@@ -4,14 +4,16 @@ This index lists durable documentation for the INF2004 Embedded Systems reposito
 
 ## Navigation
 
-For repository structure and implementation entry points, see [Agent Navigation Map](AGENT_MAP.md).
+For repository structure and implementation entry points, see the [Agent Navigation Map](AGENT_MAP.md).
 
 ## Repository entry points
 
-- [README](../README.md) — public orientation, setup, and usage.
+- [README](../README.md) — public orientation, setup, build, and usage.
 - [AGENTS](../AGENTS.md) — agent working instructions.
 
 ## Records
 
 - [Agent Navigation Map](AGENT_MAP.md) — repository paths, entry points, and boundaries.
+- [Pico W development environment](DEVELOPMENT.md) — tool installation, build, flash, and serial instructions.
+- [Hardware and calibration results](CALIBRATION_RESULTS.md) — confirmed wiring, sensor results, servo limits, and motor 2 calibration.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.

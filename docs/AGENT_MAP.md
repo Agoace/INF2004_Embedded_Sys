@@ -18,16 +18,24 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Documentation index | [docs/README.md](README.md) |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
+| Development setup | [docs/DEVELOPMENT.md](DEVELOPMENT.md) |
+| Calibration record | [docs/CALIBRATION_RESULTS.md](CALIBRATION_RESULTS.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
 
 ## Implementation locations
 
 | Area | Start here |
 | --- | --- |
-| Coursework orientation | [README.md](../README.md) |
+| General GPIO probe | [`src/pin_probe.c`](../src/pin_probe.c) |
+| Robo Pico diagnostics | [`src/board_diagnostics.c`](../src/board_diagnostics.c) |
+| Servo test | [`src/servo_test.c`](../src/servo_test.c) |
+| Positional-servo calibration | [`src/servo_calibration.c`](../src/servo_calibration.c) |
+| Motor encoder calibration | [`src/motor_encoder_calibration.c`](../src/motor_encoder_calibration.c) |
+| CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |
 | Pre-commit gate | [.githooks/pre-commit](../.githooks/pre-commit) |
+| Other coursework | Repository root and clearly named task directories |
 
 ## Repository boundaries
 
