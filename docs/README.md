@@ -15,5 +15,6 @@ For repository structure and implementation entry points, see the [Agent Navigat
 
 - [Agent Navigation Map](AGENT_MAP.md) — repository paths, entry points, and boundaries.
 - [Pico W development environment](DEVELOPMENT.md) — tool installation, build, flash, and serial instructions.
-- [Hardware and calibration results](CALIBRATION_RESULTS.md) — confirmed wiring, sensor results, servo limits, and motor 2 calibration.
+- [Hardware and calibration results](CALIBRATION_RESULTS.md) — confirmed wiring, sensor results, servo limits, and motor calibration.
+- [Raspberry Pi 400 USB power safety](USB_POWER_SAFETY.md) — 1.2 A shared limit, motor-test procedure, and over-current recovery.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.

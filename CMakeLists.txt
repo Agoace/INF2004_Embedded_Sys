@@ -89,3 +89,31 @@ target_link_libraries(motor_encoder_calibration PRIVATE
 pico_enable_stdio_usb(motor_encoder_calibration 1)
 pico_enable_stdio_uart(motor_encoder_calibration 0)
 pico_add_extra_outputs(motor_encoder_calibration)
+
+add_executable(motor_duty_calibration
+    src/motor_duty_calibration.c
+)
+
+target_link_libraries(motor_duty_calibration PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+)
+
+pico_enable_stdio_usb(motor_duty_calibration 1)
+pico_enable_stdio_uart(motor_duty_calibration 0)
+pico_add_extra_outputs(motor_duty_calibration)
+
+add_executable(motor_speed_calibration
+    src/motor_speed_calibration.c
+)
+
+target_link_libraries(motor_speed_calibration PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+)
+
+pico_enable_stdio_usb(motor_speed_calibration 1)
+pico_enable_stdio_uart(motor_speed_calibration 0)
+pico_add_extra_outputs(motor_speed_calibration)

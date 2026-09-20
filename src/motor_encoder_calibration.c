@@ -32,6 +32,12 @@
 #define MOTOR_2_TIMEOUT_MS 5000
 #define MOTOR_2_TEST_CYCLES 10
 #define DIRECTION_PAUSE_MS 500
+#define MOTOR_1_COUNTS_PER_REVOLUTION 2540
+#define MOTOR_1_BRAKE_COMPENSATION_COUNTS 40
+#define MOTOR_1_TARGET_COUNTS \
+    (MOTOR_1_COUNTS_PER_REVOLUTION - MOTOR_1_BRAKE_COMPENSATION_COUNTS)
+#define MOTOR_1_TIMEOUT_MS 5000
+#define MOTOR_1_TEST_CYCLES 10
 
 typedef struct {
     uint a_pin;
@@ -160,9 +166,19 @@ static uint16_t motor_duty_level(void) {
 
 static void stop_all_motors(void) {
     pwm_set_gpio_level(MOTOR_1_PWM_PIN, 0);
-    gpio_put(MOTOR_1_BRAKE_PIN, false);
+    pwm_set_gpio_level(MOTOR_1_BRAKE_PIN, 0);
     pwm_set_gpio_level(MOTOR_2_PWM_PIN, 0);
     pwm_set_gpio_level(MOTOR_2_BRAKE_PIN, 0);
+}
+
+static void drive_motor_1(bool reverse) {
+    if (reverse) {
+        pwm_set_gpio_level(MOTOR_1_PWM_PIN, 0);
+        pwm_set_gpio_level(MOTOR_1_BRAKE_PIN, motor_duty_level());
+    } else {
+        pwm_set_gpio_level(MOTOR_1_BRAKE_PIN, 0);
+        pwm_set_gpio_level(MOTOR_1_PWM_PIN, motor_duty_level());
+    }
 }
 
 static void drive_motor_2(bool reverse) {
@@ -180,6 +196,52 @@ static int32_t read_quadrature_count(const encoder_state_t *encoder) {
     const int32_t count = encoder->quadrature_count;
     restore_interrupts(interrupt_state);
     return count;
+}
+
+static bool run_motor_1_leg(bool reverse, unsigned int cycle,
+                            int32_t *cumulative_count) {
+    reset_encoder(&encoder_1);
+    printf("Cycle %u/%u, direction %s: running to %u counts.\n",
+           cycle, MOTOR_1_TEST_CYCLES, reverse ? "B" : "A",
+           MOTOR_1_TARGET_COUNTS);
+    drive_motor_1(reverse);
+
+    bool emergency_stop = false;
+    bool timed_out = true;
+    uint32_t elapsed_ms = 0;
+    for (; elapsed_ms < MOTOR_1_TIMEOUT_MS;
+         elapsed_ms += BUTTON_POLL_MS) {
+        if (!gpio_get(MOTOR_2_BUTTON_PIN)) {
+            emergency_stop = true;
+            timed_out = false;
+            break;
+        }
+
+        const int32_t signed_count = read_quadrature_count(&encoder_1);
+        const uint32_t count = (uint32_t)(
+            signed_count < 0 ? -signed_count : signed_count);
+        if (count >= MOTOR_1_TARGET_COUNTS) {
+            timed_out = false;
+            break;
+        }
+        sleep_ms(BUTTON_POLL_MS);
+    }
+
+    stop_all_motors();
+    sleep_ms(BRAKE_SETTLE_MS);
+    const int32_t final_count = read_quadrature_count(&encoder_1);
+    *cumulative_count += final_count;
+
+    if (emergency_stop) {
+        printf("Emergency stop activated.\n");
+    } else if (timed_out) {
+        printf("Safety timeout after %u ms.\n", MOTOR_1_TIMEOUT_MS);
+    } else {
+        printf("Count target reached after approximately %lu ms.\n",
+               (unsigned long)elapsed_ms);
+    }
+    print_encoder_result(1, &encoder_1);
+    return !emergency_stop && !timed_out;
 }
 
 static bool run_motor_2_leg(bool reverse, unsigned int cycle,
@@ -237,8 +299,9 @@ static void initialise_button(uint pin) {
 int main(void) {
     stdio_init_all();
 
-    initialise_brake_pin(MOTOR_1_BRAKE_PIN);
     initialise_motor_pwm(MOTOR_1_PWM_PIN, &motor_1_slice);
+    gpio_set_function(MOTOR_1_BRAKE_PIN, GPIO_FUNC_PWM);
+    pwm_set_gpio_level(MOTOR_1_BRAKE_PIN, 0);
     initialise_motor_pwm(MOTOR_2_PWM_PIN, &motor_2_slice);
     gpio_set_function(MOTOR_2_BRAKE_PIN, GPIO_FUNC_PWM);
     pwm_set_gpio_level(MOTOR_2_BRAKE_PIN, 0);
@@ -250,39 +313,40 @@ int main(void) {
     initialise_button(MOTOR_2_BUTTON_PIN);
 
     sleep_ms(1000);
-    printf("\nMotor 2 forward/backward drift test\n");
+    printf("\nMotor 1 forward/backward drift test\n");
+    printf("WARNING: power motors from VIN, not Raspberry Pi USB.\n");
     printf("Lift the wheel before starting the test.\n");
-    printf("Tap GP21 to run %u forward/backward cycles.\n",
-           MOTOR_2_TEST_CYCLES);
-    printf("GP20 is the emergency stop. Motor 1 is disabled.\n");
+    printf("Tap GP20 to run %u forward/backward cycles.\n",
+           MOTOR_1_TEST_CYCLES);
+    printf("GP21 is the emergency stop. Motor 2 is disabled.\n");
     printf("Motor power: %u%%; stop threshold: %u counts.\n",
-           PWM_DUTY_PERCENT, MOTOR_2_TARGET_COUNTS);
+           PWM_DUTY_PERCENT, MOTOR_1_TARGET_COUNTS);
 
     bool previous_start_pressed = false;
 
     while (true) {
-        const bool start_pressed = !gpio_get(MOTOR_2_BUTTON_PIN);
+        const bool start_pressed = !gpio_get(MOTOR_1_BUTTON_PIN);
 
         if (start_pressed && !previous_start_pressed) {
             int32_t cumulative_count = 0;
             bool completed = true;
 
             for (unsigned int cycle = 1;
-                 cycle <= MOTOR_2_TEST_CYCLES; ++cycle) {
-                if (!run_motor_2_leg(false, cycle, &cumulative_count)) {
+                 cycle <= MOTOR_1_TEST_CYCLES; ++cycle) {
+                if (!run_motor_1_leg(false, cycle, &cumulative_count)) {
                     completed = false;
                     break;
                 }
                 sleep_ms(DIRECTION_PAUSE_MS);
 
-                if (!run_motor_2_leg(true, cycle, &cumulative_count)) {
+                if (!run_motor_1_leg(true, cycle, &cumulative_count)) {
                     completed = false;
                     break;
                 }
 
                 const int32_t drift_millidegrees =
                     (cumulative_count * 360000) /
-                    MOTOR_2_COUNTS_PER_REVOLUTION;
+                    MOTOR_1_COUNTS_PER_REVOLUTION;
                 printf("Cycle %u cumulative drift: %ld counts (%ld millidegrees)\n",
                        cycle, (long)cumulative_count,
                        (long)drift_millidegrees);
@@ -298,7 +362,7 @@ int main(void) {
                 printf("Test stopped before all cycles completed.\n");
             }
 
-            while (!gpio_get(MOTOR_2_BUTTON_PIN)) {
+            while (!gpio_get(MOTOR_1_BUTTON_PIN)) {
                 sleep_ms(BUTTON_POLL_MS);
             }
             previous_start_pressed = false;

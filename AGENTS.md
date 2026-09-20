@@ -16,6 +16,8 @@ This repository contains INF2004 Embedded Systems coursework. Use the [Agent Nav
 ## Commands
 
 ```sh
+cmake -S . -B build -DPICO_BOARD=pico_w
+cmake --build build
 python3 scripts/check-docs.py
 bash scripts/install-hooks.sh
 ```
@@ -24,7 +26,8 @@ bash scripts/install-hooks.sh
 
 - This is an independent Git repository with no nested repositories or submodules.
 - The current workspace checks it out as a submodule of the School Repos superproject. Edit, test, commit, and push changes in this repository before the parent records its updated gitlink.
-- The repository currently contains documentation and repository tooling only. It has no build, test, lint, package, or CI configuration.
+- The repository contains CMake firmware targets for Pico W diagnostics and Robo Pico hardware calibration.
+- Build output belongs in `build/` and is not committed.
 
 ## Conventions
 

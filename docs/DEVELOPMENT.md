@@ -131,7 +131,9 @@ Read USB serial to record each pulse width. Stop moving toward an endpoint immed
 
 ## Motor encoder calibration
 
-Lift the wheels before using this target. The current calibration focuses on motor 2: tap GP21 to run ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP4/GP5 encoder and a 2500-count stop threshold. Calibration measured 2539 counts per wheel revolution. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP20 is an emergency stop, and motor 1 stays disabled.
+> **Motor power warning:** Do not power the Robo Pico motors from the Raspberry Pi 400 USB ports. The Pi 400 has a shared 1.2 A USB peripheral limit. A motor test caused USB over-current and disconnected the external SSD. Follow the [USB power safety procedure](USB_POWER_SAFETY.md) and use the regulated VIN supply.
+
+Lift the wheels before using this target. The current calibration runs a motor 1 repeatability test: tap GP20 to start ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP16/GP17 encoder and a 2500-count stop threshold. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP21 is an emergency stop, and motor 2 stays disabled. Motor 1 measured 2540 counts per wheel revolution; motor 2 measured 2539.
 
 ```sh
 cmake --build build --target motor_encoder_calibration
@@ -139,6 +141,30 @@ picotool load -f -v -x build/motor_encoder_calibration.uf2
 ```
 
 Keep hands, wires, clothing, and the USB cable clear of the wheels and drivetrain.
+
+### Minimum free-running duty
+
+The `motor_duty_calibration` target tests both unloaded motors together. Tap GP20 to start at 0% duty. Each level runs for 10 seconds, followed by a five-second stop. Duty then increases by 1%. A motor is recorded and stopped after its encoder reaches 10 counts. GP21 stops the complete test.
+
+```sh
+cmake --build build --target motor_duty_calibration
+picotool load -f -v -x build/motor_duty_calibration.uf2
+```
+
+Keep both wheels lifted. Testing both motors together includes the effect of shared power-supply load.
+
+For a VIN-only test, disconnect USB, keep VIN power on, and press GP20. The firmware stores the completed result in RAM and repeats it every two seconds. Reconnect USB after the motors stop without switching VIN off, then open `/dev/ttyACM0` to read the saved result. Removing VIN power clears the stored result.
+
+### Unloaded motor speed
+
+The `motor_speed_calibration` target measures both motors from 10% through 100% duty in 10% steps. Each level uses the 10% startup kick, settles for one second, and measures encoder speed for five seconds. Results include RPM and the difference between motors. The completed table remains in RAM and repeats after USB reconnects.
+
+```sh
+cmake --build build --target motor_speed_calibration
+picotool load -f -v -x build/motor_speed_calibration.uf2
+```
+
+Keep both wheels lifted. GP20 starts the test and GP21 stops it. Use VIN power because motor voltage changes the result and USB motor power can exceed the Pi 400 peripheral current limit.
 
 A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. Keep 2539 counts per revolution as the measured calibration and 2500 as the compensated stopping threshold for this test speed.
 

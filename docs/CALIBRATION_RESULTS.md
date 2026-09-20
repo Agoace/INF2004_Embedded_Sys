@@ -1,6 +1,6 @@
 # Hardware and calibration results
 
-Date: 2026-09-19
+Last updated: 2026-09-20
 
 ## Hardware
 
@@ -19,11 +19,11 @@ Date: 2026-09-19
 | Motor 2 encoder phase A | GP4 | Working |
 | Motor 2 encoder phase B | GP5 | Working |
 | GY-511 DRDY | GP6 | Electrically HIGH; functional transitions not yet confirmed |
-| Robo Pico motor 1 driver | GP8 and GP9 | Board-defined connection; motor not yet calibrated |
+| Robo Pico motor 1 driver | GP8 and GP9 | Working; one-revolution calibration complete |
 | Robo Pico motor 2 driver | GP10 and GP11 | Working in both directions |
 | Servo signal | GP15 | Working |
-| Motor 1 encoder phase A | GP16 | Connection detected; not yet calibrated |
-| Motor 1 encoder phase B | GP17 | Connection detected; not yet calibrated |
+| Motor 1 encoder phase A | GP16 | Working |
+| Motor 1 encoder phase B | GP17 | Working |
 | IR sensor analog output | GP26 / ADC0 | Working |
 | Programmable button 1 | GP20 | Working |
 | Programmable button 2 | GP21 | Working |
@@ -76,6 +76,40 @@ A simple angle mapping is:
 pulse_us = 500 + (angle_degrees * 2000 / 180);
 ```
 
+## Motor 1 encoder
+
+Test conditions:
+
+- Motor power: 10% PWM duty.
+- PWM frequency: approximately 20 kHz.
+- Driver: GP8 and GP9.
+- Encoder: GP16 phase A and GP17 phase B.
+- The tested direction produced negative signed counts.
+- These direction-dependent results were measured before the motor 1 power leads were swapped to align its physical forward direction with motor 2.
+
+| Value | Result |
+| --- | ---: |
+| Stop threshold | 2500 counts |
+| Final count after braking | 2540 counts |
+| Measured counts per wheel revolution | 2540 |
+| Braking travel | 40 counts |
+| Test duration | Approximately 2560 ms |
+| Visual error | None detected |
+
+### Ten-cycle repeatability test
+
+| Metric | Result |
+| --- | ---: |
+| Average direction A magnitude | 2535.7 counts |
+| Average direction B magnitude | 2532.4 counts |
+| Average directional difference per cycle | 3.3 counts |
+| Final signed drift | -33 counts |
+| Encoder-calculated angular drift | -4.68° |
+| Average encoder-calculated drift per cycle | -0.47° |
+| Visually estimated wheel drift | Approximately 1° |
+
+The encoder reports more movement than is visible at the wheel. Gearbox backlash can absorb part of the motor-shaft movement when direction changes. Repeat this directional test after the motor 1 lead swap before using its old drift compensation.
+
 ## Motor 2 encoder
 
 Test conditions:
@@ -113,9 +147,87 @@ The test completed ten forward/reverse wheel-revolution pairs.
 
 The phase A and phase B edge totals remained closely matched. This result indicates that both encoder channels work and that the motor 2 forward/reverse movement is repeatable while the wheel is unloaded.
 
+## Minimum unloaded motor duty
+
+Both wheels were lifted. Both motors were tested together at approximately 20 kHz PWM. Each duty level ran for 10 seconds, followed by a five-second stop.
+
+### Pico USB power
+
+| Duty | Motor 1 | Motor 2 |
+| ---: | --- | --- |
+| 0–5% | No encoder movement | No encoder movement |
+| 6% | One encoder count; no sustained movement | No encoder movement |
+| 7% | Sustained movement after about 80 ms | Sustained movement after about 80 ms |
+
+### 5 V VIN power with USB disconnected
+
+| Motor | Minimum detected duty | Time to 10 counts |
+| --- | ---: | ---: |
+| Motor 1 | 6% | Approximately 70 ms |
+| Motor 2 | 7% | Approximately 80 ms |
+
+The VIN supply reduced motor 1's unloaded start threshold from 7% to 6%. Motor 2 remained at 7%.
+
+- Recommended common unloaded minimum: 8% to provide a margin for both motors.
+- Selected startup policy: apply a 10% duty kick until the encoder detects 10 counts, with a 250 ms timeout, then change to the requested duty.
+
+A loaded wheel can require more starting torque than a lifted wheel. If a motor does not reach 10 encoder counts during the 250 ms kick, stop it and report a stalled-motor condition.
+
+## Unloaded motor speed at 5 V VIN
+
+Both wheels were lifted. Both motors ran together. Each duty level used the 10% startup kick, a one-second settling period, and a five-second encoder measurement.
+
+| Duty | Motor 1 | Motor 2 | Motor 1 minus motor 2 |
+| ---: | ---: | ---: | ---: |
+| 10% | 26.253 RPM | 26.556 RPM | -0.303 RPM |
+| 20% | 53.881 RPM | 54.352 RPM | -0.471 RPM |
+| 30% | 81.486 RPM | 81.948 RPM | -0.462 RPM |
+| 40% | 109.006 RPM | 109.328 RPM | -0.322 RPM |
+| 50% | 136.648 RPM | 136.527 RPM | +0.121 RPM |
+| 60% | 163.417 RPM | 163.136 RPM | +0.281 RPM |
+| 70% | 190.842 RPM | 188.965 RPM | +1.877 RPM |
+| 80% | 217.029 RPM | 214.298 RPM | +2.731 RPM |
+| 90% | 242.664 RPM | 239.560 RPM | +3.104 RPM |
+| 100% | 260.829 RPM | 257.860 RPM | +2.969 RPM |
+
+Observations:
+
+- From 10% through 60%, the motors differ by less than 0.5 RPM.
+- Above 70%, motor 1 is approximately 1–3 RPM faster.
+- Maximum measured unloaded speed was approximately 261 RPM for motor 1 and 258 RPM for motor 2.
+- Speed is close to linear through most of the duty range, with visible saturation near 100%.
+- Encoder feedback should provide better straight-line control than a fixed PWM correction. This table can be used as the initial feed-forward estimate.
+
+## Partial unloaded speed test on Pico USB power
+
+Motor 1 power leads were swapped before this test so both wheels used the intended physical forward direction. Both motors were powered through the Pico USB connection.
+
+| Duty | Motor 1 | Motor 2 | Motor 1 minus motor 2 |
+| ---: | ---: | ---: | ---: |
+| 10% | 23.815 RPM | 24.094 RPM | -0.279 RPM |
+| 20% | 49.412 RPM | 49.885 RPM | -0.473 RPM |
+| 30% | 74.598 RPM | 75.516 RPM | -0.918 RPM |
+| 40% | 99.699 RPM | 100.570 RPM | -0.871 RPM |
+| 50% | 124.209 RPM | 125.350 RPM | -1.141 RPM |
+| 60% | 147.992 RPM | 149.576 RPM | -1.584 RPM |
+
+The test stopped while settling at 70% because the Raspberry Pi reported USB over-current. The Raspberry Pi 400 has a shared 1.2 A USB peripheral limit, which also supplies the external SSD, keyboard, Pico W, and other USB devices. The event disconnected the external SSD mounted at `/srv` and aborted its ext4 journal. No 70–100% USB-powered results are valid. Do not repeat this test with the motors powered from Pico USB.
+
+Compared with 5 V VIN, USB motor power produced approximately 8.5–10.5% lower unloaded speed over the measured 10–60% range.
+
+## Motor power safety finding
+
+See the [Raspberry Pi 400 USB power safety record](USB_POWER_SAFETY.md) for the full procedure and recovery steps.
+
+- The Raspberry Pi 400 USB ports share a maximum 1.2 A peripheral current budget.
+- Power the Robo Pico motors from VIN for all motor tests.
+- Do not use the Pico USB connection as the motor power source.
+- For VIN-only tests, disconnect USB before starting the motors.
+- Store results in RAM, stop the motors, keep VIN on, and reconnect USB only to read the result.
+- If a USB over-current event occurs, turn off the Robo Pico, disconnect it, reboot the Raspberry Pi, and verify `/srv` with `findmnt /srv` before continuing.
+
 ## Remaining work
 
-- Calibrate motor 1 and its GP16/GP17 encoder.
 - Test both motors under the robot's normal load.
 - Measure wheel slip on the floor. Encoder counts cannot detect wheel slip.
 - Configure the GY-511 and verify DRDY transitions.
