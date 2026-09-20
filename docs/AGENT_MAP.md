@@ -21,6 +21,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Development setup | [docs/DEVELOPMENT.md](DEVELOPMENT.md) |
 | Calibration record | [docs/CALIBRATION_RESULTS.md](CALIBRATION_RESULTS.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
+| Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
 
 ## Implementation locations

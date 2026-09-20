@@ -17,4 +17,5 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Pico W development environment](DEVELOPMENT.md) — tool installation, build, flash, and serial instructions.
 - [Hardware and calibration results](CALIBRATION_RESULTS.md) — confirmed wiring, sensor results, servo limits, and motor calibration.
 - [Raspberry Pi 400 USB power safety](USB_POWER_SAFETY.md) — 1.2 A shared limit, motor-test procedure, and over-current recovery.
+- [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — planned Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
