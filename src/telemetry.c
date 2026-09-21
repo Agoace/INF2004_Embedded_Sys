@@ -22,7 +22,7 @@
 
 #define TELEMETRY_DESTINATION_IP "192.168.18.98"
 #define TELEMETRY_DESTINATION_PORT 4242
-#define TELEMETRY_SCHEMA_VERSION 1
+#define TELEMETRY_SCHEMA_VERSION 2
 #define WIFI_CONNECT_TIMEOUT_MS 30000
 #define TELEMETRY_DEVICE_ID_SIZE 64
 
@@ -221,14 +221,14 @@ static bool telemetry_ready(void) {
     return telemetry_state.cyw43_started && telemetry_state.udp != NULL;
 }
 
-static bool begin_packet(json_writer_t *writer, bool *payload_first,
-                         const char *test_type) {
+static bool begin_packet(json_writer_t *writer, bool *object_first,
+                         const char *test_type, const char *object_name) {
     if (!telemetry_ready()) {
         record_error("telemetry is not initialised");
         return false;
     }
-    if (!safe_identifier(test_type)) {
-        record_error("invalid telemetry test identifier");
+    if (!safe_identifier(test_type) || !safe_identifier(object_name)) {
+        record_error("invalid telemetry identifier");
         return false;
     }
 
@@ -253,10 +253,10 @@ static bool begin_packet(json_writer_t *writer, bool *payload_first,
         !json_add_i32(writer, &envelope_first, "link", link_status) ||
         !json_add_string(writer, &envelope_first, "test", test_type) ||
         !json_prefix(writer, &envelope_first) ||
-        !json_append(writer, "\"payload\":{")) {
+        !json_append(writer, "\"%s\":{", object_name)) {
         return false;
     }
-    *payload_first = true;
+    *object_first = true;
     return true;
 }
 
@@ -397,24 +397,13 @@ bool telemetry_init(const char *device_id) {
     return true;
 }
 
-bool telemetry_send_probe(const telemetry_probe_sample_t *sample) {
-    if (sample == NULL) {
-        record_error("probe telemetry sample is NULL");
-        return false;
-    }
-
-    char line[TELEMETRY_MAX_PACKET_BYTES];
-    json_writer_t writer;
-    bool payload_first;
-    json_writer_init(&writer, line, sizeof(line));
-    bool valid = begin_packet(&writer, &payload_first, "probe");
-    valid = valid && json_add_string(&writer, &payload_first,
-                                     "state", sample->state);
+static bool send_finished_packet(json_writer_t *writer, bool valid,
+                                 const char *error_message) {
     if (!valid) {
-        record_error("probe telemetry JSON formatting failed");
+        record_error(error_message);
         return false;
     }
-    const bool sent = finish_packet(&writer);
+    const bool sent = finish_packet(writer);
 #if TELEMETRY_VERBOSE
     if (sent) {
         printf("Sent telemetry seq=%lu link=%d.\n",
@@ -423,6 +412,65 @@ bool telemetry_send_probe(const telemetry_probe_sample_t *sample) {
     }
 #endif
     return sent;
+}
+
+bool telemetry_send_readings(const char *test,
+                             const telemetry_readings_t *readings) {
+    if (readings == NULL) {
+        record_error("telemetry readings are NULL");
+        return false;
+    }
+
+    char line[TELEMETRY_MAX_PACKET_BYTES];
+    json_writer_t writer;
+    bool object_first;
+    json_writer_init(&writer, line, sizeof(line));
+    bool valid = begin_packet(&writer, &object_first, test, "readings");
+#define ADD_TEXT(key, member) \
+    valid = valid && json_add_optional_string(&writer, &object_first, \
+                                              key, readings->member)
+#define ADD_U32(flag, key, member) \
+    if (readings->flag) { \
+        valid = valid && json_add_u32(&writer, &object_first, \
+                                      key, readings->member); \
+    }
+
+    valid = valid && json_add_string(&writer, &object_first,
+                                     "state", readings->state);
+    ADD_U32(has_motor_1_speed_milli_rpm, "motor_1_speed_mrpm",
+            motor_1_speed_milli_rpm);
+    ADD_U32(has_motor_2_speed_milli_rpm, "motor_2_speed_mrpm",
+            motor_2_speed_milli_rpm);
+    ADD_U32(has_motor_1_duty_percent, "motor_1_duty_pct",
+            motor_1_duty_percent);
+    ADD_U32(has_motor_2_duty_percent, "motor_2_duty_pct",
+            motor_2_duty_percent);
+    ADD_TEXT("motor_1_direction", motor_1_direction);
+    ADD_TEXT("motor_2_direction", motor_2_direction);
+    ADD_U32(has_range_mm, "range_mm", range_mm);
+    ADD_U32(has_ir_mv, "ir_mv", ir_mv);
+    ADD_U32(has_supply_mv, "supply_mv", supply_mv);
+    ADD_U32(has_progress_percent, "progress_pct", progress_percent);
+#undef ADD_TEXT
+#undef ADD_U32
+
+    return send_finished_packet(&writer, valid,
+                                "readings JSON formatting failed");
+}
+
+bool telemetry_send_terminal_notice(const char *test, const char *outcome,
+                                    bool fault) {
+    char line[TELEMETRY_MAX_PACKET_BYTES];
+    json_writer_t writer;
+    bool object_first;
+    json_writer_init(&writer, line, sizeof(line));
+    bool valid = begin_packet(&writer, &object_first, test, "notice");
+    valid = valid && json_add_string(&writer, &object_first,
+                                     "outcome", outcome);
+    valid = valid && json_add_u32(&writer, &object_first, "fault",
+                                  fault ? 1u : 0u);
+    return send_finished_packet(&writer, valid,
+                                "terminal notice JSON formatting failed");
 }
 
 bool telemetry_is_connected(void) {
@@ -436,174 +484,4 @@ uint32_t telemetry_error_count(void) {
 
 uint32_t telemetry_session_id(void) {
     return telemetry_state.session_id;
-}
-
-bool telemetry_send_motor_line(const telemetry_motor_sample_t *sample) {
-    if (sample == NULL) {
-        record_error("motor telemetry sample is NULL");
-        return false;
-    }
-
-    char line[TELEMETRY_MAX_PACKET_BYTES];
-    json_writer_t writer;
-    bool payload_first;
-    if (sample->test_type == NULL ||
-        strcmp(sample->test_type, "rotation_drift") != 0) {
-        record_error("invalid rotation telemetry test identifier");
-        return false;
-    }
-    json_writer_init(&writer, line, sizeof(line));
-    bool valid = begin_packet(&writer, &payload_first, "rotation_drift");
-#define ADD_REQUIRED_TEXT(key, member) \
-    valid = valid && json_add_string(&writer, &payload_first, \
-                                     key, sample->member)
-#define ADD_TEXT(key, member) \
-    valid = valid && json_add_optional_string(&writer, &payload_first, \
-                                              key, sample->member)
-#define ADD_U32(key, member) \
-    valid = valid && json_add_u32(&writer, &payload_first, \
-                                  key, sample->member)
-#define ADD_I32(key, member) \
-    valid = valid && json_add_i32(&writer, &payload_first, \
-                                  key, sample->member)
-
-    ADD_REQUIRED_TEXT("state", state);
-    ADD_TEXT("direction", direction);
-    ADD_TEXT("startup", startup_state);
-    ADD_TEXT("stall", stall_state);
-    ADD_TEXT("emergency", emergency_state);
-    ADD_TEXT("error", error_state);
-    if (sample->has_motor_number) {
-        ADD_U32("motor", motor_number);
-    }
-    if (sample->has_duty_percent) {
-        ADD_U32("duty_pct", duty_percent);
-    }
-    if (sample->has_revolutions_requested) {
-        ADD_U32("revolutions_requested", revolutions_requested);
-    }
-    if (sample->has_revolution_index) {
-        ADD_U32("revolution_index", revolution_index);
-    }
-    if (sample->has_absolute_count) {
-        ADD_U32("absolute_count", absolute_count);
-    }
-    if (sample->has_elapsed_ms) {
-        ADD_U32("elapsed_ms", elapsed_ms);
-    }
-    if (sample->has_ideal_counts) {
-        ADD_U32("ideal_counts", ideal_counts);
-    }
-    if (sample->has_target_counts) {
-        ADD_U32("target_counts", target_counts);
-    }
-    if (sample->has_count_at_stop) {
-        ADD_I32("count_at_stop", count_at_stop);
-    }
-    if (sample->has_absolute_count_at_stop) {
-        ADD_U32("absolute_count_at_stop", absolute_count_at_stop);
-    }
-    if (sample->has_count_at_trigger) {
-        ADD_I32("count_at_trigger", count_at_trigger);
-    }
-    if (sample->has_absolute_count_at_trigger) {
-        ADD_U32("absolute_count_at_trigger", absolute_count_at_trigger);
-    }
-    if (sample->has_count_after_settle) {
-        ADD_I32("count_after_settle", count_after_settle);
-    }
-    if (sample->has_absolute_count_after_settle) {
-        ADD_U32("absolute_count_after_settle", absolute_count_after_settle);
-    }
-    if (sample->has_coast_overshoot_counts) {
-        ADD_I32("coast_overshoot_counts", coast_overshoot_counts);
-    }
-    if (sample->has_boundary_count_reached) {
-        ADD_U32("boundary_count", boundary_count_reached);
-    }
-    if (sample->has_undershoot_counts) {
-        ADD_U32("undershoot_counts", undershoot_counts);
-    }
-    if (sample->has_drift_counts) {
-        ADD_I32("drift_counts", drift_counts);
-    }
-    if (sample->has_drift_millidegrees) {
-        ADD_I32("drift_mdeg", drift_millidegrees);
-    }
-    if (sample->has_drift_per_revolution_millidegrees) {
-        ADD_I32("drift_per_rev_mdeg", drift_per_revolution_millidegrees);
-    }
-    if (sample->has_elapsed_us) {
-        ADD_U32("elapsed_us", elapsed_us);
-    }
-    if (sample->has_mean_us_per_revolution) {
-        ADD_U32("mean_us_per_rev", mean_us_per_revolution);
-    }
-    if (sample->has_mean_ms_per_revolution) {
-        ADD_U32("mean_ms_per_rev", mean_ms_per_revolution);
-    }
-    if (sample->has_counts_per_rev_milli) {
-        ADD_U32("counts_per_rev_milli", counts_per_rev_milli);
-    }
-    if (sample->has_sensitivity_millicounts) {
-        ADD_U32("sensitivity_millicounts_per_degree",
-                sensitivity_millicounts);
-    }
-    if (sample->has_jog_counts) {
-        ADD_I32("jog_counts", jog_counts);
-    }
-    if (sample->has_jog_final_absolute_count) {
-        ADD_U32("jog_final_absolute_count", jog_final_absolute_count);
-    }
-    if (sample->has_jog_combined_count) {
-        ADD_U32("jog_combined_count", jog_combined_count);
-    }
-    if (sample->has_smallest_jog_movement) {
-        ADD_U32("smallest_jog_movement_counts", smallest_jog_movement);
-    }
-    if (sample->has_alignment_resolution_cpr_milli) {
-        ADD_U32("alignment_resolution_cpr_milli",
-                alignment_resolution_cpr_milli);
-    }
-    if (sample->has_jog_primary_cpr_milli) {
-        ADD_U32("jog_primary_cpr_milli", jog_primary_cpr_milli);
-    }
-    if (sample->has_jog_secondary_cpr_milli) {
-        ADD_U32("jog_secondary_cpr_milli", jog_secondary_cpr_milli);
-    }
-    if (sample->has_split_index) {
-        ADD_U32("split_index", split_index);
-    }
-    if (sample->has_split_total) {
-        ADD_U32("split_total", split_total);
-    }
-    if (sample->has_split_revolution) {
-        ADD_U32("split_revolution", split_revolution);
-    }
-    if (sample->has_split_absolute_count) {
-        ADD_U32("split_absolute_count", split_absolute_count);
-    }
-    if (sample->has_split_elapsed_us) {
-        ADD_U32("split_elapsed_us", split_elapsed_us);
-    }
-    if (sample->has_split_delta_counts) {
-        ADD_U32("split_delta_counts", split_delta_counts);
-    }
-    if (sample->has_split_delta_us) {
-        ADD_U32("split_delta_us", split_delta_us);
-    }
-    if (sample->has_completed) {
-        valid = valid && json_add_u32(&writer, &payload_first, "completed",
-                                      sample->completed ? 1u : 0u);
-    }
-#undef ADD_REQUIRED_TEXT
-#undef ADD_TEXT
-#undef ADD_U32
-#undef ADD_I32
-
-    if (!valid) {
-        record_error("motor telemetry JSON formatting failed");
-        return false;
-    }
-    return finish_packet(&writer);
 }

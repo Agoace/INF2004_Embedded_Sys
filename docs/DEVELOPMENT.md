@@ -74,6 +74,8 @@ Wi-Fi, so starting the listener first prevents loss of the first packets:
 python3 scripts/telemetry_receiver.py
 ```
 
+Restart the receiver after a telemetry schema change. The startup line shows
+its schema version, so a mismatch is visible before new firmware sends data.
 The listener accepts LAN UDP on port 4242. Restrict that port with the
 bench-grade source rule in `scripts/restrict-telemetry-port.sh`:
 

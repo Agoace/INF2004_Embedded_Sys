@@ -24,10 +24,9 @@ record describes the planned architecture for those parts.
 
 The hardware soak test showed sporadic, scattered sequence gaps. It did not
 show consecutive bursts. This is normal packet loss behaviour for UDP on a
-2.4 GHz network. The motor firmware therefore repeats completed summaries
-every 2 seconds and completed split series every 10 seconds. The authoritative
-result stays in RAM on the Pico. No measurement depends on a telemetry packet
-arriving.
+2.4 GHz network. The motor firmware sends live instrument readings and a small
+terminal notice when a run ends. The authoritative calibration result stays in
+RAM on the Pico. No measurement depends on a telemetry packet arriving.
 
 The local credential file `src/wifi_config.h` is ignored. The tracked
 `src/wifi_config.h.example` contains placeholders and copy instructions. A
@@ -74,7 +73,7 @@ Pico W on Robo Pico
         v
 Raspberry Pi 400 LAN address, UDP port 4242
         |
-        | Validate, calculate, and store results
+        | Validate and store readings, trends, and history
         v
 Dashboard on 127.0.0.1:8080
         |
@@ -90,20 +89,20 @@ The Pico W does not join the tailnet. It communicates with the Raspberry Pi 400 
 ### Pico W
 
 - Connect to the existing 2.4 GHz Wi-Fi network.
-- Send calibration telemetry to the Raspberry Pi 400 LAN address.
-- Send each measurement with a session identifier and sequence number.
+- Send physical instrument readings to the Raspberry Pi 400 LAN address.
+- Send each reading with a session identifier and sequence number.
+- Convert encoder counts to milli-RPM on the Pico using its 2535 CPR constant.
 - Continue the motor test if Wi-Fi or the receiver becomes unavailable.
-- Keep the completed result in RAM.
-- Repeat the completed result so the receiver can recover missed packets.
+- Keep every completed calibration result in RAM and USB output.
 - Use GP20 for test start and GP21 for emergency stop.
 - Never depend on a network command for emergency stopping.
 
 ### Raspberry Pi 400
 
 - Listen for Pico telemetry on UDP port 4242 through the LAN interface.
-- Reject malformed, duplicate, or out-of-order packets as necessary.
-- Calculate comparisons and store calibration sessions.
-- Provide live charts, status, and result tables.
+- Reject malformed and out-of-order packets as necessary.
+- Store readings for trends, averages, and history without calibration constants.
+- Provide live gauges, charts, and status notices.
 - Bind the web dashboard only to `127.0.0.1:8080`.
 - Keep dashboard operation separate from motor control.
 
@@ -140,24 +139,21 @@ The Pico cannot send telemetry to `localhost`. It must use the Pi 400 LAN addres
 ## Telemetry content
 
 The authoritative payload contract is the [telemetry JSON schema](TELEMETRY_SCHEMA.md).
-It defines the common envelope, the nested test payloads, integer units,
-versioning, packet limit, and the reserved test types. Packets are newline
+It defines the common envelope, one flat instrument readings object, terminal
+notices, integer units, versioning, and reserved fields. Packets are newline
 terminated JSON objects.
 
-UDP does not guarantee packet delivery. Sequence numbers reveal missing packets, and repeated completed results provide recovery without blocking motor control.
+UDP does not guarantee packet delivery. Sequence numbers reveal missing packets, and repeated instrument readings and terminal notices provide recovery without blocking motor control.
 
 ## Initial dashboard scope
 
 The first dashboard must be read-only. It should show:
 
 - Pico connection state and time of the last packet.
-- Current calibration stage and elapsed time.
-- PWM duty and startup-kick state.
-- Live encoder counts and RPM for both motors.
-- Motor speed difference.
-- Stall, timeout, and emergency-stop warnings.
-- Completed result tables and RPM-versus-duty charts.
-- Calibration history with CSV or JSON export.
+- Wheel speed in RPM, motor duty percent, direction, and current state.
+- Ultrasonic range and IR voltage when a target provides them.
+- Terminal outcome and fault status beside the live gauges.
+- Trends, averages, and history without converting encoder counts.
 
 Remote motor start and remote emergency stop are outside the initial scope. GP20 and GP21 remain the physical controls.
 
