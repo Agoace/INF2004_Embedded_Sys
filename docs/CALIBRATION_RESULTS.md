@@ -48,9 +48,20 @@ The scan confirms power, ground, SDA, SCL, and I²C communication. The DRDY line
 
 - The fitted module is an **HC-SR04+**. The front silkscreen reads HC-SR04;
   the reverse side identifies the variant as HC-SR04+.
-- Trigger on GP3 and Echo on GP2 produced stable readings.
+- The sensor is powered from 3.3 V, not from the 5 V servo rail.
+- Tested through `board_diagnostics`: GP3 trigger and GP2 echo both function,
+  the readings are stable, and the values are sane. The sensor is verified as
+  working.
+- The readings were more stable than in earlier testing on the 5 V rail. The
+  earlier setup was not measured for comparison.
 - The initial stationary reading was approximately 177 mm. This shows that the
   sensor responds, but it is not a calibration.
+- The HC-SR04 is used as a presence and approximate-range sensor, not as a
+  measurement instrument. Ultrasound reflects specularly: a target tilted more
+  than about 15° can return no echo, soft or fabric targets can absorb the
+  pulse, and narrow objects are often missed. A missing echo cannot be told
+  apart from an absent obstacle, so obstacle logic must treat a timeout as
+  unknown and not as clear.
 - Robo Pico digital inputs are limited to 3.6 V. A classic HC-SR04 powered at
   5 V Vcc can produce a 5 V Echo signal and requires a voltage divider.
 - The HC-SR04+ Echo output follows its logic supply and is 3.3 V compatible.
@@ -268,8 +279,7 @@ See the [Raspberry Pi 400 USB power safety record](USB_POWER_SAFETY.md) for the 
 - Measure wheel slip on the floor. Encoder counts cannot detect wheel slip.
 - Configure the GY-511 and verify DRDY transitions.
 - Test the IR sensor against targets at known distances or reflectivities.
-- Measure ultrasonic distance accuracy against a tape measure at several known
-  distances.
-- Measure the usable minimum and maximum ultrasonic range.
-- Measure the ultrasonic beam width or detection cone.
-- Measure ultrasonic reading repeatability at a fixed distance.
+- Measure the minimum and maximum reliable ultrasonic detection distance on the
+  3.3 V supply.
+- Confirm what the firmware returns when no echo arrives, because the obstacle
+  logic depends on that value.

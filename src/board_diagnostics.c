@@ -176,7 +176,8 @@ int main(void) {
 
     printf("\nRobo Pico connection diagnostics\n");
     printf("GP15 servo is not driven to prevent unexpected movement.\n");
-    printf("WARNING: GP2 must not receive more than 3.3 V.\n\n");
+    printf("The fitted HC-SR04+ is powered from 3.3 V. A classic HC-SR04 at"
+           " 5 V would need a divider on GP2.\n\n");
     scan_i2c_bus();
 
     uint32_t previous_encoder_1_a = 0;
