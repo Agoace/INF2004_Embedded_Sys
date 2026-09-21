@@ -204,7 +204,7 @@ Keep both wheels lifted. GP20 starts the test and GP21 stops it. Use VIN power b
 
 A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. This historical result is superseded; use the shared 2535 counts-per-revolution value in the [motor rotation drift record](MOTOR_ROTATION_DRIFT.md).
 
-**Voltage warning:** The Robo Pico specification limits digital inputs to 3.6 V. A bare HC-SR04 can produce a 5 V Echo signal. GP2 must use a suitable level shifter or voltage divider unless the connected ultrasonic module already provides a 3.3 V Echo signal.
+**Echo voltage:** The fitted module is an HC-SR04+. The front silkscreen reads HC-SR04, but the reverse side identifies HC-SR04+. Its Echo output follows its logic supply and is 3.3 V compatible, so no level conversion is fitted or needed. The Robo Pico specification limits digital inputs to 3.6 V; a classic HC-SR04 powered at 5 V Vcc can produce a 5 V Echo signal and requires a suitable voltage divider.
 
 ## Clean
 

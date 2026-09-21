@@ -46,9 +46,18 @@ The scan confirms power, ground, SDA, SCL, and I²C communication. The DRDY line
 
 ## HC-SR04
 
+- The fitted module is an **HC-SR04+**. The front silkscreen reads HC-SR04;
+  the reverse side identifies the variant as HC-SR04+.
 - Trigger on GP3 and Echo on GP2 produced stable readings.
-- The initial stationary reading was approximately 177 mm.
-- GP2 must receive no more than 3.3 V. A bare 5 V HC-SR04 Echo output needs level conversion.
+- The initial stationary reading was approximately 177 mm. This shows that the
+  sensor responds, but it is not a calibration.
+- Robo Pico digital inputs are limited to 3.6 V. A classic HC-SR04 powered at
+  5 V Vcc can produce a 5 V Echo signal and requires a voltage divider.
+- The HC-SR04+ Echo output follows its logic supply and is 3.3 V compatible.
+  No level conversion is fitted or needed for this module.
+- The standard speed-of-sound constant assumes about 20 °C and changes by
+  roughly 0.17% per °C. This is negligible for obstacle avoidance but matters
+  if the sensor is used for measurement or mapping.
 
 ## IR sensor
 
@@ -259,4 +268,8 @@ See the [Raspberry Pi 400 USB power safety record](USB_POWER_SAFETY.md) for the 
 - Measure wheel slip on the floor. Encoder counts cannot detect wheel slip.
 - Configure the GY-511 and verify DRDY transitions.
 - Test the IR sensor against targets at known distances or reflectivities.
-- Confirm that the HC-SR04 Echo voltage at GP2 does not exceed 3.3 V.
+- Measure ultrasonic distance accuracy against a tape measure at several known
+  distances.
+- Measure the usable minimum and maximum ultrasonic range.
+- Measure the ultrasonic beam width or detection cone.
+- Measure ultrasonic reading repeatability at a fixed distance.
