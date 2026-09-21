@@ -131,3 +131,20 @@ target_link_libraries(motor_rotation_drift PRIVATE
 pico_enable_stdio_usb(motor_rotation_drift 1)
 pico_enable_stdio_uart(motor_rotation_drift 0)
 pico_add_extra_outputs(motor_rotation_drift)
+
+add_executable(wifi_telemetry_probe
+    src/wifi_telemetry_probe.c
+)
+
+target_include_directories(wifi_telemetry_probe PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(wifi_telemetry_probe PRIVATE
+    pico_stdlib
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(wifi_telemetry_probe 1)
+pico_enable_stdio_uart(wifi_telemetry_probe 0)
+pico_add_extra_outputs(wifi_telemetry_probe)
