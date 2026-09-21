@@ -74,8 +74,38 @@ Wi-Fi, so starting the listener first prevents loss of the first packets:
 python3 scripts/telemetry_receiver.py
 ```
 
-The listener accepts LAN UDP on port 4242. Restrict that port with a firewall
-rule to the local network or the Pico's reserved DHCP address.
+The listener accepts LAN UDP on port 4242. Restrict that port with the
+bench-grade source rule in `scripts/restrict-telemetry-port.sh`:
+
+1. Find the Pico hardware address from its current IP address:
+
+   ```sh
+   ip neigh | grep <pico-ip>
+   ```
+
+   The ARP entry may show `STALE`. This is harmless. Use the hardware address
+   from the entry, not the IP address.
+
+2. Apply and inspect the rule:
+
+   ```sh
+   sudo ./scripts/restrict-telemetry-port.sh apply <pico-mac>
+   sudo ./scripts/restrict-telemetry-port.sh status
+   ```
+
+3. Remove the restriction when needed:
+
+   ```sh
+   sudo ./scripts/restrict-telemetry-port.sh remove
+   ```
+
+The script owns only the `inet telemetry_guard` table. Its table policy is
+accept, and its rules affect UDP port 4242 only. If the hardware address is
+wrong, the rule silently blocks the operator's telemetry. Run `remove`, check
+the address again with `ip neigh`, and apply the corrected address. The rules
+are lost on reboot. To make them persistent, add the table to
+`/etc/nftables.conf` after review. This is a local-network bench control, not
+strong port security; a MAC can be spoofed on the same network.
 
 Flash either target as follows:
 

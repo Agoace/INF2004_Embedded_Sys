@@ -34,9 +34,34 @@ The local credential file `src/wifi_config.h` is ignored. The tracked
 compiled `.uf2` contains the Wi-Fi credentials in plain text, so firmware
 binaries must not be shared.
 
-The listener accepts unauthenticated UDP from the LAN. This is an open security
-item. Restrict UDP port 4242 with a firewall rule to the local network or the
-Pico's reserved DHCP address.
+The listener still accepts unauthenticated UDP from the LAN. A bench-grade
+source restriction is now applied with
+`scripts/restrict-telemetry-port.sh`. It creates its own `inet telemetry_guard`
+nftables table with an input chain whose policy is accept, so it governs UDP
+port 4242 only and cannot affect other ports or services. The rule order is:
+
+1. Accept UDP 4242 from the Pico hardware address.
+2. Accept UDP 4242 from loopback.
+3. Count and drop other UDP 4242 traffic.
+
+The script matches the hardware address, not the IP address, so a DHCP change
+does not change the rule. MAC matching works only on the local network segment
+and a MAC can be spoofed by a determined attacker on that segment. This is a
+bench control, not strong authentication. This mitigates exposure but does not
+close the security item. The receiver still performs no packet authentication
+and must treat all content as untrusted.
+
+The script has three subcommands:
+
+- `apply <pico-mac>` deletes and recreates the table after validating the MAC.
+- `status` prints the table or reports that port 4242 is unrestricted.
+- `remove` deletes the table and makes port 4242 unrestricted again.
+
+The operator applied the rules with Pico address `d8:3a:dd:ae:51:ac` and
+confirmed that telemetry continued to arrive. The drop counter was zero. This
+means that no other source probed the port; it does not mean that the rule is
+inactive. The rules are not persistent across reboot. Persistence is an open
+item and requires adding the table to `/etc/nftables.conf`.
 
 ## Architecture
 
