@@ -20,6 +20,8 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/DEVELOPMENT.md](DEVELOPMENT.md) |
 | Calibration record | [docs/CALIBRATION_RESULTS.md](CALIBRATION_RESULTS.md) |
+| Motor rotation drift record | [docs/MOTOR_ROTATION_DRIFT.md](MOTOR_ROTATION_DRIFT.md) |
+| Interrupt and polling conventions | [docs/INTERRUPT_CONVENTIONS.md](INTERRUPT_CONVENTIONS.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
@@ -35,6 +37,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor encoder calibration | [`src/motor_encoder_calibration.c`](../src/motor_encoder_calibration.c) |
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
+| Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
 | CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |

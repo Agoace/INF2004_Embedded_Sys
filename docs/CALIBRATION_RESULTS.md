@@ -78,6 +78,18 @@ pulse_us = 500 + (angle_degrees * 2000 / 180);
 
 ## Motor 1 encoder
 
+### Current shared calibration
+
+The current shared value is **2535 counts per wheel revolution**. The
+50-revolution forward run and count-based jog alignment are recorded in the
+[Motor rotation drift record](MOTOR_ROTATION_DRIFT.md). Motor 1 measured
+2535.000 counts per revolution. This supersedes the earlier 2540 and 2539
+values: those values came from a chosen 2500-count stop threshold plus
+observed coast and a single-revolution visual check with about +/-20 counts of
+visual resolution. That method could not resolve a 5-count error.
+
+### Superseded single-revolution measurement
+
 Test conditions:
 
 - Motor power: 10% PWM duty.
@@ -91,7 +103,7 @@ Test conditions:
 | --- | ---: |
 | Stop threshold | 2500 counts |
 | Final count after braking | 2540 counts |
-| Measured counts per wheel revolution | 2540 |
+| Measured counts per wheel revolution (superseded) | 2540 |
 | Braking travel | 40 counts |
 | Test duration | Approximately 2560 ms |
 | Visual error | None detected |
@@ -112,6 +124,16 @@ The encoder reports more movement than is visible at the wheel. Gearbox backlash
 
 ## Motor 2 encoder
 
+### Current shared calibration
+
+Use the shared value **2535 counts per wheel revolution**. The 50-revolution
+forward run and count-based jog alignment are recorded in the [Motor rotation
+drift record](MOTOR_ROTATION_DRIFT.md). Motor 2 measured 2534.940 counts per
+revolution, which is within the approximately +/-0.06-count precision of the
+motor 1 result.
+
+### Superseded single-revolution measurement
+
 Test conditions:
 
 - Motor power: 10% PWM duty.
@@ -124,7 +146,7 @@ Test conditions:
 
 | Value | Result |
 | --- | ---: |
-| Measured counts per wheel revolution | 2539 |
+| Measured counts per wheel revolution (superseded) | 2539 |
 | Practical rounded value | 2540 |
 | Compensated stop threshold at 10% power | 2500 |
 | Typical braking travel | 33–39 counts |
@@ -220,15 +242,20 @@ Compared with 5 V VIN, USB motor power produced approximately 8.5–10.5% lower 
 See the [Raspberry Pi 400 USB power safety record](USB_POWER_SAFETY.md) for the full procedure and recovery steps.
 
 - The Raspberry Pi 400 USB ports share a maximum 1.2 A peripheral current budget.
-- Power the Robo Pico motors from VIN for all motor tests.
-- Do not use the Pico USB connection as the motor power source.
+- Power the Robo Pico motors from VIN for general motor tests.
+- The `motor_rotation_drift` record documents one bounded exception: one
+  unloaded motor at 10% duty with the stall guard active.
+- Do not use USB motor power for multiple motors, higher duty, or a loaded
+  wheel.
 - For VIN-only tests, disconnect USB before starting the motors.
 - Store results in RAM, stop the motors, keep VIN on, and reconnect USB only to read the result.
 - If a USB over-current event occurs, turn off the Robo Pico, disconnect it, reboot the Raspberry Pi, and verify `/srv` with `findmnt /srv` before continuing.
 
 ## Remaining work
 
-- Test both motors under the robot's normal load.
+- Re-measure coast under the robot's normal load for each motor.
+- Confirm the shared 2535 counts-per-revolution value under the robot's normal
+  load.
 - Measure wheel slip on the floor. Encoder counts cannot detect wheel slip.
 - Configure the GY-511 and verify DRDY transitions.
 - Test the IR sensor against targets at known distances or reflectivities.

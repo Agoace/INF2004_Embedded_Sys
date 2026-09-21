@@ -117,3 +117,17 @@ target_link_libraries(motor_speed_calibration PRIVATE
 pico_enable_stdio_usb(motor_speed_calibration 1)
 pico_enable_stdio_uart(motor_speed_calibration 0)
 pico_add_extra_outputs(motor_speed_calibration)
+
+add_executable(motor_rotation_drift
+    src/motor_rotation_drift.c
+)
+
+target_link_libraries(motor_rotation_drift PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+)
+
+pico_enable_stdio_usb(motor_rotation_drift 1)
+pico_enable_stdio_uart(motor_rotation_drift 0)
+pico_add_extra_outputs(motor_rotation_drift)

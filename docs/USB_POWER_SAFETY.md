@@ -41,7 +41,23 @@ Aborting journal on device sda1
 9. Reconnect USB only after the motors stop.
 10. Read the repeated saved result through USB serial.
 
-Do not power the motors from the Raspberry Pi 400 USB ports.
+## Bounded single-motor exception
+
+The `motor_rotation_drift` measurement used one motor at 10% duty with the
+wheel lifted. The operator determined this single-motor case was acceptable
+on the Raspberry Pi 400 USB supply when the firmware stall guard was active.
+The exception is bounded by both motor count and duty. Do not use it for two
+motors, higher duty, or a loaded wheel. A rule that is routinely overridden is
+worse than an accurate rule.
+
+The VIN source available for this test is an unmarked power bank. It cuts its
+output after about 10 seconds of low current draw, so it cannot power the
+50-revolution measurement reliably. This does not make USB power generally
+safe: the 1.2 A limit still supplies the external SSD and other devices.
+Reconnect USB only after the motor stops so the saved result can be read.
+
+For all other motor tests, do not power the motors from the Raspberry Pi 400
+USB ports.
 
 ## Recovery after an over-current event
 

@@ -133,7 +133,9 @@ Read USB serial to record each pulse width. Stop moving toward an endpoint immed
 
 > **Motor power warning:** Do not power the Robo Pico motors from the Raspberry Pi 400 USB ports. The Pi 400 has a shared 1.2 A USB peripheral limit. A motor test caused USB over-current and disconnected the external SSD. Follow the [USB power safety procedure](USB_POWER_SAFETY.md) and use the regulated VIN supply.
 
-Lift the wheels before using this target. The current calibration runs a motor 1 repeatability test: tap GP20 to start ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP16/GP17 encoder and a 2500-count stop threshold. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP21 is an emergency stop, and motor 2 stays disabled. Motor 1 measured 2540 counts per wheel revolution; motor 2 measured 2539.
+Lift the wheels before using this target. The current calibration runs a motor 1 repeatability test: tap GP20 to start ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP16/GP17 encoder and a 2500-count stop threshold. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP21 is an emergency stop, and motor 2 stays disabled. The historical
+single-revolution values were 2540 for motor 1 and 2539 for motor 2; both are
+superseded by the [50-revolution measurement](MOTOR_ROTATION_DRIFT.md).
 
 ```sh
 cmake --build build --target motor_encoder_calibration
@@ -141,6 +143,40 @@ picotool load -f -v -x build/motor_encoder_calibration.uf2
 ```
 
 Keep hands, wires, clothing, and the USB cable clear of the wheels and drivetrain.
+
+### 50-revolution motor rotation drift
+
+The `motor_rotation_drift` target measures the shared counts per wheel
+revolution. It runs one selected motor at 10% duty for 50 continuous forward
+revolutions. The run takes about 127 seconds. GP20 starts motor 1 and GP21 is
+its emergency stop. GP21 starts motor 2 and GP20 is its emergency stop.
+
+Build and flash it:
+
+```sh
+cmake --build build --target motor_rotation_drift
+picotool load -f -v -x build/motor_rotation_drift.uf2
+```
+
+The run deliberately stops 300 counts short of the ideal 126750-count total.
+A drift near -277 counts is expected after unloaded coast; it includes the
+deliberate undershoot and is not a motor error. Coast is reported separately.
+The stall guard stops a motor after 500 ms without encoder count movement,
+after a 1-second start grace period.
+
+After a completed run, jog forward only to align a wheel-rim mark with a fixed
+chassis mark. A tap of the motor button fires a 40-count coarse pulse when the
+button is released. A tap of the other button fires a 3-count fine pulse on
+release. Pulses use the encoder stop mechanism and have a 500 ms backstop. Do
+not reverse: reverse movement engages gearbox backlash. Hold both buttons to
+finish without moving. The result includes the primary 50-revolution CPR
+value, a secondary 51-revolution check, and the measured jog resolution.
+
+The firmware does not print during the motor run by design. It stores the
+result in RAM and repeats it every two seconds while idle. Reconnect USB after
+the motor stops to read the saved result. Follow the bounded USB exception in
+the [USB power safety procedure](USB_POWER_SAFETY.md); do not generalise it
+to multiple motors or higher duty.
 
 ### Minimum free-running duty
 
@@ -166,7 +202,7 @@ picotool load -f -v -x build/motor_speed_calibration.uf2
 
 Keep both wheels lifted. GP20 starts the test and GP21 stops it. Use VIN power because motor voltage changes the result and USB motor power can exceed the Pi 400 peripheral current limit.
 
-A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. Keep 2539 counts per revolution as the measured calibration and 2500 as the compensated stopping threshold for this test speed.
+A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. This historical result is superseded; use the shared 2535 counts-per-revolution value in the [motor rotation drift record](MOTOR_ROTATION_DRIFT.md).
 
 **Voltage warning:** The Robo Pico specification limits digital inputs to 3.6 V. A bare HC-SR04 can produce a 5 V Echo signal. GP2 must use a suitable level shifter or voltage divider unless the connected ultrasonic module already provides a 3.3 V Echo signal.
 
