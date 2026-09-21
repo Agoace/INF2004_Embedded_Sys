@@ -19,5 +19,6 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Motor rotation drift record](MOTOR_ROTATION_DRIFT.md) — 50-revolution counts-per-revolution measurements and jog alignment results.
 - [Interrupt and polling conventions](INTERRUPT_CONVENTIONS.md) — rules for event-driven, time-driven, and no-event work.
 - [Raspberry Pi 400 USB power safety](USB_POWER_SAFETY.md) — 1.2 A shared limit, motor-test procedure, bounded exception, and over-current recovery.
-- [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — planned Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
+- [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
+- [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned packet contract for firmware, receiver, and future dashboard.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.

@@ -5,21 +5,25 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define TELEMETRY_LINE_SIZE 1024
+#define TELEMETRY_MAX_PACKET_BYTES 1400
 #define TELEMETRY_DEVICE_ID_PROBE "pico-w-telemetry-probe"
 
 /*
  * Each send returns after local formatting and the raw UDP enqueue; it does
  * not wait for the receiver. Call these functions only from the main loop.
- * NEVER call telemetry_send_line() or telemetry_send_motor_line() from an
+ * NEVER call telemetry_send_probe() or telemetry_send_motor_line() from an
  * interrupt handler.
  */
 bool telemetry_init(const char *device_id);
-/* Adds ver,device,session,seq,ms,link and supplied comma-separated fields. */
-bool telemetry_send_line(const char *optional_fields);
 bool telemetry_is_connected(void);
 uint32_t telemetry_error_count(void);
 uint32_t telemetry_session_id(void);
+
+typedef struct {
+    const char *state;
+} telemetry_probe_sample_t;
+
+bool telemetry_send_probe(const telemetry_probe_sample_t *sample);
 
 typedef struct {
     /* NULL strings and false has_* members omit optional fields. */

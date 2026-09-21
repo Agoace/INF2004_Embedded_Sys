@@ -139,20 +139,10 @@ The Pico cannot send telemetry to `localhost`. It must use the Pi 400 LAN addres
 
 ## Telemetry content
 
-Each packet should contain at least:
-
-- Protocol version.
-- Device identifier.
-- Calibration session identifier.
-- Sequence number.
-- Pico monotonic timestamp.
-- Test type and current state.
-- PWM duty.
-- Motor 1 and motor 2 encoder counts.
-- Motor 1 and motor 2 RPM.
-- RPM difference.
-- Startup, stall, emergency-stop, and error states.
-- A flag that identifies a completed result.
+The authoritative payload contract is the [telemetry JSON schema](TELEMETRY_SCHEMA.md).
+It defines the common envelope, the nested test payloads, integer units,
+versioning, packet limit, and the reserved test types. Packets are newline
+terminated JSON objects.
 
 UDP does not guarantee packet delivery. Sequence numbers reveal missing packets, and repeated completed results provide recovery without blocking motor control.
 

@@ -18,7 +18,10 @@ int main(void) {
     printf("Network failure must not stall the main loop; send errors are "
            "counted and transmission continues.\n");
     while (true) {
-        telemetry_send_line("test=probe,state=running");
+        const telemetry_probe_sample_t sample = {
+            .state = "running",
+        };
+        telemetry_send_probe(&sample);
         sleep_ms(1000);
     }
 }
