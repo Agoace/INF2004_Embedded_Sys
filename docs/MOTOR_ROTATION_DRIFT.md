@@ -141,9 +141,12 @@ motor at 10% duty with the wheel lifted was acceptable for this test. The
 Raspberry Pi 400 USB ports still share a 1.2 A limit with the external SSD.
 The firmware stall guard is required.
 
-The available VIN source is an unmarked power bank. It cuts output after about
-10 seconds of low current draw, so it would end this long test prematurely
-and cannot be used for this measurement.
+The available VIN source is an unmarked power bank with conditional
+behaviour. The operator confirmed that a Wi-Fi target can keep it on, but a
+non-networked target such as `board_diagnostics` can still trigger a low-current
+cutout. Do not treat the radio load as a supply guarantee. See
+[USB power safety](USB_POWER_SAFETY.md) for the measured condition, the
+non-networked target warning, and the reliable dummy-load fix.
 
 Do not generalise this exception to two motors, a loaded wheel, or higher duty.
 See [USB power safety](USB_POWER_SAFETY.md) for the bounded exception and the

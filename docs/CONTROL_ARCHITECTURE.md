@@ -124,7 +124,8 @@ output and there is little voltage variation to observe.
 This decision has two important caveats:
 
 - The power bank already cut output during `board_diagnostics` because the
-  current draw was too low. This is unlikely under motor load, but without a
+  current draw was too low. The CYW43 radio keeps it on for current Wi-Fi
+  targets, but this does not cover non-networked motor tests. Without a
   voltage reading a mid-run dropout cannot be distinguished from a stall or a
   crash. The stall guard stops the motor, but the diagnosis remains ambiguous.
 - If the supply changes to one 18650 or 21700 cell connected directly to VIN,

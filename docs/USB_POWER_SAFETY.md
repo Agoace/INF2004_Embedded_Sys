@@ -50,12 +50,49 @@ The exception is bounded by both motor count and duty. Do not use it for two
 motors, higher duty, or a loaded wheel. A rule that is routinely overridden is
 worse than an accurate rule.
 
-The VIN source available for this test is an unmarked power bank. It cuts its
-output below roughly 100 mA and could not keep `board_diagnostics` alive. It is
-therefore unusable as a standalone supply for this project. This does not make
-USB power generally safe: the 1.2 A limit still supplies the external SSD and
-other devices. Reconnect USB only after the motor stops so the saved result can
-be read.
+### Conditional behaviour of the unmarked power bank
+
+The unmarked USB power bank is conditional, not a generally reliable supply.
+The operator confirmed this measured behaviour:
+
+- It cut output during `board_diagnostics`, where the load was too low.
+- It stayed on when a Wi-Fi target ran, including `wifi_telemetry_probe` and
+  `motor_rotation_drift`.
+
+These current values are estimates, not meter measurements. A non-networked
+target draws roughly 30–50 mA. A target with the CYW43 radio associated and
+sending at 1 Hz draws roughly 70–90 mA. The periodic transmit current spike,
+not only the average current, is likely part of what satisfies the bank's
+low-current detector. No dummy-load resistor is fitted. The radio is the only
+known load that raises the current.
+
+This does not make the bank safe for every target. It remains at risk of a
+mid-test cutout when used with `board_diagnostics`,
+`motor_encoder_calibration`, `motor_duty_calibration`, or
+`motor_speed_calibration`; none of these targets use networking. A cutout
+during a motor test looks exactly like a stall or a crash. The stall guard will
+stop the motor safely, but the operator will diagnose the wrong cause. There
+is no battery-voltage reading to separate these causes because GP28 is
+allocated to a line-tracing IR sensor instead of the VBAT sense.
+
+Relying on the radio is incidental, not designed. A firmware change, a
+low-power radio state between packets, or a non-networked target can remove
+the effect. Use the reliable fix if this supply must be used: fit a resistor
+in parallel across the VIN `+` and `-` terminals. A resistor of about 42 ohms
+would draw about 119 mA at 5 V and dissipate about 0.6 W. Use a 2 W or larger
+part. A 1 W part at 0.6 W becomes hot enough to burn. The resistor must be
+parallel with the board, never in series. A series resistor would drop the
+supply voltage and starve the motors.
+
+The bank's claimed 20 Ah capacity makes 0.6 W waste acceptable for bench
+work. Power-bank capacity is normally quoted at cell voltage, however, so the
+usable capacity at 5 V is lower. The resistor is **not currently fitted**.
+
+For the four non-networked targets listed above, an unexplained stop may be a
+power-bank cutout rather than a test fault. Do not continue until the supply
+is confirmed. This does not make USB power generally safe: the 1.2 A limit
+still supplies the external SSD and other devices. Reconnect USB only after
+the motor stops so the saved result can be read.
 
 The Robo Pico datasheet gives an input range of 3.6–6 V. Its motor rail is
 unregulated, so motor voltage equals the supply voltage. Motor speed therefore
