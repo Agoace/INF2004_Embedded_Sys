@@ -1,12 +1,42 @@
 # Wi-Fi telemetry dashboard architecture
 
-Status: Planned
+Status: Partially implemented
 
 Date: 2026-09-20
 
 ## Purpose
 
 Provide live Pico W calibration results without a USB or UART data connection. The design keeps motor power away from the Raspberry Pi 400 USB ports and makes the dashboard available privately through the tailnet.
+
+## Implementation status
+
+The Pico transport is confirmed working on hardware. The repository now has:
+
+- A reusable raw-lwIP Wi-Fi and UDP transport module in `src/telemetry.c` and
+  `src/telemetry.h`.
+- The `wifi_telemetry_probe` firmware target.
+- Telemetry integration in `motor_rotation_drift`.
+- The standard-library host receiver in
+  `scripts/telemetry_receiver.py`.
+
+The read-only dashboard and the Tailscale Serve proxy do not exist yet. This
+record describes the planned architecture for those parts.
+
+The hardware soak test showed sporadic, scattered sequence gaps. It did not
+show consecutive bursts. This is normal packet loss behaviour for UDP on a
+2.4 GHz network. The motor firmware therefore repeats completed summaries
+every 2 seconds and completed split series every 10 seconds. The authoritative
+result stays in RAM on the Pico. No measurement depends on a telemetry packet
+arriving.
+
+The local credential file `src/wifi_config.h` is ignored. The tracked
+`src/wifi_config.h.example` contains placeholders and copy instructions. A
+compiled `.uf2` contains the Wi-Fi credentials in plain text, so firmware
+binaries must not be shared.
+
+The listener accepts unauthenticated UDP from the LAN. This is an open security
+item. Restrict UDP port 4242 with a firewall rule to the local network or the
+Pico's reserved DHCP address.
 
 ## Architecture
 

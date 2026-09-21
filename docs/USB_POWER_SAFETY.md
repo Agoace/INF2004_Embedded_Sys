@@ -51,10 +51,16 @@ motors, higher duty, or a loaded wheel. A rule that is routinely overridden is
 worse than an accurate rule.
 
 The VIN source available for this test is an unmarked power bank. It cuts its
-output after about 10 seconds of low current draw, so it cannot power the
-50-revolution measurement reliably. This does not make USB power generally
-safe: the 1.2 A limit still supplies the external SSD and other devices.
-Reconnect USB only after the motor stops so the saved result can be read.
+output below roughly 100 mA and could not keep `board_diagnostics` alive. It is
+therefore unusable as a standalone supply for this project. This does not make
+USB power generally safe: the 1.2 A limit still supplies the external SSD and
+other devices. Reconnect USB only after the motor stops so the saved result can
+be read.
+
+The Robo Pico datasheet gives an input range of 3.6–6 V. Its motor rail is
+unregulated, so motor voltage equals the supply voltage. Motor speed therefore
+changes with supply voltage, and each recorded speed table applies only at its
+stated voltage. Under USB-only power, the motor rail is VUSB minus 0.4 V.
 
 For all other motor tests, do not power the motors from the Raspberry Pi 400
 USB ports.

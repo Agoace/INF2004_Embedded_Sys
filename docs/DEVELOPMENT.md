@@ -46,6 +46,48 @@ The flashable file is:
 build/pin_probe.uf2
 ```
 
+## Wi-Fi telemetry
+
+The telemetry firmware embeds the Wi-Fi credentials. Create the ignored local
+configuration file before building:
+
+```sh
+cp src/wifi_config.h.example src/wifi_config.h
+# Edit src/wifi_config.h and set WIFI_SSID and WIFI_PASSWORD.
+```
+
+Do not commit or share `src/wifi_config.h`. The credentials remain in the
+compiled `.uf2` file.
+
+Build the probe and the motor drift target with the Pico W board selected:
+
+```sh
+cmake -S . -B build -DPICO_BOARD=pico_w
+cmake --build build --target wifi_telemetry_probe
+cmake --build build --target motor_rotation_drift
+```
+
+Start the receiver before flashing. The probe starts sending after it joins
+Wi-Fi, so starting the listener first prevents loss of the first packets:
+
+```sh
+python3 scripts/telemetry_receiver.py
+```
+
+The listener accepts LAN UDP on port 4242. Restrict that port with a firewall
+rule to the local network or the Pico's reserved DHCP address.
+
+Flash either target as follows:
+
+```sh
+picotool load -f -v -x build/wifi_telemetry_probe.uf2
+# or
+picotool load -f -v -x build/motor_rotation_drift.uf2
+```
+
+The motor target must use VIN motor power and the USB cable must stay
+unconnected while the motors operate. See the [USB power safety procedure](USB_POWER_SAFETY.md).
+
 ## Flash
 
 1. Disconnect the Pico W.

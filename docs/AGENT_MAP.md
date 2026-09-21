@@ -38,6 +38,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
+| Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
+| Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
+| Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |

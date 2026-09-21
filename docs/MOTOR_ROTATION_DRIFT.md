@@ -16,6 +16,29 @@ has no available datasheet, so this is an empirical value.
 The value is not divisible by four. This indicates that the encoder is on the
 motor shaft before a non-integer gear ratio. A round ratio must not be assumed.
 
+## What this measures
+
+The measurement chain has a clear limit:
+
+- Encoder counts to wheel revolutions are measured. The shared value is about
+  +/-0.06 counts per revolution. This is a gear and encoder ratio. It is a
+  mechanical property and does not normally drift.
+- Wheel revolutions to ground distance are **not measured**. This needs the
+  wheel diameter. The wheel diameter has not been measured. The effective
+  rolling radius under load is smaller than the free diameter because the tyre
+  compresses. The amount of compression has not been measured here.
+- Ground distance is also affected by wheel slip. An encoder cannot detect
+  slip. A wheel can spin on a slick floor, add counts, and produce no matching
+  ground travel.
+
+Therefore, 2535 is a precise encoder constant, not a precise distance
+calibration. The weak link is the wheel-to-ground interface, not the encoder.
+Encoder dead reckoning also accumulates error over distance, even with a good
+encoder constant. It needs periodic correction against an external reference.
+The GY-511 magnetometer is deferred and may be abandoned because the chassis
+may be magnetically too noisy. The remaining candidates are ultrasonic
+correction against a known surface or accepting bounded drift over short runs.
+
 ## Method
 
 Each motor was tested separately with:

@@ -8,6 +8,8 @@
 #include "hardware/sync.h"
 #include "pico/stdlib.h"
 
+#include "telemetry.h"
+
 #define MOTOR_1_PWM_PIN 8
 #define MOTOR_1_BRAKE_PIN 9
 #define MOTOR_2_PWM_PIN 10
@@ -134,6 +136,7 @@ typedef struct {
 } drift_result_t;
 
 static drift_result_t last_result;
+static bool telemetry_enabled;
 
 static uint8_t read_encoder_state(const encoder_state_t *encoder) {
     return (uint8_t)((gpio_get(encoder->a_pin) << 1u) |
@@ -285,6 +288,185 @@ static int32_t read_quadrature_count(const encoder_state_t *encoder) {
 
 static uint32_t absolute_count(int32_t count) {
     return (uint32_t)(count < 0 ? -count : count);
+}
+
+static void send_motor_telemetry(const telemetry_motor_sample_t *sample) {
+    if (telemetry_enabled && telemetry_is_connected()) {
+        (void)telemetry_send_motor_line(sample);
+    }
+}
+
+static void send_run_progress_telemetry(unsigned int motor_number,
+                                         uint32_t observed_count,
+                                         uint32_t elapsed_ms,
+                                         bool stall_monitoring) {
+    telemetry_motor_sample_t sample = {0};
+    sample.test_type = "rotation_drift";
+    sample.state = "running";
+    sample.direction = "forward";
+    sample.startup_state = stall_monitoring ? "complete" : "grace";
+    sample.stall_state = "clear";
+    sample.emergency_state = "clear";
+    sample.error_state = "none";
+    sample.has_motor_number = true;
+    sample.motor_number = motor_number;
+    sample.has_duty_percent = true;
+    sample.duty_percent = PWM_DUTY_PERCENT;
+    sample.has_revolutions_requested = true;
+    sample.revolutions_requested = TEST_REVOLUTIONS;
+    sample.has_revolution_index = true;
+    sample.revolution_index = observed_count / COUNTS_PER_REVOLUTION;
+    sample.has_absolute_count = true;
+    sample.absolute_count = observed_count;
+    sample.has_elapsed_ms = true;
+    sample.elapsed_ms = elapsed_ms;
+    sample.has_completed = true;
+    sample.completed = false;
+    send_motor_telemetry(&sample);
+}
+
+static const char *result_state(const drift_result_t *result) {
+    if (result->completed) {
+        return "completed";
+    }
+    if (result->emergency_stop) {
+        return "emergency_stop";
+    }
+    if (result->stalled) {
+        return "stalled";
+    }
+    if (result->timed_out) {
+        return "safety_timeout";
+    }
+    return "incomplete";
+}
+
+static void send_completed_telemetry(bool include_splits) {
+    if (!last_result.valid) {
+        return;
+    }
+
+    const drift_result_t *result = &last_result;
+    telemetry_motor_sample_t sample = {0};
+    sample.test_type = "rotation_drift";
+    sample.state = result_state(result);
+    sample.direction = result->reverse ? "reverse" : "forward";
+    sample.startup_state = "complete";
+    sample.stall_state = result->stalled ? "active" : "clear";
+    sample.emergency_state = result->emergency_stop ? "active" : "clear";
+    sample.error_state = result->timed_out ? "timeout" :
+                         (result->stalled ? "stall" : "none");
+    sample.has_motor_number = true;
+    sample.motor_number = result->motor_number;
+    sample.has_duty_percent = true;
+    sample.duty_percent = result->duty_percent;
+    sample.has_revolutions_requested = true;
+    sample.revolutions_requested = result->revolutions_requested;
+    sample.has_ideal_counts = true;
+    sample.ideal_counts = IDEAL_COUNTS;
+    sample.has_target_counts = true;
+    sample.target_counts = TARGET_COUNTS;
+    sample.has_count_at_stop = true;
+    sample.count_at_stop = result->count_at_stop;
+    sample.has_absolute_count_at_stop = true;
+    sample.absolute_count_at_stop = result->absolute_count_at_stop;
+    sample.has_count_after_settle = true;
+    sample.count_after_settle = result->count_after_settle;
+    sample.has_absolute_count_after_settle = true;
+    sample.absolute_count_after_settle = result->absolute_count_after_settle;
+    sample.has_coast_overshoot_counts = true;
+    sample.coast_overshoot_counts = result->overshoot_counts;
+    sample.has_boundary_count_reached = true;
+    sample.boundary_count_reached = result->boundary_count_reached;
+    sample.has_elapsed_ms = true;
+    sample.elapsed_ms = result->elapsed_ms;
+    sample.has_completed = true;
+    sample.completed = true;
+
+    if (result->completed) {
+        sample.has_count_at_trigger = true;
+        sample.count_at_trigger = result->count_at_trigger;
+        sample.has_absolute_count_at_trigger = true;
+        sample.absolute_count_at_trigger = result->absolute_count_at_trigger;
+        sample.has_undershoot_counts = true;
+        sample.undershoot_counts = UNDERSHOOT_COUNTS;
+        sample.has_drift_counts = true;
+        sample.drift_counts = result->drift_counts;
+        sample.has_drift_millidegrees = true;
+        sample.drift_millidegrees = result->drift_millidegrees;
+        sample.has_drift_per_revolution_millidegrees = true;
+        sample.drift_per_revolution_millidegrees =
+            result->drift_per_revolution_millidegrees;
+        sample.has_elapsed_us = true;
+        sample.elapsed_us = result->elapsed_us;
+        sample.has_mean_us_per_revolution = true;
+        sample.mean_us_per_revolution = result->mean_us_per_revolution;
+        sample.has_mean_ms_per_revolution = true;
+        sample.mean_ms_per_revolution = result->mean_ms_per_revolution;
+        sample.has_counts_per_rev_milli = true;
+        sample.counts_per_rev_milli =
+            (result->absolute_count_after_settle * 1000u) /
+            TEST_REVOLUTIONS;
+        sample.has_sensitivity_millicounts = true;
+        sample.sensitivity_millicounts =
+            (IDEAL_COUNTS * 1000u) / (360u * TEST_REVOLUTIONS);
+    }
+    if (result->jog_complete) {
+        sample.has_jog_counts = true;
+        sample.jog_counts = result->jog_counts;
+        sample.has_jog_final_absolute_count = true;
+        sample.jog_final_absolute_count = result->jog_final_absolute_count;
+        sample.has_jog_combined_count = true;
+        sample.jog_combined_count = result->jog_combined_count;
+        sample.has_smallest_jog_movement = true;
+        sample.smallest_jog_movement = result->smallest_jog_movement;
+        sample.has_alignment_resolution_cpr_milli = true;
+        sample.alignment_resolution_cpr_milli =
+            (result->smallest_jog_movement * 1000u) /
+            TEST_REVOLUTIONS;
+        sample.has_jog_primary_cpr_milli = true;
+        sample.jog_primary_cpr_milli =
+            (result->jog_combined_count * 1000u) /
+            TEST_REVOLUTIONS;
+        sample.has_jog_secondary_cpr_milli = true;
+        sample.jog_secondary_cpr_milli =
+            (result->jog_combined_count * 1000u) /
+            (TEST_REVOLUTIONS + 1u);
+    }
+    send_motor_telemetry(&sample);
+
+    if (!include_splits || !result->completed) {
+        return;
+    }
+    for (uint32_t index = 0;
+         index < result->boundary_count_reached && index < TEST_REVOLUTIONS;
+         ++index) {
+        const uint32_t previous_count = index == 0 ? 0 : boundary_count[index - 1];
+        const uint32_t previous_us = index == 0 ? 0 : boundary_us[index - 1];
+        telemetry_motor_sample_t split = {0};
+        split.test_type = "rotation_drift";
+        split.state = "completed_split";
+        split.direction = result->reverse ? "reverse" : "forward";
+        split.has_motor_number = true;
+        split.motor_number = result->motor_number;
+        split.has_split_index = true;
+        split.split_index = index;
+        split.has_split_total = true;
+        split.split_total = result->boundary_count_reached;
+        split.has_split_revolution = true;
+        split.split_revolution = index + 1u;
+        split.has_split_absolute_count = true;
+        split.split_absolute_count = boundary_count[index];
+        split.has_split_elapsed_us = true;
+        split.split_elapsed_us = boundary_us[index];
+        split.has_split_delta_counts = true;
+        split.split_delta_counts = boundary_count[index] - previous_count;
+        split.has_split_delta_us = true;
+        split.split_delta_us = boundary_us[index] - previous_us;
+        split.has_completed = true;
+        split.completed = true;
+        send_motor_telemetry(&split);
+    }
 }
 
 static void print_millicounts(const char *label, uint32_t numerator,
@@ -468,6 +650,7 @@ static void run_motor_test(unsigned int motor_number,
     uint32_t last_observed_count = absolute_count(read_quadrature_count(encoder));
     uint32_t last_count_change_ms = 0;
     bool stall_monitoring = false;
+    uint32_t next_telemetry_ms = 1000;
 
     while (true) {
         const uint32_t now_ms =
@@ -503,6 +686,15 @@ static void run_motor_test(unsigned int motor_number,
             timed_out = true;
             elapsed_ms = now_ms;
             break;
+        }
+
+        /* Send only after emergency, stall, stop, and timeout checks. */
+        if (now_ms >= next_telemetry_ms) {
+            send_run_progress_telemetry(motor_number, observed_count,
+                                         now_ms, stall_monitoring);
+            do {
+                next_telemetry_ms += 1000u;
+            } while (next_telemetry_ms <= now_ms);
         }
         sleep_ms(BUTTON_POLL_MS);
     }
@@ -659,6 +851,38 @@ static void perform_jog_pulse(unsigned int motor_number,
     print_millicounts("  running secondary counts/rev at N+1: ",
                       last_result.jog_combined_count,
                       TEST_REVOLUTIONS + 1u);
+
+    telemetry_motor_sample_t sample = {0};
+    sample.test_type = "rotation_drift";
+    sample.state = "jogging";
+    sample.direction = "forward";
+    sample.has_motor_number = true;
+    sample.motor_number = motor_number;
+    sample.has_duty_percent = true;
+    sample.duty_percent = JOG_DUTY_PERCENT;
+    sample.has_absolute_count = true;
+    sample.absolute_count = last_result.jog_final_absolute_count;
+    sample.has_jog_counts = true;
+    sample.jog_counts = last_result.jog_counts;
+    sample.has_jog_final_absolute_count = true;
+    sample.jog_final_absolute_count = last_result.jog_final_absolute_count;
+    sample.has_jog_combined_count = true;
+    sample.jog_combined_count = last_result.jog_combined_count;
+    sample.has_smallest_jog_movement = true;
+    sample.smallest_jog_movement = last_result.smallest_jog_movement;
+    sample.has_alignment_resolution_cpr_milli = true;
+    sample.alignment_resolution_cpr_milli =
+        (last_result.smallest_jog_movement * 1000u) / TEST_REVOLUTIONS;
+    sample.has_jog_primary_cpr_milli = true;
+    sample.jog_primary_cpr_milli =
+        (last_result.jog_combined_count * 1000u) / TEST_REVOLUTIONS;
+    sample.has_jog_secondary_cpr_milli = true;
+    sample.jog_secondary_cpr_milli =
+        (last_result.jog_combined_count * 1000u) /
+        (TEST_REVOLUTIONS + 1u);
+    sample.has_completed = true;
+    sample.completed = false;
+    send_motor_telemetry(&sample);
 }
 
 static void run_jog_mode(unsigned int motor_number,
@@ -776,9 +1000,14 @@ int main(void) {
     printf("Deliberate undershoot: %u counts; jog forward to alignment.\n",
            UNDERSHOOT_COUNTS);
 
+    telemetry_enabled = telemetry_init("pico-w-rotation-drift");
+    printf("Telemetry startup: %s.\n",
+           telemetry_enabled ? "enabled" : "unavailable; continuing without it");
+
     bool previous_motor_1_pressed = false;
     bool previous_motor_2_pressed = false;
     absolute_time_t next_result_report = make_timeout_time_ms(2000);
+    absolute_time_t next_split_report = make_timeout_time_ms(10000);
 
     while (true) {
         const bool motor_1_pressed = !gpio_get(MOTOR_1_BUTTON_PIN);
@@ -786,12 +1015,15 @@ int main(void) {
 
         if (motor_1_pressed && !previous_motor_1_pressed) {
             run_motor_test(1, &encoder_1, MOTOR_2_BUTTON_PIN);
+            send_completed_telemetry(true);
             if (last_result.completed && !last_result.stalled) {
                 run_jog_mode(1, &encoder_1,
                              MOTOR_1_BUTTON_PIN, MOTOR_2_BUTTON_PIN);
+                send_completed_telemetry(true);
             }
             printf("Tap GP20 or GP21 to run another test.\n");
             next_result_report = make_timeout_time_ms(2000);
+            next_split_report = make_timeout_time_ms(10000);
             while (!gpio_get(MOTOR_1_BUTTON_PIN) ||
                    !gpio_get(MOTOR_2_BUTTON_PIN)) {
                 sleep_ms(BUTTON_POLL_MS);
@@ -803,12 +1035,15 @@ int main(void) {
 
         if (motor_2_pressed && !previous_motor_2_pressed) {
             run_motor_test(2, &encoder_2, MOTOR_1_BUTTON_PIN);
+            send_completed_telemetry(true);
             if (last_result.completed && !last_result.stalled) {
                 run_jog_mode(2, &encoder_2,
                              MOTOR_2_BUTTON_PIN, MOTOR_1_BUTTON_PIN);
+                send_completed_telemetry(true);
             }
             printf("Tap GP20 or GP21 to run another test.\n");
             next_result_report = make_timeout_time_ms(2000);
+            next_split_report = make_timeout_time_ms(10000);
             while (!gpio_get(MOTOR_1_BUTTON_PIN) ||
                    !gpio_get(MOTOR_2_BUTTON_PIN)) {
                 sleep_ms(BUTTON_POLL_MS);
@@ -820,7 +1055,13 @@ int main(void) {
 
         if (last_result.valid && time_reached(next_result_report)) {
             print_saved_result();
+            send_completed_telemetry(false);
             next_result_report = make_timeout_time_ms(2000);
+        }
+        if (last_result.valid && time_reached(next_split_report)) {
+            /* Summary repeats every 2 s; split packets repeat every 10 s. */
+            send_completed_telemetry(true);
+            next_split_report = make_timeout_time_ms(10000);
         }
 
         previous_motor_1_pressed = motor_1_pressed;

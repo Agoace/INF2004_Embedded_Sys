@@ -120,12 +120,22 @@ pico_add_extra_outputs(motor_speed_calibration)
 
 add_executable(motor_rotation_drift
     src/motor_rotation_drift.c
+    src/telemetry.c
+)
+
+target_include_directories(motor_rotation_drift PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_compile_definitions(motor_rotation_drift PRIVATE
+    TELEMETRY_VERBOSE=0
 )
 
 target_link_libraries(motor_rotation_drift PRIVATE
     pico_stdlib
     hardware_gpio
     hardware_pwm
+    pico_cyw43_arch_lwip_threadsafe_background
 )
 
 pico_enable_stdio_usb(motor_rotation_drift 1)
@@ -134,6 +144,7 @@ pico_add_extra_outputs(motor_rotation_drift)
 
 add_executable(wifi_telemetry_probe
     src/wifi_telemetry_probe.c
+    src/telemetry.c
 )
 
 target_include_directories(wifi_telemetry_probe PRIVATE
