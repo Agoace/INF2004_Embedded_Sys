@@ -120,6 +120,35 @@ picotool load -f -v -x build/motor_rotation_drift.uf2
 The motor target must use VIN motor power and the USB cable must stay
 unconnected while the motors operate. See the [USB power safety procedure](USB_POWER_SAFETY.md).
 
+### Read-only dashboard
+
+Start the dashboard on the Raspberry Pi 400 in a second terminal:
+
+```sh
+python3 scripts/telemetry_dashboard.py
+```
+
+It receives UDP telemetry on `0.0.0.0:4242` and serves the page at
+[http://127.0.0.1:8080/](http://127.0.0.1:8080/). The HTTP server binds to
+localhost only. The UDP receiver and HTTP server run independently. The page
+is read-only; GP20 and GP21 remain the only physical controls, and no remote
+motor start or emergency stop exists.
+
+For private tailnet access, the operator may proxy the local page with:
+
+```sh
+tailscale serve --bg 8080
+```
+
+Use Tailscale Serve, not Tailscale Funnel. Serve keeps the page on the private
+tailnet; Funnel would publish it to the Internet. Do not run this command
+without operator approval.
+
+The UDP listener is unauthenticated. The bench-grade restriction in
+`scripts/restrict-telemetry-port.sh` is not persistent across reboot. After a
+Pi reboot, check the Pico MAC address and reapply the rule before relying on
+that restriction.
+
 ## Flash
 
 1. Disconnect the Pico W.

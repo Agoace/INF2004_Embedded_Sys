@@ -1,12 +1,12 @@
 # Wi-Fi telemetry dashboard architecture
 
-Status: Partially implemented
+Status: Implemented (read-only dashboard)
 
 Date: 2026-09-20
 
 ## Purpose
 
-Provide live Pico W calibration results without a USB or UART data connection. The design keeps motor power away from the Raspberry Pi 400 USB ports and makes the dashboard available privately through the tailnet.
+Provide live Pico W instrument readings and run status without a USB or UART data connection. Calibration results remain on the Pico and are read over USB. The design keeps motor power away from the Raspberry Pi 400 USB ports and makes the dashboard available privately through the tailnet.
 
 ## Implementation status
 
@@ -18,9 +18,12 @@ The Pico transport is confirmed working on hardware. The repository now has:
 - Telemetry integration in `motor_rotation_drift`.
 - The standard-library host receiver in
   `scripts/telemetry_receiver.py`.
+- The standard-library read-only dashboard in
+  `scripts/telemetry_dashboard.py`.
 
-The read-only dashboard and the Tailscale Serve proxy do not exist yet. This
-record describes the planned architecture for those parts.
+The dashboard binds to `127.0.0.1:8080` only. It has no motor controls. GP20
+and GP21 remain the only physical controls. Tailscale Serve is the remote
+access path; the dashboard does not bind to a LAN address.
 
 The hardware soak test showed sporadic, scattered sequence gaps. It did not
 show consecutive bursts. This is normal packet loss behaviour for UDP on a
@@ -56,11 +59,12 @@ The script has three subcommands:
 - `status` prints the table or reports that port 4242 is unrestricted.
 - `remove` deletes the table and makes port 4242 unrestricted again.
 
-The operator applied the rules with Pico address `d8:3a:dd:ae:51:ac` and
-confirmed that telemetry continued to arrive. The drop counter was zero. This
-means that no other source probed the port; it does not mean that the rule is
-inactive. The rules are not persistent across reboot. Persistence is an open
-item and requires adding the table to `/etc/nftables.conf`.
+**Open item after reboot:** the rules are not persistent. The Pi has rebooted,
+so the UDP restriction is currently absent and must be reapplied with
+`scripts/restrict-telemetry-port.sh` after checking the Pico MAC address.
+Persistence remains open and requires adding the table to
+`/etc/nftables.conf` after review. Until then the UDP listener is
+unauthenticated and relies on this bench-grade rule when it is active.
 
 ## Architecture
 
@@ -102,9 +106,10 @@ The Pico W does not join the tailnet. It communicates with the Raspberry Pi 400 
 - Listen for Pico telemetry on UDP port 4242 through the LAN interface.
 - Reject malformed and out-of-order packets as necessary.
 - Store readings for trends, averages, and history without calibration constants.
-- Provide live gauges, charts, and status notices.
+- Provide live gauges, numeric history summaries, and status notices.
 - Bind the web dashboard only to `127.0.0.1:8080`.
 - Keep dashboard operation separate from motor control.
+- Keep the UDP receiver thread independent from HTTP request threads.
 
 ### Tailscale
 
@@ -145,9 +150,25 @@ terminated JSON objects.
 
 UDP does not guarantee packet delivery. Sequence numbers reveal missing packets, and repeated instrument readings and terminal notices provide recovery without blocking motor control.
 
+## Dashboard implementation
+
+`scripts/telemetry_dashboard.py` runs the UDP receiver on its own thread and
+serves one self-contained page with the Python standard library. The page
+polls `/api/state` about once per second. It shows live readings, packet
+health, terminal notices, and up to 300 numeric samples per field. It clears
+history when the Pico session changes. Missing fields show `not applicable`;
+they are never changed to zero. The browser receives JSON and uses DOM
+`textContent`, not `innerHTML`, for received values.
+
+Run `python3 scripts/telemetry_dashboard.py --self-test` to test the state
+pipeline without opening sockets.
+
+The dashboard is read-only. It provides no remote motor start and no remote
+emergency stop. GP20 and GP21 remain the only physical controls.
+
 ## Initial dashboard scope
 
-The first dashboard must be read-only. It should show:
+The dashboard shows:
 
 - Pico connection state and time of the last packet.
 - Wheel speed in RPM, motor duty percent, direction, and current state.
@@ -155,7 +176,8 @@ The first dashboard must be read-only. It should show:
 - Terminal outcome and fault status beside the live gauges.
 - Trends, averages, and history without converting encoder counts.
 
-Remote motor start and remote emergency stop are outside the initial scope. GP20 and GP21 remain the physical controls.
+Remote motor start and remote emergency stop are not implemented. GP20 and
+GP21 remain the only physical controls.
 
 ## Power and failure rules
 
