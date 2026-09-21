@@ -206,8 +206,8 @@ Read USB serial to record each pulse width. Stop moving toward an endpoint immed
 > **Motor power warning:** Do not power the Robo Pico motors from the Raspberry Pi 400 USB ports. The Pi 400 has a shared 1.2 A USB peripheral limit. A motor test caused USB over-current and disconnected the external SSD. Follow the [USB power safety procedure](USB_POWER_SAFETY.md) and use the regulated VIN supply.
 
 Lift the wheels before using this target. The current calibration runs a motor 1 repeatability test: tap GP20 to start ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP16/GP17 encoder and a 2500-count stop threshold. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP21 is an emergency stop, and motor 2 stays disabled. The historical
-single-revolution values were 2540 for motor 1 and 2539 for motor 2; both are
-superseded by the [50-revolution measurement](MOTOR_ROTATION_DRIFT.md).
+The shared value is now 2535 counts per revolution, as recorded in the
+[50-revolution measurement](MOTOR_ROTATION_DRIFT.md).
 
 ```sh
 cmake --build build --target motor_encoder_calibration

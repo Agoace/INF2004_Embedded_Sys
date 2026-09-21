@@ -108,6 +108,11 @@ values: those values came from a chosen 2500-count stop threshold plus
 observed coast and a single-revolution visual check with about +/-20 counts of
 visual resolution. That method could not resolve a 5-count error.
 
+Both `motor_encoder_calibration` and `motor_speed_calibration` now use the
+shared 2535 constant. The encoder calibration still stops at 2500 counts by
+design: its brake compensation is now 35 counts, so 2535 - 35 remains 2500.
+This preserves the physical stop behaviour and the historical comparison.
+
 ### Superseded single-revolution measurement
 
 Test conditions:
@@ -151,6 +156,12 @@ forward run and count-based jog alignment are recorded in the [Motor rotation
 drift record](MOTOR_ROTATION_DRIFT.md). Motor 2 measured 2534.940 counts per
 revolution, which is within the approximately +/-0.06-count precision of the
 motor 1 result.
+
+`motor_encoder_calibration` and `motor_speed_calibration` now use 2535 for
+motor 2 as well. The encoder calibration keeps its 2500-count stop threshold:
+its brake compensation is 35 counts, so the threshold remains 2535 - 35.
+This keeps the physical stop behaviour unchanged while correcting the angular
+drift calculation.
 
 ### Superseded single-revolution measurement
 
@@ -219,6 +230,13 @@ A loaded wheel can require more starting torque than a lifted wheel. If a motor 
 
 Both wheels were lifted. Both motors ran together. Each duty level used the 10% startup kick, a one-second settling period, and a five-second encoder measurement.
 
+These historical RPM values used the superseded 2540 count value for motor 1
+and 2539 for motor 2. The motor 1 values therefore read about 0.197% low; to
+correct them, multiply a recorded motor 1 RPM by `2540/2535`. The motor 2
+values read about 0.158% low; use `2539/2535` for those values. Fresh runs now
+use 2535 and report corrected values directly. A small difference from this
+table is expected and is not a hardware change.
+
 | Duty | Motor 1 | Motor 2 | Motor 1 minus motor 2 |
 | ---: | ---: | ---: | ---: |
 | 10% | 26.253 RPM | 26.556 RPM | -0.303 RPM |
@@ -243,6 +261,13 @@ Observations:
 ## Partial unloaded speed test on Pico USB power
 
 Motor 1 power leads were swapped before this test so both wheels used the intended physical forward direction. Both motors were powered through the Pico USB connection.
+
+These historical RPM values also used the superseded 2540 count value for
+motor 1 and 2539 for motor 2. The motor 1 values read about 0.197% low and can
+be corrected by multiplying by `2540/2535`; motor 2 uses `2539/2535` and reads
+about 0.158% low. Fresh runs now use 2535 and report corrected values directly.
+A small difference from this table is expected and is not a hardware change.
+Do not edit the recorded measurements.
 
 | Duty | Motor 1 | Motor 2 | Motor 1 minus motor 2 |
 | ---: | ---: | ---: | ---: |

@@ -16,6 +16,11 @@ has no available datasheet, so this is an empirical value.
 The value is not divisible by four. This indicates that the encoder is on the
 motor shaft before a non-integer gear ratio. A round ratio must not be assumed.
 
+Both `motor_encoder_calibration` and `motor_speed_calibration` now use the
+shared 2535 constant. In `motor_encoder_calibration`, the brake compensation is
+35 counts so the stop threshold stays at 2535 - 35 = 2500 counts. Do not
+change 35 back to the old value: this preserves the tested physical stop.
+
 ## What this measures
 
 The measurement chain has a clear limit:

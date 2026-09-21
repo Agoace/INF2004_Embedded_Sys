@@ -25,15 +25,21 @@
 #define PWM_DUTY_PERCENT 10
 #define BUTTON_POLL_MS 20
 #define BRAKE_SETTLE_MS 100
-#define MOTOR_2_COUNTS_PER_REVOLUTION 2539
-#define MOTOR_2_BRAKE_COMPENSATION_COUNTS 39
+/* Measured 2535 counts per wheel revolution for both motors by the
+ * 50-revolution rotation drift test. See docs/MOTOR_ROTATION_DRIFT.md.
+ * The brake compensation is set so each stop threshold stays at the
+ * empirically tuned 2500 counts that this test used before, and the
+ * measured 33-40 count braking travel still applies. The corrected value
+ * only changes the angular drift calculation. */
+#define MOTOR_2_COUNTS_PER_REVOLUTION 2535
+#define MOTOR_2_BRAKE_COMPENSATION_COUNTS 35
 #define MOTOR_2_TARGET_COUNTS \
     (MOTOR_2_COUNTS_PER_REVOLUTION - MOTOR_2_BRAKE_COMPENSATION_COUNTS)
 #define MOTOR_2_TIMEOUT_MS 5000
 #define MOTOR_2_TEST_CYCLES 10
 #define DIRECTION_PAUSE_MS 500
-#define MOTOR_1_COUNTS_PER_REVOLUTION 2540
-#define MOTOR_1_BRAKE_COMPENSATION_COUNTS 40
+#define MOTOR_1_COUNTS_PER_REVOLUTION 2535
+#define MOTOR_1_BRAKE_COMPENSATION_COUNTS 35
 #define MOTOR_1_TARGET_COUNTS \
     (MOTOR_1_COUNTS_PER_REVOLUTION - MOTOR_1_BRAKE_COMPENSATION_COUNTS)
 #define MOTOR_1_TIMEOUT_MS 5000

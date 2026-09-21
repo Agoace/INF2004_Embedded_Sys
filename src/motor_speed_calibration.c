@@ -20,8 +20,13 @@
 #define START_BUTTON_PIN 20
 #define EMERGENCY_STOP_BUTTON_PIN 21
 
-#define MOTOR_1_COUNTS_PER_REVOLUTION 2540
-#define MOTOR_2_COUNTS_PER_REVOLUTION 2539
+/* Measured 2535 counts per wheel revolution for both motors by the
+ * 50-revolution rotation drift test. See docs/MOTOR_ROTATION_DRIFT.md.
+ * This supersedes the earlier 2540 and 2539, which were not independent
+ * measurements. RPM values recorded before this change read about 0.197%
+ * low. */
+#define MOTOR_1_COUNTS_PER_REVOLUTION 2535
+#define MOTOR_2_COUNTS_PER_REVOLUTION 2535
 
 #define PWM_WRAP 6249
 #define STARTUP_DUTY_PERCENT 10
