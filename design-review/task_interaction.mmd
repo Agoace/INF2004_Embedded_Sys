@@ -1,0 +1,142 @@
+---
+config:
+  layout: elk
+  flowchart:
+    curve: orthogonal
+    htmlLabels: true
+    wrappingWidth: 600
+  elk:
+    mergeEdges: false
+    forceNodeModelOrder: false
+    considerModelOrder: NONE
+    nodePlacementStrategy: BRANDES_KOEPF
+    spacing.nodeNode: 25
+    layerSpacing: 35
+  themeVariables:
+    fontSize: 40px
+    edgeLabelBackground: "#ffffff"
+---
+flowchart LR
+
+ENC_HW["Motor 1 encoder A/B GP16/GP17<br/>Motor 2 encoder A/B GP4/GP5<br/>3V3"]
+ESTOP_HW["ESTOP button<br/>Robo Pico Button 1<br/>GP20"]
+IR_HW["3 × analogue line IR<br/>GP26/GP27/GP28<br/>digital barcode IR GP7<br/>3V3"]
+ECHO_HW["HC-SR04 Echo GP2<br/>HC-SR04+, 3V3<br/>no divider"]
+IMU_HW["GY-511<br/>I2C0 GP0/GP1<br/>DRDY GP6"]
+ENC_ISR[["Encoder ISR<br/>A/B channels<br/>signed counts (±)"]]
+ESTOP_ISR[["ESTOP ISR"]]
+ECHO_ISR[["Echo ISR<br/>rising and falling<br/>edge timestamps"]]
+COUNTS[("Motor 1 / Motor 2 encoder counters<br/>atomic signed 32-bit counters<br/>2535 counts per wheel revolution")]
+ESTOP_SEM{"sem_estop<br/>semaphore"}
+ECHO_SEM{"sem_echo<br/>semaphore"}
+LINE("Line &amp; Barcode Task<br/>High (11)<br/>Periodic 1 ms<br/>(cyclic handler; barcode sensor polled on GP7)")
+SCAN("Obstacle Scan Task<br/>High (12)<br/>Periodic 100 ms; scan on SCAN_REQ")
+IMU("IMU Terrain Task<br/>Medium (20)<br/>Periodic 13 ms<br/>turn rate (heading change, cross-checked with encoders)<br/>highest hump peak per run")
+MOTION_MBF["mbf_motion_cmd<br/>message buffer"]
+CTRL_MBF["mbf_ctrl_evt<br/>message buffer"]
+MODE{{"flg_mode<br/>RUN | LINE_EN<br/>SCAN_REQ | SLOW"}}
+CTRL("Vehicle Controller Task<br/>High (13)<br/>Event-driven: mbf_ctrl_evt with 10 ms timeout,<br/>then polls sem_estop (TMO_POL)<br/>5 s auto-start; search / reacquire / rescan timeouts")
+EVENTS["<div style='width:900px; text-align:center'>Events into mbf_ctrl_evt<br/><br/>Motion: MOTION_DONE, STALL; encoder self-test result<br/>Line &amp; Barcode: BARCODE (Left / Straight / Right or END), JUNCTION,<br/>LINE_LOST / LINE_FOUND; IR self-test / calibration result<br/>Obstacle Scan: OBST_NEAR, OBST_STOP, PROFILE, SENSOR_FAULT; echo self-test result<br/>IMU Terrain: HUMP_START, HUMP_END, COLLISION, SENSOR_FAULT;<br/>self-test / calibration result<br/>Telemetry: CMD (start, stop, estop, reset)<br/><br/>Vehicle Controller ignores OBST_NEAR / OBST_STOP in HUMP_TRAVERSE</div>"]
+MOTION("Motion Control Task<br/>High (10), highest<br/>Periodic 20 ms,<br/>and immediately on a new command")
+MOTOR_HW["Motor 1 PWM GP8/GP9<br/>Motor 2 PWM GP10/GP11"]
+SNAP[("robot_snapshot_t<br/>mtx_snapshot (mutex, TA_INHERIT)<br/>each task writes its own fields")]
+TELEM("Telemetry Task<br/>Low (30), lowest<br/>Periodic 110 ms<br/>heartbeat; command validation<br/>last-will (offline)")
+WIFI_HW["CYW43 Wi-Fi<br/>MQTT broker (laptop)"]
+SCAN_HW["HC-SR04 Trigger GP3<br/>Servo signal GP15<br/>Servo: 5 V / VSYS"]
+
+%% Hardware I/O.
+ENC_HW -->|"A/B GPIO interrupts"| ENC_ISR
+ESTOP_HW -->|"GPIO interrupt GP20"| ESTOP_ISR
+IR_HW -->|"sampled every 1 ms"| LINE
+ECHO_HW -->|"rising and falling edges"| ECHO_ISR
+SCAN -->|"trigger pulse; servo angle"| SCAN_HW
+IMU <-->|"I2C0 (sole bus owner); DRDY"| IMU_HW
+MOTION -->|PWM| MOTOR_HW
+TELEM <-->|"publish robot/aai01/telemetry, heartbeat, event, status;<br/>subscribe robot/aai01/cmd"| WIFI_HW
+
+%% ISR paths.
+ENC_ISR -->|"signed counts (±)"| COUNTS
+ESTOP_ISR -->|"tk_sig_sem(sem_estop, 1)"| ESTOP_SEM
+ESTOP_SEM -->|"polled (TMO_POL), ≤ 10 ms"| CTRL
+ECHO_ISR -->|"tk_sig_sem(sem_echo, 1)"| ECHO_SEM
+ECHO_SEM -->|"wait, 30 ms timeout"| SCAN
+
+%% Motion commands and sensor data.
+COUNTS -->|"counts read every 20 ms"| MOTION
+COUNTS -->|"encoder distance; count difference"| IMU
+LINE -->|STEER| MOTION_MBF
+CTRL -->|"FOLLOW, TURN(θ), FWD(d), REV(d),<br/>ROTATE, STOP"| MOTION_MBF
+MOTION_MBF -->|"wakes the task at once"| MOTION
+
+%% Events to the controller.
+MOTION -->|"event ID + payload"| CTRL_MBF
+LINE --> CTRL_MBF
+SCAN --> CTRL_MBF
+IMU --> CTRL_MBF
+TELEM -->|"CMD (start, stop, estop, reset)"| CTRL_MBF
+CTRL_MBF -->|"typed events"| CTRL
+
+%% Event flag.
+CTRL -->|"set / clear"| MODE
+MODE -->|LINE_EN| LINE
+MODE -->|SCAN_REQ| SCAN
+MODE -->|SLOW| MOTION
+
+%% Shared snapshot reads. The node states task ownership; no writer arrows are drawn.
+SNAP -->|heading| CTRL
+SNAP -->|"copy under mutex"| TELEM
+
+%% Legend.
+subgraph LEGEND [Legend]
+  direction LR
+  LEG_TASK("RTOS task")
+  LEG_HW["Hardware"]
+  LEG_ISR[["ISR"]]
+  LEG_MBF["Message<br/>buffer"]
+  LEG_FLAG{{"Event flag"}}
+  LEG_SEM{"Semaphore"}
+  LEG_DATA[("Shared data")]
+  LEG_COLORS["Blue: motion/data<br/>Red: events<br/>Dashed red: flags<br/>Purple: ISR<br/>Black: I/O<br/>Teal: snapshot"]
+end
+
+%% Invisible anchors only; they render no lines.
+EVENTS ~~~ CTRL_MBF
+LEG_TASK ~~~ LEG_HW ~~~ LEG_ISR ~~~ LEG_MBF ~~~ LEG_FLAG ~~~ LEG_SEM ~~~ LEG_DATA ~~~ LEG_COLORS
+LEG_DATA ~~~ SCAN_HW
+
+classDef task fill:#d8f1d2,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef taskMotion fill:#ffe1bd,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef taskCtrl fill:#fff0b2,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef taskScan fill:#ffd2d2,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef taskImu fill:#e4d7f5,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef taskTelem fill:#d6e8ff,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef hardware fill:#e6e6e6,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef isr fill:#eadcff,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef shared fill:#fff4b2,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef buffer fill:#cfe2ff,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef flag fill:#ffd8d8,stroke:#333,stroke-width:2px,color:#111,font-size:40px;
+classDef note fill:#fff,stroke:#999,stroke-width:2px,stroke-dasharray:6 5,color:#111,font-size:34px;
+classDef legend fill:#f7f7f7,stroke:#777,stroke-width:1px,color:#111,font-size:34px;
+
+class MOTION taskMotion;
+class LINE task;
+class SCAN taskScan;
+class CTRL taskCtrl;
+class IMU taskImu;
+class TELEM taskTelem;
+class ENC_HW,ESTOP_HW,IR_HW,ECHO_HW,SCAN_HW,IMU_HW,MOTOR_HW,WIFI_HW hardware;
+class ENC_ISR,ESTOP_ISR,ECHO_ISR isr;
+class COUNTS,SNAP,LEG_DATA shared;
+class MOTION_MBF,CTRL_MBF,LEG_MBF buffer;
+class MODE,LEG_FLAG flag;
+class ESTOP_SEM,ECHO_SEM,LEG_SEM shared;
+class EVENTS note;
+class LEGEND,LEG_TASK,LEG_HW,LEG_ISR,LEG_COLORS legend;
+
+%% Visible edge styles, in declaration order.
+linkStyle 0,1,2,3,4,5,6,7 stroke:#222222,stroke-width:2px;
+linkStyle 8,9,10,11,12 stroke:#7b3fb5,stroke-width:2px;
+linkStyle 13,14,15,16,17 stroke:#1769d1,stroke-width:2px;
+linkStyle 18,19,20,21,22,23 stroke:#c62828,stroke-width:2px;
+linkStyle 24,25,26,27 stroke:#c62828,stroke-width:2px,stroke-dasharray:6 5;
+linkStyle 28,29 stroke:#168f88,stroke-width:2px;
