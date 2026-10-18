@@ -225,3 +225,22 @@ target_link_libraries(scan_test PRIVATE
 pico_enable_stdio_usb(scan_test 1)
 pico_enable_stdio_uart(scan_test 0)
 pico_add_extra_outputs(scan_test)
+# Independent IR line-detection and Code 39 barcode-reading firmware.
+add_executable(robocar_ir_sensors
+    src/robocar_ir_sensors.c
+    src/line_detector.c
+    src/barcode_reader.c
+)
+
+target_include_directories(robocar_ir_sensors PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(robocar_ir_sensors PRIVATE
+    pico_stdlib
+    hardware_adc
+)
+
+pico_enable_stdio_usb(robocar_ir_sensors 1)
+pico_enable_stdio_uart(robocar_ir_sensors 0)
+pico_add_extra_outputs(robocar_ir_sensors)

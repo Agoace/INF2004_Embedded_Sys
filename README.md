@@ -17,6 +17,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/obstacle_test.c`](src/obstacle_test.c) — obstacle watch bench test; [`tests/test_obstacle.c`](tests/test_obstacle.c) is its host unit test.
 - [`src/vehicle_controller.c`](src/vehicle_controller.c) — Vehicle Controller state machine (step 1: line following); [`tests/test_vehicle_controller.c`](tests/test_vehicle_controller.c) is its host unit test.
 - [`src/obstacle_scan.c`](src/obstacle_scan.c) — 13-point ±30° servo scan; [`src/scan_test.c`](src/scan_test.c) is its bench test.
+- [`src/robocar_ir_sensors.c`](src/robocar_ir_sensors.c) — line detection and Code 39 barcode reader firmware.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
 - [`docs/`](docs/README.md) — durable documentation and calibration results.
