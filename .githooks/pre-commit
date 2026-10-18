@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Check documentation-related staged changes. Use `git commit --no-verify` as
+# the intentional escape hatch.
+set -euo pipefail
+
+root="$(git rev-parse --show-toplevel)"
+relevant=false
+
+while IFS= read -r -d '' path; do
+  case "$path" in
+    *.md|docs/*|scripts/check-docs.py|scripts/install-hooks.sh|.githooks/*|.gitmodules)
+      relevant=true
+      break
+      ;;
+  esac
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+
+if [ "$relevant" = false ]; then
+  exit 0
+fi
+
+cd "$root"
+exec python3 scripts/check-docs.py

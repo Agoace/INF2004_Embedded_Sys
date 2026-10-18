@@ -1,0 +1,11 @@
+#ifndef WIFI_CONFIG_H
+#define WIFI_CONFIG_H
+
+/* Copy this file to src/wifi_config.h and replace these placeholders locally. */
+#define WIFI_SSID "REPLACE_WITH_2_4_GHZ_SSID"
+#define WIFI_PASSWORD "REPLACE_WITH_WIFI_PASSWORD"
+
+/* The compiled firmware contains these credentials as plain text. Do not
+ * share the .uf2 file or commit src/wifi_config.h. */
+
+#endif

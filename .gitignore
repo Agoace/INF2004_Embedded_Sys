@@ -1,0 +1,22 @@
+# CMake build output
+/build/
+/cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+
+# Pico SDK generated output
+*.bin
+*.dis
+*.elf
+*.elf.map
+*.hex
+*.uf2
+
+# Local Wi-Fi credentials
+/src/wifi_config.h
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+*~
