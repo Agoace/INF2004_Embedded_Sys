@@ -25,7 +25,9 @@ bool line_detector_process(line_detector_t *detector, const uint16_t *samples,
     const bool fault_level = mean <= detector->config.fault_low ||
                              mean >= detector->config.fault_high;
 
-    detector->fault_count = fault_level ? detector->fault_count + 1u : 0u;
+    if (!fault_level) detector->fault_count = 0;
+    else if (detector->fault_count < detector->config.fault_buffers)
+        ++detector->fault_count; /* Saturate: a persistent fault must not wrap. */
     const line_class_t next = detector->fault_count >= detector->config.fault_buffers
         ? LINE_SENSOR_FAULT : classify(detector, mean);
 
