@@ -16,6 +16,11 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`docs/`](docs/README.md) — durable documentation and calibration results.
 - [`scripts/`](scripts/) — repository maintenance scripts.
 - [`.githooks/`](.githooks/) — repository-owned Git hooks.
+- [`src/common/robot_shared.h`](src/common/robot_shared.h) — shared team types: encoder delta helper, fault bits, packed motion fields.
+- [`src/motion/`](src/motion/motion_control.h) — motion-control library (Buddy 2): encoder ISR, PWM, PID, statechart.
+- [`src/motion_bench.c`](src/motion_bench.c) — motion bench console for PID, accuracy, stop and stall tests.
+- [`src/robocar_line_follow.c`](src/robocar_line_follow.c) — motion and line-sensing integration target (built when the line files are present).
+- [`tests/motion/`](tests/motion/test_motion.c) — host unit tests for the motion core.
 
 Future coursework belongs in clearly named task directories.
 

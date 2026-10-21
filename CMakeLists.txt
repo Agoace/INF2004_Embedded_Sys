@@ -118,6 +118,70 @@ pico_enable_stdio_usb(motor_speed_calibration 1)
 pico_enable_stdio_uart(motor_speed_calibration 0)
 pico_add_extra_outputs(motor_speed_calibration)
 
+# ---------------------------------------------------------------------------
+# Buddy 2: motion-control library (Motion Control Task). Link it from any
+# target that needs motion; it brings its own include paths.
+# Host unit tests: see docs/MOTION_CONTROL.md.
+add_library(motion_control STATIC
+    src/motion/motion_control.c
+    src/motion/motion_hal_pico.c
+    src/motion/encoder.c
+    src/motion/line_motion_bridge.c
+)
+
+target_include_directories(motion_control PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}/src/common
+    ${CMAKE_CURRENT_LIST_DIR}/src/motion
+)
+
+# -Wno-array-bounds: GCC 13 false positive inside the SDK's inline pwm_init().
+target_compile_options(motion_control PRIVATE -Wall -Wextra -Wno-array-bounds)
+
+target_link_libraries(motion_control PUBLIC
+    pico_stdlib
+    hardware_gpio
+    hardware_irq
+    hardware_pwm
+    hardware_sync
+)
+
+# Bench target: USB console, PID step logs, NFR13/NFR16 trials.
+add_executable(motion_bench
+    src/motion_bench.c
+)
+
+target_compile_options(motion_bench PRIVATE -Wall -Wextra)
+
+target_link_libraries(motion_bench PRIVATE
+    motion_control
+)
+
+pico_enable_stdio_usb(motion_bench 1)
+pico_enable_stdio_uart(motion_bench 0)
+pico_add_extra_outputs(motion_bench)
+
+# Buddy 2 + Buddy 3 integration. Built only when the line-tracing files from
+# the ziven-line_tracing_algo branch are present.
+if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/src/line_detector.c)
+    add_executable(robocar_line_follow
+        src/robocar_line_follow.c
+        src/line_detector.c
+    )
+
+    target_include_directories(robocar_line_follow PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src
+    )
+
+    target_link_libraries(robocar_line_follow PRIVATE
+        motion_control
+        hardware_adc
+    )
+
+    pico_enable_stdio_usb(robocar_line_follow 1)
+    pico_enable_stdio_uart(robocar_line_follow 0)
+    pico_add_extra_outputs(robocar_line_follow)
+endif()
+
 add_executable(motor_rotation_drift
     src/motor_rotation_drift.c
     src/telemetry.c

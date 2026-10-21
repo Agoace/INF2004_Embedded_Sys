@@ -21,5 +21,6 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Raspberry Pi 400 USB power safety](USB_POWER_SAFETY.md) — 1.2 A shared limit, motor-test procedure, bounded exception, and over-current recovery.
 - [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
 - [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned instrument packet contract for firmware, receiver, and future dashboard.
+- [Motion control (Buddy 2)](MOTION_CONTROL.md) — motion library, interface for the other tasks, bench procedures, and open measurements.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
