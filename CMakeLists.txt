@@ -229,6 +229,7 @@ pico_add_extra_outputs(scan_test)
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c
     src/line_detector.c
+    src/ir_line_data.c
     src/barcode_reader.c
 )
 
