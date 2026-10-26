@@ -164,6 +164,7 @@ pico_add_extra_outputs(wifi_telemetry_probe)
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c
     src/line_detector.c
+    src/ir_line_data.c
     src/barcode_reader.c
 )
 
