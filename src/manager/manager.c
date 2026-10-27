@@ -93,6 +93,16 @@ reset_run_tracking (void)
 
 /* ---- State transitions ------------------------------------------------- */
 
+static void
+enter_fault (uint32_t fault_bits)
+{
+    g_fault_bits |= fault_bits;
+    /* A latched Manager fault must never leave the wheels driven. */
+    motion_request_stop(false);
+    reset_run_tracking();
+    set_state(MANAGER_FAULT);
+}
+
 /** Stop the wheels now and disarm line following. */
 static void
 stop_follow (void)
@@ -154,6 +164,19 @@ start_recovery (void)
 static void
 finish_recovery (void)
 {
+    /*
+     * Motion stops and reports the terminal event by itself when the distance
+     * budget or the wall-clock guard runs out. A line sample can reach the
+     * Manager in the same step as that report, so check first: if Motion has
+     * already left RECOVERY, the manoeuvre failed and the terminal outcome
+     * wins. Restarting FOLLOW from the late sample would hide the fault.
+     */
+    if (MOTION_STATE_RECOVERY != motion_get_state())
+    {
+        enter_fault(FAULT_RECOVERY_TIMEOUT);
+        return;
+    }
+
     /* End the reverse manoeuvre with the Motion fast path... */
     motion_request_stop(false);
     /* ...then re-arm forward travel. The bridge already holds the forward
@@ -165,16 +188,6 @@ finish_recovery (void)
     g_stats.reacquisitions++;
     reset_run_tracking();
     set_state(MANAGER_LINE_FOLLOW_ON);
-}
-
-static void
-enter_fault (uint32_t fault_bits)
-{
-    g_fault_bits |= fault_bits;
-    /* A latched Manager fault must never leave the wheels driven. */
-    motion_request_stop(false);
-    reset_run_tracking();
-    set_state(MANAGER_FAULT);
 }
 
 /* ---- Line handling ----------------------------------------------------- */
@@ -533,8 +546,15 @@ manager_step (uint32_t now_ms)
 {
     g_stats.steps++;
 
-    update_line(now_ms);
+    /*
+     * Discrete events first. A terminal Motion outcome (the recovery limit)
+     * and the third tracking sample can arrive in the same step; the terminal
+     * outcome must win, so the queue is drained before the line mailbox is
+     * consumed. The reverse order would let a reacquired line restart FOLLOW
+     * after the recovery budget was already exhausted.
+     */
     update_events();
+    update_line(now_ms);
 }
 
 manager_state_t

@@ -98,8 +98,10 @@ bool             manager_post_button(manager_button_t button, uint32_t now_ms);
 /**
  * @brief One Manager step. Call every 1 ms from the Manager loop or task.
  *
- * Reads the line mailbox, refreshes STEER, runs the loss timer and the
- * recovery sample counter, and drains the event queue.
+ * Drains the discrete event queue first, then consumes the latest line
+ * observation, so a terminal Motion outcome (the recovery limit) always wins
+ * over a line sample that arrives in the same step. Then it refreshes STEER,
+ * runs the loss timer and the recovery sample counter.
  */
 void             manager_step(uint32_t now_ms);
 

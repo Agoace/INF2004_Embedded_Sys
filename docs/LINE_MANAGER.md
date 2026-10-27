@@ -61,6 +61,12 @@ The mailbox is one aligned 32-bit word: bits 2:0 black pattern, 5:3 unknown mask
 
 STEER is not queued at any level. The Manager calls [the line bridge](../src/motion/line_motion_bridge.h) once per sample, and the bridge alone maps the L/C/R pattern to the latest-value STEER. This preserves the Motion property that a STOP never waits behind a burst of steering updates.
 
+### Step order
+
+Each Manager step drains the discrete event queue first, and only then consumes the latest line observation. A terminal Motion outcome (the recovery limit) and the third tracking sample can arrive in the same millisecond, and the terminal outcome must win. In the other order, a reacquired line would restart `FOLLOW` after the recovery budget was already used up, and the fault would never latch.
+
+`finish_recovery()` also refuses to resume when Motion has already left `MOTION_STATE_RECOVERY`. That covers the narrower case where a Motion tick lands between two Manager steps, so its report is still in flight when the third tracking sample arrives. Both cases latch `FAULT_RECOVERY_TIMEOUT` and hold PWM at zero.
+
 ## Ownership
 
 - Motion is the only writer of motor PWM. It is also the only writer of encoder counts.
@@ -151,7 +157,7 @@ cmake -S . -B build -DPICO_BOARD=pico_w
 cmake --build build --target robocar_line_manager
 ```
 
-The host tests cover the boot self-test, both button toggles, the 100 ms loss threshold, the recovery steering inversion for both directions, the three tracking samples, the recovery timeout, the line-sensor fault, and the fact that PWM does not restart after a STOP or a fault.
+The host tests cover the boot self-test, both button toggles, the 100 ms loss threshold, the recovery steering inversion for both directions, the three tracking samples, the recovery timeout, the line-sensor fault, and the fact that PWM does not restart after a STOP or a fault. They also cover both recovery-limit races: the terminal event arriving in the same step as the third tracking sample, and the terminal event still in flight when that sample arrives.
 
 ## Open items
 
