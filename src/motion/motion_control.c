@@ -54,6 +54,7 @@ typedef struct
     uint8_t  cmd_id;
     int16_t  speed_l_mm_s;      /* SPEED command set-points.               */
     int16_t  speed_r_mm_s;
+    uint32_t recover_ms;        /* Time spent in RECOVERY.                 */
 } move_t;
 
 typedef struct
@@ -469,6 +470,37 @@ select_motion (const motion_cmd_t * p_cmd)
             return true;
         }
 
+        case MOTION_CMD_RECOVER:
+        {
+            /* Bounded reverse follow. The distance and the speed are clamped
+             * here, so no caller can ask for an unbounded reverse. */
+            int32_t const mm  = p_cmd->arg_a;
+            int32_t       spd = p_cmd->speed_mm_s;
+
+            if ((mm <= 0) || (mm > MOTION_RECOVERY_MAX_MM))
+            {
+                return false;
+            }
+
+            if ((spd <= 0) || (spd > MOTION_RECOVERY_SPEED_MM_S))
+            {
+                spd = MOTION_RECOVERY_SPEED_MM_S;
+            }
+
+            /* Reverse the wheel set-points only. The bridge keeps publishing
+             * the forward STEER, so the stored left/right bias unwinds and
+             * the robot retraces the arc toward the line. */
+            g_move.dir[MOTOR_LEFT]  = -1;
+            g_move.dir[MOTOR_RIGHT] = -1;
+            g_move.target_counts    = motion_mm_to_counts(mm);
+            g_move.turn_kind        = TURN_ROTATE;
+            g_move.cruise_q8        = motion_mm_s_to_cpt_q8(spd);
+            g_move.recover_ms       = 0u;
+            begin_move();
+            set_state(MOTION_STATE_RECOVERY);
+            return true;
+        }
+
         default:
         {
             return false;
@@ -667,8 +699,12 @@ run_settle (int16_t * p_l, int16_t * p_r)
     }
 }
 
-static void
-run_follow (int16_t * p_l, int16_t * p_r)
+/**
+ * Read the latest-value STEER. Returns false when it is missing or older than
+ * the stale timeout, and posts MOTION_EVT_STEER_STALE once for each episode.
+ */
+static bool
+read_steer (int32_t * p_steer)
 {
     uint32_t const word = g_steer_word;
     bool const     set  = (0u != (word & 0x100u));
@@ -684,27 +720,97 @@ run_follow (int16_t * p_l, int16_t * p_r)
             post_event(MOTION_EVT_STEER_STALE, 0u, 0u, 0);
         }
 
+        return false;
+    }
+
+    g_steer_stale = false;
+    *p_steer = (int8_t) (word & 0xFFu);
+
+    return true;
+}
+
+/**
+ * Follow wheel set-points for one STEER value: outer wheel at base speed,
+ * inner wheel slowed (0 at |steer| = 127). steer < 0 turns left.
+ */
+static void
+steer_setpoints (int32_t steer, int32_t base, int32_t * p_l, int32_t * p_r)
+{
+    int32_t const inner = (base * (127 - abs32(steer))) / 127;
+
+    *p_l = (steer < 0) ? inner : base;
+    *p_r = (steer > 0) ? inner : base;
+}
+
+static int32_t
+follow_base (void)
+{
+    int32_t const base = g_move.cruise_q8;
+
+    return g_slow ? ((base * MOTION_SLOW_PERCENT) / 100) : base;
+}
+
+static void
+run_follow (int16_t * p_l, int16_t * p_r)
+{
+    int32_t steer;
+
+    if (!read_steer(&steer))
+    {
         /* Hold: no fresh line information, do not drive blind. */
         (void) drive_wheels(0, 0, p_l, p_r);
         return;
     }
 
-    g_steer_stale = false;
+    int32_t sp_l;
+    int32_t sp_r;
 
-    int32_t const steer = (int8_t) (word & 0xFFu);
-    int32_t base = g_move.cruise_q8;
+    steer_setpoints(steer, follow_base(), &sp_l, &sp_r);
+    (void) drive_wheels(sp_l, sp_r, p_l, p_r);
+}
 
-    if (g_slow)
+/**
+ * Bounded reverse follow (motor-line-manager checkpoint).
+ *
+ * The wheel set-points are the FOLLOW pair with dir = -1, so the same STEER
+ * bias drives the robot backwards and unwinds instead of accumulating: a line
+ * lost to the left is retraced back to the left. The manoeuvre ends at the
+ * distance budget or at the wall-clock guard; either way Motion reports
+ * MOTION_DONE_RECOVERY_LIMIT and stops, and the caller decides the fault.
+ */
+static void
+run_recovery (int16_t * p_l, int16_t * p_r)
+{
+    g_move.recover_ms += MOTION_TICK_MS;
+
+    int32_t const progress = move_progress();
+
+    if ((progress >= g_move.target_counts) ||
+        (g_move.recover_ms > MOTION_RECOVERY_TIMEOUT_MS))
     {
-        base = (base * MOTION_SLOW_PERCENT) / 100;
+        post_event(MOTION_EVT_DONE, MOTION_DONE_RECOVERY_LIMIT, g_move.cmd_id,
+                   (int16_t) motion_counts_to_mm(progress));
+        reset_wheel_control();
+        set_state(MOTION_STATE_IDLE);
+        *p_l = 0;
+        *p_r = 0;
+        return;
     }
 
-    /* Outer wheel at base speed, inner wheel slowed (0 at |steer| = 127). */
-    int32_t const inner = (base * (127 - abs32(steer))) / 127;
-    int32_t const sp_l  = (steer < 0) ? inner : base;
-    int32_t const sp_r  = (steer > 0) ? inner : base;
+    int32_t steer;
 
-    (void) drive_wheels(sp_l, sp_r, p_l, p_r);
+    if (!read_steer(&steer))
+    {
+        (void) drive_wheels(0, 0, p_l, p_r);
+        return;
+    }
+
+    int32_t mag_l;
+    int32_t mag_r;
+
+    steer_setpoints(steer, follow_base(), &mag_l, &mag_r);
+    (void) drive_wheels(g_move.dir[MOTOR_LEFT]  * mag_l,
+                        g_move.dir[MOTOR_RIGHT] * mag_r, p_l, p_r);
 }
 
 static void
@@ -938,6 +1044,12 @@ motion_tick (void)
         case MOTION_STATE_SPEED:
         {
             run_speed(&duty_l, &duty_r);
+            break;
+        }
+
+        case MOTION_STATE_RECOVERY:
+        {
+            run_recovery(&duty_l, &duty_r);
             break;
         }
 
@@ -1205,7 +1317,7 @@ motion_state_name (motion_state_t state)
     static const char * const names[MOTION_STATE_COUNT] =
     {
         "IDLE", "SELECT_MOTION", "FOLLOW", "DRIVE_DISTANCE", "TURNING",
-        "SETTLE", "MOTOR_FAULT", "SPEED", "SELFTEST",
+        "SETTLE", "MOTOR_FAULT", "SPEED", "SELFTEST", "RECOVERY",
     };
 
     return (state < MOTION_STATE_COUNT) ? names[state] : "?";

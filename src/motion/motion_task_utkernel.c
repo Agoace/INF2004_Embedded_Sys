@@ -27,6 +27,12 @@
 #include "motion_hal.h"
 #include "robot_shared.h"
 
+#ifdef MANAGER_USE_UTKERNEL
+#include "manager.h"
+#include "manager_task_utkernel.h"
+#include "manager_types.h"
+#endif
+
 #define MOTION_TASK_PRI     10
 #define MOTION_TASK_STACK   1024
 
@@ -85,6 +91,18 @@ motion_task (INT stacd, void * exinf)
         {
             /* Typed event: the VC decodes motion_evt_t (robot_shared.h). */
             (void) tk_snd_mbf(mbf_ctrl_evt, &evt, sizeof(evt), TMO_POL);
+
+#ifdef MANAGER_USE_UTKERNEL
+            /* The Manager owns line-follow steering and recovery, so it gets
+             * the same event. Motion stays the only writer of motion_evt_t;
+             * the Manager only reads the copy. */
+            manager_evt_t mev;
+
+            mev.kind           = (uint8_t) MANAGER_EVT_MOTION;
+            mev.payload.motion = evt;
+            (void) manager_post_event(&mev);
+            manager_adapter_wake();
+#endif
         }
 
         uint32_t w1;

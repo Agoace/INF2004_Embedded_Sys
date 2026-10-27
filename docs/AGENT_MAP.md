@@ -23,6 +23,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor rotation drift record | [docs/MOTOR_ROTATION_DRIFT.md](MOTOR_ROTATION_DRIFT.md) |
 | Interrupt and polling conventions | [docs/INTERRUPT_CONVENTIONS.md](INTERRUPT_CONVENTIONS.md) |
 | Motion control record | [docs/MOTION_CONTROL.md](MOTION_CONTROL.md) |
+| Line-following Manager checkpoint | [docs/LINE_MANAGER.md](LINE_MANAGER.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
@@ -43,6 +44,11 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motion-control library | [`src/motion/`](../src/motion/motion_control.h) |
 | Motion bench target | [`src/motion_bench.c`](../src/motion_bench.c) |
 | Motion and line integration target | [`src/robocar_line_follow.c`](../src/robocar_line_follow.c) |
+| Manager (vehicle state) core | [`src/manager/manager.c`](../src/manager/manager.c), [`src/manager/manager.h`](../src/manager/manager.h) |
+| Manager shared types | [`src/manager/manager_types.h`](../src/manager/manager_types.h) |
+| Integrated line-follow target (Manager + Line + Motion) | [`src/robocar_line_manager.c`](../src/robocar_line_manager.c) |
+| μT-Kernel Line/Manager adapter | [`src/manager/manager_task_utkernel.c`](../src/manager/manager_task_utkernel.c) |
+| Manager host unit tests | [`tests/manager/test_manager.c`](../tests/manager/test_manager.c) |
 | Motion host unit tests | [`tests/motion/test_motion.c`](../tests/motion/test_motion.c) |
 | Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
 | Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |

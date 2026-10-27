@@ -112,6 +112,7 @@ typedef enum
     MOTION_CMD_ROTATE,      /* In-place rotate arg_a degrees (+ = left/CCW). */
     MOTION_CMD_SPEED,       /* Open speed set-point per wheel (PID tests).   */
     MOTION_CMD_SELFTEST,    /* FR17 encoder self-test (short kicks).         */
+    MOTION_CMD_RECOVER,     /* Bounded reverse follow: arg_a mm at 100 mm/s. */
     MOTION_CMD_COUNT
 } motion_cmd_id_t;
 
@@ -150,6 +151,7 @@ typedef enum
 
 #define MOTION_DONE_OK              0u
 #define MOTION_DONE_SETTLE_TIMEOUT  1u  /* Wheels still moving after ramp.  */
+#define MOTION_DONE_RECOVERY_LIMIT  2u  /* RECOVER used its whole budget.   */
 
 #define MOTION_REJECT_INVALID       0u  /* Bad id or argument.              */
 #define MOTION_REJECT_FAULT         1u  /* MOTOR_FAULT: send RESET first.   */
@@ -199,6 +201,7 @@ typedef enum
     MOTION_STATE_MOTOR_FAULT,
     MOTION_STATE_SPEED,         /* Test-only open speed set-point. */
     MOTION_STATE_SELFTEST,
+    MOTION_STATE_RECOVERY,      /* Bounded reverse follow after a lost line. */
     MOTION_STATE_COUNT
 } motion_state_t;
 

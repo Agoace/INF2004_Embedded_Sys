@@ -180,6 +180,77 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/src/line_detector.c)
     pico_enable_stdio_usb(robocar_line_follow 1)
     pico_enable_stdio_uart(robocar_line_follow 0)
     pico_add_extra_outputs(robocar_line_follow)
+
+    # --------------------------------------------------------------------
+    # Manager: vehicle state shared by every integrated line-following
+    # target. Platform independent; the adapters below supply the runtime.
+    add_library(manager_core STATIC
+        src/manager/manager.c
+        src/manager/manager_button.c
+    )
+
+    target_include_directories(manager_core PUBLIC
+        ${CMAKE_CURRENT_LIST_DIR}/src/manager
+    )
+
+    target_compile_options(manager_core PRIVATE -Wall -Wextra)
+
+    target_link_libraries(manager_core PUBLIC
+        motion_control
+    )
+
+    # Integrated checkpoint target: Manager + Line + Motion, bare metal.
+    # No RTOS and no physical emergency stop; see docs/LINE_MANAGER.md.
+    add_executable(robocar_line_manager
+        src/robocar_line_manager.c
+        src/line_detector.c
+    )
+
+    target_include_directories(robocar_line_manager PRIVATE
+        ${CMAKE_CURRENT_LIST_DIR}/src
+    )
+
+    target_compile_options(robocar_line_manager PRIVATE -Wall -Wextra)
+
+    target_link_libraries(robocar_line_manager PRIVATE
+        manager_core
+        hardware_adc
+    )
+
+    pico_enable_stdio_usb(robocar_line_manager 1)
+    pico_enable_stdio_uart(robocar_line_manager 0)
+    pico_add_extra_outputs(robocar_line_manager)
+
+    # --------------------------------------------------------------------
+    # μT-Kernel-ready adapter: OFF by default. The external μT-Kernel port and
+    # the startup integration (usermain) are not in this repository, so the
+    # bare-metal target and the host tests must build without it.
+    option(USE_UTKERNEL_ADAPTER
+        "Build the μT-Kernel Line/Manager/Motion adapter (needs the external port)" OFF)
+
+    if(USE_UTKERNEL_ADAPTER)
+        add_library(line_manager_utkernel STATIC
+            src/manager/manager_task_utkernel.c
+            src/motion/motion_task_utkernel.c
+        )
+
+        target_include_directories(line_manager_utkernel PRIVATE
+            ${CMAKE_CURRENT_LIST_DIR}/src
+        )
+
+        target_compile_options(line_manager_utkernel PRIVATE -Wall -Wextra)
+
+        # Motion forwards its events to the Manager only in this build.
+        target_compile_definitions(line_manager_utkernel PUBLIC
+            MANAGER_USE_UTKERNEL
+            MOTION_USE_UTKERNEL
+        )
+
+        target_link_libraries(line_manager_utkernel PUBLIC
+            manager_core
+            hardware_adc
+        )
+    endif()
 endif()
 
 add_executable(motor_rotation_drift

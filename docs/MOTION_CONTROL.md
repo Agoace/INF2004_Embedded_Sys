@@ -51,14 +51,22 @@ This record describes the Motion Control Task code, the interface that the other
 
 ### Vehicle Controller (Buddy 5)
 
-- Send commands with `motion_command(&cmd)`. `motion_cmd_t` is 8 bytes. Commands are STOP, ESTOP, RESET, FOLLOW, FWD(mm), REV(mm), TURN(deg), ROTATE(deg), SELFTEST, and SPEED (test only). A positive angle turns left.
+- Send commands with `motion_command(&cmd)`. `motion_cmd_t` is 8 bytes. Commands are STOP, ESTOP, RESET, FOLLOW, FWD(mm), REV(mm), TURN(deg), ROTATE(deg), SELFTEST, RECOVER(mm), and SPEED (test only). A positive angle turns left.
 - STOP and ESTOP take effect at once. ESTOP latches `FAULT_ESTOP` until RESET.
 - FWD, REV, TURN and ROTATE run to completion. A command sent during a move waits in the queue (depth 3) and starts when the move ends. A command sent during FOLLOW starts at once, for example a ROTATE at a junction. Send STOP to cancel a move.
 - Read events in the Motion task and forward them to `mbf_ctrl_evt`: DONE, STOPPED, STALL, STEER_STALE, SELFTEST and REJECTED. The field meanings are in `robot_shared.h`.
 - `motion_set_slow()` mirrors the `flg_mode` SLOW bit. `motion_odometer_reset()` is called at RUN start.
 - The ESTOP ISR may call `motion_request_stop(true)` directly. It is ISR-safe and gives the shortest NFR16 path. The Week 6 path (ISR, then `sem_estop`, then the VC) also works.
 
-### Line & Barcode (Buddy 3, `ziven-line_tracing_algo`)
+### Manager (`motor-line-manager` checkpoint)
+
+- The Manager (see [Line-following Manager checkpoint](LINE_MANAGER.md)) calls `motion_command()` and `motion_request_stop()` only. It never writes PWM and never writes STEER itself.
+- `MOTION_CMD_RECOVER` (arg_a = mm) is a bounded reverse follow. Motion clamps the request to `MOTION_RECOVERY_MAX_MM` (100 mm) and `MOTION_RECOVERY_SPEED_MM_S` (100 mm/s), so no caller can ask for an unbounded reverse.
+- In `MOTION_STATE_RECOVERY` Motion negates both wheel set-points and keeps the STEER from the bridge. The stored left/right bias therefore unwinds while the robot backs up. The STEER sign is not flipped: flipping it would curve away from the line instead of back to it.
+- The manoeuvre ends at the distance budget or at `MOTION_RECOVERY_TIMEOUT_MS` (3 s). Motion then stops and posts `MOTION_EVT_DONE` with `arg = MOTION_DONE_RECOVERY_LIMIT`. The caller decides the fault.
+- STEER staleness applies to `RECOVERY` exactly as it does to `FOLLOW`: the wheels are held after 100 ms without a refresh.
+
+
 
 - Each line cycle, call `line_bridge_update(black_pattern, unknown_mask, fault_mask)` with the values that `robocar_ir_sensors.c` already computes. The bridge uses the same truth table (L = 1, C = 2, R = 4) and converts the -2..+2 error to STEER through a gain table. Tune it with `line_bridge_set_steer_table()`.
 - When the line is lost, the last steer is kept, which biases the robot toward the side where the line left. Junction, split and unknown patterns give steer 0. A sensor fault stops STEER refreshes, so Motion holds the wheels after 100 ms.

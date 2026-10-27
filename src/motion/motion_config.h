@@ -66,6 +66,13 @@
 #define MOTION_MAX_DISTANCE_MM      3000
 #define MOTION_MAX_ANGLE_DEG        360
 
+/* ---- Bounded reverse-follow recovery (motor-line-manager checkpoint) ----
+ * Motion enforces these limits itself, so a caller cannot ask for an
+ * unbounded reverse manoeuvre. */
+#define MOTION_RECOVERY_SPEED_MM_S  100     /* Fixed reverse speed.          */
+#define MOTION_RECOVERY_MAX_MM      100     /* Distance budget.              */
+#define MOTION_RECOVERY_TIMEOUT_MS  3000u   /* Wall-clock guard.             */
+
 /* ---- Default controller gains (Q8 fixed point: 256 = 1.0) --------------
  * Units: PWM permille per (count per 20 ms tick).
  * Feed-forward from the unloaded 5 V VIN table: 10% duty ~ 22 counts/tick,
