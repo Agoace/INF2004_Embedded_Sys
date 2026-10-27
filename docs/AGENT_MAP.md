@@ -22,6 +22,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Calibration record | [docs/CALIBRATION_RESULTS.md](CALIBRATION_RESULTS.md) |
 | Motor rotation drift record | [docs/MOTOR_ROTATION_DRIFT.md](MOTOR_ROTATION_DRIFT.md) |
 | Interrupt and polling conventions | [docs/INTERRUPT_CONVENTIONS.md](INTERRUPT_CONVENTIONS.md) |
+| Motion control record | [docs/MOTION_CONTROL.md](MOTION_CONTROL.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
@@ -38,6 +39,11 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
+| Shared team header (packed fields, fault bits, encoder delta) | [`src/common/robot_shared.h`](../src/common/robot_shared.h) |
+| Motion-control library | [`src/motion/`](../src/motion/motion_control.h) |
+| Motion bench target | [`src/motion_bench.c`](../src/motion_bench.c) |
+| Motion and line integration target | [`src/robocar_line_follow.c`](../src/robocar_line_follow.c) |
+| Motion host unit tests | [`tests/motion/test_motion.c`](../tests/motion/test_motion.c) |
 | Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
 | Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
