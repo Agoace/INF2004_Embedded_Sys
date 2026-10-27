@@ -29,6 +29,13 @@ static void clear_capture(barcode_reader_t *reader) {
     reader->collecting = false;
 }
 
+static void find_shortest_run(barcode_reader_t *reader) {
+    reader->shortest_run_us = UINT32_MAX;
+    for (size_t i = 0; i < reader->run_count; ++i)
+        if (reader->runs[i] < reader->shortest_run_us)
+            reader->shortest_run_us = reader->runs[i];
+}
+
 void barcode_reader_init(barcode_reader_t *reader, const barcode_reader_config_t *config,
                          bool initial_level, uint32_t now_us) {
     memset(reader, 0, sizeof(*reader));
@@ -64,7 +71,13 @@ static char decode_character(const uint32_t *runs, uint32_t *narrow_max) {
     return '\0';
 }
 
-static void decode_capture(barcode_reader_t *reader, barcode_result_t *result) {
+static uint32_t captured_run(const barcode_reader_t *reader, size_t index,
+                             bool reverse) {
+    return reader->runs[reverse ? reader->run_count - 1u - index : index];
+}
+
+static void decode_capture_direction(const barcode_reader_t *reader, bool reverse,
+                                     barcode_result_t *result) {
     memset(result, 0, sizeof(*result));
     result->edge_count = (uint16_t)reader->run_count;
     if (reader->run_count < 29u) {
@@ -78,14 +91,20 @@ static void decode_capture(barcode_reader_t *reader, barcode_result_t *result) {
 
     size_t output = 0;
     for (size_t offset = 0; offset + 9u <= reader->run_count; offset += 10u) {
+        uint32_t symbol_runs[9];
+        for (size_t i = 0; i < 9u; ++i)
+            symbol_runs[i] = captured_run(reader, offset + i, reverse);
         uint32_t narrow_max = 0;
-        const char symbol = decode_character(&reader->runs[offset], &narrow_max);
+        const char symbol = decode_character(symbol_runs, &narrow_max);
         if (!symbol) {
             result->status = BARCODE_DECODE_FAIL;
+            result->failure_offset = (uint16_t)offset;
+            memcpy(result->failure_runs, symbol_runs, sizeof(result->failure_runs));
             return;
         }
         if (offset > 0 &&
-            (uint64_t)reader->runs[offset - 1u] > (uint64_t)narrow_max * 5u) {
+            (uint64_t)captured_run(reader, offset - 1u, reverse) >
+                (uint64_t)narrow_max * 5u) {
             result->status = BARCODE_DECODE_FAIL; /* Inter-character space is narrow. */
             return;
         }
@@ -115,6 +134,15 @@ static void decode_capture(barcode_reader_t *reader, barcode_result_t *result) {
     result->status = BARCODE_PARTIAL;
 }
 
+static void decode_capture(barcode_reader_t *reader, barcode_result_t *result) {
+    decode_capture_direction(reader, false, result);
+    if (result->status == BARCODE_OK || reader->run_count < 29u) return;
+
+    barcode_result_t reversed;
+    decode_capture_direction(reader, true, &reversed);
+    if (reversed.status == BARCODE_OK) *result = reversed;
+}
+
 static uint32_t quiet_required(const barcode_reader_t *reader) {
     uint32_t quiet = reader->config.quiet_zone_us;
     if (reader->shortest_run_us != UINT32_MAX &&
@@ -140,7 +168,23 @@ bool barcode_reader_process_edge(barcode_reader_t *reader, bool level,
             if (level == reader->config.black_level)
                 reader->collecting = true; /* The same edge begins the next scan. */
         } else if (elapsed < reader->config.min_run_us) {
-            clear_capture(reader); /* Discard a pulse too short to be a bar. */
+            /*
+             * Discard only the short pulse.  Its leading edge already stored
+             * the preceding run, so remove that stored duration and extend
+             * the preceding level until the next real edge.  Clearing the
+             * complete capture made one comparator glitch lose a whole scan.
+             */
+            if (reader->run_count == 0u) {
+                clear_capture(reader);
+                reader->level = level;
+                reader->last_edge_us = timestamp_us;
+                return false;
+            }
+            const uint32_t preceding_run = reader->runs[--reader->run_count];
+            reader->last_edge_us -= preceding_run;
+            find_shortest_run(reader);
+            reader->level = level;
+            return false;
         } else if (reader->run_count == BARCODE_MAX_RUNS) {
             memset(result, 0, sizeof(*result));
             result->status = BARCODE_TRUNCATED;

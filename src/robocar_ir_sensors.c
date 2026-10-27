@@ -2,7 +2,6 @@
 
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
-#include "hardware/sync.h"
 
 #include "barcode_reader.h"
 #include "ir_module_pins.h"
@@ -13,8 +12,6 @@
 #define LINE_SAMPLES_PER_SENSOR 8u
 #define LINE_SAMPLE_PERIOD_US 1000u
 #define LINE_DEBUG_INTERVAL_US 500000u
-#define BARCODE_EDGE_QUEUE_SIZE 128u
-#define BARCODE_BLACK_LEVEL 0u /* Change if the module's DO is active high. */
 
 static const uint8_t LINE_ANALOG_GPIOS[LINE_SENSOR_COUNT] = {
     LINE_IR_LEFT_ANALOG_GPIO,
@@ -29,17 +26,7 @@ static uint32_t line_pack_errors;
 static int8_t latest_steering_error;
 static bool latest_steering_valid;
 static line_detector_t lines[LINE_SENSOR_COUNT];
-static barcode_reader_t barcode;
-
-typedef struct {
-    uint32_t timestamp_us;
-    bool level;
-} barcode_edge_t;
-
-static barcode_edge_t barcode_edges[BARCODE_EDGE_QUEUE_SIZE];
-static volatile uint16_t barcode_edge_head;
-static volatile uint16_t barcode_edge_tail;
-static volatile uint32_t barcode_edges_dropped;
+static barcode_reader_t barcode_black_high;
 
 static const line_detector_config_t LINE_CONFIG = {
     .black_threshold = 1200,
@@ -50,49 +37,12 @@ static const line_detector_config_t LINE_CONFIG = {
     .fault_buffers = 100,
 };
 
-static const barcode_reader_config_t BARCODE_CONFIG = {
-    .black_level = BARCODE_BLACK_LEVEL,
-    .min_run_us = 80,
+static const barcode_reader_config_t BARCODE_BLACK_HIGH_CONFIG = {
+    .black_level = true,
+    /* A 1 ms sample can be slightly early; retain a one-sample bar or space. */
+    .min_run_us = 250,
     .quiet_zone_us = 5000,
 };
-
-static void barcode_gpio_irq(uint gpio, uint32_t events) {
-    if (gpio != BARCODE_IR_DIGITAL_GPIO) return;
-    const uint32_t edges = events & (GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL);
-    if (!edges) return;
-    if (edges == (GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL)) {
-        ++barcode_edges_dropped; /* The order of two pending edges is unknown. */
-        return;
-    }
-    const uint16_t next = (uint16_t)((barcode_edge_head + 1u) % BARCODE_EDGE_QUEUE_SIZE);
-    if (next == barcode_edge_tail) {
-        ++barcode_edges_dropped;
-        return;
-    }
-    barcode_edges[barcode_edge_head].timestamp_us = time_us_32();
-    barcode_edges[barcode_edge_head].level = edges == GPIO_IRQ_EDGE_RISE;
-    barcode_edge_head = next;
-}
-
-static bool take_barcode_edge(barcode_edge_t *edge) {
-    const uint32_t flags = save_and_disable_interrupts();
-    const bool available = barcode_edge_tail != barcode_edge_head;
-    if (available) {
-        *edge = barcode_edges[barcode_edge_tail];
-        barcode_edge_tail = (uint16_t)((barcode_edge_tail + 1u) % BARCODE_EDGE_QUEUE_SIZE);
-    }
-    restore_interrupts(flags);
-    return available;
-}
-
-static uint32_t take_dropped_edges(void) {
-    const uint32_t flags = save_and_disable_interrupts();
-    const uint32_t dropped = barcode_edges_dropped;
-    barcode_edges_dropped = 0;
-    if (dropped) barcode_edge_tail = barcode_edge_head;
-    restore_interrupts(flags);
-    return dropped;
-}
 
 static void sample_line(line_detector_t lines[LINE_SENSOR_COUNT]) {
     const uint32_t now_us = time_us_32();
@@ -144,40 +94,61 @@ static void report_line(const line_detector_t lines[LINE_SENSOR_COUNT]) {
     else printf(" steer=invalid\n");
 }
 
-static void report_barcode(const barcode_result_t *result, uint32_t *rejected) {
-    if (result->status == BARCODE_OK) {
-        if (result->text[1] == '\0') printf("barcode char=%c\n", result->text[0]);
-        else printf("barcode text=%s\n", result->text);
-    } else if (result->status != BARCODE_NO_BARCODE) {
-        ++*rejected;
+static const char *barcode_status_name(barcode_status_t status) {
+    switch (status) {
+        case BARCODE_PARTIAL: return "partial";
+        case BARCODE_DECODE_FAIL: return "decode_fail";
+        case BARCODE_TRUNCATED: return "truncated";
+        default: return "none";
     }
 }
 
-static void process_barcode(barcode_reader_t *barcode, uint32_t *rejected,
-                            uint32_t *dropped_total) {
-    const uint32_t dropped = take_dropped_edges();
-    if (dropped) {
-        *dropped_total += dropped;
-        barcode_reader_init(barcode, &BARCODE_CONFIG,
-                            gpio_get(BARCODE_IR_DIGITAL_GPIO), time_us_32());
-        return; /* A scan with missing transitions cannot be decoded. */
+static void report_barcode(const barcode_result_t *result, uint32_t *rejected,
+                           const char *black_level) {
+    if (result->status == BARCODE_OK) {
+        if (result->text[1] == '\0')
+            printf("barcode char=%c black=%s\n", result->text[0], black_level);
+        else
+            printf("barcode text=%s black=%s\n", result->text, black_level);
+    } else if (result->status == BARCODE_NO_BARCODE) {
+        if (result->edge_count)
+            printf("barcode short runs=%u black=%s\n",
+                   (unsigned)result->edge_count, black_level);
+    } else if (result->status != BARCODE_NO_BARCODE) {
+        ++*rejected;
+        printf("barcode reject reason=%s runs=%u black=%s\n",
+               barcode_status_name(result->status), (unsigned)result->edge_count,
+               black_level);
+        if (result->status == BARCODE_DECODE_FAIL && result->failure_runs[0]) {
+            printf("barcode symbol=%u durations_us=%lu/%lu/%lu/%lu/%lu/%lu/%lu/%lu/%lu\n",
+                   (unsigned)(result->failure_offset / 10u),
+                   (unsigned long)result->failure_runs[0],
+                   (unsigned long)result->failure_runs[1],
+                   (unsigned long)result->failure_runs[2],
+                   (unsigned long)result->failure_runs[3],
+                   (unsigned long)result->failure_runs[4],
+                   (unsigned long)result->failure_runs[5],
+                   (unsigned long)result->failure_runs[6],
+                   (unsigned long)result->failure_runs[7],
+                   (unsigned long)result->failure_runs[8]);
+        }
     }
-    barcode_edge_t edge;
+}
+
+static void process_barcode(barcode_reader_t *black_high, bool level,
+                            uint32_t now_us, uint32_t *rejected) {
     barcode_result_t result;
-    while (take_barcode_edge(&edge)) {
-        if (barcode_reader_process_edge(barcode, edge.level, edge.timestamp_us, &result))
-            report_barcode(&result, rejected);
-    }
-    if (barcode_reader_poll(barcode, time_us_32(), &result))
-        report_barcode(&result, rejected);
+    if (barcode_reader_process_edge(black_high, level, now_us, &result))
+        report_barcode(&result, rejected, "high");
+    if (barcode_reader_poll(black_high, now_us, &result))
+        report_barcode(&result, rejected, "high");
 }
 
 int main(void) {
     stdio_init_all();
     sleep_ms(1500);
     printf("RoboCar IR sensor firmware starting\n");
-    printf("line AO GP26/GP27/GP28; barcode DO GP7, black level=%u\n",
-           (unsigned)BARCODE_BLACK_LEVEL);
+    printf("line AO GP26/GP27/GP28; barcode DO GP7, black level=1\n");
 
     adc_init();
     for (size_t sensor = 0; sensor < LINE_SENSOR_COUNT; ++sensor)
@@ -187,11 +158,10 @@ int main(void) {
 
     for (size_t sensor = 0; sensor < LINE_SENSOR_COUNT; ++sensor)
         line_detector_init(&lines[sensor], &LINE_CONFIG);
-    barcode_reader_init(&barcode, &BARCODE_CONFIG,
-                        gpio_get(BARCODE_IR_DIGITAL_GPIO), time_us_32());
-    gpio_set_irq_enabled_with_callback(BARCODE_IR_DIGITAL_GPIO,
-                                       GPIO_IRQ_EDGE_RISE | GPIO_IRQ_EDGE_FALL,
-                                       true, barcode_gpio_irq);
+    const bool barcode_initial_level = gpio_get(BARCODE_IR_DIGITAL_GPIO);
+    const uint32_t barcode_initial_time = time_us_32();
+    barcode_reader_init(&barcode_black_high, &BARCODE_BLACK_HIGH_CONFIG,
+                        barcode_initial_level, barcode_initial_time);
 
     uint32_t next_line_us = time_us_32();
     uint32_t last_line_debug_us = next_line_us;
@@ -199,7 +169,6 @@ int main(void) {
     uint32_t max_line_late_us = 0;
     uint32_t max_line_sample_us = 0;
     uint32_t rejected_barcodes = 0;
-    uint32_t dropped_barcode_edges = 0;
     while (true) {
         const uint32_t now_us = time_us_32();
         if ((int32_t)(now_us - next_line_us) >= 0) {
@@ -211,16 +180,19 @@ int main(void) {
             sample_line(lines);
             const uint32_t duration_us = time_us_32() - start_us;
             if (duration_us > max_line_sample_us) max_line_sample_us = duration_us;
+            /* GP7 is sampled with the three line sensors once per 1 ms cycle. */
+            process_barcode(&barcode_black_high, gpio_get(BARCODE_IR_DIGITAL_GPIO), time_us_32(),
+                            &rejected_barcodes);
         }
-        process_barcode(&barcode, &rejected_barcodes, &dropped_barcode_edges);
         if ((uint32_t)(now_us - last_line_debug_us) >= LINE_DEBUG_INTERVAL_US) {
             last_line_debug_us = now_us;
             report_line(lines);
-            printf("timing missed_line=%lu max_late_us=%lu max_line_us=%lu line_pack_err=%lu barcode_reject=%lu barcode_dropped=%lu\n",
+            printf("timing missed_line=%lu max_late_us=%lu max_line_us=%lu line_pack_err=%lu barcode_do=%u barcode_reject=%lu\n",
                    (unsigned long)missed_line_cycles, (unsigned long)max_line_late_us,
                    (unsigned long)max_line_sample_us,
                    (unsigned long)line_pack_errors,
-                   (unsigned long)rejected_barcodes, (unsigned long)dropped_barcode_edges);
+                   (unsigned)gpio_get(BARCODE_IR_DIGITAL_GPIO),
+                   (unsigned long)rejected_barcodes);
         }
         tight_loop_contents();
     }

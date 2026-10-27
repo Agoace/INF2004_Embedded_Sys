@@ -35,6 +35,8 @@ typedef struct {
 typedef struct {
     barcode_status_t status;
     uint16_t edge_count;
+    uint16_t failure_offset;
+    uint32_t failure_runs[9]; /* Populated when one Code 39 symbol is invalid. */
     char text[BARCODE_MAX_TEXT];
 } barcode_result_t;
 
