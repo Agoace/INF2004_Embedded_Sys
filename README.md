@@ -11,6 +11,8 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/motor_encoder_calibration.c`](src/motor_encoder_calibration.c) — wheel encoder calibration and repeatability test.
 - [`src/motor_duty_calibration.c`](src/motor_duty_calibration.c) — minimum free-running motor duty test.
 - [`src/motor_speed_calibration.c`](src/motor_speed_calibration.c) — unloaded motor RPM versus PWM calibration.
+- [`src/ultrasonic.c`](src/ultrasonic.c) — non-blocking HC-SR04+ driver with a packed 16-bit result.
+- [`src/ultrasonic_test.c`](src/ultrasonic_test.c) — ultrasonic range and accuracy bench test.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
 - [`docs/`](docs/README.md) — durable documentation and calibration results.

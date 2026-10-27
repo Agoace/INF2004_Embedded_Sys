@@ -159,3 +159,23 @@ target_link_libraries(wifi_telemetry_probe PRIVATE
 pico_enable_stdio_usb(wifi_telemetry_probe 1)
 pico_enable_stdio_uart(wifi_telemetry_probe 0)
 pico_add_extra_outputs(wifi_telemetry_probe)
+
+add_executable(ultrasonic_test
+    src/ultrasonic_test.c
+    src/ultrasonic.c
+)
+
+target_include_directories(ultrasonic_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(ultrasonic_test PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_irq
+    hardware_sync
+)
+
+pico_enable_stdio_usb(ultrasonic_test 1)
+pico_enable_stdio_uart(ultrasonic_test 0)
+pico_add_extra_outputs(ultrasonic_test)
