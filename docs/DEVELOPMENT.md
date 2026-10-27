@@ -195,7 +195,7 @@ A component can appear open when it has a high-impedance output, an open switch,
 | GY-511 data-ready | GP6 |
 | Servo | GP15 |
 | Motor 1 encoder | GP16 A, GP17 B |
-| IR analog output | GP26 / ADC0 |
+| Line-tracing IR analog outputs | GP26 / ADC0, GP27 / ADC1, GP28 / ADC2 |
 
 Build and flash only this target:
 
@@ -204,7 +204,7 @@ cmake --build build --target board_diagnostics
 picotool load -f -v -x build/board_diagnostics.uf2
 ```
 
-The tool scans I²C once and then reports the ultrasonic distance, encoder edge counts, data-ready edges, and IR voltage every second. Turn each encoder slowly and check that both edge counts increase. Move an object in front of the ultrasonic and IR sensors and check that their readings change.
+The tool scans I²C once and then reports the ultrasonic distance, encoder edge counts, data-ready edges, and all three IR voltages every second. Turn each encoder slowly and check that both edge counts increase. Move an object in front of the ultrasonic and each IR sensor in turn; check that the relevant reading changes. A held-LOW GPIO probe result alone does not confirm that an IR sensor works. GP27 and GP28 have not yet been verified by a changing-target test.
 
 The diagnostic does not drive GP15 because unexpected servo movement can damage a mechanism. It cannot verify the servo signal wire without moving the servo.
 
