@@ -118,6 +118,24 @@ pico_enable_stdio_usb(motor_speed_calibration 1)
 pico_enable_stdio_uart(motor_speed_calibration 0)
 pico_add_extra_outputs(motor_speed_calibration)
 
+# Keep this target name short. Longer names can push SDK object paths past
+# the Windows 260-character limit when the checkout path is also long.
+add_executable(max_speed
+    src/max_speed.c
+)
+
+target_compile_options(max_speed PRIVATE -Wall -Wextra)
+
+target_link_libraries(max_speed PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+)
+
+pico_enable_stdio_usb(max_speed 1)
+pico_enable_stdio_uart(max_speed 0)
+pico_add_extra_outputs(max_speed)
+
 # ---------------------------------------------------------------------------
 # Buddy 2: motion-control library (Motion Control Task). Link it from any
 # target that needs motion; it brings its own include paths.

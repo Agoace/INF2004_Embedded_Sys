@@ -38,6 +38,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor encoder calibration | [`src/motor_encoder_calibration.c`](../src/motor_encoder_calibration.c) |
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
+| Max-speed run (GP20 start, 1 s speed reports) | [`src/max_speed.c`](../src/max_speed.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
 | Shared team header (packed fields, fault bits, encoder delta) | [`src/common/robot_shared.h`](../src/common/robot_shared.h) |
 | Motion-control library | [`src/motion/`](../src/motion/motion_control.h) |
