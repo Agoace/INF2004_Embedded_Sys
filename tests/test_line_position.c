@@ -63,6 +63,17 @@ static vc_event_t step(lp_t *lp, const model_t *m, int cl, int cc, int cr,
 
 #define TYPE(e) vc_event_type(e)
 
+/* Per-mille coverage, for the small gap rises. */
+static uint16_t reading_pm(const model_t *m, unsigned int s, int pm) {
+    return (uint16_t)(m->floor[s] + ((int)m->line[s] - (int)m->floor[s]) * pm / 1000);
+}
+
+static vc_event_t step_pm(lp_t *lp, const model_t *m, int l, int c, int r, uint32_t t) {
+    const uint16_t raw[3] = {reading_pm(m, 0u, l), reading_pm(m, 1u, c),
+                             reading_pm(m, 2u, r)};
+    return lp_update(lp, raw, t);
+}
+
 /* Line reads HIGH (typical IR module: black reflects less). Sensors differ. */
 static const model_t HIGH_LINE = {{250, 400, 320}, {3000, 2600, 3300}};
 /* Line reads LOW (the assumption in the fixed-threshold detector). */
@@ -87,8 +98,8 @@ static void test_polarity_and_position(const model_t *m, bool line_high,
         {0, 0, 100, 100},   /* under the right sensor */
         {100, 100, 0, -50}, /* between left and centre */
         {0, 100, 100, 50},
-        {50, 100, 0, -33},  /* edge reading helps, not "unknown" */
-        {0, 100, 25, 20},
+        {50, 100, 0, -25},  /* side from L: 50 * ((1000 - C) + L) / 1000 */
+        {0, 100, 25, 12},
     };
     uint32_t t = 0u;
     for (unsigned int i = 0; i < sizeof cases / sizeof cases[0]; ++i) {
@@ -194,7 +205,7 @@ int main(void) {
                                                reading(&drift, 2u, 0)}, t);
             if (lp.norm[0] > worst) worst = lp.norm[0];
         }
-        CHECK(worst < LP_ADAPT_FLOOR_PCT, "floor drift: left sensor reached %u%%", worst);
+        CHECK(worst < LP_PERMILLE(LP_ADAPT_FLOOR_PCT), "floor drift: left sensor reached %u", worst);
         CHECK(abs((int)lp_floor(&lp, 0u) - (HIGH_LINE.floor[0] + 600)) < 30,
               "floor learned: %u", lp_floor(&lp, 0u));
         CHECK(lp_line_seen(&lp) && lp.position == 0, "still tracking");
@@ -216,6 +227,111 @@ int main(void) {
     }
     CHECK(lp_line(&lp, 0u) - lp_floor(&lp, 0u) >= (int)LP_MIN_CONTRAST_ADC - 1,
           "range kept: %u", lp_line(&lp, 0u) - lp_floor(&lp, 0u));
+
+    /* Readings are per mille: 0.5 % coverage is visible. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    (void)step_pm(&lp, &HIGH_LINE, 5, 1000, 0, 0u);
+    CHECK(lp.norm[0] >= 4u && lp.norm[0] <= 5u, "0.5 %% reads %u per mille", lp.norm[0]);
+
+    /* Gap, left: C fades, L rises 1 % above its baseline, R does not. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        CHECK(lp_centred(&lp), "gap: centred");
+        (void)step_pm(&lp, &HIGH_LINE, 10, 600, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_GAP,
+              "gap: side %u source %u", lp.fade_side, lp.fade_source);
+        CHECK(lp.position == -20, "gap: C 60 %% gives %d, want -20", lp.position);
+        const uint32_t dark = t;
+        CHECK(TYPE(step_pm(&lp, &HIGH_LINE, 10, 0, 0, t++)) == VC_EVENT_NONE, "gap: dark");
+        CHECK(lp.position == -50, "gap: in the gap %d, want -50", lp.position);
+        CHECK(TYPE(step_pm(&lp, &HIGH_LINE, 10, 0, 0, dark + 50u)) == VC_EVENT_NONE,
+              "gap: no LINE_LOST at 50 ms");
+        CHECK(TYPE(step_pm(&lp, &HIGH_LINE, 10, 0, 0, dark + LP_GAP_LOST_MS - 1u)) ==
+                  VC_EVENT_NONE, "gap: no LINE_LOST before 300 ms");
+        const vc_event_t e = step_pm(&lp, &HIGH_LINE, 10, 0, 0, dark + LP_GAP_LOST_MS);
+        CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_LEFT,
+              "gap: LINE_LOST LEFT at 300 ms");
+    }
+
+    /* Gap, right, mirrored. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 0, 0, 10, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT && lp.position == 50,
+              "gap right: side %u position %d", lp.fade_side, lp.position);
+    }
+
+    /* Both outers rise the same (the floor changed): no side. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 10, 600, 10, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_UNKNOWN, "equal rise: side %u", lp.fade_side);
+        CHECK(lp.position == 0, "equal rise: position %d", lp.position);
+        /* Unknown side in the dark: normal 50 ms LINE_LOST, unknown side. */
+        (void)step_pm(&lp, &HIGH_LINE, 10, 0, 10, 100u);
+        const vc_event_t e = step_pm(&lp, &HIGH_LINE, 10, 0, 10, 150u);
+        CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_UNKNOWN,
+              "equal rise: LINE_LOST unknown at 50 ms");
+    }
+
+    /* The baseline needs LP_BASELINE_MIN centred updates first. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < LP_BASELINE_MIN - 1u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 10, 600, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_UNKNOWN, "baseline not ready: side %u",
+              lp.fade_side);
+    }
+
+    /* Hint: used when no sensor shows the side, and kept while fading. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        lp_set_hint(&lp, VC_LINE_SIDE_LEFT);
+        (void)step_pm(&lp, &HIGH_LINE, 0, 600, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_HINT &&
+                  lp.position == -20,
+              "hint: side %u source %u position %d", lp.fade_side, lp.fade_source,
+              lp.position);
+        lp_set_hint(&lp, VC_LINE_SIDE_RIGHT); /* robot now turns back */
+        (void)step_pm(&lp, &HIGH_LINE, 0, 500, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.position == -25,
+              "hint: side kept while fading (%u, %d)", lp.fade_side, lp.position);
+        (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_UNKNOWN && lp.position == 0,
+              "hint: cleared when centred");
+        /* Newer evidence wins over the hint. */
+        (void)step_pm(&lp, &HIGH_LINE, 0, 600, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT, "hint right: %u", lp.fade_side);
+        (void)step_pm(&lp, &HIGH_LINE, 10, 500, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_GAP,
+              "gap rise wins over hint: side %u source %u", lp.fade_side, lp.fade_source);
+        (void)step_pm(&lp, &HIGH_LINE, 0, 300, 200, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT && lp.fade_source == LP_SIDE_SOURCE_SENSOR &&
+                  lp.position == 45,
+              "sensor wins: side %u source %u position %d", lp.fade_side, lp.fade_source,
+              lp.position);
+    }
 
     /* Line word layout. */
     lp.position = -50;

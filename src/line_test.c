@@ -113,7 +113,7 @@ int main(void) {
 
         if (time_reached(next_print)) {
             next_print = delayed_by_ms(next_print, PRINT_PERIOD_MS);
-            printf("raw %4u %4u %4u  n %3u %3u %3u %%  ", raw[0], raw[1], raw[2],
+            printf("raw %4u %4u %4u  n %4u %4u %4u  ", raw[0], raw[1], raw[2],
                    lp.norm[0], lp.norm[1], lp.norm[2]);
             if (lp_line_seen(&lp)) {
                 printf("pos %+4d  ", lp.position);

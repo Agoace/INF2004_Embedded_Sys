@@ -27,17 +27,60 @@ sensor learns. The first detector is not changed.
 ## How it works
 
 ```text
-raw ADC ──▶ n = (raw − floor) / (line − floor), 0–100 per sensor
-        ──▶ position = 100 × (nR − nL) / (nL + nC + nR), −100…+100
+raw ADC ──▶ n = (raw − floor) / (line − floor), 0–1000 per sensor
+        ──▶ side (where the line is going) ──▶ position −100…+100
 ```
+
+With a known side: position = side × 50 × ((1000 − nC) + nOuter) / 1000.
+With the line under an outer sensor alone: ±100. With no known side, or
+with both outer sensors on the line: the weighted average
+100 × (nR − nL) / (nL + nC + nR).
 
 | Position | Meaning |
 | ---: | --- |
 | −100 | Line under the left sensor |
-| −50 | Line between the left and centre sensors |
+| −50 | Line between the left and centre sensors (in the gap) |
 | 0 | Line under the centre sensor |
 | +50 | Line between the centre and right sensors |
 | +100 | Line under the right sensor |
+
+### The gaps between the sensors
+
+On 2026-10-27 the line, placed between C and L, gave almost nothing:
+
+| | L | C | R |
+| --- | ---: | ---: | ---: |
+| Line in the C–L gap | 178 | 222 | 198 |
+| Bare floor, same area | 151 | 188 | 200 |
+| Rise | +27 | +34 | −2 |
+
+The noise is about ±2 counts, so the rise is real, but it is under 1 % of
+the range, and the floor itself varies by about 100 counts across the mat.
+The sensors are already at the highest and closest mount position. So the
+gap rise cannot say "the line is here", but it can say which side the line
+went to: each outer sensor is compared with its own reading a moment
+earlier, while the line was centred.
+
+Side tracking, newest evidence first:
+
+| Source | Rule |
+| --- | --- |
+| Sensor | One outer sensor reads at least 5 % |
+| Gap rise | One outer sensor is at least 0.3 % above its baseline and at least 0.3 % above the other |
+| Wheel hint | From the caller: the left wheel turned at least 20 counts more than the right since the line was centred, so the robot turns right and the line moves left (or the opposite) |
+
+- Baseline: the outer sensors' readings while the line is centred (C at
+  least 80 %, outer sensors under 5 %), moving 1/16 per reading, used after
+  16 readings. It must not learn while C fades: then it absorbs the rise
+  it must detect. The host test found this.
+- The side is kept until the line is centred again; a newer sensor or gap
+  rise replaces it. The hint is used only when no side is kept, because
+  the robot's own correction turns the wheel difference the other way.
+- In the gap (all sensors dark) with a known side, the position is ±50 and
+  LINE_LOST waits 300 ms instead of 50 ms, so the steering can bring the
+  line back.
+- If the line goes dark after a position of ±75 or more, it left outward
+  past an outer sensor: the position stays and LINE_LOST comes after 50 ms.
 
 ### A. Calibration sweep
 
@@ -71,7 +114,8 @@ far that the range drops below the 200-count sanity limit.
 
 ## Thresholds
 
-All are percentages of each sensor's own range, not ADC values:
+All are percentages of each sensor's own range, not ADC values. Readings
+are per mille (0–1000), so the code compares `LP_PERMILLE(pct)`:
 
 | Name | Value | Meaning |
 | --- | ---: | --- |
@@ -80,6 +124,11 @@ All are percentages of each sensor's own range, not ADC values:
 | `LP_JUNCTION_PCT` | 50 % | All sensors at or above this: junction |
 | `LP_SIDE_PCT` | 20 | Position beyond ±20 gives a side for LINE_LOST |
 | `LP_LOST_MS` | 50 ms | Design review: LINE_LOST after more than 50 ms |
+| `LP_GAP_LOST_MS` | 300 ms | LINE_LOST in a gap with a known side |
+| `LP_CENTRED_PCT` | 80 % | C at or above, outer sensors dark: centred |
+| `LP_OUTER_SEEN_PCT` | 5 % | An outer sensor at or above this sees the line |
+| `LP_GAP_RISE_PERMILLE` | 0.3 % | Gap rise above the baseline (about 11 ADC counts) |
+| `LP_OUTWARD_POSITION` | 75 | Dark after this: the line left outward |
 
 The gap between 30 % and 50 % stops the seen/lost state from changing on
 every reading.
@@ -90,7 +139,7 @@ every reading.
 
 | Event | When | Payload |
 | --- | --- | --- |
-| LINE_LOST | The line was not seen for 50 ms | Last side: left, right, or unknown (line was near the centre) |
+| LINE_LOST | The line was not seen for 50 ms (300 ms in a gap with a known side) | Last side: left, right, or unknown |
 | LINE_FOUND | Any sensor reaches 50 % after LINE_LOST | — |
 
 After a calibration the module assumes the line is under the robot. If it
@@ -108,7 +157,7 @@ Line word for other tasks and telemetry:
 | 10–11 | Last side | 2 |
 | 12–15 | Spare | 4 |
 
-Each normalised reading is 0–100 (7 bits). The learned ends are 12-bit ADC
+Each normalised reading is 0–1000 (10 bits). The learned ends are 12-bit ADC
 values with 8 fraction bits for the slow learning; they are private to the
 line task.
 
@@ -127,11 +176,23 @@ never saw the line, LINE_LOST at 50 ms with the side, LINE_FOUND at 50 %,
 a short gap, the unknown side, a start off the line, a 600-count light
 drift over 10 s, the range guard, and the line word.
 
+Side tracking: per-mille resolution, gap left (side, position −20 then
+−50, no LINE_LOST at 50 ms, LINE_LOST LEFT at 300 ms), gap right, equal
+rise on both sides (no side, LINE_LOST at 50 ms), baseline not ready, the
+hint (used, kept while the wheels turn back, cleared when centred), and a
+gap rise and then a sensor replacing the hint.
+
 Result on 2026-10-27: all tests pass. Six deliberate rule changes (fixed
 polarity, no range guard, no 50 ms wait, found at 30 %, no floor learning,
 not seen after calibration) each make the test fail. The range-guard test
 was first written wrongly and did not detect its rule change; it was
 corrected.
+
+Side tracking, 2026-10-27: all tests pass. Eight deliberate rule changes
+(baseline learns while fading, gap rise without the difference check,
+hint replaces a kept side, no 300 ms gap wait, no outward hold, side not
+cleared when centred, baseline never ready, outer-only not ±100) each make
+the test fail.
 
 ## Bench test
 
@@ -228,6 +289,7 @@ sideways.
 - Find out why R reaches only 1645 on the line (sensor height, angle, or
   only part of the line crossed it).
 - Tell the line detector owner: the line reads high on this robot.
+- Check the gap rise and the side sources on the track (`steer_test` log).
 - Tell the Vehicle Controller the line state at START, so that a robot
   started off the line searches at once.
 - Send JUNCTION to the Vehicle Controller in a later step.

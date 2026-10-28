@@ -20,9 +20,21 @@
  *      sensor learns its floor value only when it clearly sees the floor,
  *      and its line value only when it clearly sees the line.
  *
- * Each reading is normalised to 0-100 (0 = floor, 100 = line). The line
- * position is the weighted average of the three sensors, -100 (under the
- * left sensor) to +100 (under the right sensor).
+ * Each reading is normalised to 0-1000 (0 = floor, 1000 = line). The line
+ * position is -100 (under the left sensor) to +100 (under the right sensor).
+ *
+ * The sensors cannot see the line in the gaps between them (measured
+ * 2026-10-27): there only a weak rise of about 0.7 % of the range reaches
+ * the neighbours. So the side the line moves to is tracked:
+ *   - while the line is centred (C >= 80 %, outers dark), the outer
+ *     sensors' readings are kept as a baseline;
+ *   - when the centre reading fades, the side is taken from, newest
+ *     evidence first: an outer sensor that sees the line, an outer sensor
+ *     that rises above its baseline (gap rise), or the caller's hint
+ *     (wheel encoders: which way the robot is turning);
+ *   - the side is kept until the line is centred again.
+ * With a known side, position = side * 50 * ((1000 - C) + outer) / 1000:
+ * 0 under the centre, +/-50 in the gap, +/-100 under an outer sensor.
  *
  * Pure logic: no hardware or RTOS calls. See docs/LINE_POSITION.md.
  */
@@ -32,7 +44,10 @@
 #define LP_CENTRE 1u
 #define LP_RIGHT 2u
 
-/* Thresholds as a percentage of each sensor's own floor-to-line range. */
+/* Readings are per mille (0-1000) of each sensor's own floor-to-line
+ * range. Thresholds are given in percent and compared as LP_PERMILLE(x). */
+#define LP_PERMILLE(pct) ((pct) * 10u)
+
 #define LP_LOST_PCT 30u     /* All sensors below this: line not seen. */
 #define LP_FOUND_PCT 50u    /* Any sensor at or above this: line seen. */
 #define LP_JUNCTION_PCT 50u /* All sensors at or above this: junction. */
@@ -44,6 +59,18 @@
 #define LP_ADAPT_SHIFT 8u
 /* Design review: LINE_LOST after more than 50 ms without the line. */
 #define LP_LOST_MS 50u
+/* In a gap with a known side the line is near: wait longer, steer back. */
+#define LP_GAP_LOST_MS 300u
+
+/* Side tracking (see above). */
+#define LP_CENTRED_PCT 80u     /* C at or above this, outers dark: centred */
+#define LP_OUTER_SEEN_PCT 5u   /* an outer sensor at or above this sees the line */
+#define LP_GAP_RISE_PERMILLE 3 /* gap rise above the baseline (about 11 ADC) */
+#define LP_BASELINE_SHIFT 4u   /* baseline moves 1/16 per update */
+#define LP_BASELINE_MIN 16u    /* updates before the baseline is used */
+/* |position| at or above this when the line goes dark: it left outward,
+ * past an outer sensor (not into a gap). */
+#define LP_OUTWARD_POSITION 75
 /* Sanity limit, not a classification threshold: a sensor whose floor and
  * line values differ by less than this is broken or never saw the line.
  * About 0.16 V. */
@@ -61,11 +88,26 @@ typedef struct {
     uint32_t cal_sum[LP_SENSORS];
     uint32_t cal_count;
 
-    uint8_t norm[LP_SENSORS]; /* 0-100 */
-    int8_t position;          /* -100..+100 */
-    uint16_t flags;           /* LP_FLAG_* */
+    uint16_t norm[LP_SENSORS]; /* 0-1000 */
+    int8_t position;           /* -100..+100 */
+    uint16_t flags;            /* LP_FLAG_* */
     uint32_t lost_since_ms;
+
+    /* Side tracking. */
+    int32_t baseline_q8[LP_SENSORS]; /* outer sensors only, Q8 raw */
+    uint8_t baseline_count;
+    uint8_t fade_side;   /* vc_line_side_t: where the line went */
+    uint8_t fade_source; /* lp_side_source_t */
+    uint8_t hint;        /* vc_line_side_t from the caller */
 } lp_t;
+
+/* Where the side came from (for logs and tests). */
+typedef enum {
+    LP_SIDE_SOURCE_NONE = 0,
+    LP_SIDE_SOURCE_SENSOR = 1, /* an outer sensor sees the line */
+    LP_SIDE_SOURCE_GAP = 2,    /* an outer sensor rose above its baseline */
+    LP_SIDE_SOURCE_HINT = 3,   /* the caller's hint (wheel encoders) */
+} lp_side_source_t;
 
 #define LP_FLAG_CALIBRATED 0x0001u
 #define LP_FLAG_LINE_SEEN 0x0002u
@@ -74,6 +116,7 @@ typedef struct {
 #define LP_FLAG_SIDE_SHIFT 4u
 #define LP_FLAG_SIDE_MASK 0x0030u /* vc_line_side_t, 2 bits */
 #define LP_FLAG_LINE_HIGH 0x0040u /* Polarity: line reads higher than floor */
+#define LP_FLAG_CENTRED 0x0080u   /* Line under the centre sensor only */
 
 void lp_init(lp_t *lp);
 
@@ -99,6 +142,14 @@ lp_calib_result_t lp_calib_end(lp_t *lp, unsigned int *bad_mask);
  */
 vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms);
 
+/* Optional: the side the line is probably moving to, from the caller's
+ * other data. Example: the left wheel turned more than the right, so the
+ * robot turns right and the line moves to the LEFT. Used only when no
+ * sensor shows the side. Set VC_LINE_SIDE_UNKNOWN when there is no hint. */
+static inline void lp_set_hint(lp_t *lp, vc_line_side_t side) {
+    lp->hint = (uint8_t)side;
+}
+
 static inline bool lp_calibrated(const lp_t *lp) {
     return (lp->flags & LP_FLAG_CALIBRATED) != 0u;
 }
@@ -110,6 +161,9 @@ static inline bool lp_junction(const lp_t *lp) {
 }
 static inline bool lp_line_reads_high(const lp_t *lp) {
     return (lp->flags & LP_FLAG_LINE_HIGH) != 0u;
+}
+static inline bool lp_centred(const lp_t *lp) {
+    return (lp->flags & LP_FLAG_CENTRED) != 0u;
 }
 static inline vc_line_side_t lp_last_side(const lp_t *lp) {
     return (vc_line_side_t)((lp->flags & LP_FLAG_SIDE_MASK) >> LP_FLAG_SIDE_SHIFT);

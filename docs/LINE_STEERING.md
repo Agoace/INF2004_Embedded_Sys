@@ -98,13 +98,24 @@ picotool load -f -x build/steer_test.uf2
 
 Settings: base 20 %, gain 100 %, kd 0, min 12 %, max 30 % (operator choices).
 
-A run stops on GP21, LINE_LOST, a stalled wheel (no encoder count for
-500 ms), or after 20 s. There is no line search yet.
+While following, the encoders give the line position module its side
+hint: left minus right wheel counts since the line was last centred; more
+than +20 means the robot turns right, so the line moves left.
+
+On LINE_LOST the robot searches on the spot at 20 % duty: an eighth of a
+wheel turn toward the last side (left if unknown), then through the start
+to an eighth on the other side. LINE_FOUND resumes following. This is a
+bench stand-in for the Vehicle Controller LINE_SEARCH state.
+
+A run stops on GP21, a failed search, a stalled wheel (no encoder count
+for 500 ms), or after 20 s.
 
 This is a driving test, so use 5 V VIN with USB disconnected
-([USB power safety](USB_POWER_SAFETY.md)). The run is logged in RAM every
-50 ms. After the robot stops, connect USB and open the serial port. The
-summary and log print once, then the summary repeats every 5 s.
+([USB power safety](USB_POWER_SAFETY.md)). The run is logged every 50 ms
+(position, duties, raw readings, side and its source, hint, wheel counts)
+and saved to the last two flash sectors when the robot stops, so a restart
+does not lose it. Connect USB and open the serial port: the summary and
+log print once, then the summary repeats every 5 s.
 
 Procedure:
 
@@ -132,6 +143,16 @@ wrong way; its report was lost when the Pico restarted, so the run is now
 saved to flash.
 
 Settings after run 1: base 20 %, max 30 % (operator choices).
+
+### Run 2: 2026-10-27, VIN
+
+Sensor sides fixed. 605 ms, LINE_LOST with unknown side. The position was
+0 for 88 % of the run: only the centre sensor saw the line, so there was
+no steering. The left wheel ran 881 counts and the right 820 at the same
+duty, so the robot drifted right and the line went into the gap between C
+and L, where no sensor sees it. See
+[the gaps between the sensors](LINE_POSITION.md#the-gaps-between-the-sensors)
+for the measurement and the side tracking that followed.
 
 ## Open items
 
