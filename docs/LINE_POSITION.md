@@ -195,12 +195,26 @@ and did not return to the line. Final version:
 - The encoders were 60 and −22 counts from the start at the stop, so a
   count-only return would not reliably end on the line.
 
-Steps 3 and 4 of the procedure are not yet recorded.
+Procedure steps 3 and 4 (robot moved by hand, 2026-10-27):
+
+| Check | Result |
+| --- | --- |
+| Each sensor reaches 100 % | Yes: L, C and R |
+| Line under L, C, R | Position −100, 0, +100 |
+| Line between L and C | L 50 %, C 67 %: position −42 |
+| Slide off, line leaves through R (2 times) | LINE_LOST RIGHT |
+| Slide off, line leaves through L | LINE_LOST LEFT |
+| Lift the robot | LINE_LOST unknown side (correct: the line did not leave sideways) |
+| Put back on the line | LINE_FOUND, once per return |
+
+A lift and a line that leaves sideways through the centre sensor look the
+same: only C fades. Using the recent movement of the position to choose a
+side was considered and not added, because it gives a wrong side after a
+lift. Look at it again if real driving gives "unknown" when the line leaves
+sideways.
 
 ## Open items
 
-- Record procedure steps 3 and 4 (position under each sensor, LINE_LOST
-  and LINE_FOUND).
 - Find out why R reaches only 1645 on the line (sensor height, angle, or
   only part of the line crossed it).
 - Tell the line detector owner: the line reads high on this robot.
