@@ -506,9 +506,10 @@ The ±15° mounted servo and 400 mm profile range were a worked example, not the
 
 # 13. Buddy 5 — ultrasonic distance
 
-> **Update 2026-10-27 (bench test):** the implemented range is **0–511 mm**,
-> still 9 bits. A 9-bit field holds 512 values, so the range uses every code
-> at no extra cost. An echo beyond 511 mm is NO_RETURN. See
+> **Update 2026-10-27 (bench test):** the implemented range is **60–511 mm**,
+> still 9 bits. Code `0` with VALID means TOO_NEAR (less than 60 mm), because
+> the sensor reports wrong distances below about 40 mm. An echo beyond
+> 511 mm is NO_RETURN. See
 > [Ultrasonic driver](ULTRASONIC_DRIVER.md#packed-result).
 
 ## Chosen application range

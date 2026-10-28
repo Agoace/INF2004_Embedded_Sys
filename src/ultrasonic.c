@@ -111,7 +111,9 @@ static void publish(ultrasonic_status_t status, uint32_t latency_us,
     }
 
     if (status == ULTRASONIC_STATUS_VALID) {
-        distance_code = (uint16_t)distance_mm;
+        distance_code = distance_mm < ULTRASONIC_DISTANCE_MIN_MM
+                            ? ULTRASONIC_DISTANCE_TOO_NEAR
+                            : (uint16_t)distance_mm;
         failure_streak = 0u;
     } else if (status == ULTRASONIC_STATUS_NO_RETURN) {
         /* The sensor answered the trigger, so it works. */

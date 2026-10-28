@@ -36,9 +36,20 @@ typedef enum {
                                          from 0-511 mm. */
 } ultrasonic_status_t;
 
-/* Distance code: 9 bits, 0-511 mm. Every code is a distance.
- * An echo from more than 511 mm is reported as NO_RETURN. */
+/*
+ * Distance code: 9 bits.
+ *   0       VALID only: TOO_NEAR, an echo from less than 60 mm. Something is
+ *           there, but the exact distance is not reliable.
+ *   1-59    not used
+ *   60-511  distance in mm
+ * An echo from more than 511 mm is reported as NO_RETURN.
+ *
+ * Below about 40 mm the HC-SR04+ still rings from its own burst and reports
+ * wrong distances. The 60 mm floor keeps those values out of the field.
+ */
+#define ULTRASONIC_DISTANCE_MIN_MM 60u
 #define ULTRASONIC_DISTANCE_MAX_MM 511u
+#define ULTRASONIC_DISTANCE_TOO_NEAR 0u
 /* Distance code when the status is not VALID. The value has no meaning. */
 #define ULTRASONIC_DISTANCE_NONE 0u
 
@@ -86,6 +97,12 @@ static inline uint8_t ultrasonic_result_streak(ultrasonic_result_t r) {
 
 static inline bool ultrasonic_result_is_none(ultrasonic_result_t r) {
     return r == ULTRASONIC_RESULT_NONE;
+}
+
+/* True for a VALID echo from less than ULTRASONIC_DISTANCE_MIN_MM. */
+static inline bool ultrasonic_result_too_near(ultrasonic_result_t r) {
+    return ultrasonic_result_status(r) == ULTRASONIC_STATUS_VALID &&
+           ultrasonic_result_distance(r) == ULTRASONIC_DISTANCE_TOO_NEAR;
 }
 
 /* True after ULTRASONIC_FAULT_STREAK sensor faults in a row. */

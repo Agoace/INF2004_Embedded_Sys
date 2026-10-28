@@ -130,7 +130,12 @@ static void print_live(uint32_t sequence, ultrasonic_result_t result,
     printf("#%lu %-10s word 0x%04X streak %u%s", (unsigned long)sequence,
            status_name(status), result, ultrasonic_result_streak(result),
            ultrasonic_result_fault(result) ? " FAULT" : "");
-    if (status == ULTRASONIC_STATUS_VALID) {
+    if (ultrasonic_result_too_near(result)) {
+        printf("  TOO_NEAR (<%u mm, raw %lu mm)  pulse %lu us  rise %lu us",
+               ULTRASONIC_DISTANCE_MIN_MM, (unsigned long)debug.distance_mm,
+               (unsigned long)debug.pulse_us,
+               (unsigned long)debug.rise_latency_us);
+    } else if (status == ULTRASONIC_STATUS_VALID) {
         printf("  %u mm  pulse %lu us  rise %lu us", code,
                (unsigned long)debug.pulse_us,
                (unsigned long)debug.rise_latency_us);
@@ -166,9 +171,10 @@ int main(void) {
     ultrasonic_init(ULTRASONIC_TRIGGER_PIN, ULTRASONIC_ECHO_PIN, NULL);
 
     printf("\nHC-SR04+ ultrasonic test (GP3 trigger, GP2 echo)\n");
-    printf("Trigger period %u ms. Distance field 0-%u mm; "
-           "farther is NO_RETURN.\n",
-           MEASURE_PERIOD_US / 1000u, ULTRASONIC_DISTANCE_MAX_MM);
+    printf("Trigger period %u ms. Distance field %u-%u mm; nearer is "
+           "TOO_NEAR, farther is NO_RETURN.\n",
+           MEASURE_PERIOD_US / 1000u, ULTRASONIC_DISTANCE_MIN_MM,
+           ULTRASONIC_DISTANCE_MAX_MM);
     printf("GP20: record %u-reading batch. GP21: live output on/off.\n\n",
            BATCH_SIZE);
 

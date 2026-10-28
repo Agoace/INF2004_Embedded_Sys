@@ -65,7 +65,7 @@ not used.
 
 | Field | Producer | Consumer | Valid range | Resolution | Reserved meaning | Bits |
 | --- | --- | --- | --- | --- | --- | ---: |
-| Distance code | `ultrasonic_service()` | Obstacle Task | 0–511 mm | 1 mm | None; every code is a distance. `0` when status is not VALID | 9 |
+| Distance code | `ultrasonic_service()` | Obstacle Task | 60–511 mm | 1 mm | `0` with VALID = TOO_NEAR (less than 60 mm); 1–59 unused; `0` when status is not VALID | 9 |
 | Status | `ultrasonic_service()`, `ultrasonic_trigger()` | Obstacle Task | VALID, NO_RISE, STUCK_HIGH, NO_RETURN | 4 states | NO_RISE with streak 0 = no result yet | 2 |
 | Fault streak | `ultrasonic_service()` | Obstacle Task | 0–5 | 1 | `5` = sensor fault; saturates | 3 |
 
@@ -73,7 +73,7 @@ Status codes:
 
 | Code | Status | Meaning | Streak |
 | ---: | --- | --- | --- |
-| 0 | VALID | Echo returned from 0–511 mm | Reset to 0 |
+| 0 | VALID | Echo returned from 0–511 mm. Distance code 0 means TOO_NEAR. | Reset to 0 |
 | 1 | NO_RISE | Fault: Echo did not go HIGH within 2 ms of the trigger | +1 |
 | 2 | STUCK_HIGH | Fault: Echo was HIGH before the trigger | +1 |
 | 3 | NO_RETURN | Sensor pinged (Echo rose), but no echo returned from 0–511 mm | Reset to 0 |
@@ -83,13 +83,21 @@ Rules:
 
 - **No echo is unknown, not clear.** Treat every status except VALID as
   unknown.
-- The field uses the full 9-bit range, 0–511 mm. A 9-bit field holds 512
+- **TOO_NEAR:** a VALID echo from less than 60 mm has distance code `0`.
+  Something is in front of the sensor, but the exact distance is not
+  reliable. Treat it as the nearest possible obstacle. Use
+  `ultrasonic_result_too_near()`. Below about 40 mm the sensor reports wrong
+  distances (run 6). The robot front is about 58 mm from the sensor
+  (run 7), so an obstacle that touches the front gives TOO_NEAR or about
+  60 mm. Both mean "stop".
+- The field uses the 9-bit range up to 511 mm. A 9-bit field holds 512
   values, so the extra 111 mm of look-ahead beyond the planned 400 mm costs
   no extra bits. An echo from more than 511 mm is reported as NO_RETURN.
 - History: the first version used 0–400 mm and reported 401–515 mm as code
   `511`. The bench test showed that a target at 400 mm flipped between `400`
   and `511`, and the far code gave no decision value. The range was then
-  changed to 0–511 mm with no special codes. This replaces the 0–400 mm
+  changed to 0–511 mm. Runs 6 and 7 then added the 60 mm floor and the
+  TOO_NEAR code. This replaces the 0–400 mm
   range in the [Week 8 notes](week8_change_requirement_1_notes.md#13-buddy-5--ultrasonic-distance).
 - NO_RETURN is not a fault. The sensor answered the trigger, so it works.
   NO_RETURN is still unknown: open space, fabric, a tilted face, or a narrow
@@ -134,7 +142,8 @@ With these timeouts, the results mean:
 
 | Target | Result |
 | --- | --- |
-| 0–511 mm | VALID + distance |
+| Less than 60 mm | VALID + `0` (TOO_NEAR) |
+| 60–511 mm | VALID + distance |
 | More than 511 mm, or no echo | NO_RETURN (unknown) |
 
 The HC-SR04+ holds Echo HIGH by itself when no echo returns. The echo timeout
@@ -248,7 +257,7 @@ target moved are excluded. The firmware still reported echoes from 401 to
 
 | Target | Readings | Mean | Std | Min | Max | Drop-outs | Note |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| 20 mm (unconfirmed) | 45 | 49.3 | 7.1 | 41 | 74 | 15 NO_RETURN | Unstable |
+| 20 mm | 45 | 49.3 | 7.1 | 41 | 74 | 15 NO_RETURN | Unstable; confirmed by run 6 |
 | 50 mm (unconfirmed) | 54 | 61.4 | 2.6 | 56 | 68 | 16 NO_RETURN | |
 | 100 mm | 270 | 96.8 | 1.6 | 87 | 108 | 0 | |
 | 200 mm | 93 | 210.5 | 3.0 | 196 | 217 | 0 | |
@@ -256,8 +265,9 @@ target moved are excluded. The firmware still reported echoes from 401 to
 | 400 mm | 146 | 398.1 | 5.2 | 385 | 422 | 0 | Flipped between `400` and `511` |
 | 600 mm | — | — | — | — | — | All NO_RETURN | Beyond the 515 mm echo timeout |
 
-The two near plateaus were not labelled during the test. The 20 mm and 50 mm
-assignment is the order of the procedure, not a confirmed record.
+The two near plateaus were not labelled during the test. Run 6 confirmed the
+20 mm row. The 50 mm row is still the order of the procedure, not a
+confirmed record.
 
 Conclusions:
 
@@ -273,6 +283,57 @@ Conclusions:
 - A target at 400 mm flipped between `400` and `511`. Code `511` gave no
   decision value. The field is now 0–511 mm with no special codes, and an
   echo beyond 511 mm is NO_RETURN.
+
+### Run 6: near-range check at 20 mm
+
+A flat target was held by hand at 20 mm. The firmware used the 0–511 mm
+field. One recorder process read the port.
+
+| Observation | Result |
+| --- | --- |
+| Most readings | VALID, 40–55 mm |
+| Other readings | Often 60–90 mm; some 100–250 mm, probably from the hand or the table |
+| Lowest reported value | 40 mm |
+| Status | Mostly VALID; the sensor does not flag the error |
+
+Conclusions:
+
+- The sensor has a blind zone of about 40 mm. The 8-cycle 40 kHz burst
+  lasts about 200 µs, and a 40 mm echo returns after about 233 µs. An
+  echo from a nearer target arrives while the transducer still rings.
+- In the blind zone the sensor gives a wrong VALID distance, not NO_RETURN.
+  The driver cannot detect this.
+- A 20 mm target reads about 45 mm. This is still far below the 200 mm stop
+  threshold, so the stop decision is not affected.
+- The driver now reports a VALID echo below 60 mm as TOO_NEAR (code `0`)
+  and not as a distance.
+
+### Run 7: sensor-to-robot-front offset
+
+The sensor was mounted on the robot. A flat target touched the front of the
+robot. Firmware: 0–511 mm field, before the 60 mm floor.
+
+| Observation | Result |
+| --- | --- |
+| Readings | 80 of 80 VALID |
+| Mean | 57.9 mm, std 2.2 mm |
+| Values | 56 mm ×45, 60 mm ×21, 61 mm ×14 |
+| Pulse | 327 or 353 µs; one 25 µs sensor step apart |
+
+Conclusions:
+
+- The echo distance from the sensor to the robot front is about 58 mm.
+  At about 50 mm the hand-held test read about 11 mm high, so measure the
+  true offset with a ruler before use.
+- The sensor blind zone (about 40 mm) is inside the robot body.
+- The stop threshold needs a stated reference point:
+
+| Stop rule | Sensor threshold |
+| --- | ---: |
+| 200 mm from the sensor | 200 mm |
+| 200 mm from the robot front | 200 + 58 ≈ 258 mm |
+
+- The 511 mm field reaches about 453 mm in front of the robot.
 
 ## Measurements to record
 
@@ -300,7 +361,7 @@ reader while a recorder is running.
 ## Open items
 
 - Repeat the distance test with a fixed target and the sensor mounted on the
-  robot. Confirm the 20 mm and 50 mm behaviour.
+  robot. Confirm the 50 mm behaviour.
 - Complete the material and angle table.
 - Get team agreement on the four status codes and on how the Vehicle
   Controller drives on NO_RETURN.
