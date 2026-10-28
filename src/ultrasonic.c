@@ -76,7 +76,8 @@ static void __not_in_flash_func(echo_irq_handler)(void) {
     }
 }
 
-void ultrasonic_init(uint trigger_pin, uint echo_pin, ultrasonic_echo_hook_t hook) {
+void ultrasonic_init(unsigned int trigger_pin, unsigned int echo_pin,
+                     ultrasonic_echo_hook_t hook) {
     trigger_gpio = trigger_pin;
     echo_gpio = echo_pin;
     echo_hook = hook;

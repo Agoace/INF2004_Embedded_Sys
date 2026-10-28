@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "pico/types.h"
-
 /*
  * Non-blocking HC-SR04+ driver for the Spatial Optimizer.
  *
@@ -121,7 +119,8 @@ typedef void (*ultrasonic_echo_hook_t)(void);
  * Configure the trigger and echo pins and install the echo interrupt on the
  * calling core. Call once, from the core that will call ultrasonic_service().
  */
-void ultrasonic_init(uint trigger_pin, uint echo_pin, ultrasonic_echo_hook_t hook);
+void ultrasonic_init(unsigned int trigger_pin, unsigned int echo_pin,
+                     ultrasonic_echo_hook_t hook);
 
 /*
  * Start one measurement. Returns false and does nothing if a measurement is

@@ -26,6 +26,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Week 8 Change Requirement 1 notes | [docs/week8_change_requirement_1_notes.md](week8_change_requirement_1_notes.md) |
 | Ultrasonic driver record | [docs/ULTRASONIC_DRIVER.md](ULTRASONIC_DRIVER.md) |
+| Forward obstacle watch record | [docs/OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md) |
 | Week 6 design-review diagrams | [`design-review/`](../design-review/) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
 
@@ -45,6 +46,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
 | Ultrasonic driver | [`src/ultrasonic.c`](../src/ultrasonic.c), [`src/ultrasonic.h`](../src/ultrasonic.h) |
 | Ultrasonic bench test | [`src/ultrasonic_test.c`](../src/ultrasonic_test.c) |
+| Forward obstacle watch | [`src/obstacle.c`](../src/obstacle.c), [`src/obstacle.h`](../src/obstacle.h) |
+| Obstacle watch bench test | [`src/obstacle_test.c`](../src/obstacle_test.c) |
+| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test) |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
