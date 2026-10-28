@@ -681,6 +681,10 @@ the 10 µs calibration step does **not** automatically mean final application re
 
 # 20. Mounted servo limit
 
+> **Update 2026-10-27 (measured):** the mounted servo turns about **±41°**
+> before the mount touches the robot (1040 µs right, 1960 µs left). The scan
+> uses **±30°**. See [Servo obstacle scan](OBSTACLE_SCAN.md#mounted-servo-limits).
+
 With surrounding hardware installed, practical movement is about:
 
 **−15° to +15°**
@@ -690,6 +694,10 @@ This is the application-relevant motion unless the mechanical arrangement is cha
 ---
 
 # 21. Servo scan index
+
+> **Update 2026-10-27:** the implemented points are −30° to +30° in **5°**
+> steps: 13 points, so the index is **4 bits** (`ceil(log2(13)) = 4`;
+> 13–15 unused). Index 0 is 30° right, 6 is straight ahead, 12 is 30° left.
 
 If final scan points are:
 
@@ -728,6 +736,10 @@ The Obstacle Task can locally map the index to PWM.
 
 # 22. Mounted servo PWM range
 
+> **Update 2026-10-27:** the implemented pulses are 1167–1833 µs. The servo
+> code clamps every pulse to 1100–1900 µs. The scan stores only the 4-bit
+> index; the pulse table is local to the scan module.
+
 From the linear unloaded calibration:
 
 - −90° ≈ 500 µs
@@ -765,6 +777,12 @@ But a 3-bit scan index is still better if only seven positions are used.
 ---
 
 # 23. Obstacle width geometry
+
+> **Update 2026-10-27 (scan range):** the scan half-angle is now **30°**,
+> not 15°. At 400 mm, `2 × 400 × tan(30°) ≈ 462 mm`; at 511 mm, about
+> 590 mm. Both exceed an 8-bit 1 mm field. The HC-SR04+ beam (about 30°
+> wide) also blurs the edges, so a 1 mm width resolution is not real.
+> Recalculate the width field in the profile step.
 
 > **Update 2026-10-27:** the calculation below uses 400 mm. If the profile
 > uses the full 0–511 mm range, the observable width becomes

@@ -200,3 +200,27 @@ target_link_libraries(obstacle_test PRIVATE
 pico_enable_stdio_usb(obstacle_test 1)
 pico_enable_stdio_uart(obstacle_test 0)
 pico_add_extra_outputs(obstacle_test)
+
+add_executable(scan_test
+    src/scan_test.c
+    src/obstacle_scan.c
+    src/servo.c
+    src/ultrasonic.c
+)
+
+target_include_directories(scan_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(scan_test PRIVATE
+    pico_stdlib
+    hardware_clocks
+    hardware_gpio
+    hardware_irq
+    hardware_pwm
+    hardware_sync
+)
+
+pico_enable_stdio_usb(scan_test 1)
+pico_enable_stdio_uart(scan_test 0)
+pico_add_extra_outputs(scan_test)

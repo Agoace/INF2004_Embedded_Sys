@@ -89,6 +89,11 @@ The behavior test confirmed a positional servo, not a continuous-rotation servo.
 - Approximate mechanical range: 180° total, or 90° on each side of center.
 - The servo did not buzz or strain at the tested endpoints.
 - The servo cannot rotate continuously through 360°.
+- Mounted on the robot (2026-10-27): a pulse below 1500 µs turns the sensor
+  right and above 1500 µs turns it left, seen from behind. The mount touches
+  the robot at about 1040 µs (41° right) and 1960 µs (41° left). The scan
+  uses ±30°; `src/servo.c` clamps to 1100–1900 µs. See
+  [Servo obstacle scan](OBSTACLE_SCAN.md#mounted-servo-limits).
 
 A simple angle mapping is:
 
