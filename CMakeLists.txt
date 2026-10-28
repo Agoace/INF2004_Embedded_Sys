@@ -136,6 +136,22 @@ pico_enable_stdio_usb(max_speed 1)
 pico_enable_stdio_uart(max_speed 0)
 pico_add_extra_outputs(max_speed)
 
+add_executable(fixed_speed
+    src/fixed_speed.c
+)
+
+target_compile_options(fixed_speed PRIVATE -Wall -Wextra)
+
+target_link_libraries(fixed_speed PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+)
+
+pico_enable_stdio_usb(fixed_speed 1)
+pico_enable_stdio_uart(fixed_speed 0)
+pico_add_extra_outputs(fixed_speed)
+
 # ---------------------------------------------------------------------------
 # Buddy 2: motion-control library (Motion Control Task). Link it from any
 # target that needs motion; it brings its own include paths.
@@ -177,6 +193,21 @@ target_link_libraries(motion_bench PRIVATE
 pico_enable_stdio_usb(motion_bench 1)
 pico_enable_stdio_uart(motion_bench 0)
 pico_add_extra_outputs(motion_bench)
+
+# Movement sequence with closed-loop distance and heading correction.
+add_executable(motion_sequence
+    src/motion_sequence.c
+)
+
+target_compile_options(motion_sequence PRIVATE -Wall -Wextra)
+
+target_link_libraries(motion_sequence PRIVATE
+    motion_control
+)
+
+pico_enable_stdio_usb(motion_sequence 1)
+pico_enable_stdio_uart(motion_sequence 0)
+pico_add_extra_outputs(motion_sequence)
 
 # Buddy 2 + Buddy 3 integration. Built only when the line-tracing files from
 # the ziven-line_tracing_algo branch are present.

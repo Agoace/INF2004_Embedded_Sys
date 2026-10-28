@@ -39,10 +39,12 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
 | Max-speed run (GP20 start, 1 s speed reports) | [`src/max_speed.c`](../src/max_speed.c) |
+| Fixed-duty run with per-motor trim (GP20 start) | [`src/fixed_speed.c`](../src/fixed_speed.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
 | Shared team header (packed fields, fault bits, encoder delta) | [`src/common/robot_shared.h`](../src/common/robot_shared.h) |
 | Motion-control library | [`src/motion/`](../src/motion/motion_control.h) |
 | Motion bench target | [`src/motion_bench.c`](../src/motion_bench.c) |
+| Movement sequence with distance and heading correction (GP21 start) | [`src/motion_sequence.c`](../src/motion_sequence.c) |
 | Motion and line integration target | [`src/robocar_line_follow.c`](../src/robocar_line_follow.c) |
 | Motion host unit tests | [`tests/motion/test_motion.c`](../tests/motion/test_motion.c) |
 | Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |

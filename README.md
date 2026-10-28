@@ -12,6 +12,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/motor_duty_calibration.c`](src/motor_duty_calibration.c) — minimum free-running motor duty test.
 - [`src/motor_speed_calibration.c`](src/motor_speed_calibration.c) — unloaded motor RPM versus PWM calibration.
 - [`src/max_speed.c`](src/max_speed.c) — 3-second full-duty run on a GP20 press, with speed printed every second.
+- [`src/fixed_speed.c`](src/fixed_speed.c) — 5-second fixed-duty run on a GP20 press, with a duty trim for each motor.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
 - [`docs/`](docs/README.md) — durable documentation and calibration results.
@@ -20,9 +21,9 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/common/robot_shared.h`](src/common/robot_shared.h) — shared team types: encoder delta helper, fault bits, packed motion fields.
 - [`src/motion/`](src/motion/motion_control.h) — motion-control library (Buddy 2): encoder ISR, PWM, PID, statechart.
 - [`src/motion_bench.c`](src/motion_bench.c) — motion bench console for PID, accuracy, stop and stall tests.
+- [`src/motion_sequence.c`](src/motion_sequence.c) — runs a list of movement steps and corrects distance and heading after each step.
 - [`src/robocar_line_follow.c`](src/robocar_line_follow.c) — motion and line-sensing integration target (built when the line files are present).
 - [`tests/motion/`](tests/motion/test_motion.c) — host unit tests for the motion core.
-
 Future coursework belongs in clearly named task directories.
 
 ## Setup
