@@ -15,8 +15,13 @@ _Static_assert(SPIN_DUTY_PERCENT <= SPIN_DUTY_LIMIT_PERCENT,
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
 #define SPIN_STEP_COUNTS (DRIVE_COUNTS_PER_WHEEL_TURN / 4) /* a quarter wheel turn */
-/* Last step: stop when the line is this close to the centre (-100..+100). */
-#define SPIN_CENTRE_POSITION 20
+/* Last step: stop at the peak of the centre reading (per mille): at or
+ * above SPIN_CENTRE_STOP, or once it falls SPIN_PEAK_DROP below its peak
+ * after reaching SPIN_CENTRE_MIN. A stop at the line edge (C about 50 %)
+ * leaves the line not centred, so no side baseline is learned. */
+#define SPIN_CENTRE_STOP 900u
+#define SPIN_CENTRE_MIN 500u
+#define SPIN_PEAK_DROP 50u
 #define SPIN_STEP_TIMEOUT_MS 6000u
 #define SPIN_PAUSE_MS 200u
 #define SAMPLE_PERIOD_US 1000u
@@ -67,6 +72,7 @@ static bool spin_step(lp_t *lp, int direction, spin_goal_t goal, const int32_t h
     int32_t last[2] = {start[0], start[1]};
     uint32_t moved_ms[2] = {t0, t0};
     bool on_line = false;
+    uint16_t centre_peak = 0u;
 
     drive_set_wheel(DRIVE_LEFT, wheel_sign[DRIVE_LEFT] * SPIN_DUTY_PERCENT);
     absolute_time_t next_sample = get_absolute_time();
@@ -114,9 +120,11 @@ static bool spin_step(lp_t *lp, int direction, spin_goal_t goal, const int32_t h
             line_sensors_read(raw);
             if (stop_on_line) {
                 (void)lp_update(lp, raw, now);
-                on_line = lp->norm[LP_CENTRE] >= LP_FOUND_PCT &&
-                          lp->position >= -SPIN_CENTRE_POSITION &&
-                          lp->position <= SPIN_CENTRE_POSITION;
+                const uint16_t c_now = lp->norm[LP_CENTRE];
+                if (c_now > centre_peak) centre_peak = c_now;
+                on_line = c_now >= SPIN_CENTRE_STOP ||
+                          (centre_peak >= SPIN_CENTRE_MIN &&
+                           c_now + SPIN_PEAK_DROP <= centre_peak);
             } else {
                 lp_calib_add(lp, raw);
             }
@@ -127,6 +135,9 @@ static bool spin_step(lp_t *lp, int direction, spin_goal_t goal, const int32_t h
     printf("[spin] %+d done in %lu ms%s; from start L %ld  R %ld\n", direction,
            (unsigned long)(to_ms_since_boot(get_absolute_time()) - t0),
            on_line ? ", stopped on the line" : "", (long)end[0], (long)end[1]);
+    if (stop_on_line) {
+        printf("[spin] centre peak %u, now %u per mille\n", centre_peak, lp->norm[LP_CENTRE]);
+    }
     return true;
 }
 

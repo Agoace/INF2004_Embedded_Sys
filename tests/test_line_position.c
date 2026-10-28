@@ -174,18 +174,20 @@ int main(void) {
           "lost right");
     (void)step(&lp, &HIGH_LINE, 0, 100, 0, 100u);
     (void)step(&lp, &HIGH_LINE, 0, 0, 0, 101u);
+    CHECK(TYPE(step(&lp, &HIGH_LINE, 0, 0, 0, 160u)) == VC_EVENT_NONE,
+          "dark from the centre: no LINE_LOST at 50 ms (may be a gap)");
     {
-        const vc_event_t e = step(&lp, &HIGH_LINE, 0, 0, 0, 160u);
+        const vc_event_t e = step(&lp, &HIGH_LINE, 0, 0, 0, 101u + LP_GAP_LOST_MS);
         CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_UNKNOWN,
-              "lost while centred: unknown side");
+              "lost while centred: unknown side at 300 ms");
     }
 
-    /* Robot starts off the line: LINE_LOST after 50 ms. */
+    /* Robot starts off the line: LINE_LOST (position 0, so after 300 ms). */
     lp_init(&lp);
     sweep(&lp, &HIGH_LINE);
     (void)lp_calib_end(&lp, &bad);
     (void)step(&lp, &HIGH_LINE, 0, 0, 0, 0u);
-    CHECK(TYPE(step(&lp, &HIGH_LINE, 0, 0, 0, 50u)) == VC_EVENT_LINE_LOST,
+    CHECK(TYPE(step(&lp, &HIGH_LINE, 0, 0, 0, LP_GAP_LOST_MS)) == VC_EVENT_LINE_LOST,
           "start off the line");
 
     /* Slow light change: the floor gets 600 counts brighter over 10 s.
@@ -281,11 +283,27 @@ int main(void) {
         (void)step_pm(&lp, &HIGH_LINE, 10, 600, 10, t++);
         CHECK(lp.fade_side == VC_LINE_SIDE_UNKNOWN, "equal rise: side %u", lp.fade_side);
         CHECK(lp.position == 0, "equal rise: position %d", lp.position);
-        /* Unknown side in the dark: normal 50 ms LINE_LOST, unknown side. */
+        /* Unknown side in the dark: LINE_LOST after 300 ms, unknown side. */
         (void)step_pm(&lp, &HIGH_LINE, 10, 0, 10, 100u);
-        const vc_event_t e = step_pm(&lp, &HIGH_LINE, 10, 0, 10, 150u);
+        const vc_event_t e = step_pm(&lp, &HIGH_LINE, 10, 0, 10, 100u + LP_GAP_LOST_MS);
         CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_UNKNOWN,
-              "equal rise: LINE_LOST unknown at 50 ms");
+              "equal rise: LINE_LOST unknown at 300 ms");
+    }
+
+    /* The side can arrive late, in the dark: then the position follows. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 0, 0, 0, 100u); /* dark, no rise yet */
+        CHECK(lp.position == 0 && lp.fade_side == VC_LINE_SIDE_UNKNOWN, "late: no side yet");
+        CHECK(TYPE(step_pm(&lp, &HIGH_LINE, 0, 0, 0, 160u)) == VC_EVENT_NONE,
+              "late: no LINE_LOST at 60 ms");
+        (void)step_pm(&lp, &HIGH_LINE, 10, 0, 0, 200u); /* L rises later */
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.position == -50,
+              "late: side %u position %d", lp.fade_side, lp.position);
     }
 
     /* The baseline needs LP_BASELINE_MIN centred updates first. */

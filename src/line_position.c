@@ -270,9 +270,10 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
                 set_flag(lp, LP_FLAG_LOST_TIMING, true);
                 lp->lost_since_ms = now_ms;
             }
-            /* In a gap with a known side, wait longer; else LP_LOST_MS. */
-            const bool in_gap = lp->fade_side != (uint8_t)VC_LINE_SIDE_UNKNOWN &&
-                                before < LP_OUTWARD_POSITION;
+            /* Dark from the middle: the line is probably in a gap, and the
+             * gap rise or the hint may give the side late. Wait longer.
+             * Dark after an outer sensor: it left outward, LP_LOST_MS. */
+            const bool in_gap = before < LP_OUTWARD_POSITION;
             const uint32_t limit = in_gap ? LP_GAP_LOST_MS : LP_LOST_MS;
             if ((uint32_t)(now_ms - lp->lost_since_ms) >= limit) {
                 set_flag(lp, LP_FLAG_LINE_SEEN, false);

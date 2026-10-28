@@ -59,7 +59,8 @@
 #define LP_ADAPT_SHIFT 8u
 /* Design review: LINE_LOST after more than 50 ms without the line. */
 #define LP_LOST_MS 50u
-/* In a gap with a known side the line is near: wait longer, steer back. */
+/* Dark from the middle (|position| < LP_OUTWARD_POSITION): the line is
+ * probably in a gap and the side may come late. Wait longer, steer back. */
 #define LP_GAP_LOST_MS 300u
 
 /* Side tracking (see above). */

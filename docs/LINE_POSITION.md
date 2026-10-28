@@ -76,9 +76,11 @@ Side tracking, newest evidence first:
 - The side is kept until the line is centred again; a newer sensor or gap
   rise replaces it. The hint is used only when no side is kept, because
   the robot's own correction turns the wheel difference the other way.
-- In the gap (all sensors dark) with a known side, the position is ±50 and
-  LINE_LOST waits 300 ms instead of 50 ms, so the steering can bring the
-  line back.
+- If the line goes dark from the middle (position under ±75), it is
+  probably in a gap: LINE_LOST waits 300 ms instead of 50 ms. The side can
+  come late, in the dark, when the gap rise appears; then the position
+  becomes ±50 and the steering can bring the line back. A lift is also
+  reported after 300 ms.
 - If the line goes dark after a position of ±75 or more, it left outward
   past an outer sensor: the position stays and LINE_LOST comes after 50 ms.
 
@@ -124,7 +126,7 @@ are per mille (0–1000), so the code compares `LP_PERMILLE(pct)`:
 | `LP_JUNCTION_PCT` | 50 % | All sensors at or above this: junction |
 | `LP_SIDE_PCT` | 20 | Position beyond ±20 gives a side for LINE_LOST |
 | `LP_LOST_MS` | 50 ms | Design review: LINE_LOST after more than 50 ms |
-| `LP_GAP_LOST_MS` | 300 ms | LINE_LOST in a gap with a known side |
+| `LP_GAP_LOST_MS` | 300 ms | LINE_LOST when the line goes dark from the middle |
 | `LP_CENTRED_PCT` | 80 % | C at or above, outer sensors dark: centred |
 | `LP_OUTER_SEEN_PCT` | 5 % | An outer sensor at or above this sees the line |
 | `LP_GAP_RISE_PERMILLE` | 0.3 % | Gap rise above the baseline (about 11 ADC counts) |
@@ -139,11 +141,15 @@ every reading.
 
 | Event | When | Payload |
 | --- | --- | --- |
-| LINE_LOST | The line was not seen for 50 ms (300 ms in a gap with a known side) | Last side: left, right, or unknown |
+| LINE_LOST | The line was not seen for 50 ms after an outer sensor, or 300 ms from the middle | Last side: left, right, or unknown |
 | LINE_FOUND | Any sensor reaches 50 % after LINE_LOST | — |
 
 After a calibration the module assumes the line is under the robot. If it
-is not, LINE_LOST comes after 50 ms.
+is not, LINE_LOST comes after 300 ms.
+
+The design review asks for LINE_LOST after more than 50 ms. The 300 ms
+wait from the middle is a deliberate change for the sensor gaps; at 20 %
+duty the robot moves about 4 cm in that time.
 
 ## Data representation
 
@@ -290,6 +296,27 @@ sideways.
   only part of the line crossed it).
 - Tell the line detector owner: the line reads high on this robot.
 - Check the gap rise and the side sources on the track (`steer_test` log).
+
+### Gap check: 2026-10-27, `steer_test` idle, USB
+
+The line was centred (C 90 %, side cleared), then slid slowly into the
+C–L gap. Side L was found from the gap rise:
+
+| | L raw | C raw | R raw |
+| --- | ---: | ---: | ---: |
+| Centred | 163 | 2300 | ~205 |
+| In the gap | 168–172 | ~276 | ~199 |
+| Rise | +5 to +9 | | −6 |
+
+- The rise was smaller than the first measurement (+27): the line was
+  only just past the edge of C. +5 to +9 counts is 2.5–4.5 per mille,
+  just above the 3 per mille trigger.
+- LINE_LOST came 50 ms after C went dark, before the rise appeared, so
+  the position stayed 0. The wait from the middle was then changed to
+  300 ms for every dark start, not only one with a known side.
+- A first try showed side L from the start: it was left from the spin,
+  which stopped with C at 48 %, so the line was never centred and the side
+  was never cleared. The spin now stops at the peak of C.
 - Tell the Vehicle Controller the line state at START, so that a robot
   started off the line searches at once.
 - Send JUNCTION to the Vehicle Controller in a later step.
