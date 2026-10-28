@@ -33,8 +33,9 @@ steer_word_t steer_update(steer_t *s, int8_t position) {
         (int32_t)s->cfg.gain_pct * position + (int32_t)s->cfg.kd_pct * change;
     const int32_t delta = div_10000_rounded(base * turn);
 
-    int32_t left = base + delta;
-    int32_t right = base - delta;
+    const int32_t trim = s->cfg.right_trim_pct;
+    int32_t left = base + delta + (trim < 0 ? -trim : 0);
+    int32_t right = base - delta + (trim > 0 ? trim : 0);
     if (left > max) {
         right -= left - max;
         left = max;

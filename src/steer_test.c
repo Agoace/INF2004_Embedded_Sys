@@ -46,6 +46,7 @@ static const steer_config_t STEER = {
     .kd_pct = 0u,     /* D off; add it if the robot zig-zags */
     .min_pct = 12u,   /* below this a loaded wheel does not turn */
     .max_pct = 30u,   /* operator limit, 2026-10-27 */
+    .right_trim_pct = 1, /* team drive-straight trim: right motor +1 % */
 };
 
 #define SAMPLE_PERIOD_US 1000u
@@ -176,8 +177,9 @@ static void print_summary(void) {
            run.recoveries);
     printf("[run] calibration (floor/line): L %u/%u  C %u/%u  R %u/%u\n", run.floor[0],
            run.line[0], run.floor[1], run.line[1], run.floor[2], run.line[2]);
-    printf("[run] steering: base %u%% gain %u%% kd %u%% min %u%% max %u%%\n",
-           STEER.base_pct, STEER.gain_pct, STEER.kd_pct, STEER.min_pct, STEER.max_pct);
+    printf("[run] steering: base %u%% gain %u%% kd %u%% min %u%% max %u%% right trim %+d%%\n",
+           STEER.base_pct, STEER.gain_pct, STEER.kd_pct, STEER.min_pct, STEER.max_pct,
+           STEER.right_trim_pct);
     if (run.steer_updates > 0u) {
         printf("[run] mean |pos| %lu;  |pos| share:",
                (unsigned long)(run.sum_abs_position / run.steer_updates));

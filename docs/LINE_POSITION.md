@@ -83,6 +83,10 @@ Side tracking, newest evidence first:
   reported after 300 ms.
 - If the line goes dark after a position of ±75 or more, it left outward
   past an outer sensor: the position stays and LINE_LOST comes after 50 ms.
+- Junction hold: for 300 ms after the last junction reading (all sensors
+  at least 50 %), the gap rise is not used and the baseline does not
+  learn, because a side arm of the junction can stay near an outer sensor.
+  The side from before stays. Steering Run 3 found this.
 
 ### A. Calibration sweep
 
@@ -131,6 +135,7 @@ are per mille (0–1000), so the code compares `LP_PERMILLE(pct)`:
 | `LP_OUTER_SEEN_PCT` | 5 % | An outer sensor at or above this sees the line |
 | `LP_GAP_RISE_PERMILLE` | 0.3 % | Gap rise above the baseline (about 11 ADC counts) |
 | `LP_OUTWARD_POSITION` | 75 | Dark after this: the line left outward |
+| `LP_JUNCTION_HOLD_MS` | 300 ms | No gap rise and no baseline learning after a junction |
 
 The gap between 30 % and 50 % stops the seen/lost state from changing on
 every reading.
@@ -186,7 +191,9 @@ Side tracking: per-mille resolution, gap left (side, position −20 then
 −50, no LINE_LOST at 50 ms, LINE_LOST LEFT at 300 ms), gap right, equal
 rise on both sides (no side, LINE_LOST at 50 ms), baseline not ready, the
 hint (used, kept while the wheels turn back, cleared when centred), and a
-gap rise and then a sensor replacing the hint.
+gap rise and then a sensor replacing the hint, the junction hold (a side
+arm near L keeps RIGHT, the gap rise works again after the hold), and no
+baseline learning during the hold.
 
 Result on 2026-10-27: all tests pass. Six deliberate rule changes (fixed
 polarity, no range guard, no 50 ms wait, found at 30 %, no floor learning,
@@ -198,7 +205,8 @@ Side tracking, 2026-10-27: all tests pass. Eight deliberate rule changes
 (baseline learns while fading, gap rise without the difference check,
 hint replaces a kept side, no 300 ms gap wait, no outward hold, side not
 cleared when centred, baseline never ready, outer-only not ±100) each make
-the test fail.
+the test fail. Three junction-hold rule changes (baseline learns in the
+hold, gap rise used in the hold, no hold time) each make the test fail.
 
 ## Bench test
 

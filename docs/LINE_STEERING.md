@@ -34,9 +34,17 @@ so a duty ratio is close to a speed ratio.
 
 Gain 100 % means: with the line under an outer sensor, the inner wheel stops.
 
+## Trim
+
+`right_trim_pct` is added to the right wheel before the limits (a
+negative value adds to the left wheel). The team's drive-straight trim is
++1 % on the right motor. It agrees with the measurement: at 20 % duty the
+left wheel ran about 7 % faster, and because a wheel only starts to turn
+at about 6 % duty, one more percent at 20 % is about 7 % more speed.
+
 ## Limits
 
-Applied in this order:
+Applied in this order, after the trim:
 
 | Limit | Rule | Why |
 | --- | --- | --- |
@@ -77,12 +85,14 @@ cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
 It checks straight, both turn directions, the pivot at ±100, rounding, the
 ratio at another base, gain 50, the max limit in both directions, the
 100 % ceiling, the min limit, the D part (first update, moving, still,
-moving back, reset), and the word layout.
+moving back, reset), the trim (straight, turning, inner wheel stop, max
+limit, negative trim), and the word layout.
 
 Result on 2026-10-27: all tests pass. Six deliberate rule changes (turn
 direction swapped, max without lowering the other wheel, no min limit, D
 on the first update, no 100 % ceiling, no rounding) each make the test
-fail.
+fail. Three trim rule changes (no left trim, no right trim, negative trim
+on the right wheel) each make the test fail.
 
 ## Bench test
 
@@ -154,9 +164,33 @@ and L, where no sensor sees it. See
 [the gaps between the sensors](LINE_POSITION.md#the-gaps-between-the-sensors)
 for the measurement and the side tracking that followed.
 
+### Run 3: 2026-10-27, VIN
+
+Side tracking, local search, spin stop at the centre peak (906 per
+mille). No trim yet.
+
+| Item | Result |
+| --- | --- |
+| Duration | 20 s: stopped by the time limit, not by a lost line |
+| Wheels | L 29192, R 28543 counts (about 11.5 wheel turns) |
+| LINE_LOST | 3 times, the line was found again 3 times |
+| Mean \|pos\| | 21; 0 for 37 % of the steering updates |
+| Side source | Outer sensor 43 %, gap rise 12 %, wheel hint about 1 % |
+
+- Most corrections were to the left (line in the C–L gap): the left wheel
+  is faster at the same duty, so the robot drifts right.
+- At 14.0 s the robot crossed a junction (all sensors high). 150 ms later
+  a side arm of the junction was still near L (+54 counts) while the line
+  had gone right: the gap rise gave LEFT, the search turned left first,
+  and the line was found only on the way back. The gap rise is now not
+  used for 300 ms after a junction
+  ([junction hold](LINE_POSITION.md#the-gaps-between-the-sensors)).
+- Next run: right trim +1 %.
+
 ## Open items
 
-- First run on the track; tune `base_pct` and `gain_pct`.
+- Tune `base_pct` and `gain_pct` on the track.
+- Junctions: the robot goes straight. The Vehicle Controller decides later.
 - Turn on `kd_pct` if the robot zig-zags.
 - Find the lowest duty at which a loaded wheel turns, to set `min_pct`.
 - Send the steer word to the Motion task when the RTOS wiring is done.

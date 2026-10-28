@@ -72,6 +72,12 @@
 /* |position| at or above this when the line goes dark: it left outward,
  * past an outer sensor (not into a gap). */
 #define LP_OUTWARD_POSITION 75
+/* After a junction (all sensors on the line), a side arm of the junction
+ * can stay near an outer sensor and look like a gap rise. For this time
+ * after the last junction reading, the gap rise is not used and the
+ * baseline does not learn. Bench run 3, 2026-10-27: the wrong side came
+ * about 150 ms after the junction. */
+#define LP_JUNCTION_HOLD_MS 300u
 /* Sanity limit, not a classification threshold: a sensor whose floor and
  * line values differ by less than this is broken or never saw the line.
  * About 0.16 V. */
@@ -100,6 +106,7 @@ typedef struct {
     uint8_t fade_side;   /* vc_line_side_t: where the line went */
     uint8_t fade_source; /* lp_side_source_t */
     uint8_t hint;        /* vc_line_side_t from the caller */
+    uint32_t junction_ms; /* time of the last junction reading */
 } lp_t;
 
 /* Where the side came from (for logs and tests). */
@@ -118,6 +125,7 @@ typedef enum {
 #define LP_FLAG_SIDE_MASK 0x0030u /* vc_line_side_t, 2 bits */
 #define LP_FLAG_LINE_HIGH 0x0040u /* Polarity: line reads higher than floor */
 #define LP_FLAG_CENTRED 0x0080u   /* Line under the centre sensor only */
+#define LP_FLAG_JUNCTION_HOLD 0x0100u /* Less than LP_JUNCTION_HOLD_MS after a junction */
 
 void lp_init(lp_t *lp);
 

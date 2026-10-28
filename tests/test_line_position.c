@@ -351,6 +351,42 @@ int main(void) {
               lp.position);
     }
 
+    /* Junction: a side arm near L after the junction must not give LEFT. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 600, 1000, 600, 100u); /* junction */
+        CHECK(lp_junction(&lp), "junction seen");
+        (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 200, 150u); /* line goes right */
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT, "junction: right %u", lp.fade_side);
+        (void)step_pm(&lp, &HIGH_LINE, 30, 0, 0, 250u); /* arm near L, all dark */
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT && lp.position == 50,
+              "junction hold: side %u position %d, want RIGHT +50", lp.fade_side,
+              lp.position);
+        /* After the hold the gap rise works again. */
+        for (t = 400u; t < 420u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        (void)step_pm(&lp, &HIGH_LINE, 10, 600, 0, t);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_GAP,
+              "after the hold: gap rise LEFT (side %u source %u)", lp.fade_side,
+              lp.fade_source);
+    }
+
+    /* The baseline does not learn during the hold. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        for (; t < 20u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        const int32_t before = lp.baseline_q8[LP_LEFT];
+        (void)step_pm(&lp, &HIGH_LINE, 600, 1000, 600, 100u);
+        for (t = 101u; t < 150u; ++t) (void)step_pm(&lp, &HIGH_LINE, 40, 1000, 0, t);
+        CHECK(lp.baseline_q8[LP_LEFT] == before, "hold: baseline kept");
+    }
+
     /* Line word layout. */
     lp.position = -50;
     lp.flags = (uint16_t)(LP_FLAG_LINE_SEEN | (VC_LINE_SIDE_LEFT << LP_FLAG_SIDE_SHIFT));

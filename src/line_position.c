@@ -25,6 +25,7 @@ void lp_init(lp_t *lp) {
     lp->fade_side = (uint8_t)VC_LINE_SIDE_UNKNOWN;
     lp->fade_source = (uint8_t)LP_SIDE_SOURCE_NONE;
     lp->hint = (uint8_t)VC_LINE_SIDE_UNKNOWN;
+    lp->junction_ms = 0u;
     lp->position = 0;
     lp->flags = 0u;
     lp->lost_since_ms = 0u;
@@ -136,8 +137,16 @@ static void set_fade_side(lp_t *lp, vc_line_side_t side, lp_side_source_t source
 }
 
 /* Keeps the baseline of the outer sensors and the side the line went to. */
-static void track_side(lp_t *lp, const uint16_t raw[LP_SENSORS]) {
+static void track_side(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) {
     const uint16_t *n = lp->norm;
+    if (lp_junction(lp)) {
+        lp->junction_ms = now_ms;
+        set_flag(lp, LP_FLAG_JUNCTION_HOLD, true);
+    } else if ((lp->flags & LP_FLAG_JUNCTION_HOLD) &&
+               (uint32_t)(now_ms - lp->junction_ms) >= LP_JUNCTION_HOLD_MS) {
+        set_flag(lp, LP_FLAG_JUNCTION_HOLD, false);
+    }
+    const bool hold = (lp->flags & LP_FLAG_JUNCTION_HOLD) != 0u;
     const bool left_sees = n[LP_LEFT] >= LP_PERMILLE(LP_OUTER_SEEN_PCT);
     const bool right_sees = n[LP_RIGHT] >= LP_PERMILLE(LP_OUTER_SEEN_PCT);
     const bool outers_dark = !left_sees && !right_sees;
@@ -146,7 +155,7 @@ static void track_side(lp_t *lp, const uint16_t raw[LP_SENSORS]) {
 
     /* Learn the baseline only while centred: as C fades, the outer sensor
      * that the line moves toward rises, and the baseline must not follow. */
-    if (centred) {
+    if (centred && !hold) {
         const unsigned int outer[2] = {LP_LEFT, LP_RIGHT};
         for (unsigned int i = 0u; i < 2u; ++i) {
             const unsigned int s = outer[i];
@@ -171,7 +180,7 @@ static void track_side(lp_t *lp, const uint16_t raw[LP_SENSORS]) {
                       LP_SIDE_SOURCE_SENSOR);
         return;
     }
-    if (outers_dark && lp->baseline_count >= LP_BASELINE_MIN) {
+    if (outers_dark && !hold && lp->baseline_count >= LP_BASELINE_MIN) {
         const int32_t rise_l = gap_rise(lp, LP_LEFT, raw[LP_LEFT]);
         const int32_t rise_r = gap_rise(lp, LP_RIGHT, raw[LP_RIGHT]);
         if (rise_l >= LP_GAP_RISE_PERMILLE && rise_l - rise_r >= LP_GAP_RISE_PERMILLE) {
@@ -258,7 +267,7 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
         }
     }
     set_flag(lp, LP_FLAG_JUNCTION, min_n >= LP_PERMILLE(LP_JUNCTION_PCT));
-    track_side(lp, raw);
+    track_side(lp, raw, now_ms);
 
     if (lp_line_seen(lp)) {
         const bool dark = max_n < LP_PERMILLE(LP_LOST_PCT);

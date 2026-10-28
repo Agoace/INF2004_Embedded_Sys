@@ -22,7 +22,7 @@ static void expect(steer_t *s, int position, unsigned int left, unsigned int rig
 }
 
 static steer_t make(uint8_t base, uint8_t gain, uint8_t kd, uint8_t min, uint8_t max) {
-    const steer_config_t cfg = {base, gain, kd, min, max};
+    const steer_config_t cfg = {base, gain, kd, min, max, 0};
     steer_t s;
     steer_init(&s, &cfg);
     return s;
@@ -67,6 +67,19 @@ int main(void) {
     expect(&s, 20, 33u, 27u, "moving back: D opposes");
     steer_reset(&s);
     expect(&s, 40, 42u, 18u, "after reset: P only");
+
+    /* Trim: +1 on the right wheel. */
+    {
+        const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1};
+        steer_init(&s, &trimmed);
+        expect(&s, 0, 20u, 21u, "trim +1: right wheel +1");
+        expect(&s, 25, 25u, 16u, "trim +1 while turning right");
+        expect(&s, 100, 30u, 0u, "trim +1: inner wheel still stops");
+        expect(&s, -50, 0u, 30u, "trim +1: capped at max, turn kept (31 -> 30, 10 -> 9 -> 0)");
+        const steer_config_t left_trim = {20u, 100u, 0u, 12u, 30u, -2};
+        steer_init(&s, &left_trim);
+        expect(&s, 0, 22u, 20u, "trim -2: left wheel +2");
+    }
 
     /* Word layout. */
     s = make(30u, 100u, 0u, 0u, 100u);

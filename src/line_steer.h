@@ -12,6 +12,10 @@
  * Position > 0 (line to the right) makes the left wheel faster, so the
  * robot turns right toward the line.
  *
+ * Trim: right_trim_pct is added to the right wheel (a negative trim adds
+ * to the left wheel) before the limits, so the robot drives straight when
+ * the two motors differ. The limits below still apply.
+ *
  * Limits, in this order:
  *   1. A wheel above max_pct is set to max_pct and the other wheel is
  *      lowered by the same amount, so the turn is kept.
@@ -38,6 +42,7 @@ typedef struct {
     uint8_t kd_pct;   /* D: reaction to the change since the last update; 0 = off */
     uint8_t min_pct;  /* a duty below this is set to 0 */
     uint8_t max_pct;  /* highest duty, at most 100 */
+    int8_t right_trim_pct; /* + adds to the right wheel, - to the left; 0 = none */
 } steer_config_t;
 
 typedef struct {
