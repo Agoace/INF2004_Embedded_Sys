@@ -832,6 +832,12 @@ The final documentation should state the geometry assumption.
 
 # 25. Obstacle width representation
 
+> **Update 2026-10-27 (decision):** the profile does **not** carry a width.
+> The Vehicle Controller needs only the shorter way around. The PROFILE
+> word is 15 bits: obstacle distance (9), right free step (3), left free
+> step (3). Sections 23–26 are kept as history. See
+> [Servo obstacle scan](OBSTACLE_SCAN.md#profile-analysis-and-the-profile-event).
+
 At 1 mm resolution:
 
 - numeric widths 0–214 mm;

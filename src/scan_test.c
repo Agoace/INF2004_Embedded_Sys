@@ -13,6 +13,7 @@
 #include <stdlib.h>
 
 #include "hardware/gpio.h"
+#include "obstacle_profile.h"
 #include "obstacle_scan.h"
 #include "pico/stdlib.h"
 #include "ultrasonic.h"
@@ -51,6 +52,14 @@ static void print_point(unsigned int index, obstacle_scan_point_t point) {
     }
 }
 
+static void print_free(const char *name, unsigned int step) {
+    if (step == OBSTACLE_PROFILE_BLOCKED) {
+        printf("%s blocked", name);
+    } else {
+        printf("%s free at %u deg", name, step * (unsigned int)OBSTACLE_SCAN_STEP_DEG);
+    }
+}
+
 static void print_summary(const obstacle_profile_t *profile, uint32_t took_ms) {
     unsigned int nearest = OBSTACLE_SCAN_POINTS;
     uint16_t nearest_mm = 0u;
@@ -68,10 +77,21 @@ static void print_summary(const obstacle_profile_t *profile, uint32_t took_ms) {
     }
     printf("[scan] done in %lu ms. ", (unsigned long)took_ms);
     if (nearest == OBSTACLE_SCAN_POINTS) {
-        printf("No echo at any point.\n\n");
+        printf("No echo at any point.\n");
     } else {
-        printf("Nearest: idx %u at %u mm.\n\n", nearest, nearest_mm);
+        printf("Nearest: idx %u at %u mm.\n", nearest, nearest_mm);
     }
+
+    const obstacle_profile_word_t w = obstacle_profile_build(profile);
+    const obstacle_side_t side = obstacle_profile_side(w, profile);
+    printf("[profile] word 0x%04X  obstacle %u mm  ", w,
+           obstacle_profile_distance(w));
+    print_free("right", obstacle_profile_right(w));
+    printf("  ");
+    print_free("left", obstacle_profile_left(w));
+    printf("  -> go %s\n\n", side == OBSTACLE_SIDE_LEFT    ? "LEFT"
+                              : side == OBSTACLE_SIDE_RIGHT ? "RIGHT"
+                                                            : "NONE (reverse and rescan)");
 }
 
 int main(void) {

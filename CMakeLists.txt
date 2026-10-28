@@ -203,6 +203,7 @@ pico_add_extra_outputs(obstacle_test)
 
 add_executable(scan_test
     src/scan_test.c
+    src/obstacle_profile.c
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c

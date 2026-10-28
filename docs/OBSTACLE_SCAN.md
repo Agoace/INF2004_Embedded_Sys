@@ -3,11 +3,13 @@
 This record describes the second part of the Obstacle Scan Task: the servo
 scan. After OBST_STOP, the Vehicle Controller sets SCAN_REQ. The scan turns
 the ultrasonic sensor through 13 points and records the nearest echo at each
-point. The profile analysis (left/right clearance, width) is the next step.
+point. The profile analysis then chooses the shorter way around the
+obstacle. It does not estimate the obstacle width.
 
 - Code: [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h)
 - Servo: [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h)
-- Host unit test: [`tests/test_obstacle_scan.c`](../tests/test_obstacle_scan.c)
+- Profile analysis: [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h)
+- Host unit tests: [`tests/test_obstacle_scan.c`](../tests/test_obstacle_scan.c), [`tests/test_obstacle_profile.c`](../tests/test_obstacle_profile.c)
 - Bench test: [`src/scan_test.c`](../src/scan_test.c)
 - Related: [forward obstacle watch](OBSTACLE_MONITOR.md), [ultrasonic driver](ULTRASONIC_DRIVER.md)
 
@@ -103,8 +105,74 @@ Each profile point uses the ultrasonic result layout without the streak:
 | 11–15 | Always 0 | — |
 
 Logical size: 11 bits per point, 143 bits for the 13-point profile. The
-profile stays inside the Obstacle Scan Task. The compact PROFILE event for
-the Vehicle Controller is the next step.
+profile stays inside the Obstacle Scan Task. Only the PROFILE word below
+goes to the Vehicle Controller.
+
+## Profile analysis and the PROFILE event
+
+Decision 2026-10-27: the Vehicle Controller does not need the obstacle
+width. The project brief does not ask for it so far, and the scan cannot
+measure it reliably: the beam blurs edges, a flat face reflects the sound
+away at more than about 20–25°, and a wide obstacle extends past ±30°.
+BYPASS needs only the shorter way around.
+
+For each side, the analysis starts at straight ahead and steps outward 5° at
+a time. The **free step** is the first step where the beam is past the
+obstacle:
+
+| Point | Free? |
+| --- | --- |
+| NO_RETURN | Yes |
+| VALID, at least 150 mm farther than the obstacle | Yes: the beam sees past the edge |
+| VALID, less than 150 mm farther | No: still the obstacle (run 1 corners were 20–35 mm farther) |
+| No data | Never |
+
+- The free point and the next point outward must both be free, so one stray
+  NO_RETURN is not an edge. The 30° point may be free alone.
+- Obstacle distance = the nearest VALID point (511 when there is none).
+- Clearer side = the smaller free step. On a tie, the side with more room at
+  30°. On a full tie, LEFT. Both sides blocked = NONE: reverse and rescan.
+
+NO_RETURN counts as free here, but it never releases a STOP in the
+[forward watch](OBSTACLE_MONITOR.md). Without this, the robot could not
+choose a side in open space. A flat face angled away can also give
+NO_RETURN, so the forward watch must run during BYPASS. It stops the robot
+if the scan missed part of the obstacle.
+
+PROFILE word:
+
+| Bits | Field | Width | Values |
+| --- | --- | ---: | --- |
+| 0–8 | Obstacle distance | 9 | Ultrasonic distance code; 0 = TOO_NEAR; 511 = no VALID point |
+| 9–11 | Right free step | 3 | 0–6 = free at 0–30°; 7 = blocked |
+| 12–14 | Left free step | 3 | 0–6 = free at 0–30°; 7 = blocked |
+| 15 | Spare | 1 | Always 0 |
+
+Logical size: 15 bits. The turn angle for BYPASS is the free step × 5° plus
+a margin for the robot half-width; the Vehicle Controller chooses the
+margin.
+
+Run 1 gives `0x5CA2`: obstacle 162 mm, right free at 30°, left free at 25°,
+go LEFT.
+
+### Run 2: profile on the robot
+
+2026-10-27. Firmware with the profile analysis. Box ahead, slightly to the
+right.
+
+| Idx | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| mm | NR | 383 | 201 | 197 | 197 | 197 | 197 | 197 | 201 | 214 | NR | NR | NR |
+
+Result: `0x4AC5`, obstacle 197 mm, right free at 25°, left free at 20°,
+go LEFT. Scan time 1833 ms.
+
+- At 25° right the beam saw past the box to an object at 383 mm. This is at
+  least 150 mm farther than the box, so the gap rule marked it free. This is
+  the first bench check of the gap rule.
+- The corner readings (201 and 214 mm) stayed below the gap and were not
+  taken as edges.
+- The decision matches a hand check of the rules.
 
 ## Host unit test
 
@@ -115,7 +183,21 @@ cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
 ```
 
 It checks the angle and pulse tables, that every pulse is inside the safe
-clamp, and the combine rules. Result on 2026-10-27: all tests pass.
+clamp, and the combine rules.
+
+```sh
+cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
+   tests/test_obstacle_profile.c src/obstacle_profile.c \
+   -o build/test_obstacle_profile
+./build/test_obstacle_profile
+```
+
+It checks 12 profiles, including run 1, open space, a wall, a stray
+NO_RETURN, no data, TOO_NEAR, and both tie rules. Three deliberate rule
+changes (no data as free, one free point as an edge, no 150 mm gap) each
+make the test fail.
+
+Result on 2026-10-27: all tests pass.
 
 ## Bench test
 
@@ -186,6 +268,8 @@ Conclusions:
 - Confirm that 1500 µs points straight ahead.
 - Check whether 60 ms is enough settle time; if readings at a point
   disagree, increase it.
-- Next step: profile analysis and the PROFILE event (left/right
-  clearance, approximate width). The ±30° range changes the width
-  calculation in the Week 8 notes, section 23.
+- Bench-test the profile with the obstacle on the left (expect go RIGHT),
+  facing a wall (expect NONE), and in open space.
+- Check the 150 mm gap rule with an obstacle in front of a wall.
+- The Vehicle Controller must keep the forward watch running during
+  BYPASS.

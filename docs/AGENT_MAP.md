@@ -50,6 +50,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Forward obstacle watch | [`src/obstacle.c`](../src/obstacle.c), [`src/obstacle.h`](../src/obstacle.h) |
 | Obstacle watch bench test | [`src/obstacle_test.c`](../src/obstacle_test.c) |
 | Servo obstacle scan | [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h) |
+| Obstacle profile analysis | [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
 | Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test) and [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test) |
