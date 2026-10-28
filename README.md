@@ -15,6 +15,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/ultrasonic_test.c`](src/ultrasonic_test.c) — ultrasonic range and accuracy bench test.
 - [`src/obstacle.c`](src/obstacle.c) — forward obstacle watch: NEAR, STOP, and CLEAR events from ultrasonic results.
 - [`src/obstacle_test.c`](src/obstacle_test.c) — obstacle watch bench test; [`tests/test_obstacle.c`](tests/test_obstacle.c) is its host unit test.
+- [`src/vehicle_controller.c`](src/vehicle_controller.c) — Vehicle Controller state machine (step 1: line following); [`tests/test_vehicle_controller.c`](tests/test_vehicle_controller.c) is its host unit test.
 - [`src/obstacle_scan.c`](src/obstacle_scan.c) — 13-point ±30° servo scan; [`src/scan_test.c`](src/scan_test.c) is its bench test.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
