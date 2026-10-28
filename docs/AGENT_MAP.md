@@ -29,6 +29,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Forward obstacle watch record | [docs/OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md) |
 | Servo obstacle scan record | [docs/OBSTACLE_SCAN.md](OBSTACLE_SCAN.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
+| Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
 | Week 6 design-review diagrams | [`design-review/`](../design-review/) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
 
@@ -52,10 +53,12 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Obstacle watch bench test | [`src/obstacle_test.c`](../src/obstacle_test.c) |
 | Servo obstacle scan | [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h) |
 | Obstacle profile analysis | [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h) |
+| Normalised line position | [`src/line_position.c`](../src/line_position.c), [`src/line_position.h`](../src/line_position.h) |
+| Line position bench test | [`src/line_test.c`](../src/line_test.c) |
 | Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`src/vehicle_controller.h`](../src/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), and [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test) |
+| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), and [LINE_POSITION.md](LINE_POSITION.md#host-unit-test) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |

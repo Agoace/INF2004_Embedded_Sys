@@ -25,6 +25,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Week 8 Change Requirement 1 notes](week8_change_requirement_1_notes.md) — minimum-bit data representation decisions, calculations, and open measurements.
 - [Ultrasonic driver and bench test](ULTRASONIC_DRIVER.md) — non-blocking HC-SR04+ driver, packed 16-bit result, and range test procedure.
 - [Forward obstacle watch](OBSTACLE_MONITOR.md) — ultrasonic thresholds, NEAR/STOP/CLEAR events, packed event word, and tests.
+- [Normalised line position](LINE_POSITION.md) — per-sensor learned floor and line values, line position −100…+100, LINE_LOST/LINE_FOUND events.
 - [Vehicle Controller](VEHICLE_CONTROLLER.md) — controller state machine built step by step; step 1 is line following.
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
