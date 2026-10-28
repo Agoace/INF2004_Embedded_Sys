@@ -12,7 +12,8 @@
  * where the line was last seen (left if unknown) by SEARCH_COUNTS, then to
  * the other side. LINE_FOUND resumes line following.
  *
- * A run stops on: GP21, a failed search, a stalled wheel, or RUN_LIMIT_MS.
+ * A run stops on: GP21, a failed search, or a stalled wheel. There is no
+ * time limit. The log keeps the last LOG_KEEP_MS of the run.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
  * (USB_POWER_SAFETY.md). The run is logged every 50 ms and saved to the
@@ -52,14 +53,14 @@ static const steer_config_t STEER = {
 #define SAMPLE_PERIOD_US 1000u
 #define STEER_PERIOD_MS 10u
 #define LOG_PERIOD_MS 50u
-#define RUN_LIMIT_MS 20000u
+#define LOG_KEEP_MS 20000u /* the log keeps the last 20 s */
 #define START_DELAY_MS 1000u
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
 #define BUTTON_POLL_MS 20u
 #define REPORT_REPEAT_MS 5000u
 #define IDLE_PRINT_MS 300u
-#define LOG_ENTRIES (RUN_LIMIT_MS / LOG_PERIOD_MS)
+#define LOG_ENTRIES (LOG_KEEP_MS / LOG_PERIOD_MS)
 
 /* Wheel hint: left minus right counts since the line was last centred. */
 #define HINT_COUNTS 20
@@ -72,12 +73,10 @@ typedef enum {
     STOP_SEARCH_FAILED,
     STOP_STALL_LEFT,
     STOP_STALL_RIGHT,
-    STOP_TIME_LIMIT,
 } stop_reason_t;
 
 static const char *const STOP_NAMES[] = {
     "GP21 pressed", "search failed", "left wheel stalled", "right wheel stalled",
-    "time limit",
 };
 
 static const char *side_name(unsigned int side) {
@@ -108,7 +107,7 @@ static unsigned int bucket_of(int position) {
     return a == 0 ? 0u : a <= 20 ? 1u : a <= 50 ? 2u : a < 100 ? 3u : 4u;
 }
 
-#define RUN_MAGIC 0x53545232u /* "STR2": a saved run is in flash */
+#define RUN_MAGIC 0x53545233u /* "STR3": a saved run is in flash */
 
 typedef struct {
     uint32_t magic;
@@ -125,7 +124,7 @@ typedef struct {
     uint16_t recoveries;
     uint16_t floor[LP_SENSORS];
     uint16_t line[LP_SENSORS];
-    unsigned int log_count;
+    uint32_t log_total; /* entries written; the log is a ring of the last LOG_ENTRIES */
     log_entry_t log[LOG_ENTRIES];
 } run_t;
 
@@ -200,10 +199,14 @@ static void print_summary(void) {
 static void print_log(void) {
     printf("\n[log] t_ms mode  pos  dutyL dutyR  rawL rawC rawR  side src hint  cntL cntR\n");
     static const char *const SOURCE[4] = {"-", "sensor", "gap", "hint"};
-    for (unsigned int i = 0u; i < run.log_count; ++i) {
-        const log_entry_t *e = &run.log[i];
-        printf("[log] %5u %s %+4d  %3d %3d  %4u %4u %4u  %s %-6s %s  %4d %4d\n",
-               i * LOG_PERIOD_MS, (e->info & 3u) == MODE_SEARCH ? "SRCH" : "FOLW",
+    const uint32_t kept = run.log_total < LOG_ENTRIES ? run.log_total : LOG_ENTRIES;
+    if (kept < run.log_total) {
+        printf("[log] (only the last %u s are kept)\n", LOG_KEEP_MS / 1000u);
+    }
+    for (uint32_t i = run.log_total - kept; i < run.log_total; ++i) {
+        const log_entry_t *e = &run.log[i % LOG_ENTRIES];
+        printf("[log] %6lu %s %+4d  %3d %3d  %4u %4u %4u  %s %-6s %s  %4d %4d\n",
+               (unsigned long)(i * LOG_PERIOD_MS), (e->info & 3u) == MODE_SEARCH ? "SRCH" : "FOLW",
                e->position, e->left_pct, e->right_pct, e->raw[0], e->raw[1], e->raw[2],
                side_name((e->info >> 2) & 3u), SOURCE[(e->info >> 4) & 3u],
                side_name((e->info >> 6) & 3u), e->left_counts, e->right_counts);
@@ -247,14 +250,10 @@ static void follow_line(steer_t *steer, bool *previous_run) {
     uint32_t next_steer_ms = t0;
     uint32_t next_log_ms = t0 + LOG_PERIOD_MS;
     uint32_t next_button_ms = t0;
-    stop_reason_t reason = STOP_TIME_LIMIT;
+    stop_reason_t reason = STOP_BUTTON;
 
     while (true) {
         const uint32_t now = to_ms_since_boot(get_absolute_time());
-        if (now - t0 >= RUN_LIMIT_MS) {
-            reason = STOP_TIME_LIMIT;
-            break;
-        }
         int32_t c[2];
         drive_counts(&c[0], &c[1]);
 
@@ -337,8 +336,8 @@ static void follow_line(steer_t *steer, bool *previous_run) {
 
         if ((int32_t)(now - next_log_ms) >= 0) {
             next_log_ms += LOG_PERIOD_MS;
-            if (run.log_count < LOG_ENTRIES) {
-                run.log[run.log_count++] = (log_entry_t){
+            {
+                run.log[run.log_total++ % LOG_ENTRIES] = (log_entry_t){
                     .position = lp.position,
                     .left_pct = (int8_t)duty[0],
                     .right_pct = (int8_t)duty[1],

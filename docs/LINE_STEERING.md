@@ -117,8 +117,9 @@ wheel turn toward the last side (left if unknown), then through the start
 to an eighth on the other side. LINE_FOUND resumes following. This is a
 bench stand-in for the Vehicle Controller LINE_SEARCH state.
 
-A run stops on GP21, a failed search, a stalled wheel (no encoder count
-for 500 ms), or after 20 s.
+A run stops on GP21, a failed search, or a stalled wheel (no encoder
+count for 500 ms). Since run 3 there is no time limit; the log keeps the
+last 20 s of the run, and the summary covers the whole run.
 
 This is a driving test, so use 5 V VIN with USB disconnected
 ([USB power safety](USB_POWER_SAFETY.md)). The run is logged every 50 ms
