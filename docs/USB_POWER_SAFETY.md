@@ -50,6 +50,23 @@ The exception is bounded by both motor count and duty. Do not use it for two
 motors, higher duty, or a loaded wheel. A rule that is routinely overridden is
 worse than an accurate rule.
 
+## Bounded spin-calibration exception
+
+On 2026-10-27 the operator approved the `line_test` spin calibration on the
+Raspberry Pi 400 USB supply. Two motors drive a loaded robot on the floor,
+so the firmware enforces these limits:
+
+| Limit | Value |
+| --- | --- |
+| Duty | 20 %. The build fails above 20 % (`_Static_assert`). |
+| Start | Motor 2 starts 50 ms after motor 1, so the start currents do not add |
+| Stall guard | No encoder count for 500 ms stops both motors |
+| Time | Each step stops at 6 s; a full calibration runs about 3 s |
+
+15 % duty stalled on the floor; 20 % completed. No over-current occurred.
+Do not use this exception for higher duty, longer runs, or driving tests.
+Use VIN for those.
+
 ### Conditional behaviour of the unmarked power bank
 
 The unmarked USB power bank is conditional, not a generally reliable supply.

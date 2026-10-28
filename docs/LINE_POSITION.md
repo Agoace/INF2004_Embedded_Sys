@@ -38,9 +38,10 @@ raw ADC ──▶ n = (raw − floor) / (line − floor), 0–100 per sensor
 
 ### A. Calibration sweep
 
-The sensors cross the line for 4 s. For now, slide the robot by hand. Later,
-the CALIBRATE state turns the robot left and right over the line. Each
-sensor records its minimum and maximum.
+The sensors cross the line: the robot turns on the spot left and right
+over the line (spin calibration), or is slid across it by hand for 4 s.
+Each sensor records its minimum and maximum. The spin is the model for the
+Vehicle Controller CALIBRATE state.
 
 Polarity: the floor is seen most of the time, so the average reading is
 nearer the floor end. The module compares the average with both ends for
@@ -137,30 +138,72 @@ picotool load -f -x build/line_test.uf2
 stty -F /dev/ttyACM0 115200 raw -echo && cat /dev/ttyACM0
 ```
 
+Nothing moves until a button is pressed.
+
 | Control | Action |
 | --- | --- |
-| GP20 | Calibrate again |
-| GP21 | Pause or resume the 100 ms output |
+| GP20 | Spin calibration (motors run) |
+| GP21 | Hand calibration: slide the robot across the line for 4 s |
 
-The motors are not driven.
+Spin calibration, at 20 % duty, on the spot:
+
+```text
+start on the line ─▶ left ¼ wheel turn ─▶ right ¼ wheel turn past the start
+                  ─▶ calibrate ─▶ turn back until the line is under the centre sensor
+```
+
+- All distances are counted from the start position, so coasting does not
+  add up from step to step.
+- The last step stops on the line, not on the encoder count. Tyres slip
+  when the robot turns on the spot.
+- USB power limits: see the
+  [spin-calibration exception](USB_POWER_SAFETY.md#bounded-spin-calibration-exception).
 
 Procedure:
 
-1. Put the robot on the track. During the 4 s calibration, slide it slowly
-   left and right across the line two or three times.
-2. Check the calibration report: all three sensors OK, and the polarity.
+1. Put the robot on the track with the centre sensor over the line.
+2. Press GP20. Check the calibration report: all three sensors OK.
 3. Put the line under each sensor in turn. Expect about −100, 0, +100, and
    values between them on the edges.
 4. Lift the line away to the left. Expect LINE_LOST with LEFT. Bring it
    back. Expect LINE_FOUND.
 
-Results: not yet recorded.
+### Run 1: 2026-10-27, spin calibration, USB power
+
+15 % duty stalled (motor 2 stopped after 746 of 2535 counts). Raised to
+20 %. Whole and half wheel turns were too far; a quarter turn (633 counts)
+was enough. The first version counted each step from the previous stop
+and did not return to the line. Final version:
+
+| Step | Time | Encoders from start (M1, M2) |
+| --- | ---: | --- |
+| Left | 807 ms | −633, −650 |
+| Right | 1633 ms | +641, +633 |
+| Back to the line | 712 ms | +60, −22: stopped on the line |
+
+| Sensor | Floor | Line | Range |
+| --- | ---: | ---: | ---: |
+| L | 191 | 3424 | 3233 |
+| C | 185 | 2615 | 2430 |
+| R | 202 | 1645 | 1443 |
+
+- The line reads **higher** than the floor. The fixed-threshold detector
+  assumes the opposite (black ≤ 1200).
+- One fixed "line ≥ 2600" value would never detect the line on R. Each
+  sensor needs its own range.
+- After the stop: C at 58 %, position 0.
+- The encoders were 60 and −22 counts from the start at the stop, so a
+  count-only return would not reliably end on the line.
+
+Steps 3 and 4 of the procedure are not yet recorded.
 
 ## Open items
 
-- Record the bench test and the measured floor and line values.
-- Confirm the polarity. Board diagnostics read about 180–220 mV on all
-  three sensors; the surface under them was not recorded.
+- Record procedure steps 3 and 4 (position under each sensor, LINE_LOST
+  and LINE_FOUND).
+- Find out why R reaches only 1645 on the line (sensor height, angle, or
+  only part of the line crossed it).
+- Tell the line detector owner: the line reads high on this robot.
 - Tell the Vehicle Controller the line state at START, so that a robot
   started off the line searches at once.
 - Send JUNCTION to the Vehicle Controller in a later step.

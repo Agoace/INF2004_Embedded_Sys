@@ -253,6 +253,8 @@ target_link_libraries(line_test PRIVATE
     pico_stdlib
     hardware_adc
     hardware_gpio
+    hardware_pwm
+    hardware_sync
 )
 
 pico_enable_stdio_usb(line_test 1)

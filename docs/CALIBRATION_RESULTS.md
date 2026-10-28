@@ -75,6 +75,17 @@ The scan confirms power, ground, SDA, SCL, and I²C communication. The DRDY line
 - GP26 / ADC0 produced a stable analog reading of approximately 219–223 mV.
 - The initial average was approximately 220 mV.
 - A changing-target test is still useful to confirm the sensor response range.
+- 2026-10-27, `line_test` spin calibration on the track: the line reads
+  higher than the floor. Floor and line values differ by sensor: L 191/3424,
+  C 185/2615, R 202/1645. See [Normalised line position](LINE_POSITION.md#bench-test).
+
+## Motor sides
+
+Measured on 2026-10-27 with `line_test`:
+
+- Motor 1 (GP8/GP9, encoder GP16/GP17) is the left wheel. Motor 1 forward
+  and motor 2 reverse turns the robot right.
+- Motor 1 forward counts up. Motor 2 forward counts down.
 
 ## Servo
 
