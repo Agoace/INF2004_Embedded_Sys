@@ -9,7 +9,9 @@ sensor learns. The first detector is not changed.
 - Host unit test: [`tests/test_line_position.c`](../tests/test_line_position.c)
 - Bench test: [`src/line_test.c`](../src/line_test.c); spin calibration in [`src/line_spin.c`](../src/line_spin.c)
 - Steering from the position: [Line steering](LINE_STEERING.md)
-- Sensor pins: [`src/ir_module_pins.h`](../src/ir_module_pins.h): left GP26, centre GP27, right GP28
+- Sensor pins, robot's own sides: left **GP28**, centre GP27, right **GP26**, set in
+  [`src/line_sensors.c`](../src/line_sensors.c). [`src/ir_module_pins.h`](../src/ir_module_pins.h)
+  names them the other way round.
 - Events go to the [Vehicle Controller](VEHICLE_CONTROLLER.md)
 
 ## Why
@@ -170,6 +172,13 @@ Procedure:
    back. Expect LINE_FOUND.
 
 ### Run 1: 2026-10-27, spin calibration, USB power
+
+> **Update 2026-10-27:** Run 1 and the hand-movement checks below used the
+> pin names from `ir_module_pins.h` (L = GP26, R = GP28). The first steering
+> run turned away from the line, and the operator confirmed that GP26 is the
+> robot's **right** sensor and GP28 its **left**. In the tables below, "L"
+> is the physical right sensor and "R" the physical left sensor. The code
+> now uses the physical sides.
 
 15 % duty stalled (motor 2 stopped after 746 of 2535 counts). Raised to
 20 %. Whole and half wheel turns were too far; a quarter turn (633 counts)

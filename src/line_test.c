@@ -14,7 +14,6 @@
 
 #include "drive.h"
 #include "hardware/gpio.h"
-#include "ir_module_pins.h"
 #include "line_position.h"
 #include "line_sensors.h"
 #include "line_spin.h"
@@ -71,9 +70,8 @@ int main(void) {
     sleep_ms(2000);
 
     printf("\nNormalised line position test\n");
-    printf("L/C/R = GP%u/GP%u/GP%u. GP20: spin calibration. GP21: hand calibration.\n",
-           LINE_IR_LEFT_ANALOG_GPIO, LINE_IR_CENTRE_ANALOG_GPIO,
-           LINE_IR_RIGHT_ANALOG_GPIO);
+    printf("L/C/R = GP28/GP27/GP26 (see line_sensors.c). GP20: spin calibration.\n"
+           "GP21: hand calibration.\n");
 
     line_sensors_init();
     drive_init();

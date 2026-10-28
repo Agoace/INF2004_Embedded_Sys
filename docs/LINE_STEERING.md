@@ -24,12 +24,13 @@ speed. Our motors are close to linear between 10 % and 60 % duty
 ([unloaded speed test](CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)),
 so a duty ratio is close to a speed ratio.
 
-| Position | Meaning | Wheels (base 25 %, gain 100 %) |
+| Position | Meaning | Wheels (base 20 %, gain 100 %, max 30 %, min 12 %) |
 | ---: | --- | --- |
-| 0 | Line under the centre sensor | 25 / 25: straight |
-| +50 | Line between centre and right | 38 / 13: turn right |
-| +100 | Line under the right sensor | 50 / 0: pivot right |
-| −50 | Line between left and centre | 13 / 38: turn left |
+| 0 | Line under the centre sensor | 20 / 20: straight |
+| +25 | Line a little right of centre | 25 / 15: turn right |
+| +50 | Line between centre and right | 30 / 0: 30 / 10 after max, 10 is below min |
+| +100 | Line under the right sensor | 30 / 0: pivot right |
+| −50 | Line between left and centre | 0 / 30: turn left |
 
 Gain 100 % means: with the line under an outer sensor, the inner wheel stops.
 
@@ -95,7 +96,7 @@ picotool load -f -x build/steer_test.uf2
 | GP20 | Spin calibration |
 | GP21 | Start line following after 1 s / stop |
 
-Settings: base 25 %, gain 100 %, kd 0, min 12 %, max 50 %.
+Settings: base 20 %, gain 100 %, kd 0, min 12 %, max 30 % (operator choices).
 
 A run stops on GP21, LINE_LOST, a stalled wheel (no encoder count for
 500 ms), or after 20 s. There is no line search yet.
@@ -112,7 +113,25 @@ Procedure:
 3. Press GP21 and move your hand away. The robot starts after 1 s.
 4. After it stops, connect USB and read the report.
 
-Results: not yet recorded.
+### Run 1: 2026-10-27, VIN
+
+Base 25 %, max 50 %. The robot turned away from the line and lost it after
+197 ms:
+
+| t (ms) | Position | Left / right duty |
+| ---: | ---: | --- |
+| 0 | −33 | 17 / 33 |
+| 50 | −96 | 0 / 49 |
+| 100 | −100 | 0 / 50 |
+
+The spin's first step turns left as coded, so the motor sides are correct.
+The operator confirmed that the sensor sides were swapped: GP26 is the
+robot's right sensor and GP28 its left. Fixed in
+[`src/line_sensors.c`](../src/line_sensors.c). A second run also turned the
+wrong way; its report was lost when the Pico restarted, so the run is now
+saved to flash.
+
+Settings after run 1: base 20 %, max 30 % (operator choices).
 
 ## Open items
 

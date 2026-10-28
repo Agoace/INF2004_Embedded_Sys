@@ -8,9 +8,10 @@
  * There is no line search yet: LINE_LOST stops the robot.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (USB_POWER_SAFETY.md). The run is logged in RAM every 50 ms. Connect USB
- * after the robot stops and open the serial port: the log prints once, then
- * the summary repeats every 5 s.
+ * (USB_POWER_SAFETY.md). The run is logged every 50 ms and saved to the
+ * last flash sector when the robot stops, so it survives a restart or a
+ * power cut. Connect USB at any time after the run and open the serial
+ * port: the last saved run prints once, then the summary every 5 s.
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -18,7 +19,9 @@
 #include <stdlib.h>
 
 #include "drive.h"
+#include "hardware/flash.h"
 #include "hardware/gpio.h"
+#include "hardware/sync.h"
 #include "line_position.h"
 #include "line_sensors.h"
 #include "line_spin.h"
@@ -31,11 +34,11 @@
 
 /* Steering settings for this test. */
 static const steer_config_t STEER = {
-    .base_pct = 25u, /* both wheels when centred */
+    .base_pct = 20u, /* both wheels when centred (operator, 2026-10-27) */
     .gain_pct = 100u, /* line under an outer sensor: inner wheel stops */
     .kd_pct = 0u,    /* D off; add it if the robot zig-zags */
     .min_pct = 12u,  /* below this a loaded wheel does not turn */
-    .max_pct = 50u,
+    .max_pct = 30u,  /* operator limit, 2026-10-27 */
 };
 
 #define SAMPLE_PERIOD_US 1000u
@@ -47,6 +50,7 @@ static const steer_config_t STEER = {
 #define STALL_TIMEOUT_MS 500u
 #define BUTTON_POLL_MS 20u
 #define REPORT_REPEAT_MS 5000u
+#define IDLE_PRINT_MS 300u
 #define LOG_ENTRIES (RUN_LIMIT_MS / LOG_PERIOD_MS)
 
 typedef enum {
@@ -79,7 +83,10 @@ static unsigned int bucket_of(int position) {
     return a == 0 ? 0u : a <= 20 ? 1u : a <= 50 ? 2u : a < 100 ? 3u : 4u;
 }
 
+#define RUN_MAGIC 0x53545231u /* "STR1": a saved run is in flash */
+
 typedef struct {
+    uint32_t magic;
     bool valid;
     stop_reason_t reason;
     vc_line_side_t lost_side;
@@ -95,6 +102,31 @@ typedef struct {
 
 static run_t run;
 static lp_t lp;
+
+/* The last flash sector holds the last run. The program is far smaller. */
+#define RUN_FLASH_OFFSET (PICO_FLASH_SIZE_BYTES - FLASH_SECTOR_SIZE)
+#define RUN_FLASH_BYTES \
+    (((sizeof(run_t) + FLASH_PAGE_SIZE - 1u) / FLASH_PAGE_SIZE) * FLASH_PAGE_SIZE)
+_Static_assert(RUN_FLASH_BYTES <= FLASH_SECTOR_SIZE, "run log must fit one flash sector");
+
+static void save_run(void) {
+    static uint8_t buffer[RUN_FLASH_BYTES];
+    for (unsigned int i = 0u; i < RUN_FLASH_BYTES; ++i) buffer[i] = 0xFFu;
+    run.magic = RUN_MAGIC;
+    const uint8_t *src = (const uint8_t *)&run;
+    for (unsigned int i = 0u; i < sizeof(run_t); ++i) buffer[i] = src[i];
+    const uint32_t saved = save_and_disable_interrupts();
+    flash_range_erase(RUN_FLASH_OFFSET, FLASH_SECTOR_SIZE);
+    flash_range_program(RUN_FLASH_OFFSET, buffer, RUN_FLASH_BYTES);
+    restore_interrupts(saved);
+}
+
+static void load_run(void) {
+    const run_t *stored = (const run_t *)(XIP_BASE + RUN_FLASH_OFFSET);
+    if (stored->magic == RUN_MAGIC && stored->valid) {
+        run = *stored;
+    }
+}
 
 static bool button_pressed(unsigned int pin, bool *previous) {
     const bool down = !gpio_get(pin);
@@ -236,6 +268,7 @@ static void follow_line(lp_t *line, steer_t *steer, bool *previous_run) {
     run.left_counts = c[0] - start[0];
     run.right_counts = c[1] - start[1];
     run.valid = true;
+    save_run();
     print_summary();
 }
 
@@ -253,6 +286,10 @@ int main(void) {
     sleep_ms(2000);
     printf("\nLine steering test. GP20: spin calibration. GP21: start/stop.\n");
 
+    load_run();
+    if (run.valid) {
+        printf("[run] A saved run is in flash; it prints when a terminal connects.\n");
+    }
     lp_init(&lp);
     steer_t steer;
     steer_init(&steer, &STEER);
@@ -261,6 +298,7 @@ int main(void) {
     bool previous_run = false;
     bool was_connected = false;
     uint32_t next_report_ms = 0u;
+    uint32_t next_idle_print_ms = 0u;
 
     while (true) {
         const uint32_t now = to_ms_since_boot(get_absolute_time());
@@ -292,6 +330,16 @@ int main(void) {
         if (connected && run.valid && (int32_t)(now - next_report_ms) >= 0) {
             next_report_ms = now + REPORT_REPEAT_MS;
             print_summary();
+        }
+
+        /* While idle and calibrated, show the line position (no motors). */
+        uint16_t raw[LP_SENSORS];
+        line_sensors_read(raw);
+        (void)lp_update(&lp, raw, now);
+        if (connected && lp_calibrated(&lp) && (int32_t)(now - next_idle_print_ms) >= 0) {
+            next_idle_print_ms = now + IDLE_PRINT_MS;
+            printf("[idle] n %3u %3u %3u %%  pos %+4d\n", lp.norm[0], lp.norm[1],
+                   lp.norm[2], lp.position);
         }
 
         sleep_ms(BUTTON_POLL_MS);
