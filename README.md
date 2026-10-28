@@ -4,6 +4,8 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 
 ## Repository layout
 
+- [`IMU-Telemetry/`](IMU-Telemetry/README.md) - standalone GY-511 IMU producer and USB diagnostics.
+
 - [`src/pin_probe.c`](src/pin_probe.c) — general Pico W GPIO connection probe.
 - [`src/board_diagnostics.c`](src/board_diagnostics.c) — Robo Pico sensor and encoder diagnostics.
 - [`src/servo_test.c`](src/servo_test.c) — short GP15 servo movement test.

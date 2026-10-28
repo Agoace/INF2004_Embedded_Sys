@@ -45,6 +45,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
 | Eventual control architecture | [`CONTROL_ARCHITECTURE.md`](CONTROL_ARCHITECTURE.md) |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
+| Standalone IMU telemetry producer | [`IMU-Telemetry/README.md`](../IMU-Telemetry/README.md) |
 | CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |

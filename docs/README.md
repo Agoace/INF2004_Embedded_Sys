@@ -13,6 +13,8 @@ For repository structure and implementation entry points, see the [Agent Navigat
 
 ## Records
 
+- [IMU telemetry implementation contract](../IMU-Telemetry/IMU_TELEMETRY_PLAN.md) - standalone Pico W GY-511 producer, packet contract, state handling, and verification plan.
+
 - [Agent Navigation Map](AGENT_MAP.md) — repository paths, entry points, and boundaries.
 - [Pico W development environment](DEVELOPMENT.md) — tool installation, build, flash, and serial instructions.
 - [Hardware and calibration results](CALIBRATION_RESULTS.md) — confirmed wiring, sensor results, servo limits, and motor calibration.
