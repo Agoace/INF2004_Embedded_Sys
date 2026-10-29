@@ -357,6 +357,30 @@ button, stopped by the 60 s time limit. The Wi-Fi log received 1179 of
   (the same turn ratios; D grows with the speed because the position
   changes faster), straight part at most 450 counts.
 
+### Run 8: 2026-10-29, VIN, Wi-Fi log
+
+Base 33 %, max 75 %, gain 200 %, kd 200 %. Stopped by the 60 s time
+limit. The Wi-Fi log received 1179 of 1199 entries. The operator saw
+oscillation.
+
+| Measure | Run 7 (max 50 %) | Run 8 (max 75 %) |
+| --- | ---: | ---: |
+| Speed when centred | 103 counts per 50 ms | 145 counts per 50 ms |
+| Swings from ±50 to ∓50 within 300 ms | 5 | 126 (10 bursts of 3 or more) |
+| \|position\| 100 | 1 % | 19 % |
+| One wheel stopped | 11.1 % | 34.2 % |
+| LINE_LOST | 5 | 7, all found again |
+
+- About half of the swings came after junctions; the other half on
+  straight parts with no junction (for example 10 s and 28–29.6 s).
+- In a burst the wheels went 0/75 ↔ 75/0 about every 125 ms: −100 →
+  +100 → +7 → −100. The line crossed all three sensors in about 50 ms,
+  so the position was nearly only ±100 or 0. The D part (limited to 25 per
+  update) braked at the centre (24/43 at +7), but the robot still turned
+  past the line in the next 50 ms.
+- Duty 0 lets a wheel coast (both driver inputs low), so a 75 % pivot
+  keeps turning after the duty changes.
+
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
