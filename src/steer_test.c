@@ -17,9 +17,16 @@
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
  * (USB_POWER_SAFETY.md). The run is logged every 50 ms and saved to the
- * last two flash sectors when the robot stops, so it survives a restart or
- * a power cut. Connect USB at any time after the run and open the serial
- * port: the last saved run prints once, then the summary every 5 s.
+ * last two flash sectors when the robot stops, so it survives a restart.
+ * Connect USB at any time after the run and open the serial port: the last
+ * saved run prints once, then the summary every 5 s.
+ *
+ * Wi-Fi log (src/wifi_log.c, docs/STEER_WIFI_LOG.md): with
+ * src/wifi_config.h, the robot joins the network in the background (LED on
+ * when joined) and broadcasts the printf output and the run log live, 5
+ * entries every 250 ms. When a run stops, and when Wi-Fi joins with a
+ * saved run, the whole kept log is sent again (replay), so the receiver
+ * can fill in lost packets.
  */
 #include <stdbool.h>
 #include <stdint.h>
@@ -36,6 +43,8 @@
 #include "line_steer.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
+#include "steer_log.h"
+#include "wifi_log.h"
 
 #define SPIN_BUTTON_PIN 20
 #define RUN_BUTTON_PIN 21
@@ -88,15 +97,9 @@ static const char *side_name(unsigned int side) {
 #define MODE_FOLLOW 0u
 #define MODE_SEARCH 1u
 
-typedef struct {
-    int8_t position;
-    int8_t left_pct;
-    int8_t right_pct;
-    uint8_t info;
-    uint16_t raw[LP_SENSORS];
-    int16_t left_counts; /* counts in the last 50 ms */
-    int16_t right_counts;
-} log_entry_t;
+typedef sl_entry_t log_entry_t; /* counts are per 50 ms */
+
+#define LIVE_BATCH 5u /* entries per live packet: one packet every 250 ms */
 
 /* |position| buckets for the summary. */
 #define BUCKETS 5u
@@ -130,6 +133,44 @@ typedef struct {
 
 static run_t run;
 static lp_t lp;
+static uint8_t run_number; /* 0: a saved run from before the restart */
+
+/* Wi-Fi: send log entries [first, first + count) of the current run. */
+static void send_entries(uint32_t first, uint32_t count, uint8_t flags) {
+    uint8_t packet[SL_LOG_HEADER_BYTES + SL_MAX_ENTRIES * SL_ENTRY_BYTES];
+    if (count > SL_MAX_ENTRIES) count = SL_MAX_ENTRIES;
+    size_t n = sl_write_log_header(packet, run_number, flags, (uint16_t)first, (uint8_t)count);
+    for (uint32_t i = 0u; i < count; ++i) {
+        sl_pack_entry(&run.log[(first + i) % LOG_ENTRIES], &packet[n]);
+        n += SL_ENTRY_BYTES;
+    }
+    (void)wifi_log_send(SL_TYPE_LOG, packet, n);
+}
+
+/* Replay of the kept log, one packet per call from the idle loop. */
+static struct {
+    bool active;
+    uint32_t next;
+} replay;
+
+static void replay_start(void) {
+    const uint32_t kept = run.log_total < LOG_ENTRIES ? run.log_total : LOG_ENTRIES;
+    replay.next = run.log_total - kept;
+    replay.active = kept > 0u;
+}
+
+static void replay_step(void) {
+    if (!replay.active || !wifi_log_up()) {
+        return;
+    }
+    const uint32_t left = run.log_total - replay.next;
+    const uint32_t count = left < SL_MAX_ENTRIES ? left : SL_MAX_ENTRIES;
+    const bool last = count == left;
+    send_entries(replay.next, count,
+                 (uint8_t)(SL_FLAG_REPLAY | (last ? SL_FLAG_REPLAY_END : 0u)));
+    replay.next += count;
+    replay.active = !last;
+}
 
 /* The last two flash sectors hold the last run. The program is far smaller. */
 #define RUN_FLASH_SECTORS 2u
@@ -233,7 +274,10 @@ static void follow_line(steer_t *steer, bool *previous_run) {
         run.line[s] = lp_line(&lp, s);
     }
     steer_reset(steer);
-    printf("[run] start\n");
+    replay.active = false;
+    ++run_number;
+    if (run_number == 0u) run_number = 1u;
+    printf("[run] start, run %u\n", run_number);
 
     const uint32_t t0 = to_ms_since_boot(get_absolute_time());
     int32_t start[2];
@@ -256,6 +300,7 @@ static void follow_line(steer_t *steer, bool *previous_run) {
         const uint32_t now = to_ms_since_boot(get_absolute_time());
         int32_t c[2];
         drive_counts(&c[0], &c[1]);
+        wifi_log_poll(now);
 
         if (time_reached(next_sample)) {
             next_sample = delayed_by_us(next_sample, SAMPLE_PERIOD_US);
@@ -349,6 +394,9 @@ static void follow_line(steer_t *steer, bool *previous_run) {
                     .left_counts = (int16_t)(c[0] - last_log[0]),
                     .right_counts = (int16_t)(c[1] - last_log[1]),
                 };
+                if (run.log_total % LIVE_BATCH == 0u) {
+                    send_entries(run.log_total - LIVE_BATCH, LIVE_BATCH, 0u);
+                }
             }
             last_log[0] = c[0];
             last_log[1] = c[1];
@@ -374,10 +422,12 @@ static void follow_line(steer_t *steer, bool *previous_run) {
     run.valid = true;
     save_run();
     print_summary();
+    replay_start();
 }
 
 int main(void) {
     stdio_init_all();
+    wifi_log_init();
     line_sensors_init();
     drive_init();
     drive_stop();
@@ -401,11 +451,22 @@ int main(void) {
     bool previous_spin = false;
     bool previous_run = false;
     bool was_connected = false;
+    bool wifi_was_up = false;
     uint32_t next_report_ms = 0u;
     uint32_t next_idle_print_ms = 0u;
 
     while (true) {
         const uint32_t now = to_ms_since_boot(get_absolute_time());
+        wifi_log_poll(now);
+        replay_step();
+
+        /* Wi-Fi joined with a saved run: send its summary and log. */
+        const bool wifi_up = wifi_log_up();
+        if (wifi_up && !wifi_was_up && run.valid) {
+            print_summary();
+            replay_start();
+        }
+        wifi_was_up = wifi_up;
 
         if (button_pressed(SPIN_BUTTON_PIN, &previous_spin)) {
             (void)line_spin_calibrate(&lp);
@@ -427,7 +488,9 @@ int main(void) {
         if (connected && !was_connected && run.valid) {
             sleep_ms(500);
             print_summary();
+            wifi_log_mirror_text(false); /* the Wi-Fi log has its own packets */
             print_log();
+            wifi_log_mirror_text(true);
             next_report_ms = now + REPORT_REPEAT_MS;
         }
         was_connected = connected;
@@ -440,7 +503,8 @@ int main(void) {
         uint16_t raw[LP_SENSORS];
         line_sensors_read(raw);
         (void)lp_update(&lp, raw, now);
-        if (connected && lp_calibrated(&lp) && (int32_t)(now - next_idle_print_ms) >= 0) {
+        if ((connected || wifi_up) && lp_calibrated(&lp) &&
+            (int32_t)(now - next_idle_print_ms) >= 0) {
             next_idle_print_ms = now + IDLE_PRINT_MS;
             printf("[idle] raw %4u %4u %4u  n %4u %4u %4u  pos %+4d  side %s\n", raw[0],
                    raw[1], raw[2], lp.norm[0], lp.norm[1], lp.norm[2], lp.position,

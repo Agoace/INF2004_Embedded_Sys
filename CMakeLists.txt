@@ -271,6 +271,8 @@ add_executable(steer_test
     src/line_sensors.c
     src/line_spin.c
     src/drive.c
+    src/steer_log.c
+    src/wifi_log.c
 )
 
 target_include_directories(steer_test PRIVATE
@@ -279,10 +281,12 @@ target_include_directories(steer_test PRIVATE
 
 target_link_libraries(steer_test PRIVATE
     pico_stdlib
+    pico_rand
     hardware_adc
     hardware_gpio
     hardware_pwm
     hardware_sync
+    pico_cyw43_arch_lwip_threadsafe_background
 )
 
 pico_enable_stdio_usb(steer_test 1)

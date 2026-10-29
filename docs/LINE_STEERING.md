@@ -126,7 +126,8 @@ This is a driving test, so use 5 V VIN with USB disconnected
 (position, duties, raw readings, side and its source, hint, wheel counts)
 and saved to the last two flash sectors when the robot stops, so a restart
 does not lose it. Connect USB and open the serial port: the summary and
-log print once, then the summary repeats every 5 s.
+log print once, then the summary repeats every 5 s. The same text and log
+also go over Wi-Fi ([steering Wi-Fi log](STEER_WIFI_LOG.md)).
 
 Procedure:
 
