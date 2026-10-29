@@ -85,7 +85,7 @@ Entry, 88 bits, least significant bit first:
 | 0–7 | Position, −100…+100 | 8 |
 | 8–15 | Left duty %, negative = reverse | 8 |
 | 16–23 | Right duty % | 8 |
-| 24–31 | Info: mode (0 FOLW, 1 SRCH, 2 STRT straight across a junction), side, side source, wheel hint (2 bits each) | 8 |
+| 24–31 | Info: mode (0 FOLW, 1 SRCH, 2 STRT straight across a junction, 3 CALM following with the calm settings), side, side source, wheel hint (2 bits each) | 8 |
 | 32–67 | Raw L, C, R ADC readings | 3 × 12 |
 | 68–87 | Left and right wheel counts in the 50 ms, clamped to ±511 | 2 × 10 |
 

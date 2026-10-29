@@ -88,6 +88,39 @@ steer_word_t steer_update(steer_t *s, int8_t position);
  * forgets the previous position, so the next steer_update() has no D part. */
 steer_word_t steer_straight(steer_t *s);
 
+/* Change the settings and keep the previous position, so the D part goes
+ * on without a jump (used to change between fast and calm settings). */
+void steer_set_config(steer_t *s, const steer_config_t *cfg);
+
+/*
+ * Calm mode: when to use slower settings.
+ *
+ * Bench run 9, 2026-10-29: at base 33 % the robot swung 0/55 <-> 55/0 for
+ * up to 1.4 s after the T junction; at base 25 % (run 7) the same kick
+ * settled in about 0.2 s. So the robot is calm (slower settings):
+ *   - at the start,
+ *   - after a trigger (junction, line search),
+ *   - while |position| >= STEER_CALM_ENTER,
+ * and goes back to fast after |position| <= STEER_CALM_NEAR for
+ * STEER_CALM_HOLD_MS without a break.
+ */
+#define STEER_CALM_ENTER 50
+#define STEER_CALM_NEAR 20
+#define STEER_CALM_HOLD_MS 300u
+
+typedef struct {
+    bool calm;
+    bool near;           /* |position| <= STEER_CALM_NEAR since near_ms */
+    uint32_t near_ms;
+} steer_calm_t;
+
+/* Starts calm. */
+void steer_calm_init(steer_calm_t *c);
+
+/* Call at each steer update. trigger: a junction or a line search now.
+ * Returns true while calm. */
+bool steer_calm_update(steer_calm_t *c, int8_t position, bool trigger, uint32_t now_ms);
+
 static inline unsigned int steer_left(steer_word_t w) {
     return w & STEER_DUTY_MASK;
 }

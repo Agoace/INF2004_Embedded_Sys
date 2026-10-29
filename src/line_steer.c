@@ -68,3 +68,42 @@ steer_word_t steer_straight(steer_t *s) {
     steer_reset(s);
     return w;
 }
+
+void steer_set_config(steer_t *s, const steer_config_t *cfg) {
+    const int8_t previous = s->previous;
+    const bool has_previous = s->has_previous;
+    steer_init(s, cfg);
+    s->previous = previous;
+    s->has_previous = has_previous;
+}
+
+void steer_calm_init(steer_calm_t *c) {
+    c->calm = true;
+    c->near = false;
+    c->near_ms = 0u;
+}
+
+bool steer_calm_update(steer_calm_t *c, int8_t position, bool trigger, uint32_t now_ms) {
+    const int a = position < 0 ? -(int)position : (int)position;
+    if (trigger || a >= STEER_CALM_ENTER) {
+        c->calm = true;
+        c->near = false;
+        return true;
+    }
+    if (!c->calm) {
+        return false;
+    }
+    if (a > STEER_CALM_NEAR) {
+        c->near = false;
+        return true;
+    }
+    if (!c->near) {
+        c->near = true;
+        c->near_ms = now_ms;
+    }
+    if ((uint32_t)(now_ms - c->near_ms) >= STEER_CALM_HOLD_MS) {
+        c->calm = false;
+        c->near = false;
+    }
+    return c->calm;
+}

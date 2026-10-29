@@ -43,7 +43,8 @@ FLAG_REPLAY = 0x01
 FLAG_REPLAY_END = 0x02
 LOG_PERIOD_MS = 50
 
-MODES = {0: "FOLW", 1: "SRCH", 2: "STRT"}  # STRT: straight across a junction
+# STRT: straight across a junction; CALM: following with the calm settings
+MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "CALM"}
 SIDES = {0: "-", 1: "L", 2: "R", 3: "?"}
 SOURCES = {0: "-", 1: "sensor", 2: "gap", 3: "hint"}
 

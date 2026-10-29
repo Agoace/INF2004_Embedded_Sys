@@ -100,6 +100,26 @@ stays 0, and the overlap zones between sensors are narrow. So the robot
 can drift inside the centre zone without correction, then gets a large
 correction at its edge. Expect some weave.
 
+## Calm mode
+
+Fast settings on straight parts, calm (slower) settings where the robot
+is likely to swing. `steer_calm_update()` decides at each update:
+
+| Rule | Value |
+| --- | --- |
+| Calm at the start of a run | — |
+| Calm after a trigger: junction hold or a line search | `steer_test` |
+| Calm while \|position\| ≥ `STEER_CALM_ENTER` | 50 |
+| Fast again after \|position\| ≤ `STEER_CALM_NEAR` without a break for `STEER_CALM_HOLD_MS` | 20, 300 ms |
+
+`steer_set_config()` changes the settings and keeps the previous
+position, so the D part goes on without a jump. The log shows calm
+updates as mode `CALM`.
+
+Why: in run 9 (base 33 %) the robot swung 0/55 ↔ 55/0 for up to 1.4 s
+after the T junction; with the run 7 settings (base 25 %) the same kick
+settled in about 0.2 s. The calm settings are the run 7 settings.
+
 ## Data representation
 
 Steer word: 14 bits used.
@@ -123,7 +143,9 @@ ratio at another base, gain 50, the max limit in both directions, the
 100 % ceiling, the min limit, the D part (first update, moving, still,
 moving back, reset, the ±25 change limit, braking while the line comes
 back), straight across a junction (base and trim, no D before or after),
-the trim (straight, turning, not on a stopped wheel, max limit, negative
+changing settings with the D part kept, calm mode (calm at the start,
+fast after 300 ms near the centre, calm at 50 but not 49, a break
+restarting the 300 ms, a trigger, the time wrap), the trim (straight, turning, not on a stopped wheel, max limit, negative
 trim), speed-based steering (min as speed zero, gain 150 % points, and no
 step of more than 1 % in the inner wheel for positions 1 to 100 until it
 stops), and the word layout.
@@ -144,6 +166,11 @@ D limit and straight, 2026-10-29: all tests pass. Five rule changes (no
 upper change limit, no lower change limit, D sign swapped, no reset
 before or after the straight word) each make the test fail.
 
+Calm mode, 2026-10-29: all tests pass. Seven rule changes (settings
+change forgets the position, start fast, enter above 50 only, a break
+does not restart the 300 ms, the 300 ms off by one, trigger ignored,
+time compare not safe over the wrap) each make the test fail.
+
 ## Bench test
 
 ```sh
@@ -156,7 +183,7 @@ picotool load -f -x build/steer_test.uf2
 | GP21 | Spin calibration, then line following after 1 s; press again to stop |
 | GP20 | Spin calibration only |
 
-Settings: base 33 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 55 %,
+Settings (fast): base 33 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 55 %,
 right trim +1 %. Max is an operator choice (30 %, then 50 %, then 75 %
 on 2026-10-29). Run 8 at max 75 % oscillated, so max is 55 % since then:
 fast straights with pivots close to run 7 (50/0).
@@ -169,6 +196,9 @@ fast straights with pivots close to run 7 (50/0).
 | +40 | 50 / 17 |
 | +50 | 54 / 0 |
 | +100 | 55 / 0 |
+
+Calm settings ([calm mode](#calm-mode)): base 25 %, max 50 %, the rest
+the same (run 7).
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -413,10 +443,7 @@ limit. The Wi-Fi log received 894 of 899 entries.
 - Tune `base_pct` and `gain_pct` on the track.
 - Junctions: the robot goes straight for 300 ms. The Vehicle Controller decides later.
 - Tune `kd_pct` on the track.
-- Faster than base 25 %: try a calm mode (run 7 settings) after a
-  junction, after a search, or when |position| ≥ 50, back to fast after
-  300 ms near the centre. Not built; base 33 % / max 55 % (run 9) is the
-  current state.
+- Test the calm mode on the track (built 2026-10-29 after run 9).
 - Stop the run when a wheel turns with no load (a wheel came off in run 6)
   or the readings do not change while the wheels turn.
 - Find the lowest duty at which a loaded wheel turns, to set `min_pct`.

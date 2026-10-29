@@ -122,6 +122,51 @@ int main(void) {
         expect(&s, 40, 23u, 18u, "after straight: P only, no D from 0 to +40");
     }
 
+    /* set_config keeps the previous position: D goes on. */
+    {
+        const steer_config_t fast = {33u, 100u, 100u, 12u, 100u, 0};
+        const steer_config_t calm = {25u, 100u, 100u, 12u, 100u, 0};
+        steer_init(&s, &fast);
+        expect(&s, 10, 35u, 31u, "set_config: fast, no D yet");
+        steer_set_config(&s, &calm);
+        expect(&s, 20, 29u, 21u, "set_config: calm, P 20 + D 10 from the kept +10 (28/22 without D)");
+    }
+
+    /* Calm mode. */
+    {
+        steer_calm_t c;
+        steer_calm_init(&c);
+        int ok = 1;
+        ok &= steer_calm_update(&c, 0, false, 0u) == true;     /* starts calm */
+        ok &= steer_calm_update(&c, 10, false, 299u) == true;  /* near 299 ms */
+        ok &= steer_calm_update(&c, -20, false, 300u) == false; /* near 300 ms: fast */
+        if (!ok) { printf("FAIL calm: start, then fast after 300 ms near\n"); ++failures; }
+
+        ok = 1;
+        ok &= steer_calm_update(&c, 49, false, 400u) == false;  /* 49: still fast */
+        ok &= steer_calm_update(&c, -50, false, 410u) == true;  /* 50: calm */
+        ok &= steer_calm_update(&c, 0, false, 420u) == true;
+        ok &= steer_calm_update(&c, 21, false, 600u) == true;   /* 21 breaks "near" */
+        ok &= steer_calm_update(&c, 0, false, 700u) == true;    /* near again from 700 */
+        ok &= steer_calm_update(&c, 0, false, 999u) == true;
+        ok &= steer_calm_update(&c, 0, false, 1000u) == false;
+        if (!ok) { printf("FAIL calm: enter at 50, a break restarts the 300 ms\n"); ++failures; }
+
+        ok = 1;
+        ok &= steer_calm_update(&c, 0, true, 2000u) == true;    /* trigger */
+        ok &= steer_calm_update(&c, 0, true, 2200u) == true;    /* trigger held */
+        ok &= steer_calm_update(&c, 0, false, 2210u) == true;   /* near from 2210 */
+        ok &= steer_calm_update(&c, 0, false, 2509u) == true;
+        ok &= steer_calm_update(&c, 0, false, 2510u) == false;
+        if (!ok) { printf("FAIL calm: trigger, 300 ms counted after it ends\n"); ++failures; }
+
+        ok = 1;
+        steer_calm_init(&c);
+        ok &= steer_calm_update(&c, 0, false, 0xFFFFFF00u) == true;
+        ok &= steer_calm_update(&c, 0, false, 0x0000002Cu) == false; /* 300 ms over the wrap */
+        if (!ok) { printf("FAIL calm: time wrap\n"); ++failures; }
+    }
+
     /* Trim: +1 on the right wheel. */
     {
         const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1};

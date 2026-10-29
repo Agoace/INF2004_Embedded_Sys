@@ -56,7 +56,17 @@
 #define SPIN_BUTTON_PIN 20
 #define RUN_BUTTON_PIN 21
 
-/* Steering settings for this test. */
+/* Steering settings for this test: fast on straight parts, calm (run 7,
+ * which was stable) at the start, after a junction or a search, and while
+ * |position| >= 50 (steer_calm_update in src/line_steer.c). */
+static const steer_config_t STEER_CALM = {
+    .base_pct = 25u,
+    .gain_pct = 200u,
+    .kd_pct = 200u,
+    .min_pct = 12u,
+    .max_pct = 50u,
+    .right_trim_pct = 1,
+};
 static const steer_config_t STEER = {
     .base_pct = 33u,  /* both wheels when centred (was 25) */
     .gain_pct = 200u, /* inner wheel stops at position +/-50 (run 6) */
@@ -111,7 +121,8 @@ static const char *side_name(unsigned int side) {
 #define MODE_FOLLOW 0u
 #define MODE_SEARCH 1u
 #define MODE_STRAIGHT 2u /* straight across a junction */
-static const char *const MODE_NAMES[4] = {"FOLW", "SRCH", "STRT", "?"};
+#define MODE_CALM 3u     /* following with the calm settings */
+static const char *const MODE_NAMES[4] = {"FOLW", "SRCH", "STRT", "CALM"};
 
 typedef sl_entry_t log_entry_t; /* counts are per 50 ms */
 
@@ -126,7 +137,7 @@ static unsigned int bucket_of(int position) {
     return a == 0 ? 0u : a <= 20 ? 1u : a <= 50 ? 2u : a < 100 ? 3u : 4u;
 }
 
-#define RUN_MAGIC 0x53545235u /* "STR5": a saved run is in flash */
+#define RUN_MAGIC 0x53545236u /* "STR6": a saved run is in flash */
 
 typedef struct {
     uint32_t magic;
@@ -137,6 +148,7 @@ typedef struct {
     int32_t right_counts;
     uint32_t steer_updates;
     uint32_t straight_updates; /* steer updates driven straight at a junction */
+    uint32_t calm_updates;     /* steer updates with the calm settings */
     uint32_t sum_abs_position;
     uint32_t bucket[BUCKETS];
     uint32_t source_updates[4]; /* steer updates per lp_side_source_t */
@@ -145,6 +157,7 @@ typedef struct {
     uint16_t floor[LP_SENSORS];
     uint16_t line[LP_SENSORS];
     steer_config_t steer; /* settings used in this run */
+    steer_config_t calm;  /* calm settings used in this run */
     uint32_t log_total; /* entries written; the log is a ring of the last LOG_ENTRIES */
     log_entry_t log[LOG_ENTRIES];
 } run_t;
@@ -239,6 +252,10 @@ static void print_summary(void) {
            "right trim %+d%%\n",
            run.steer.base_pct, run.steer.gain_pct, run.steer.kd_pct, run.steer.min_pct,
            run.steer.max_pct, run.steer.right_trim_pct);
+    printf("[run] calm: base %u%% max %u%% (start, junction, search, |pos| >= %d; fast "
+           "after %u ms at |pos| <= %d)\n",
+           run.calm.base_pct, run.calm.max_pct, STEER_CALM_ENTER, STEER_CALM_HOLD_MS,
+           STEER_CALM_NEAR);
     if (run.steer_updates > 0u) {
         printf("[run] mean |pos| %lu;  |pos| share:",
                (unsigned long)(run.sum_abs_position / run.steer_updates));
@@ -246,8 +263,9 @@ static void print_summary(void) {
             printf("  %s: %lu%%", BUCKET_NAMES[b],
                    (unsigned long)(run.bucket[b] * 100u / run.steer_updates));
         }
-        printf("\n[run] straight at junctions %lu%% of steer updates",
-               (unsigned long)(run.straight_updates * 100u / run.steer_updates));
+        printf("\n[run] straight at junctions %lu%%, calm %lu%% of steer updates",
+               (unsigned long)(run.straight_updates * 100u / run.steer_updates),
+               (unsigned long)(run.calm_updates * 100u / run.steer_updates));
         printf("\n[run] side known from: sensor %lu%%  gap rise %lu%%  wheel hint %lu%%\n",
                (unsigned long)(run.source_updates[LP_SIDE_SOURCE_SENSOR] * 100u /
                                run.steer_updates),
@@ -291,6 +309,7 @@ static int32_t search_angle(const search_t *s, const int32_t c[2]) {
 static void follow_line(steer_t *steer, bool *previous_run) {
     run = (run_t){0};
     run.steer = STEER;
+    run.calm = STEER_CALM;
     for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
         run.floor[s] = lp_floor(&lp, s);
         run.line[s] = lp_line(&lp, s);
@@ -310,7 +329,12 @@ static void follow_line(steer_t *steer, bool *previous_run) {
     uint32_t moved_ms[2] = {t0, t0};
     int duty[2] = {0, 0};
     bool straight = false; /* driving straight across a junction */
+    bool calm = true;
+    steer_calm_t calm_state;
+    steer_calm_init(&calm_state);
+    steer_set_config(steer, &STEER_CALM);
     bool was_hold = false;
+    bool recovering = false; /* a search just ended */
     int32_t straight_from = 0; /* mean wheel count at the junction */
     int32_t heading = 0; /* left minus right counts since the line was centred */
     uint16_t raw[LP_SENSORS] = {0u, 0u, 0u};
@@ -346,6 +370,7 @@ static void follow_line(steer_t *steer, bool *previous_run) {
                 drive_set(duty[0], duty[1]);
             } else if (vc_event_type(event) == VC_EVENT_LINE_FOUND && search.active) {
                 search.active = false;
+                recovering = true; /* calm again after a search */
                 ++run.recoveries;
                 steer_reset(steer);
                 heading = 0;
@@ -383,9 +408,18 @@ static void follow_line(steer_t *steer, bool *previous_run) {
             }
             was_hold = hold;
             straight = hold && travel - straight_from < STRAIGHT_COUNTS;
+            /* The search and the junction hold keep the robot calm. */
+            const bool now_calm =
+                steer_calm_update(&calm_state, lp.position, hold || recovering, now);
+            recovering = false;
+            if (now_calm != calm) {
+                calm = now_calm;
+                steer_set_config(steer, calm ? &STEER_CALM : &STEER);
+            }
             const steer_word_t w =
                 straight ? steer_straight(steer) : steer_update(steer, lp.position);
             run.straight_updates += straight ? 1u : 0u;
+            run.calm_updates += calm ? 1u : 0u;
             duty[0] = (int)steer_left(w);
             duty[1] = (int)steer_right(w);
             drive_set(duty[0], duty[1]);
@@ -426,6 +460,7 @@ static void follow_line(steer_t *steer, bool *previous_run) {
                     .right_pct = (int8_t)duty[1],
                     .info = (uint8_t)((search.active ? MODE_SEARCH
                                        : straight    ? MODE_STRAIGHT
+                                       : calm        ? MODE_CALM
                                                      : MODE_FOLLOW) |
                                       ((lp.fade_side & 3u) << 2) |
                                       ((lp.fade_source & 3u) << 4) |
