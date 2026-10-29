@@ -402,12 +402,21 @@ limit. The Wi-Fi log received 894 of 899 entries.
   250–300 ms, and they also come on straight parts.
 - The turn rate for a given position is about speed × gain: 13 × 200 =
   2600 in run 7 (stable), 21 × 200 = 4200 in runs 8 and 9.
+- The operator saw that the oscillation starts after the T junction. The
+  log agrees (15.4 s, 35.25 s, 38.95 s): during the short straight part
+  the main line moves to +33…+48, then the robot pivots at 54/0 and swings
+  0/55 ↔ 55/0 for up to 1.4 s. In run 7 (slower) the same kick settled in
+  about 0.2 s.
 
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
 - Junctions: the robot goes straight for 300 ms. The Vehicle Controller decides later.
 - Tune `kd_pct` on the track.
+- Faster than base 25 %: try a calm mode (run 7 settings) after a
+  junction, after a search, or when |position| ≥ 50, back to fast after
+  300 ms near the centre. Not built; base 33 % / max 55 % (run 9) is the
+  current state.
 - Stop the run when a wheel turns with no load (a wheel came off in run 6)
   or the readings do not change while the wheels turn.
 - Find the lowest duty at which a loaded wheel turns, to set `min_pct`.
