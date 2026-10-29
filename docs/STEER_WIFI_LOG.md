@@ -1,7 +1,8 @@
 # Steering Wi-Fi log
 
-Status: built 2026-10-29. Run 1 on the track: joins and sends, but
-broadcast lost most packets; changed to unicast, not yet tested.
+Status: works. 2026-10-29: after run 1 (broadcast lost most packets) it
+sends to the receiver directly; run 4 of the steering test arrived live,
+1315 of 1320 entries.
 
 `steer_test` sends its printf output and its 50 ms run log over Wi-Fi, so a
 run on the track can be watched from the laptop without USB. The flash log
@@ -152,6 +153,18 @@ receiver got about 400 of about 1565 live entries, in gaps of 0.25–3 s,
 and none of the summary or the replay after the stop. The cause is
 broadcast: no Wi-Fi repeats. The HELLO and unicast were added after this
 run.
+
+### Fixes after run 1, 2026-10-29
+
+| Problem seen | Fix |
+| --- | --- |
+| The replay at start was sent before the HELLO, by broadcast: 6 packets lost | The replay waits for the receiver |
+| Text was sent by broadcast before the HELLO and lost | Text waits for the receiver |
+| The first 11 packets to the receiver were lost and not counted: lwIP keeps only one packet while ARP (finding the laptop's hardware address) is open; `ARP_QUEUEING` did not help | The robot sends nothing to the receiver until ARP is done; the receiver counts packets missing from the start |
+| The summary printed the current settings, not the settings of the saved run | The run stores its settings |
+
+After these fixes a restart sent all the text and the saved run: 400 of
+400 entries, 0 packets lost.
 
 ## Open items
 

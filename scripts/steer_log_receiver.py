@@ -122,8 +122,10 @@ class Receiver:
 
     def track_seq(self, boot, seq):
         if boot not in self.next_seq:
-            print("[recv] robot boot %04x" % boot)
-            self.lost[boot] = 0
+            # The robot counts from 0 at each start: earlier packets were lost
+            # (or sent before this receiver started).
+            print("[recv] robot boot %04x (first packet %d)" % (boot, seq))
+            self.lost[boot] = seq
         else:
             gap = (seq - self.next_seq[boot]) & 0xFFFF
             if 0 < gap < 0x8000:

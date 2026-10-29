@@ -110,7 +110,7 @@ static unsigned int bucket_of(int position) {
     return a == 0 ? 0u : a <= 20 ? 1u : a <= 50 ? 2u : a < 100 ? 3u : 4u;
 }
 
-#define RUN_MAGIC 0x53545233u /* "STR3": a saved run is in flash */
+#define RUN_MAGIC 0x53545234u /* "STR4": a saved run is in flash */
 
 typedef struct {
     uint32_t magic;
@@ -127,6 +127,7 @@ typedef struct {
     uint16_t recoveries;
     uint16_t floor[LP_SENSORS];
     uint16_t line[LP_SENSORS];
+    steer_config_t steer; /* settings used in this run */
     uint32_t log_total; /* entries written; the log is a ring of the last LOG_ENTRIES */
     log_entry_t log[LOG_ENTRIES];
 } run_t;
@@ -217,9 +218,10 @@ static void print_summary(void) {
            run.recoveries);
     printf("[run] calibration (floor/line): L %u/%u  C %u/%u  R %u/%u\n", run.floor[0],
            run.line[0], run.floor[1], run.line[1], run.floor[2], run.line[2]);
-    printf("[run] steering: base %u%% gain %u%% kd %u%% min %u%% max %u%% right trim %+d%%\n",
-           STEER.base_pct, STEER.gain_pct, STEER.kd_pct, STEER.min_pct, STEER.max_pct,
-           STEER.right_trim_pct);
+    printf("[run] steering: base %u%% gain %u%% kd %u%% min %u%% (speed zero) max %u%% "
+           "right trim %+d%%\n",
+           run.steer.base_pct, run.steer.gain_pct, run.steer.kd_pct, run.steer.min_pct,
+           run.steer.max_pct, run.steer.right_trim_pct);
     if (run.steer_updates > 0u) {
         printf("[run] mean |pos| %lu;  |pos| share:",
                (unsigned long)(run.sum_abs_position / run.steer_updates));
@@ -269,6 +271,7 @@ static int32_t search_angle(const search_t *s, const int32_t c[2]) {
 
 static void follow_line(steer_t *steer, bool *previous_run) {
     run = (run_t){0};
+    run.steer = STEER;
     for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
         run.floor[s] = lp_floor(&lp, s);
         run.line[s] = lp_line(&lp, s);

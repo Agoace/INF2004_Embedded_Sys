@@ -15,6 +15,7 @@
 
 #if WIFI_LOG_ENABLED
 
+#include "lwip/etharp.h"
 #include "lwip/ip4_addr.h"
 #include "lwip/netif.h"
 #include "lwip/pbuf.h"
@@ -43,7 +44,7 @@ static struct {
     /* Receiver address from its HELLO packets; written in the lwIP
      * receive callback, read in the main loop, both under the lwIP lock. */
     bool have_receiver;
-    bool receiver_reported;
+    bool receiver_ready; /* its hardware address is known (ARP done) */
     ip_addr_t receiver;
     char text[TEXT_BUFFER_BYTES];
     size_t text_used;
@@ -91,7 +92,10 @@ static void on_receive(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_
     uint8_t first = 0u;
     if (p->tot_len >= SL_HEADER_BYTES && pbuf_copy_partial(p, &first, 1u, 0u) == 1u &&
         first == (uint8_t)(SL_TYPE_HELLO | (SL_VERSION << 4))) {
-        ip_addr_copy(w.receiver, *addr);
+        if (!w.have_receiver || !ip_addr_cmp(&w.receiver, addr)) {
+            ip_addr_copy(w.receiver, *addr);
+            w.receiver_ready = false;
+        }
         w.have_receiver = true;
     }
     pbuf_free(p);
@@ -146,7 +150,7 @@ static bool send_packet(unsigned int type, const uint8_t *payload, size_t length
         (void)sl_write_header(out, type, w.boot_id, w.seq);
         memcpy(&out[SL_HEADER_BYTES], payload, length);
         ip_addr_t to;
-        if (w.have_receiver) {
+        if (w.receiver_ready) {
             ip_addr_copy(to, w.receiver);
         } else {
             ip_addr_set_ip4_u32(&to, ip4_addr_get_u32(netif_ip4_addr(nif)) |
@@ -193,20 +197,33 @@ void wifi_log_poll(uint32_t now_ms) {
                 w.join_ms = now_ms;
             }
         }
-        if (w.have_receiver && !w.receiver_reported) {
+        /* Before the first unicast, resolve the receiver's hardware address
+         * (ARP). Packets sent while ARP was open were dropped on the track:
+         * lwIP keeps only one. So nothing is sent until ARP is done. */
+        if (up && w.have_receiver && !w.receiver_ready) {
             char ip[IPADDR_STRLEN_MAX];
+            bool ready = false;
             cyw43_arch_lwip_begin();
-            ipaddr_ntoa_r(&w.receiver, ip, sizeof ip);
+            struct eth_addr *eth = NULL;
+            const ip4_addr_t *found = NULL;
+            if (etharp_find_addr(netif_default, ip_2_ip4(&w.receiver), &eth, &found) >= 0) {
+                ready = true;
+                ipaddr_ntoa_r(&w.receiver, ip, sizeof ip);
+            } else {
+                (void)etharp_query(netif_default, ip_2_ip4(&w.receiver), NULL);
+            }
             cyw43_arch_lwip_end();
-            printf("[wifi] receiver at %s: sending to it directly\n", ip);
-            w.receiver_reported = true;
+            if (ready) {
+                w.receiver_ready = true;
+                printf("[wifi] receiver at %s: sending to it directly\n", ip);
+            }
         }
         if (!up && (status < 0 || now_ms - w.join_ms >= REJOIN_MS)) {
             join(now_ms);
         }
     }
     /* Text waits for the receiver: broadcast text was lost on the track. */
-    if (w.up && w.have_receiver && w.text_used > 0u) {
+    if (w.up && w.receiver_ready && w.text_used > 0u) {
         const size_t n = w.text_used < TEXT_PACKET_BYTES ? w.text_used : TEXT_PACKET_BYTES;
         (void)send_packet(SL_TYPE_TEXT, (const uint8_t *)w.text, n);
         memmove(w.text, &w.text[n], w.text_used - n);
@@ -219,7 +236,7 @@ bool wifi_log_up(void) {
 }
 
 bool wifi_log_receiver_known(void) {
-    return w.up && w.have_receiver;
+    return w.up && w.receiver_ready;
 }
 
 bool wifi_log_send(unsigned int type, const uint8_t *payload, size_t length) {
