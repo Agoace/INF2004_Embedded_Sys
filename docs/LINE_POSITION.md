@@ -73,9 +73,18 @@ Side tracking, newest evidence first:
   least 80 %, outer sensors under 5 %), moving 1/16 per reading, used after
   16 readings. It must not learn while C fades: then it absorbs the rise
   it must detect. The host test found this.
-- The side is kept until the line is centred again; a newer sensor or gap
-  rise replaces it. The hint is used only when no side is kept, because
-  the robot's own correction turns the wheel difference the other way.
+- The side is kept until a newer sensor or gap rise replaces it. Since
+  2026-10-29 it is also kept when the line is centred, as a memory
+  (source "none"): on a curve the line leaves on the same side again, so
+  the position follows C as soon as C fades (C 90 % gives ±5). Before,
+  the side was cleared when centred and the position stayed 0 until the
+  line was half into the gap; then the steering pulled hard. In the last
+  20 s of a track run one wheel was stopped 17 % of the time (jerky
+  turns). The cost: on a straight line that drifts to the other side, the
+  robot first steers the wrong way, a little, until the gap rise on the
+  other side replaces the memory.
+- The hint is used only when no side is kept, because the robot's own
+  correction turns the wheel difference the other way.
 - If the line goes dark from the middle (position under ±75), it is
   probably in a gap: LINE_LOST waits 300 ms instead of 50 ms. The side can
   come late, in the dark, when the gap rise appears; then the position
@@ -190,8 +199,9 @@ drift over 10 s, the range guard, and the line word.
 Side tracking: per-mille resolution, gap left (side, position −20 then
 −50, no LINE_LOST at 50 ms, LINE_LOST LEFT at 300 ms), gap right, equal
 rise on both sides (no side, LINE_LOST at 50 ms), baseline not ready, the
-hint (used, kept while the wheels turn back, cleared when centred), and a
-gap rise and then a sensor replacing the hint, the junction hold (a side
+hint (used, kept while the wheels turn back), the side remembered when
+centred (C 90 % then gives −5), a gap rise and then a sensor replacing
+it, a gap rise on the other side replacing a remembered side, the junction hold (a side
 arm near L keeps RIGHT, the gap rise works again after the hold), and no
 baseline learning during the hold.
 
@@ -207,6 +217,10 @@ hint replaces a kept side, no 300 ms gap wait, no outward hold, side not
 cleared when centred, baseline never ready, outer-only not ±100) each make
 the test fail. Three junction-hold rule changes (baseline learns in the
 hold, gap rise used in the hold, no hold time) each make the test fail.
+
+Side memory, 2026-10-29: the old rule (clear the side when centred)
+makes 4 checks fail. The "side not cleared when centred" rule change
+above is now the intended rule.
 
 ## Bench test
 

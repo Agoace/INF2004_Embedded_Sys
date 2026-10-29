@@ -164,7 +164,7 @@ int main(void) {
     CHECK(TYPE(step(&lp, &HIGH_LINE, 0, 0, 0, 350u)) == VC_EVENT_NONE, "new gap");
     CHECK(TYPE(step(&lp, &HIGH_LINE, 0, 0, 0, 399u)) == VC_EVENT_NONE, "timer restarted");
 
-    /* Right side, and centred (unknown side). */
+    /* Right side, then centred: the side is remembered. */
     lp_init(&lp);
     sweep(&lp, &HIGH_LINE);
     (void)lp_calib_end(&lp, &bad);
@@ -178,8 +178,8 @@ int main(void) {
           "dark from the centre: no LINE_LOST at 50 ms (may be a gap)");
     {
         const vc_event_t e = step(&lp, &HIGH_LINE, 0, 0, 0, 101u + LP_GAP_LOST_MS);
-        CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_UNKNOWN,
-              "lost while centred: unknown side at 300 ms");
+        CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_RIGHT,
+              "lost after centring: remembered side RIGHT at 300 ms");
     }
 
     /* Robot starts off the line: LINE_LOST (position 0, so after 300 ms). */
@@ -336,11 +336,14 @@ int main(void) {
         CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.position == -25,
               "hint: side kept while fading (%u, %d)", lp.fade_side, lp.position);
         (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t++);
-        CHECK(lp.fade_side == VC_LINE_SIDE_UNKNOWN && lp.position == 0,
-              "hint: cleared when centred");
-        /* Newer evidence wins over the hint. */
-        (void)step_pm(&lp, &HIGH_LINE, 0, 600, 0, t++);
-        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT, "hint right: %u", lp.fade_side);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_NONE &&
+                  lp.position == 0,
+              "centred: side remembered (%u, source %u, %d)", lp.fade_side, lp.fade_source,
+              lp.position);
+        /* The remembered side wins over the hint; C fading steers at once. */
+        (void)step_pm(&lp, &HIGH_LINE, 0, 900, 0, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.position == -5,
+              "remembered side, C 90 %%: side %u position %d", lp.fade_side, lp.position);
         (void)step_pm(&lp, &HIGH_LINE, 10, 500, 0, t++);
         CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_GAP,
               "gap rise wins over hint: side %u source %u", lp.fade_side, lp.fade_source);
@@ -348,6 +351,23 @@ int main(void) {
         CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT && lp.fade_source == LP_SIDE_SOURCE_SENSOR &&
                   lp.position == 45,
               "sensor wins: side %u source %u position %d", lp.fade_side, lp.fade_source,
+              lp.position);
+    }
+
+    /* A remembered side is replaced by a gap rise on the other side. */
+    lp_init(&lp);
+    sweep(&lp, &HIGH_LINE);
+    (void)lp_calib_end(&lp, &bad);
+    {
+        uint32_t t = 0u;
+        (void)step_pm(&lp, &HIGH_LINE, 200, 700, 0, t++); /* line left: L sees it */
+        for (; t < 30u; ++t) (void)step_pm(&lp, &HIGH_LINE, 0, 1000, 0, t);
+        CHECK(lp.fade_side == VC_LINE_SIDE_LEFT && lp.fade_source == LP_SIDE_SOURCE_NONE,
+              "remembered LEFT");
+        (void)step_pm(&lp, &HIGH_LINE, 0, 600, 10, t++);
+        CHECK(lp.fade_side == VC_LINE_SIDE_RIGHT && lp.fade_source == LP_SIDE_SOURCE_GAP &&
+                  lp.position == 20,
+              "gap rise RIGHT replaces remembered LEFT: side %u position %d", lp.fade_side,
               lp.position);
     }
 

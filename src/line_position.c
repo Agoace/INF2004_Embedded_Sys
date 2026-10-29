@@ -172,7 +172,13 @@ static void track_side(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms
     }
 
     if (centred) {
-        set_fade_side(lp, VC_LINE_SIDE_UNKNOWN, LP_SIDE_SOURCE_NONE);
+        /* Keep the side, as a memory (source NONE): on a curve the line
+         * leaves on the same side again, so steering starts as soon as C
+         * fades. New evidence for the other side replaces it. Bench run,
+         * 2026-10-29: with the side cleared here, the position stayed 0
+         * until the line was half into the gap, then the steering pulled
+         * hard; one wheel was stopped 17-18 % of the time (jerky turns). */
+        lp->fade_source = (uint8_t)LP_SIDE_SOURCE_NONE;
         return;
     }
     if (left_sees != right_sees) {
