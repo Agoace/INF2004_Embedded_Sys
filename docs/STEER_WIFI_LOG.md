@@ -117,7 +117,7 @@ Each session:
 
 4. Power the robot from VIN. The LED comes on when it joins; the receiver
    prints `[wifi] up, IP …`.
-5. GP20 spin, GP21 start, GP21 stop. The receiver prints the text and the
+5. GP21: spin, then the run (60 s, or GP21 again to stop). The receiver prints the text and the
    live log. After the stop it receives the replay and saves the run to
    `build/steer_logs/run_<time>_boot<id>_run<n>.txt`, with the number of
    entries received live and the number of lost packets.

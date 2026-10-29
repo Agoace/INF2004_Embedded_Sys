@@ -1,8 +1,9 @@
 /*
  * Bench test: follow the line with proportional steering (src/line_steer.c).
  *
- *   GP20  spin calibration (src/line_spin.c)
- *   GP21  start line following (after 1 s) / stop
+ *   GP21  spin calibration (src/line_spin.c), then line following after
+ *         1 s; press again to stop
+ *   GP20  spin calibration only
  *
  * While following, the wheel encoders give the line position module a side
  * hint: if the left wheel has turned more than the right since the line
@@ -16,8 +17,8 @@
  * where the line was last seen (left if unknown) by SEARCH_COUNTS, then to
  * the other side. LINE_FOUND resumes line following.
  *
- * A run stops on: GP21, a failed search, or a stalled wheel. There is no
- * time limit. The log keeps the last LOG_KEEP_MS of the run.
+ * A run stops on: GP21, a failed search, a stalled wheel, or the time
+ * limit RUN_LIMIT_MS. The log keeps the last LOG_KEEP_MS of the run.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
  * (USB_POWER_SAFETY.md). The run is logged every 50 ms and saved to the
@@ -68,6 +69,7 @@ static const steer_config_t STEER = {
 #define LOG_PERIOD_MS 50u
 #define LOG_KEEP_MS 20000u /* the log keeps the last 20 s */
 #define START_DELAY_MS 1000u
+#define RUN_LIMIT_MS 60000u /* operator choice, 2026-10-29 */
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
 #define BUTTON_POLL_MS 20u
@@ -86,10 +88,12 @@ typedef enum {
     STOP_SEARCH_FAILED,
     STOP_STALL_LEFT,
     STOP_STALL_RIGHT,
+    STOP_TIME_LIMIT,
 } stop_reason_t;
 
 static const char *const STOP_NAMES[] = {
     "GP21 pressed", "search failed", "left wheel stalled", "right wheel stalled",
+    "time limit",
 };
 
 static const char *side_name(unsigned int side) {
@@ -394,6 +398,10 @@ static void follow_line(steer_t *steer, bool *previous_run) {
             reason = stalled[0] ? STOP_STALL_LEFT : STOP_STALL_RIGHT;
             break;
         }
+        if (now - t0 >= RUN_LIMIT_MS) {
+            reason = STOP_TIME_LIMIT;
+            break;
+        }
 
         if ((int32_t)(now - next_log_ms) >= 0) {
             next_log_ms += LOG_PERIOD_MS;
@@ -456,7 +464,8 @@ int main(void) {
         gpio_pull_up(buttons[i]);
     }
     sleep_ms(2000);
-    printf("\nLine steering test. GP20: spin calibration. GP21: start/stop.\n");
+    printf("\nLine steering test. GP21: calibrate, then run %lu s (press "
+           "again to stop). GP20: calibrate only.\n", (unsigned long)(RUN_LIMIT_MS / 1000u));
 
     load_run();
     if (run.valid) {
@@ -493,8 +502,10 @@ int main(void) {
         }
 
         if (button_pressed(RUN_BUTTON_PIN, &previous_run)) {
-            if (!lp_calibrated(&lp)) {
-                printf("[run] Not calibrated. Press GP20 first.\n");
+            /* One button: calibrate, then run. The spin ends with the line
+             * under the centre sensor. */
+            if (line_spin_calibrate(&lp) != LINE_SPIN_OK || !lp_calibrated(&lp)) {
+                printf("[run] Calibration failed: not started.\n");
             } else {
                 sleep_ms(START_DELAY_MS);
                 follow_line(&steer, &previous_run);

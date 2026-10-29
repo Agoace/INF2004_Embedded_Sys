@@ -151,8 +151,8 @@ picotool load -f -x build/steer_test.uf2
 
 | Control | Action |
 | --- | --- |
-| GP20 | Spin calibration |
-| GP21 | Start line following after 1 s / stop |
+| GP21 | Spin calibration, then line following after 1 s; press again to stop |
+| GP20 | Spin calibration only |
 
 Settings: base 25 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 50 %,
 right trim +1 %. Base and max are operator choices (base 20 % and max
@@ -167,9 +167,14 @@ wheel turn toward the last side (left if unknown), then through the start
 to an eighth on the other side. LINE_FOUND resumes following. This is a
 bench stand-in for the Vehicle Controller LINE_SEARCH state.
 
-A run stops on GP21, a failed search, or a stalled wheel (no encoder
-count for 500 ms). Since run 3 there is no time limit; the log keeps the
-last 20 s of the run, and the summary covers the whole run.
+A run stops on GP21, a failed search, a stalled wheel (no encoder count
+for 500 ms), or the 60 s time limit. The log keeps the last 20 s of the
+run, and the summary covers the whole run. The Wi-Fi live log covers the
+whole run.
+
+> Update 2026-10-29: one button (GP21) now calibrates and starts the run,
+> and the run stops after 60 s (operator choices). From run 3 to run 6
+> there was no time limit, and GP20 then GP21 were pressed.
 
 This is a driving test, so use 5 V VIN with USB disconnected
 ([USB power safety](USB_POWER_SAFETY.md)). The run is logged every 50 ms
@@ -182,8 +187,10 @@ also go over Wi-Fi ([steering Wi-Fi log](STEER_WIFI_LOG.md)).
 Procedure:
 
 1. Flash with USB. Turn on VIN, then disconnect USB.
-2. Put the robot on the line, centre sensor over it. Press GP20.
-3. Press GP21 and move your hand away. The robot starts after 1 s.
+2. Put the robot on the line, centre sensor over it. Press GP21 and move
+   your hand away. The robot spins to calibrate, stops on the line, and
+   starts 1 s later.
+3. It stops after 60 s, or press GP21 again.
 4. After it stops, connect USB and read the report.
 
 ### Run 1: 2026-10-27, VIN
