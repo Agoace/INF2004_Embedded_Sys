@@ -316,6 +316,32 @@ received 1157 of 1177 entries. At about 51 s the left wheel came off.
   300 ms started less than 1.5 s after one of the 7 junctions. Run 5 (max
   30 %) had none. Next run: straight across junctions and kd 200 %.
 
+### Run 7: 2026-10-29, VIN, Wi-Fi log
+
+Straight across junctions, kd 200 %, base 25 %, gain 200 %, max 50 %. One
+button, stopped by the 60 s time limit. The Wi-Fi log received 1179 of
+1199 entries.
+
+| Measure | Run 6 (first 51 s) | Run 7 (60 s) |
+| --- | ---: | ---: |
+| Mean wheel speed | 99 counts per 50 ms | 101 counts per 50 ms |
+| LINE_LOST | 1.4 per 10 s | 0.8 per 10 s, all found again |
+| Swings from ±50 to ∓50 within 300 ms | 30 | 5 |
+| One wheel stopped | 20.3 % | 11.1 % |
+| Jumps of 10 % duty or more | 51.3 per 10 s | 29.0 per 10 s |
+| Mean change of the inner duty per 50 ms | 6.39 | 4.03 |
+
+- Straight mode (`STRT`) started at all 8 junction readings and lasted
+  300 ms. The 5 swings left are at junctions: about 50 ms before the
+  junction reading the side arm under R gives +50 (38/0); the robot then
+  drives straight and the main line shows at −50. After the straight
+  part the robot was back near 0 within about 0.2 s (run 6: about 0.8 s).
+- One junction (34.75 s) ended in LINE_LOST: during the straight part
+  the line moved to +50 and C faded; after it the robot turned right,
+  swung past the line to −51 and found it again with a search.
+- The receiver was started before `STRT` was added and wrote mode 2 as
+  `?`; the saved file was corrected to `STRT`.
+
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
