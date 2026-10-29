@@ -168,6 +168,10 @@ static inline bool lp_line_seen(const lp_t *lp) {
 static inline bool lp_junction(const lp_t *lp) {
     return (lp->flags & LP_FLAG_JUNCTION) != 0u;
 }
+/* True up to LP_JUNCTION_HOLD_MS after the last junction reading. */
+static inline bool lp_junction_hold(const lp_t *lp) {
+    return (lp->flags & LP_FLAG_JUNCTION_HOLD) != 0u;
+}
 static inline bool lp_line_reads_high(const lp_t *lp) {
     return (lp->flags & LP_FLAG_LINE_HIGH) != 0u;
 }

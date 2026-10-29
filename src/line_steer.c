@@ -29,7 +29,9 @@ steer_word_t steer_update(steer_t *s, int8_t position) {
     const int32_t min = s->cfg.min_pct;
     const int32_t max = s->cfg.max_pct;
     const int32_t speed = s->cfg.base_pct > min ? s->cfg.base_pct - min : 0;
-    const int32_t change = s->has_previous ? (int32_t)position - s->previous : 0;
+    int32_t change = s->has_previous ? (int32_t)position - s->previous : 0;
+    if (change > STEER_MAX_CHANGE) change = STEER_MAX_CHANGE;
+    if (change < -STEER_MAX_CHANGE) change = -STEER_MAX_CHANGE;
     const int32_t turn =
         (int32_t)s->cfg.gain_pct * position + (int32_t)s->cfg.kd_pct * change;
     const int32_t delta = div_10000_rounded(speed * turn);
@@ -58,4 +60,11 @@ steer_word_t steer_update(steer_t *s, int8_t position) {
     s->has_previous = true;
     return (steer_word_t)(((uint32_t)left & STEER_DUTY_MASK) |
                           (((uint32_t)right & STEER_DUTY_MASK) << STEER_RIGHT_SHIFT));
+}
+
+steer_word_t steer_straight(steer_t *s) {
+    steer_reset(s);
+    const steer_word_t w = steer_update(s, 0);
+    steer_reset(s);
+    return w;
 }

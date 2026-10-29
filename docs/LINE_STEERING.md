@@ -66,8 +66,31 @@ Applied in this order, after the trim:
 ## The D part
 
 `kd_pct` reacts to the change of position since the last update (10 ms).
-It works against fast movement of the line, which reduces zig-zag. It is
-0 (off) at first. Turn it on if the robot zig-zags on a straight line.
+It works against fast movement of the line, which reduces zig-zag. While
+the line moves back toward the centre, D turns against the turn, so the
+robot does not swing past the line. In a steady curve the position does
+not change, so D does not weaken the turn.
+
+The change is limited to ±25 per update (`STEER_MAX_CHANGE`): a jump of
+the position between sensors gives only a small kick.
+
+> Update 2026-10-29: `steer_test` uses kd 200 %. In run 6 (D off, base
+> 25 %, max 50 %) the robot swung from 0/50 to 50/0 and back for about
+> 0.8 s after each junction. Example with the `steer_test` settings: line
+> at −30 gives 17/34; the next update at −12 (line coming back fast)
+> gives 27/24, so the robot already turns back; at −12 again, 22/29.
+> Damping from the wheel counts (turn rate) was not used: it also works
+> against the steady turn in a curve, and run 5 lost the line because the
+> turn was too weak.
+
+## Straight across a junction
+
+`steer_straight()` gives both wheels the base duty (with the trim) and
+forgets the previous position, so the next update has no D part.
+`steer_test` uses it while `lp_junction_hold()` is true: up to 300 ms
+after all three sensors saw the line. In run 6 the side arm of the T
+junction under the right sensor pulled the robot right for about 200 ms
+before the swing began. The log shows these updates as mode `STRT`.
 
 The [bench data](LINE_POSITION.md#bench-test) showed that the position is
 mostly 0 or ±100: when only the centre sensor sees the line the position
@@ -96,7 +119,9 @@ cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
 It checks straight, both turn directions, the pivot at ±100, rounding, the
 ratio at another base, gain 50, the max limit in both directions, the
 100 % ceiling, the min limit, the D part (first update, moving, still,
-moving back, reset), the trim (straight, turning, not on a stopped wheel, max limit, negative
+moving back, reset, the ±25 change limit, braking while the line comes
+back), straight across a junction (base and trim, no D before or after),
+the trim (straight, turning, not on a stopped wheel, max limit, negative
 trim), speed-based steering (min as speed zero, gain 150 % points, and no
 step of more than 1 % in the inner wheel for positions 1 to 100 until it
 stops), and the word layout.
@@ -113,6 +138,10 @@ wheel, the old 12 % cliff) each make the test fail. The trim rule change
 first passed, because with min 12 the extra 1 % is set back to 0; a test
 with min 0 was added.
 
+D limit and straight, 2026-10-29: all tests pass. Five rule changes (no
+upper change limit, no lower change limit, D sign swapped, no reset
+before or after the straight word) each make the test fail.
+
 ## Bench test
 
 ```sh
@@ -125,7 +154,7 @@ picotool load -f -x build/steer_test.uf2
 | GP20 | Spin calibration |
 | GP21 | Start line following after 1 s / stop |
 
-Settings: base 25 %, gain 200 %, kd 0, min 12 % (speed zero), max 50 %,
+Settings: base 25 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 50 %,
 right trim +1 %. Base and max are operator choices (base 20 % and max
 30 % until 2026-10-29).
 
@@ -276,11 +305,16 @@ received 1157 of 1177 entries. At about 51 s the left wheel came off.
   duty. On the track that duty gives about 129, so the motor turned
   with no wheel load. The stall guard did not stop the run, because the
   motor turned. At 55 s the robot was lifted.
+- All 30 swings from one side (|position| ≥ 50) to the other within
+  300 ms started less than 1.5 s after one of the 7 junctions. Run 5 (max
+  30 %) had none. Next run: straight across junctions and kd 200 %.
 
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
-- Junctions: the robot goes straight. The Vehicle Controller decides later.
-- Turn on `kd_pct` if the robot zig-zags.
+- Junctions: the robot goes straight for 300 ms. The Vehicle Controller decides later.
+- Tune `kd_pct` on the track.
+- Stop the run when a wheel turns with no load (a wheel came off in run 6)
+  or the readings do not change while the wheels turn.
 - Find the lowest duty at which a loaded wheel turns, to set `min_pct`.
 - Send the steer word to the Motion task when the RTOS wiring is done.

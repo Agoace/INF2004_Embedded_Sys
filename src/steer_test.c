@@ -8,6 +8,10 @@
  * hint: if the left wheel has turned more than the right since the line
  * was last centred, the robot turns right and the line moves to the left.
  *
+ * Junctions: while lp_junction_hold() is true (up to 300 ms after all
+ * three sensors saw the line), the robot drives straight (steer_straight),
+ * so a side arm does not pull it off the main line.
+ *
  * On LINE_LOST the robot searches on the spot: it turns toward the side
  * where the line was last seen (left if unknown) by SEARCH_COUNTS, then to
  * the other side. LINE_FOUND resumes line following.
@@ -53,7 +57,7 @@
 static const steer_config_t STEER = {
     .base_pct = 25u,  /* both wheels when centred (operator, 2026-10-29; was 20) */
     .gain_pct = 200u, /* inner wheel stops at position +/-50 (run 6) */
-    .kd_pct = 0u,     /* D off; add it if the robot zig-zags */
+    .kd_pct = 200u,   /* damping: run 6 swung 0/50 <-> 50/0 after junctions */
     .min_pct = 12u,   /* a loaded wheel starts to turn here: speed zero */
     .max_pct = 50u,   /* operator limit, 2026-10-29 (was 30) */
     .right_trim_pct = 1, /* team drive-straight trim: right motor +1 % */
@@ -96,6 +100,8 @@ static const char *side_name(unsigned int side) {
  * 6-7 wheel hint. */
 #define MODE_FOLLOW 0u
 #define MODE_SEARCH 1u
+#define MODE_STRAIGHT 2u /* straight across a junction */
+static const char *const MODE_NAMES[4] = {"FOLW", "SRCH", "STRT", "?"};
 
 typedef sl_entry_t log_entry_t; /* counts are per 50 ms */
 
@@ -110,7 +116,7 @@ static unsigned int bucket_of(int position) {
     return a == 0 ? 0u : a <= 20 ? 1u : a <= 50 ? 2u : a < 100 ? 3u : 4u;
 }
 
-#define RUN_MAGIC 0x53545234u /* "STR4": a saved run is in flash */
+#define RUN_MAGIC 0x53545235u /* "STR5": a saved run is in flash */
 
 typedef struct {
     uint32_t magic;
@@ -120,6 +126,7 @@ typedef struct {
     int32_t left_counts;
     int32_t right_counts;
     uint32_t steer_updates;
+    uint32_t straight_updates; /* steer updates driven straight at a junction */
     uint32_t sum_abs_position;
     uint32_t bucket[BUCKETS];
     uint32_t source_updates[4]; /* steer updates per lp_side_source_t */
@@ -229,6 +236,8 @@ static void print_summary(void) {
             printf("  %s: %lu%%", BUCKET_NAMES[b],
                    (unsigned long)(run.bucket[b] * 100u / run.steer_updates));
         }
+        printf("\n[run] straight at junctions %lu%% of steer updates",
+               (unsigned long)(run.straight_updates * 100u / run.steer_updates));
         printf("\n[run] side known from: sensor %lu%%  gap rise %lu%%  wheel hint %lu%%\n",
                (unsigned long)(run.source_updates[LP_SIDE_SOURCE_SENSOR] * 100u /
                                run.steer_updates),
@@ -249,7 +258,7 @@ static void print_log(void) {
     for (uint32_t i = run.log_total - kept; i < run.log_total; ++i) {
         const log_entry_t *e = &run.log[i % LOG_ENTRIES];
         printf("[log] %6lu %s %+4d  %3d %3d  %4u %4u %4u  %s %-6s %s  %4d %4d\n",
-               (unsigned long)(i * LOG_PERIOD_MS), (e->info & 3u) == MODE_SEARCH ? "SRCH" : "FOLW",
+               (unsigned long)(i * LOG_PERIOD_MS), MODE_NAMES[e->info & 3u],
                e->position, e->left_pct, e->right_pct, e->raw[0], e->raw[1], e->raw[2],
                side_name((e->info >> 2) & 3u), SOURCE[(e->info >> 4) & 3u],
                side_name((e->info >> 6) & 3u), e->left_counts, e->right_counts);
@@ -290,6 +299,7 @@ static void follow_line(steer_t *steer, bool *previous_run) {
     int32_t last_count[2] = {start[0], start[1]};
     uint32_t moved_ms[2] = {t0, t0};
     int duty[2] = {0, 0};
+    bool straight = false; /* driving straight across a junction */
     int32_t heading = 0; /* left minus right counts since the line was centred */
     uint16_t raw[LP_SENSORS] = {0u, 0u, 0u};
     search_t search = {0};
@@ -354,7 +364,10 @@ static void follow_line(steer_t *steer, bool *previous_run) {
             lp_set_hint(&lp, heading > HINT_COUNTS    ? VC_LINE_SIDE_LEFT
                              : heading < -HINT_COUNTS ? VC_LINE_SIDE_RIGHT
                                                       : VC_LINE_SIDE_UNKNOWN);
-            const steer_word_t w = steer_update(steer, lp.position);
+            straight = lp_junction_hold(&lp);
+            const steer_word_t w =
+                straight ? steer_straight(steer) : steer_update(steer, lp.position);
+            run.straight_updates += straight ? 1u : 0u;
             duty[0] = (int)steer_left(w);
             duty[1] = (int)steer_right(w);
             drive_set(duty[0], duty[1]);
@@ -389,7 +402,9 @@ static void follow_line(steer_t *steer, bool *previous_run) {
                     .position = lp.position,
                     .left_pct = (int8_t)duty[0],
                     .right_pct = (int8_t)duty[1],
-                    .info = (uint8_t)((search.active ? MODE_SEARCH : MODE_FOLLOW) |
+                    .info = (uint8_t)((search.active ? MODE_SEARCH
+                                       : straight    ? MODE_STRAIGHT
+                                                     : MODE_FOLLOW) |
                                       ((lp.fade_side & 3u) << 2) |
                                       ((lp.fade_source & 3u) << 4) |
                                       ((lp.hint & 3u) << 6)),

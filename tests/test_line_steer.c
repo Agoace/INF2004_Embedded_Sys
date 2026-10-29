@@ -93,6 +93,35 @@ int main(void) {
     steer_reset(&s);
     expect(&s, 40, 42u, 18u, "after reset: P only");
 
+    /* D: the change is limited to STEER_MAX_CHANGE (25) per update. */
+    s = make(30u, 100u, 50u, 0u, 100u);
+    expect(&s, 0, 30u, 30u, "D limit: start");
+    expect(&s, 100, 64u, 0u, "D limit: jump +100 counts as +25 (P 30 + D 4)");
+    expect(&s, 0, 26u, 34u, "D limit: jump -100 counts as -25");
+
+    /* steer_test settings with D: braking while the line comes back. */
+    {
+        const steer_config_t cfg = {25u, 200u, 200u, 12u, 50u, 1};
+        steer_init(&s, &cfg);
+        expect(&s, -30, 17u, 34u, "kd 200: line left, no D yet");
+        expect(&s, -12, 27u, 24u, "kd 200: line returns fast: D turns the other way");
+        expect(&s, -12, 22u, 29u, "kd 200: line still: P only");
+    }
+
+    /* Straight: base and trim, no D afterwards. */
+    {
+        const steer_config_t cfg = {20u, 100u, 50u, 12u, 30u, 1};
+        steer_init(&s, &cfg);
+        expect(&s, 40, 23u, 18u, "straight test: start at +40");
+        const steer_word_t w = steer_straight(&s);
+        if (steer_left(w) != 20u || steer_right(w) != 21u) {
+            printf("FAIL straight: %u/%u, want 20/21 (no D from +40)\n", steer_left(w),
+                   steer_right(w));
+            ++failures;
+        }
+        expect(&s, 40, 23u, 18u, "after straight: P only, no D from 0 to +40");
+    }
+
     /* Trim: +1 on the right wheel. */
     {
         const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1};

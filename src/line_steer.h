@@ -22,6 +22,15 @@
  * robot turns right toward the line. With min_pct 0 the rule is the plain
  * duty ratio.
  *
+ * D (damping): kd_pct times the change of position since the last update
+ * (10 ms). While the line moves back toward the centre, D works against
+ * the turn, so the robot does not swing past the line. In a steady curve
+ * the position does not change, so D does not weaken the turn. The change
+ * is limited to +/-STEER_MAX_CHANGE per update: a position jump between
+ * sensors only gives a small kick. Bench run 6, 2026-10-29: with D off,
+ * base 25 % and max 50 %, the robot swung from 0/50 to 50/0 and back for
+ * about 0.8 s after each junction.
+ *
  * Trim: right_trim_pct is added to the duty of the right wheel when it
  * turns (a negative trim adds to the left wheel), so the robot drives
  * straight when the two motors differ. The limits below still apply.
@@ -46,6 +55,9 @@ typedef uint16_t steer_word_t;
 #define STEER_DUTY_MASK 0x7Fu
 #define STEER_RIGHT_SHIFT 7u
 
+/* Largest position change per update used by the D part. */
+#define STEER_MAX_CHANGE 25
+
 typedef struct {
     uint8_t base_pct; /* duty of both wheels when the line is centred */
     uint8_t gain_pct; /* P: 100 = inner wheel stops at position +/-100 */
@@ -69,6 +81,12 @@ void steer_reset(steer_t *s);
 
 /* Call at a fixed period (10 ms). */
 steer_word_t steer_update(steer_t *s, int8_t position);
+
+/* Drive straight: both wheels at base (with the trim). Use it in place of
+ * steer_update() while the line position must not be used, for example
+ * across a junction, where a side arm pulls the position to one side. It
+ * forgets the previous position, so the next steer_update() has no D part. */
+steer_word_t steer_straight(steer_t *s);
 
 static inline unsigned int steer_left(steer_word_t w) {
     return w & STEER_DUTY_MASK;
