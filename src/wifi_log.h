@@ -10,7 +10,8 @@
  *     in the main loop finishes it, and joins again if the link is lost;
  *   - a send without a link is dropped (the flash log is the backup);
  *   - printf output is also kept in a 2 KB buffer and sent as TEXT
- *     packets from wifi_log_poll(); text that does not fit is dropped.
+ *     packets from wifi_log_poll() once a receiver has said HELLO; text
+ *     that does not fit is dropped.
  *
  * The Pico W LED is on while the Wi-Fi link is up.
  *

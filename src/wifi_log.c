@@ -205,7 +205,8 @@ void wifi_log_poll(uint32_t now_ms) {
             join(now_ms);
         }
     }
-    if (w.up && w.text_used > 0u) {
+    /* Text waits for the receiver: broadcast text was lost on the track. */
+    if (w.up && w.have_receiver && w.text_used > 0u) {
         const size_t n = w.text_used < TEXT_PACKET_BYTES ? w.text_used : TEXT_PACKET_BYTES;
         (void)send_packet(SL_TYPE_TEXT, (const uint8_t *)w.text, n);
         memmove(w.text, &w.text[n], w.text_used - n);
