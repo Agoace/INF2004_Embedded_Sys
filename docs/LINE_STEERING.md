@@ -125,8 +125,9 @@ picotool load -f -x build/steer_test.uf2
 | GP20 | Spin calibration |
 | GP21 | Start line following after 1 s / stop |
 
-Settings: base 20 %, gain 150 %, kd 0, min 12 % (speed zero), max 30 %,
-right trim +1 %. Base and max are operator choices.
+Settings: base 20 %, gain 200 %, kd 0, min 12 % (speed zero), max 50 %,
+right trim +1 %. Base and max are operator choices (max 30 % until
+2026-10-29).
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -228,6 +229,30 @@ the "before" numbers from its last 20 s.
   the time, and nothing between 12/29 and 0/30.
 - The side memory helped a little; the remaining jumps come from the
   12 % to 0 step. Speed-based steering (above) was added after this run.
+
+### Run 5: 2026-10-29, VIN, Wi-Fi log
+
+Speed-based steering, gain 150 %, max 30 %. 98 s, stopped by GP21. The
+Wi-Fi log received 1927 of 1962 entries.
+
+| Measure | Run 4 | Run 5 |
+| --- | ---: | ---: |
+| Jumps of 10 % duty or more | 31 per 10 s | 26.5 per 10 s |
+| One wheel stopped | 15.4 % | 12.9 % |
+| Mean change of the inner duty per 50 ms | 3.39 | 2.85 |
+| LINE_LOST | 5 in 66 s | **30 in 98 s**, all found again |
+| \|pos\| 51–99 | about 7 % | 18 % |
+
+- Smoother, but too weak in tight curves: at position −50 the wheels were
+  14/27, the line went out past the outer sensor, and the search turned
+  back to it (about 0.1 s). The searches came in groups at the tight
+  curves.
+- The track has one ramp per lap (about 10 s). On every climb the right
+  sensor read 1200–1600 raw (about 200 on the flat) for 2–4 s. There was
+  no LINE_LOST on the ramps, and the wheel speed did not change at 20 %
+  duty. The floor learning followed the higher right reading, so it was
+  not taken as the line; on the ramp the right sensor is less sensitive.
+- Next run: gain 200 % (inner wheel stops at ±50) and max 50 %.
 
 ## Open items
 
