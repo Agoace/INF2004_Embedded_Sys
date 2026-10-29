@@ -256,6 +256,27 @@ Wi-Fi log received 1927 of 1962 entries.
   (speed above the start duty 13 instead of 8, about 60 % faster), on a
   lap without the ramp.
 
+### Run 6: 2026-10-29, VIN, Wi-Fi log
+
+Base 25 %, gain 200 %, max 50 %. 59 s, stopped by GP21. The Wi-Fi log
+received 1157 of 1177 entries. At about 51 s the left wheel came off.
+
+| Measure (until the wheel came off, 51 s) | Run 5 | Run 6 |
+| --- | ---: | ---: |
+| Mean wheel speed | 72 counts per 50 ms | 99 counts per 50 ms |
+| LINE_LOST | 2.7 per 10 s | 1.4 per 10 s, all found again |
+| One wheel stopped | 12.9 % | 20.3 % |
+| Jumps of 10 % duty or more | 26.5 per 10 s | 51.3 per 10 s |
+
+- About 38 % faster, with half the line losses.
+- The duty jumps are larger because the duty range is larger: at
+  49.8 s the wheels went from 0/50 to 50/0 in 100 ms.
+- From 51.3 s the sensor readings did not change (the robot did not
+  move) while the left wheel turned at 214 counts per 50 ms at 38 %
+  duty. On the track that duty gives about 129, so the motor turned
+  with no wheel load. The stall guard did not stop the run, because the
+  motor turned. At 55 s the robot was lifted.
+
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
