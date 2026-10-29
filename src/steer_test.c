@@ -58,11 +58,11 @@
 
 /* Steering settings for this test. */
 static const steer_config_t STEER = {
-    .base_pct = 33u,  /* both wheels when centred; 12 + 3 x 21 = 75 at +/-100 (was 25) */
+    .base_pct = 33u,  /* both wheels when centred (was 25) */
     .gain_pct = 200u, /* inner wheel stops at position +/-50 (run 6) */
     .kd_pct = 200u,   /* damping: run 6 swung 0/50 <-> 50/0 after junctions */
     .min_pct = 12u,   /* a loaded wheel starts to turn here: speed zero */
-    .max_pct = 75u,   /* operator limit, 2026-10-29 (was 50, before that 30) */
+    .max_pct = 55u,   /* run 8 at 75 % oscillated; pivot about 55/0 (run 7: 50/0) */
     .right_trim_pct = 1, /* team drive-straight trim: right motor +1 % */
 };
 

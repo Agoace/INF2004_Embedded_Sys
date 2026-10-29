@@ -156,19 +156,19 @@ picotool load -f -x build/steer_test.uf2
 | GP21 | Spin calibration, then line following after 1 s; press again to stop |
 | GP20 | Spin calibration only |
 
-Settings: base 33 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 75 %,
+Settings: base 33 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 55 %,
 right trim +1 %. Max is an operator choice (30 %, then 50 %, then 75 %
-on 2026-10-29); base 33 % is chosen so the outer wheel reaches max at
-±100: 12 + 3 × 21 = 75.
+on 2026-10-29). Run 8 at max 75 % oscillated, so max is 55 % since then:
+fast straights with pivots close to run 7 (50/0).
 
-| Position | Left / right duty (base 33 %) |
+| Position | Left / right duty (base 33 %, max 55 %) |
 | ---: | --- |
 | 0 | 33 / 34 |
 | +10 | 37 / 30 |
 | +25 | 44 / 23 |
 | +40 | 50 / 17 |
 | +50 | 54 / 0 |
-| +100 | 75 / 0 |
+| +100 | 55 / 0 |
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -380,6 +380,8 @@ oscillation.
   past the line in the next 50 ms.
 - Duty 0 lets a wheel coast (both driver inputs low), so a 75 % pivot
   keeps turning after the duty changes.
+- Next run: max 55 % (base 33 % kept). If curves are lost, brake the
+  inner wheel instead of letting it coast.
 
 ## Open items
 
