@@ -180,12 +180,12 @@ to an eighth on the other side. LINE_FOUND resumes following. This is a
 bench stand-in for the Vehicle Controller LINE_SEARCH state.
 
 A run stops on GP21, a failed search, a stalled wheel (no encoder count
-for 500 ms), or the 60 s time limit. The log keeps the last 20 s of the
+for 500 ms), or the 45 s time limit. The log keeps the last 20 s of the
 run, and the summary covers the whole run. The Wi-Fi live log covers the
 whole run.
 
 > Update 2026-10-29: one button (GP21) now calibrates and starts the run,
-> and the run stops after 60 s (operator choices). From run 3 to run 6
+> and the run stops after 60 s (operator choices; 45 s since run 9). From run 3 to run 6
 > there was no time limit, and GP20 then GP21 were pressed.
 
 This is a driving test, so use 5 V VIN with USB disconnected
@@ -202,7 +202,7 @@ Procedure:
 2. Put the robot on the line, centre sensor over it. Press GP21 and move
    your hand away. The robot spins to calibrate, stops on the line, and
    starts 1 s later.
-3. It stops after 60 s, or press GP21 again.
+3. It stops after 45 s, or press GP21 again.
 4. After it stops, connect USB and read the report.
 
 ### Run 1: 2026-10-27, VIN

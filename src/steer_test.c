@@ -71,7 +71,7 @@ static const steer_config_t STEER = {
 #define LOG_PERIOD_MS 50u
 #define LOG_KEEP_MS 20000u /* the log keeps the last 20 s */
 #define START_DELAY_MS 1000u
-#define RUN_LIMIT_MS 60000u /* operator choice, 2026-10-29 */
+#define RUN_LIMIT_MS 45000u /* operator choice, 2026-10-29 (was 60 s) */
 /* Straight across a junction: at most this mean wheel travel. Run 6: the
  * side arm pulled the robot for about 400 counts; run 7: 300 ms (about
  * 600 counts) once let the main line drift to the edge. */
