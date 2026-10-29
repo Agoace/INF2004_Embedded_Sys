@@ -51,7 +51,7 @@
 
 /* Steering settings for this test. */
 static const steer_config_t STEER = {
-    .base_pct = 20u,  /* both wheels when centred (operator, 2026-10-27) */
+    .base_pct = 25u,  /* both wheels when centred (operator, 2026-10-29; was 20) */
     .gain_pct = 200u, /* inner wheel stops at position +/-50 (run 6) */
     .kd_pct = 0u,     /* D off; add it if the robot zig-zags */
     .min_pct = 12u,   /* a loaded wheel starts to turn here: speed zero */

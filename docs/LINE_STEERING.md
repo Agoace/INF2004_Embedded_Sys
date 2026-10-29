@@ -125,9 +125,9 @@ picotool load -f -x build/steer_test.uf2
 | GP20 | Spin calibration |
 | GP21 | Start line following after 1 s / stop |
 
-Settings: base 20 %, gain 200 %, kd 0, min 12 % (speed zero), max 50 %,
-right trim +1 %. Base and max are operator choices (max 30 % until
-2026-10-29).
+Settings: base 25 %, gain 200 %, kd 0, min 12 % (speed zero), max 50 %,
+right trim +1 %. Base and max are operator choices (base 20 % and max
+30 % until 2026-10-29).
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -252,7 +252,9 @@ Wi-Fi log received 1927 of 1962 entries.
   no LINE_LOST on the ramps, and the wheel speed did not change at 20 %
   duty. The floor learning followed the higher right reading, so it was
   not taken as the line; on the ramp the right sensor is less sensitive.
-- Next run: gain 200 % (inner wheel stops at ±50) and max 50 %.
+- Next run: gain 200 % (inner wheel stops at ±50), max 50 %, base 25 %
+  (speed above the start duty 13 instead of 8, about 60 % faster), on a
+  lap without the ramp.
 
 ## Open items
 
