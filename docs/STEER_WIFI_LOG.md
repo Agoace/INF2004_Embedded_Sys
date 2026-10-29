@@ -48,7 +48,7 @@ Robot (Pico W) ──Wi-Fi──▶ phone hotspot (2.4 GHz) ◀──Wi-Fi──
 | The Pico W LED is on while joined | Check at the track without a PC |
 | printf output goes to a 2 KB buffer, sent from the main loop | Text that does not fit is dropped, never waited for |
 | Live log: 5 entries every 250 ms | 4 small packets per second |
-| Replay: the whole kept log (up to 20 s) is sent again when a run stops, and when Wi-Fi joins with a saved run | The receiver fills in lost live packets |
+| Replay: the whole kept log (up to 20 s) is sent again when a run stops, and when the receiver is first heard with a saved run; a replay waits for the receiver's HELLO | The receiver fills in lost live packets; a broadcast replay lost 6 packets |
 | The receiver saves a run when the last replay packet arrives, or 3 s after the last replay packet | A lost last packet does not lose the run |
 
 Without `src/wifi_config.h` the firmware builds without Wi-Fi, with a

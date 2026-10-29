@@ -30,6 +30,9 @@ void wifi_log_init(void);
 void wifi_log_poll(uint32_t now_ms);
 bool wifi_log_up(void);
 
+/* Link up and a receiver has said HELLO: packets go to it directly. */
+bool wifi_log_receiver_known(void);
+
 /* Send one packet: the module adds the 5-byte header (steer_log.h). */
 bool wifi_log_send(unsigned int type, const uint8_t *payload, size_t length);
 

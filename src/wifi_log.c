@@ -217,6 +217,10 @@ bool wifi_log_up(void) {
     return w.up;
 }
 
+bool wifi_log_receiver_known(void) {
+    return w.up && w.have_receiver;
+}
+
 bool wifi_log_send(unsigned int type, const uint8_t *payload, size_t length) {
     if (!w.started) {
         return false;
@@ -241,6 +245,9 @@ void wifi_log_poll(uint32_t now_ms) {
     (void)now_ms;
 }
 bool wifi_log_up(void) {
+    return false;
+}
+bool wifi_log_receiver_known(void) {
     return false;
 }
 bool wifi_log_send(unsigned int type, const uint8_t *payload, size_t length) {

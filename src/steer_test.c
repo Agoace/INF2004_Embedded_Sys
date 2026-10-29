@@ -160,7 +160,7 @@ static void replay_start(void) {
 }
 
 static void replay_step(void) {
-    if (!replay.active || !wifi_log_up()) {
+    if (!replay.active || !wifi_log_receiver_known()) {
         return;
     }
     const uint32_t left = run.log_total - replay.next;
@@ -451,7 +451,7 @@ int main(void) {
     bool previous_spin = false;
     bool previous_run = false;
     bool was_connected = false;
-    bool wifi_was_up = false;
+    bool receiver_was_known = false;
     uint32_t next_report_ms = 0u;
     uint32_t next_idle_print_ms = 0u;
 
@@ -460,13 +460,14 @@ int main(void) {
         wifi_log_poll(now);
         replay_step();
 
-        /* Wi-Fi joined with a saved run: send its summary and log. */
+        /* Receiver found with a saved run: send its summary and log. */
         const bool wifi_up = wifi_log_up();
-        if (wifi_up && !wifi_was_up && run.valid) {
+        const bool receiver = wifi_log_receiver_known();
+        if (receiver && !receiver_was_known && run.valid) {
             print_summary();
             replay_start();
         }
-        wifi_was_up = wifi_up;
+        receiver_was_known = receiver;
 
         if (button_pressed(SPIN_BUTTON_PIN, &previous_spin)) {
             (void)line_spin_calibrate(&lp);
