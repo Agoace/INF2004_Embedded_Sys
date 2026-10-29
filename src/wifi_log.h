@@ -1,8 +1,9 @@
 /*
- * Wi-Fi log: send packets as UDP broadcasts on the local network, port
- * SL_PORT (4243). The PC needs no fixed IP address: any PC on the same
- * network (for example a phone hotspot) can run
- * scripts/steer_log_receiver.py. See docs/STEER_WIFI_LOG.md.
+ * Wi-Fi log: send packets over UDP, port SL_PORT (4243). The PC needs no
+ * fixed IP address: scripts/steer_log_receiver.py sends a HELLO packet
+ * every second, and the robot then sends to its address (unicast, which
+ * Wi-Fi repeats if lost). Until then the robot sends to the broadcast
+ * address. See docs/STEER_WIFI_LOG.md.
  *
  * Wi-Fi never blocks or stops the robot:
  *   - wifi_log_init() starts the connection and returns; wifi_log_poll()

@@ -8,6 +8,11 @@ The robot sends:
   - LOG packets: 50 ms log entries, live during a run, and again as a
     replay when the run stops, so lost live packets can be filled in.
 
+The receiver sends a HELLO packet to the broadcast address once a second.
+The robot then sends to this PC directly (unicast): Wi-Fi repeats lost
+unicast frames, but not broadcast frames. A run is saved when the last
+replay packet arrives, or 3 s after the last replay packet if it is lost.
+
 All packet content is untrusted input: sizes are checked, and text is
 shown without control characters.
 
@@ -17,14 +22,19 @@ shown without control characters.
 
 import argparse
 import pathlib
+import select
 import socket
 import sys
+import time
 from datetime import datetime
 
 PORT = 4243
 VERSION = 1
 TYPE_LOG = 1
 TYPE_TEXT = 2
+TYPE_HELLO = 3
+HELLO_PERIOD_S = 1.0
+REPLAY_QUIET_S = 3.0
 HEADER_BYTES = 5
 LOG_HEADER_BYTES = 5
 ENTRY_BYTES = 11
@@ -99,6 +109,8 @@ class Receiver:
         if version != VERSION:
             print("[recv] ignored packet with version %d" % version)
             return
+        if ptype == TYPE_HELLO:
+            return  # our own HELLO, looped back
         boot = int.from_bytes(data[1:3], "little")
         seq = int.from_bytes(data[3:5], "little")
         self.track_seq(boot, seq)
@@ -139,8 +151,11 @@ class Receiver:
         if count > MAX_ENTRIES or len(body) != LOG_HEADER_BYTES + count * ENTRY_BYTES:
             print("[recv] ignored LOG packet with a bad size")
             return
-        state = self.runs.setdefault((boot, run), {"entries": {}, "live": set()})
+        state = self.runs.setdefault((boot, run),
+                                     {"entries": {}, "live": set(), "replay_at": None})
         replay = bool(flags & FLAG_REPLAY)
+        if replay:
+            state["replay_at"] = time.monotonic()
         if self.live and not replay and not state["live"]:
             print("[log] run %d\n[log] %s" % (run, TABLE_HEADER))
         for i in range(count):
@@ -154,6 +169,13 @@ class Receiver:
                     print("[log] " + format_entry(index, e))
         if flags & FLAG_REPLAY_END:
             self.save_run(boot, run, state)
+
+    def tick(self, now):
+        """Save runs whose last replay packet was lost."""
+        for (boot, run), state in self.runs.items():
+            if state["replay_at"] is not None and now - state["replay_at"] >= REPLAY_QUIET_S:
+                print("[recv] last replay packet of run %d not received" % run)
+                self.save_run(boot, run, state)
 
     def save_run(self, boot, run, state):
         entries = state["entries"]
@@ -170,9 +192,10 @@ class Receiver:
             f.write(TABLE_HEADER + "\n")
             for index in indices:
                 f.write(format_entry(index, entries[index]) + "\n")
-        print("[recv] run %d saved to %s (%d of %d entries; %d live)" % (
-            run, path, len(indices), expected, len(state["live"])))
+        print("[recv] run %d saved to %s (%d of %d entries; %d live; %d packets lost)" % (
+            run, path, len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
         state["live"] = set()
+        state["replay_at"] = None
 
 
 def self_test():
@@ -202,6 +225,16 @@ def self_test():
             if format_entry(10, VECTOR_FIELDS | {"raw": (177, 2300, 4095)}) not in text:
                 print("FAIL run file entry")
                 failures += 1
+        # Last replay packet lost: saved after the quiet time.
+        r.handle(header2[:3] + bytes([3, 0]) + bytes([4, FLAG_REPLAY, 0, 0, 1]) + VECTOR)
+        r.tick(time.monotonic())
+        if list(pathlib.Path(d).glob("run_*_bootbeef_run4.txt")):
+            print("FAIL saved before the quiet time")
+            failures += 1
+        r.tick(time.monotonic() + REPLAY_QUIET_S)
+        if len(list(pathlib.Path(d).glob("run_*_bootbeef_run4.txt"))) != 1:
+            print("FAIL not saved after the quiet time")
+            failures += 1
         # Bad sizes are ignored.
         r.handle(header + bytes([3, 0, 0, 0, 5]) + VECTOR)
         r.handle(b"\x21")
@@ -230,12 +263,26 @@ def main():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     sock.bind(("0.0.0.0", args.port))
+    hello = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    hello.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+    hello_packet = bytes([TYPE_HELLO | (VERSION << 4), 0, 0, 0, 0])
     print("[recv] listening on UDP port %d; saving to %s" % (args.port, args.out))
     receiver = Receiver(args.out, live=not args.quiet)
+    next_hello = 0.0
     try:
         while True:
-            data, _ = sock.recvfrom(2048)
-            receiver.handle(data)
+            now = time.monotonic()
+            if now >= next_hello:
+                next_hello = now + HELLO_PERIOD_S
+                try:
+                    hello.sendto(hello_packet, ("255.255.255.255", args.port))
+                except OSError as error:
+                    print("[recv] HELLO not sent: %s" % error)
+            receiver.tick(now)
+            ready, _, _ = select.select([sock], [], [], 0.2)
+            if ready:
+                data, _ = sock.recvfrom(2048)
+                receiver.handle(data)
             sys.stdout.flush()
     except KeyboardInterrupt:
         print("\n[recv] stopped")

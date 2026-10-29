@@ -40,6 +40,11 @@ static struct {
     uint32_t next_check_ms;
     uint32_t join_ms;
     int status; /* last CYW43_LINK_* seen */
+    /* Receiver address from its HELLO packets; written in the lwIP
+     * receive callback, read in the main loop, both under the lwIP lock. */
+    bool have_receiver;
+    bool receiver_reported;
+    ip_addr_t receiver;
     char text[TEXT_BUFFER_BYTES];
     size_t text_used;
 } w;
@@ -77,6 +82,21 @@ static const char *status_name(int status) {
     }
 }
 
+/* lwIP receive callback (lwIP lock held). */
+static void on_receive(void *arg, struct udp_pcb *pcb, struct pbuf *p, const ip_addr_t *addr,
+                       u16_t port) {
+    (void)arg;
+    (void)pcb;
+    (void)port;
+    uint8_t first = 0u;
+    if (p->tot_len >= SL_HEADER_BYTES && pbuf_copy_partial(p, &first, 1u, 0u) == 1u &&
+        first == (uint8_t)(SL_TYPE_HELLO | (SL_VERSION << 4))) {
+        ip_addr_copy(w.receiver, *addr);
+        w.have_receiver = true;
+    }
+    pbuf_free(p);
+}
+
 static void join(uint32_t now_ms) {
     w.join_ms = now_ms;
     const int r =
@@ -94,6 +114,10 @@ void wifi_log_init(void) {
     cyw43_arch_enable_sta_mode();
     cyw43_arch_lwip_begin();
     w.pcb = udp_new();
+    if (w.pcb != NULL) {
+        (void)udp_bind(w.pcb, IP_ANY_TYPE, SL_PORT);
+        udp_recv(w.pcb, on_receive, NULL);
+    }
     cyw43_arch_lwip_end();
     if (w.pcb == NULL) {
         printf("[wifi] no UDP block: no Wi-Fi log\n");
@@ -105,7 +129,8 @@ void wifi_log_init(void) {
     join(to_ms_since_boot(get_absolute_time()));
 }
 
-/* Send header + payload to the subnet broadcast address. */
+/* Send header + payload to the receiver, or to the subnet broadcast
+ * address until a receiver has said HELLO. */
 static bool send_packet(unsigned int type, const uint8_t *payload, size_t length) {
     if (!w.up) {
         ++w.dropped;
@@ -120,10 +145,14 @@ static bool send_packet(unsigned int type, const uint8_t *payload, size_t length
         uint8_t *out = (uint8_t *)p->payload;
         (void)sl_write_header(out, type, w.boot_id, w.seq);
         memcpy(&out[SL_HEADER_BYTES], payload, length);
-        ip_addr_t broadcast;
-        ip_addr_set_ip4_u32(&broadcast, ip4_addr_get_u32(netif_ip4_addr(nif)) |
-                                            ~ip4_addr_get_u32(netif_ip4_netmask(nif)));
-        sent = udp_sendto(w.pcb, p, &broadcast, SL_PORT) == ERR_OK;
+        ip_addr_t to;
+        if (w.have_receiver) {
+            ip_addr_copy(to, w.receiver);
+        } else {
+            ip_addr_set_ip4_u32(&to, ip4_addr_get_u32(netif_ip4_addr(nif)) |
+                                         ~ip4_addr_get_u32(netif_ip4_netmask(nif)));
+        }
+        sent = udp_sendto(w.pcb, p, &to, SL_PORT) == ERR_OK;
     }
     if (p != NULL) {
         pbuf_free(p);
@@ -163,6 +192,14 @@ void wifi_log_poll(uint32_t now_ms) {
                 printf("[wifi] link lost (status %d)\n", status);
                 w.join_ms = now_ms;
             }
+        }
+        if (w.have_receiver && !w.receiver_reported) {
+            char ip[IPADDR_STRLEN_MAX];
+            cyw43_arch_lwip_begin();
+            ipaddr_ntoa_r(&w.receiver, ip, sizeof ip);
+            cyw43_arch_lwip_end();
+            printf("[wifi] receiver at %s: sending to it directly\n", ip);
+            w.receiver_reported = true;
         }
         if (!up && (status < 0 || now_ms - w.join_ms >= REJOIN_MS)) {
             join(now_ms);

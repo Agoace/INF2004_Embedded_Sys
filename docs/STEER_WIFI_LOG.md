@@ -1,6 +1,7 @@
 # Steering Wi-Fi log
 
-Status: built 2026-10-29; host tests pass; not yet tested on the robot.
+Status: built 2026-10-29. Run 1 on the track: joins and sends, but
+broadcast lost most packets; changed to unicast, not yet tested.
 
 `steer_test` sends its printf output and its 50 ms run log over Wi-Fi, so a
 run on the track can be watched from the laptop without USB. The flash log
@@ -17,11 +18,20 @@ flash log, and USB must stay disconnected while the motors run
 
 ```text
 Robot (Pico W) ──Wi-Fi──▶ phone hotspot (2.4 GHz) ◀──Wi-Fi── laptop
-   UDP broadcast, port 4243                       scripts/steer_log_receiver.py
+   UDP port 4243, to the laptop                   scripts/steer_log_receiver.py
+                 ◀── HELLO broadcast once a second ──
 ```
 
-- The robot sends to the subnet broadcast address. The laptop needs no
-  fixed IP address, and its address is not in the firmware.
+- The receiver broadcasts a HELLO packet once a second. The robot then
+  sends to the address of the HELLO (unicast); until then it sends to the
+  subnet broadcast address. The laptop needs no fixed IP address, and its
+  address is not in the firmware.
+- Unicast, not broadcast, for the log: Wi-Fi repeats a lost unicast
+  frame, but sends a broadcast frame once, at the lowest rate, with no
+  repeat. With broadcast only, run 1 (below) lost about 75 % of the live
+  packets and all of the replay.
+- Any device on the network can send a HELLO and receive the log. This is
+  acceptable on a private hotspot.
 - The Pico W supports 2.4 GHz WPA2 only. School networks that need a user
   login, or that block traffic between devices, do not work.
 - Port 4243 is separate from the JSON telemetry on port 4242
@@ -39,6 +49,7 @@ Robot (Pico W) ──Wi-Fi──▶ phone hotspot (2.4 GHz) ◀──Wi-Fi──
 | printf output goes to a 2 KB buffer, sent from the main loop | Text that does not fit is dropped, never waited for |
 | Live log: 5 entries every 250 ms | 4 small packets per second |
 | Replay: the whole kept log (up to 20 s) is sent again when a run stops, and when Wi-Fi joins with a saved run | The receiver fills in lost live packets |
+| The receiver saves a run when the last replay packet arrives, or 3 s after the last replay packet | A lost last packet does not lose the run |
 
 Without `src/wifi_config.h` the firmware builds without Wi-Fi, with a
 compiler warning.
@@ -121,14 +132,26 @@ python3 scripts/steer_log_receiver.py --self-test
 
 Both sides use the same 11-byte test vector. The C test checks the vector,
 round trips at the field limits, the ±511 clamp, the 12-bit raw mask, and
-the header bytes. The Python test decodes the vector and runs one live and
-one replay packet through the receiver, with one lost packet.
+the header bytes. The Python test decodes the vector, runs one live and
+one replay packet through the receiver with one lost packet, and checks
+the save 3 s after a replay whose last packet is lost.
 
 Result on 2026-10-29: all tests pass. Five C rule changes (field moved by
 one bit, no sign extension, wrong clamp, bits not cleared, high header
 byte lost) and three Python rule changes (no sign extension, field moved,
 lost packets not counted) each make a test fail. A loopback send to the
 receiver printed the text and the entry.
+
+## Track test
+
+### Run 1: 2026-10-29, broadcast only
+
+The robot joined the iPhone hotspot in a few seconds (`172.20.10.8`) and
+sent the saved run from flash: 380 of 400 entries. During a 78 s run the
+receiver got about 400 of about 1565 live entries, in gaps of 0.25–3 s,
+and none of the summary or the replay after the stop. The cause is
+broadcast: no Wi-Fi repeats. The HELLO and unicast were added after this
+run.
 
 ## Open items
 

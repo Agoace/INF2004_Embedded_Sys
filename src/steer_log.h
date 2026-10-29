@@ -9,6 +9,10 @@
  *
  * TEXT packets: the header, then text (the firmware's printf output).
  *
+ * HELLO packets: only the header, sent by the receiver once a second to
+ * the broadcast address. The robot then sends to the receiver's address
+ * (unicast): Wi-Fi repeats lost unicast frames, but not broadcast frames.
+ *
  * LOG packets: the header, then a 5-byte log header, then up to
  * SL_MAX_ENTRIES entries of 11 bytes:
  *
@@ -45,6 +49,7 @@
 
 #define SL_TYPE_LOG 1u
 #define SL_TYPE_TEXT 2u
+#define SL_TYPE_HELLO 3u
 
 #define SL_HEADER_BYTES 5u
 #define SL_LOG_HEADER_BYTES 5u
