@@ -10,8 +10,10 @@
  * was last centred, the robot turns right and the line moves to the left.
  *
  * Junctions: while lp_junction_hold() is true (up to 300 ms after all
- * three sensors saw the line), the robot drives straight (steer_straight),
- * so a side arm does not pull it off the main line.
+ * three sensors saw the line), the robot drives straight (steer_straight)
+ * for at most STRAIGHT_COUNTS of travel, so a side arm does not pull it
+ * off the main line. A distance, not a time, so it does not grow with
+ * the speed.
  *
  * On LINE_LOST the robot searches on the spot: it turns toward the side
  * where the line was last seen (left if unknown) by SEARCH_COUNTS, then to
@@ -56,11 +58,11 @@
 
 /* Steering settings for this test. */
 static const steer_config_t STEER = {
-    .base_pct = 25u,  /* both wheels when centred (operator, 2026-10-29; was 20) */
+    .base_pct = 33u,  /* both wheels when centred; 12 + 3 x 21 = 75 at +/-100 (was 25) */
     .gain_pct = 200u, /* inner wheel stops at position +/-50 (run 6) */
     .kd_pct = 200u,   /* damping: run 6 swung 0/50 <-> 50/0 after junctions */
     .min_pct = 12u,   /* a loaded wheel starts to turn here: speed zero */
-    .max_pct = 50u,   /* operator limit, 2026-10-29 (was 30) */
+    .max_pct = 75u,   /* operator limit, 2026-10-29 (was 50, before that 30) */
     .right_trim_pct = 1, /* team drive-straight trim: right motor +1 % */
 };
 
@@ -70,6 +72,10 @@ static const steer_config_t STEER = {
 #define LOG_KEEP_MS 20000u /* the log keeps the last 20 s */
 #define START_DELAY_MS 1000u
 #define RUN_LIMIT_MS 60000u /* operator choice, 2026-10-29 */
+/* Straight across a junction: at most this mean wheel travel. Run 6: the
+ * side arm pulled the robot for about 400 counts; run 7: 300 ms (about
+ * 600 counts) once let the main line drift to the edge. */
+#define STRAIGHT_COUNTS 450
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
 #define BUTTON_POLL_MS 20u
@@ -304,6 +310,8 @@ static void follow_line(steer_t *steer, bool *previous_run) {
     uint32_t moved_ms[2] = {t0, t0};
     int duty[2] = {0, 0};
     bool straight = false; /* driving straight across a junction */
+    bool was_hold = false;
+    int32_t straight_from = 0; /* mean wheel count at the junction */
     int32_t heading = 0; /* left minus right counts since the line was centred */
     uint16_t raw[LP_SENSORS] = {0u, 0u, 0u};
     search_t search = {0};
@@ -368,7 +376,13 @@ static void follow_line(steer_t *steer, bool *previous_run) {
             lp_set_hint(&lp, heading > HINT_COUNTS    ? VC_LINE_SIDE_LEFT
                              : heading < -HINT_COUNTS ? VC_LINE_SIDE_RIGHT
                                                       : VC_LINE_SIDE_UNKNOWN);
-            straight = lp_junction_hold(&lp);
+            const bool hold = lp_junction_hold(&lp);
+            const int32_t travel = (c[0] + c[1]) / 2;
+            if (hold && !was_hold) {
+                straight_from = travel;
+            }
+            was_hold = hold;
+            straight = hold && travel - straight_from < STRAIGHT_COUNTS;
             const steer_word_t w =
                 straight ? steer_straight(steer) : steer_update(steer, lp.position);
             run.straight_updates += straight ? 1u : 0u;

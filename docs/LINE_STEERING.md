@@ -87,8 +87,10 @@ the position between sensors gives only a small kick.
 
 `steer_straight()` gives both wheels the base duty (with the trim) and
 forgets the previous position, so the next update has no D part.
-`steer_test` uses it while `lp_junction_hold()` is true: up to 300 ms
-after all three sensors saw the line. In run 6 the side arm of the T
+`steer_test` uses it while `lp_junction_hold()` is true (up to 300 ms
+after all three sensors saw the line), for at most 450 counts of mean wheel
+travel (since 2026-10-29, after run 7; a distance does not grow with the
+speed). In run 6 the side arm of the T
 junction under the right sensor pulled the robot right for about 200 ms
 before the swing began. The log shows these updates as mode `STRT`.
 
@@ -154,9 +156,19 @@ picotool load -f -x build/steer_test.uf2
 | GP21 | Spin calibration, then line following after 1 s; press again to stop |
 | GP20 | Spin calibration only |
 
-Settings: base 25 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 50 %,
-right trim +1 %. Base and max are operator choices (base 20 % and max
-30 % until 2026-10-29).
+Settings: base 33 %, gain 200 %, kd 200 %, min 12 % (speed zero), max 75 %,
+right trim +1 %. Max is an operator choice (30 %, then 50 %, then 75 %
+on 2026-10-29); base 33 % is chosen so the outer wheel reaches max at
+±100: 12 + 3 × 21 = 75.
+
+| Position | Left / right duty (base 33 %) |
+| ---: | --- |
+| 0 | 33 / 34 |
+| +10 | 37 / 30 |
+| +25 | 44 / 23 |
+| +40 | 50 / 17 |
+| +50 | 54 / 0 |
+| +100 | 75 / 0 |
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -341,6 +353,9 @@ button, stopped by the 60 s time limit. The Wi-Fi log received 1179 of
   swung past the line to −51 and found it again with a search.
 - The receiver was started before `STRT` was added and wrote mode 2 as
   `?`; the saved file was corrected to `STRT`.
+- Next run: max 75 % (operator), base 33 %, gain 200 % and kd 200 % kept
+  (the same turn ratios; D grows with the speed because the position
+  changes faster), straight part at most 450 counts.
 
 ## Open items
 
