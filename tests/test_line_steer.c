@@ -54,10 +54,35 @@ int main(void) {
     s = make(80u, 100u, 0u, 0u, 127u);
     expect(&s, 50, 100u, 20u, "max limited to 100");
 
-    /* Below min: wheel stopped, not left at a duty that cannot turn it. */
+    /* Speed-based: min 10 is speed zero, base 30 is speed 20. */
     s = make(30u, 100u, 0u, 10u, 100u);
-    expect(&s, 90, 57u, 0u, "3 % is below min 10: stop");
-    expect(&s, 60, 48u, 12u, "12 % is above min: kept");
+    expect(&s, 0, 30u, 30u, "speed-based: straight");
+    expect(&s, 60, 42u, 18u, "speed-based: speed 32/8 -> duty 42/18");
+    expect(&s, 90, 48u, 12u, "speed-based: inner speed 2 -> duty 12, not 0");
+    expect(&s, 100, 50u, 0u, "speed-based: inner speed 0 -> stopped");
+
+    /* steer_test settings: no cliff before the inner wheel stops. */
+    s = make(20u, 150u, 0u, 12u, 30u);
+    expect(&s, 25, 23u, 17u, "gain 150: +25");
+    expect(&s, 50, 26u, 14u, "gain 150: +50 (was 30/0 with the cliff)");
+    expect(&s, 60, 27u, 13u, "gain 150: +60");
+    expect(&s, 66, 28u, 0u, "gain 150: +66 inner stops");
+    expect(&s, 100, 30u, 0u, "gain 150: +100 capped");
+    {
+        unsigned int previous_inner = 20u;
+        for (int pos = 1; pos <= 100; ++pos) {
+            const steer_word_t w = steer_update(&s, (int8_t)pos);
+            const unsigned int inner = steer_right(w);
+            const int smooth = previous_inner >= inner && previous_inner - inner <= 1u;
+            const int stops = inner == 0u && (previous_inner == 13u || previous_inner == 0u);
+            if (!smooth && !stops) {
+                printf("FAIL cliff at position %d: inner %u -> %u\n", pos, previous_inner,
+                       inner);
+                ++failures;
+            }
+            previous_inner = inner;
+        }
+    }
 
     /* D: no D part on the first update, then it reacts to the change. */
     s = make(30u, 100u, 50u, 0u, 100u);
@@ -73,9 +98,16 @@ int main(void) {
         const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1};
         steer_init(&s, &trimmed);
         expect(&s, 0, 20u, 21u, "trim +1: right wheel +1");
-        expect(&s, 25, 25u, 16u, "trim +1 while turning right");
-        expect(&s, 100, 30u, 0u, "trim +1: inner wheel still stops");
-        expect(&s, -50, 0u, 30u, "trim +1: capped at max, turn kept (31 -> 30, 10 -> 9 -> 0)");
+        expect(&s, 25, 22u, 19u, "trim +1 while turning right");
+        expect(&s, 100, 28u, 0u, "trim +1: not on a stopped wheel");
+        expect(&s, -50, 16u, 25u, "trim +1 while turning left");
+        const steer_config_t trimmed_150 = {20u, 150u, 0u, 12u, 30u, 1};
+        steer_init(&s, &trimmed_150);
+        expect(&s, -60, 13u, 28u, "trim +1, gain 150: -60");
+        expect(&s, -100, 0u, 30u, "trim +1: capped at max (33 -> 30)");
+        const steer_config_t trimmed_no_min = {20u, 100u, 0u, 0u, 100u, 1};
+        steer_init(&s, &trimmed_no_min);
+        expect(&s, 100, 40u, 0u, "trim +1, min 0: stopped wheel stays stopped");
         const steer_config_t left_trim = {20u, 100u, 0u, 12u, 30u, -2};
         steer_init(&s, &left_trim);
         expect(&s, 0, 22u, 20u, "trim -2: left wheel +2");

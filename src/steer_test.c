@@ -52,9 +52,9 @@
 /* Steering settings for this test. */
 static const steer_config_t STEER = {
     .base_pct = 20u,  /* both wheels when centred (operator, 2026-10-27) */
-    .gain_pct = 100u, /* line under an outer sensor: inner wheel stops */
+    .gain_pct = 150u, /* inner wheel stops at position +/-67 */
     .kd_pct = 0u,     /* D off; add it if the robot zig-zags */
-    .min_pct = 12u,   /* below this a loaded wheel does not turn */
+    .min_pct = 12u,   /* a loaded wheel starts to turn here: speed zero */
     .max_pct = 30u,   /* operator limit, 2026-10-27 */
     .right_trim_pct = 1, /* team drive-straight trim: right motor +1 % */
 };

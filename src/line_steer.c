@@ -26,16 +26,23 @@ static int32_t apply_floor(int32_t duty, int32_t min_pct) {
 }
 
 steer_word_t steer_update(steer_t *s, int8_t position) {
-    const int32_t base = s->cfg.base_pct;
+    const int32_t min = s->cfg.min_pct;
     const int32_t max = s->cfg.max_pct;
+    const int32_t speed = s->cfg.base_pct > min ? s->cfg.base_pct - min : 0;
     const int32_t change = s->has_previous ? (int32_t)position - s->previous : 0;
     const int32_t turn =
         (int32_t)s->cfg.gain_pct * position + (int32_t)s->cfg.kd_pct * change;
-    const int32_t delta = div_10000_rounded(base * turn);
+    const int32_t delta = div_10000_rounded(speed * turn);
+
+    /* Wheel speed to duty: min_pct is speed zero. */
+    const int32_t left_speed = speed + delta;
+    const int32_t right_speed = speed - delta;
+    int32_t left = left_speed > 0 ? min + left_speed : 0;
+    int32_t right = right_speed > 0 ? min + right_speed : 0;
 
     const int32_t trim = s->cfg.right_trim_pct;
-    int32_t left = base + delta + (trim < 0 ? -trim : 0);
-    int32_t right = base - delta + (trim > 0 ? trim : 0);
+    if (trim > 0 && right > 0) right += trim;
+    if (trim < 0 && left > 0) left -= trim;
     if (left > max) {
         right -= left - max;
         left = max;

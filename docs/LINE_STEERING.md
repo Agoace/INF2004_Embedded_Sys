@@ -13,31 +13,43 @@ right wheel duty.
 
 ## How it works
 
+Steering works on wheel speed, not raw duty. A loaded wheel only starts to
+turn at about `min_pct` (12 %), so `min_pct` is speed zero:
+
 ```text
+speed = base − min
 turn  = gain × position + kd × (position − previous position)
-left  = base + base × turn / 10000
-right = base − base × turn / 10000
+left  = speed + speed × turn / 10000        (wheel speeds)
+right = speed − speed × turn / 10000
+duty  = min + wheel speed, or 0 if the wheel speed is 0 or less
 ```
 
-The correction is a share of the base duty, so it is the same ratio at any
-speed. Our motors are close to linear between 10 % and 60 % duty
-([unloaded speed test](CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)),
-so a duty ratio is close to a speed ratio.
+The correction is a share of the base speed, so it is the same ratio at
+any speed. Above the start duty our motors are close to linear
+([unloaded speed test](CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)).
 
-| Position | Meaning | Wheels (base 20 %, gain 100 %, max 30 %, min 12 %) |
-| ---: | --- | --- |
-| 0 | Line under the centre sensor | 20 / 20: straight |
-| +25 | Line a little right of centre | 25 / 15: turn right |
-| +50 | Line between centre and right | 30 / 0: 30 / 10 after max, 10 is below min |
-| +100 | Line under the right sensor | 30 / 0: pivot right |
-| −50 | Line between left and centre | 0 / 30: turn left |
+| Position | Meaning | Wheels L / R (base 20 %, gain 150 %, min 12 %, max 30 %) | Before (raw duty, gain 100 %) |
+| ---: | --- | --- | --- |
+| 0 | Line under the centre sensor | 20 / 20: straight | 20 / 20 |
+| +25 | Line a little right of centre | 23 / 17 | 25 / 15 |
+| +50 | Line between centre and right | 26 / 14 | **30 / 0** |
+| +66 | | 28 / 0: inner wheel stops | 30 / 0 |
+| +100 | Line under the right sensor | 30 / 0: pivot right | 30 / 0 |
 
-Gain 100 % means: with the line under an outer sensor, the inner wheel stops.
+Gain 100 % means: with the line under an outer sensor, the inner wheel
+stops. Gain 150 % stops it at ±67.
+
+Why: with the raw-duty rule a duty below `min_pct` was set to 0, so the
+inner wheel dropped from 12 % to 0 at position 41. Run 4 below showed the
+steering jumping between "straight" (20/21, 36 % of the time) and "pivot"
+(0/30, 15 %), with about 3 jumps of 10 % duty or more each second. Now the
+inner wheel slows by at most 1 % per step of position until it stops
+(13 % to 0, where the wheel hardly turns).
 
 ## Trim
 
-`right_trim_pct` is added to the right wheel before the limits (a
-negative value adds to the left wheel). The team's drive-straight trim is
+`right_trim_pct` is added to the duty of the right wheel when it turns,
+before the limits (a negative value adds to the left wheel). The team's drive-straight trim is
 +1 % on the right motor. It agrees with the measurement: at 20 % duty the
 left wheel ran about 7 % faster, and because a wheel only starts to turn
 at about 6 % duty, one more percent at 20 % is about 7 % more speed.
@@ -49,8 +61,7 @@ Applied in this order, after the trim:
 | Limit | Rule | Why |
 | --- | --- | --- |
 | `max_pct` | A wheel above it is set to it; the other wheel is lowered by the same amount | Keeps the turn when the outer wheel saturates |
-| No reverse | A wheel below 0 is set to 0 | No pivot on the spot while following |
-| `min_pct` | A wheel below it is set to 0 | A loaded wheel below about 12 % does not turn; it only uses current |
+| `min_pct` and no reverse | A wheel below `min_pct` (for example after the max limit lowered it) is set to 0 | A loaded wheel below about 12 % does not turn; it only uses current. No pivot on the spot while following |
 
 ## The D part
 
@@ -85,14 +96,22 @@ cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
 It checks straight, both turn directions, the pivot at ±100, rounding, the
 ratio at another base, gain 50, the max limit in both directions, the
 100 % ceiling, the min limit, the D part (first update, moving, still,
-moving back, reset), the trim (straight, turning, inner wheel stop, max
-limit, negative trim), and the word layout.
+moving back, reset), the trim (straight, turning, not on a stopped wheel, max limit, negative
+trim), speed-based steering (min as speed zero, gain 150 % points, and no
+step of more than 1 % in the inner wheel for positions 1 to 100 until it
+stops), and the word layout.
 
 Result on 2026-10-27: all tests pass. Six deliberate rule changes (turn
 direction swapped, max without lowering the other wheel, no min limit, D
 on the first update, no 100 % ceiling, no rounding) each make the test
 fail. Three trim rule changes (no left trim, no right trim, negative trim
 on the right wheel) each make the test fail.
+
+Speed-based steering, 2026-10-29: all tests pass. Four rule changes (no
+min offset, speed from base instead of base − min, trim on a stopped
+wheel, the old 12 % cliff) each make the test fail. The trim rule change
+first passed, because with min 12 the extra 1 % is set back to 0; a test
+with min 0 was added.
 
 ## Bench test
 
@@ -106,7 +125,8 @@ picotool load -f -x build/steer_test.uf2
 | GP20 | Spin calibration |
 | GP21 | Start line following after 1 s / stop |
 
-Settings: base 20 %, gain 100 %, kd 0, min 12 %, max 30 % (operator choices).
+Settings: base 20 %, gain 150 %, kd 0, min 12 % (speed zero), max 30 %,
+right trim +1 %. Base and max are operator choices.
 
 While following, the encoders give the line position module its side
 hint: left minus right wheel counts since the line was last centred; more
@@ -188,6 +208,26 @@ mille). No trim yet.
   used for 300 ms after a junction
   ([junction hold](LINE_POSITION.md#the-gaps-between-the-sensors)).
 - Next run: right trim +1 %.
+
+### Run 4: 2026-10-29, VIN, Wi-Fi log
+
+Trim +1 %, side memory through the centre, raw-duty steering (gain 100 %,
+min 12 %). The previous run (91 s, 10 LINE_LOST, all found again) gave
+the "before" numbers from its last 20 s.
+
+| Measure | Before side memory | Run 4 (66 s) |
+| --- | ---: | ---: |
+| One wheel stopped | 17.1 % | 15.4 % |
+| Position 0 | 25.4 % | 22.0 % |
+| Mean change of the inner duty per 50 ms | 4.08 | 3.39 |
+| Jumps of 10 % duty or more | 37 per 10 s | 31 per 10 s |
+| LINE_LOST | — | 5, all found again |
+
+- The operator saw jerky steering in tight turns, "jumping between two
+  steering points". The log agrees: 20/21 for 36 % and 0/30 for 15 % of
+  the time, and nothing between 12/29 and 0/30.
+- The side memory helped a little; the remaining jumps come from the
+  12 % to 0 step. Speed-based steering (above) was added after this run.
 
 ## Open items
 
