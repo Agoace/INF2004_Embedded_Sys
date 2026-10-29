@@ -24,6 +24,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Interrupt and polling conventions | [docs/INTERRUPT_CONVENTIONS.md](INTERRUPT_CONVENTIONS.md) |
 | Motion control record | [docs/MOTION_CONTROL.md](MOTION_CONTROL.md) |
 | Line-following Manager checkpoint | [docs/LINE_MANAGER.md](LINE_MANAGER.md) |
+| IMU moving hump profile | [docs/IMU_HUMP_PROFILE.md](IMU_HUMP_PROFILE.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
 | Parent checkout ledger | [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) |
@@ -49,6 +50,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Integrated line-follow target (Manager + Line + Motion) | [`src/robocar_line_manager.c`](../src/robocar_line_manager.c) |
 | μT-Kernel Line/Manager adapter | [`src/manager/manager_task_utkernel.c`](../src/manager/manager_task_utkernel.c) |
 | Manager host unit tests | [`tests/manager/test_manager.c`](../tests/manager/test_manager.c) |
+| IMU producer core and config | [`src/imu/imu_core.c`](../src/imu/imu_core.c), [`src/imu/imu_config.h`](../src/imu/imu_config.h) |
+| IMU encoder feed adapter | [`src/imu/imu_feed.c`](../src/imu/imu_feed.c) |
+| IMU host unit tests | [`tests/imu/test_imu_hump.c`](../tests/imu/test_imu_hump.c) |
 | Motion host unit tests | [`tests/motion/test_motion.c`](../tests/motion/test_motion.c) |
 | Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
 | Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |

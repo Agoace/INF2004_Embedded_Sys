@@ -16,6 +16,7 @@
  * and the encoder ISR already uses a raw handler. Raw handlers let the two
  * button edges coexist with the encoder edges (docs/INTERRUPT_CONVENTIONS.md).
  */
+#include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -36,12 +37,19 @@
 #include "motion_control.h"
 #include "motion_hal.h"
 
+#include "imu_config.h"
+#include "imu_core.h"
+#include "imu_feed.h"
+#include "imu_hal.h"
+#include "imu_snapshot.h"
+
 #define LINE_SENSOR_COUNT       3u
 #define LINE_SAMPLES            8u
 #define BUTTON_A_GPIO           20u
 #define BUTTON_B_GPIO           21u
 #define MANAGER_PERIOD_MS       1u
 #define REPORT_MS               500u
+#define IMU_REPORT_MS           100u    /* 10 Hz IMU diagnostic line. */
 
 static const uint8_t g_line_gpio[LINE_SENSOR_COUNT] =
 {
@@ -62,6 +70,7 @@ static const line_detector_config_t g_line_cfg =
 
 static line_detector_t        g_lines[LINE_SENSOR_COUNT];
 static repeating_timer_t      g_tick_timer;
+static imu_feed_t             g_imu_feed;
 
 /* ---- Button edge capture (ISR -> 1 ms loop) ---------------------------- */
 
@@ -227,12 +236,82 @@ report (const line_observation_t * p_obs)
            (unsigned long) stats.line_overwrites);
 }
 
+/**
+ * Hand the IMU this cycle's real encoder travel.
+ *
+ * Motion stays the encoder owner: motion_consume_travel() hands out signed
+ * per-wheel deltas and imu_feed converts them. While the Manager is in
+ * RECOVERY the chassis is reversing, so the feed publishes zero distance and
+ * a recovery can never start or modify a hump episode.
+ */
+static void
+feed_imu_encoder_input (void)
+{
+    int16_t d_left  = 0;
+    int16_t d_right = 0;
+
+    motion_consume_travel(&d_left, &d_right);
+
+    bool const reverse = (MANAGER_RECOVERY == manager_get_state());
+    imu_encoder_input_t input;
+
+    (void) imu_feed_step(&g_imu_feed, d_left, d_right, reverse, &input);
+    imu_publish_encoder_input(&input);
+}
+
+/** 10 Hz IMU line: terrain, height, the encoder feed and sensor health. */
+static void
+report_imu (uint32_t now_ms)
+{
+    imu_diag_t diag;
+    imu_snapshot_t snapshot;
+
+    imu_diag_read(&diag);
+
+    if (!imu_snapshot_read(&snapshot))
+    {
+        return;
+    }
+
+    imu_snapshot_fields_t fields;
+
+    imu_snapshot_unpack(&snapshot, &fields);
+
+    long const hump_tenths = (long) lroundf(diag.hump_mm * 10.0f);
+    long const hump_abs    = (hump_tenths < 0) ? -hump_tenths : hump_tenths;
+
+    printf("imu t=%lums acc=%ld,%ld,%ldmg pitch=%ldddg roll=%ldddg "
+           "tilt=%ldddg terr=%s h=%s%ld.%ldmm hi=%umm "
+           "dd=%dmm enc=%d/%d gain=%ld ctrl4=0x%02x i2c=%lu inv=%lu "
+           "cal=%lu miss=%lu\n",
+           (unsigned long) now_ms,
+           (long) lroundf(diag.accel_filt_g[0] * 1000.0f),
+           (long) lroundf(diag.accel_filt_g[1] * 1000.0f),
+           (long) lroundf(diag.accel_filt_g[2] * 1000.0f),
+           (long) lroundf(diag.pitch_deg * 10.0f),
+           (long) lroundf(diag.roll_deg * 10.0f),
+           (long) lroundf(diag.tilt_deg * 10.0f),
+           imu_terrain_name(diag.terrain),
+           (hump_tenths < 0) ? "-" : "", hump_abs / 10, hump_abs % 10,
+           (unsigned) fields.highest_hump_mm,
+           (int) diag.distance_delta_mm,
+           (int) diag.encoder_left_delta, (int) diag.encoder_right_delta,
+           (long) lroundf(diag.gravity_gain * 1000.0f),
+           (unsigned) diag.accel_ctrl4,
+           (unsigned long) diag.i2c_errors,
+           (unsigned long) diag.invalid_samples,
+           (unsigned long) diag.calibration_rejects,
+           (unsigned long) diag.missed_distance);
+}
+
 int
 main (void)
 {
     stdio_init_all();
     motion_hal_pico_init();     /* PWM = 0 first. */
     motion_init();
+
+    (void) imu_hal_bus_init();  /* I2C0 GP0/GP1, DRDY GP6. */
 
     adc_init();
     for (uint32_t s = 0u; s < LINE_SENSOR_COUNT; s++)
@@ -263,17 +342,25 @@ main (void)
     irq_set_enabled(IO_IRQ_BANK0, true);
 
     sleep_ms(1500);
-    printf("\nrobocar_line_manager: Manager + Line + Motion checkpoint\n");
+    printf("\nrobocar_line_manager: Manager + Line + Motion + IMU checkpoint\n");
     printf("WARNING: no physical emergency stop in this build.\n");
     printf("GP20 and GP21 are both line-follow toggles. "
            "Remove motor power to stop.\n");
+    printf("IMU: LSM303DLHC on I2C0, %.0f Hz step, moving hump profile. "
+           "Keep the robot parked and flat for the first 2 s.\n",
+           1000.0f / (float) IMU_CFG_PERIOD_MS);
 
     (void) add_repeating_timer_ms(-(int32_t) MOTION_TICK_MS, tick_cb, NULL,
                                   &g_tick_timer);
 
     manager_init(boot_ms);
 
-    uint32_t last_report = boot_ms;
+    imu_feed_init(&g_imu_feed);
+    imu_init(boot_ms);          /* Self-test, then flat calibration (~2 s). */
+
+    uint32_t last_report     = boot_ms;
+    uint32_t last_imu_report = boot_ms;
+    uint32_t next_imu        = boot_ms;
 
     for (;;)
     {
@@ -287,10 +374,31 @@ main (void)
         poll_buttons(now_ms);
         manager_step(now_ms);
 
+        /* 13 ms IMU cycle. The Manager step has already run, so the reverse
+         * gate in the feed sees this cycle's state. */
+        if ((int32_t) (now_ms - next_imu) >= 0)
+        {
+            feed_imu_encoder_input();
+            imu_step(now_ms);
+
+            next_imu += IMU_CFG_PERIOD_MS;
+
+            if ((int32_t) (now_ms - next_imu) >= 0)
+            {
+                next_imu = now_ms + IMU_CFG_PERIOD_MS;
+            }
+        }
+
         if ((now_ms - last_report) >= REPORT_MS)
         {
             last_report = now_ms;
             report(&obs);
+        }
+
+        if ((now_ms - last_imu_report) >= IMU_REPORT_MS)
+        {
+            last_imu_report = now_ms;
+            report_imu(now_ms);
         }
 
         sleep_ms(MANAGER_PERIOD_MS);

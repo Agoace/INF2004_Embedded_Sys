@@ -135,6 +135,8 @@ Both buttons are active low with the internal pull-up. The filter accepts a rele
 | `src/manager/manager_button.h`, `.c` | Short-press filter shared by both adapters. |
 | `src/manager/manager_task_utkernel.h`, `.c` | μT-Kernel Line and Manager tasks. Compiles only with `MANAGER_USE_UTKERNEL`. |
 | `src/robocar_line_manager.c` | Runnable bare-metal target. |
+| `src/imu/` | IMU hump profile: encoder feed, terrain classifier, height integration. See [IMU moving hump profile](IMU_HUMP_PROFILE.md). |
+| `tests/imu/test_imu_hump.c` | Host tests for the height profile and the encoder feed. |
 | `src/motion/line_motion_bridge.h`, `.c` | The only L/C/R to STEER mapping. |
 | `src/motion/motion_control.c` | Motion, including the bounded `MOTION_CMD_RECOVER` state. |
 | `tests/manager/test_manager.c` | Host unit tests with a simulated Motion HAL. |
@@ -173,7 +175,7 @@ These items are explicitly out of scope for this checkpoint:
 - Barcode-driven navigation, and the barcode capture loop.
 - Telemetry integration and the Wi-Fi transport.
 - Ultrasonic obstacle avoidance.
-- IMU integration.
+- IMU static pose and tilt alerts, roll reporting, static height, a re-calibration request API, and a shared line-calibration gate. The **moving** hump profile is integrated; see [IMU moving hump profile](IMU_HUMP_PROFILE.md).
 - Junction and mission policy. The bridge keeps its current behaviour: unknown, split, and junction patterns steer straight, and the Manager treats them as not lost.
 - Repeated recovery attempts after a timeout.
 - Loaded-wheel geometry, PID tuning, cruise-speed, and coast measurements.

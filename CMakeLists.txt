@@ -199,11 +199,30 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/src/line_detector.c)
         motion_control
     )
 
-    # Integrated checkpoint target: Manager + Line + Motion, bare metal.
+    # --------------------------------------------------------------------
+    # IMU producer: platform-independent hump/attitude core plus the encoder
+    # feed adapter. No SDK types, so the host tests drive it directly.
+    add_library(imu_producer STATIC
+        src/imu/imu_core.c
+        src/imu/imu_snapshot.c
+        src/imu/imu_lsm303.c
+        src/imu/imu_feed.c
+    )
+
+    target_include_directories(imu_producer PUBLIC
+        ${CMAKE_CURRENT_LIST_DIR}/src/imu
+        ${CMAKE_CURRENT_LIST_DIR}/src/motion
+        ${CMAKE_CURRENT_LIST_DIR}/src/common
+    )
+
+    target_compile_options(imu_producer PRIVATE -Wall -Wextra)
+
+    # Integrated checkpoint target: Manager + Line + Motion + IMU, bare metal.
     # No RTOS and no physical emergency stop; see docs/LINE_MANAGER.md.
     add_executable(robocar_line_manager
         src/robocar_line_manager.c
         src/line_detector.c
+        src/imu/imu_hal_pico.c
     )
 
     target_include_directories(robocar_line_manager PRIVATE
@@ -214,7 +233,9 @@ if(EXISTS ${CMAKE_CURRENT_LIST_DIR}/src/line_detector.c)
 
     target_link_libraries(robocar_line_manager PRIVATE
         manager_core
+        imu_producer
         hardware_adc
+        hardware_i2c
     )
 
     pico_enable_stdio_usb(robocar_line_manager 1)

@@ -100,6 +100,18 @@ uint32_t       motion_get_fault_bits(void);
 /** Reset the run odometer (VC calls this on RUN start). */
 void           motion_odometer_reset(void);
 
+/**
+ * @brief Signed encoder counts each wheel travelled since the previous call.
+ *
+ * Motion owns the encoder interrupt and the counts, so this is the only way a
+ * consumer may learn how far the wheels moved. Calling it once per consumer
+ * period yields the per-period deltas; the first call after
+ * motion_odometer_reset() reports zero. Deltas are wrapping-safe and signed, so
+ * reverse travel is negative.
+ */
+void           motion_consume_travel(int16_t * p_left_counts,
+                                    int16_t * p_right_counts);
+
 void           motion_get_gains(motion_gains_t * p_gains);
 void           motion_set_gains(const motion_gains_t * p_gains);
 void           motion_get_stats(motion_stats_t * p_stats);

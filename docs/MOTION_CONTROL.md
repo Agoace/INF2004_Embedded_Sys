@@ -61,6 +61,7 @@ This record describes the Motion Control Task code, the interface that the other
 ### Manager (`motor-line-manager` checkpoint)
 
 - The Manager (see [Line-following Manager checkpoint](LINE_MANAGER.md)) calls `motion_command()` and `motion_request_stop()` only. It never writes PWM and never writes STEER itself.
+- `motion_consume_travel()` hands the caller signed per-wheel count deltas since its previous call. It is how the IMU height profile gets real wheel travel without reading encoder GPIO, so Motion stays the only reader of the counts. Deltas are wrapping-safe, the first call after `motion_odometer_reset()` reports zero, and the two per-motor reads can skew by one count. See [IMU moving hump profile](IMU_HUMP_PROFILE.md).
 - `MOTION_CMD_RECOVER` (arg_a = mm) is a bounded reverse follow. Motion clamps the request to `MOTION_RECOVERY_MAX_MM` (100 mm) and `MOTION_RECOVERY_SPEED_MM_S` (100 mm/s), so no caller can ask for an unbounded reverse.
 - In `MOTION_STATE_RECOVERY` Motion negates both wheel set-points and keeps the STEER from the bridge. The stored left/right bias therefore unwinds while the robot backs up. The STEER sign is not flipped: flipping it would curve away from the line instead of back to it.
 - The manoeuvre ends at the distance budget or at `MOTION_RECOVERY_TIMEOUT_MS` (3 s). Motion then stops and posts `MOTION_EVT_DONE` with `arg = MOTION_DONE_RECOVERY_LIMIT`. The caller decides the fault.

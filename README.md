@@ -22,7 +22,9 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/motion_bench.c`](src/motion_bench.c) — motion bench console for PID, accuracy, stop and stall tests.
 - [`src/robocar_line_follow.c`](src/robocar_line_follow.c) — motion and line-sensing integration target (built when the line files are present).
 - [`src/manager/`](src/manager/manager.h) — line-following Manager: vehicle state, line mailbox, event queue, and recovery policy.
-- [`src/robocar_line_manager.c`](src/robocar_line_manager.c) — integrated Manager, line-sensing and motion target. It has no physical emergency stop; see the [Manager checkpoint](docs/LINE_MANAGER.md).
+- [`src/robocar_line_manager.c`](src/robocar_line_manager.c) — integrated Manager, line-sensing, motion and IMU target. It has no physical emergency stop; see the [Manager checkpoint](docs/LINE_MANAGER.md).
+- [`src/imu/`](src/imu/imu_core.h) — IMU hump profile: encoder-to-distance feed, pitch-times-travel height integration, and the diagnostics line.
+- [`tests/imu/`](tests/imu/test_imu_hump.c) — host unit tests for the height profile and the encoder feed.
 - [`tests/motion/`](tests/motion/test_motion.c) — host unit tests for the motion core.
 - [`tests/manager/`](tests/manager/test_manager.c) — host unit tests for the Manager core.
 
