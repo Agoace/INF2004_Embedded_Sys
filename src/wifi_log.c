@@ -39,6 +39,7 @@ static struct {
     uint32_t dropped;
     uint32_t next_check_ms;
     uint32_t join_ms;
+    int status; /* last CYW43_LINK_* seen */
     char text[TEXT_BUFFER_BYTES];
     size_t text_used;
 } w;
@@ -63,9 +64,24 @@ static stdio_driver_t text_driver = {
 #endif
 };
 
+static const char *status_name(int status) {
+    switch (status) {
+        case CYW43_LINK_DOWN: return "down";
+        case CYW43_LINK_JOIN: return "joining";
+        case CYW43_LINK_NOIP: return "joined, waiting for an IP address";
+        case CYW43_LINK_UP: return "up";
+        case CYW43_LINK_FAIL: return "failed";
+        case CYW43_LINK_NONET: return "network not found";
+        case CYW43_LINK_BADAUTH: return "wrong password";
+        default: return "unknown";
+    }
+}
+
 static void join(uint32_t now_ms) {
     w.join_ms = now_ms;
-    (void)cyw43_arch_wifi_connect_async(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK);
+    const int r =
+        cyw43_arch_wifi_connect_async(WIFI_SSID, WIFI_PASSWORD, CYW43_AUTH_WPA2_AES_PSK);
+    printf("[wifi] joining \"%s\" (start %d)\n", WIFI_SSID, r);
 }
 
 void wifi_log_init(void) {
@@ -85,8 +101,8 @@ void wifi_log_init(void) {
     }
     w.started = true;
     stdio_set_driver_enabled(&text_driver, true);
+    w.status = CYW43_LINK_DOWN;
     join(to_ms_since_boot(get_absolute_time()));
-    printf("[wifi] joining \"%s\" in the background\n", WIFI_SSID);
 }
 
 /* Send header + payload to the subnet broadcast address. */
@@ -129,6 +145,10 @@ void wifi_log_poll(uint32_t now_ms) {
         cyw43_arch_lwip_begin();
         const int status = cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA);
         cyw43_arch_lwip_end();
+        if (status != w.status) {
+            printf("[wifi] status %d: %s\n", status, status_name(status));
+            w.status = status;
+        }
         const bool up = status == CYW43_LINK_UP;
         if (up != w.up) {
             w.up = up;
