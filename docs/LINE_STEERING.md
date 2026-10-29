@@ -383,6 +383,26 @@ oscillation.
 - Next run: max 55 % (base 33 % kept). If curves are lost, brake the
   inner wheel instead of letting it coast.
 
+### Run 9: 2026-10-29, VIN, Wi-Fi log
+
+Base 33 %, max 55 %, gain 200 %, kd 200 %. 45 s, stopped by the time
+limit. The Wi-Fi log received 894 of 899 entries.
+
+| Measure | Run 7 (base 25, max 50) | Run 8 (base 33, max 75) | Run 9 (base 33, max 55) |
+| --- | ---: | ---: | ---: |
+| Speed when centred (counts per 50 ms) | 103 | 145 | 141 |
+| Swings per 10 s | 0.8 | 21.0 | 10.7 |
+| Bursts of 3 or more swings | 0 | 11 | 8 |
+| \|position\| 100 | 1 % | 19 % | 7 % |
+| One wheel stopped | 11.1 % | 34.2 % | 24.6 % |
+| LINE_LOST per 10 s | 0.8 | 0.8 | 1.3, all found again |
+
+- Half the oscillation of run 8, but far more than run 7. The swings
+  are smaller (often ±30 to ±50, not ±100) with a period of about
+  250–300 ms, and they also come on straight parts.
+- The turn rate for a given position is about speed × gain: 13 × 200 =
+  2600 in run 7 (stable), 21 × 200 = 4200 in runs 8 and 9.
+
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
