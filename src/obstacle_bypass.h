@@ -12,17 +12,15 @@
  *           BP_STRAIGHT_CLEAR free readings in a row. Free is the scan rule
  *           (obstacle_profile.h): NO_RETURN, or a valid echo at least
  *           OBSTACLE_PROFILE_GAP_MM farther than the obstacle.
- *   AROUND  Drive forward, in one of three phases:
- *     PASS  Straight, servo at the limit, until the robot has passed the
- *           obstacle: last distance x cos(limit) + pass_extra_mm of mean
- *           wheel travel. The sensor cannot see beside the robot.
- *     WRAP  Steer wrap_deg toward the obstacle side (back toward the line).
- *     EDGE  After a hit (a valid echo nearer than hit_mm): the servo
- *           moves like a rubber band. On a hit at angle t and distance d it
- *           jumps bounce_deg back toward S, and the robot steers at
- *           t + asin(clearance_mm / d) toward S, so the point passes
- *           clearance_mm from the robot's centre line. While clear, the
- *           servo steps toward the obstacle; clear at the limit starts PASS.
+ *   AROUND  Drive forward. The servo always moves like a rubber band:
+ *           while the readings are clear it steps toward the obstacle (and
+ *           stays at the limit); on a hit it jumps bounce_deg back toward
+ *           S. The safe angle is the angle of the latest clear reading, or
+ *           the angle the servo jumps back to after a hit. The robot steers
+ *           at the safe angle + offset_deg toward S. When the obstacle is
+ *           beside the robot (clear at the limit), the robot turns gently
+ *           back toward it (limit - offset), so it follows the obstacle's
+ *           edge round and meets the line again.
  *   DONE    The line sensors see the line again (not a junction reading),
  *           after it was lost for line_arm_ms. The line follower takes over.
  *   FAILED  Time limit, sensor fault, an obstacle too near ahead, or no
@@ -57,21 +55,16 @@
 #define BP_TOO_NEAR_DEG 10
 
 /* Robot geometry, operator measurements 2026-10-30 (about):
- *   wheel contact to wheel contact 111 mm, servo axis to rear axle 65 mm,
- *   wheel diameter 65 mm (circumference 204.204 mm), robot width 160 mm. */
+ *   wheel contact to wheel contact 111 mm, servo axis to rear axle 65 mm. */
 #define BP_HALF_TRACK_TENTHS_MM 555u
 #define BP_WHEELBASE_TENTHS_MM 650u
-#define BP_COUNTS_PER_WHEEL_TURN 2535u
-#define BP_WHEEL_CIRCUMFERENCE_UM 204204u
 
 typedef struct {
     uint16_t hit_mm;        /* a valid echo nearer than this is a hit */
     uint8_t limit_deg;      /* servo and steering limit, each side (<= 30) */
     uint8_t step_deg;       /* servo step toward the obstacle while clear */
     uint8_t bounce_deg;     /* servo step back toward S after a hit */
-    uint8_t wrap_deg;       /* WRAP steering toward the obstacle side */
-    uint16_t clearance_mm;  /* obstacle to robot centre line */
-    uint16_t pass_extra_mm; /* PASS: travel past the last point seen */
+    uint8_t offset_deg;     /* steering = safe angle + this, toward S */
     uint16_t line_arm_ms;   /* line lost this long before it can end the bypass */
     uint16_t pivot_max_ms;  /* pivot time limit */
     uint16_t around_max_ms; /* time limit from the start of AROUND */
@@ -84,13 +77,6 @@ typedef enum {
     BP_DONE = 2,
     BP_FAILED = 3,
 } bp_state_t;
-
-/* AROUND phase: 2 bits. */
-typedef enum {
-    BP_PHASE_EDGE = 0,
-    BP_PHASE_PASS = 1,
-    BP_PHASE_WRAP = 2,
-} bp_phase_t;
 
 /* Failure reason: 3 bits. */
 typedef enum {
@@ -137,7 +123,6 @@ static inline int bp_servo_deg(bp_word_t w) {
 typedef struct {
     bp_config_t cfg;
     uint8_t state;      /* bp_state_t */
-    uint8_t phase;      /* bp_phase_t, in AROUND */
     uint8_t fail;       /* bp_fail_t */
     int8_t side;        /* +1: bypass left (obstacle right); -1: bypass right */
     int8_t servo_deg;   /* commanded servo angle */
@@ -146,13 +131,10 @@ typedef struct {
     bool pending;       /* a reading was triggered and is not in yet */
     bool armed;         /* the line was lost long enough */
     bool seen;          /* PIVOT: the obstacle was in the beam */
-    bool pass_started;  /* PASS: pass_from is set */
     bool dark;
     uint8_t clear_count;
     uint16_t free_mm;     /* PIVOT: a valid echo this far or farther is free */
     uint16_t last_mm;     /* last distance to the obstacle */
-    uint32_t pass_counts; /* PASS: mean wheel travel to drive */
-    int32_t pass_from;    /* PASS: mean wheel count at the start */
     uint32_t settle_ms;   /* no trigger before this time */
     uint32_t state_ms;    /* start of the current state */
     uint32_t dark_ms;     /* start of "line not seen" */
@@ -175,18 +157,8 @@ void bp_triggered(bp_t *bp);
 void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms);
 
 /* Call often (every 10 ms is good). line_seen and junction come from the
- * line position module; travel_counts is the mean of the two wheel counts.
- * Returns the command for the motors and the servo. */
-bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, int32_t travel_counts,
-                    uint32_t now_ms);
-
-/* Smallest whole angle a (0-90 degrees) with sin(a) >= clearance / distance,
- * from a table of sin x 1000 (sin 89 rounds to 1000); 90 when clearance is
- * more than the distance. */
-int bp_clear_angle(uint16_t clearance_mm, uint16_t distance_mm);
-
-/* Millimetres of travel to mean wheel counts, rounded. */
-uint32_t bp_mm_to_counts(uint32_t mm);
+ * line position module. Returns the command for the motors and the servo. */
+bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms);
 
 /*
  * Steering angle to a line_steer position (use gain 100 %, kd 0), by the
@@ -202,9 +174,6 @@ int bp_steer_position(int steer_deg);
 
 static inline bp_state_t bp_state(const bp_t *bp) {
     return (bp_state_t)bp->state;
-}
-static inline bp_phase_t bp_phase(const bp_t *bp) {
-    return (bp_phase_t)bp->phase;
 }
 static inline bp_fail_t bp_fail(const bp_t *bp) {
     return (bp_fail_t)bp->fail;

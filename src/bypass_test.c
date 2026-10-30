@@ -66,31 +66,29 @@ static const steer_config_t STEER_FOLLOW = {
     .right_trim_pct = 1,
 };
 /* Bypass: gain 100 and no damping, so bp_steer_position() gives the wheel
- * speeds of the bicycle model. min_pct is the duty where a turning wheel's
+ * speeds of the bicycle model. Base 20 % (operator, run 5: slower than line
+ * following, 25 %). min_pct is the duty where a turning wheel's
  * speed reaches zero: the speed table (20 % 74, 25 % 101, 33 % 141 counts
  * per 50 ms) is a line through about 5.6 %. Run 3 used 12 (the start duty
  * of a stopped wheel): WRAP 29/22 % gave 117/91 counts, a 467 mm turn
  * radius for a planned 179 mm. */
 static const steer_config_t STEER_BYPASS = {
-    .base_pct = 25u,
+    .base_pct = 20u,
     .gain_pct = 100u,
     .kd_pct = 0u,
     .min_pct = 6u,
     .max_pct = 50u,
     .right_trim_pct = 1,
 };
-/* First values: tune on the track (docs/OBSTACLE_BYPASS.md). Run 2
- * settings: clearance from the robot width (160 mm: 80 mm half + 30 mm
- * margin); pass extra = 65 mm servo to rear axle + 65 mm for the obstacle
- * depth past the last point seen. */
+/* First values: tune on the track (docs/OBSTACLE_BYPASS.md). Steering =
+ * safe angle + offset toward the free side; clear at the limit (30) steers
+ * 30 - 20 = 10 degrees back toward the obstacle. */
 static const bp_config_t BYPASS = {
     .hit_mm = 250u,
     .limit_deg = 30u,
     .step_deg = 5u,
     .bounce_deg = 10u,
-    .wrap_deg = 20u,
-    .clearance_mm = 110u,
-    .pass_extra_mm = 130u,
+    .offset_deg = 20u,
     .line_arm_ms = 200u,
     .pivot_max_ms = 4000u,
     .around_max_ms = 10000u,
@@ -136,7 +134,6 @@ static const char *const FAIL_NAMES[] = {
     "ultrasonic fault", "obstacle too near ahead",
 };
 static const char *const STATE_NAMES[] = {"PIVOT", "AROUND", "DONE", "FAILED"};
-static const char *const PHASE_NAMES[] = {"EDGE", "PASS", "WRAP", "?"};
 
 typedef enum {
     PHASE_FOLLOW,
@@ -211,11 +208,11 @@ static void print_summary(void) {
            run.bypasses, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] bypass: hit %u mm, clearance %u mm, pass extra %u mm, limit %u, step %u, "
-           "bounce %u, wrap %u deg; pivot %d%%; base %u%% max %u%%\n",
-           BYPASS.hit_mm, BYPASS.clearance_mm, BYPASS.pass_extra_mm, BYPASS.limit_deg,
-           BYPASS.step_deg, BYPASS.bounce_deg, BYPASS.wrap_deg, PIVOT_DUTY_PCT,
-           STEER_BYPASS.base_pct, STEER_BYPASS.max_pct);
+    printf("[run] bypass: hit %u mm, limit %u, step %u, bounce %u, offset %u deg; "
+           "pivot %d%%; base %u%% min %u%% max %u%%\n",
+           BYPASS.hit_mm, BYPASS.limit_deg, BYPASS.step_deg, BYPASS.bounce_deg,
+           BYPASS.offset_deg, PIVOT_DUTY_PCT, STEER_BYPASS.base_pct, STEER_BYPASS.min_pct,
+           STEER_BYPASS.max_pct);
 }
 
 static void print_log(void) {
@@ -228,14 +225,13 @@ static void print_log(void) {
                e->left_pct, e->right_pct, e->raw[0], e->raw[1], e->raw[2], e->left_counts,
                e->right_counts);
     }
-    printf("\n[bypass] t_ms servo reading state phase steer\n");
+    printf("\n[bypass] t_ms servo reading state steer\n");
     const uint32_t n = run.bypass_total < BYPASS_RECORDS ? run.bypass_total : BYPASS_RECORDS;
     for (uint32_t i = 0u; i < n; ++i) {
         const sl_bypass_t *b = &run.bypass[i];
         printf("[bypass] %6u %+3d ", b->time_10ms * 10u, b->servo_deg);
         print_reading(b->reading);
-        printf(" %s %s %+d\n", STATE_NAMES[b->state & 3u], PHASE_NAMES[b->phase & 3u],
-               b->steer_deg);
+        printf(" %s %+d\n", STATE_NAMES[b->state & 3u], b->steer_deg);
     }
 }
 
@@ -323,7 +319,7 @@ typedef struct {
     int32_t last_steer[2];
     uint32_t next_watch_ms;
     uint32_t stop_until_ms;
-    uint8_t shown; /* last printed bypass state and phase: state << 2 | phase */
+    uint8_t shown; /* last printed bypass state */
     stop_reason_t reason;
     bool stop;
 } ctx_t;
@@ -378,7 +374,6 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
                 .reading = r,
                 .state = x->bp.state,
                 .steer_deg = x->bp.steer_deg,
-                .phase = x->bp.phase,
             };
         }
         ++run.bypass_total;
@@ -401,7 +396,7 @@ static void start_bypass(ctx_t *x, uint32_t now) {
            : side == OBSTACLE_SIDE_RIGHT ? "RIGHT"
                                          : "NONE");
     bp_init(&x->bp, &BYPASS, side, obstacle_profile_distance(word), now);
-    x->shown = (uint8_t)(x->bp.state << 2 | x->bp.phase);
+    x->shown = x->bp.state;
     printf("[bypass] PIVOT at %lu ms\n", (unsigned long)(now - x->t0));
     steer_set_config(&x->steer, &STEER_BYPASS);
     steer_reset(&x->steer);
@@ -409,24 +404,14 @@ static void start_bypass(ctx_t *x, uint32_t now) {
 }
 
 static void bypass_step(ctx_t *x, const int32_t c[2], uint32_t now) {
-    const bp_word_t w = bp_update(&x->bp, lp_line_seen(&lp), lp_junction(&lp),
-                                  (c[0] + c[1]) / 2, now);
+    const bp_word_t w = bp_update(&x->bp, lp_line_seen(&lp), lp_junction(&lp), now);
     (void)servo_set_pulse_us(servo_pulse(bp_servo_deg(w)));
     const bp_state_t after = bp_state(&x->bp);
     /* State changes also happen in bp_reading(): compare with the last print. */
-    const uint8_t shown = (uint8_t)(x->bp.state << 2 | x->bp.phase);
-    if (shown != x->shown) {
-        x->shown = shown;
-        if (after == BP_AROUND) {
-            printf("[bypass] AROUND %s at %lu ms, steer %+d, last %u mm", PHASE_NAMES[x->bp.phase],
-                   (unsigned long)(now - x->t0), x->bp.steer_deg, x->bp.last_mm);
-            if (x->bp.phase == BP_PHASE_PASS) {
-                printf(", pass %lu counts", (unsigned long)x->bp.pass_counts);
-            }
-            printf("\n");
-        } else {
-            printf("[bypass] %s at %lu ms\n", STATE_NAMES[after], (unsigned long)(now - x->t0));
-        }
+    if (x->bp.state != x->shown) {
+        x->shown = x->bp.state;
+        printf("[bypass] %s at %lu ms, steer %+d, last %u mm\n", STATE_NAMES[after],
+               (unsigned long)(now - x->t0), x->bp.steer_deg, x->bp.last_mm);
     }
     if (after == BP_DONE) {
         ++run.bypasses;
