@@ -352,6 +352,34 @@ always within 30° of the nose) and the slanted face; the operator chose
 option B: the offset is the clear angle for 110 mm at the measured
 distance, and EDGE needs two free readings. That is version 4.
 
+### Runs 12–14: 2026-10-30, version 4 (spiral in, corner hit)
+
+Logs: `build/steer_logs/run_20261030-155756_boot1597_run1.txt`,
+`run_20261030-155915_boot1597_run2.txt`, `run_20261030-160004_boot1597_run3.txt`
+(boot 1597; not in Git). All three ended with "left wheel stalled": the
+front corner against the obstacle.
+
+Distance at each EDGE (first seen reading after TURN):
+
+| Run | Cycle 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 12 | 230 | 204 | 179 | 136 | 131 | 83 | — |
+| 13 | 248 | 205 | 176 | 157 | 119 | 92 | — |
+| 14 (stopped at 112 mm) | 126 | 102 | 83 | — | — | — | — |
+
+Findings (run 12):
+
+1. Each cycle took about 0.5–0.8 s: DRIVE about 190 ms (three readings,
+   about 25 mm), TURN 120–300 ms, EDGE 120–250 ms.
+2. In DRIVE the obstacle was free at −20°, −25° and −30° within about
+   200 ms, although EDGE had just seen it at −25°: the turn away moves it
+   out of view at once, and TURN then turns the robot back. From the wheel
+   counts the heading went 0° → −46° (toward the obstacle) in 4 s.
+3. The edge is found only 5–10° from where TURN first saw it.
+4. The clearance is from the sensor. The robot corner is about 80 mm to
+   the side of the sensor, so a 110 mm sensor clearance is not body
+   clearance when the obstacle is beside the front.
+
 ## Host unit test
 
 ```sh
