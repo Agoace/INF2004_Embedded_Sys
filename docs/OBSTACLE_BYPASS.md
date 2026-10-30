@@ -139,8 +139,9 @@ rear axle is the back wheel. Operator measurements, 2026-10-30 (about):
 | --- | ---: |
 | Track W (wheel contact to wheel contact) | 111 mm |
 | Wheelbase L (servo axis to rear axle) | 65 mm |
-| Wheel diameter | 65 mm (version 2 only) |
-| Robot width (widest point) | 160 mm (version 2 only) |
+| Wheel diameter | 65 mm (versions 2 and 4.1: wheel counts to mm) |
+| Robot width (widest point) | 160 mm (versions 2, 4 and 4.1: clearance) |
+| Robot length (overall) | 190 mm (given after the bypass was shelved; not used in the code) |
 
 At steering angle δ the rear axle turns on radius R = L / tan δ. Each wheel
 then runs at speed × (1 ∓ (W/2)·tan δ / L). `line_steer` with gain 100 %
