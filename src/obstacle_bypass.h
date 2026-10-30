@@ -1,5 +1,5 @@
 /*
- * Obstacle bypass by edge following (docs/OBSTACLE_BYPASS.md).
+ * Obstacle bypass by edge following, version 4 (docs/OBSTACLE_BYPASS.md).
  *
  * Assumption: one isolated obstacle on the line, inside the field of view
  * of the scan. The caller stops the robot at OBST_STOP, runs one scan, and
@@ -12,16 +12,26 @@
  *           BP_STRAIGHT_CLEAR free readings in a row. Free is the scan rule
  *           (obstacle_profile.h): NO_RETURN, or a valid echo at least
  *           OBSTACLE_PROFILE_GAP_MM farther than the obstacle.
- *   AROUND  Drive forward. The servo always moves like a rubber band:
- *           while the readings are clear it steps toward the obstacle (and
- *           stays at the limit); on a hit it jumps bounce_deg back toward
- *           S. The safe angle is the angle of the latest clear reading, or
- *           the angle the servo jumps back to after a hit. The robot steers
- *           at the safe angle + offset_deg toward S. A clear reading at the
- *           limit means the obstacle is out of view: the steering turns one
- *           step_deg more toward it for each such reading (up to the limit),
- *           until the obstacle is seen again. So the robot follows the
- *           obstacle's edge round and meets the line again.
+ *   AROUND  Go round the obstacle in three phases. "Seen" is the pivot
+ *           rule inverted: a valid echo nearer than free_mm.
+ *     DRIVE Drive forward. Steering = angle + clear_angle(clearance, d)
+ *           toward S, from the latest seen point (angle, d) or the edge
+ *           found in EDGE. clear_angle is the smallest angle a with
+ *           sin(a) >= clearance / d, so the sensor end of the robot passes
+ *           that point with clearance_mm to spare. The servo moves like a
+ *           rubber band: a free reading steps it step_deg toward the
+ *           obstacle (the steering does not change); a seen reading sets
+ *           the steering and jumps the servo bounce_deg back toward S. A
+ *           free reading at the limit toward the obstacle: lost, go to TURN.
+ *     TURN  Turn on the spot toward the obstacle, the servo at the limit,
+ *           until a reading is seen. Then EDGE.
+ *     EDGE  Stopped. The servo steps step_deg toward S while the readings
+ *           are seen. A free reading is read again; two free readings at
+ *           the same angle give the edge: steer edge + clear_angle(last d),
+ *           go to DRIVE. (A slanted face can miss one echo.) Seen at the
+ *           limit toward S: the edge is the limit.
+ *           AROUND starts in DRIVE with the edge at the limit, where the
+ *           pivot's last free readings were.
  *   DONE    The line sensors see the line again (not a junction reading),
  *           after it was lost for line_arm_ms. The line follower takes over.
  *   FAILED  Time limit, sensor fault, an obstacle too near ahead, or no
@@ -55,19 +65,21 @@
 #define BP_TOO_NEAR_MM 60u
 #define BP_TOO_NEAR_DEG 10
 
+/* Free readings at one angle that give the edge in EDGE. */
+#define BP_EDGE_FREE 2u
+
 /* Robot geometry, operator measurements 2026-10-30 (about):
  *   wheel contact to wheel contact 111 mm, servo axis to rear axle 65 mm. */
 #define BP_HALF_TRACK_TENTHS_MM 555u
 #define BP_WHEELBASE_TENTHS_MM 650u
 
 typedef struct {
-    uint16_t hit_mm;        /* a valid echo nearer than this is a hit */
+    uint16_t clearance_mm;  /* obstacle point to the robot centre line */
     uint8_t limit_deg;      /* servo and steering limit, each side (<= 30) */
-    uint8_t step_deg;       /* servo step toward the obstacle while clear */
-    uint8_t bounce_deg;     /* servo step back toward S after a hit */
-    uint8_t offset_deg;     /* steering = safe angle + this, toward S */
+    uint8_t step_deg;       /* servo step (DRIVE: toward the obstacle; EDGE: toward S) */
+    uint8_t bounce_deg;     /* DRIVE: servo step back toward S after a seen reading */
     uint16_t line_arm_ms;   /* line lost this long before it can end the bypass */
-    uint16_t pivot_max_ms;  /* pivot time limit */
+    uint16_t pivot_max_ms;  /* time limit of the pivot and of each TURN */
     uint16_t around_max_ms; /* time limit from the start of AROUND */
 } bp_config_t;
 
@@ -79,11 +91,18 @@ typedef enum {
     BP_FAILED = 3,
 } bp_state_t;
 
+/* AROUND phase: 2 bits. */
+typedef enum {
+    BP_PHASE_DRIVE = 0,
+    BP_PHASE_TURN = 1,
+    BP_PHASE_EDGE = 2,
+} bp_phase_t;
+
 /* Failure reason: 3 bits. */
 typedef enum {
     BP_FAIL_NONE = 0,
     BP_FAIL_NO_SIDE = 1,      /* both sides blocked in the scan */
-    BP_FAIL_PIVOT_TIME = 2,   /* the obstacle did not go through the beam */
+    BP_FAIL_PIVOT_TIME = 2,   /* pivot or TURN too long */
     BP_FAIL_AROUND_TIME = 3,  /* line not found again */
     BP_FAIL_SENSOR = 4,       /* ultrasonic fault streak */
     BP_FAIL_TOO_NEAR = 5,     /* obstacle less than 60 mm ahead */
@@ -124,6 +143,7 @@ static inline int bp_servo_deg(bp_word_t w) {
 typedef struct {
     bp_config_t cfg;
     uint8_t state;      /* bp_state_t */
+    uint8_t phase;      /* bp_phase_t, in AROUND */
     uint8_t fail;       /* bp_fail_t */
     int8_t side;        /* +1: bypass left (obstacle right); -1: bypass right */
     int8_t servo_deg;   /* commanded servo angle */
@@ -133,11 +153,12 @@ typedef struct {
     bool armed;         /* the line was lost long enough */
     bool seen;          /* PIVOT: the obstacle was in the beam */
     bool dark;
-    uint8_t clear_count;
-    uint16_t free_mm;     /* PIVOT: a valid echo this far or farther is free */
+    uint8_t clear_count; /* PIVOT: free in a row; EDGE: free at this angle */
+    uint16_t free_mm;     /* a valid echo this far or farther is free */
     uint16_t last_mm;     /* last distance to the obstacle */
     uint32_t settle_ms;   /* no trigger before this time */
     uint32_t state_ms;    /* start of the current state */
+    uint32_t turn_ms;     /* start of the current TURN */
     uint32_t dark_ms;     /* start of "line not seen" */
 } bp_t;
 
@@ -161,6 +182,11 @@ void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms);
  * line position module. Returns the command for the motors and the servo. */
 bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms);
 
+/* Smallest whole angle a (0-90 degrees) with sin(a) >= clearance / distance,
+ * from a table of sin x 1000 (sin 89 rounds to 1000); 90 when clearance is
+ * more than the distance. */
+int bp_clear_angle(uint16_t clearance_mm, uint16_t distance_mm);
+
 /*
  * Steering angle to a line_steer position (use gain 100 %, kd 0), by the
  * bicycle model with the servo as the front wheel: the rear axle turns on
@@ -175,6 +201,9 @@ int bp_steer_position(int steer_deg);
 
 static inline bp_state_t bp_state(const bp_t *bp) {
     return (bp_state_t)bp->state;
+}
+static inline bp_phase_t bp_phase(const bp_t *bp) {
+    return (bp_phase_t)bp->phase;
 }
 static inline bp_fail_t bp_fail(const bp_t *bp) {
     return (bp_fail_t)bp->fail;

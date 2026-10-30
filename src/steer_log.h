@@ -48,7 +48,7 @@
  *   bits 19-29  reading: ultrasonic result bits 0-10 (distance, status)
  *   bits 30-31  bypass state after the reading (bp_state_t)
  *   bits 32-37  steering angle after the reading + 30, degrees (0-60)
- *   bits 38-39  spare, 0
+ *   bits 38-39  AROUND phase after the reading (bp_phase_t: DRIVE, TURN, EDGE)
  *
  * Pure logic, no hardware: host-tested by tests/test_steer_log.c. The
  * host decoder is scripts/steer_log_receiver.py.
@@ -102,6 +102,7 @@ typedef struct {
     uint16_t reading;    /* ultrasonic_result_t; bits 0-10 are kept */
     uint8_t state;       /* bp_state_t */
     int8_t steer_deg;    /* -30..+30 */
+    uint8_t phase;       /* bp_phase_t */
 } sl_bypass_t;
 
 void sl_pack_bypass(const sl_bypass_t *b, uint8_t out[SL_BYPASS_BYTES]);

@@ -1,5 +1,15 @@
 #include "obstacle_bypass.h"
 
+/* sin(0..90 degrees) x 1000, rounded. */
+static const uint16_t SIN_PERMILLE[91] = {
+    0,   17,  35,  52,  70,  87,  105, 122, 139, 156, 174, 191, 208, 225, 242, 259,
+    276, 292, 309, 326, 342, 358, 375, 391, 407, 423, 438, 454, 469, 485, 500, 515,
+    530, 545, 559, 574, 588, 602, 616, 629, 643, 656, 669, 682, 695, 707, 719, 731,
+    743, 755, 766, 777, 788, 799, 809, 819, 829, 839, 848, 857, 866, 875, 883, 891,
+    899, 906, 914, 921, 927, 934, 940, 946, 951, 956, 961, 966, 970, 974, 978, 982,
+    985, 988, 990, 993, 995, 996, 998, 999, 999, 1000, 1000,
+};
+
 /* tan(0..30 degrees) x 1000, rounded. */
 static const uint16_t TAN_PERMILLE[31] = {
     0,   17,  35,  52,  70,  87,  105, 123, 141, 158, 176, 194, 213, 231, 249, 268,
@@ -8,6 +18,17 @@ static const uint16_t TAN_PERMILLE[31] = {
 
 static int clamp_deg(int deg, int limit) {
     return deg > limit ? limit : deg < -limit ? -limit : deg;
+}
+
+int bp_clear_angle(uint16_t clearance_mm, uint16_t distance_mm) {
+    /* sin(a) >= c / d  <=>  sin1000(a) x d >= 1000 x c (no division). */
+    const uint32_t need = 1000u * clearance_mm;
+    for (int a = 0; a <= 90; ++a) {
+        if ((uint32_t)SIN_PERMILLE[a] * distance_mm >= need) {
+            return a;
+        }
+    }
+    return 90;
 }
 
 int bp_steer_position(int steer_deg) {
@@ -65,6 +86,13 @@ void bp_triggered(bp_t *bp) {
     bp->reading_deg = bp->servo_deg;
 }
 
+/* Steer so that the sensor end passes the point (deg, mm) with the
+ * clearance to spare, on the S side. */
+static void steer_past(bp_t *bp, int deg, uint16_t mm) {
+    const int steer = deg + bp->side * bp_clear_angle(bp->cfg.clearance_mm, mm);
+    bp->steer_deg = (int8_t)clamp_deg(steer, bp->cfg.limit_deg);
+}
+
 static void pivot_reading(bp_t *bp, ultrasonic_status_t status, uint16_t mm,
                           uint32_t now_ms) {
     const bool free = status == ULTRASONIC_STATUS_NO_RETURN || mm >= bp->free_mm;
@@ -76,11 +104,11 @@ static void pivot_reading(bp_t *bp, ultrasonic_status_t status, uint16_t mm,
         ++bp->clear_count;
     }
     if (bp->clear_count >= BP_STRAIGHT_CLEAR) {
-        /* The last readings were clear at the limit: that is the safe angle. */
+        /* The last readings were free at the limit: that is the edge. */
         bp->state = BP_AROUND;
+        bp->phase = BP_PHASE_DRIVE;
         bp->state_ms = now_ms;
-        bp->steer_deg = (int8_t)clamp_deg(
-            -bp->side * bp->cfg.limit_deg + bp->side * bp->cfg.offset_deg, bp->cfg.limit_deg);
+        steer_past(bp, -bp->side * bp->cfg.limit_deg, bp->last_mm);
     }
     set_servo(bp, bp->servo_deg, now_ms);
 }
@@ -108,33 +136,59 @@ void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms) {
         return;
     }
 
-    /* AROUND: rubber band. The safe angle is the latest clear angle, or
-     * the angle the servo jumps back to after a hit. */
-    const bool hit = status == ULTRASONIC_STATUS_VALID && mm < bp->cfg.hit_mm;
+    const bool seen = status == ULTRASONIC_STATUS_VALID && mm < bp->free_mm;
     const int at = bp->reading_deg;
     const int limit = bp->cfg.limit_deg;
     const int toward_obstacle = -bp->side;
-    int safe;
-    if (hit) {
-        if (mm < BP_TOO_NEAR_MM && at <= BP_TOO_NEAR_DEG && at >= -BP_TOO_NEAR_DEG) {
-            fail(bp, BP_FAIL_TOO_NEAR);
-            return;
-        }
+    if (seen && mm < BP_TOO_NEAR_MM && at <= BP_TOO_NEAR_DEG && at >= -BP_TOO_NEAR_DEG) {
+        fail(bp, BP_FAIL_TOO_NEAR);
+        return;
+    }
+    if (seen) {
         bp->last_mm = mm;
-        safe = at + bp->side * bp->cfg.bounce_deg;
-        set_servo(bp, safe, now_ms);
-    } else {
-        safe = at;
-        set_servo(bp, at + toward_obstacle * bp->cfg.step_deg, now_ms);
     }
-    int steer = safe + bp->side * bp->cfg.offset_deg;
-    if (!hit && at == toward_obstacle * limit) {
-        /* Not seen even at the limit: turn one step more toward it each
-         * reading, until it is seen again. (The servo walks to the limit in
-         * steps, so the steering before this is limit + offset or less.) */
-        steer = bp->steer_deg + toward_obstacle * bp->cfg.step_deg;
+
+    switch (bp_phase(bp)) {
+    case BP_PHASE_DRIVE:
+        if (seen) {
+            steer_past(bp, at, mm);
+            set_servo(bp, at + bp->side * bp->cfg.bounce_deg, now_ms);
+        } else if (at == toward_obstacle * limit) {
+            bp->phase = BP_PHASE_TURN; /* lost: turn toward it until seen */
+            bp->turn_ms = now_ms;
+            set_servo(bp, at, now_ms);
+        } else {
+            set_servo(bp, at + toward_obstacle * bp->cfg.step_deg, now_ms);
+        }
+        break;
+    case BP_PHASE_TURN:
+        if (seen) {
+            bp->phase = BP_PHASE_EDGE;
+            bp->clear_count = 0u;
+            set_servo(bp, at + bp->side * bp->cfg.step_deg, now_ms);
+        } else {
+            set_servo(bp, at, now_ms);
+        }
+        break;
+    default: /* BP_PHASE_EDGE */
+        if (seen) {
+            bp->clear_count = 0u;
+            if (at == bp->side * limit) {
+                steer_past(bp, at, mm); /* seen across the whole view */
+                bp->phase = BP_PHASE_DRIVE;
+                set_servo(bp, at, now_ms);
+            } else {
+                set_servo(bp, at + bp->side * bp->cfg.step_deg, now_ms);
+            }
+        } else if (++bp->clear_count >= BP_EDGE_FREE) {
+            steer_past(bp, at, bp->last_mm);
+            bp->phase = BP_PHASE_DRIVE;
+            set_servo(bp, at, now_ms);
+        } else {
+            set_servo(bp, at, now_ms); /* read this angle again */
+        }
+        break;
     }
-    bp->steer_deg = (int8_t)clamp_deg(steer, limit);
 }
 
 static bp_word_t word(bp_move_t move, int steer_deg, int servo_deg) {
@@ -166,6 +220,9 @@ bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms) {
             bp->state = BP_DONE;
         } else if (in_state >= bp->cfg.around_max_ms) {
             fail(bp, BP_FAIL_AROUND_TIME);
+        } else if (bp->phase == BP_PHASE_TURN &&
+                   (uint32_t)(now_ms - bp->turn_ms) >= bp->cfg.pivot_max_ms) {
+            fail(bp, BP_FAIL_PIVOT_TIME);
         }
     }
 
@@ -173,6 +230,12 @@ bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms) {
     case BP_PIVOT:
         return word(BP_MOVE_PIVOT, bp->side * BP_ANGLE_BIAS, bp->servo_deg);
     case BP_AROUND:
+        if (bp->phase == BP_PHASE_TURN) {
+            return word(BP_MOVE_PIVOT, -bp->side * BP_ANGLE_BIAS, bp->servo_deg);
+        }
+        if (bp->phase == BP_PHASE_EDGE) {
+            return word(BP_MOVE_STOP, 0, bp->servo_deg);
+        }
         return word(BP_MOVE_STEER, bp->steer_deg, bp->servo_deg);
     default:
         return word(BP_MOVE_STOP, 0, 0);

@@ -20,11 +20,10 @@ static void check(int ok, const char *what) {
 }
 
 static const bp_config_t CFG = {
-    .hit_mm = 250u,
+    .clearance_mm = 110u,
     .limit_deg = 30u,
     .step_deg = 5u,
     .bounce_deg = 10u,
-    .offset_deg = 20u,
     .line_arm_ms = 150u,
     .pivot_max_ms = 4000u,
     .around_max_ms = 10000u,
@@ -48,6 +47,7 @@ static ultrasonic_result_t result(int mm) {
 }
 
 static uint32_t now;
+static uint32_t t0_turn;
 
 /* Obstacle distance from the scan: the pivot needs 260 + 150 = 410 mm. */
 #define OBST_MM 260u
@@ -129,9 +129,10 @@ int main(void) {
     (void)read(&bp, 410); /* free */
     check(bp_state(&bp) == BP_PIVOT, "pivot: 409 mm between frees restarts the count");
     w = read(&bp, NR);
-    check(bp_state(&bp) == BP_AROUND, "pivot: seen, then two free -> AROUND");
-    check(bp_move(w) == BP_MOVE_STEER && bp_steer_deg(w) == -10 && bp_servo_deg(w) == -30,
-          "AROUND start: safe -30 (the limit) + 20 = -10, servo stays at the limit");
+    check(bp_state(&bp) == BP_AROUND && bp_phase(&bp) == BP_PHASE_DRIVE,
+          "pivot: seen, then two free -> AROUND, DRIVE");
+    check(bp_move(w) == BP_MOVE_STEER && bp_steer_deg(w) == -14 && bp_servo_deg(w) == -30,
+          "AROUND start: edge -30 (the limit) + clear angle(409 mm) 16 = -14");
 
     /* No information, and the fault streak. */
     bp = start(OBSTACLE_SIDE_LEFT);
@@ -145,72 +146,120 @@ int main(void) {
     (void)read(&bp, FAULT);
     check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_SENSOR, "fault streak fails");
 
-    /* Rubber band, bypass left (obstacle on the right). */
-    bp = around(OBSTACLE_SIDE_LEFT);
-    w = read(&bp, NR); /* clear at the limit -30 */
-    check(bp_servo_deg(w) == -30 && bp_steer_deg(w) == -15,
-          "not seen at the limit: servo stays, steer one step more (-10 -> -15)");
+    /* Clear angle: smallest a with sin(a) >= 110 / d. */
+    check(bp_clear_angle(110u, 220u) == 30, "clear angle 110/220: 30 (sin 30 = 0.500)");
+    check(bp_clear_angle(110u, 219u) == 31, "clear angle 110/219: 31");
+    check(bp_clear_angle(110u, 300u) == 22, "clear angle 110/300: 22");
+    check(bp_clear_angle(110u, 110u) == 89, "clear angle c = d: 89 (sin 89 rounds to 1000)");
+    check(bp_clear_angle(110u, 109u) == 90, "clear angle c > d: 90");
+    check(bp_clear_angle(110u, 0u) == 90, "clear angle d 0: 90");
+    check(bp_clear_angle(0u, 300u) == 0, "clear angle c 0: 0");
+
+    /* Bypass left (obstacle on the right): DRIVE, lost, TURN, EDGE, DRIVE. */
+    bp = around(OBSTACLE_SIDE_LEFT); /* last seen 300 mm: 22 */
+    w = bp_update(&bp, false, false, now);
+    check(bp_move(w) == BP_MOVE_STEER && bp_steer_deg(w) == -8 && bp_servo_deg(w) == -30,
+          "DRIVE start: -30 + 22 = -8");
+    w = read(&bp, NR); /* free at the limit -30: lost */
+    check(bp_phase(&bp) == BP_PHASE_TURN && bp_move(w) == BP_MOVE_PIVOT &&
+              bp_steer_deg(w) == -30 && bp_servo_deg(w) == -30,
+          "lost at the limit: TURN right on the spot, servo stays");
+    const uint32_t turn_start = now;
     w = read(&bp, NR);
-    check(bp_steer_deg(w) == -20, "not seen again: -20");
-    (void)read(&bp, NR);
-    w = read(&bp, NR);
-    check(bp_steer_deg(w) == -30, "not seen: -25, -30");
-    w = read(&bp, NR);
-    check(bp_steer_deg(w) == -30 && bp_servo_deg(w) == -30, "turn more stops at the limit");
-    w = read(&bp, 200); /* hit at -30 */
-    check(bp_servo_deg(w) == -20 && bp_steer_deg(w) == 0,
-          "hit at -30: bounce to -20 (safe), steer -20 + 20 = 0");
-    check(!bp_wants_reading(&bp, now + 79u) && bp_wants_reading(&bp, now + 80u),
-          "10 degree bounce: 80 ms settle");
-    w = read(&bp, NR); /* clear at -20 */
-    check(bp_servo_deg(w) == -25 && bp_steer_deg(w) == 0,
-          "clear at -20 (not the limit): steer 0, servo -25");
+    check(bp_phase(&bp) == BP_PHASE_TURN && bp_servo_deg(w) == -30, "TURN: free, keep turning");
+    w = read(&bp, 200); /* seen */
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_move(w) == BP_MOVE_STOP &&
+              bp_servo_deg(w) == -25 && bp.last_mm == 200u,
+          "TURN: seen -> EDGE, stop, servo steps to -25");
     check(!bp_wants_reading(&bp, now + 59u) && bp_wants_reading(&bp, now + 60u),
           "5 degree step: 60 ms settle");
-    w = read(&bp, 220); /* hit at -25 */
-    check(bp_servo_deg(w) == -15 && bp_steer_deg(w) == 5, "hit at -25: safe -15, steer +5");
-    w = read(&bp, NR); /* clear at -15 */
-    check(bp_servo_deg(w) == -20 && bp_steer_deg(w) == 5, "clear at -15: steer +5");
-    w = read(&bp, 249); /* hit at -20 */
-    check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == -10, "249 mm is a hit: safe -10, +10");
-    w = read(&bp, 250); /* clear at -10 */
-    check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == -15, "250 mm (hit_mm) is clear");
-    (void)read(&bp, NR); /* -15 */
-    (void)read(&bp, NR); /* -20 */
-    w = read(&bp, NR);   /* -25: steer -5 */
-    check(bp_steer_deg(w) == -5 && bp_servo_deg(w) == -30, "clears walk the servo back");
-    w = read(&bp, NR); /* first clear at the limit: -5 - 5 */
-    check(bp_steer_deg(w) == -10, "at the limit: one step more than at -25");
-    w = read(&bp, NR);
-    check(bp_steer_deg(w) == -15, "then one step more");
+    check(now - turn_start < 4000u, "test timing");
+    w = read(&bp, 190); /* seen at -25 */
+    check(bp_servo_deg(w) == -20 && bp.last_mm == 190u, "EDGE: seen, step on to -20");
+    w = read(&bp, NR); /* free at -20, once */
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_servo_deg(w) == -20,
+          "EDGE: one free reading: read the same angle again");
+    check(!bp_wants_reading(&bp, now + 39u) && bp_wants_reading(&bp, now + 40u),
+          "read again: 40 ms settle");
+    w = read(&bp, 195); /* seen again: a slanted face missed one echo */
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_servo_deg(w) == -15,
+          "EDGE: seen after one free: the count restarts, step on");
+    (void)read(&bp, NR); /* -15, once */
+    w = read(&bp, NR);   /* -15, twice: the edge */
+    /* 110/195 = 0.564: sin 35 = 0.574 -> -15 + 35 = +20 */
+    check(bp_phase(&bp) == BP_PHASE_DRIVE && bp_move(w) == BP_MOVE_STEER &&
+              bp_steer_deg(w) == 20 && bp_servo_deg(w) == -15,
+          "EDGE: two free at -15 -> DRIVE, steer -15 + 35 = +20");
+    w = read(&bp, NR); /* DRIVE: free at -15 */
+    check(bp_servo_deg(w) == -20 && bp_steer_deg(w) == 20,
+          "DRIVE: free steps the servo toward the obstacle; steering stays");
+    w = read(&bp, 250); /* seen at -20 */
+    check(bp_steer_deg(w) == 7 && bp_servo_deg(w) == -10,
+          "DRIVE: seen 250 mm at -20: steer -20 + 27 = +7, bounce to -10");
+    check(!bp_wants_reading(&bp, now + 79u) && bp_wants_reading(&bp, now + 80u),
+          "10 degree bounce: 80 ms settle");
+    (void)read(&bp, NR); /* -10 -> -15 */
+    w = read(&bp, 410);  /* free (410 = free_mm) at -15 */
+    check(bp_steer_deg(w) == 7 && bp_servo_deg(w) == -20, "410 mm is free");
+    w = read(&bp, 409); /* seen at -20 */
+    check(bp_steer_deg(w) == -4 && bp_servo_deg(w) == -10, "409 mm is seen: -20 + 16 = -4");
+    w = read(&bp, NR); /* -10 */
+    w = read(&bp, NR); /* -15 */
+    w = read(&bp, NR); /* -20 */
+    w = read(&bp, NR); /* -25 */
+    check(bp_phase(&bp) == BP_PHASE_DRIVE && bp_servo_deg(w) == -30, "DRIVE until the limit");
+    w = read(&bp, NR); /* free at -30 */
+    check(bp_phase(&bp) == BP_PHASE_TURN, "free at the limit: TURN again");
 
-    /* Rubber band, bypass right (obstacle on the left). */
+    /* Bypass right (obstacle on the left). */
     bp = around(OBSTACLE_SIDE_RIGHT);
     w = bp_update(&bp, false, false, now);
-    check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == 30, "bypass right: start steer +10");
-    w = read(&bp, 200); /* hit at +30 */
-    check(bp_servo_deg(w) == 20 && bp_steer_deg(w) == 0, "bypass right: hit +30 -> 0");
-    w = read(&bp, NR); /* clear at +20 */
-    check(bp_servo_deg(w) == 25 && bp_steer_deg(w) == 0, "bypass right: servo steps left");
-    (void)read(&bp, NR); /* +25 */
-    w = read(&bp, NR);   /* +30, the limit: +10 */
-    w = read(&bp, NR);   /* +15 */
-    check(bp_steer_deg(w) == 15, "bypass right: not seen at the limit turns more left");
+    check(bp_steer_deg(w) == 8 && bp_servo_deg(w) == 30, "bypass right: DRIVE start +30 - 22");
+    w = read(&bp, NR);
+    check(bp_move(w) == BP_MOVE_PIVOT && bp_steer_deg(w) == 30, "bypass right: TURN left");
+    w = read(&bp, 200);
+    check(bp_servo_deg(w) == 25 && bp_move(w) == BP_MOVE_STOP, "bypass right: EDGE steps right");
+    (void)read(&bp, NR);
+    w = read(&bp, NR);
+    check(bp_steer_deg(w) == -9 && bp_phase(&bp) == BP_PHASE_DRIVE,
+          "bypass right: edge +25 - 34 = -9");
+    w = read(&bp, NR);
+    check(bp_servo_deg(w) == 30, "bypass right: DRIVE steps the servo left");
+    w = read(&bp, 300);
+    check(bp_steer_deg(w) == 8 && bp_servo_deg(w) == 20, "bypass right: seen bounces right");
 
-    /* Steering clamp: hits walk the servo to the bypass side. */
+    /* EDGE seen across the whole view; steering clamp. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    for (int i = 0; i < 4; ++i) {
-        (void)read(&bp, 200); /* -30, -20, -10, 0 */
+    (void)read(&bp, NR);  /* TURN */
+    (void)read(&bp, 300); /* EDGE, servo -25 */
+    for (int i = 0; i < 11; ++i) {
+        (void)read(&bp, 300); /* seen -25 .. +25 */
     }
-    w = read(&bp, 200); /* hit at +10: safe +20 */
-    check(bp_steer_deg(w) == 30 && bp_servo_deg(w) == 20, "steer clamps at +30");
-    w = read(&bp, 200); /* hit at +20: safe +30 */
-    w = read(&bp, 200); /* hit at +30: safe +40 */
-    check(bp_steer_deg(w) == 30 && bp_servo_deg(w) == 30, "servo clamps at +30");
+    w = bp_update(&bp, false, false, now);
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_servo_deg(w) == 30,
+          "EDGE: seen from -25 to +25, servo at the limit +30");
+    w = read(&bp, 300); /* seen at +30, the limit toward S */
+    check(bp_phase(&bp) == BP_PHASE_DRIVE && bp_steer_deg(w) == 30 && bp_servo_deg(w) == 30,
+          "EDGE: seen at the limit: edge is the limit, steer clamps at +30");
+    bp = around(OBSTACLE_SIDE_LEFT);
+    w = read(&bp, 100); /* DRIVE: seen 100 mm at -30: -30 + 90 */
+    check(bp_steer_deg(w) == 30 && bp_servo_deg(w) == -20, "very near at the side: steer +30");
+
+    /* TURN time limit. */
+    bp = around(OBSTACLE_SIDE_LEFT);
+    (void)read(&bp, NR); /* TURN at now */
+    t0_turn = now;
+    (void)bp_update(&bp, false, false, t0_turn + 3999u);
+    check(bp_state(&bp) == BP_AROUND, "TURN 3999 ms: running");
+    (void)bp_update(&bp, false, false, t0_turn + 4000u);
+    check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_PIVOT_TIME, "TURN 4000 ms: fails");
+    bp = around(OBSTACLE_SIDE_LEFT);
+    (void)bp_update(&bp, false, false, now + 5000u);
+    check(bp_state(&bp) == BP_AROUND, "DRIVE: no TURN time limit");
 
     /* Too near ahead fails. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    (void)read(&bp, 200); /* -30 -> -20 */
+    (void)read(&bp, 200); /* DRIVE: seen at -30 -> -20 */
     (void)read(&bp, 200); /* -20 -> -10 */
     (void)read(&bp, 0);   /* TOO_NEAR at -10 */
     check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_TOO_NEAR,
@@ -218,8 +267,8 @@ int main(void) {
     bp = around(OBSTACLE_SIDE_LEFT);
     (void)read(&bp, 200); /* -30 -> -20 */
     w = read(&bp, 0);     /* TOO_NEAR at -20 */
-    check(bp_state(&bp) == BP_AROUND && bp_steer_deg(w) == 10,
-          "TOO_NEAR at 20 degrees: a hit, no failure");
+    check(bp_state(&bp) == BP_AROUND && bp_steer_deg(w) == 30,
+          "TOO_NEAR at 20 degrees: seen, no failure; steer +30");
 
     /* Line: seen at the start (on the line); armed after 150 ms dark. */
     bp = around(OBSTACLE_SIDE_LEFT);
@@ -285,7 +334,7 @@ int main(void) {
     /* Word layout. */
     bp = around(OBSTACLE_SIDE_LEFT);
     w = bp_update(&bp, false, false, now);
-    check(w == (bp_word_t)(2u | (20u << 2) | (0u << 8)), "word: STEER, steer -10, servo -30");
+    check(w == (bp_word_t)(2u | (22u << 2) | (0u << 8)), "word: STEER, steer -8, servo -30");
 
     if (failures == 0) {
         printf("test_obstacle_bypass: all tests passed\n");
