@@ -1,7 +1,8 @@
 # Obstacle bypass
 
-Status: version 4, host-tested and built on 2026-10-30. Not yet tried on
-the track. Earlier versions ([track tests](#track-tests)): version 2 drove a
+Status: version 4.1, host-tested and built on 2026-10-30. Not yet tried on
+the track. Version 4 (runs 12–14) spiralled in: it turned back after about
+25 mm of each leg. Earlier versions ([track tests](#track-tests)): version 2 drove a
 fixed straight and arc (runs 3–4); version 3 steered at the last safe angle
 + 20° (runs 5–8); version 3.1 also turned harder when the obstacle was out
 of view, and its front corner hit a box (run 11).
@@ -11,8 +12,9 @@ and finds the line again. The operator's name for the plan is the "Blind
 Bicycle Algorithm" (BBA). The robot only drives forward when it knows where
 the obstacle's edge is. When it loses the obstacle, it stops, turns on the
 spot to find it again, and finds the edge with the servo. Then it steers so
-that the front of the robot passes the edge with a fixed clearance. No
-wheel-count distance is used.
+that the front of the robot passes the edge with a fixed clearance, and it
+drives that path to its closest point (by the wheel counts) before it may
+turn back to look again.
 
 ## Assumptions
 
@@ -63,20 +65,33 @@ robot turned only about 13°.
 
 | Phase | Motors | Servo | Reading → what happens |
 | --- | --- | --- | --- |
-| **DRIVE** | Forward, steering angle | Rubber band | **Seen** at θ, d mm: steer = θ + clear angle(d) toward S; servo jumps `bounce` (10°) toward S. **Free** at θ: servo steps `step` (5°) toward the obstacle; steering does not change. **Free at the 30° limit** toward the obstacle: lost → TURN |
+| **DRIVE** | Forward, steering angle | Rubber band | **Seen** at θ, d mm: steer = θ + clear angle(d) toward S, and a new leg starts; servo jumps `bounce` (10°) toward S. **Free** at θ: servo steps `step` (5°) toward the obstacle; steering does not change. **Free at the 30° limit** toward the obstacle: lost → TURN, **but only when the leg is done**; before that the servo reads the limit again |
 | **TURN** | Pivot on the spot toward the obstacle (20 %) | Stays at the limit | Seen → EDGE (servo steps 5° toward S). Free → keep turning |
-| **EDGE** | Stopped | Steps 5° toward S per seen reading | Free → read the same angle again. **2 free at one angle** = the edge e: steer = e + clear angle(last d) → DRIVE. Seen at the 30° limit toward S → edge = the limit → DRIVE |
+| **EDGE** | Stopped | Steps 5° toward S per seen reading | Free → read the same angle again. **2 free at one angle** = the edge e: steer = e + clear angle(last d), new leg → DRIVE. Seen at the 30° limit toward S → edge = the limit → DRIVE |
 
 AROUND starts in DRIVE with the edge at the limit (where the pivot's last
 free readings were) and the pivot's last seen distance.
 
+**Leg** (version 4.1, runs 12–14): along the steering direction, the
+sensor end is nearest to the point (θ, d) after √(d² − c²) mm. The leg is
+that distance in mean wheel counts (12.41 counts per mm), counted from the
+first `bp_update()` after the leg starts. Turning back before the end of
+the leg (version 4: after about 25 mm) undid the turn away and the robot
+spiralled in.
+
+| d | 250 mm | 230 mm | 200 mm | 180 mm | ≤ 150 mm |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Clear angle (c = 150) | 37° | 41° | 49° | 57° | 90° |
+| Leg (c = 150) | 200 mm | 174 mm | 132 mm | 99 mm | 0 |
+
 **Clear angle(d)** = the smallest whole angle a with sin a ≥ c / d, where c
-is `clearance_mm` (110 = 80 mm half robot width + 30 mm margin). In the
+is `clearance_mm` (150 = 80 mm half robot width + 70 mm, because the front
+corner is beside the sensor; version 4 used 110). In the
 bicycle model the servo end of the robot moves in the steering direction,
 so steering at the edge + a passes the edge point with c to spare. Near
 obstacles get a larger angle:
 
-| d | 300 mm | 250 mm | 220 mm | 200 mm | 183 mm | 150 mm | ≤ 110 mm |
+| d (c = 110, version 4) | 300 mm | 250 mm | 220 mm | 200 mm | 183 mm | 150 mm | ≤ 110 mm |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | Clear angle | 22° | 27° | 30° | 34° | 37° | 48° | 89–90° |
 
@@ -100,7 +115,7 @@ The bench values are in [`src/bypass_test.c`](../src/bypass_test.c)
 
 | Setting | Value | Notes |
 | --- | ---: | --- |
-| `clearance_mm` | 110 | Edge to robot centre line. Larger: wider path |
+| `clearance_mm` | 150 | Edge to the sensor's path. Larger: wider path. Version 4: 110 (corner hit) |
 | `limit_deg` | 30 | Servo and steering limit each side (the scan range) |
 | `step_deg` | 5 | Servo step: DRIVE toward the obstacle, EDGE toward S |
 | `bounce_deg` | 10 | DRIVE: servo step toward S after a seen reading |
@@ -380,6 +395,10 @@ Findings (run 12):
    the side of the sensor, so a 110 mm sensor clearance is not body
    clearance when the obstacle is beside the front.
 
+Operator: "not turning away enough". Version 4.1 (operator chose both):
+A, drive each leg to its closest point before TURN is allowed; B,
+clearance 150 mm.
+
 ## Host unit test
 
 ```sh
@@ -392,7 +411,10 @@ cc -std=c11 -Wall -Wextra -Wconversion -Wshadow -Werror -Isrc \
 free side, the pivot direction and servo angle, the settle times, ignored
 readings without a trigger, the pivot rule (free before the obstacle is
 seen does not count; the 409 / 410 mm boundary for a 260 mm obstacle), the
-clear-angle table and its boundaries, the start steering of AROUND, a full
+clear-angle table and its boundaries, the start steering of AROUND, the
+leg length (integer square root) and the counts per mm, the leg rule (not
+lost before the leg ends, the 3463 / 3464 count boundary, a seen reading
+starts a new leg, a new leg counts from the next update), a full
 DRIVE → TURN → EDGE → DRIVE cycle in both directions (the TURN direction,
 the EDGE steps, the read-again rule and its restart, the edge steering, the
 rubber band and the seen / free boundary in DRIVE), EDGE seen across the
@@ -401,10 +423,10 @@ the side, NO_RISE as no information, the fault streak, the line arming and
 the junction rule, the time limits, the time-counter wrap, the word layout,
 and the steering-angle to position table.
 
-Result on 2026-10-30 (version 4): all tests pass. 35 rule changes in
+Result on 2026-10-30 (version 4.1): all tests pass. 44 rule changes in
 `src/obstacle_bypass.c` each make a test fail.
 
-Version 3.1: 25 rule changes. Version 3: 20.
+Version 4: 35 rule changes. Version 3.1: 25. Version 3: 20.
 Version 2 (same day): 30 rule changes each made a test fail. Version 1:
 22, four of them after new tests (a hit at exactly `hit_mm`, no wait after
 a reading with no information, and the settle time and pivot time limit
