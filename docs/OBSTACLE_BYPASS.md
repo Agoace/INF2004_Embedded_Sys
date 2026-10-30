@@ -269,6 +269,43 @@ first plan). Version 3 does this: PASS and WRAP are removed, the rubber
 band runs during all of AROUND, the steering is the safe angle + offset,
 and the base duty is 20 %.
 
+### Runs 5–8: 2026-10-30, version 3 (offset 20°, base 20 %)
+
+Logs: `build/steer_logs/run_20261030-150809_boot3759_run1.txt` to
+`run_20261030-150947_boot3759_run4.txt` (boot 3759, runs 1–4; not in Git).
+Path from the wheel counts (dead reckoning, start at the STOP point, line
+along x). The bottle centre is taken as 65 + nearest + 33 mm ahead of the
+rear axle.
+
+| Run | STOP | Side | AROUND | Path | Closest robot centre to bottle centre | End |
+| --- | ---: | --- | ---: | --- | ---: | --- |
+| 5 | 201 mm | LEFT | 5.85 s | x 596, y 262 mm; heading 45° → 7° | 173 mm | Line found; time limit later |
+| 6 | 211 mm | LEFT | 0.79 s | x 69, y 70 mm | — (before the bottle) | A line under L at 6.0 s; search failed |
+| 7 | 201 mm | LEFT | 0.62 s | x 51, y 55 mm | — (before the bottle) | A line under R at 12.2 s; search failed |
+| 8 | 221 mm | LEFT | 3.84 s | x 448, y 172 mm; heading 39° → 3° | 149 mm | Line found; search failed later |
+
+Findings:
+
+1. **The rubber band never started.** All AROUND readings in the four
+   runs were NO_RETURN at −30°. The pivot ends when the bottle leaves the
+   −30° beam; then, while the robot drives forward, the bottle moves
+   further behind (its bearing grows). The robot must turn toward it faster
+   than that to see it again: about a 440 mm radius or less at 220 mm and
+   30°. AROUND was a fixed −10° arc.
+2. **The −10° arc was wide.** Duties 22/19 % gave 82/71 counts per 50 ms
+   (ratio 1.15; planned 1.35). From the wheel counts the turn radius was
+   about 800 mm (planned 369 mm).
+3. No contact: the robot body (80 mm half width) passed the bottle
+   (about 33 mm radius) with about 35–60 mm to spare (dead reckoning; an
+   estimate).
+4. Runs 6 and 7 found a line about 100 mm after the pivot, before the
+   bottle, and the line search failed after it. The line at that point is
+   not known (another part of the track near the bottle?).
+
+Proposal (run 9): `offset_deg` 10, so clear at the limit steers −20°
+(about 180–240 mm radius). The robot then turns back fast enough to see
+the bottle again and the rubber band starts.
+
 ## Host unit test
 
 ```sh
