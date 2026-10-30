@@ -1,7 +1,8 @@
 # Obstacle bypass
 
-Status: version 2, host-tested and built on 2026-10-30 after track run 1
-hit the obstacle ([track tests](#track-tests)). Not yet tried on the track.
+Status: version 2, 2026-10-30. Track run 3 went around the bottle and back
+to the line, but on a wide path; run 4 uses the corrected wheel-speed zero
+([track tests](#track-tests)).
 
 This record describes how the robot drives around one obstacle on the line
 and finds the line again. The operator's name for the plan is the "Blind
@@ -142,7 +143,8 @@ position = −100 · (W/2) · tan δ / L = −85.4 · tan δ (negative = left)
 `bp_steer_position()` uses a 31-entry table of tan × 1000 (the RP2040 has
 no floating-point hardware) and rounds. At 30° the inner wheel runs at
 51 % of the base speed above `min_pct`. The bypass uses base 25 %, gain
-100 %, no damping, max 50 %, right trim +1 % (`STEER_BYPASS`).
+100 %, no damping, min 6 % (the duty where a turning wheel stops; run 3),
+max 50 %, right trim +1 % (`STEER_BYPASS`).
 
 ## Command word (Change Requirement 1)
 
@@ -239,6 +241,35 @@ Causes:
 The stall stop worked as a collision stop. The text line for PIVOT →
 AROUND was not printed: that change happens in `bp_reading()`, and
 `bypass_test` printed state changes only after `bp_update()`.
+
+### Run 3: 2026-10-30, version 2 (around the bottle, wide)
+
+Log: `build/steer_logs/run_20261030-144234_bootf169_run3.txt` (not in Git).
+Run 2 on the same boot was a 30 s line-following run with no obstacle.
+Operator: "it works kinda", but the path went across about half the
+circuit.
+
+| Time | What happened |
+| ---: | --- |
+| 3401 ms | STOP at 191 mm |
+| 5.5 s | Scan: bottle at −20° to 0°, nearest 182 mm. Free step R 5, L 1 → bypass LEFT |
+| 5.53–5.94 s | PIVOT left: bottle seen 3 times at −30° (185–187 mm), then 2 free. Mean wheel travel 342 counts: about 28° |
+| 5.94–7.74 s | PASS: 3612 counts (291 mm) straight, no hits |
+| 7.74–10.24 s | WRAP at −20°: duties 29/22 %, counts 117/91 per 50 ms. The robot turned only about 50° in 412 mm |
+| 10.24 s | DONE: the line found, then a junction straight and a search; line following again |
+| 18.3 s | A second STOP at the bottle after a lap; bypass LEFT; DONE during PASS at 21.5 s (line found after 640 ms) |
+| 24.7 s | Search failed |
+
+Cause of the wide path: the steering used `min_pct` 12 % as speed zero.
+That is the duty at which a stopped wheel starts; a turning wheel slows to
+zero only at about 5.6 % (speed table: 20 % → 74, 25 % → 101, 33 % → 141
+counts per 50 ms). The planned 20° WRAP is a 179 mm turn radius (rear axle);
+the robot drove a 467 mm radius, 2.6 times wider. The 30° steering limit
+was not the cause.
+
+Fix (run 4): `STEER_BYPASS.min_pct` 6. A 20° WRAP is then 31/20 % (about
+131/74 counts, speed ratio 1.77 for a planned 1.89); 30° is 34/17 %.
+Line following keeps `min_pct` 12 (tuned on the track).
 
 ## Host unit test
 

@@ -66,12 +66,16 @@ static const steer_config_t STEER_FOLLOW = {
     .right_trim_pct = 1,
 };
 /* Bypass: gain 100 and no damping, so bp_steer_position() gives the wheel
- * speeds of the bicycle model. */
+ * speeds of the bicycle model. min_pct is the duty where a turning wheel's
+ * speed reaches zero: the speed table (20 % 74, 25 % 101, 33 % 141 counts
+ * per 50 ms) is a line through about 5.6 %. Run 3 used 12 (the start duty
+ * of a stopped wheel): WRAP 29/22 % gave 117/91 counts, a 467 mm turn
+ * radius for a planned 179 mm. */
 static const steer_config_t STEER_BYPASS = {
     .base_pct = 25u,
     .gain_pct = 100u,
     .kd_pct = 0u,
-    .min_pct = 12u,
+    .min_pct = 6u,
     .max_pct = 50u,
     .right_trim_pct = 1,
 };
