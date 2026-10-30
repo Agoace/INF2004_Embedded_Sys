@@ -337,7 +337,7 @@ streak, the line arming and the junction rule, the time limits, the
 time-counter wrap, the word layout, and the steering-angle to position
 table.
 
-Result on 2026-10-30 (version 3.1): all tests pass. 26 rule changes in
+Result on 2026-10-30 (version 3.1): all tests pass. 25 rule changes in
 `src/obstacle_bypass.c` each make a test fail (version 3: 20, before the
 turn-more rule).
 
