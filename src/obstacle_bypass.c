@@ -127,7 +127,14 @@ void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms) {
         safe = at;
         set_servo(bp, at + toward_obstacle * bp->cfg.step_deg, now_ms);
     }
-    bp->steer_deg = (int8_t)clamp_deg(safe + bp->side * bp->cfg.offset_deg, limit);
+    int steer = safe + bp->side * bp->cfg.offset_deg;
+    if (!hit && at == toward_obstacle * limit) {
+        /* Not seen even at the limit: turn one step more toward it each
+         * reading, until it is seen again. (The servo walks to the limit in
+         * steps, so the steering before this is limit + offset or less.) */
+        steer = bp->steer_deg + toward_obstacle * bp->cfg.step_deg;
+    }
+    bp->steer_deg = (int8_t)clamp_deg(steer, limit);
 }
 
 static bp_word_t word(bp_move_t move, int steer_deg, int servo_deg) {

@@ -17,10 +17,11 @@
  *           stays at the limit); on a hit it jumps bounce_deg back toward
  *           S. The safe angle is the angle of the latest clear reading, or
  *           the angle the servo jumps back to after a hit. The robot steers
- *           at the safe angle + offset_deg toward S. When the obstacle is
- *           beside the robot (clear at the limit), the robot turns gently
- *           back toward it (limit - offset), so it follows the obstacle's
- *           edge round and meets the line again.
+ *           at the safe angle + offset_deg toward S. A clear reading at the
+ *           limit means the obstacle is out of view: the steering turns one
+ *           step_deg more toward it for each such reading (up to the limit),
+ *           until the obstacle is seen again. So the robot follows the
+ *           obstacle's edge round and meets the line again.
  *   DONE    The line sensors see the line again (not a junction reading),
  *           after it was lost for line_arm_ms. The line follower takes over.
  *   FAILED  Time limit, sensor fault, an obstacle too near ahead, or no

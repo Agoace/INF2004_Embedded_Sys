@@ -1,7 +1,8 @@
 # Obstacle bypass
 
-Status: version 3, host-tested and built on 2026-10-30. Not yet tried on
-the track. Version 2 (PASS straight, then WRAP) went around the bottle in
+Status: version 3.1, host-tested and built on 2026-10-30. Not yet tried on
+the track. Version 3 (runs 5–8) passed the bottle but never saw it again
+after the pivot. Version 2 (PASS straight, then WRAP) went around the bottle in
 runs 3 and 4; the operator chose this simpler rule after run 4
 ([track tests](#track-tests)).
 
@@ -61,20 +62,28 @@ The servo never stops ranging. Each reading at servo angle θ:
 with the safe angle at the limit, where the pivot's last free readings
 were.
 
+**Not seen even at the limit** (a clear reading with the servo at the 30°
+limit toward the obstacle): the steering turns one `step` (5°) more toward
+the obstacle for each such reading, up to 30°, until the obstacle is in
+the beam again (runs 5–8: the obstacle went out of view behind the beam
+and a fixed −10° arc never brought it back). At one reading per 60 ms,
+−10° to −30° takes about 0.24 s.
+
 Example, bypass on the left (obstacle on the right), offset 20°:
 
 | Reading | Servo | Safe | Steering |
 | --- | ---: | ---: | ---: |
-| Start of AROUND | −30° | −30° | −10° (gently back toward the obstacle) |
-| Clear at −30° | −30° | −30° | −10° |
+| Start of AROUND | −30° | −30° | −10° (back toward the obstacle) |
+| Clear at −30° (not seen at the limit) | −30° | −30° | −15° (one step more) |
+| Clear at −30° again | −30° | −30° | −20° |
 | Hit at −30° | −20° | −20° | 0° |
 | Clear at −20° | −25° | −20° | 0° |
 | Hit at −25° | −15° | −15° | +5° (away) |
 
 So the robot keeps the obstacle's edge about `offset` beyond its heading.
-When the obstacle is beside the robot and out of view, the safe angle is
-the limit and the robot turns 10° back toward it, so it follows the
-obstacle round and meets the line.
+When the obstacle is out of view, the robot turns harder toward it until
+the beam finds it again, so it follows the obstacle round and meets the
+line.
 
 ### Settings
 
@@ -84,9 +93,9 @@ The bench values are in [`src/bypass_test.c`](../src/bypass_test.c)
 | Setting | Value | Notes |
 | --- | ---: | --- |
 | `hit_mm` | 250 | About the stop distance (258 mm). Larger keeps the robot farther away |
-| `offset_deg` | 20 | Steering beyond the safe angle, toward S. Larger: wider path; smaller: closer, and a sharper turn back when the obstacle is beside the robot (limit − offset) |
+| `offset_deg` | 20 | Steering beyond the safe angle, toward S. Larger: wider path; smaller: closer |
 | `limit_deg` | 30 | Servo and steering limit each side (the scan range) |
-| `step_deg` | 5 | Servo step while clear |
+| `step_deg` | 5 | Servo step while clear; also the extra steering for each reading not seen at the limit |
 | `bounce_deg` | 10 | Servo step back after a hit |
 | `line_arm_ms` | 200 | The line must be lost this long before it can end the bypass. The robot starts on the line |
 | `pivot_max_ms` | 4000 | Pivot time limit |
@@ -302,9 +311,11 @@ Findings:
    bottle, and the line search failed after it. The line at that point is
    not known (another part of the track near the bottle?).
 
-Proposal (run 9): `offset_deg` 10, so clear at the limit steers −20°
-(about 180–240 mm radius). The robot then turns back fast enough to see
-the bottle again and the rubber band starts.
+Proposal: `offset_deg` 10, so clear at the limit steers −20°. Operator
+review: the sensor must keep looking for the obstacle during the arc, and
+when it cannot see it even at 30° the robot should turn more. Version 3.1
+does this (not seen at the limit: 5° more steering per reading); the
+offset stays 20°.
 
 ## Host unit test
 
@@ -319,14 +330,16 @@ free side, the pivot direction and servo angle, the settle times, ignored
 readings without a trigger, the pivot rule (free before the obstacle is
 seen does not count; the 409 / 410 mm boundary for a 260 mm obstacle), the
 start steering of AROUND, the rubber band and the safe-angle steering in
-both directions, the `hit_mm` boundary, the steering and servo clamps,
+both directions, the extra turn per reading not seen at the limit (and its
+stop at 30°), the `hit_mm` boundary, the steering and servo clamps,
 TOO_NEAR ahead and at the side, NO_RISE as no information, the fault
 streak, the line arming and the junction rule, the time limits, the
 time-counter wrap, the word layout, and the steering-angle to position
 table.
 
-Result on 2026-10-30 (version 3): all tests pass. 20 rule changes in
-`src/obstacle_bypass.c` each make a test fail.
+Result on 2026-10-30 (version 3.1): all tests pass. 26 rule changes in
+`src/obstacle_bypass.c` each make a test fail (version 3: 20, before the
+turn-more rule).
 
 Version 2 (same day): 30 rule changes each made a test fail. Version 1:
 22, four of them after new tests (a hit at exactly `hit_mm`, no wait after

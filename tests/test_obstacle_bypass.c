@@ -148,15 +148,23 @@ int main(void) {
     /* Rubber band, bypass left (obstacle on the right). */
     bp = around(OBSTACLE_SIDE_LEFT);
     w = read(&bp, NR); /* clear at the limit -30 */
-    check(bp_servo_deg(w) == -30 && bp_steer_deg(w) == -10,
-          "clear at the limit: servo stays, steer -30 + 20 = -10 (back toward it)");
+    check(bp_servo_deg(w) == -30 && bp_steer_deg(w) == -15,
+          "not seen at the limit: servo stays, steer one step more (-10 -> -15)");
+    w = read(&bp, NR);
+    check(bp_steer_deg(w) == -20, "not seen again: -20");
+    (void)read(&bp, NR);
+    w = read(&bp, NR);
+    check(bp_steer_deg(w) == -30, "not seen: -25, -30");
+    w = read(&bp, NR);
+    check(bp_steer_deg(w) == -30 && bp_servo_deg(w) == -30, "turn more stops at the limit");
     w = read(&bp, 200); /* hit at -30 */
     check(bp_servo_deg(w) == -20 && bp_steer_deg(w) == 0,
           "hit at -30: bounce to -20 (safe), steer -20 + 20 = 0");
     check(!bp_wants_reading(&bp, now + 79u) && bp_wants_reading(&bp, now + 80u),
           "10 degree bounce: 80 ms settle");
     w = read(&bp, NR); /* clear at -20 */
-    check(bp_servo_deg(w) == -25 && bp_steer_deg(w) == 0, "clear at -20: steer 0, servo -25");
+    check(bp_servo_deg(w) == -25 && bp_steer_deg(w) == 0,
+          "clear at -20 (not the limit): steer 0, servo -25");
     check(!bp_wants_reading(&bp, now + 59u) && bp_wants_reading(&bp, now + 60u),
           "5 degree step: 60 ms settle");
     w = read(&bp, 220); /* hit at -25 */
@@ -167,6 +175,14 @@ int main(void) {
     check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == -10, "249 mm is a hit: safe -10, +10");
     w = read(&bp, 250); /* clear at -10 */
     check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == -15, "250 mm (hit_mm) is clear");
+    (void)read(&bp, NR); /* -15 */
+    (void)read(&bp, NR); /* -20 */
+    w = read(&bp, NR);   /* -25: steer -5 */
+    check(bp_steer_deg(w) == -5 && bp_servo_deg(w) == -30, "clears walk the servo back");
+    w = read(&bp, NR); /* first clear at the limit: -5 - 5 */
+    check(bp_steer_deg(w) == -10, "at the limit: one step more than at -25");
+    w = read(&bp, NR);
+    check(bp_steer_deg(w) == -15, "then one step more");
 
     /* Rubber band, bypass right (obstacle on the left). */
     bp = around(OBSTACLE_SIDE_RIGHT);
@@ -176,6 +192,10 @@ int main(void) {
     check(bp_servo_deg(w) == 20 && bp_steer_deg(w) == 0, "bypass right: hit +30 -> 0");
     w = read(&bp, NR); /* clear at +20 */
     check(bp_servo_deg(w) == 25 && bp_steer_deg(w) == 0, "bypass right: servo steps left");
+    (void)read(&bp, NR); /* +25 */
+    w = read(&bp, NR);   /* +30, the limit: +10 */
+    w = read(&bp, NR);   /* +15 */
+    check(bp_steer_deg(w) == 15, "bypass right: not seen at the limit turns more left");
 
     /* Steering clamp: hits walk the servo to the bypass side. */
     bp = around(OBSTACLE_SIDE_LEFT);
