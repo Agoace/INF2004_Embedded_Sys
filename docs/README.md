@@ -23,6 +23,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned instrument packet contract for firmware, receiver, and future dashboard.
 - [Motion control (Buddy 2)](MOTION_CONTROL.md) — motion library, interface for the other tasks, bench procedures, and open measurements.
 - [Line-following Manager checkpoint](LINE_MANAGER.md) — Manager statechart, mailbox and event-queue boundary, recovery limits, GPIO behaviour, and deferred scope.
+- [Line abstraction fork from YX line tracing](LINE_ABSTRACTION_FORK.md) — provenance, the deliberate deltas from the YX worktree, the physical sensor order, how the component is consumed, and what is still unmeasured.
 - [IMU moving hump profile](IMU_HUMP_PROFILE.md) — pitch-times-travel height integration, the encoder feed contract, terrain thresholds, diagnostics, and the bench procedure.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.

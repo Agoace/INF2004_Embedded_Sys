@@ -24,6 +24,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Interrupt and polling conventions | [docs/INTERRUPT_CONVENTIONS.md](INTERRUPT_CONVENTIONS.md) |
 | Motion control record | [docs/MOTION_CONTROL.md](MOTION_CONTROL.md) |
 | Line-following Manager checkpoint | [docs/LINE_MANAGER.md](LINE_MANAGER.md) |
+| Line abstraction fork record | [docs/LINE_ABSTRACTION_FORK.md](LINE_ABSTRACTION_FORK.md) |
 | IMU moving hump profile | [docs/IMU_HUMP_PROFILE.md](IMU_HUMP_PROFILE.md) |
 | USB power safety | [docs/USB_POWER_SAFETY.md](USB_POWER_SAFETY.md) |
 | Wi-Fi telemetry dashboard architecture | [docs/WIFI_TELEMETRY_DASHBOARD.md](WIFI_TELEMETRY_DASHBOARD.md) |
@@ -50,6 +51,14 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Integrated line-follow target (Manager + Line + Motion) | [`src/robocar_line_manager.c`](../src/robocar_line_manager.c) |
 | μT-Kernel Line/Manager adapter | [`src/manager/manager_task_utkernel.c`](../src/manager/manager_task_utkernel.c) |
 | Manager host unit tests | [`tests/manager/test_manager.c`](../tests/manager/test_manager.c) |
+| Line observation contract (32-bit word, line-local events) | [`src/line/line_types.h`](../src/line/line_types.h) |
+| Line position, dwell and calibration learner | [`src/line/line_position.c`](../src/line/line_position.c) |
+| Line steering policy (position to signed steer) | [`src/line/line_steer.c`](../src/line/line_steer.c) |
+| Line sweep sequencer (calibration and search) | [`src/line/line_spin.c`](../src/line/line_spin.c) |
+| Line sensor health and 1 kHz cadence | [`src/line/line_health.c`](../src/line/line_health.c), [`src/line/line_sampler.c`](../src/line/line_sampler.c) |
+| Line producer (sensor, observation, calibration owner) | [`src/line/line_producer.c`](../src/line/line_producer.c) |
+| Line ADC seam and Pico implementation | [`src/line/line_adc.h`](../src/line/line_adc.h), [`src/line/line_adc_pico.c`](../src/line/line_adc_pico.c) |
+| Line component host tests | [`tests/line/test_line.c`](../tests/line/test_line.c) |
 | IMU producer core and config | [`src/imu/imu_core.c`](../src/imu/imu_core.c), [`src/imu/imu_config.h`](../src/imu/imu_config.h) |
 | IMU encoder feed adapter | [`src/imu/imu_feed.c`](../src/imu/imu_feed.c) |
 | IMU host unit tests | [`tests/imu/test_imu_hump.c`](../tests/imu/test_imu_hump.c) |

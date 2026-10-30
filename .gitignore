@@ -1,5 +1,6 @@
 # CMake build output
 /build/
+/tests/line/build/
 /cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
