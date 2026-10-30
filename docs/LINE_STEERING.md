@@ -438,12 +438,35 @@ limit. The Wi-Fi log received 894 of 899 entries.
   0/55 ↔ 55/0 for up to 1.4 s. In run 7 (slower) the same kick settled in
   about 0.2 s.
 
+### Run 10: 2026-10-30, VIN, Wi-Fi log
+
+Calm mode (fast: base 33 %, max 55 %; calm: base 25 %, max 50 %). 45 s,
+stopped by the time limit. The Wi-Fi log received 894 of 899 entries.
+
+| Measure | Run 7 (base 25) | Run 9 (base 33) | Run 10 (calm mode) |
+| --- | ---: | ---: | ---: |
+| Mean speed (counts per 50 ms) | 101 | 137 | 113 |
+| Swings per 10 s | 0.8 | 10.7 | 2.9 |
+| Bursts of 3 or more swings | 0 | 8 | 2 |
+| One wheel stopped | 11.1 % | 24.6 % | 13.2 % |
+| LINE_LOST per 10 s | 0.8 | 1.3 | 1.6, all found again |
+| Calm | — | — | 55 % of the time |
+
+- At the T the robot still swings, but for about 0.5 s (run 9: up to
+  1.4 s). The straight part now runs at the calm base (25/26).
+- 3 of the 7 LINE_LOST came in one tight left curve (14.7–15.4 s): the
+  line stayed in the L–C gap at position about −45 (13/38) for 300 ms,
+  then a short search found it at once.
+
 ## Open items
 
 - Tune `base_pct` and `gain_pct` on the track.
 - Junctions: the robot goes straight for 300 ms. The Vehicle Controller decides later.
 - Tune `kd_pct` on the track.
-- Test the calm mode on the track (built 2026-10-29 after run 9).
+- Tight left curve (run 10, 14.3–15.8 s): the line stays in the L–C gap
+  at position about −45 (13/38) for 300 ms, so LINE_LOST and a short
+  search, three times. The gap position cannot pass ±50 until an outer
+  sensor sees the line.
 - Stop the run when a wheel turns with no load (a wheel came off in run 6)
   or the readings do not change while the wheels turn.
 - Find the lowest duty at which a loaded wheel turns, to set `min_pct`.
