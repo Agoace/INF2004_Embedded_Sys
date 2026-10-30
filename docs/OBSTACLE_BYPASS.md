@@ -1,7 +1,7 @@
 # Obstacle bypass
 
-Status: first version, host-tested and built on 2026-10-30. Not yet tried on
-the track.
+Status: first version, host-tested and built on 2026-10-30. Track run 1 hit
+the obstacle ([track tests](#track-tests)); fixes are being decided.
 
 This record describes how the robot drives around one obstacle on the line
 and finds the line again. The operator's name for the plan is the "Blind
@@ -166,6 +166,40 @@ The receiver writes the readings as a table at the end of the run file.
 | The robot crosses the line steeply and follows it back toward the obstacle | Smaller `offset_deg`, so it meets the line at a flatter angle |
 | A steep crossing reads as a junction | The bypass already ignores readings with all three sensors on the line; check the log |
 | The pivot never ends (wall behind the obstacle) | Move the obstacle, or check the scan |
+
+## Track tests
+
+### Run 1: 2026-10-30, first try (hit the bottle)
+
+Log: `build/steer_logs/run_20261030-140353_bootaaa6_run1.txt` (not in Git).
+Obstacle: a bottle on a straight part of the line.
+
+| Time | What happened |
+| ---: | --- |
+| 2845 ms | Forward watch STOP at 201 mm. The robot coasted about 50 ms |
+| 2.9–4.95 s | Scan: `NR NR NR NR NR NR 190 186 186 206 NR NR NR` (bottle at 0° to +15°). Free step R 1, L 4 → bypass RIGHT |
+| 4.95–5.14 s | PIVOT right: 2 free readings straight ahead after about 150 counts per wheel |
+| 5.14–5.9 s | AROUND: hits at +20° (168 mm) and +25° (155 mm) set steering 0° and +5° |
+| 5.93 s on | Clear at the limit +30°: steering +10°, toward the bottle (the wrap rule) |
+| 6.4 s | Wheels stop against the bottle; run stopped by "right wheel stalled" at 6.9 s |
+
+Causes:
+
+1. **The pivot ends too early.** "Free straight ahead" means only that the
+   narrow sensor beam missed the bottle, not that the robot body misses it.
+   The bottle edge was about 13° off the heading, at 186 mm: about 42 mm to
+   the side, less than the 56 mm half track.
+2. **The fixed offset is too small near the obstacle.** To pass a point at
+   distance d with side clearance c, the heading must be asin(c / d) away
+   from it. For c = 100 mm: 24° at 250 mm, 37° at 168 mm, 40° at 155 mm.
+   The fixed 20° drove at the bottle.
+3. **The wrap starts too early.** "Clear at +30°" happened while the bottle
+   was still beside the front of the robot; the sensor cannot see beside
+   the robot, so the robot turned into it.
+
+The stall stop worked as a collision stop. The text line for PIVOT →
+AROUND was not printed: that change happens in `bp_reading()`, and
+`bypass_test` printed state changes only after `bp_update()`.
 
 ## Host unit test
 
