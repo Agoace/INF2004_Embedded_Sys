@@ -31,6 +31,26 @@ int bp_clear_angle(uint16_t clearance_mm, uint16_t distance_mm) {
     return 90;
 }
 
+uint32_t bp_leg_mm(uint16_t clearance_mm, uint16_t distance_mm) {
+    if (distance_mm < clearance_mm) {
+        return 0u; /* (d = c gives the root of 0) */
+    }
+    const uint32_t n = (uint32_t)distance_mm * distance_mm - (uint32_t)clearance_mm * clearance_mm;
+    uint32_t r = 0u;
+    for (uint32_t bit = 1u << 15; bit != 0u; bit >>= 1) { /* n < 2^32: root < 2^16 */
+        const uint32_t t = r | bit;
+        if (t * t <= n) {
+            r = t;
+        }
+    }
+    return r;
+}
+
+uint32_t bp_mm_to_counts(uint32_t mm) {
+    const uint64_t num = (uint64_t)mm * BP_COUNTS_PER_WHEEL_TURN * 1000u;
+    return (uint32_t)((num + BP_WHEEL_CIRCUMFERENCE_UM / 2u) / BP_WHEEL_CIRCUMFERENCE_UM);
+}
+
 int bp_steer_position(int steer_deg) {
     const int a = clamp_deg(steer_deg < 0 ? -steer_deg : steer_deg, BP_ANGLE_BIAS);
     const uint32_t num = (uint32_t)TAN_PERMILLE[a] * BP_HALF_TRACK_TENTHS_MM * 100u;
@@ -91,6 +111,13 @@ void bp_triggered(bp_t *bp) {
 static void steer_past(bp_t *bp, int deg, uint16_t mm) {
     const int steer = deg + bp->side * bp_clear_angle(bp->cfg.clearance_mm, mm);
     bp->steer_deg = (int8_t)clamp_deg(steer, bp->cfg.limit_deg);
+    /* New leg: to the closest point to (deg, mm), from the next update. */
+    bp->leg_counts = bp_mm_to_counts(bp_leg_mm(bp->cfg.clearance_mm, mm));
+    bp->leg_started = false;
+}
+
+static bool leg_done(const bp_t *bp) {
+    return bp->leg_started && bp->travel - bp->leg_from >= (int32_t)bp->leg_counts;
 }
 
 static void pivot_reading(bp_t *bp, ultrasonic_status_t status, uint16_t mm,
@@ -154,8 +181,10 @@ void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms) {
             steer_past(bp, at, mm);
             set_servo(bp, at + bp->side * bp->cfg.bounce_deg, now_ms);
         } else if (at == toward_obstacle * limit) {
-            bp->phase = BP_PHASE_TURN; /* lost: turn toward it until seen */
-            bp->turn_ms = now_ms;
+            if (leg_done(bp)) {
+                bp->phase = BP_PHASE_TURN; /* lost: turn toward it until seen */
+                bp->turn_ms = now_ms;
+            }
             set_servo(bp, at, now_ms);
         } else {
             set_servo(bp, at + toward_obstacle * bp->cfg.step_deg, now_ms);
@@ -199,7 +228,14 @@ static bp_word_t word(bp_move_t move, int steer_deg, int servo_deg) {
                            << BP_SERVO_SHIFT);
 }
 
-bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms) {
+bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, int32_t travel_counts,
+                    uint32_t now_ms) {
+    bp->travel = travel_counts;
+    /* DRIVE is always entered through steer_past(), which starts a new leg. */
+    if (!bp->leg_started) {
+        bp->leg_from = travel_counts;
+        bp->leg_started = true;
+    }
     if (!line_seen) {
         if (!bp->dark) {
             bp->dark = true;

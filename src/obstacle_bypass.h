@@ -22,7 +22,12 @@
  *           rubber band: a free reading steps it step_deg toward the
  *           obstacle (the steering does not change); a seen reading sets
  *           the steering and jumps the servo bounce_deg back toward S. A
- *           free reading at the limit toward the obstacle: lost, go to TURN.
+ *           free reading at the limit toward the obstacle: lost, go to TURN,
+ *           but only after the leg: the robot has driven sqrt(d^2 - c^2)
+ *           (mean wheel travel) since the latest seen point or edge, so the
+ *           sensor end has reached its closest point to it. Before that the
+ *           servo reads the limit again. (Runs 12-14: turning back after
+ *           about 25 mm made the robot spiral in.)
  *     TURN  Turn on the spot toward the obstacle, the servo at the limit,
  *           until a reading is seen. Then EDGE.
  *     EDGE  Stopped. The servo steps step_deg toward S while the readings
@@ -69,9 +74,12 @@
 #define BP_EDGE_FREE 2u
 
 /* Robot geometry, operator measurements 2026-10-30 (about):
- *   wheel contact to wheel contact 111 mm, servo axis to rear axle 65 mm. */
+ *   wheel contact to wheel contact 111 mm, servo axis to rear axle 65 mm,
+ *   wheel diameter 65 mm (circumference 204.204 mm). */
 #define BP_HALF_TRACK_TENTHS_MM 555u
 #define BP_WHEELBASE_TENTHS_MM 650u
+#define BP_COUNTS_PER_WHEEL_TURN 2535u
+#define BP_WHEEL_CIRCUMFERENCE_UM 204204u
 
 typedef struct {
     uint16_t clearance_mm;  /* obstacle point to the robot centre line */
@@ -153,12 +161,16 @@ typedef struct {
     bool armed;         /* the line was lost long enough */
     bool seen;          /* PIVOT: the obstacle was in the beam */
     bool dark;
+    bool leg_started;     /* DRIVE: leg_from is set */
     uint8_t clear_count; /* PIVOT: free in a row; EDGE: free at this angle */
     uint16_t free_mm;     /* a valid echo this far or farther is free */
     uint16_t last_mm;     /* last distance to the obstacle */
     uint32_t settle_ms;   /* no trigger before this time */
     uint32_t state_ms;    /* start of the current state */
     uint32_t turn_ms;     /* start of the current TURN */
+    uint32_t leg_counts;  /* DRIVE: mean wheel travel before TURN is allowed */
+    int32_t leg_from;     /* DRIVE: mean wheel count at the start of the leg */
+    int32_t travel;       /* mean wheel count at the last bp_update() */
     uint32_t dark_ms;     /* start of "line not seen" */
 } bp_t;
 
@@ -179,8 +191,17 @@ void bp_triggered(bp_t *bp);
 void bp_reading(bp_t *bp, ultrasonic_result_t result, uint32_t now_ms);
 
 /* Call often (every 10 ms is good). line_seen and junction come from the
- * line position module. Returns the command for the motors and the servo. */
-bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, uint32_t now_ms);
+ * line position module; travel_counts is the mean of the two wheel counts.
+ * Returns the command for the motors and the servo. */
+bp_word_t bp_update(bp_t *bp, bool line_seen, bool junction, int32_t travel_counts,
+                    uint32_t now_ms);
+
+/* DRIVE leg: sqrt(distance^2 - clearance^2) in mm, rounded down; 0 when the
+ * distance is not more than the clearance. */
+uint32_t bp_leg_mm(uint16_t clearance_mm, uint16_t distance_mm);
+
+/* Millimetres of travel to mean wheel counts, rounded. */
+uint32_t bp_mm_to_counts(uint32_t mm);
 
 /* Smallest whole angle a (0-90 degrees) with sin(a) >= clearance / distance,
  * from a table of sin x 1000 (sin 89 rounds to 1000); 90 when clearance is

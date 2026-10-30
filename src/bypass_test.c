@@ -80,10 +80,11 @@ static const steer_config_t STEER_BYPASS = {
     .max_pct = 50u,
     .right_trim_pct = 1,
 };
-/* First values: tune on the track (docs/OBSTACLE_BYPASS.md). Clearance =
- * 80 mm half robot width + 30 mm margin. */
+/* First values: tune on the track (docs/OBSTACLE_BYPASS.md). Clearance
+ * from the sensor = 80 mm half robot width + 70 mm for the front corner
+ * (runs 12-14: 110 mm let the corner hit). */
 static const bp_config_t BYPASS = {
-    .clearance_mm = 110u,
+    .clearance_mm = 150u,
     .limit_deg = 30u,
     .step_deg = 5u,
     .bounce_deg = 10u,
@@ -207,7 +208,7 @@ static void print_summary(void) {
            run.bypasses, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] bypass v4: clearance %u mm, limit %u, step %u, bounce %u deg; "
+    printf("[run] bypass v4.1: clearance %u mm, limit %u, step %u, bounce %u deg; "
            "pivot %d%%; base %u%% min %u%% max %u%%\n",
            BYPASS.clearance_mm, BYPASS.limit_deg, BYPASS.step_deg, BYPASS.bounce_deg,
            PIVOT_DUTY_PCT, STEER_BYPASS.base_pct, STEER_BYPASS.min_pct, STEER_BYPASS.max_pct);
@@ -404,17 +405,18 @@ static void start_bypass(ctx_t *x, uint32_t now) {
 }
 
 static void bypass_step(ctx_t *x, const int32_t c[2], uint32_t now) {
-    const bp_word_t w = bp_update(&x->bp, lp_line_seen(&lp), lp_junction(&lp), now);
+    const bp_word_t w =
+        bp_update(&x->bp, lp_line_seen(&lp), lp_junction(&lp), (c[0] + c[1]) / 2, now);
     (void)servo_set_pulse_us(servo_pulse(bp_servo_deg(w)));
     const bp_state_t after = bp_state(&x->bp);
     /* State changes also happen in bp_reading(): compare with the last print. */
     const uint8_t shown = (uint8_t)(x->bp.state << 2 | x->bp.phase);
     if (shown != x->shown) {
         x->shown = shown;
-        printf("[bypass] %s %s at %lu ms, steer %+d, servo %+d, last %u mm\n",
+        printf("[bypass] %s %s at %lu ms, steer %+d, servo %+d, last %u mm, leg %lu counts\n",
                STATE_NAMES[after], after == BP_AROUND ? PHASE_NAMES[x->bp.phase] : "",
                (unsigned long)(now - x->t0), x->bp.steer_deg, x->bp.servo_deg,
-               x->bp.last_mm);
+               x->bp.last_mm, (unsigned long)x->bp.leg_counts);
     }
     if (after == BP_DONE) {
         ++run.bypasses;
