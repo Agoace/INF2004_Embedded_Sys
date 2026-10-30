@@ -16,9 +16,9 @@
  *   DETOUR  src/obstacle_detour.c, version 1: the sensor looks 30 degrees
  *           toward the obstacle. Turn away (5-degree steps, stop and look)
  *           until the obstacle passed out of view; then straights that
- *           end 190 mm after their nearest reading, each followed by a
- *           turn toward the obstacle until it is seen and then 10 degrees
- *           back; until the line is
+ *           end 350 mm (length + width) after their nearest reading, each
+ *           followed by a turn toward the obstacle until it is seen and
+ *           then 15 degrees back; until the line is
  *           found in a straight. Then 100 mm on and a turn back along the
  *           line, and FOLLOW again with a new forward watch. The motors
  *           stop for MOVE_PAUSE_MS when the motion changes (not between
@@ -87,9 +87,9 @@ static const dt_config_t DETOUR = {
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
     .max_straights = 5u,
-    .back_off_deg = 10u, /* detour runs 1 and 3 clipped the corner with 0 */
+    .back_off_deg = 15u, /* operator after v1.1: 10 (v1: 0 clipped the corner) */
     .look_ms = 150u, /* the robot coasts, then stands still for the reading */
-    .vehicle_mm = 190u,
+    .vehicle_mm = 350u, /* operator: length 190 + width 160 (v1, v1.1: 190) */
     .sweep_mm = 150u,
     .margin_mm = 30u,
     .sensor_ahead_mm = 65u,
@@ -220,7 +220,7 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.1: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
+    printf("[run] detour v1.2: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
            "look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
            DETOUR.counts_per_deg_x100 % 100u, DETOUR.back_off_deg, DETOUR.look_ms,
