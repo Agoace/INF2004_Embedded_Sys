@@ -23,6 +23,7 @@ static const dt_config_t CFG = {
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
     .max_straights = 5u,
+    .back_off_deg = 10u,
     .look_ms = 150u,
     .vehicle_mm = 190u,
     .sweep_mm = 150u,
@@ -266,14 +267,29 @@ int main(void) {
     read(&dt, 410);
     (void)turn_to(&dt, -counts(10));
     read(&dt, 350);
-    check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 5, "seen at -10: heading 15 - 10 = 5");
+    check(dt_step(&dt) == DT_TURN_TOWARD && dt.backing && !dt.looking,
+          "seen at -10: back off");
+    w = update(&dt);
+    check(dt_move(w) == DT_MOVE_TURN && dt_dir(w) == +1, "back off: turn left (away)");
+    check(!dt_wants_reading(&dt, now + 1000u), "back off: no readings");
+    line = true;
+    (void)turn_to(&dt, -counts(10) + 240);
+    check(dt_step(&dt) == DT_TURN_TOWARD, "back off 240 of 240.5 counts: turning; line ignored");
+    line = false;
+    (void)turn_to(&dt, -counts(10) + 241);
+    check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 15,
+          "back off 10: heading 15 - 10 + 10 = 15");
     check(dt.straights == 1u && dt.best_mm == 0xFFFFu, "second straight starts clean");
 
     /* TURN_TOWARD: seen at the first look: no turn. */
     (void)drive_to(&dt, 190);
     (void)update(&dt);
     read(&dt, 300);
-    check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 5, "seen at once: heading stays 5");
+    check(dt.backing, "seen at once: back off");
+    w = update(&dt);
+    check(!dt.looking && dt_move(w) == DT_MOVE_TURN, "back off from 0: turning, no look");
+    (void)turn_to(&dt, counts(10));
+    check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 25, "seen at once: 15 + 10 = 25");
 
     /* TURN_TOWARD limit: 150. */
     (void)drive_to(&dt, 190);
@@ -293,6 +309,7 @@ int main(void) {
         (void)drive_to(&dt, 190);
         (void)update(&dt);
         read(&dt, 300);
+        (void)turn_to(&dt, counts(10));
     }
     check(dt_step(&dt) == DT_STRAIGHT && dt.straights == 4u, "4 straights done: fifth");
     (void)drive_to(&dt, 190);
@@ -331,7 +348,8 @@ int main(void) {
     read(&dt, NR);
     (void)turn_to(&dt, -counts(30));
     read(&dt, 300);
-    check(dt.heading == -15, "heading 15 - 30 = -15");
+    (void)turn_to(&dt, -counts(30) + counts(10));
+    check(dt.heading == -5, "heading 15 - 30 + 10 = -5");
     (void)drive_to(&dt, 50);
     line = true;
     (void)update(&dt);
@@ -341,12 +359,12 @@ int main(void) {
     (void)drive_to(&dt, 100);
     check(dt_step(&dt) == DT_ALIGN, "ON_LINE 100 mm: ALIGN");
     w = update(&dt);
-    check(dt_move(w) == DT_MOVE_TURN && dt_dir(w) == +1, "ALIGN from -15: turn left");
-    (void)turn_to(&dt, counts(15) - 1);
-    check(dt_step(&dt) == DT_ALIGN, "ALIGN: 14.99 deg");
-    w = turn_to(&dt, counts(15));
+    check(dt_move(w) == DT_MOVE_TURN && dt_dir(w) == +1, "ALIGN from -5: turn left");
+    (void)turn_to(&dt, counts(5) - 1);
+    check(dt_step(&dt) == DT_ALIGN, "ALIGN: 4.99 deg");
+    w = turn_to(&dt, counts(5));
     check(dt_step(&dt) == DT_DONE && dt.heading == 0 && dt_move(w) == DT_MOVE_STOP,
-          "ALIGN 15 deg: DONE");
+          "ALIGN 5 deg: DONE");
     check(!dt_wants_reading(&dt, now + 1000u), "DONE: no readings");
 
     /* ALIGN from +15 turns right; from 0 is done at once. */
@@ -411,6 +429,7 @@ int main(void) {
     /* Turn exactly at the target: 5 x 2400 = 12000 = 120 x 100. */
     dt_config_t exact = CFG;
     exact.counts_per_deg_x100 = 2400u;
+    exact.back_off_deg = 0u; /* back off 0: STRAIGHT when seen */
     now = 1000u;
     dt_init(&dt, &exact, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
     (void)update(&dt);
@@ -434,6 +453,25 @@ int main(void) {
     (void)update(&dt);
     read(&dt, 300);
     check(dt.heading == 0, "exact: -36 counts = -1.5 deg rounds to -2: 2 - 2 = 0");
+
+    /* Back off exactly at the target: seen at -5 (-120 counts), back 10
+     * x 2400 = 240 counts: ends at +120. */
+    exact = CFG;
+    exact.counts_per_deg_x100 = 2400u;
+    dt_init(&dt, &exact, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+    (void)update(&dt);
+    read(&dt, 250);
+    (void)turn_to(&dt, 120);
+    read(&dt, NR);
+    (void)drive_to(&dt, 190);
+    (void)update(&dt);
+    read(&dt, NR);
+    (void)turn_to(&dt, -120);
+    read(&dt, 300);
+    (void)turn_to(&dt, 119);
+    check(dt.backing, "exact back off: 119: turning");
+    (void)turn_to(&dt, 120);
+    check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 10, "exact back off: 120: heading 10");
 
     /* Look 0 ms: the servo still needs 160 ms at the start. */
     exact = CFG;

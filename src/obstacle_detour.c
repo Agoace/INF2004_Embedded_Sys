@@ -56,7 +56,7 @@ static int turn_dir(const dt_t *dt) {
         return +1;
     }
     if (dt->step == DT_TURN_TOWARD) {
-        return -1;
+        return dt->backing ? +1 : -1;
     }
     return dt->heading < 0 ? +1 : -1; /* ALIGN: back to 0 */
 }
@@ -92,6 +92,7 @@ static void begin(dt_t *dt, dt_step_t step) {
     dt->from_mm = 0;
     dt->best_mm = NO_ECHO;
     dt->looking = false;
+    dt->backing = false;
     dt->target_deg = 0u; /* turns look first */
     if (step == DT_ON_LINE) {
         dt->leg_mm = dt->cfg.line_ahead_mm;
@@ -201,7 +202,14 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             next_look(dt, dt->cfg.away_max_deg);
         }
     } else if (seen) { /* DT_TURN_TOWARD */
-        end_turn(dt, DT_STRAIGHT);
+        if (dt->cfg.back_off_deg == 0u) {
+            end_turn(dt, DT_STRAIGHT);
+        } else {
+            dt->looking = false;
+            dt->backing = true; /* turn back, away from the obstacle */
+            dt->back_x100 = (int32_t)turn_x100(dt) +
+                            (int32_t)dt->cfg.back_off_deg * dt->cfg.counts_per_deg_x100;
+        }
     } else {
         next_look(dt, dt->cfg.toward_max_deg);
     }
@@ -229,6 +237,11 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
     case DT_BACK:
         if ((uint32_t)dist >= dt->leg_mm) {
             begin(dt, DT_TURN_AWAY);
+        }
+        break;
+    case DT_TURN_TOWARD:
+        if (dt->backing && turn_x100(dt) >= dt->back_x100) {
+            end_turn(dt, DT_STRAIGHT);
         }
         break;
     case DT_STRAIGHT:
@@ -264,7 +277,7 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
     }
 
     /* After the step switch, so that a new turn looks before it moves. */
-    if (is_turn(dt) && !dt->looking && turned(dt, dt->target_deg)) {
+    if (is_turn(dt) && !dt->looking && !dt->backing && turned(dt, dt->target_deg)) {
         dt->looking = true; /* stop, let the robot settle, then read */
         const uint32_t look = now_ms + dt->cfg.look_ms;
         if ((int32_t)(look - dt->settle_ms) > 0) {
