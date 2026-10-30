@@ -12,9 +12,12 @@
  *           100 ms, servo straight.
  *   STOP    forward watch STOP: motors off (coast), wait STOP_SETTLE_MS.
  *   SCAN    one servo scan (src/obstacle_scan.c); the profile gives the
- *           detour side, the obstacle distance and its free step.
+ *           detour side and the obstacle distance.
  *   DETOUR  src/obstacle_detour.c: four straight sides round the obstacle,
  *           a turn on the spot at each corner, then a turn along the line.
+ *           Version 1: the sensor looks 30 degrees toward the obstacle and
+ *           each straight past it ends one vehicle length (190 mm) after
+ *           the nearest reading of that straight.
  *           Then FOLLOW again, with a new forward watch. The motors stop
  *           for MOVE_PAUSE_MS between moves. Straights hold the heading
  *           with the wheel-count difference.
@@ -70,21 +73,19 @@ static const steer_config_t STEER_FOLLOW = {
     .right_trim_pct = 1,
 };
 /* First values: tune on the track. Geometry (docs/OBSTACLE_BYPASS.md):
- * track 111 mm, servo axis 65 mm ahead of the rear axle, half width 80 mm.
- * sweep 150 mm: the front corner circle round the rear axle centre (about
- * 147 mm; measure the rear axle to the front bumper). line_ahead_mm: the
- * line sensors ahead of the rear axle (about; measure). Turn counts:
+ * vehicle length 190 mm, track 111 mm, servo axis 65 mm ahead of the rear
+ * axle. sweep 150 mm: the front corner circle round the rear axle centre
+ * (about 147 mm; measure the rear axle to the front bumper). line_ahead_mm:
+ * the line sensors ahead of the rear axle (about; measure). Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
 static const dt_config_t DETOUR = {
     .turn_deg = 45u,
-    .look_deg = 30u,
-    .half_width_mm = 80u,
+    .vehicle_mm = 190u,
     .sweep_mm = 150u,
     .margin_mm = 30u,
     .sensor_ahead_mm = 65u,
     .line_ahead_mm = 100u,
-    .depth_mm = 150u,
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
     .turn_max_ms = 4000u,
@@ -133,7 +134,7 @@ static const char *const STOP_NAMES[] = {
 static const char *const FAIL_NAMES[] = {
     "-",          "no free side",           "turn time limit",
     "time limit", "ultrasonic fault",       "obstacle too near ahead",
-    "line not found", "obstacle inside the pass lane",
+    "line not found",
 };
 static const char *const STEP_NAMES[16] = {
     "BACK", "TURN_OUT", "OUT", "TURN_BACK", "PASS", "TURN_IN", "IN", "ON_LINE",
@@ -213,11 +214,11 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1: turn %u deg (%u.%02u counts/deg), sweep %u, margin %u, "
-           "depth %u mm; turn %d%%, straight %d%%\n",
+    printf("[run] detour v1: turn %u deg (%u.%02u counts/deg), past nearest %u mm, "
+           "seen < %u mm; turn %d%%, straight %d%%\n",
            DETOUR.turn_deg, DETOUR.counts_per_deg_x100 / 100u,
-           DETOUR.counts_per_deg_x100 % 100u, DETOUR.sweep_mm, DETOUR.margin_mm,
-           DETOUR.depth_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
+           DETOUR.counts_per_deg_x100 % 100u, DETOUR.vehicle_mm, DETOUR.seen_mm,
+           TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
 }
 
 static void print_log(void) {
@@ -375,7 +376,12 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
         }
     } else if (x->phase == PHASE_DETOUR) {
         const int8_t at = (int8_t)(x->dt.side * x->dt.servo_deg); /* robot frame */
+        const uint16_t best = x->dt.best_mm;
         dt_reading(&x->dt, r, now);
+        if (x->dt.best_mm != best) {
+            printf("[detour] %s nearest %u mm at %ld mm: count again\n",
+                   STEP_NAMES[x->dt.step], x->dt.best_mm, (long)x->dt.from_mm);
+        }
         if (run.bypass_total < BYPASS_RECORDS) {
             const uint32_t t = (now - x->t0) / 10u;
             run.bypass[run.bypass_total] = (sl_bypass_t){
@@ -395,8 +401,6 @@ static void start_detour(ctx_t *x, const int32_t c[2], uint32_t now) {
     const obstacle_profile_t *profile = obstacle_scan_profile();
     const obstacle_profile_word_t word = obstacle_profile_build(profile);
     const obstacle_side_t side = obstacle_profile_side(word, profile);
-    const unsigned int free_step = side == OBSTACLE_SIDE_LEFT ? obstacle_profile_left(word)
-                                                              : obstacle_profile_right(word);
     printf("[scan]");
     for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; ++i) {
         printf(" ");
@@ -408,8 +412,7 @@ static void start_detour(ctx_t *x, const int32_t c[2], uint32_t now) {
            side == OBSTACLE_SIDE_LEFT    ? "LEFT"
            : side == OBSTACLE_SIDE_RIGHT ? "RIGHT"
                                          : "NONE");
-    dt_init(&x->dt, &DETOUR, side, obstacle_profile_distance(word), free_step, c[0], c[1],
-            now);
+    dt_init(&x->dt, &DETOUR, side, obstacle_profile_distance(word), c[0], c[1], now);
     x->shown = 0xFFu; /* print the first step */
     x->move = DT_MOVE_STOP;
     x->move_dir = 0;
@@ -430,12 +433,8 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     /* Step changes also happen in dt_reading(): compare with the last print. */
     if ((uint8_t)step != x->shown) {
         x->shown = (uint8_t)step;
-        printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d, leg %lu mm, "
-               "front %ld, edge %ld, lane %ld, seen %ld\n",
-               STEP_NAMES[step], (unsigned long)(now - x->t0), (long)x->dt.x,
-               (long)x->dt.y, x->dt.heading, (unsigned long)x->dt.leg_mm,
-               (long)x->dt.front_x, (long)x->dt.edge_y, (long)x->dt.lane_y,
-               (long)x->dt.seen_x);
+        printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[step],
+               (unsigned long)(now - x->t0), (long)x->dt.x, (long)x->dt.y, x->dt.heading);
     }
     if (step == DT_DONE) {
         ++run.detours;
