@@ -37,6 +37,9 @@
  *
  * Log header flag bit 2 (SL_FLAG_BYPASS): the run is from bypass_test, so
  * mode 3 is BYPS (obstacle stop, scan or bypass) instead of CALM.
+ * Log header flag bit 3 (SL_FLAG_DETOUR, with bit 2): the run is from
+ * detour_test; in the reading records, state << 2 | phase is the detour
+ * step (dt_step_t, src/obstacle_detour.h) and steer is 0.
  *
  * BYPASS packets (bypass_test): the header, then a 4-byte bypass header
  * (run number; index of the first record, little-endian; number of
@@ -77,6 +80,7 @@
 #define SL_FLAG_REPLAY 0x01u
 #define SL_FLAG_REPLAY_END 0x02u
 #define SL_FLAG_BYPASS 0x04u
+#define SL_FLAG_DETOUR 0x08u
 
 #define SL_BYPASS_HEADER_BYTES 4u
 #define SL_BYPASS_BYTES 5u

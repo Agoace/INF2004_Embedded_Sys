@@ -43,6 +43,7 @@ MAX_ENTRIES = 20
 FLAG_REPLAY = 0x01
 FLAG_REPLAY_END = 0x02
 FLAG_BYPASS = 0x04  # run from bypass_test: mode 3 is BYPS
+FLAG_DETOUR = 0x08  # with FLAG_BYPASS: run from detour_test
 BYPASS_HEADER_BYTES = 4
 BYPASS_BYTES = 5
 MAX_BYPASS = 40
@@ -53,6 +54,9 @@ MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "CALM"}
 BYPASS_MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "BYPS"}
 BYPASS_STATES = {0: "PIVOT", 1: "AROUND", 2: "DONE", 3: "FAILED"}
 BYPASS_PHASES = {0: "DRIVE", 1: "TURN", 2: "EDGE", 3: "?"}
+# detour_test: state << 2 | phase is the step (src/obstacle_detour.h).
+DETOUR_STEPS = ["BACK", "TURN_OUT", "OUT", "TURN_BACK", "PASS", "TURN_IN", "IN",
+                "ON_LINE", "ALIGN", "DONE", "FAILED", "?", "?", "?", "?", "?"]
 SIDES = {0: "-", 1: "L", 2: "R", 3: "?"}
 SOURCES = {0: "-", 1: "sensor", 2: "gap", 3: "hint"}
 
@@ -108,6 +112,13 @@ def reading_text(reading):
 
 
 BYPASS_HEADER = "#  t_ms servo reading    state  phase steer"
+DETOUR_HEADER = "#  t_ms servo reading    step"
+
+
+def format_detour(b):
+    return "# %6d %+5d %-10s %s" % (
+        b["time_10ms"] * 10, b["servo_deg"], reading_text(b["reading"]),
+        DETOUR_STEPS[b["state"] << 2 | b["phase"]])
 
 
 def format_bypass(b):
@@ -165,7 +176,8 @@ class Receiver:
 
     def run_state(self, boot, run):
         return self.runs.setdefault((boot, run), {
-            "entries": {}, "live": set(), "replay_at": None, "modes": MODES, "bypass": {}})
+            "entries": {}, "live": set(), "replay_at": None, "modes": MODES, "bypass": {},
+            "detour": False})
 
     def handle_bypass(self, boot, body):
         if len(body) < BYPASS_HEADER_BYTES:
@@ -217,6 +229,8 @@ class Receiver:
         state = self.run_state(boot, run)
         if flags & FLAG_BYPASS:
             state["modes"] = BYPASS_MODES
+        if flags & FLAG_DETOUR:
+            state["detour"] = True
         replay = bool(flags & FLAG_REPLAY)
         if replay:
             state["replay_at"] = time.monotonic()
@@ -250,7 +264,8 @@ class Receiver:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = self.out_dir / ("run_%s_boot%04x_run%d.txt" % (stamp, boot, run))
         with path.open("w") as f:
-            name = "bypass_test" if state["modes"] is BYPASS_MODES else "steer_test"
+            name = ("detour_test" if state["detour"]
+                    else "bypass_test" if state["modes"] is BYPASS_MODES else "steer_test")
             f.write("# %s run %d, boot %04x, saved %s\n" % (name, run, boot, stamp))
             f.write("# entries %d of %d; received live %d; packets lost %d\n" % (
                 len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
@@ -261,9 +276,10 @@ class Receiver:
             if bypass:
                 last = max(bypass)
                 f.write("# bypass readings %d of %d\n" % (len(bypass), last + 1))
-                f.write(BYPASS_HEADER + "\n")
+                f.write((DETOUR_HEADER if state["detour"] else BYPASS_HEADER) + "\n")
+                fmt = format_detour if state["detour"] else format_bypass
                 for i in sorted(bypass):
-                    f.write(format_bypass(bypass[i]) + "\n")
+                    f.write(fmt(bypass[i]) + "\n")
         print("[recv] run %d saved to %s (%d of %d entries; %d live; %d packets lost)" % (
             run, path, len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
         state["live"] = set()
@@ -337,6 +353,21 @@ def self_test():
             if want not in text:
                 print("FAIL bypass run file, missing %r:\n%s" % (want, text))
                 failures += 1
+        # detour_test run: step names from state << 2 | phase.
+        r.handle(bytes([TYPE_BYPASS | (VERSION << 4), 0xEF, 0xBE, 7, 0]) +
+                 bytes([6, 0, 0, 1]) + BYPASS_VECTOR)  # state 1, phase 0: PASS
+        r.handle(bytes([TYPE_LOG | (VERSION << 4), 0xEF, 0xBE, 8, 0]) +
+                 bytes([6, FLAG_REPLAY | FLAG_REPLAY_END | FLAG_BYPASS | FLAG_DETOUR,
+                        0, 0, 1]) + VECTOR)
+        files = list(pathlib.Path(d).glob("run_*_bootbeef_run6.txt"))
+        text = files[0].read_text() if len(files) == 1 else ""
+        for want in ("# detour_test run 6", DETOUR_HEADER, "#  12340   -25 NO_RETURN  PASS"):
+            if want not in text:
+                print("FAIL detour run file, missing %r:\n%s" % (want, text))
+                failures += 1
+        if not format_detour(dict(want_b, state=2, phase=2)).endswith(" FAILED"):
+            print("FAIL detour step 10 is not FAILED")
+            failures += 1
         # Bad sizes are ignored.
         r.handle(header + bytes([3, 0, 0, 0, 5]) + VECTOR)
         r.handle(b"\x21")

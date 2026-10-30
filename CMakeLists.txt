@@ -328,6 +328,41 @@ target_link_libraries(bypass_test PRIVATE
 pico_enable_stdio_usb(bypass_test 1)
 pico_enable_stdio_uart(bypass_test 0)
 pico_add_extra_outputs(bypass_test)
+
+add_executable(detour_test
+    src/detour_test.c
+    src/obstacle_detour.c
+    src/obstacle.c
+    src/obstacle_profile.c
+    src/obstacle_scan.c
+    src/servo.c
+    src/ultrasonic.c
+    src/line_steer.c
+    src/line_position.c
+    src/line_sensors.c
+    src/line_spin.c
+    src/drive.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(detour_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(detour_test PRIVATE
+    pico_stdlib
+    pico_rand
+    hardware_adc
+    hardware_gpio
+    hardware_pwm
+    hardware_sync
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(detour_test 1)
+pico_enable_stdio_uart(detour_test 0)
+pico_add_extra_outputs(detour_test)
 # Independent IR line-detection and Code 39 barcode-reading firmware.
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c

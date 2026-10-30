@@ -57,6 +57,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Servo obstacle scan | [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h) |
 | Obstacle profile analysis | [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h) |
 | Obstacle bypass | [`src/obstacle_bypass.c`](../src/obstacle_bypass.c), [`src/obstacle_bypass.h`](../src/obstacle_bypass.h); bench test [`src/bypass_test.c`](../src/bypass_test.c) |
+| Obstacle detour (straights and turns on the spot) | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
 | Normalised line position | [`src/line_position.c`](../src/line_position.c), [`src/line_position.h`](../src/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
 | Line steering | [`src/line_steer.c`](../src/line_steer.c), [`src/line_steer.h`](../src/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
