@@ -29,5 +29,6 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Line steering](LINE_STEERING.md) — line position to left/right wheel duty (proportional, optional D), steer word, `steer_test` bench procedure.
 - [Steering Wi-Fi log](STEER_WIFI_LOG.md) — `steer_test` text and 50 ms run log over UDP broadcast (port 4243), packet format, receiver use.
 - [Vehicle Controller](VEHICLE_CONTROLLER.md) — controller state machine built step by step; step 1 is line following.
+- [Obstacle bypass](OBSTACLE_BYPASS.md) — edge-following bypass ("Blind Bicycle Algorithm"): pivot, rubber-band servo, bicycle steering, `bypass_test` bench procedure.
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.

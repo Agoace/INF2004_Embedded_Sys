@@ -24,6 +24,10 @@ static int failures;
 static const uint8_t VECTOR[SL_ENTRY_BYTES] = {0xDB, 0x0D, 0xEC, 0xA5, 0xB1, 0xC0,
                                                0x8F, 0xFF, 0x0F, 0xFF, 0x7F};
 
+/* Bypass record: 12.34 s, servo -25, NO_RETURN, AROUND, steer +17. Also
+ * decoded by the receiver self-test. */
+static const uint8_t BYPASS_VECTOR[SL_BYPASS_BYTES] = {0xD2, 0xA4, 0x00, 0x70, 0x2F};
+
 static int same(const sl_entry_t *a, const sl_entry_t *b) {
     return a->position == b->position && a->left_pct == b->left_pct &&
            a->right_pct == b->right_pct && a->info == b->info && a->raw[0] == b->raw[0] &&
@@ -71,6 +75,38 @@ int main(void) {
               back.left_counts, back.right_counts);
         CHECK(back.raw[0] == 0x0FFFu && back.raw[1] == 0u, "raw 12 bits: %u %u",
               back.raw[0], back.raw[1]);
+    }
+
+    /* Bypass records. */
+    {
+        const sl_bypass_t b = {.time_10ms = 1234u, .servo_deg = -25, .reading = 0x0600u,
+                               .state = 1u, .steer_deg = 17};
+        uint8_t r[SL_BYPASS_BYTES];
+        memset(r, 0xFF, sizeof r);
+        sl_pack_bypass(&b, r);
+        CHECK(memcmp(r, BYPASS_VECTOR, sizeof r) == 0,
+              "bypass bytes %02X %02X %02X %02X %02X", r[0], r[1], r[2], r[3], r[4]);
+        sl_bypass_t back_b;
+        sl_unpack_bypass(BYPASS_VECTOR, &back_b);
+        CHECK(back_b.time_10ms == 1234u && back_b.servo_deg == -25 &&
+                  back_b.reading == 0x0600u && back_b.state == 1u && back_b.steer_deg == 17,
+              "bypass vector decodes");
+
+        /* Ends: clamps, the streak bits dropped. */
+        const sl_bypass_t far = {.time_10ms = 9000u, .servo_deg = 31, .reading = 0x39FFu,
+                                  .state = 3u, .steer_deg = -40};
+        sl_pack_bypass(&far, r);
+        sl_unpack_bypass(r, &back_b);
+        CHECK(back_b.time_10ms == SL_BYPASS_TIME_MAX && back_b.servo_deg == 30 &&
+                  back_b.reading == 0x01FFu && back_b.state == 3u && back_b.steer_deg == -30,
+              "bypass ends: t %u servo %d reading %03X state %u steer %d", back_b.time_10ms,
+              back_b.servo_deg, back_b.reading, back_b.state, back_b.steer_deg);
+        CHECK((r[4] & 0xC0u) == 0u, "bypass spare bits are 0");
+
+        uint8_t h[SL_BYPASS_HEADER_BYTES];
+        CHECK(sl_write_bypass_header(h, 9u, 0x0102u, 40u) == SL_BYPASS_HEADER_BYTES &&
+                  h[0] == 9u && h[1] == 0x02u && h[2] == 0x01u && h[3] == 40u,
+              "bypass header");
     }
 
     /* Headers. */

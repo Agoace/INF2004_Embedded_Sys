@@ -64,7 +64,7 @@ Header, 5 bytes:
 
 | Bytes | Field |
 | --- | --- |
-| 0 | Bits 0–3 type (1 LOG, 2 TEXT), bits 4–7 version (1) |
+| 0 | Bits 0–3 type (1 LOG, 2 TEXT, 3 HELLO, 4 BYPASS), bits 4–7 version (1) |
 | 1–2 | Boot id (random at each start) |
 | 3–4 | Sequence number (finds lost packets) |
 
@@ -73,7 +73,7 @@ LOG packet: header, then:
 | Bytes | Field |
 | --- | --- |
 | 5 | Run number (0: a saved run from before the restart) |
-| 6 | Flags: bit 0 replay, bit 1 last replay packet |
+| 6 | Flags: bit 0 replay, bit 1 last replay packet, bit 2 `bypass_test` run (mode 3 is BYPS) |
 | 7–8 | Index of the first entry (time = index × 50 ms) |
 | 9 | Number of entries, at most 20 |
 | 10… | Entries, 11 bytes each |
@@ -90,6 +90,25 @@ Entry, 88 bits, least significant bit first:
 | 68–87 | Left and right wheel counts in the 50 ms, clamped to ±511 | 2 × 10 |
 
 TEXT packet: header, then text.
+
+BYPASS packet (`bypass_test`, added 2026-10-30): header, then run number
+(1 byte), index of the first record (2 bytes), number of records (1 byte,
+at most 40), then records of 5 bytes. One record per ultrasonic reading of
+the bypass ([OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md)), 40 bits, least
+significant bit first:
+
+| Bits | Field | Width |
+| --- | --- | ---: |
+| 0–12 | Time since the run start, 10 ms units (to 81.91 s) | 13 |
+| 13–18 | Servo angle of the reading + 30 | 6 |
+| 19–29 | Reading: ultrasonic distance (9 bits) and status (2 bits) | 11 |
+| 30–31 | Bypass state after the reading: 0 PIVOT, 1 AROUND, 2 DONE, 3 FAILED | 2 |
+| 32–37 | Steering angle after the reading + 30 | 6 |
+| 38–39 | Spare, 0 | 2 |
+
+The fault streak (3 bits) is not sent: a streak ends the bypass, and the
+run summary says so. In a `bypass_test` run, mode 3 of the 88-bit entry is
+BYPS and its position field is the steering angle in degrees.
 
 ## Use
 
@@ -132,16 +151,24 @@ python3 scripts/steer_log_receiver.py --self-test
 ```
 
 Both sides use the same 11-byte test vector. The C test checks the vector,
-round trips at the field limits, the ±511 clamp, the 12-bit raw mask, and
+the bypass record vector (clamps, spare bits, header), round trips at the field limits, the ±511 clamp, the 12-bit raw mask, and
 the header bytes. The Python test decodes the vector, runs one live and
 one replay packet through the receiver with one lost packet, and checks
-the save 3 s after a replay whose last packet is lost.
+the save 3 s after a replay whose last packet is lost. It also decodes
+the bypass record vector, checks the reading names, and saves a
+`bypass_test` run with its bypass table.
 
 Result on 2026-10-29: all tests pass. Five C rule changes (field moved by
 one bit, no sign extension, wrong clamp, bits not cleared, high header
 byte lost) and three Python rule changes (no sign extension, field moved,
 lost packets not counted) each make a test fail. A loopback send to the
 receiver printed the text and the entry.
+
+Update 2026-10-30 (bypass records): all tests pass. Five C rule changes
+(servo field moved, no time clamp, no angle clamp, spare bits not cleared,
+wrong header byte) and five Python rule changes (servo field moved, flag
+ignored, TOO_NEAR shown as 0 mm, no bypass table, wrong mode name) each
+make a test fail.
 
 ## Track test
 

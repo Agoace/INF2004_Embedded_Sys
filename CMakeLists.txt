@@ -292,6 +292,42 @@ target_link_libraries(steer_test PRIVATE
 pico_enable_stdio_usb(steer_test 1)
 pico_enable_stdio_uart(steer_test 0)
 pico_add_extra_outputs(steer_test)
+
+# Bench test: line following with the obstacle bypass (docs/OBSTACLE_BYPASS.md).
+add_executable(bypass_test
+    src/bypass_test.c
+    src/obstacle_bypass.c
+    src/obstacle.c
+    src/obstacle_profile.c
+    src/obstacle_scan.c
+    src/servo.c
+    src/ultrasonic.c
+    src/line_steer.c
+    src/line_position.c
+    src/line_sensors.c
+    src/line_spin.c
+    src/drive.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(bypass_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(bypass_test PRIVATE
+    pico_stdlib
+    pico_rand
+    hardware_adc
+    hardware_gpio
+    hardware_pwm
+    hardware_sync
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(bypass_test 1)
+pico_enable_stdio_uart(bypass_test 0)
+pico_add_extra_outputs(bypass_test)
 # Independent IR line-detection and Code 39 barcode-reading firmware.
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c

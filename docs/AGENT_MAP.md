@@ -28,6 +28,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Ultrasonic driver record | [docs/ULTRASONIC_DRIVER.md](ULTRASONIC_DRIVER.md) |
 | Forward obstacle watch record | [docs/OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md) |
 | Servo obstacle scan record | [docs/OBSTACLE_SCAN.md](OBSTACLE_SCAN.md) |
+| Obstacle bypass record | [docs/OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
 | Line steering record | [docs/LINE_STEERING.md](LINE_STEERING.md) |
@@ -55,6 +56,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Obstacle watch bench test | [`src/obstacle_test.c`](../src/obstacle_test.c) |
 | Servo obstacle scan | [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h) |
 | Obstacle profile analysis | [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h) |
+| Obstacle bypass | [`src/obstacle_bypass.c`](../src/obstacle_bypass.c), [`src/obstacle_bypass.h`](../src/obstacle_bypass.h); bench test [`src/bypass_test.c`](../src/bypass_test.c) |
 | Normalised line position | [`src/line_position.c`](../src/line_position.c), [`src/line_position.h`](../src/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
 | Line steering | [`src/line_steer.c`](../src/line_steer.c), [`src/line_steer.h`](../src/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
@@ -63,7 +65,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`src/vehicle_controller.h`](../src/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](LINE_STEERING.md#host-unit-test), and [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](LINE_STEERING.md#host-unit-test), and [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |

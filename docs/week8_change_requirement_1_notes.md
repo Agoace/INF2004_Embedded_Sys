@@ -900,6 +900,17 @@ Length can matter indirectly through swept turning footprint.
 
 ---
 
+> **Update 2026-10-30 (bypass design):** the bypass does not use a clearance
+> field. It follows the edge of the obstacle with the ultrasonic sensor and
+> stays `hit_mm` (250 mm at first) from it, so no swept-width threshold is
+> sent. The bypass command is one 16-bit word: motion 2 bits, steering
+> angle 6 bits, servo angle 6 bits (whole degrees in ±30, 61 values), 2
+> spare. Each logged bypass reading is 40 bits. See
+> [OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md) and
+> [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#packet-format). The operator measured
+> the track (111 mm, wheel contact to wheel contact) and the wheelbase
+> (65 mm, servo axis to rear axle) for the steering.
+
 # 28. Clearance measurement required
 
 The final clearance threshold should **not be guessed**.

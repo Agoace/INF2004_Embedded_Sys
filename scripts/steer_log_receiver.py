@@ -33,6 +33,7 @@ VERSION = 1
 TYPE_LOG = 1
 TYPE_TEXT = 2
 TYPE_HELLO = 3
+TYPE_BYPASS = 4
 HELLO_PERIOD_S = 1.0
 REPLAY_QUIET_S = 3.0
 HEADER_BYTES = 5
@@ -41,15 +42,22 @@ ENTRY_BYTES = 11
 MAX_ENTRIES = 20
 FLAG_REPLAY = 0x01
 FLAG_REPLAY_END = 0x02
+FLAG_BYPASS = 0x04  # run from bypass_test: mode 3 is BYPS
+BYPASS_HEADER_BYTES = 4
+BYPASS_BYTES = 5
+MAX_BYPASS = 40
 LOG_PERIOD_MS = 50
 
 # STRT: straight across a junction; CALM: following with the calm settings
 MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "CALM"}
+BYPASS_MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "BYPS"}
+BYPASS_STATES = {0: "PIVOT", 1: "AROUND", 2: "DONE", 3: "FAILED"}
 SIDES = {0: "-", 1: "L", 2: "R", 3: "?"}
 SOURCES = {0: "-", 1: "sensor", 2: "gap", 3: "hint"}
 
 # The same vector is packed by tests/test_steer_log.c.
 VECTOR = bytes([0xDB, 0x0D, 0xEC, 0xA5, 0xB1, 0xC0, 0x8F, 0xFF, 0x0F, 0xFF, 0x7F])
+BYPASS_VECTOR = bytes([0xD2, 0xA4, 0x00, 0x70, 0x2F])  # also in tests/test_steer_log.c
 VECTOR_FIELDS = dict(position=-37, left_pct=13, right_pct=-20, info=0xA5,
                      raw=(177, 2300, 4095), left_counts=-16, right_counts=511)
 
@@ -77,13 +85,42 @@ def decode_entry(data):
     )
 
 
+def decode_bypass(data):
+    """40-bit bypass record, least significant bit first."""
+    v = int.from_bytes(data, "little")
+    return dict(
+        time_10ms=bits(v, 0, 13),
+        servo_deg=bits(v, 13, 6) - 30,
+        reading=bits(v, 19, 11),
+        state=bits(v, 30, 2),
+        steer_deg=bits(v, 32, 6) - 30,
+    )
+
+
+def reading_text(reading):
+    """Ultrasonic result bits 0-10: distance 0-8, status 9-10."""
+    status, mm = reading >> 9, reading & 0x1FF
+    if status == 0:
+        return "TOO_NEAR" if mm == 0 else "%d mm" % mm
+    return {1: "NO_RISE", 2: "STUCK_HIGH", 3: "NO_RETURN"}[status]
+
+
+BYPASS_HEADER = "#  t_ms servo reading    state  steer"
+
+
+def format_bypass(b):
+    return "# %6d %+5d %-10s %-6s %+5d" % (
+        b["time_10ms"] * 10, b["servo_deg"], reading_text(b["reading"]),
+        BYPASS_STATES[b["state"]], b["steer_deg"])
+
+
 TABLE_HEADER = "  t_ms mode  pos  dutyL dutyR  rawL rawC rawR  side src    hint  cntL cntR"
 
 
-def format_entry(index, e):
+def format_entry(index, e, modes=MODES):
     info = e["info"]
     return ("%6d %s %+4d  %3d %3d  %4d %4d %4d  %s %-6s %s  %4d %4d" % (
-        index * LOG_PERIOD_MS, MODES.get(info & 3, "?"), e["position"],
+        index * LOG_PERIOD_MS, modes.get(info & 3, "?"), e["position"],
         e["left_pct"], e["right_pct"], e["raw"][0], e["raw"][1], e["raw"][2],
         SIDES[(info >> 2) & 3], SOURCES[(info >> 4) & 3], SIDES[(info >> 6) & 3],
         e["left_counts"], e["right_counts"]))
@@ -120,6 +157,26 @@ class Receiver:
             self.handle_text(boot, body)
         elif ptype == TYPE_LOG:
             self.handle_log(boot, body)
+        elif ptype == TYPE_BYPASS:
+            self.handle_bypass(boot, body)
+
+    def run_state(self, boot, run):
+        return self.runs.setdefault((boot, run), {
+            "entries": {}, "live": set(), "replay_at": None, "modes": MODES, "bypass": {}})
+
+    def handle_bypass(self, boot, body):
+        if len(body) < BYPASS_HEADER_BYTES:
+            return
+        run = body[0]
+        first = int.from_bytes(body[1:3], "little")
+        count = body[3]
+        if count > MAX_BYPASS or len(body) != BYPASS_HEADER_BYTES + count * BYPASS_BYTES:
+            print("[recv] ignored BYPASS packet with a bad size")
+            return
+        state = self.run_state(boot, run)
+        for i in range(count):
+            off = BYPASS_HEADER_BYTES + i * BYPASS_BYTES
+            state["bypass"][first + i] = decode_bypass(body[off:off + BYPASS_BYTES])
 
     def track_seq(self, boot, seq):
         if boot not in self.next_seq:
@@ -154,8 +211,9 @@ class Receiver:
         if count > MAX_ENTRIES or len(body) != LOG_HEADER_BYTES + count * ENTRY_BYTES:
             print("[recv] ignored LOG packet with a bad size")
             return
-        state = self.runs.setdefault((boot, run),
-                                     {"entries": {}, "live": set(), "replay_at": None})
+        state = self.run_state(boot, run)
+        if flags & FLAG_BYPASS:
+            state["modes"] = BYPASS_MODES
         replay = bool(flags & FLAG_REPLAY)
         if replay:
             state["replay_at"] = time.monotonic()
@@ -169,7 +227,7 @@ class Receiver:
             if not replay:
                 state["live"].add(index)
                 if self.live:
-                    print("[log] " + format_entry(index, e))
+                    print("[log] " + format_entry(index, e, state["modes"]))
         if flags & FLAG_REPLAY_END:
             self.save_run(boot, run, state)
 
@@ -189,12 +247,20 @@ class Receiver:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = self.out_dir / ("run_%s_boot%04x_run%d.txt" % (stamp, boot, run))
         with path.open("w") as f:
-            f.write("# steer_test run %d, boot %04x, saved %s\n" % (run, boot, stamp))
+            name = "bypass_test" if state["modes"] is BYPASS_MODES else "steer_test"
+            f.write("# %s run %d, boot %04x, saved %s\n" % (name, run, boot, stamp))
             f.write("# entries %d of %d; received live %d; packets lost %d\n" % (
                 len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
             f.write(TABLE_HEADER + "\n")
             for index in indices:
-                f.write(format_entry(index, entries[index]) + "\n")
+                f.write(format_entry(index, entries[index], state["modes"]) + "\n")
+            bypass = state["bypass"]
+            if bypass:
+                last = max(bypass)
+                f.write("# bypass readings %d of %d\n" % (len(bypass), last + 1))
+                f.write(BYPASS_HEADER + "\n")
+                for i in sorted(bypass):
+                    f.write(format_bypass(bypass[i]) + "\n")
         print("[recv] run %d saved to %s (%d of %d entries; %d live; %d packets lost)" % (
             run, path, len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
         state["live"] = set()
@@ -238,9 +304,36 @@ def self_test():
         if len(list(pathlib.Path(d).glob("run_*_bootbeef_run4.txt"))) != 1:
             print("FAIL not saved after the quiet time")
             failures += 1
+        # bypass_test run: BYPS mode name and the bypass table.
+        got_b = decode_bypass(BYPASS_VECTOR)
+        want_b = dict(time_10ms=1234, servo_deg=-25, reading=0x600, state=1, steer_deg=17)
+        if got_b != want_b:
+            print("FAIL bypass vector: %r" % got_b)
+            failures += 1
+        for reading, want in ((0, "TOO_NEAR"), (250, "250 mm"), (0x200, "NO_RISE"),
+                              (0x400, "STUCK_HIGH"), (0x600, "NO_RETURN")):
+            if reading_text(reading) != want:
+                print("FAIL reading %03x: %r" % (reading, reading_text(reading)))
+                failures += 1
+        hb = bytes([TYPE_BYPASS | (VERSION << 4), 0xEF, 0xBE, 5, 0])
+        r.handle(hb + bytes([5, 0, 0, 1]) + BYPASS_VECTOR)
+        hl = bytes([TYPE_LOG | (VERSION << 4), 0xEF, 0xBE, 6, 0])
+        r.handle(hl + bytes([5, FLAG_REPLAY | FLAG_REPLAY_END | FLAG_BYPASS,
+                                                 0, 0, 1]) + VECTOR)
+        files = list(pathlib.Path(d).glob("run_*_bootbeef_run5.txt"))
+        text = files[0].read_text() if len(files) == 1 else ""
+        if " BYPS " not in format_entry(0, VECTOR_FIELDS | {"info": 0xA7}, BYPASS_MODES):
+            print("FAIL mode 3 is not BYPS in a bypass_test run")
+            failures += 1
+        for want in ("# bypass_test run 5", "     0 SRCH", "# bypass readings 1 of 1",
+                     "#  12340   -25 NO_RETURN  AROUND   +17"):
+            if want not in text:
+                print("FAIL bypass run file, missing %r:\n%s" % (want, text))
+                failures += 1
         # Bad sizes are ignored.
         r.handle(header + bytes([3, 0, 0, 0, 5]) + VECTOR)
         r.handle(b"\x21")
+        r.handle(hb + bytes([5, 0, 0, 2]) + BYPASS_VECTOR)
     if failures:
         print("steer_log_receiver self-test: %d failure(s)" % failures)
         return 1
