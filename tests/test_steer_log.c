@@ -24,7 +24,7 @@ static int failures;
 static const uint8_t VECTOR[SL_ENTRY_BYTES] = {0xDB, 0x0D, 0xEC, 0xA5, 0xB1, 0xC0,
                                                0x8F, 0xFF, 0x0F, 0xFF, 0x7F};
 
-/* Bypass record: 12.34 s, servo -25, NO_RETURN, AROUND, steer +17. Also
+/* Bypass record: 12.34 s, servo -25, NO_RETURN, AROUND, steer +17, EDGE. Also
  * decoded by the receiver self-test. */
 static const uint8_t BYPASS_VECTOR[SL_BYPASS_BYTES] = {0xD2, 0xA4, 0x00, 0x70, 0x2F};
 
@@ -89,19 +89,22 @@ int main(void) {
         sl_bypass_t back_b;
         sl_unpack_bypass(BYPASS_VECTOR, &back_b);
         CHECK(back_b.time_10ms == 1234u && back_b.servo_deg == -25 &&
-                  back_b.reading == 0x0600u && back_b.state == 1u && back_b.steer_deg == 17,
+                  back_b.reading == 0x0600u && back_b.state == 1u && back_b.steer_deg == 17 &&
+                  back_b.phase == 0u,
               "bypass vector decodes");
 
         /* Ends: clamps, the streak bits dropped. */
         const sl_bypass_t far = {.time_10ms = 9000u, .servo_deg = 31, .reading = 0x39FFu,
-                                  .state = 3u, .steer_deg = -40};
+                                  .state = 3u, .steer_deg = -40, .phase = 6u};
         sl_pack_bypass(&far, r);
         sl_unpack_bypass(r, &back_b);
         CHECK(back_b.time_10ms == SL_BYPASS_TIME_MAX && back_b.servo_deg == 30 &&
-                  back_b.reading == 0x01FFu && back_b.state == 3u && back_b.steer_deg == -30,
-              "bypass ends: t %u servo %d reading %03X state %u steer %d", back_b.time_10ms,
-              back_b.servo_deg, back_b.reading, back_b.state, back_b.steer_deg);
-        CHECK((r[4] & 0xC0u) == 0u, "bypass spare bits are 0");
+                  back_b.reading == 0x01FFu && back_b.state == 3u && back_b.steer_deg == -30 &&
+                  back_b.phase == 2u,
+              "bypass ends: t %u servo %d reading %03X state %u steer %d phase %u",
+              back_b.time_10ms, back_b.servo_deg, back_b.reading, back_b.state,
+              back_b.steer_deg, back_b.phase);
+        CHECK((r[4] & 0xC0u) == 0x80u, "bypass phase in bits 38-39");
 
         uint8_t h[SL_BYPASS_HEADER_BYTES];
         CHECK(sl_write_bypass_header(h, 9u, 0x0102u, 40u) == SL_BYPASS_HEADER_BYTES &&

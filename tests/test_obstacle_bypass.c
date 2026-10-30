@@ -24,15 +24,17 @@ static const bp_config_t CFG = {
     .limit_deg = 30u,
     .step_deg = 5u,
     .bounce_deg = 10u,
-    .offset_deg = 15u, /* tests keep 15; the bench default is 20 */
+    .wrap_deg = 20u,
+    .clearance_mm = 110u,
+    .pass_extra_mm = 130u,
     .line_arm_ms = 150u,
     .pivot_max_ms = 4000u,
     .around_max_ms = 10000u,
 };
 
 /* Reading markers. */
-#define NR -1  /* NO_RETURN */
-#define RISE -2 /* NO_RISE, streak 1 */
+#define NR -1    /* NO_RETURN */
+#define RISE -2  /* NO_RISE, streak 1 */
 #define FAULT -3 /* NO_RISE, streak 5 */
 
 static ultrasonic_result_t result(int mm) {
@@ -60,7 +62,7 @@ static bp_word_t read(bp_t *bp, int mm) {
     bp_triggered(bp);
     now += 10u;
     bp_reading(bp, result(mm), now);
-    return bp_update(bp, false, false, now);
+    return bp_update(bp, false, false, 0, now);
 }
 
 static bp_t start(obstacle_side_t side) {
@@ -70,9 +72,10 @@ static bp_t start(obstacle_side_t side) {
     return bp;
 }
 
-/* Pivot done: two clear readings straight ahead. */
+/* Pivot done: the obstacle seen at 300 mm, then two free readings. */
 static bp_t around(obstacle_side_t side) {
     bp_t bp = start(side);
+    (void)read(&bp, 300);
     (void)read(&bp, NR);
     (void)read(&bp, NR);
     return bp;
@@ -82,55 +85,76 @@ int main(void) {
     bp_t bp;
     bp_word_t w;
 
+    /* Geometry helpers. */
+    check(bp_clear_angle(110u, 186u) == 37, "clear angle 110/186 -> 37 (run 1 stop)");
+    check(bp_clear_angle(110u, 168u) == 41, "clear angle 110/168 -> 41");
+    check(bp_clear_angle(110u, 250u) == 27, "clear angle 110/250 -> 27");
+    check(bp_clear_angle(110u, 110u) == 89, "clear angle 110/110 -> 89 (sin 89 = 1000)");
+    check(bp_clear_angle(110u, 100u) == 90, "clear angle: clearance > distance -> 90");
+    check(bp_clear_angle(110u, 0u) == 90, "clear angle: TOO_NEAR -> 90");
+    check(bp_clear_angle(0u, 300u) == 0, "clear angle: no clearance -> 0");
+    check(bp_mm_to_counts(100u) == 1241u, "100 mm -> 1241 counts (2535 per 204.204 mm)");
+    check(bp_mm_to_counts(1000u) == 12414u, "1000 mm -> 12414 counts");
+    check(bp_mm_to_counts(0u) == 0u, "0 mm -> 0 counts");
+    check(bp_mm_to_counts(4u) == 50u, "4 mm -> 50 counts (49.66 rounded up)");
+
     /* No free side. */
     bp = start(OBSTACLE_SIDE_NONE);
-    w = bp_update(&bp, true, false, now);
+    w = bp_update(&bp, true, false, 0, now);
     check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_NO_SIDE, "side NONE fails");
     check(bp_move(w) == BP_MOVE_STOP, "side NONE: stop");
     check(!bp_wants_reading(&bp, now + 1000u), "failed: no readings");
 
-    /* Pivot toward the bypass side, servo straight. */
+    /* Pivot toward the bypass side, servo at the limit toward the obstacle. */
     bp = start(OBSTACLE_SIDE_LEFT);
-    w = bp_update(&bp, true, false, now);
-    check(bp_move(w) == BP_MOVE_PIVOT && bp_steer_deg(w) == 30 && bp_servo_deg(w) == 0,
-          "pivot left: steer field +30, servo 0");
+    w = bp_update(&bp, true, false, 0, now);
+    check(bp_move(w) == BP_MOVE_PIVOT && bp_steer_deg(w) == 30 && bp_servo_deg(w) == -30,
+          "pivot left: steer field +30, servo -30 (obstacle right)");
     bp = start(OBSTACLE_SIDE_RIGHT);
-    w = bp_update(&bp, true, false, now);
-    check(bp_move(w) == BP_MOVE_PIVOT && bp_steer_deg(w) == -30, "pivot right: steer field -30");
+    w = bp_update(&bp, true, false, 0, now);
+    check(bp_move(w) == BP_MOVE_PIVOT && bp_steer_deg(w) == -30 && bp_servo_deg(w) == 30,
+          "pivot right: steer field -30, servo +30");
 
     /* Settle and pending. */
     bp = start(OBSTACLE_SIDE_LEFT);
-    check(!bp_wants_reading(&bp, now + 39u), "settle: not before 40 ms");
-    check(bp_wants_reading(&bp, now + 40u), "settle: at 40 ms");
+    check(!bp_wants_reading(&bp, now + 159u), "settle 0 -> -30: not before 160 ms");
+    check(bp_wants_reading(&bp, now + 160u), "settle 0 -> -30: at 160 ms");
     bp_triggered(&bp);
-    check(!bp_wants_reading(&bp, now + 100u), "pending: no second trigger");
-    bp_reading(&bp, result(NR), now + 50u);
-    check(bp_wants_reading(&bp, now + 90u), "after a reading: settle again 40 ms");
+    check(!bp_wants_reading(&bp, now + 300u), "pending: no second trigger");
+    bp_reading(&bp, result(NR), now + 300u);
+    check(!bp_wants_reading(&bp, now + 339u) && bp_wants_reading(&bp, now + 340u),
+          "after a reading: settle again 40 ms");
 
     /* A reading with no trigger is ignored. */
     bp = start(OBSTACLE_SIDE_LEFT);
+    bp_reading(&bp, result(300), now);
     bp_reading(&bp, result(NR), now);
     bp_reading(&bp, result(NR), now);
-    check(bp_state(&bp) == BP_PIVOT, "readings without a trigger are ignored");
+    check(bp_state(&bp) == BP_PIVOT && !bp.seen, "readings without a trigger are ignored");
 
-    /* Pivot: free is NO_RETURN or >= obstacle + 150 mm; two in a row end it. */
+    /* Pivot: the obstacle must go through the beam and out. */
     bp = start(OBSTACLE_SIDE_LEFT);
-    (void)read(&bp, 300); /* beyond hit_mm, but the obstacle (260 mm) */
-    (void)read(&bp, 300);
-    check(bp_state(&bp) == BP_PIVOT, "pivot: the obstacle at 300 mm is not free");
     (void)read(&bp, NR);
-    (void)read(&bp, 409);
+    (void)read(&bp, NR);
+    (void)read(&bp, NR);
+    check(bp_state(&bp) == BP_PIVOT, "pivot: free before the obstacle is seen does not count");
+    (void)read(&bp, 300); /* in the beam */
+    (void)read(&bp, NR);
+    (void)read(&bp, 409); /* < 410: still the obstacle */
     (void)read(&bp, 410); /* free */
     check(bp_state(&bp) == BP_PIVOT, "pivot: 409 mm between frees restarts the count");
     w = read(&bp, NR);
-    check(bp_state(&bp) == BP_AROUND, "pivot: two clear readings -> AROUND");
-    check(bp_move(w) == BP_MOVE_STEER && bp_steer_deg(w) == 0, "AROUND starts straight");
-    check(bp_servo_deg(w) == -5, "bypass left: servo steps toward the obstacle (right)");
-    check(!bp_wants_reading(&bp, now + 59u) && bp_wants_reading(&bp, now + 60u),
-          "5 degree move: 60 ms settle");
+    check(bp_state(&bp) == BP_AROUND && bp_phase(&bp) == BP_PHASE_PASS,
+          "pivot: seen, then two free -> AROUND, PASS");
+    check(bp_move(w) == BP_MOVE_STEER && bp_steer_deg(w) == 0 && bp_servo_deg(w) == -30,
+          "PASS: straight, servo stays at the limit");
+    /* last 409 mm: 409 x cos 30 = 354 mm ahead, + 130 = 484 mm. */
+    check(bp.pass_counts == bp_mm_to_counts(484u) && bp.pass_counts == 6008u,
+          "pass distance: last x cos(limit) + extra");
 
     /* No information, and the fault streak. */
     bp = start(OBSTACLE_SIDE_LEFT);
+    (void)read(&bp, 300);
     (void)read(&bp, NR);
     (void)read(&bp, RISE);
     check(!bp_wants_reading(&bp, now + 39u) && bp_wants_reading(&bp, now + 40u),
@@ -140,106 +164,149 @@ int main(void) {
     (void)read(&bp, FAULT);
     check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_SENSOR, "fault streak fails");
 
-    /* Rubber band, bypass left (obstacle on the right). */
+    /* PASS, then WRAP, by mean wheel travel. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    w = read(&bp, NR); /* clear at -5 */
-    check(bp_servo_deg(w) == -10 && bp_steer_deg(w) == 0, "clear: servo -10, steer kept");
-    w = read(&bp, NR); /* clear at -10 */
-    w = read(&bp, 180); /* hit at -15 */
-    check(bp_steer_deg(w) == 0, "hit at -15: steer -15 + 15 = 0");
-    check(bp_servo_deg(w) == -5, "hit: bounce 10 toward the bypass side");
+    const uint32_t pass = bp_mm_to_counts(300u * 866u / 1000u + 130u);
+    check(bp.pass_counts == pass, "pass distance from the pivot's last reading (300 mm)");
+    /* read() updated with travel 0: PASS started at 0. */
+    w = bp_update(&bp, false, false, (int32_t)pass - 1, now);
+    check(bp_phase(&bp) == BP_PHASE_PASS && bp_steer_deg(w) == 0, "PASS: one count short");
+    w = bp_update(&bp, false, false, (int32_t)pass, now);
+    check(bp_phase(&bp) == BP_PHASE_WRAP && bp_steer_deg(w) == -20,
+          "WRAP: steer 20 toward the obstacle (right)");
+    w = read(&bp, NR);
+    check(bp_phase(&bp) == BP_PHASE_WRAP && bp_servo_deg(w) == -30,
+          "WRAP: clear at the limit keeps WRAP");
+    bp = around(OBSTACLE_SIDE_RIGHT);
+    w = bp_update(&bp, false, false, (int32_t)bp.pass_counts, now);
+    check(bp_steer_deg(w) == 20, "bypass right: WRAP steers left");
+
+    /* PASS starts at the travel of the first update after it begins. */
+    bp = start(OBSTACLE_SIDE_LEFT);
+    for (int i = 0; i < 3; ++i) {
+        while (!bp_wants_reading(&bp, now)) now += 1u;
+        bp_triggered(&bp);
+        bp_reading(&bp, result(i == 0 ? 300 : NR), now);
+    }
+    check(bp_phase(&bp) == BP_PHASE_PASS, "PASS begun without an update");
+    (void)bp_update(&bp, false, false, -5000, now);
+    (void)bp_update(&bp, false, false, -5000 + (int32_t)bp.pass_counts - 1, now);
+    check(bp_phase(&bp) == BP_PHASE_PASS, "PASS from -5000: one count short");
+    (void)bp_update(&bp, false, false, -5000 + (int32_t)bp.pass_counts, now);
+    check(bp_phase(&bp) == BP_PHASE_WRAP, "PASS from -5000: done");
+
+    /* PASS: clear at the limit stays PASS; a hit starts EDGE. */
+    bp = around(OBSTACLE_SIDE_LEFT);
+    w = read(&bp, NR);
+    check(bp_phase(&bp) == BP_PHASE_PASS && bp_servo_deg(w) == -30, "PASS: clear keeps PASS");
+    w = read(&bp, 200); /* hit at -30: away = asin(110/200) = 34 */
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_steer_deg(w) == 4 && bp_servo_deg(w) == -20,
+          "hit at -30, 200 mm: EDGE, steer -30 + 34 = +4, bounce to -20");
     check(!bp_wants_reading(&bp, now + 79u) && bp_wants_reading(&bp, now + 80u),
           "10 degree bounce: 80 ms settle");
-    w = read(&bp, 220); /* hit at -5 */
-    check(bp_steer_deg(w) == 10 && bp_servo_deg(w) == 5, "hit at -5: steer +10 (away)");
-    w = read(&bp, NR); /* clear at +5 */
-    check(bp_servo_deg(w) == 0, "clear at +5: servo 0");
-    for (int i = 0; i < 6; ++i) {
-        w = read(&bp, NR);
-    }
-    check(bp_servo_deg(w) == -30 && bp_steer_deg(w) == 10, "clear to the limit -30");
-    w = read(&bp, NR); /* clear at the limit */
-    check(bp_steer_deg(w) == -15 && bp_servo_deg(w) == -30,
-          "clear at the limit: steer -30 + 15 = -15 (wrap), servo stays");
-    w = read(&bp, 200); /* hit at -30 */
-    check(bp_steer_deg(w) == -15 && bp_servo_deg(w) == -20, "hit at the limit: bounce");
+    w = read(&bp, NR); /* clear at -20 */
+    check(bp_servo_deg(w) == -25 && bp_steer_deg(w) == 4, "clear: servo steps, steer kept");
+    check(!bp_wants_reading(&bp, now + 59u) && bp_wants_reading(&bp, now + 60u),
+          "5 degree step: 60 ms settle");
+    (void)read(&bp, NR); /* clear at -25 */
+    w = read(&bp, NR);   /* clear at -30 */
+    check(bp_phase(&bp) == BP_PHASE_PASS && bp_steer_deg(w) == 0,
+          "clear at the limit: PASS again, straight");
+    check(bp.pass_counts == bp_mm_to_counts(200u * 866u / 1000u + 130u),
+          "new pass distance from the last hit (200 mm)");
+    w = read(&bp, 249); /* hit at the limit, just under hit_mm */
+    check(bp_phase(&bp) == BP_PHASE_EDGE, "249 mm is a hit");
+    bp = around(OBSTACLE_SIDE_LEFT);
+    (void)read(&bp, 250);
+    check(bp_phase(&bp) == BP_PHASE_PASS, "250 mm (hit_mm) is clear");
 
-    /* Rubber band, bypass right (obstacle on the left). */
+    /* WRAP: a hit starts EDGE. */
+    bp = around(OBSTACLE_SIDE_LEFT);
+    (void)bp_update(&bp, false, false, 0, now);
+    (void)bp_update(&bp, false, false, (int32_t)bp.pass_counts, now);
+    w = read(&bp, 220);
+    check(bp_phase(&bp) == BP_PHASE_EDGE && bp_steer_deg(w) == 0,
+          "WRAP hit at -30, 220 mm: EDGE, steer -30 + 30 = 0");
+
+    /* Run 1 case: bypass right, bottle on the left. */
     bp = around(OBSTACLE_SIDE_RIGHT);
-    w = read(&bp, NR); /* clear at +5 */
-    check(bp_servo_deg(w) == 10, "bypass right: servo steps left");
-    w = read(&bp, 200); /* hit at +10 */
-    check(bp_steer_deg(w) == -5 && bp_servo_deg(w) == 0, "bypass right: hit +10 -> steer -5");
+    (void)read(&bp, 200); /* hit at +30 -> servo +20 */
+    w = read(&bp, 168);   /* hit at +20: away 41 */
+    check(bp_steer_deg(w) == -21 && bp_servo_deg(w) == 10, "hit +20 at 168 mm: steer -21");
+    w = read(&bp, NR); /* clear at +10 -> +15 */
+    w = read(&bp, NR); /* clear at +15 -> +20 */
+    w = read(&bp, NR); /* clear at +20 -> +25 */
+    w = read(&bp, 155); /* hit at +25: away 46 */
+    check(bp_steer_deg(w) == -21, "hit +25 at 155 mm: steer 25 - 46 = -21");
 
-    /* Steering clamp: hit on the bypass side. */
+    /* Steering clamp: TOO_NEAR at the side. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    for (int i = 0; i < 4; ++i) {
-        (void)read(&bp, 200); /* hits walk the servo to +30 */
-    }
-    w = read(&bp, 200);
-    check(bp_steer_deg(w) == 30 && bp_servo_deg(w) == 30, "steer and servo clamp at 30");
+    w = read(&bp, 0); /* TOO_NEAR at -30: away 90 */
+    check(bp_state(&bp) == BP_AROUND && bp_steer_deg(w) == 30,
+          "TOO_NEAR at -30: no failure, steer clamps at +30");
 
-    /* Too near ahead fails; too near at the side does not. */
+    /* Too near ahead fails. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    (void)read(&bp, 0); /* TOO_NEAR at -5 */
+    (void)read(&bp, 200); /* -30 -> -20 */
+    (void)read(&bp, 200); /* -20 -> -10 */
+    (void)read(&bp, 0);   /* TOO_NEAR at -10 */
     check(bp_state(&bp) == BP_FAILED && bp_fail(&bp) == BP_FAIL_TOO_NEAR,
           "TOO_NEAR within 10 degrees fails");
     bp = around(OBSTACLE_SIDE_LEFT);
-    (void)read(&bp, NR);
-    (void)read(&bp, NR);
-    (void)read(&bp, 0); /* TOO_NEAR at -15 */
-    check(bp_state(&bp) == BP_AROUND, "TOO_NEAR at 15 degrees: a hit, no failure");
+    (void)read(&bp, 200); /* -30 -> -20 */
+    (void)read(&bp, 0);   /* TOO_NEAR at -20 */
+    check(bp_state(&bp) == BP_AROUND, "TOO_NEAR at 20 degrees: a hit, no failure");
 
     /* Line: seen at the start (on the line); armed after 150 ms dark. */
     bp = around(OBSTACLE_SIDE_LEFT);
     uint32_t t = now;
-    (void)bp_update(&bp, true, false, t);
-    (void)bp_update(&bp, false, false, t + 10u);
-    (void)bp_update(&bp, false, false, t + 150u); /* 140 ms dark */
-    (void)bp_update(&bp, true, false, t + 160u);
+    (void)bp_update(&bp, true, false, 0, t);
+    (void)bp_update(&bp, false, false, 0, t + 10u);
+    (void)bp_update(&bp, false, false, 0, t + 150u); /* 140 ms dark */
+    (void)bp_update(&bp, true, false, 0, t + 160u);
     check(bp_state(&bp) == BP_AROUND, "line back after 140 ms dark: not armed");
-    (void)bp_update(&bp, false, false, t + 200u);
-    (void)bp_update(&bp, false, false, t + 349u);
-    (void)bp_update(&bp, true, false, t + 350u);
+    (void)bp_update(&bp, false, false, 0, t + 200u);
+    (void)bp_update(&bp, false, false, 0, t + 349u);
+    (void)bp_update(&bp, true, false, 0, t + 350u);
     check(bp_state(&bp) == BP_AROUND, "dark 149 ms (a break restarts): not armed");
-    (void)bp_update(&bp, false, false, t + 400u);
-    (void)bp_update(&bp, false, false, t + 550u);
-    w = bp_update(&bp, true, true, t + 560u);
+    (void)bp_update(&bp, false, false, 0, t + 400u);
+    (void)bp_update(&bp, false, false, 0, t + 550u);
+    w = bp_update(&bp, true, true, 0, t + 560u);
     check(bp_state(&bp) == BP_AROUND, "junction reading does not end the bypass");
-    w = bp_update(&bp, true, false, t + 570u);
+    w = bp_update(&bp, true, false, 0, t + 570u);
     check(bp_state(&bp) == BP_DONE && bp_move(w) == BP_MOVE_STOP, "line found: DONE, stop");
     check(!bp_wants_reading(&bp, t + 1000u), "done: no readings");
 
     /* The line does not end the pivot. */
     bp = start(OBSTACLE_SIDE_LEFT);
-    (void)bp_update(&bp, false, false, now);
-    (void)bp_update(&bp, false, false, now + 200u);
-    (void)bp_update(&bp, true, false, now + 210u);
+    (void)bp_update(&bp, false, false, 0, now);
+    (void)bp_update(&bp, false, false, 0, now + 200u);
+    (void)bp_update(&bp, true, false, 0, now + 210u);
     check(bp_state(&bp) == BP_PIVOT, "line during the pivot: still PIVOT");
 
     /* Time limits. */
     bp = start(OBSTACLE_SIDE_LEFT);
-    (void)bp_update(&bp, true, false, now + 3999u);
+    (void)bp_update(&bp, true, false, 0, now + 3999u);
     check(bp_state(&bp) == BP_PIVOT, "pivot 3999 ms: running");
-    (void)bp_update(&bp, true, false, now + 4000u);
+    (void)bp_update(&bp, true, false, 0, now + 4000u);
     check(bp_fail(&bp) == BP_FAIL_PIVOT_TIME, "pivot 4000 ms: fails");
     bp = around(OBSTACLE_SIDE_LEFT);
     t = now;
-    (void)bp_update(&bp, true, false, t + 9999u);
+    (void)bp_update(&bp, true, false, 0, t + 9999u);
     check(bp_state(&bp) == BP_AROUND, "around 9999 ms: running");
-    (void)bp_update(&bp, true, false, t + 10000u);
+    (void)bp_update(&bp, true, false, 0, t + 10000u);
     check(bp_fail(&bp) == BP_FAIL_AROUND_TIME, "around 10000 ms: fails");
 
     /* Time wrap. */
     bp_init(&bp, &CFG, OBSTACLE_SIDE_LEFT, OBST_MM, 0xFFFFFFF0u);
     check(!bp_wants_reading(&bp, 0xFFFFFFFFu), "settle: not before the wrap");
-    check(!bp_wants_reading(&bp, 0x00000017u) && bp_wants_reading(&bp, 0x00000018u),
-          "settle over the time wrap");
-    (void)bp_update(&bp, true, false, 0xFFFFFFF5u);
+    check(!bp_wants_reading(&bp, 0x0000008Fu) && bp_wants_reading(&bp, 0x00000090u),
+          "settle over the time wrap (160 ms)");
+    (void)bp_update(&bp, true, false, 0, 0xFFFFFFF5u);
     check(bp_state(&bp) == BP_PIVOT, "pivot limit: running just after the start, before the wrap");
-    (void)bp_update(&bp, true, false, 0x00000F8Fu);
+    (void)bp_update(&bp, true, false, 0, 0x00000F8Fu);
     check(bp_state(&bp) == BP_PIVOT, "pivot limit over the wrap: running");
-    (void)bp_update(&bp, true, false, 0x00000F90u);
+    (void)bp_update(&bp, true, false, 0, 0x00000F90u);
     check(bp_fail(&bp) == BP_FAIL_PIVOT_TIME, "pivot limit over the wrap: fails at 4000 ms");
 
     /* Steering angle to line_steer position (W/2 55.5 mm, L 65 mm). */
@@ -253,8 +320,8 @@ int main(void) {
 
     /* Word layout. */
     bp = around(OBSTACLE_SIDE_LEFT);
-    w = bp_update(&bp, false, false, now);
-    check(w == (bp_word_t)(2u | (30u << 2) | (25u << 8)), "word: STEER, steer 0, servo -5");
+    w = bp_update(&bp, false, false, 0, now);
+    check(w == (bp_word_t)(2u | (30u << 2) | (0u << 8)), "word: STEER, steer 0, servo -30");
 
     if (failures == 0) {
         printf("test_obstacle_bypass: all tests passed\n");

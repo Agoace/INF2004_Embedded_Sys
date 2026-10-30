@@ -52,6 +52,7 @@ LOG_PERIOD_MS = 50
 MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "CALM"}
 BYPASS_MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "BYPS"}
 BYPASS_STATES = {0: "PIVOT", 1: "AROUND", 2: "DONE", 3: "FAILED"}
+BYPASS_PHASES = {0: "EDGE", 1: "PASS", 2: "WRAP", 3: "?"}
 SIDES = {0: "-", 1: "L", 2: "R", 3: "?"}
 SOURCES = {0: "-", 1: "sensor", 2: "gap", 3: "hint"}
 
@@ -94,6 +95,7 @@ def decode_bypass(data):
         reading=bits(v, 19, 11),
         state=bits(v, 30, 2),
         steer_deg=bits(v, 32, 6) - 30,
+        phase=bits(v, 38, 2),
     )
 
 
@@ -105,13 +107,14 @@ def reading_text(reading):
     return {1: "NO_RISE", 2: "STUCK_HIGH", 3: "NO_RETURN"}[status]
 
 
-BYPASS_HEADER = "#  t_ms servo reading    state  steer"
+BYPASS_HEADER = "#  t_ms servo reading    state  phase steer"
 
 
 def format_bypass(b):
-    return "# %6d %+5d %-10s %-6s %+5d" % (
+    phase = BYPASS_PHASES[b["phase"]] if b["state"] == 1 else "-"
+    return "# %6d %+5d %-10s %-6s %-5s %+5d" % (
         b["time_10ms"] * 10, b["servo_deg"], reading_text(b["reading"]),
-        BYPASS_STATES[b["state"]], b["steer_deg"])
+        BYPASS_STATES[b["state"]], phase, b["steer_deg"])
 
 
 TABLE_HEADER = "  t_ms mode  pos  dutyL dutyR  rawL rawC rawR  side src    hint  cntL cntR"
@@ -306,7 +309,11 @@ def self_test():
             failures += 1
         # bypass_test run: BYPS mode name and the bypass table.
         got_b = decode_bypass(BYPASS_VECTOR)
-        want_b = dict(time_10ms=1234, servo_deg=-25, reading=0x600, state=1, steer_deg=17)
+        want_b = dict(time_10ms=1234, servo_deg=-25, reading=0x600, state=1, steer_deg=17,
+                      phase=0)
+        if decode_bypass(bytes([0, 0, 0, 0, 0x80]))["phase"] != 2:
+            print("FAIL bypass phase bits 38-39")
+            failures += 1
         if got_b != want_b:
             print("FAIL bypass vector: %r" % got_b)
             failures += 1
@@ -326,7 +333,7 @@ def self_test():
             print("FAIL mode 3 is not BYPS in a bypass_test run")
             failures += 1
         for want in ("# bypass_test run 5", "     0 SRCH", "# bypass readings 1 of 1",
-                     "#  12340   -25 NO_RETURN  AROUND   +17"):
+                     "#  12340   -25 NO_RETURN  AROUND EDGE    +17"):
             if want not in text:
                 print("FAIL bypass run file, missing %r:\n%s" % (want, text))
                 failures += 1

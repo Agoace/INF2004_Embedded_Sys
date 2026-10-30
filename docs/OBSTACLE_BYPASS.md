@@ -1,22 +1,24 @@
 # Obstacle bypass
 
-Status: first version, host-tested and built on 2026-10-30. Track run 1 hit
-the obstacle ([track tests](#track-tests)); fixes are being decided.
+Status: version 2, host-tested and built on 2026-10-30 after track run 1
+hit the obstacle ([track tests](#track-tests)). Not yet tried on the track.
 
 This record describes how the robot drives around one obstacle on the line
 and finds the line again. The operator's name for the plan is the "Blind
 Bicycle Algorithm" (BBA). The first plan used arcs and wheel-count targets.
 The operator and the assistant changed it to the simpler edge following
-below: the sensor follows the edge of the obstacle, and the robot steers to
-keep a fixed angle away from that edge.
+below: the sensor follows the edge of the obstacle, and the robot steers so
+that the edge passes a fixed clearance from its centre line. After run 1,
+the operator agreed to one wheel-count check: the straight PASS past the
+obstacle, because the sensor cannot see beside the robot.
 
 ## Assumptions
 
 - One obstacle sits on the line. Nothing else is near it.
 - The scan (±30°, [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md)) sees past at least
   one side of it.
-- The robot finds the line again after the obstacle. No odometry and no
-  map are used.
+- The robot finds the line again after the obstacle. No map is used; the
+  only distance is the PASS travel.
 
 ## Steps
 
@@ -24,44 +26,74 @@ keep a fixed angle away from that edge.
  FOLLOW ──STOP (forward watch, 258 mm)──▶ wait 300 ms ──▶ SCAN
                                                           │ side S, obstacle mm
                                                           ▼
- FOLLOW ◀──line seen again── AROUND ◀──2 free readings── PIVOT
-                               │                           │
-                               └──── time limit / fault ───┴──▶ FAILED (stop)
+                                   PIVOT (servo 30° toward the obstacle)
+                                     │ obstacle in the beam, then 2 free
+                                     ▼
+            ┌──────────────▶ PASS (straight) ──travel done──▶ WRAP (20° back)
+            │ clear at 30°     │ hit                             │ hit
+            │                  ▼                                 │
+            └─────────────── EDGE ◀──────────────────────────────┘
+                     (steer = hit angle + asin(clearance / d) toward S)
+
+ Any AROUND phase ──line seen again──▶ FOLLOW
+ PIVOT / AROUND ──time limit / fault──▶ FAILED (stop)
 ```
 
 | Step | What the robot does | Ends when |
 | --- | --- | --- |
 | STOP | Motors off (coast) | 300 ms have passed |
 | SCAN | One 13-point scan. The PROFILE word picks the side S with the smaller free step (tie → more room at 30°, then LEFT). The obstacle is on the other side | The scan is done |
-| PIVOT | Turns on the spot toward S at 20 % duty, servo straight ahead | 2 **free** readings in a row → AROUND. Free = no echo, or an echo at least 150 mm past the obstacle (the scan's own rule) |
-| AROUND | Drives forward. The servo moves like a **rubber band** (below). The robot steers at the hit angle, moved `offset` toward S | The line is seen again → FOLLOW |
+| PIVOT | Turns on the spot toward S at 20 % duty. The servo looks 30° toward the obstacle | The obstacle has gone **through the beam and out**: one reading that is not free, then 2 free readings → AROUND, PASS. Free = no echo, or an echo at least 150 mm past the obstacle (the scan's own rule) |
+| AROUND | Drives forward in phase PASS, WRAP or EDGE (below) | The line is seen again → FOLLOW |
 | FAILED | Stops the run | — |
 
-Why "free" in PIVOT uses the scan rule: the robot stops about 258 mm from
-the obstacle. If "clear" meant "at least 250 mm", the pivot would end at
-once, still facing the obstacle.
+Why the pivot rule is "through the beam and out" (run 1): "free straight
+ahead" only means that the narrow beam misses the obstacle, and in run 1
+the robot turned only about 13°. "Free at 30°" is no better: the run 1 scan
+already read no echo at +30° before the pivot. When the obstacle has gone
+out of a beam that looks 30° toward it, the obstacle edge is about 40° off
+the heading (30° plus about 10° of beam).
 
-### Rubber band
+### AROUND phases
 
-The servo looks for the edge of the obstacle on each reading:
+| Phase | Steering | Servo | Ends when |
+| --- | --- | --- | --- |
+| **PASS** | Straight (0°) | Stays at 30° toward the obstacle | Mean wheel travel = last distance × cos 30° + `pass_extra_mm` → WRAP. A hit → EDGE |
+| **WRAP** | `wrap_deg` (20°) toward the obstacle side, back toward the line | Stays at 30° | A hit → EDGE |
+| **EDGE** | Hit angle θ + asin(`clearance_mm` / d) toward S, at most ±30° | Rubber band (below) | Clear at 30° → PASS, with a new pass distance |
+
+The steering rule in EDGE: a point at distance d passes `clearance_mm` from
+the robot's centre line when the heading is asin(clearance / d) away from
+it. With 110 mm (80 mm half width + 30 mm margin):
+
+| d | 250 mm | 200 mm | 186 mm | 168 mm | 155 mm | 110 mm or less |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| asin(110 / d) | 27° | 34° | 37° | 41° | 46° | 89–90° (clamped to 30°) |
+
+Run 1 hits with the old fixed 20° offset and with this rule (bypass right,
+so "away" is negative):
+
+| Hit | Old steering | New steering |
+| --- | ---: | ---: |
+| +20° at 168 mm | 0° | −21° |
+| +25° at 155 mm | +5° | −21° |
+
+The pass distance: the last point seen at 30° is d × cos 30° ahead of the
+sensor. `pass_extra_mm` (130 mm) adds 65 mm from the servo to the rear axle
+and 65 mm for the depth of the obstacle past that point. Counts =
+mm × 2535 / 204.204 (wheel diameter 65 mm), 12.41 counts per mm.
+
+### Rubber band (EDGE)
 
 | Reading at servo angle θ | Servo next | Steering angle |
 | --- | --- | --- |
-| **Hit** (echo nearer than `hit_mm`) | θ + `bounce` toward S | θ + `offset` toward S |
+| **Hit** (echo nearer than `hit_mm`) | θ + `bounce` toward S | θ + asin(`clearance_mm` / d) toward S |
 | **Clear** (no echo, or echo at `hit_mm` or farther) | θ + `step` toward the obstacle | No change |
-| Clear at the servo limit on the obstacle side | Stays at the limit | Limit + `offset` toward S: the obstacle is beside the robot, so the robot turns back toward it (wraps around it) |
+| Clear at 30° toward the obstacle | Stays | 0°: PASS starts |
 | No information (NO_RISE, STUCK_HIGH, no fault streak) | Same angle, read again | No change |
 
-Angles are positive to the left, as in the scan. Example, bypass on the
-left (obstacle on the right), offset 20°:
-
-| Reading | Servo | Steering |
-| --- | ---: | ---: |
-| Start of AROUND | −5° | 0° |
-| Clear at −5° | −10° | 0° |
-| Hit at −10° | 0° | +10° (away from the obstacle) |
-| Clear at 0°, −5°, … −30° | steps right | +10° |
-| Clear at −30° (obstacle beside the robot) | −30° | −10° (back toward it) |
+Angles are positive to the left, as in the scan. A hit in PASS or WRAP
+starts EDGE in the same way.
 
 ### Settings
 
@@ -71,17 +103,19 @@ The bench values are in [`src/bypass_test.c`](../src/bypass_test.c)
 | Setting | Value | Notes |
 | --- | ---: | --- |
 | `hit_mm` | 250 | About the stop distance (258 mm). Larger keeps the robot farther away |
+| `clearance_mm` | 110 | Robot width 160 mm: 80 mm half width + 30 mm margin |
+| `pass_extra_mm` | 130 | Servo to rear axle (65 mm) + obstacle depth (65 mm) |
+| `wrap_deg` | 20 | Turn back toward the line after PASS |
 | `limit_deg` | 30 | Servo and steering limit each side (the scan range) |
 | `step_deg` | 5 | Servo step while clear |
 | `bounce_deg` | 10 | Servo step back after a hit |
-| `offset_deg` | 20 | Start large; make it smaller if the robot goes too wide |
 | `line_arm_ms` | 200 | The line must be lost this long before it can end the bypass. The robot starts on the line |
 | `pivot_max_ms` | 4000 | Pivot time limit |
 | `around_max_ms` | 10000 | AROUND time limit |
 
 Servo settle time before each reading: 40 ms + 4 ms per degree moved
-(60 ms for 5°, 80 ms for 10°). The ultrasonic driver also keeps 60 ms
-between triggers.
+(60 ms for 5°, 80 ms for 10°, 160 ms for the first 30° move). The
+ultrasonic driver also keeps 60 ms between triggers.
 
 ## Steering
 
@@ -92,6 +126,8 @@ rear axle is the back wheel. Operator measurements, 2026-10-30 (about):
 | --- | ---: |
 | Track W (wheel contact to wheel contact) | 111 mm |
 | Wheelbase L (servo axis to rear axle) | 65 mm |
+| Wheel diameter | 65 mm |
+| Robot width (widest point) | 160 mm |
 
 At steering angle δ the rear axle turns on radius R = L / tan δ. Each wheel
 then runs at speed × (1 ∓ (W/2)·tan δ / L). `line_steer` with gain 100 %
@@ -126,7 +162,7 @@ Angles are whole degrees in ±30, so 6 bits each (61 values) are enough.
 | Reason | When |
 | --- | --- |
 | No free side | The scan saw both sides blocked |
-| Pivot time limit | Never 2 free readings ahead in 4 s |
+| Pivot time limit | The obstacle did not go through the beam and out in 4 s |
 | Line not found | AROUND ran 10 s |
 | Ultrasonic fault | Fault streak (5 faults in a row) |
 | Obstacle too near ahead | TOO_NEAR (under 60 mm) within ±10° of straight ahead in AROUND |
@@ -154,16 +190,19 @@ Procedure (power from VIN, USB unplugged, [USB_POWER_SAFETY.md](USB_POWER_SAFETY
 
 The Wi-Fi log gets the 50 ms entries (mode 3 is `BYPS`: STOP, SCAN or
 bypass; its position column is the steering angle in degrees) and one
-40-bit record per bypass reading ([packet format](STEER_WIFI_LOG.md#packet-format)).
-The receiver writes the readings as a table at the end of the run file.
+40-bit record per bypass reading, with the state and the AROUND phase
+([packet format](STEER_WIFI_LOG.md#packet-format)). The receiver writes the
+readings as a table at the end of the run file. The text shows each state
+and phase change with the steering angle, the last distance and the pass
+distance.
 
 ### What to watch in the first tests
 
 | Watch | If it happens |
 | --- | --- |
-| The rear corner touches the obstacle | Larger `offset_deg` or `hit_mm` |
-| The robot goes very wide and misses the line | Smaller `offset_deg` |
-| The robot crosses the line steeply and follows it back toward the obstacle | Smaller `offset_deg`, so it meets the line at a flatter angle |
+| The side or rear corner touches the obstacle | Larger `clearance_mm` or `pass_extra_mm` |
+| The robot goes very wide and misses the line | Smaller `clearance_mm`, larger `wrap_deg` |
+| The robot crosses the line steeply and follows it back toward the obstacle | Smaller `wrap_deg`, so it meets the line at a flatter angle |
 | A steep crossing reads as a junction | The bypass already ignores readings with all three sensors on the line; check the log |
 | The pivot never ends (wall behind the obstacle) | Move the obstacle, or check the scan |
 
@@ -209,16 +248,24 @@ cc -std=c11 -Wall -Wextra -Wconversion -Wshadow -Werror -Isrc \
 ./build/test_obstacle_bypass
 ```
 
-[`tests/test_obstacle_bypass.c`](../tests/test_obstacle_bypass.c) checks: no
-free side, pivot direction, the settle times, ignored readings without a
-trigger, the pivot free rule and its boundary (409 / 410 mm for a 260 mm
-obstacle), NO_RISE as no information, the fault streak, the rubber band in
-both directions, the steering clamp, TOO_NEAR ahead and at the side, the
-line arming and the junction rule, the time limits, the time-counter wrap,
-the word layout, and the steering-angle to position table.
+[`tests/test_obstacle_bypass.c`](../tests/test_obstacle_bypass.c) checks: the
+clearance angle and millimetre-to-count helpers, no free side, the pivot
+direction and servo angle, the settle times, ignored readings without a
+trigger, the pivot rule (free before the obstacle is seen does not count;
+the 409 / 410 mm boundary for a 260 mm obstacle), the pass distance, PASS
+→ WRAP by wheel travel (also from a negative count), hits in PASS and WRAP,
+the rubber band, the run 1 hits, the steering clamp, TOO_NEAR ahead and at
+the side, NO_RISE as no information, the fault streak, the line arming and
+the junction rule, the time limits, the time-counter wrap, the word layout,
+and the steering-angle to position table.
 
-Result on 2026-10-30: all tests pass. 22 rule changes in
-`src/obstacle_bypass.c` each make a test fail. Four of them first passed
-and needed new tests: a hit at exactly `hit_mm`, no wait after a reading
-with no information, and the settle time and the pivot time limit written
-without the wrap-safe subtraction.
+Result on 2026-10-30 (version 2): all tests pass. 30 rule changes in
+`src/obstacle_bypass.c` each make a test fail; one (no rounding in the
+millimetre-to-count helper) first passed and needed a test value that
+rounds up. One change cannot be found by a test: the servo angle after "no
+free side" is never sent, because the word is then STOP.
+
+Version 1 (same day): 22 rule changes each made a test fail; four of them
+first passed and needed new tests (a hit at exactly `hit_mm`, no wait after
+a reading with no information, and the settle time and pivot time limit
+without the wrap-safe subtraction).

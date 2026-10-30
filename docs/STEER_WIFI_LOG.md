@@ -104,7 +104,7 @@ significant bit first:
 | 19–29 | Reading: ultrasonic distance (9 bits) and status (2 bits) | 11 |
 | 30–31 | Bypass state after the reading: 0 PIVOT, 1 AROUND, 2 DONE, 3 FAILED | 2 |
 | 32–37 | Steering angle after the reading + 30 | 6 |
-| 38–39 | Spare, 0 | 2 |
+| 38–39 | AROUND phase after the reading: 0 EDGE, 1 PASS, 2 WRAP (bypass version 2) | 2 |
 
 The fault streak (3 bits) is not sent: a streak ends the bypass, and the
 run summary says so. In a `bypass_test` run, mode 3 of the 88-bit entry is
@@ -151,7 +151,7 @@ python3 scripts/steer_log_receiver.py --self-test
 ```
 
 Both sides use the same 11-byte test vector. The C test checks the vector,
-the bypass record vector (clamps, spare bits, header), round trips at the field limits, the ±511 clamp, the 12-bit raw mask, and
+the bypass record vector (clamps, phase bits, header), round trips at the field limits, the ±511 clamp, the 12-bit raw mask, and
 the header bytes. The Python test decodes the vector, runs one live and
 one replay packet through the receiver with one lost packet, and checks
 the save 3 s after a replay whose last packet is lost. It also decodes
