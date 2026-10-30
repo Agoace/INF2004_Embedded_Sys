@@ -317,6 +317,28 @@ when it cannot see it even at 30° the robot should turn more. Version 3.1
 does this (not seen at the limit: 5° more steering per reading); the
 offset stays 20°.
 
+### Runs 9–11: 2026-10-30, version 3.1 (turn more when not seen)
+
+Logs: `build/steer_logs/run_20261030-152229_boot8a6c_run1.txt`,
+`run_20261030-152326_boot8a6c_run2.txt`, `run_20261030-152605_boot8a6c_run3.txt`
+(boot 8a6c; not in Git).
+
+| Run | Obstacle | AROUND | Hits in AROUND | End |
+| --- | --- | ---: | --- | --- |
+| 9 | Bottle | 12.83–16.38 s | 1 (117 mm at −30°) | Line found (steer −30); time limit |
+| 10 | Bottle | 11.19–14.65 s; again 21.59–22.19 s | 1 (159 mm); 0 | Line found both times; time limit |
+| 11 | Box | 9.32 s – | 1 (183 mm at −30°, 10.03 s) | **Front corner hit the box**; left wheel stalled at 12.07 s |
+
+Run 11 readings: not seen at −30° from 9.31 s, so the steering went to
+−30° in 0.24 s. One echo at 10.03 s (183 mm) gave steer 0, then no echo at
+−20°, −25° and −30°, and the steering went back to −30° until the stall.
+The box face was close but gave no echo at a slant.
+
+Operator review: the turn-more rule corrects, but it turns back toward the
+obstacle too eagerly. Operator proposal: when the obstacle is lost at the
+limit, turn on the spot toward it until it is seen; then step the servo
+back until it is not seen (the edge); then steer at that edge + offset.
+
 ## Host unit test
 
 ```sh
