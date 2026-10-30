@@ -454,7 +454,8 @@ stopped by the time limit. The Wi-Fi log received 894 of 899 entries.
 
 - At the T the robot still swings, but for about 0.5 s (run 9: up to
   1.4 s). The straight part now runs at the calm base (25/26).
-- 3 of the 7 LINE_LOST came in one tight left curve (14.7–15.4 s): the
+- 3 of the 10 LINE_LOST (7 last long enough to show in the 50 ms log)
+  came in one tight left curve (14.7–15.4 s): the
   line stayed in the L–C gap at position about −45 (13/38) for 300 ms,
   then a short search found it at once.
 
