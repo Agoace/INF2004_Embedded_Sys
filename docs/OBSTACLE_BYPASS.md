@@ -1,7 +1,9 @@
 # Obstacle bypass
 
-Status: version 4.1, host-tested and built on 2026-10-30. Not yet tried on
-the track. Version 4 (runs 12–14) spiralled in: it turned back after about
+Status: **shelved on 2026-10-30** at version 4.1, by the operator, after
+track runs 15–18 ([open problems](#open-problems-when-shelved)). The code
+stays in the repository and its host test passes; `bypass_test` is the
+last firmware on the robot. Version 4 (runs 12–14) spiralled in: it turned back after about
 25 mm of each leg. Earlier versions ([track tests](#track-tests)): version 2 drove a
 fixed straight and arc (runs 3–4); version 3 steered at the last safe angle
 + 20° (runs 5–8); version 3.1 also turned harder when the obstacle was out
@@ -398,6 +400,43 @@ Findings (run 12):
 Operator: "not turning away enough". Version 4.1 (operator chose both):
 A, drive each leg to its closest point before TURN is allowed; B,
 clearance 150 mm.
+
+### Runs 15–18: 2026-10-30, version 4.1 (leg rule, clearance 150)
+
+Logs: `build/steer_logs/run_20261030-160955_boota411_run1.txt`,
+`run_20261030-161118_boota411_run2.txt`, `run_20261030-161226_boota411_run3.txt`,
+`run_20261030-161302_boota411_run4.txt` (boot a411; not in Git). Box.
+
+| Run | First leg | TURN 1 | EDGE 1 | TURN 2 | EDGE 2 | End |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 15 | 2483 counts (200 mm), 1.8 s | 85° | 201 mm | — | — | Line found at 16.2 s; right wheel stalled at 16.9 s |
+| 16 | 2334 counts (188 mm), 1.6 s | 86° | 166 mm | 64° | 82 mm | Close cycles at 79–109 mm, leg 0; line found at 10.8 s; search failed |
+| 17 | 2334 counts, 1.6 s | 82° | 198 mm | 57° | 88 mm | Left wheel stalled at 9.2 s (contact) |
+| 18 | 2383 counts, 1.7 s | 84° | 186 mm | — | — | Line found at 7.2 s; search failed |
+
+TURN angles from the wheel counts.
+
+Findings:
+
+1. The leg rule worked: the first leg was about 190–200 mm (version 4:
+   about 25 mm).
+2. After a full leg the obstacle is far out of view, so each TURN turned
+   the robot back by 57–86° on the spot. Each TURN brought the sensor
+   much nearer: about 245 → 166–201 mm after TURN 1, about 170 → 82–88 mm
+   after TURN 2. A pivot on the spot swings the front of the robot (the
+   sensor and the front corners) toward an obstacle beside it.
+3. The line was found in three runs, but the line follower lost it again
+   at once (the robot arrives at a steep angle, with steering +30°).
+
+### Open problems when shelved
+
+| Problem | Seen in |
+| --- | --- |
+| The servo sees only ±30° (mount limit about ±36°), so the obstacle is out of view when it is beside the robot | Runs 5–18 |
+| Turning back on the spot swings the front toward the obstacle | Runs 15–18 |
+| Flat faces at a slant give no echo | Runs 11, 12 |
+| The robot meets the line at a steep angle and the line follower loses it | Runs 15, 16, 18 |
+| Version 2 (fixed straight + arc by wheel counts) went around the bottle with no contact | Runs 3, 4 |
 
 ## Host unit test
 
