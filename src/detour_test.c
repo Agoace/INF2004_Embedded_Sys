@@ -13,14 +13,16 @@
  *   STOP    forward watch STOP: motors off (coast), wait STOP_SETTLE_MS.
  *   SCAN    one servo scan (src/obstacle_scan.c); the profile gives the
  *           detour side and the obstacle distance.
- *   DETOUR  src/obstacle_detour.c: four straight sides round the obstacle,
- *           a turn on the spot at each corner, then a turn along the line.
- *           Version 1: the sensor looks 30 degrees toward the obstacle and
- *           each straight past it ends one vehicle length (190 mm) after
- *           the nearest reading of that straight.
- *           Then FOLLOW again, with a new forward watch. The motors stop
- *           for MOVE_PAUSE_MS between moves. Straights hold the heading
- *           with the wheel-count difference.
+ *   DETOUR  src/obstacle_detour.c, version 1: the sensor looks 30 degrees
+ *           toward the obstacle. Turn away (5-degree steps, stop and look)
+ *           until the obstacle passed out of view; then straights that
+ *           end 190 mm after their nearest reading, each followed by a
+ *           turn toward the obstacle until it is seen; until the line is
+ *           found in a straight. Then 100 mm on and a turn back along the
+ *           line, and FOLLOW again with a new forward watch. The motors
+ *           stop for MOVE_PAUSE_MS when the motion changes (not between
+ *           the steps of one turn). Straights hold the heading with the
+ *           wheel-count difference.
  *
  * A run stops on: GP21, a failed search, a stalled wheel, a sensor fault,
  * a failed detour, or the time limit RUN_LIMIT_MS.
@@ -80,7 +82,11 @@ static const steer_config_t STEER_FOLLOW = {
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
 static const dt_config_t DETOUR = {
-    .turn_deg = 45u,
+    .turn_step_deg = 5u,
+    .away_max_deg = 90u,
+    .toward_max_deg = 150u,
+    .max_straights = 5u,
+    .look_ms = 150u, /* the robot coasts, then stands still for the reading */
     .vehicle_mm = 190u,
     .sweep_mm = 150u,
     .margin_mm = 30u,
@@ -88,7 +94,6 @@ static const dt_config_t DETOUR = {
     .line_ahead_mm = 100u,
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
-    .turn_max_ms = 4000u,
     .total_max_ms = 25000u,
 };
 
@@ -132,13 +137,12 @@ static const char *const STOP_NAMES[] = {
     "time limit",     "ultrasonic fault",   "detour failed",
 };
 static const char *const FAIL_NAMES[] = {
-    "-",          "no free side",           "turn time limit",
-    "time limit", "ultrasonic fault",       "obstacle too near ahead",
-    "line not found",
+    "-",          "no free side",     "turn limit (obstacle not seen / not lost)",
+    "time limit", "ultrasonic fault", "obstacle too near",
+    "line not found (straights)",
 };
-static const char *const STEP_NAMES[16] = {
-    "BACK", "TURN_OUT", "OUT", "TURN_BACK", "PASS", "TURN_IN", "IN", "ON_LINE",
-    "ALIGN", "DONE", "FAILED", "?", "?", "?", "?", "?",
+static const char *const STEP_NAMES[8] = {
+    "BACK", "TURN_AWAY", "STRAIGHT", "TURN_TOWARD", "ON_LINE", "ALIGN", "DONE", "FAILED",
 };
 
 typedef enum {
@@ -214,11 +218,11 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1: turn %u deg (%u.%02u counts/deg), past nearest %u mm, "
-           "seen < %u mm; turn %d%%, straight %d%%\n",
-           DETOUR.turn_deg, DETOUR.counts_per_deg_x100 / 100u,
-           DETOUR.counts_per_deg_x100 % 100u, DETOUR.vehicle_mm, DETOUR.seen_mm,
-           TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
+    printf("[run] detour v1: turn steps %u deg (%u.%02u counts/deg), look %u ms, "
+           "past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
+           DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
+           DETOUR.counts_per_deg_x100 % 100u, DETOUR.look_ms, DETOUR.vehicle_mm,
+           DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
 }
 
 static void print_log(void) {
@@ -237,7 +241,7 @@ static void print_log(void) {
         const sl_bypass_t *b = &run.bypass[i];
         printf("[detour] %6u %+3d ", b->time_10ms * 10u, b->servo_deg);
         print_reading(b->reading);
-        printf(" %s\n", STEP_NAMES[(b->state & 3u) << 2 | (b->phase & 3u)]);
+        printf(" %s\n", STEP_NAMES[((b->state & 3u) << 2 | (b->phase & 3u)) & 7u]);
     }
 }
 
@@ -327,7 +331,7 @@ typedef struct {
     uint32_t next_watch_ms;
     uint32_t stop_until_ms;
     uint8_t shown;      /* last printed detour step */
-    dt_move_t move;     /* motion of the current move */
+    dt_move_t move;     /* last motion (TURN or STRAIGHT) */
     int move_dir;
     uint32_t pause_until_ms; /* motors off between moves */
     int32_t hold_l, hold_r;  /* wheel counts at the start of the move */
@@ -380,7 +384,7 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
         dt_reading(&x->dt, r, now);
         if (x->dt.best_mm != best) {
             printf("[detour] %s nearest %u mm at %ld mm: count again\n",
-                   STEP_NAMES[x->dt.step], x->dt.best_mm, (long)x->dt.from_mm);
+                   STEP_NAMES[x->dt.step & 7u], x->dt.best_mm, (long)x->dt.from_mm);
         }
         if (run.bypass_total < BYPASS_RECORDS) {
             const uint32_t t = (now - x->t0) / 10u;
@@ -433,7 +437,7 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     /* Step changes also happen in dt_reading(): compare with the last print. */
     if ((uint8_t)step != x->shown) {
         x->shown = (uint8_t)step;
-        printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[step],
+        printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[step & 7u],
                (unsigned long)(now - x->t0), (long)x->dt.x, (long)x->dt.y, x->dt.heading);
     }
     if (step == DT_DONE) {
@@ -449,8 +453,12 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     }
     const dt_move_t move = dt_move(w);
     const int dir = dt_dir(w);
+    if (move == DT_MOVE_STOP) { /* a look in a turn */
+        set_duty(x, 0, 0);
+        return;
+    }
     if (move != x->move || dir != x->move_dir) {
-        /* New move: stop first, so the robot does not carry on. */
+        /* New motion (not the next step of the same turn): stop first. */
         x->move = move;
         x->move_dir = dir;
         x->pause_until_ms = now + MOVE_PAUSE_MS;
@@ -463,10 +471,8 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     }
     if (move == DT_MOVE_TURN) {
         set_duty(x, -dir * TURN_DUTY_PCT, dir * TURN_DUTY_PCT);
-    } else if (move == DT_MOVE_STRAIGHT) {
-        straight(x, c, dir);
     } else {
-        set_duty(x, 0, 0);
+        straight(x, c, dir);
     }
 }
 

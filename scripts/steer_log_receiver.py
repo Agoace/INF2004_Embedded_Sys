@@ -55,8 +55,8 @@ BYPASS_MODES = {0: "FOLW", 1: "SRCH", 2: "STRT", 3: "BYPS"}
 BYPASS_STATES = {0: "PIVOT", 1: "AROUND", 2: "DONE", 3: "FAILED"}
 BYPASS_PHASES = {0: "DRIVE", 1: "TURN", 2: "EDGE", 3: "?"}
 # detour_test: state << 2 | phase is the step (src/obstacle_detour.h).
-DETOUR_STEPS = ["BACK", "TURN_OUT", "OUT", "TURN_BACK", "PASS", "TURN_IN", "IN",
-                "ON_LINE", "ALIGN", "DONE", "FAILED", "?", "?", "?", "?", "?"]
+DETOUR_STEPS = ["BACK", "TURN_AWAY", "STRAIGHT", "TURN_TOWARD", "ON_LINE", "ALIGN", "DONE",
+                "FAILED", "?", "?", "?", "?", "?", "?", "?", "?"]
 SIDES = {0: "-", 1: "L", 2: "R", 3: "?"}
 SOURCES = {0: "-", 1: "sensor", 2: "gap", 3: "hint"}
 
@@ -355,18 +355,18 @@ def self_test():
                 failures += 1
         # detour_test run: step names from state << 2 | phase.
         r.handle(bytes([TYPE_BYPASS | (VERSION << 4), 0xEF, 0xBE, 7, 0]) +
-                 bytes([6, 0, 0, 1]) + BYPASS_VECTOR)  # state 1, phase 0: PASS
+                 bytes([6, 0, 0, 1]) + BYPASS_VECTOR)  # state 1, phase 0: ON_LINE
         r.handle(bytes([TYPE_LOG | (VERSION << 4), 0xEF, 0xBE, 8, 0]) +
                  bytes([6, FLAG_REPLAY | FLAG_REPLAY_END | FLAG_BYPASS | FLAG_DETOUR,
                         0, 0, 1]) + VECTOR)
         files = list(pathlib.Path(d).glob("run_*_bootbeef_run6.txt"))
         text = files[0].read_text() if len(files) == 1 else ""
-        for want in ("# detour_test run 6", DETOUR_HEADER, "#  12340   -25 NO_RETURN  PASS"):
+        for want in ("# detour_test run 6", DETOUR_HEADER, "#  12340   -25 NO_RETURN  ON_LINE"):
             if want not in text:
                 print("FAIL detour run file, missing %r:\n%s" % (want, text))
                 failures += 1
-        if not format_detour(dict(want_b, state=2, phase=2)).endswith(" FAILED"):
-            print("FAIL detour step 10 is not FAILED")
+        if not format_detour(dict(want_b, state=1, phase=3)).endswith(" FAILED"):
+            print("FAIL detour step 7 is not FAILED")
             failures += 1
         # Bad sizes are ignored.
         r.handle(header + bytes([3, 0, 0, 0, 5]) + VECTOR)
