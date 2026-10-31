@@ -202,13 +202,21 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             next_look(dt, dt->cfg.away_max_deg);
         }
     } else if (seen) { /* DT_TURN_TOWARD */
-        if (dt->cfg.back_off_deg == 0u) {
+        const int toward = -turn_deg(dt);
+        dt->last_turned_deg = toward > 0 ? toward : 0;
+        int back = dt->cfg.back_off_deg;
+        if (dt->cfg.back_off_fn) {
+            back = dt->cfg.back_off_fn(dt->last_turned_deg);
+            back = back < 0 ? 0 : back > 180 ? 180 : back;
+        }
+        dt->last_back_deg = back;
+        if (back == 0) {
             end_turn(dt, DT_STRAIGHT);
         } else {
             dt->looking = false;
             dt->backing = true; /* turn back, away from the obstacle */
             dt->back_x100 = (int32_t)turn_x100(dt) +
-                            (int32_t)dt->cfg.back_off_deg * dt->cfg.counts_per_deg_x100;
+                            (int32_t)back * dt->cfg.counts_per_deg_x100;
         }
     } else {
         next_look(dt, dt->cfg.toward_max_deg);

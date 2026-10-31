@@ -18,7 +18,7 @@
  *           until the obstacle passed out of view; then straights that
  *           end 350 mm (length + width) after their nearest reading, each
  *           followed by a turn toward the obstacle until it is seen and
- *           then 40 degrees back; until the line is
+ *           then back by the operator's formula; until the line is
  *           found in a straight. Then 123 mm on and a turn back along the
  *           line, and FOLLOW again with a new forward watch. The motors
  *           stop for MOVE_PAUSE_MS when the motion changes (not between
@@ -82,7 +82,12 @@ static const steer_config_t STEER_FOLLOW = {
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
+/* Back off after TURN_TOWARD sees the obstacle. turned_deg: how far it
+ * turned toward. Operator: edit the formula. */
+static int back_off_for(int turned_deg) { return turned_deg / 2; }
+
 static const dt_config_t DETOUR = {
+    .back_off_fn = back_off_for,
     .turn_step_deg = 5u,
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
@@ -221,11 +226,16 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.5-exp-backoff0: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
-           "look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
+    printf("[run] detour v1.5-exp-tuning: turn steps %u deg (%u.%02u counts/deg), back off ",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
-           DETOUR.counts_per_deg_x100 % 100u, DETOUR.back_off_deg, DETOUR.look_ms,
-           DETOUR.vehicle_mm,
+           DETOUR.counts_per_deg_x100 % 100u);
+    if (DETOUR.back_off_fn) {
+        printf("fn, ");
+    } else {
+        printf("%u deg, ", DETOUR.back_off_deg);
+    }
+    printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
+           DETOUR.look_ms, DETOUR.vehicle_mm,
            DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
 }
 
@@ -440,6 +450,10 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     const dt_step_t step = dt_step(&x->dt);
     /* Step changes also happen in dt_reading(): compare with the last print. */
     if ((uint8_t)step != x->shown) {
+        if (x->shown == DT_TURN_TOWARD && step == DT_STRAIGHT) {
+            printf("[detour] back off %d of turned %d deg\n",
+                   x->dt.last_back_deg, x->dt.last_turned_deg);
+        }
         x->shown = (uint8_t)step;
         printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[step & 7u],
                (unsigned long)(now - x->t0), (long)x->dt.x, (long)x->dt.y, x->dt.heading);

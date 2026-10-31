@@ -126,6 +126,8 @@ static dt_t to_straight(obstacle_side_t side) {
     return dt;
 }
 
+static int half_back_off(int turned_deg) { return turned_deg / 2; }
+
 int main(void) {
     dt_t dt;
     dt_word_t w;
@@ -522,6 +524,26 @@ int main(void) {
     dt_reading(&dt, result(300), now);
     check(dt_step(&dt) == DT_TURN_TOWARD && dt.looking,
           "the straight's reading is not used as the look");
+
+    /* Operator callback: rounded 25-degree turn chooses half (12 degrees). */
+    dt = to_straight(OBSTACLE_SIDE_LEFT);
+    dt.cfg.back_off_fn = half_back_off;
+    (void)drive_to(&dt, 190);
+    read(&dt, NR);
+    (void)turn_to(&dt, -counts(25));
+    read(&dt, 300);
+    check(dt.last_turned_deg == 25 && dt.last_back_deg == 12 && dt.backing,
+          "callback: positive rounded turn 25, back off half = 12");
+    check(dt.back_x100 == -counts(25) * 100 + 12 * (int32_t)CFG.counts_per_deg_x100,
+          "callback: backing target adds half the turned angle, not fixed 10");
+    (void)turn_to(&dt, -314);
+    check(dt.backing, "callback: before half-angle target, still backing");
+    (void)turn_to(&dt, -313);
+    check(dt_step(&dt) == DT_STRAIGHT, "callback: half-angle target ends backing");
+    (void)drive_to(&dt, 190);
+    read(&dt, 300);
+    check(dt_step(&dt) == DT_STRAIGHT && dt.last_turned_deg == 0 && dt.last_back_deg == 0,
+          "callback: half of zero enters STRAIGHT immediately");
 
     /* Word layout. */
     dt = to_straight(OBSTACLE_SIDE_LEFT);

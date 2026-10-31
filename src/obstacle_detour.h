@@ -22,7 +22,7 @@
  *                the nearest reading (from the start with none). Then
  *                TURN_TOWARD; after max_straights straights, NO_LINE.
  *   TURN_TOWARD  Turn toward the obstacle until it is seen, then back
- *                back_off_deg away from it (no look; runs 1 and 3 of the
+ *                back_off_fn(turned_deg), or back_off_deg, away (no look; runs 1 and 3 of the
  *                detour clipped the corner with no back-off). Then STRAIGHT.
  *   ON_LINE      The line sensors saw the line in a STRAIGHT: straight
  *                line_ahead_mm more, so the rear axle is on the line.
@@ -61,7 +61,7 @@ typedef struct {
     uint8_t away_max_deg;         /* TURN_AWAY limit */
     uint8_t toward_max_deg;       /* TURN_TOWARD limit */
     uint8_t max_straights;        /* NO_LINE after this many straights */
-    uint8_t back_off_deg;         /* TURN_TOWARD: turn back this much after seen */
+    uint8_t back_off_deg;         /* fixed fallback when back_off_fn is NULL */
     uint16_t look_ms;             /* stopped before a look reading */
     uint16_t vehicle_mm;          /* STRAIGHT: distance after the nearest reading */
     uint16_t sweep_mm;            /* rear axle centre to the farthest corner */
@@ -71,6 +71,7 @@ typedef struct {
     uint16_t seen_mm;             /* a valid echo nearer than this is the obstacle */
     uint16_t counts_per_deg_x100; /* turn on the spot: (right - left) counts per degree x 100 */
     uint16_t total_max_ms;        /* time limit of the detour */
+    int (*back_off_fn)(int turned_deg); /* optional; result clamped to 0..180 */
 } dt_config_t;
 
 /* Step: 3 bits. */
@@ -138,8 +139,10 @@ typedef struct {
     bool armed;         /* the line sensors lost the line once */
     bool looking;       /* turn: stopped for a look */
     bool seen_once;     /* TURN_AWAY: the obstacle was seen */
-    bool backing;       /* TURN_TOWARD: seen, turning back_off_deg away */
+    bool backing;       /* TURN_TOWARD: seen, turning chosen back-off away */
     int32_t back_x100;  /* backing ends when the turn x 100 reaches this */
+    int last_turned_deg; /* last TURN_TOWARD angle before seen, rounded, >= 0 */
+    int last_back_deg;   /* last chosen back-off; retained across step changes */
     uint8_t straights;  /* straights done */
     uint8_t target_deg; /* turn: look when the turn reaches this */
     int16_t heading;    /* degrees, S frame (+ toward S) */
