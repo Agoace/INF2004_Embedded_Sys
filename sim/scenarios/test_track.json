@@ -1,0 +1,453 @@
+{
+  "clock_quantum_us": 100,
+  "end_us": 45000000,
+  "events": [
+    {
+      "at_us": 2100000,
+      "down": true,
+      "pin": 21
+    },
+    {
+      "at_us": 2300000,
+      "down": false,
+      "pin": 21
+    }
+  ],
+  "firmware_target": "detour_test",
+  "name": "test_track",
+  "noise": {
+    "enabled": false
+  },
+  "obstacles": [
+    {
+      "contact": "freeze-both",
+      "echo": {
+        "corner_echo_max_mm": {
+          "assumed": true,
+          "note": "Operator-selected environment value; not a hardware measurement",
+          "value": 0
+        },
+        "material": "specular",
+        "max_incidence_deg": {
+          "assumed": true,
+          "note": "Operator-selected environment value; not a hardware measurement",
+          "value": 20
+        }
+      },
+      "id": "box_1",
+      "pose": {
+        "assumed": true,
+        "note": "Operator-selected environment value; not a hardware measurement",
+        "value": {
+          "heading_deg": 0,
+          "x_mm": 150,
+          "y_mm": -625
+        }
+      },
+      "size_mm": {
+        "assumed": true,
+        "note": "Operator-selected environment value; not a hardware measurement",
+        "value": [
+          120,
+          120
+        ]
+      },
+      "type": "box"
+    }
+  ],
+  "provenance": {
+    "adc": "docs/LINE_POSITION.md run 1; physical L/C/R after correction of the old pin labels",
+    "geometry": "docs/CALIBRATION_RESULTS.md#robot-geometry; conservative 160 x 190 mm rectangle",
+    "track": "Published spec: https://www.robotics.org.za/CK-RE-TRACK-COMO-16; Cytron EVA tiles, 315 x 315 x 10 mm, black 18 mm line on white"
+  },
+  "robot": {
+    "geometry": {
+      "front_x_mm": {
+        "assumed": true,
+        "note": "65 mm servo offset plus 58 mm echo mean; not a ruler measurement",
+        "value": 123
+      },
+      "length_mm": 190,
+      "rear_x_mm": {
+        "assumed": true,
+        "note": "Calculated rectangle rear: 123 minus 190 mm",
+        "value": -67
+      },
+      "sensor_face_offset_mm": {
+        "assumed": true,
+        "note": "Sensor face provisionally coincides with servo axis",
+        "value": 0
+      },
+      "servo_axis_x_mm": 65,
+      "wheel_diameter_mm": 65,
+      "wheel_track_mm": 111,
+      "width_mm": 160
+    },
+    "ir": {
+      "floor_adc": [
+        202,
+        185,
+        191
+      ],
+      "footprint_mm": {
+        "assumed": true,
+        "note": "Unmeasured sensing footprint width",
+        "value": 3
+      },
+      "line_adc": [
+        1645,
+        2615,
+        3424
+      ],
+      "points_mm": {
+        "assumed": true,
+        "note": "22 mm spacing preserves the recorded gap with 18 mm line and 3 mm footprint; x=123-4 mm board-tip inset",
+        "value": [
+          [
+            119,
+            22
+          ],
+          [
+            119,
+            0
+          ],
+          [
+            119,
+            -22
+          ]
+        ]
+      }
+    },
+    "motors": {
+      "coast_tau_ms": {
+        "assumed": true,
+        "note": "Synthetic unloaded fit: tau = USB coast counts / VIN-table steady count rate at 10 percent (left uses 27.5 midpoint of 27-28; right 23); mixed power conditions and equal acceleration/coast tau are assumptions, not measured time constants",
+        "value": [
+          24.74407874195705,
+          20.46697813254664
+        ]
+      },
+      "loaded_zero_pct": {
+        "assumed": true,
+        "note": "Approved provisional loaded zero, not a measured speed curve",
+        "value": 12
+      },
+      "profile": "unloaded-reference",
+      "symmetric_reverse": {
+        "assumed": true,
+        "note": "Approved equal forward/reverse magnitude until measured",
+        "value": true
+      }
+    },
+    "servo": {
+      "instant_angle": {
+        "assumed": true,
+        "note": "No separate servo slew model yet; real firmware settle waits remain",
+        "value": true
+      }
+    },
+    "start_pose": {
+      "assumed": true,
+      "note": "Rear axle and centre sensor start on the straight centreline; +x follows the tile row",
+      "value": {
+        "heading_deg": 0,
+        "x_mm": 0,
+        "y_mm": 0
+      }
+    },
+    "ultrasonic": {
+      "beam_deg": 30,
+      "echo_timeout_us": 3000,
+      "rise_latency_us": 215,
+      "trigger_gap_us": 60000
+    }
+  },
+  "schema_version": 1,
+  "seed": 1,
+  "track": {
+    "curve_radius_mm": {
+      "assumed": true,
+      "note": "Quarter-circle centre at tile corner, radius half a tile; check against a tile",
+      "value": 157.5
+    },
+    "line_width_mm": 18,
+    "material": "EVA foam",
+    "origin_mm": {
+      "assumed": true,
+      "note": "Place the first straight tile centreline at world y=0; chosen scenario placement",
+      "value": [
+        -315,
+        -157.5
+      ]
+    },
+    "primitives": [],
+    "thickness_mm": 10,
+    "tile_size_mm": 315,
+    "tiles": [
+      {
+        "col": 0,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "straight"
+      },
+      {
+        "col": 1,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "straight"
+      },
+      {
+        "col": 2,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "straight"
+      },
+      {
+        "col": 3,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "curve"
+      },
+      {
+        "col": 4,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 5,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 6,
+        "rotation_deg": 90,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 7,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 8,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 9,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 10,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 11,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 12,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 13,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 14,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 15,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 16,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 17,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 18,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 19,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 20,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 21,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 22,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 23,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 24,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 25,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 26,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 27,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 28,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 29,
+        "rotation_deg": 0,
+        "row": 0,
+        "type": "blank"
+      },
+      {
+        "col": 3,
+        "rotation_deg": 90,
+        "row": -1,
+        "type": "straight"
+      },
+      {
+        "col": 3,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "cross"
+      },
+      {
+        "col": 3,
+        "rotation_deg": 180,
+        "row": -3,
+        "type": "curve"
+      },
+      {
+        "col": 4,
+        "rotation_deg": 270,
+        "row": -3,
+        "type": "curve"
+      },
+      {
+        "col": 4,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "curve"
+      },
+      {
+        "col": 2,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "straight"
+      },
+      {
+        "col": 1,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "straight"
+      },
+      {
+        "col": 0,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "straight"
+      },
+      {
+        "col": -1,
+        "rotation_deg": 0,
+        "row": -2,
+        "type": "cross"
+      },
+      {
+        "col": -2,
+        "rotation_deg": 90,
+        "row": -2,
+        "type": "curve"
+      },
+      {
+        "col": -2,
+        "rotation_deg": 180,
+        "row": -3,
+        "type": "curve"
+      },
+      {
+        "col": -1,
+        "rotation_deg": 270,
+        "row": -3,
+        "type": "curve"
+      },
+      {
+        "col": -1,
+        "rotation_deg": 90,
+        "row": -1,
+        "type": "straight"
+      },
+      {
+        "col": -1,
+        "rotation_deg": 90,
+        "row": 0,
+        "type": "curve"
+      }
+    ]
+  }
+}
