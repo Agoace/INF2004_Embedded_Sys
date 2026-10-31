@@ -29,7 +29,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Forward obstacle watch record | [docs/OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md) |
 | Servo obstacle scan record | [docs/OBSTACLE_SCAN.md](OBSTACLE_SCAN.md) |
 | Obstacle bypass record | [docs/OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md) |
-| 2D firmware simulation design | [docs/SIMULATION.md](SIMULATION.md) — design only; planned `sim/` folder does not exist yet |
+| 2D firmware simulation | [docs/SIMULATION.md](SIMULATION.md) — design and milestone status; [sim/README.md](../sim/README.md) — host build, schema, trace, and tests |
 | Obstacle detour handoff | [docs/OBSTACLE_DETOUR_HANDOFF.md](OBSTACLE_DETOUR_HANDOFF.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
@@ -75,6 +75,11 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
 | Eventual control architecture | [`CONTROL_ARCHITECTURE.md`](CONTROL_ARCHITECTURE.md) |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
+| Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
+| Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/runner.py`](../sim/core/runner.py) |
+| Simulator devices and SDK headers | [`sim/devices/placeholders.c`](../sim/devices/placeholders.c), [`sim/include/`](../sim/include/) — milestone 1 stationary devices and minimal host SDK surface |
+| Simulator call hooks | [`sim/targets/detour_hooks.c`](../sim/targets/detour_hooks.c) — external-call observations; no firmware source edits |
+| Simulator scenarios and tests | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/tests/test_milestone1.py`](../sim/tests/test_milestone1.py), [`sim/tests/probe.c`](../sim/tests/probe.c) |
 | CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |

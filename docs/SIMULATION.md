@@ -2,11 +2,21 @@
 
 ## Status and purpose
 
-Design only. No simulator is implemented. The first firmware target is
-`detour_test` v1.5 at `b9dcb6f`. The simulator must execute the real firmware
-control code, not a second implementation of its rules.
+Milestone 1 is implemented in [`sim/`](../sim/README.md): scenario validation,
+a standalone host build, the clock, entry/exit, console, and buttons (build
+plan steps 1–3). The first target is the real `detour_test` v1.5 at `b9dcb6f`.
+No `src/` or firmware CMake file changes are required.
 
-The simulator has two parts: a host program that runs the firmware against
+The devices are stationary placeholders: counts stay zero, IR reads the
+floor, and ultrasonic results are timed NO_RETURN. The supplied GP21 event
+starts real spin calibration, which fails honestly on the firmware's wheel
+stall rule. The trace ends at the scenario deadline, not at detour success.
+External call hooks record results now; full phase decoding and hook/printf
+sequence checks remain step 7 work. Physics and the HTML viewer are not
+implemented. See the [host build instructions](../sim/README.md) for commands,
+schema rules, tests, and milestone limits.
+
+The complete design has two parts: a host program that runs firmware against
 a virtual floor, and an HTML viewer that plays the saved run.
 
 ## Separation from firmware
@@ -515,10 +525,12 @@ commands, contact, sensor events, and firmware labels change at saved times.
 Show gaps rather than invent data. Large traces can have a display-only
 reduced trail while the full event data stays available.
 
-## Proposed layout and commands
+## Layout and commands
 
-These paths and commands are planned, not available now. Do not add empty
-implementation files as part of this design change.
+The standalone build, target description/hooks, minimal SDK headers,
+clock/runtime, Python scenario reader/runner, placeholder devices, scenario,
+and tests now exist. World physics and the viewer paths remain planned.
+No empty implementation files are added for those later steps.
 
 | Planned path | Content |
 | --- | --- |
@@ -532,12 +544,12 @@ implementation files as part of this design change.
 | `sim/tests/` | Device contracts, geometry tests, repeatability checks |
 | `sim/build/`, `sim/output/` | Ignored host build and generated runs |
 
-Proposed build from the repository root:
+Build from the repository root:
 
 ```sh
 cmake -S sim -B sim/build -DSIM_FIRMWARE=detour_test
 cmake --build sim/build
-sim/build/robot_sim --scenario sim/scenarios/box.json --output sim/output/box
+sim/build/robot_sim --scenario sim/scenarios/box_straight.json --output sim/output/box
 ```
 
 The host build prepends `sim/include`, then reads `src/` headers. Use C11
