@@ -60,7 +60,7 @@ def write_trace(path, trace):
 
 
 def main(repo_path, build_path):
-    parser = argparse.ArgumentParser(description="Milestone 3 timed-echo firmware simulator")
+    parser = argparse.ArgumentParser(description="Milestone 4 offline-viewer firmware simulator")
     parser.add_argument("--scenario", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path, help="Output directory for trace.json")
     args = parser.parse_args()
@@ -76,7 +76,7 @@ def main(repo_path, build_path):
     config = json.loads((build / "target.json").read_text())
     config["compile_commands"] = json.loads((build / "compile_commands.json").read_text())
     header = {
-        "schema_version": 1, "milestone": 3, "source_commit": firmware_revision,
+        "schema_version": 1, "milestone": 4, "source_commit": firmware_revision,
         "repository_commit": revision, "source_hashes": before,
         "simulator_hashes": simulator_hashes(repo),
         "compiler": (build / "compiler.txt").read_text().strip(),
@@ -131,6 +131,9 @@ def main(repo_path, build_path):
     if error is not None:
         trace["error"] = error
     write_trace(args.output / "trace.json", trace)
+    sys.path.insert(0, str(repo / "sim/viewer"))
+    from render import write_html
+    write_html(trace, args.output / "run.html")
     if trace["firmware_observation"].get("step_crosscheck", {}).get("status") == "mismatch":
         print("observation mismatch: hook/printf step details saved in trace.json", file=sys.stderr)
     for time_us, line in text_lines(events):

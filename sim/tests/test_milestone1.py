@@ -138,6 +138,7 @@ class Milestone1(unittest.TestCase):
             self.assertEqual(result.returncode, 1, result.stderr)
             trace = json.loads((root / "out/trace.json").read_text())
             self.assertFalse(trace["complete"])
+            self.assertTrue((root / "out/run.html").is_file())
             self.assertRegex(trace["error"], r"native exit -(24|9)")
 
 

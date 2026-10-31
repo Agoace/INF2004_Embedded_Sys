@@ -1,4 +1,4 @@
-# Host firmware simulator — milestone 3
+# Host firmware simulator — milestone 4
 
 This host build reads the real `src/` files. It does not change or link to
 firmware CMake targets. See the [simulation record](../docs/SIMULATION.md)
@@ -8,7 +8,8 @@ for the design, model equations, assumptions, and remaining work.
 
 Requirements: Linux, a host C compiler (GCC or Clang), CMake 3.20 or later,
 and Python 3.9 or later with its standard library. No Pico SDK, network,
-credentials, Python packages, or browser is required for this milestone.
+credentials, or Python packages are required. The generated viewer needs
+only a modern browser; it does not need Node or Playwright.
 
 From the repository root:
 
@@ -22,7 +23,7 @@ ctest --test-dir sim/build --output-on-failure
 
 `robot_sim` is a generated Python launcher. It validates JSON, sends a
 numeric configuration to the native `firmware_sim` process, and writes
-`trace.json`. This uses Python's JSON parser instead of a vendored C parser.
+`trace.json` plus `run.html`. This uses Python's JSON parser instead of a vendored C parser.
 The C process runs the unchanged firmware entry point.
 
 The selected source list and per-source renames are in
@@ -31,6 +32,52 @@ Only `detour_test.c` gets `main=firmware_main` and module call renames.
 All retained firmware sources get `printf=sim_printf`. Simulator source
 files have strict warnings with `-Werror`; firmware has warnings enabled
 without changes to its sources. Unsupported targets or SDK symbols fail.
+
+## Open or regenerate the viewer
+
+Each run writes `run.html` next to `trace.json`, including failed/incomplete
+runs. Open `sim/output/box/run.html` directly in a browser (`file://`), or
+copy that single HTML file to another machine. It embeds CSS, JavaScript,
+scenario and display data; it makes no network request and does not fetch
+the JSON file. To regenerate from an existing trace without running firmware:
+
+```sh
+python3 sim/viewer/render.py sim/output/box/trace.json
+# Optional destination:
+python3 sim/viewer/render.py sim/output/box/trace.json --output sim/output/review.html
+```
+
+- Play/pause or space; speeds 0.25×, 1×, 4×, 16×.
+- Drag the time scrubber; previous/next step goes to exact hooked transitions.
+- Fit all sets the camera bounds; focus robot shows a closer view.
+- Drag the floor to pan; wheel zoom keeps the point under the pointer fixed.
+- Coordinates are mm, +y up. Blue is **true pose**; orange is the saved
+  **firmware estimate**, visible only during inferred DETOUR. The estimate
+  converts the module's S-frame x/y/heading through the recorded detour
+  origin and side. It is held start-of-step data, not unrecorded live travel.
+  The heading difference is shown without investigating or correcting it.
+- Only drawing pose is interpolated. Commands, raw ADC/counts, phase, steps,
+  echoes and console change at saved times. Gaps hide true pose rather than
+  extrapolating. The console is text only; the ASSUMED section lists every
+  assumption. Incomplete traces have a warning banner.
+
+The display keeps all world samples, dt observations/return words, step
+changes, motor/servo commands (including duplicates), console fragments,
+triggers, results and contacts. Unused hook details/packets stay in the full
+trace. Compact display data keeps the reference box HTML below 3 MB.
+Regeneration from the saved trace is byte-identical to the runner output.
+
+`sim_offline_viewer` tests data fidelity, both S-frame sides, regeneration,
+escaping and incomplete data. Its optional browser check uses an installed
+Node Playwright package. If it is not locally resolvable, set
+`SIM_PLAYWRIGHT_MODULE=/absolute/path/to/playwright` for CTest. Without a
+browser package that check reports a skip; no runtime dependency is added.
+The separate `sim/tests/viewer_browser.cjs` can save persistent screenshots:
+
+```sh
+SIM_PLAYWRIGHT_MODULE=/absolute/path/to/playwright node sim/tests/viewer_browser.cjs \
+  sim/output/box/run.html sim/output/box/trace.json sim/output/viewer-check
+```
 
 ## Milestone boundary
 
@@ -61,7 +108,7 @@ without changes to its sources. Unsupported targets or SDK symbols fail.
   a pending result; injected STUCK_HIGH publishes immediately. Optional
   falling-edge callbacks run at scheduled completion, not publication time.
 - Physical contact response, escape/reverse from contact, single-wheel
-  contact effects, and the HTML viewer are later work. Contact is latched
+  contact effects are later work. Contact is latched
   until the next process/scenario, even for a separating command. This is a
   safety stop, not contact dynamics. The contact regression test injects
   NO_RETURN to reproduce the milestone 2 contact path explicitly.
@@ -95,7 +142,7 @@ Values can be explicit assumptions:
 ```
 
 Every assumption, path, value, and note is kept in `header.assumed_values`.
-The future viewer will show this list. Published 315 mm tile size and 18 mm
+The viewer shows this list. Published 315 mm tile size and 18 mm
 line width are specifications, not assumptions. The marked 22 mm sensor
 spacing, 3 mm footprint, and sensing x = 119 mm remain guesses. The native
 world repeats the gap check through its actual stroke/footprint/ADC model:

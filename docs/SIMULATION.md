@@ -2,9 +2,9 @@
 
 ## Status and purpose
 
-Milestones 1–3 are implemented in [`sim/`](../sim/README.md): host execution,
-motion/IR, servo, timed sector echoes, module-call observations, and the real
-scan/detour loop. The target remains unchanged `detour_test` v1.5 at `b9dcb6f`.
+Milestones 1–4 are implemented in [`sim/`](../sim/README.md): host execution,
+motion/IR, servo, timed sector echoes, module-call observations, the real
+scan/detour loop, and the self-contained offline viewer. The target remains unchanged `detour_test` v1.5 at `b9dcb6f`.
 No `src/` or firmware CMake changes were made.
 
 Real GP21 calibration succeeds. The no-box scenario follows for 30 s without
@@ -19,9 +19,12 @@ separate phase decoder marks inferred/caller-pending boundaries and idle
 intervals. The eight hooked step transitions match all eight printed steps;
 module poses/headings also match the prints. A separate unhooked build gives
 identical native non-hook events, including commands, sensor results, text,
-and snapshots. Full contact response, fault dynamics, and the HTML viewer
-remain later work. Contact still uses the milestone 2 safety latch. See the
-[host instructions](../sim/README.md) for commands and schema rules.
+and snapshots. The runner now writes `run.html` beside every `trace.json`,
+including incomplete runs. It shows true world pose and the saved firmware
+estimate in separate colours. The heading gap is displayed, not investigated
+or corrected. Full contact response and fault dynamics remain later work;
+contact still uses the milestone 2 safety latch. See the
+[host instructions](../sim/README.md) for opening and regenerating the viewer.
 
 The complete design has two parts: a host program that runs firmware against
 a virtual floor, and an HTML viewer that plays the saved run.
@@ -622,34 +625,82 @@ allowing a print to omit a short-lived state between control updates.
 
 ## Viewer choice
 
-Choose the proposed offline HTML canvas viewer. Generate `run.html` with
-all CSS, JavaScript, scenario data, and trace embedded; also save `trace.json`
-for analysis. Open the HTML directly through a `file:` URL. No server,
-network fetch, external libraries, installation, or live mode is needed.
-Do not fetch a neighbouring JSON file, because browser local-file rules vary.
-Escape embedded text/data so firmware text cannot close a script element or
-insert HTML. Render console output as text only.
+The offline canvas viewer is implemented in
+[`sim/viewer/render.py`](../sim/viewer/render.py), its HTML template, CSS,
+and JavaScript. `run.html` embeds all display data and code, without external
+libraries or assets. Open it through `file:`; no server, network, installation,
+or neighbouring JSON fetch is needed. Regenerate from a saved trace without
+building or running firmware:
 
-The viewer shows the floor line, obstacles, conservative robot outline,
-IR sample points, servo beam/echo hit, path trail, counts/duties, saved
-hooked state/step with observation times, inferred phase, contacts, printf
-history, and the **ASSUMED** list.
-Controls are play/pause, playback speed, and a time scrubber. Scrubbing uses
-saved data only; it never reruns firmware. Interpolate pose only for drawing;
-commands, contact, sensor events, and firmware labels change at saved times.
-Show gaps rather than invent data. Large traces can have a display-only
-reduced trail while the full event data stays available.
+```sh
+python3 sim/viewer/render.py sim/output/box/trace.json
+```
+
+The floor is top-down in mm, +y up. It shows tile lines at their scenario
+width (18 mm in the reference), arbitrary strokes, boxes/circles, the true
+rectangle, normalized/raw IR points, the current servo ray/sector, sampled
+echo segment/point/distance, past trail, and timed contact markers. Fit all,
+focus robot, drag pan, and pointer-centred wheel zoom change only the camera.
+Controls include play/pause, 0.25×/1×/4×/16×, a microsecond scrubber,
+previous/next detour transition, and space to play/pause.
+
+The orange **firmware estimate** uses only public module x/y/heading values,
+held at their saved hook times. They are start-of-step values, not a live
+integrated estimate. At each `dt_init`, take the saved world rear-axle pose
+as origin (x0, y0, h0). For side S = +1 left / −1 right:
+
+```text
+world_x = x0 + module_x cos(h0) − S module_y sin(h0)
+world_y = y0 + module_x sin(h0) + S module_y cos(h0)
+world_heading = h0 + S module_heading
+```
+
+Do not add unrecorded travel or turn angles. The blue **true pose** uses
+world snapshots; only its drawing position/heading is interpolated. Counts,
+ADC, commands, phase, steps, console, and results change at saved times.
+A missing world interval longer than 10 ms is shown as a gap, with no true
+pose or trail bridge. No extrapolation is made beyond saved snapshots.
+The estimate is hidden outside inferred DETOUR or when its frame is missing.
+The side panel marks phases inferred and preserves the evidence/pending
+boundary in a tooltip; it shows sample times, last hooked state/failure,
+last published ultrasonic word, duties/counts, text-only console, assumptions,
+scenario, and source. Incomplete data has a clear banner.
+
+Display data retains every world sample, dt observation, step transition,
+duty/servo command (including repeated commands), text fragment, trigger,
+result, and contact. Other hook calls, packets, and completion events remain
+in the full `trace.json`. Compact arrays and omitted unused fields keep the
+reference HTML under 3 MB. Sorted JSON makes regeneration byte-identical.
+Data escapes `<`, `>`, `&`, and non-ASCII code points before embedding, so
+`</script>` cannot close the JSON script element. Dynamic text uses
+`textContent` or canvas text, never HTML. The content policy blocks network
+connections and external assets. Browser tests exercise file URLs with the
+network disabled, step/console fidelity, pose-only interpolation, controls,
+gaps, and literal `</script><b>` text. Playwright is optional for tests only;
+the viewer has no runtime dependency.
+
+Milestone 4 reference check: the 40 s `box_straight` HTML is **1,868,873
+bytes (1.7823 MiB)**. It keeps 4,001 world samples, 7,590 duty/servo commands,
+2,718 dt observations, and all eight detour transitions. Chromium
+149.0.7827.55 opened an isolated HTML copy from a file URL, with network
+disabled and no neighbouring trace. There were zero console/page errors
+and zero network requests. Screenshots at 7.8 s (STOP), 8.6 s (SCAN),
+12.0202 s (first STRAIGHT), 21.55 s (near 22 s), and 34.8102 s (FAILED)
+are in ignored `sim/output/milestone4/`, with the browser report and build/
+test evidence. The heading gap remains a displayed result only. The four
+CTest groups (27 Python tests plus native probes), all ten strict C host
+tests, documentation checks, unchanged firmware hashes, and repeat trace
+checks pass.
 
 ## Layout and commands
 
 The standalone build, target description/hooks, minimal SDK headers,
 clock/runtime, Python scenario reader/runner, replacement drivers, scenarios,
 and tests now exist. Motion, geometry, contact safety, and IR world physics
-also exist. Servo/echo geometry and observational decoding now exist;
-only the viewer path below remains planned.
-No empty implementation files are added for those later steps.
+also exist. Servo/echo geometry, observational decoding, and the offline
+viewer now exist. Full contact response remains outside this milestone.
 
-| Planned path | Content |
+| Path | Content |
 | --- | --- |
 | `sim/CMakeLists.txt` | Standalone host build; no Pico import |
 | `sim/targets/` | Source lists, compile options, hook lists/implementations, and state-label rules per firmware target |
@@ -830,12 +881,11 @@ not measured track accuracy. The run starts at 5.280300 s and stops by the
 | 4 | Motor, encoder, geometry, coast | Straight, spin, reverse, and coast match model equations; signs and fractional counts pass; no obstacle tunnelling |
 | 5 | Tile tracks, IR floor, and real spin calibration | Straight tiles join on the 315 mm grid; with 18 mm line and 3 mm footprint, the gap test rejects 14 mm spacing and accepts 22 mm; GP20/GP21 run real calibration; off-line start can fail honestly |
 | 6 | Servo and timed ultrasound | Check 59/60/511/512 mm, off-axis sector hit, 60 ms trigger gap, NO_RETURN, fault streak, immediate STUCK_HIGH, and time wrap |
-| 7 | Per-source external-call hooks | Real functions run once, results/commands match an unhooked run, timestamps do not advance time, renames stay in the caller; hooked step order agrees with printf labels |
-| 8 | Real scan and full detour loop | Scenario causes FOLLOW → STOP → SCAN → DETOUR; module hooks record actual steps/results; inferred phase respects call/assignment limits |
-| 9 | Contact and fault scenarios | Both-wheel freeze triggers real stall rules; left/right-only stalls require explicit fault injection; contact records do not depend on firmware stopping |
-| 10 | Trace decoder and offline viewer | Play/pause/speed/scrub work with network disabled; hook states, inferred phase, beam hit, text, trail, and ASSUMED list align with saved times |
-| 11 | Repeatability and timing sensitivity | Same inputs give identical traces in the same build; compare 50/100 µs clock quanta; source hashes stay unchanged |
-| 12 | Second firmware target | Select sources and hooks without changing world/clock core; inventory and implement only extra hardware needs |
+| 7 | Per-source hooks, real scan and full detour loop | Real functions run once and match an unhooked run; FOLLOW → STOP → SCAN → DETOUR follows firmware decisions; hook steps match printf labels; inferred phase keeps call/assignment limits |
+| 8 | Full contact response and fault scenarios (later) | Both-wheel freeze triggers real stall rules; separating motion and left/right-only injection require explicit models; contact records do not depend on firmware stopping |
+| 9 | Offline viewer (implemented) | Play/pause/speed/scrub work from file URLs with network disabled; true/firmware poses, inferred phase, echoes, text, trail, contacts, and ASSUMED list align with saved times |
+| 10 | Repeatability and timing sensitivity | Same inputs give identical traces in the same build; compare 50/100 µs clock quanta; source hashes stay unchanged |
+| 11 | Second firmware target | Select sources and hooks without changing world/clock core; inventory and implement only extra hardware needs |
 
 Run existing strict host tests and `python3 scripts/check-docs.py` alongside
 these checks. Hardware tests remain necessary after simulator results.
