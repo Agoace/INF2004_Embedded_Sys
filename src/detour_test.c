@@ -87,7 +87,7 @@ static const dt_config_t DETOUR = {
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
     .max_straights = 5u,
-    .back_off_deg = 40u, /* operator after v1.3 (v1: 0, v1.1: 10, v1.2: 15, v1.3: 30) */
+    .back_off_deg = 0u, /* experiment: operator sim test; v1.5 robot value is 40 */
     .look_ms = 150u, /* the robot coasts, then stands still for the reading */
     .vehicle_mm = 350u, /* operator: length 190 + width 160 (v1, v1.1: 190) */
     .sweep_mm = 150u,
@@ -221,7 +221,7 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.5: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
+    printf("[run] detour v1.5-exp-backoff0: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
            "look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
            DETOUR.counts_per_deg_x100 % 100u, DETOUR.back_off_deg, DETOUR.look_ms,
