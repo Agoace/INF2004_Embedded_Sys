@@ -3,7 +3,8 @@
 <body><header><h1>Robot environment editor</h1><span>No firmware or model edits · local batch runs only</span><output id="timing"></output></header>
 <div id="message" role="status"></div><main><aside>
 <label>Base scenario<select id="base"></select></label>
-<div class="actions"><button id="run">Run unchanged firmware</button><button id="edit-floor">Edit floor</button><button id="show-run" disabled>Run viewer</button></div>
+<div class="actions"><button id="run">Run (build if needed)</button><button id="edit-floor">Edit floor</button><button id="show-run" disabled>Run viewer</button></div>
+<output id="build-status" role="status">Native build not checked yet</output><section id="build-panel" hidden><h3>Build failed — simulation not started</h3><pre id="build-output"></pre></section>
 <label>Run length (s)<input id="duration" type="number" step="any" min="0.000001" data-field="end_us"></label>
 <p id="model-summary"></p>
 <fieldset><legend>Robot start (environment placement)</legend><div id="start"></div></fieldset>

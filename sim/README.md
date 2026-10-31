@@ -90,10 +90,25 @@ python3 sim/viewer/serve.py --build sim/build
 ```
 
 Use the printed `127.0.0.1` URL, not a network address or `localhost` alias.
-The server uses the existing built target; it never rebuilds. If the target
-is missing or older than its sources, the page shows the configure/build
-command. Rebuild in a terminal, then reload the page. Stop the server with
-Ctrl-C. This is a local development tool; do not expose it through a proxy.
+Configure/build once as above. On each **Run**, the server checks native
+C sources, compiler header dependencies and compile commands by content
+hash, then calls `cmake --build` under the run/save lock. A normal source
+edit uses an incremental build. Missing verification state, a different
+binary, or changed content with old/preserved file times forces a clean
+build so an old binary cannot pass the check. The first Run can therefore
+be slower. A 120 s process-group timeout applies to the build.
+
+The page shows **Rebuilt in X s** or **Build up to date**. Build failure
+shows compiler output as plain text and does not start a simulation, even
+if an older good binary exists. Output is also saved in
+`sim/build/editor-build.log` (last 256 KiB shown on failure). Build state
+stays in the ignored build directory. If the build is not configured, the
+page still shows the configure command. Stop the server with Ctrl-C.
+
+Only native build inputs trigger C compilation. Editing the server's own
+Python does **not** rebuild or reload it: manually restart the server to
+use Python changes. Source numbers are edited in `src/detour_test.c`, not
+from the page. This is a local tool; do not expose it through a proxy.
 
 1. Select a base scenario. Its model, guesses, motor profile and target are
    shown read-only. The server also refuses changes to those fields.
@@ -107,10 +122,12 @@ Ctrl-C. This is a local development tool; do not expose it through a proxy.
    blank, and use Rotate 90°. Grid size/origin stay fixed to the base.
 4. Set start x/y/heading and run length. Length is the scenario end time,
    including boot and calibration; firmware's own deadlines do not change.
-5. Click **Run unchanged firmware**. A full saved run returns, then playback
+5. Save source edits, then click **Run (build if needed)**. A full saved run returns, then playback
    starts. Edit floor returns to the draft without modifying that trace.
 6. Click history entries to switch quickly between saved end views and
-   their drafts. Each entry shows sizes and result, including contact.
+   their drafts. Each entry shows sizes, result/contact, the firmware's own
+   `[run] detour ...` summary and a short `src/detour_test.c` content hash.
+   A short/calibration-only run can have no summary; its build hash remains.
 7. **Save as scenario** writes a new `sim/scenarios/NAME.json`, never an
    overwrite. Names use 1–64 characters from `[a-z0-9_-]`. Saved files use
    the same schema as hand-written scenarios.

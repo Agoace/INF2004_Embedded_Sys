@@ -1,6 +1,9 @@
 """Standard-library checks for the environment-only API and loopback boundary."""
 import copy
 import http.client
+import hashlib
+import os
+import subprocess
 import json
 from pathlib import Path
 import socket
@@ -8,7 +11,7 @@ import sys
 import tempfile
 import threading
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 sys.dont_write_bytecode = True
 SIM = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SIM / "viewer"))
@@ -124,7 +127,7 @@ class API(unittest.TestCase):
                 pass
         self.assertFalse(self.server.verify_request(None, ("192.0.2.1", 123)))
 
-    def test_missing_and_stale_build_messages(self):
+    def test_missing_configuration_and_stale_sources_can_build(self):
         with patch.object(self.app, "build", Path(self.tmp.name) / "missing"):
             self.assertIn("cmake --build", self.app.build_error())
             status, _ = self.request("/api/run", {"base": "box_straight", "scenario": self.raw})
@@ -139,8 +142,58 @@ class API(unittest.TestCase):
                 return type("Stat", (), {"st_mode": actual.st_mode, "st_mtime_ns": 0})()
             return result
         with patch.object(Path, "stat", stat):
-            self.assertIn("older", self.app.build_error())
+            self.assertIsNone(self.app.build_error())  # Run now rebuilds old inputs.
         self.assertEqual(self.app.started_runs, 0)
+
+    def test_build_inputs_exclude_python(self):
+        inputs = self.app.build_inputs()
+        self.assertIn(str(SIM.parent / "src/detour_test.c"), inputs)
+        self.assertTrue(any(p.endswith(".h") for p in inputs))
+        self.assertFalse(any(p.endswith(".py") for p in inputs))
+
+    def test_content_guard_for_preserved_timestamp(self):
+        build = Path(self.tmp.name) / "build"
+        build.mkdir()
+        native = build / "firmware_sim";native.write_bytes(b"old binary")
+        source = build / "input.c";source.write_text("changed")
+        os.utime(source, ns=(0, 0))
+        source_key = str(SIM.parent / "src/detour_test.c")
+        inputs = {source_key: "a"*64, str(source): hashlib.sha256(source.read_bytes()).hexdigest()}
+        old = {**inputs, str(source): "old digest"}
+        (build / "editor-build-state.json").write_text(json.dumps({"inputs": old, "binary": Editor.file_hash(native)}))
+        process = Mock(returncode=0)
+        with patch.object(self.app, "build", build), patch.object(self.app, "build_error", return_value=None), patch.object(self.app, "build_inputs", return_value=inputs), patch("serve.subprocess.Popen", return_value=process) as popen:
+            with self.app.run_lock:
+                rebuilt = self.app.ensure_build()
+            self.assertTrue(rebuilt["rebuilt"])
+            self.assertIn("--clean-first", popen.call_args.args[0])
+            self.assertFalse(popen.call_args.kwargs["shell"])
+            process.communicate.assert_called_with(timeout=120)
+            with self.app.run_lock:
+                current = self.app.ensure_build()
+            self.assertEqual(current["message"], "Build up to date")
+            self.assertNotIn("--clean-first", popen.call_args.args[0])
+
+    def test_compiler_error_is_returned_without_simulation(self):
+        text = 'src/detour_test.c:90: error: <script>literal</script>'
+        with patch.object(self.app, "ensure_build", side_effect=RequestError("Build failed; simulation not started", "build", 422, build_output=text)):
+            status, body = self.request("/api/run", {"base":"box_straight", "scenario":self.raw})
+        self.assertEqual(status,422)
+        self.assertEqual(json.loads(body)["build_output"],text)
+        self.assertEqual(self.app.started_runs,0)
+        self.assertFalse(self.app.output.exists())
+        self.assertFalse(self.app.run_lock.locked())
+
+    def test_build_timeout_kills_group(self):
+        process=Mock(returncode=-9,pid=123456)
+        process.communicate.side_effect=[subprocess.TimeoutExpired("cmake",120), (None,None)]
+        with patch.object(self.app,"build_inputs",return_value={}), patch("serve.subprocess.Popen",return_value=process), patch("serve.os.killpg") as kill:
+            with self.app.run_lock, self.assertRaises(RequestError) as caught:
+                self.app.ensure_build()
+            self.assertEqual(caught.exception.status,504)
+            kill.assert_called_once()
+            self.assertIsNone(self.app.process)
+        self.assertEqual(self.app.started_runs,0)
 
     def test_busy_lock_and_session_history(self):
         self.app.run_lock.acquire()
