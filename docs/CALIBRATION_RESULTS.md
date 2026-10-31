@@ -15,7 +15,7 @@ Last updated: 2026-10-30
 | Track (wheel contact to wheel contact) | 111 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
 | Servo axis to rear axle | 65 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
 | Wheel diameter | 65 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
-| Width (widest point) | 160 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
+| Width (widest point) | 160 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering). Includes the barcode reader mount on the left side (operator, 2026-10-30 follow-up) |
 | Overall length | 190 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
 | Sensor face to robot front | About 58 mm | [Ultrasonic run 7](ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset): echo mean 57.9 mm, not a ruler measurement; the short-range echo read about 11 mm high |
 | Line sensor position | At the very front of the robot | Operator statement, 2026-10-30 session follow-up |
@@ -26,8 +26,9 @@ Last updated: 2026-10-30
 - The 123 mm and 146.7 mm values use the 58 mm echo value. If the true
   sensor-to-front offset is about 47 mm, the values become 112 mm and about
   138 mm. Measure the offset with a ruler before use.
-- The 146.7 mm circle assumes that the front corners are at the full
-  160 mm width.
+- The 146.7 mm circle uses the full 160 mm width (80 mm each side) as a
+  conservative value. The body without the left barcode reader mount is
+  narrower.
 
 ## Confirmed project wiring
 
