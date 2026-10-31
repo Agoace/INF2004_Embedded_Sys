@@ -41,7 +41,10 @@ def normalise(s, active=True):
         pose = obstacle["pose"]
         kind = int(obstacle["type"] == "bottle")
         size = [obstacle["diameter_mm"], 0] if kind else obstacle["size_mm"]
-        rows.append(" ".join(map(str, [kind, pose["x_mm"], pose["y_mm"], pose["heading_deg"], *size])))
+        echo = obstacle["echo"]
+        settings = [0, 90, 0] if isinstance(echo, str) else [
+            int(echo["material"] == "specular"), echo["max_incidence_deg"], echo["corner_echo_max_mm"]]
+        rows.append(" ".join(map(str, [kind, pose["x_mm"], pose["y_mm"], pose["heading_deg"], *size, *settings])))
     rows.append(str(len(faults)))
     rows += [f'{e["at_us"]} ' + str(["NORMAL", "NO_RISE", "STUCK_HIGH", "NO_RETURN"].index(e["ultrasonic_fault"])) for e in faults]
     return "\n".join(rows) + "\n"

@@ -216,7 +216,14 @@ def validate(s):
         names.add(obstacle["id"])
         pose(obstacle["pose"], p + ".pose")
         choice(obstacle["contact"], p + ".contact", ["freeze-both"])
-        choice(obstacle["echo"], p + ".echo", ["ideal-sector"])
+        echo = obstacle["echo"]
+        if isinstance(echo, str):
+            choice(echo, p + ".echo", ["ideal", "ideal-sector"])
+        else:
+            obj(echo, p + ".echo", "material max_incidence_deg corner_echo_max_mm")
+            choice(echo["material"], p + ".echo.material", ["ideal", "specular"])
+            number(echo["max_incidence_deg"], p + ".echo.max_incidence_deg", 0, 90)
+            number(echo["corner_echo_max_mm"], p + ".echo.corner_echo_max_mm", 0, 1000000)
     array(s["events"], "events")
     if len(s["events"]) > 100000:
         fail("events", "at most 100000 events are supported")

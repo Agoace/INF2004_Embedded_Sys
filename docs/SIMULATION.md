@@ -385,8 +385,9 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   actual echo segment separately so off-axis hits are visible.
 - The operator approved ideal nearest-surface echoes in the 30° sector
   for the first release, with opaque rectangle and circle surfaces.
-  Reflection and dropout come later. This is not a claim about real
-  ultrasound: tilted flat faces and thin objects can give no echo; see
+  The current box defaults use the deterministic specular rule below;
+  ideal material remains selectable for old traces. This is not a claim
+  about complete real ultrasound: tilted flat faces and thin objects can give no echo; see
   [driver representation rules](ULTRASONIC_DRIVER.md#packed-result).
 - Preserve the `ultrasonic.h` 16-bit result: bits 0–8 distance, 9–10 status,
   11–13 fault streak, 14–15 zero. VALID below 60 mm has distance code 0;
@@ -415,6 +416,21 @@ intersections with both sector boundaries. For a circle, test the nearest
 radial point and both boundary-ray intersections. Keep the nearest admitted
 surface across all obstacles. This includes off-axis echoes, not just the
 centre ray. The aperture is a closed ±15° sector.
+
+Current per-obstacle `echo` settings select `ideal` or `specular` material.
+Specular points must face the sensor within `max_incidence_deg`; box corners
+can bypass that cut up to `corner_echo_max_mm` (0 disables it). The nearest
+admitted point inside the same ±15° sector returns; none gives NO_RETURN.
+Circles use radial normals. Existing boxes default to **assumed 20°**, from
+the documented 20–25° flat-face loss, and **assumed 0 mm corners**, because
+no corner range was recorded. Both fields are editable environment values.
+Legacy `ideal-sector` remains supported. The viewer marks a sampled surface
+with a faint no-echo cross when incidence rejects all sector candidates.
+The [recorded-scan fit table](SIM_ECHO_FIT.md) gives geometry assumptions,
+per-angle readings and residuals: visibility can be matched for scan run 1,
+but neither its rising ranges nor the narrow bottle profile are reproduced
+by this nearest-point sector model. No random dropout or firmware changes
+are used to hide those limits.
 
 Round the ideal pulse to integer microseconds, then use the real driver's
 rounded pulse-to-mm conversion and packed-field limit. The ideal geometry
@@ -822,7 +838,7 @@ note. The original question numbers are kept for reference.
 | Q1, Q4: missing geometry and scenarios | Closed for the first release: accept explicit marked guesses, including the first-settings table above; measurements replace them later |
 | Q3: motors | Closed: use unloaded reference data and the provisional loaded profile with zero shifted to 12 %, and symmetric reverse; compare algorithms, not track success rates |
 | Q5: outline | Closed: conservative 160 × 190 mm rectangle |
-| Q6: echoes | Closed: ideal nearest surface in the 30° sector first; reflection/dropout later |
+| Q6: echoes | Ideal retained; deterministic specular incidence/corner settings added, with assumed values and explicit recorded-scan fit limits |
 | Q7: firmware state | Closed: per-source external-call hooks; no source edit; exact hook timestamps and separate inferred phase with the limits stated above |
 | Q8: clock and contact | Closed: fixed 100 µs clock-read quantum, compare against 50 µs; both-wheel contact freeze; single-wheel stalls only as explicit fault injections |
 

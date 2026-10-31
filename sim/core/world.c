@@ -10,7 +10,11 @@
 
 typedef struct { int col, row, kind, rotation; } tile_t;
 typedef struct { int kind; world_point_t a, b; double radius, start, sweep, width; } stroke_t;
-typedef struct { int kind; world_point_t centre; double angle, width, height; } obstacle_t;
+typedef struct {
+    int kind, specular;
+    world_point_t centre;
+    double angle, width, height, max_incidence, corner_range;
+} obstacle_t;
 static world_config_t cfg;
 static world_state_t state;
 static tile_t *tiles;
@@ -90,9 +94,11 @@ void world_read(FILE *input) {
     obstacles = allocate(obstacle_count, sizeof *obstacles);
     for (size_t i = 0; i < obstacle_count; ++i) {
         obstacle_t *o = &obstacles[i];
-        if (fscanf(input, "%d %lf %lf %lf %lf %lf", &o->kind, &o->centre.x,
-            &o->centre.y, &o->angle, &o->width, &o->height) != 6) { sim_error("invalid obstacle"); }
+        if (fscanf(input, "%d %lf %lf %lf %lf %lf %d %lf %lf", &o->kind, &o->centre.x,
+            &o->centre.y, &o->angle, &o->width, &o->height, &o->specular,
+            &o->max_incidence, &o->corner_range) != 9) { sim_error("invalid obstacle"); }
         o->angle *= PI / 180.0;
+        o->max_incidence *= PI / 180.0;
     }
     if (!world_gap_consistent()) { sim_error("real IR model failed C-L gap consistency"); }
 }
@@ -298,18 +304,29 @@ void world_advance(uint64_t start_us, uint64_t end_us) {
 }
 void world_servo(uint16_t pulse) { servo_deg = ((double)pulse - 1500.0) * 0.09; }
 static double cross(world_point_t a, world_point_t b) { return a.x*b.y - a.y*b.x; }
-static void echo_candidate(world_echo_t *best, world_point_t p, size_t index, double heading) {
+static void echo_candidate(world_echo_t *best, world_point_t p, size_t index, double heading,
+                           world_point_t normal, bool corner) {
     const double x=p.x-best->origin.x, y=p.y-best->origin.y;
     const double distance=hypot(x,y);
     const double offset=atan2(sin(atan2(y,x)-heading),cos(atan2(y,x)-heading));
-    if (distance<best->distance && (distance<1e-9 || fabs(offset)<=PI/12+1e-12)) {
+    if (distance>=1e-9 && fabs(offset)>PI/12+1e-12) { return; }
+    if (distance<best->surface_distance) {
+        best->surface_hit=true; best->surface_distance=distance;
+        best->surface_point=p; best->surface_obstacle=index;
+    }
+    const obstacle_t o=obstacles[index];
+    /* Outward normal dotted with P->sensor: 1 is normal incidence. */
+    const double cosine=distance<1e-9 ? 1.0 : -(normal.x*x+normal.y*y)/distance;
+    const bool corner_echo=corner && o.corner_range>0 && distance<=o.corner_range+1e-9;
+    if (o.specular && !corner_echo && cosine+1e-12<cos(o.max_incidence)) { return; }
+    if (distance<best->distance) {
         best->hit=true; best->distance=distance; best->point=p; best->obstacle=index;
     }
 }
 world_echo_t world_echo(void) {
     const double heading=state.heading+servo_deg*PI/180;
     const world_point_t axis=transform((world_point_t){cfg.servo_x,0},state.x,state.y,state.heading);
-    world_echo_t best={.distance=1e30,.angle_deg=heading*180/PI,
+    world_echo_t best={.distance=1e30,.surface_distance=1e30,.angle_deg=heading*180/PI,
         .origin=transform((world_point_t){cfg.face_offset,0},axis.x,axis.y,heading)};
     if (!active) { return best; }
     for (size_t i=0;i<obstacle_count;++i) {
@@ -317,14 +334,19 @@ world_echo_t world_echo(void) {
         if (o.kind==0) {
             world_point_t box[4];
             rectangle(box,o.centre.x,o.centre.y,o.angle,o.width/2,-o.width/2,o.height);
+            /* On a visible planar face, incidence increases with range.
+             * The exact geometric minimum in the sector is therefore also
+             * the best incidence; no angular sampling or centre-ray proxy. */
             for (size_t j=0;j<4u;++j) {
                 const world_point_t a=box[j],b=box[(j+1u)%4u];
                 const world_point_t edge={b.x-a.x,b.y-a.y};
                 const world_point_t delta={a.x-best.origin.x,a.y-best.origin.y};
                 const double square=edge.x*edge.x+edge.y*edge.y;
                 const double t=fmax(0,fmin(1,-(delta.x*edge.x+delta.y*edge.y)/square));
-                echo_candidate(&best,a,i,heading);
-                echo_candidate(&best,(world_point_t){a.x+t*edge.x,a.y+t*edge.y},i,heading);
+                const double length=sqrt(square);
+                const world_point_t normal={edge.y/length,-edge.x/length};
+                echo_candidate(&best,a,i,heading,normal,true);
+                echo_candidate(&best,(world_point_t){a.x+t*edge.x,a.y+t*edge.y},i,heading,normal,false);
                 for (int side=-1;side<=1;side+=2) {
                     const double h=heading+(double)side*PI/12;
                     const world_point_t ray={cos(h),sin(h)};
@@ -333,7 +355,7 @@ world_echo_t world_echo(void) {
                     const double range=cross(delta,edge)/denominator;
                     const double along=cross(delta,ray)/denominator;
                     if (range>=0 && along>=0 && along<=1) {
-                        echo_candidate(&best,(world_point_t){best.origin.x+range*ray.x,best.origin.y+range*ray.y},i,heading);
+                        echo_candidate(&best,(world_point_t){best.origin.x+range*ray.x,best.origin.y+range*ray.y},i,heading,normal,false);
                     }
                 }
             }
@@ -341,9 +363,11 @@ world_echo_t world_echo(void) {
             const double dx=o.centre.x-best.origin.x,dy=o.centre.y-best.origin.y;
             const double distance=hypot(dx,dy),radius=o.width/2;
             if (distance>0) {
-                echo_candidate(&best,(world_point_t){o.centre.x-radius*dx/distance,o.centre.y-radius*dy/distance},i,heading);
+                echo_candidate(&best,(world_point_t){o.centre.x-radius*dx/distance,o.centre.y-radius*dy/distance},i,heading,
+                    (world_point_t){-dx/distance,-dy/distance},false);
             } else {
-                echo_candidate(&best,(world_point_t){best.origin.x+radius*cos(heading),best.origin.y+radius*sin(heading)},i,heading);
+                echo_candidate(&best,(world_point_t){best.origin.x+radius*cos(heading),best.origin.y+radius*sin(heading)},i,heading,
+                    (world_point_t){cos(heading),sin(heading)},false);
             }
             for (int side=-1;side<=1;side+=2) {
                 const double h=heading+(double)side*PI/12;
@@ -353,7 +377,8 @@ world_echo_t world_echo(void) {
                 for (int root=-1;root<=1;root+=2) {
                     const double range=projection+(double)root*sqrt(discriminant);
                     if (range>=0) {
-                        echo_candidate(&best,(world_point_t){best.origin.x+range*cos(h),best.origin.y+range*sin(h)},i,heading);
+                        const world_point_t p={best.origin.x+range*cos(h),best.origin.y+range*sin(h)};
+                        echo_candidate(&best,p,i,heading,(world_point_t){(p.x-o.centre.x)/radius,(p.y-o.centre.y)/radius},false);
                     }
                 }
             }

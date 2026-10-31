@@ -26,6 +26,10 @@ typedef struct {
     size_t obstacle;
     double distance, angle_deg;
     world_point_t origin, point;
+    bool surface_hit;
+    size_t surface_obstacle;
+    double surface_distance;
+    world_point_t surface_point;
 } world_echo_t;
 void world_servo(uint16_t pulse);
 world_echo_t world_echo(void);

@@ -38,6 +38,8 @@ def display_data(trace):
             console.append([t, event["text"]])
         elif kind == "ultrasonic_trigger":
             triggers.append(event)
+        elif kind == "ultrasonic_no_echo" and triggers and triggers[-1]["t_us"] == t:
+            triggers[-1] = {**triggers[-1], "no_echo": event}
         elif kind == "ultrasonic_result":
             results.append(event)
         elif kind == "contact":

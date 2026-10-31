@@ -134,7 +134,12 @@ class EchoDetour(unittest.TestCase):
         before = source_hashes(SIM.parent)
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
             root = Path(directory)
-            args = ["--scenario",str(SIM / "scenarios/box_straight.json")]
+            # Preserve the accepted ideal trajectory; specular has separate checks.
+            raw = json.loads((SIM / "scenarios/box_straight.json").read_text())
+            raw["obstacles"][0]["echo"] = "ideal"
+            ideal = root / "ideal.json"
+            ideal.write_text(json.dumps(raw))
+            args = ["--scenario",str(ideal)]
             subprocess.run([str(LAUNCHER),*args,"--output",str(root/"hooked")],check=True,capture_output=True,timeout=10)
             trace = json.loads((root/"hooked/trace.json").read_text())
             obs = trace["firmware_observation"]

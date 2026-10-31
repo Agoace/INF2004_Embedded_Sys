@@ -83,10 +83,15 @@ class Milestone1(unittest.TestCase):
     def test_real_firmware_determinism_and_read_only(self):
         before = source_hashes(SIM.parent)
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
+            # Keep the accepted ideal-model regression independent of new defaults.
+            raw = copy.deepcopy(self.raw)
+            raw["obstacles"][0]["echo"] = "ideal"
+            ideal = Path(directory) / "ideal.json"
+            ideal.write_text(json.dumps(raw))
             traces = []
             for run in ("a", "b"):
                 output = Path(directory) / run
-                result = subprocess.run([str(LAUNCHER), "--scenario", str(SIM / "scenarios/box_straight.json"),
+                result = subprocess.run([str(LAUNCHER), "--scenario", str(ideal),
                                          "--output", str(output)], capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 traces.append((output / "trace.json").read_bytes())
