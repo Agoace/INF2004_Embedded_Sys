@@ -382,6 +382,18 @@ static void start_follow(ctx_t *x, const int32_t c[2], uint32_t now) {
     x->next_watch_ms = now + WATCH_PERIOD_MS; /* let the servo centre first */
 }
 
+/* The same count-limited search after LINE_LOST or an off-line detour. */
+static void start_search(ctx_t *x, const int32_t c[2], int direction) {
+    x->search = (search_t){
+        .direction = direction,
+        .start_l = c[0],
+        .start_r = c[1],
+    };
+    x->phase = PHASE_SEARCH;
+    ++run.searches;
+    set_duty(x, -direction * SEARCH_DUTY_PCT, direction * SEARCH_DUTY_PCT);
+}
+
 /* One ultrasonic result, by phase. */
 static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
     if (x->phase == PHASE_FOLLOW) {
@@ -468,7 +480,15 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     }
     if (step == DT_DONE) {
         ++run.detours;
+        lp_reset_tracking(&lp);
+        uint16_t raw[LP_SENSORS];
+        line_sensors_read(raw);
+        (void)lp_update(&lp, raw, now);
         start_follow(x, c, now);
+        if (!lp_line_seen(&lp)) {
+            printf("[detour] DONE: line not seen, search toward the obstacle side\n");
+            start_search(x, c, -x->dt.side);
+        }
         return;
     }
     if (step == DT_FAILED) {
@@ -560,15 +580,7 @@ static void run_once(bool *previous_run) {
             const vc_event_t event = lp_update(&lp, raw, now);
             if (x.phase == PHASE_FOLLOW && vc_event_type(event) == VC_EVENT_LINE_LOST) {
                 const vc_line_side_t side = (vc_line_side_t)vc_event_payload(event);
-                x.search = (search_t){
-                    .direction = side == VC_LINE_SIDE_RIGHT ? -1 : +1,
-                    .start_l = c[0],
-                    .start_r = c[1],
-                };
-                x.phase = PHASE_SEARCH;
-                ++run.searches;
-                set_duty(&x, -x.search.direction * SEARCH_DUTY_PCT,
-                         x.search.direction * SEARCH_DUTY_PCT);
+                start_search(&x, c, side == VC_LINE_SIDE_RIGHT ? -1 : +1);
             } else if (x.phase == PHASE_SEARCH && vc_event_type(event) == VC_EVENT_LINE_FOUND) {
                 start_follow(&x, c, now);
                 next_steer_ms = now;

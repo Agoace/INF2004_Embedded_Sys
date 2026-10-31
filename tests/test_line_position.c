@@ -113,7 +113,46 @@ static void test_polarity_and_position(const model_t *m, bool line_high,
     CHECK(!lp_junction(&lp), "%s: no junction", name);
 }
 
+static void test_reset_tracking(const model_t *m) {
+    lp_t lp;
+    unsigned int bad;
+    lp_init(&lp);
+    sweep(&lp, m);
+    (void)lp_calib_end(&lp, &bad);
+    for (uint32_t t = 0u; t < 20u; ++t) {
+        (void)step(&lp, m, 0, 100, 0, t);
+    }
+    lp_set_hint(&lp, VC_LINE_SIDE_RIGHT);
+    (void)step(&lp, m, 0, 0, 100, 20u);
+    (void)step(&lp, m, 100, 100, 100, 21u);
+    (void)step(&lp, m, 0, 0, 0, 22u);
+    const lp_t before = lp;
+    lp_reset_tracking(&lp);
+    CHECK(lp_calibrated(&lp) && lp_line_reads_high(&lp) == lp_line_reads_high(&before),
+          "reset: calibration flags kept");
+    for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
+        CHECK(lp.floor_q8[s] == before.floor_q8[s] && lp.line_q8[s] == before.line_q8[s],
+              "reset: exact calibrated ends kept, sensor %u", s);
+        CHECK(lp.cal_min[s] == before.cal_min[s] && lp.cal_max[s] == before.cal_max[s] &&
+                  lp.cal_sum[s] == before.cal_sum[s], "reset: sweep data kept");
+        CHECK(lp.baseline_q8[s] == 0 && lp.norm[s] == 0u, "reset: sensor memory cleared");
+    }
+    CHECK(lp.cal_count == before.cal_count, "reset: sweep count kept");
+    CHECK(lp.flags == (before.flags & (LP_FLAG_CALIBRATED | LP_FLAG_LINE_HIGH)) &&
+              lp.position == 0 && lp.baseline_count == 0u &&
+              lp.fade_side == VC_LINE_SIDE_UNKNOWN && lp.fade_source == LP_SIDE_SOURCE_NONE &&
+              lp.hint == VC_LINE_SIDE_UNKNOWN && lp_last_side(&lp) == VC_LINE_SIDE_UNKNOWN &&
+              lp.lost_since_ms == 0u && lp.junction_ms == 0u,
+          "reset: tracking flags, side and timers cleared");
+    CHECK(TYPE(step(&lp, m, 0, 0, 0, 1000u)) == VC_EVENT_NONE && !lp_line_seen(&lp),
+          "reset: floor stays unseen without an old loss event");
+    CHECK(TYPE(step(&lp, m, 0, 100, 0, 1001u)) == VC_EVENT_LINE_FOUND && lp_centred(&lp),
+          "reset: fresh line detection still works");
+}
+
 int main(void) {
+    test_reset_tracking(&HIGH_LINE);
+    test_reset_tracking(&LOW_LINE);
     test_polarity_and_position(&HIGH_LINE, true, "line reads high");
     test_polarity_and_position(&LOW_LINE, false, "line reads low");
 
