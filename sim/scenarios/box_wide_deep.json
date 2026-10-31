@@ -1,0 +1,225 @@
+{
+  "schema_version": 1,
+  "name": "box_wide_deep",
+  "firmware_target": "detour_test",
+  "end_us": 40000000,
+  "clock_quantum_us": 100,
+  "seed": 1,
+  "provenance": {
+    "track": "Published spec: https://www.robotics.org.za/CK-RE-TRACK-COMO-16; Cytron EVA tiles, 315 x 315 x 10 mm, black 18 mm line on white",
+    "geometry": "docs/CALIBRATION_RESULTS.md#robot-geometry; conservative 160 x 190 mm rectangle",
+    "adc": "docs/LINE_POSITION.md run 1; physical L/C/R after correction of the old pin labels"
+  },
+  "track": {
+    "tile_size_mm": 315,
+    "thickness_mm": 10,
+    "line_width_mm": 18,
+    "material": "EVA foam",
+    "origin_mm": {
+      "value": [
+        -315,
+        -157.5
+      ],
+      "assumed": true,
+      "note": "Place the first straight tile centreline at world y=0; chosen scenario placement"
+    },
+    "tiles": [
+      {
+        "col": 0,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 1,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 2,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 3,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 4,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 5,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 6,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      },
+      {
+        "col": 7,
+        "row": 0,
+        "type": "straight",
+        "rotation_deg": 0
+      }
+    ],
+    "curve_radius_mm": {
+      "value": 157.5,
+      "assumed": true,
+      "note": "Quarter-circle centre at tile corner, radius half a tile; check against a tile"
+    },
+    "primitives": []
+  },
+  "robot": {
+    "start_pose": {
+      "value": {
+        "x_mm": 0,
+        "y_mm": 0,
+        "heading_deg": 0
+      },
+      "assumed": true,
+      "note": "Rear axle and centre sensor start on the straight centreline; +x follows the tile row"
+    },
+    "geometry": {
+      "width_mm": 160,
+      "length_mm": 190,
+      "front_x_mm": {
+        "value": 123,
+        "assumed": true,
+        "note": "65 mm servo offset plus 58 mm echo mean; not a ruler measurement"
+      },
+      "rear_x_mm": {
+        "value": -67,
+        "assumed": true,
+        "note": "Calculated rectangle rear: 123 minus 190 mm"
+      },
+      "wheel_track_mm": 111,
+      "wheel_diameter_mm": 65,
+      "servo_axis_x_mm": 65,
+      "sensor_face_offset_mm": {
+        "value": 0,
+        "assumed": true,
+        "note": "Sensor face provisionally coincides with servo axis"
+      }
+    },
+    "ir": {
+      "points_mm": {
+        "value": [
+          [
+            119,
+            22
+          ],
+          [
+            119,
+            0
+          ],
+          [
+            119,
+            -22
+          ]
+        ],
+        "assumed": true,
+        "note": "22 mm spacing preserves the recorded gap with 18 mm line and 3 mm footprint; x=123-4 mm board-tip inset"
+      },
+      "footprint_mm": {
+        "value": 3,
+        "assumed": true,
+        "note": "Unmeasured sensing footprint width"
+      },
+      "floor_adc": [
+        202,
+        185,
+        191
+      ],
+      "line_adc": [
+        1645,
+        2615,
+        3424
+      ]
+    },
+    "motors": {
+      "profile": "provisional-loaded",
+      "loaded_zero_pct": {
+        "value": 12,
+        "assumed": true,
+        "note": "Approved provisional loaded zero, not a measured speed curve"
+      },
+      "symmetric_reverse": {
+        "value": true,
+        "assumed": true,
+        "note": "Approved equal forward/reverse magnitude until measured"
+      },
+      "coast_tau_ms": {
+        "value": [
+          50,
+          50
+        ],
+        "assumed": true,
+        "note": "Provisional loaded acceleration/coast time constants; not measured loaded coast"
+      }
+    },
+    "servo": {
+      "instant_angle": {
+        "value": true,
+        "assumed": true,
+        "note": "No separate servo slew model yet; real firmware settle waits remain"
+      }
+    },
+    "ultrasonic": {
+      "beam_deg": 30,
+      "rise_latency_us": 215,
+      "echo_timeout_us": 3000,
+      "trigger_gap_us": 60000
+    }
+  },
+  "obstacles": [
+    {
+      "id": "box",
+      "type": "box",
+      "pose": {
+        "value": {
+          "x_mm": 980.0,
+          "y_mm": 0,
+          "heading_deg": 0
+        },
+        "assumed": true,
+        "note": "Chosen scenario placement, not a D1-D18 reconstruction"
+      },
+      "size_mm": {
+        "value": [
+          480,
+          240
+        ],
+        "assumed": true,
+        "note": "Pure size guess; no box dimensions recorded"
+      },
+      "contact": "freeze-both",
+      "echo": "ideal-sector"
+    }
+  ],
+  "events": [
+    {
+      "at_us": 2100000,
+      "pin": 21,
+      "down": true
+    },
+    {
+      "at_us": 2300000,
+      "pin": 21,
+      "down": false
+    }
+  ],
+  "noise": {
+    "enabled": false
+  }
+}
