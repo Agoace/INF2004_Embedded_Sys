@@ -175,11 +175,21 @@ class MotionIR(unittest.TestCase):
             text = "\n".join(line for _, line in lines)
             self.assertIn("[calib] OK. Line reads HIGHER", text)
             self.assertIn("[run] start, run 1", text)
-            self.assertIn("stopped by time limit", text)
-            self.assertIn("searches 0", text)
+            self.assertTrue(any(e["type"] == "hook" and e["call"] == "steer_update"
+                                for e in trace["events"]))
+            self.assertNotIn("SEARCH", [e["phase"] for e in trace["firmware_observation"]["phase_timeline"]])
             self.assertFalse(any(e["type"] == "contact" for e in trace["events"]))
             start = next(t for t, line in lines if line.startswith("[run] start"))
-            end = next(t for t, line in lines if "stopped by time limit" in line)
+            stops = [t for t, line in lines if line.startswith("[run] ") and "stopped by" in line]
+            if stops:
+                self.assertIn("stopped by time limit", text)
+                self.assertIn("searches 0", text)
+                end = stops[0]
+            else:
+                self.assertTrue(trace["complete"])
+                self.assertEqual(trace["events"][-1], {"t_us": self.scenario["end_us"],
+                    "type": "end", "reason": "scenario_end", "complete": True})
+                end = trace["events"][-1]["t_us"]
             snapshots = [e for e in trace["events"] if e["type"] == "world"]
             self.assertEqual([e["t_us"] for e in snapshots], list(range(0,40000001,10000)))
             run = [e for e in snapshots if start <= e["t_us"] <= end]

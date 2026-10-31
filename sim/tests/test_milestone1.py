@@ -105,7 +105,7 @@ class Milestone1(unittest.TestCase):
             self.assertIn("[calib] OK. Line reads HIGHER", text)
             self.assertNotIn("[run] Calibration failed:", text)
             self.assertIn("[run] start,", text)
-            self.assertIn("[detour] FAILED", text)
+            self.assertRegex(text, r"\[detour\] (DONE|FAILED) at \d+ ms:")
             self.assertEqual(trace["firmware_observation"]["step_crosscheck"]["status"], "match")
             self.assertEqual(trace["header"]["source_hashes"], before)
             self.assertEqual([e["t_us"] for e in trace["events"] if e["type"] == "button"], [2100000, 2300000])

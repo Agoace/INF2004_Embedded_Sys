@@ -171,6 +171,10 @@ only, not a dependency of the editor or the simulator.
   With ideal material, the accepted reference firmware enters
   FOLLOW → STOP → SCAN → DETOUR → FAILED, ending at its 25 s detour time
   limit. It chooses LEFT; no contact occurs. This is not claimed as success.
+  These outcomes describe the v1.5 reference run. The tests do not pin them:
+  they check determinism, read-only sources, hook/console agreement and a
+  valid detour step sequence (TURN_AWAY first, DONE or FAILED last), so they
+  pass with any firmware version.
 - [`scenarios/unloaded_reference.json`](scenarios/unloaded_reference.json)
   selects the unloaded curve and the explicit synthetic coast fit. The
   loaded scenarios use marked 50 ms acceleration/coast constants per wheel.
