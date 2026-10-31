@@ -8,12 +8,56 @@ This record gives the state of the obstacle detour at the end of the 2026-10-30 
 | --- | --- |
 | Branch | `yx`, pushed |
 | Firmware on the robot | Still `detour_test` v1.4 (commit `5efeacd`); v1.5 is not flashed or run on the track yet |
-| Current source | `detour_test` v1.5: `line_ahead_mm` 123 mm |
+| Current source | `detour_test` v1.6 (see [Version 1.6](#version-16-sim-tested-not-run-on-the-robot)); v1.5 added `line_ahead_mm` 123 mm |
 | Module | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h) |
 | Track test | [`src/detour_test.c`](../src/detour_test.c) (CMake target `detour_test`) |
 | Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`) |
 | Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). It is **not running**: the laptop restarted after the last runs |
 | Run logs | `build/steer_logs/` (not committed), table in [Track runs](#track-runs) |
+
+## Version 1.6 (sim-tested, not run on the robot)
+
+Source: `detour_test` v1.6. Branch `yx`. The robot still runs v1.4 until the operator flashes v1.6. Test plan: [DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md).
+
+### What changed and why
+
+| Change | Why |
+| --- | --- |
+| Back-off formula: half of the turned angle, at most 25° (`back_off_for`). `back_off_deg` 25 is used only when `back_off_fn` is NULL | A fixed 40° back-off gave contact and turn limits in runs D6–D18 |
+| Return to the line when the obstacle is behind: an unseen turn at −90° (`return_heading_deg`) starts a STRAIGHT back to the line, at most 1000 mm (`return_max_mm`) | The robot ended in a spiral and hit the turn limit when it passed the obstacle |
+| After DONE: line memory reset (`lp_reset_tracking`). If no line is seen, a search starts toward the obstacle side | Problem C (D10, D11, D16) |
+| Continuous sweep turns: PI rate control on the wheel counts. Target 20°/s, readings every 60 ms, 2 consecutive readings decide "seen" or "unseen", duty 12..30 % | Step-and-stop turns are slow and the stops add coast errors. `sweep_deg_s` 0 gives the old stepped turns |
+
+### New config values
+
+| Field | Value |
+| --- | ---: |
+| `back_off_fn` | `back_off_for` (min(turned/2, 25)) |
+| `back_off_deg` (fallback) | 25 |
+| `return_heading_deg` | 90 |
+| `return_max_mm` | 1000 |
+| `sweep_deg_s` | 20 |
+| `sweep_ping_ms` | 60 |
+| `sweep_seen_count` | 2 |
+| `sweep_min_duty` | 12 (loaded value not measured) |
+| `sweep_max_duty` | 30 |
+| `total_max_ms` | 40000 |
+| `RUN_LIMIT_MS` | 90000 |
+
+### Problems addressed and not addressed
+
+| Problem | v1.6 |
+| --- | --- |
+| C (no search after DONE) | Addressed |
+| Spiral and turn limit | Addressed by the back-off formula and the return to the line |
+| Wide boxes | Not fixed: the scan gives NO_SIDE |
+| D (line ignored in turns) | Not fixed: the line is still ignored during turns |
+| Blind back-off coast | Not fixed: the back-off is still a blind coast |
+| A, B, E, F | Not changed |
+
+### Evidence
+
+The evidence is simulation results. The simulator uses marked guesses (motor curve, coast, echo model, loaded speed 740 mm/s at 100 % from operator recollection). These are not robot results. In the simulator, a 120 × 120 mm box on a straight gave DONE with no contact. The branch `sim` of this repository holds the simulator and the traces.
 
 ## Design, version 1.5
 

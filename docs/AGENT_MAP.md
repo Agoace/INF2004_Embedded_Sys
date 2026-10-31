@@ -30,6 +30,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Servo obstacle scan record | [docs/OBSTACLE_SCAN.md](OBSTACLE_SCAN.md) |
 | Obstacle bypass record | [docs/OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md) |
 | Obstacle detour handoff | [docs/OBSTACLE_DETOUR_HANDOFF.md](OBSTACLE_DETOUR_HANDOFF.md) |
+| Detour v1.6 test plan | [docs/DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
 | Line steering record | [docs/LINE_STEERING.md](LINE_STEERING.md) |
