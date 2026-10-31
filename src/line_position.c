@@ -32,6 +32,21 @@ void lp_init(lp_t *lp) {
     lp_calib_begin(lp);
 }
 
+void lp_reset_tracking(lp_t *lp) {
+    for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
+        lp->norm[s] = 0u;
+        lp->baseline_q8[s] = 0;
+    }
+    lp->flags &= LP_FLAG_CALIBRATED | LP_FLAG_LINE_HIGH;
+    lp->position = 0;
+    lp->baseline_count = 0u;
+    lp->fade_side = (uint8_t)VC_LINE_SIDE_UNKNOWN;
+    lp->fade_source = (uint8_t)LP_SIDE_SOURCE_NONE;
+    lp->hint = (uint8_t)VC_LINE_SIDE_UNKNOWN;
+    lp->lost_since_ms = 0u;
+    lp->junction_ms = 0u;
+}
+
 void lp_calib_begin(lp_t *lp) {
     for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
         lp->cal_min[s] = UINT16_MAX;

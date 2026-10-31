@@ -129,6 +129,9 @@ typedef enum {
 
 void lp_init(lp_t *lp);
 
+/* Clear tracking state and timers. Keep calibration and its polarity. */
+void lp_reset_tracking(lp_t *lp);
+
 /* Calibration sweep. Feed every reading while the sensors cross the line. */
 void lp_calib_begin(lp_t *lp);
 void lp_calib_add(lp_t *lp, const uint16_t raw[LP_SENSORS]);

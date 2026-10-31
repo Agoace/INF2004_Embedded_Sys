@@ -14,11 +14,12 @@
  *   SCAN    one servo scan (src/obstacle_scan.c); the profile gives the
  *           detour side and the obstacle distance.
  *   DETOUR  src/obstacle_detour.c: the sensor looks 30 degrees
- *           toward the obstacle. Turn away (5-degree steps, stop and look)
- *           until the obstacle passed out of view; then straights that
+ *           toward the obstacle. Turn away (encoder-controlled sweep, or
+ *           5-degree stop/look steps when sweep_deg_s is 0) until the
+ *           obstacle passed out of view; then straights that
  *           end 350 mm (length + width) after their nearest reading, each
  *           followed by a turn toward the obstacle until it is seen and
- *           then 40 degrees back; until the line is
+ *           then back by the operator's formula; until the line is
  *           found in a straight. Then 123 mm on and a turn back along the
  *           line, and FOLLOW again with a new forward watch. The motors
  *           stop for MOVE_PAUSE_MS when the motion changes (not between
@@ -82,12 +83,27 @@ static const steer_config_t STEER_FOLLOW = {
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
+/* Back off half of the turn toward the obstacle, at most 25 degrees.
+ * turned_deg: how far TURN_TOWARD turned. Operator: edit the formula. */
+static int back_off_for(int turned_deg) {
+    const int half = turned_deg / 2;
+    return half > 25 ? 25 : half;
+}
+
 static const dt_config_t DETOUR = {
+    .back_off_fn = back_off_for,
+    .return_heading_deg = 90u, /* operator: unseen at -90 degrees, return to line */
+    .return_max_mm = 1000u,    /* operator: maximum return travel without a line */
+    .sweep_deg_s = 20u,       /* 0: old step-stop-look; otherwise target deg/s */
+    .sweep_ping_ms = 60u,     /* HC-SR04 cycle; readings while turning */
+    .sweep_seen_count = 2u,   /* consecutive seen / unseen readings */
+    .sweep_min_duty = 12u,    /* loaded turn minimum not measured; unloaded ~8% */
+    .sweep_max_duty = 30u,    /* turn controller duty ceiling, percent */
     .turn_step_deg = 5u,
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
     .max_straights = 5u,
-    .back_off_deg = 40u, /* operator after v1.3 (v1: 0, v1.1: 10, v1.2: 15, v1.3: 30) */
+    .back_off_deg = 25u, /* used only when back_off_fn is NULL (v1.5 value: 40) */
     .look_ms = 150u, /* the robot coasts, then stands still for the reading */
     .vehicle_mm = 350u, /* operator: length 190 + width 160 (v1, v1.1: 190) */
     .sweep_mm = 150u,
@@ -97,7 +113,7 @@ static const dt_config_t DETOUR = {
                            * docs/CALIBRATION_RESULTS.md, Robot geometry */
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
-    .total_max_ms = 25000u,
+    .total_max_ms = 40000u,
 };
 
 #define TURN_DUTY_PCT 20     /* on the spot, as the line search */
@@ -114,7 +130,7 @@ static const dt_config_t DETOUR = {
 #define LOG_ENTRIES (LOG_KEEP_MS / LOG_PERIOD_MS)
 #define BYPASS_RECORDS 256u
 #define START_DELAY_MS 1000u
-#define RUN_LIMIT_MS 30000u
+#define RUN_LIMIT_MS 90000u
 #define STRAIGHT_COUNTS 450
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
@@ -221,12 +237,22 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.5: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
-           "look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
+    printf("[run] detour v1.6: turn steps %u deg (%u.%02u counts/deg), back off ",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
-           DETOUR.counts_per_deg_x100 % 100u, DETOUR.back_off_deg, DETOUR.look_ms,
-           DETOUR.vehicle_mm,
-           DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
+           DETOUR.counts_per_deg_x100 % 100u);
+    if (DETOUR.back_off_fn) {
+        printf("fn, ");
+    } else {
+        printf("%u deg, ", DETOUR.back_off_deg);
+    }
+    printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%; "
+           "return heading %u deg, return max %u mm; sweep %u deg/s, ping %u ms, "
+           "count %u, duty %u..%u%%\n",
+           DETOUR.look_ms, DETOUR.vehicle_mm,
+           DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT,
+           DETOUR.return_heading_deg, DETOUR.return_max_mm, DETOUR.sweep_deg_s,
+           DETOUR.sweep_ping_ms, DETOUR.sweep_seen_count,
+           DETOUR.sweep_min_duty, DETOUR.sweep_max_duty);
 }
 
 static void print_log(void) {
@@ -326,6 +352,8 @@ typedef struct {
     obstacle_monitor_t watch;
     dt_t dt;
     search_t search;
+    dt_sweep_control_t sweep;
+    bool sweep_active;
     int duty[2];
     bool straight;
     bool was_hold;
@@ -368,6 +396,18 @@ static void start_follow(ctx_t *x, const int32_t c[2], uint32_t now) {
     x->next_watch_ms = now + WATCH_PERIOD_MS; /* let the servo centre first */
 }
 
+/* The same count-limited search after LINE_LOST or an off-line detour. */
+static void start_search(ctx_t *x, const int32_t c[2], int direction) {
+    x->search = (search_t){
+        .direction = direction,
+        .start_l = c[0],
+        .start_r = c[1],
+    };
+    x->phase = PHASE_SEARCH;
+    ++run.searches;
+    set_duty(x, -direction * SEARCH_DUTY_PCT, direction * SEARCH_DUTY_PCT);
+}
+
 /* One ultrasonic result, by phase. */
 static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
     if (x->phase == PHASE_FOLLOW) {
@@ -385,7 +425,14 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
     } else if (x->phase == PHASE_DETOUR) {
         const int8_t at = (int8_t)(x->dt.side * x->dt.servo_deg); /* robot frame */
         const uint16_t best = x->dt.best_mm;
+        const bool was_returning = x->dt.returning;
         dt_reading(&x->dt, r, now);
+        if (x->dt.sweep_end != DT_SWEEP_NONE) {
+            set_duty(x, 0, 0); /* stop as soon as the sweep reading decides */
+        }
+        if (!was_returning && x->dt.returning) {
+            printf("[detour] RETURN to line at heading %d\n", x->dt.heading);
+        }
         if (x->dt.best_mm != best) {
             printf("[detour] %s nearest %u mm at %ld mm: count again\n",
                    STEP_NAMES[x->dt.step & 7u], x->dt.best_mm, (long)x->dt.from_mm);
@@ -435,18 +482,42 @@ static void straight(ctx_t *x, const int32_t c[2], int dir) {
 }
 
 static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
+    const uint32_t serial = x->dt.sweep_serial;
+    const bool was_returning = x->dt.returning;
     const dt_word_t w = dt_update(&x->dt, lp_line_seen(&lp), c[0], c[1], now);
+    if (x->dt.sweep_serial != serial) {
+        static const char *const ends[] = {"-", "seen", "lost", "return", "limit"};
+        printf("[detour] sweep %s at heading %+d (rate %d deg/s, coast %d.%d deg)\n",
+               ends[x->dt.sweep_last_end], x->dt.sweep_heading,
+               x->sweep.rate_deg_s, x->dt.sweep_coast_x10 / 10,
+               x->dt.sweep_coast_x10 % 10);
+    }
+    if (!was_returning && x->dt.returning) {
+        printf("[detour] RETURN to line at heading %d\n", x->dt.heading);
+    }
     (void)servo_set_pulse_us(servo_pulse(dt_servo_deg(w)));
     const dt_step_t step = dt_step(&x->dt);
     /* Step changes also happen in dt_reading(): compare with the last print. */
     if ((uint8_t)step != x->shown) {
+        if (x->shown == DT_TURN_TOWARD && step == DT_STRAIGHT && !x->dt.returning) {
+            printf("[detour] back off %d of turned %d deg\n",
+                   x->dt.last_back_deg, x->dt.last_turned_deg);
+        }
         x->shown = (uint8_t)step;
         printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[step & 7u],
                (unsigned long)(now - x->t0), (long)x->dt.x, (long)x->dt.y, x->dt.heading);
     }
     if (step == DT_DONE) {
         ++run.detours;
+        lp_reset_tracking(&lp);
+        uint16_t raw[LP_SENSORS];
+        line_sensors_read(raw);
+        (void)lp_update(&lp, raw, now);
         start_follow(x, c, now);
+        if (!lp_line_seen(&lp)) {
+            printf("[detour] DONE: line not seen, search toward the obstacle side\n");
+            start_search(x, c, -x->dt.side);
+        }
         return;
     }
     if (step == DT_FAILED) {
@@ -457,6 +528,12 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     }
     const dt_move_t move = dt_move(w);
     const int dir = dt_dir(w);
+    const bool sweep = DETOUR.sweep_deg_s != 0u &&
+        (step == DT_TURN_AWAY || step == DT_TURN_TOWARD) && !x->dt.backing &&
+        move == DT_MOVE_TURN;
+    if (!sweep) {
+        x->sweep_active = false;
+    }
     if (move == DT_MOVE_STOP) { /* a look in a turn */
         set_duty(x, 0, 0);
         return;
@@ -473,7 +550,14 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
         x->hold_r = c[1];
         return;
     }
-    if (move == DT_MOVE_TURN) {
+    if (sweep) {
+        if (!x->sweep_active) {
+            dt_sweep_control_init(&x->sweep, &DETOUR, c[0], c[1], now);
+            x->sweep_active = true;
+        }
+        dt_sweep_control_update(&x->sweep, &DETOUR, dir, c[0], c[1], now);
+        set_duty(x, -dir * x->sweep.duty[0], dir * x->sweep.duty[1]);
+    } else if (move == DT_MOVE_TURN) {
         set_duty(x, -dir * TURN_DUTY_PCT, dir * TURN_DUTY_PCT);
     } else {
         straight(x, c, dir);
@@ -538,15 +622,7 @@ static void run_once(bool *previous_run) {
             const vc_event_t event = lp_update(&lp, raw, now);
             if (x.phase == PHASE_FOLLOW && vc_event_type(event) == VC_EVENT_LINE_LOST) {
                 const vc_line_side_t side = (vc_line_side_t)vc_event_payload(event);
-                x.search = (search_t){
-                    .direction = side == VC_LINE_SIDE_RIGHT ? -1 : +1,
-                    .start_l = c[0],
-                    .start_r = c[1],
-                };
-                x.phase = PHASE_SEARCH;
-                ++run.searches;
-                set_duty(&x, -x.search.direction * SEARCH_DUTY_PCT,
-                         x.search.direction * SEARCH_DUTY_PCT);
+                start_search(&x, c, side == VC_LINE_SIDE_RIGHT ? -1 : +1);
             } else if (x.phase == PHASE_SEARCH && vc_event_type(event) == VC_EVENT_LINE_FOUND) {
                 start_follow(&x, c, now);
                 next_steer_ms = now;
