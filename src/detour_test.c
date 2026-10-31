@@ -83,9 +83,12 @@ static const steer_config_t STEER_FOLLOW = {
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
-/* Back off after TURN_TOWARD sees the obstacle. turned_deg: how far it
- * turned toward. Operator: edit the formula. */
-static int back_off_for(int turned_deg) { return turned_deg / 2; }
+/* Back off half of the turn toward the obstacle, at most 25 degrees.
+ * turned_deg: how far TURN_TOWARD turned. Operator: edit the formula. */
+static int back_off_for(int turned_deg) {
+    const int half = turned_deg / 2;
+    return half > 25 ? 25 : half;
+}
 
 static const dt_config_t DETOUR = {
     .back_off_fn = back_off_for,
@@ -100,7 +103,7 @@ static const dt_config_t DETOUR = {
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
     .max_straights = 5u,
-    .back_off_deg = 0u, /* experiment: operator sim test; v1.5 robot value is 40 */
+    .back_off_deg = 25u, /* experiment: operator sim test; v1.5 robot value is 40 */
     .look_ms = 150u, /* the robot coasts, then stands still for the reading */
     .vehicle_mm = 350u, /* operator: length 190 + width 160 (v1, v1.1: 190) */
     .sweep_mm = 150u,
@@ -110,7 +113,7 @@ static const dt_config_t DETOUR = {
                            * docs/CALIBRATION_RESULTS.md, Robot geometry */
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
-    .total_max_ms = 25000u,
+    .total_max_ms = 40000u,
 };
 
 #define TURN_DUTY_PCT 20     /* on the spot, as the line search */
@@ -127,7 +130,7 @@ static const dt_config_t DETOUR = {
 #define LOG_ENTRIES (LOG_KEEP_MS / LOG_PERIOD_MS)
 #define BYPASS_RECORDS 256u
 #define START_DELAY_MS 1000u
-#define RUN_LIMIT_MS 30000u
+#define RUN_LIMIT_MS 90000u
 #define STRAIGHT_COUNTS 450
 #define STALL_GRACE_MS 1000u
 #define STALL_TIMEOUT_MS 500u
