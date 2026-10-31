@@ -744,12 +744,15 @@ Each run gets a new `sim/output/web/SESSION-COUNT-HASH/` directory with a
 and console/error text. The response includes the full trace. A shared lock
 permits one simulator process at a time; concurrent runs or saves are refused
 with a busy message. Native CPU/wall watchdogs remain unchanged; the server
-also has a 25 s outer process-group timeout. Missing/stale binaries or build
-configuration produce a build command, without starting a run. Freshness
-checks use selected C sources, compiler header dependencies, launcher template,
-and CMake configuration timestamps; non-Make generators use a conservative
-header fallback. Python and web assets do not require rebuilding the native
-binary.
+also has a 25 s outer process-group timeout. Run first checks native source
+and header content plus compile commands, then invokes the CMake build
+under that same lock with a 120 s process-group timeout. A missing build
+verification record, different binary, or content change hidden by old file
+times forces a clean build. Compiler errors are plain text in the page;
+failed builds never run the previous binary. Missing build configuration
+still gives a configure command. Python edits need a manual server restart;
+they do not trigger native compilation. Run history records the actual
+firmware summary and a short target-source hash.
 
 Save as scenario uses the same validation and allows names with 1–64
 characters from `[a-z0-9_-]`. It publishes a complete file atomically and
