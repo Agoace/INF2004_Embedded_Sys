@@ -1,4 +1,5 @@
 #include "sim_runtime.h"
+#include "sim_world.h"
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -11,6 +12,7 @@ static button_t *buttons;
 static size_t button_count, next_button;
 static bool down[2];
 static uint64_t now_us, end_us, quantum;
+static uint64_t next_snapshot = 10000u;
 uint16_t sim_floor[3];
 
 uint64_t sim_now(void) { return now_us; }
@@ -31,16 +33,20 @@ static void json_string(const char *text, size_t size) {
     putchar('"');
 }
 
-void sim_event(const char *kind, const char *fields, ...) {
-    printf("{\"t_us\":%" PRIu64 ",\"type\":\"%s\"", now_us, kind);
-    if (fields[0] != '\0') {
-        putchar(',');
-        va_list args;
-        va_start(args, fields);
-        vprintf(fields, args);
-        va_end(args);
-    }
+static void event_args(uint64_t time_us, const char *kind, const char *fields, va_list args) {
+    printf("{\"t_us\":%" PRIu64 ",\"type\":\"%s\"", time_us, kind);
+    if (fields[0] != '\0') { putchar(','); vprintf(fields, args); }
     puts("}");
+}
+void sim_event(const char *kind, const char *fields, ...) {
+    va_list args; va_start(args, fields);
+    event_args(now_us, kind, fields, args);
+    va_end(args);
+}
+void sim_event_at(uint64_t time_us, const char *kind, const char *fields, ...) {
+    va_list args; va_start(args, fields);
+    event_args(time_us, kind, fields, args);
+    va_end(args);
 }
 
 int sim_printf(const char *format, ...) {
@@ -63,16 +69,29 @@ int sim_printf(const char *format, ...) {
 
 static void advance(uint64_t delta) {
     const uint64_t target = delta >= end_us - now_us ? end_us : now_us + delta;
-    while (next_button < button_count && buttons[next_button].us <= target) {
-        const button_t b = buttons[next_button++];
-        now_us = b.us;
-        down[b.pin - 20u] = b.down != 0u;
-        sim_event("button", "\"pin\":%u,\"down\":%s", b.pin, b.down ? "true" : "false");
+    while (now_us < target || (next_button < button_count && buttons[next_button].us == now_us)) {
+        uint64_t span = target - now_us;
+        if (world_is_active() && span > 100u) { span = 100u; }
+        uint64_t next = now_us + span;
+        if (next_button < button_count && buttons[next_button].us < next) { next = buttons[next_button].us; }
+        if (next_snapshot < next) { next = next_snapshot; }
+        world_advance(now_us, next);
+        now_us = next;
+        while (next_button < button_count && buttons[next_button].us == now_us) {
+            const button_t b = buttons[next_button++];
+            down[b.pin - 20u] = b.down != 0u;
+            sim_event("button", "\"pin\":%u,\"down\":%s", b.pin, b.down ? "true" : "false");
+        }
+        if (now_us == next_snapshot) {
+            world_snapshot(now_us);
+            next_snapshot += 10000u;
+        }
     }
-    now_us = target;
     if (now_us == end_us) {
+        if (now_us % 10000u != 0u) { world_snapshot(now_us); }
         sim_event("end", "\"reason\":\"scenario_end\",\"complete\":true");
         free(buttons);
+        world_destroy();
         if (fflush(stdout) != 0 || ferror(stdout)) { exit(2); }
         exit(0);
     }
@@ -125,7 +144,9 @@ int main(void) {
         }
         check_pin(b->pin);
     }
-    sim_event("start", "\"milestone\":1,\"devices\":\"stationary_placeholders\"");
+    world_read(stdin);
+    sim_event("start", "\"milestone\":2,\"devices\":\"motion_ir_with_placeholder_ultrasonic\"");
+    world_snapshot(0u);
     (void)firmware_main();
     sim_error("firmware returned before scenario end");
     return 2;

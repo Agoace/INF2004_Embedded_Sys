@@ -76,10 +76,12 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Eventual control architecture | [`CONTROL_ARCHITECTURE.md`](CONTROL_ARCHITECTURE.md) |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
-| Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/runner.py`](../sim/core/runner.py) |
-| Simulator devices and SDK headers | [`sim/devices/placeholders.c`](../sim/devices/placeholders.c), [`sim/include/`](../sim/include/) — milestone 1 stationary devices and minimal host SDK surface |
+| Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |
+| Simulator motion, contact safety, and IR | [`sim/core/world.c`](../sim/core/world.c), [`sim/include/sim_world.h`](../sim/include/sim_world.h) — calibrated curves, coast, fractional counts, tile sensing, and conservative contact stop |
+| Simulator devices and SDK headers | [`sim/devices/placeholders.c`](../sim/devices/placeholders.c), [`sim/include/`](../sim/include/) — motion/IR devices, placeholder ultrasonic, and minimal host SDK surface |
 | Simulator call hooks | [`sim/targets/detour_hooks.c`](../sim/targets/detour_hooks.c) — external-call observations; no firmware source edits |
-| Simulator scenarios and tests | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/tests/test_milestone1.py`](../sim/tests/test_milestone1.py), [`sim/tests/probe.c`](../sim/tests/probe.c) |
+| Simulator scenarios | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/scenarios/no_box_straight.json`](../sim/scenarios/no_box_straight.json), [`sim/scenarios/unloaded_reference.json`](../sim/scenarios/unloaded_reference.json) |
+| Simulator tests | [`sim/tests/test_milestone1.py`](../sim/tests/test_milestone1.py), [`sim/tests/probe.c`](../sim/tests/probe.c), [`sim/tests/test_milestone2.py`](../sim/tests/test_milestone2.py), [`sim/tests/model_probe.c`](../sim/tests/model_probe.c) |
 | CMake build | [`CMakeLists.txt`](../CMakeLists.txt) |
 | Documentation checker | [scripts/check-docs.py](../scripts/check-docs.py) |
 | Hook installer | [scripts/install-hooks.sh](../scripts/install-hooks.sh) |

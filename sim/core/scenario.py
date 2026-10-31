@@ -173,12 +173,13 @@ def validate(s):
     overlap = max(0.0, min(width / 2, distance + footprint / 2) - max(-width / 2, distance - footprint / 2))
     if overlap / footprint >= 0.01:
         fail("robot.ir", "C-L gap consistency: gap-centred line gives >=1% rise")
+    # The native world repeats this check with its production IR overlap function.
     motors = robot["motors"]
     obj(motors, "robot.motors", "profile loaded_zero_pct symmetric_reverse coast_tau_ms")
     choice(motors["profile"], "robot.motors.profile", ["unloaded-reference", "provisional-loaded"])
     number(motors["loaded_zero_pct"], "robot.motors.loaded_zero_pct", 0, 99)
-    if not isinstance(motors["symmetric_reverse"], bool):
-        fail("robot.motors.symmetric_reverse", "expected boolean")
+    if motors["symmetric_reverse"] is not True:
+        fail("robot.motors.symmetric_reverse", "only the approved symmetric reverse model is implemented")
     array(motors["coast_tau_ms"], "robot.motors.coast_tau_ms", 2)
     for value in motors["coast_tau_ms"]:
         number(value, "robot.motors.coast_tau_ms", 0.001, 10000)
@@ -191,7 +192,7 @@ def validate(s):
         number(value, "robot.ultrasonic." + key, 1, 1000000, integer=True)
     # M1 has one timing implementation. Reject rather than ignore timing changes.
     if ultra != {"beam_deg": 30, "rise_latency_us": 215, "echo_timeout_us": 3000, "trigger_gap_us": 60000}:
-        fail("robot.ultrasonic", "milestone 1 requires the documented timing and beam")
+        fail("robot.ultrasonic", "placeholder ultrasonic requires the documented timing and beam")
     array(s["obstacles"], "obstacles")
     names = set()
     for i, obstacle in enumerate(s["obstacles"]):
@@ -214,7 +215,7 @@ def validate(s):
             fail(p, "duplicate obstacle id")
         names.add(obstacle["id"])
         pose(obstacle["pose"], p + ".pose")
-        choice(obstacle["contact"], p + ".contact", ["freeze-both", "record-only", "inject-left", "inject-right"])
+        choice(obstacle["contact"], p + ".contact", ["freeze-both"])
         choice(obstacle["echo"], p + ".echo", ["ideal-sector"])
     array(s["events"], "events")
     if len(s["events"]) > 100000:
@@ -234,7 +235,7 @@ def validate(s):
         levels[event["pin"]] = event["down"]
     obj(s["noise"], "noise", "enabled")
     if s["noise"]["enabled"] is not False:
-        fail("noise.enabled", "noise is not implemented in milestone 1")
+        fail("noise.enabled", "noise is not implemented yet")
 
 
 def load(path):

@@ -11,9 +11,10 @@ if(NOT SIM_FIRMWARE STREQUAL "detour_test")
     message(FATAL_ERROR "Unsupported SIM_FIRMWARE: ${SIM_FIRMWARE}")
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/targets/${SIM_FIRMWARE}.cmake")
-set(SIM_SOURCES core/runtime.c devices/placeholders.c ${SIM_TARGET_SOURCES})
+set(SIM_SOURCES core/runtime.c core/world.c devices/placeholders.c ${SIM_TARGET_SOURCES})
 add_executable(firmware_sim ${SIM_SOURCES} ${SIM_FIRMWARE_SOURCES})
 target_include_directories(firmware_sim PRIVATE include "${REPO}/src")
+target_link_libraries(firmware_sim PRIVATE m)
 target_compile_options(firmware_sim PRIVATE -Wall -Wextra -Wconversion -Wshadow)
 set_source_files_properties(${SIM_SOURCES} PROPERTIES
     COMPILE_OPTIONS "-Werror;-Wpedantic;-Wstrict-prototypes;-Wmissing-prototypes")
@@ -26,11 +27,20 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/target.json"
 configure_file(core/robot_sim.in robot_sim @ONLY)
 file(CHMOD "${CMAKE_CURRENT_BINARY_DIR}/robot_sim"
     PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-add_executable(sim_clock_probe core/runtime.c devices/placeholders.c tests/probe.c)
+add_executable(sim_clock_probe core/runtime.c core/world.c devices/placeholders.c tests/probe.c)
+target_link_libraries(sim_clock_probe PRIVATE m)
+add_executable(sim_model_probe core/world.c tests/model_probe.c)
+target_include_directories(sim_model_probe PRIVATE include)
+target_link_libraries(sim_model_probe PRIVATE m)
+target_compile_options(sim_model_probe PRIVATE -Wall -Wextra -Wconversion -Wshadow -Werror -Wpedantic -UNDEBUG)
+set_source_files_properties(tests/model_probe.c PROPERTIES COMPILE_OPTIONS "-Wstrict-prototypes;-Wmissing-prototypes")
 target_include_directories(sim_clock_probe PRIVATE include "${REPO}/src")
 target_compile_options(sim_clock_probe PRIVATE -Wall -Wextra -Wconversion -Wshadow -Werror -Wpedantic -UNDEBUG)
 set_source_files_properties(tests/probe.c PROPERTIES COMPILE_OPTIONS "-Wstrict-prototypes;-Wmissing-prototypes")
 enable_testing()
 add_test(NAME sim_contracts COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_milestone1.py"
+    "${CMAKE_CURRENT_BINARY_DIR}/robot_sim")
+add_test(NAME sim_motion_ir COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_milestone2.py"
     "${CMAKE_CURRENT_BINARY_DIR}/robot_sim")

@@ -70,7 +70,7 @@ class Milestone1(unittest.TestCase):
                 load(path)
 
     def test_native_contracts(self):
-        normalised = "5000000000 100 202 185 191 2\n500 21 1\n4000 21 0\n"
+        normalised = "5000000000 100 202 185 191 2\n500 21 1\n4000 21 0\n0\n"
         result = subprocess.run([str(LAUNCHER.parent / "sim_clock_probe")],
                                 input=normalised, text=True, capture_output=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -97,9 +97,10 @@ class Milestone1(unittest.TestCase):
             text = "".join(e["text"] for e in trace["events"] if e["type"] == "text")
             self.assertIn("Obstacle detour test.", text)
             self.assertIn("[spin] step 1: left", text)
-            self.assertIn("[spin] STOPPED: left wheel stalled", text)
-            self.assertIn("[run] Calibration failed: not started.", text)
-            self.assertNotIn("[run] start,", text)
+            self.assertIn("[calib] OK. Line reads HIGHER", text)
+            self.assertNotIn("[run] Calibration failed:", text)
+            self.assertIn("[run] start,", text)
+            self.assertTrue(any(e["type"] == "contact" for e in trace["events"]))
             self.assertEqual(trace["header"]["source_hashes"], before)
             self.assertEqual([e["t_us"] for e in trace["events"] if e["type"] == "button"], [2100000, 2300000])
         self.assertEqual(source_hashes(SIM.parent), before)
@@ -108,7 +109,7 @@ class Milestone1(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
             root = Path(directory)
             self.raw["events"][0]["pin"] = self.raw["events"][1]["pin"] = 20
-            self.raw["end_us"] = 4000000
+            self.raw["end_us"] = 4000001
             path = root / "gp20.json"
             path.write_text(json.dumps(self.raw))
             result = subprocess.run([str(LAUNCHER), "--scenario", str(path), "--output", str(root / "out")],
@@ -116,6 +117,8 @@ class Milestone1(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("[spin] step 1: left", result.stdout)
             self.assertNotIn("[run] Calibration failed:", result.stdout)
+            trace = json.loads((root / "out/trace.json").read_text())
+            self.assertEqual([e for e in trace["events"] if e["type"] == "world"][-1]["t_us"], 4000001)
 
     def test_cpu_watchdog(self):
         # A temporary native-process replacement deliberately never reads time.

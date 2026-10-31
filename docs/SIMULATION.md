@@ -2,19 +2,23 @@
 
 ## Status and purpose
 
-Milestone 1 is implemented in [`sim/`](../sim/README.md): scenario validation,
-a standalone host build, the clock, entry/exit, console, and buttons (build
-plan steps 1–3). The first target is the real `detour_test` v1.5 at `b9dcb6f`.
-No `src/` or firmware CMake file changes are required.
+Milestones 1–2 are implemented in [`sim/`](../sim/README.md): build plan
+steps 1–5, including motion, encoders, coast, geometry, and IR. The first
+target is the real `detour_test` v1.5 at `b9dcb6f`. No `src/` or firmware
+CMake file changes are required.
 
-The devices are stationary placeholders: counts stay zero, IR reads the
-floor, and ultrasonic results are timed NO_RETURN. The supplied GP21 event
-starts real spin calibration, which fails honestly on the firmware's wheel
-stall rule. The trace ends at the scenario deadline, not at detour success.
-External call hooks record results now; full phase decoding and hook/printf
-sequence checks remain step 7 work. Physics and the HTML viewer are not
-implemented. See the [host build instructions](../sim/README.md) for commands,
-schema rules, tests, and milestone limits.
+Real GP21 spin calibration succeeds on the straight-tile model. The no-box
+scenario follows the line to the firmware's 30 s run limit, with no searches.
+The box scenario records contact and stops safely before penetration; the
+real wheel-stall rule ends its run. Ultrasound remains timed NO_RETURN, so
+neither scenario starts a detour. Contact response is a conservative safety
+latch, not full physical response or escape motion. A complete trace means
+the scenario deadline was reached, not detour success.
+
+External call hooks record results; full phase decoding and hook/printf
+sequence checks remain step 7 work. Echo geometry and the HTML viewer are
+not implemented. See the [host build instructions](../sim/README.md) for
+commands, schema rules, tests, and milestone limits.
 
 The complete design has two parts: a host program that runs firmware against
 a virtual floor, and an HTML viewer that plays the saved run.
@@ -315,6 +319,50 @@ loaded coast parameters. Do not treat 250 ms firmware pauses as measured
 motor time constants. Continue counts during coast, as the real firmware
 expects.
 
+#### Implemented motion equations and coast fit
+
+The production model is [`sim/core/world.c`](../sim/core/world.c).
+Unloaded curves have explicit zero-speed anchors at 6 % left and 7 % right,
+then linear interpolation through the corrected table. For the loaded
+profile, map duty magnitude d above 12 % to the unloaded curve at
+`u = u0 + (d − 12) × (100 − u0) / (100 − 12)`, where u0 is 6 or 7.
+At or below 12 % the target speed is zero. Reverse negates the target.
+This approved curve transform is a provisional model, not loaded test data.
+
+For a constant command over dt seconds, use exact first-order wheel updates:
+
+```text
+v1 = target + (v0 − target) × exp(−dt / tau)
+ds = target × dt + (v0 − target) × tau × (1 − exp(−dt / tau))
+counts += ds × 2535 / 204.204
+```
+
+The loaded scenarios explicitly assume tau = 50 ms for each wheel, for
+both acceleration and coast. Fractional counts accumulate; firmware reads
+signed counts truncated toward zero. The body uses the mean wheel travel
+and `(dsR − dsL) / 111` turn, integrated as a circular arc per substep of
+at most 100 µs. General scenario wheel diameter scales the 204.204 mm
+circumference in proportion to the nominal 65 mm diameter.
+
+For the unloaded reference, a settled 10 % command gives count rates
+`26.253 × 2540 / 60 = 1111.377` left and
+`26.556 × 2539 / 60 = 1123.7614` right counts/s. A first-order stop travels
+`rate × tau` counts. Fit tau to 27.5 counts left (the 27–28 midpoint) and
+23 right: 24.744078742 ms and 20.466978133 ms. The
+[`unloaded_reference` scenario](../sim/scenarios/unloaded_reference.json)
+marks this fit as assumed: the coast source used USB power, while the speed
+table used VIN. These are synthetic fit parameters, not measured time
+constants; using the same tau for acceleration is another assumption.
+
+The independent model probe checks a loaded 20 % command for 1 s from rest:
+wheel travel 125.732983276/135.094957331 mm and fractional counts
+1560.856362291/1677.076437455. Different wheel curves give a slight arc,
+not perfectly straight motion. The on-the-spot command (+20/−20) turns
+−134.633695278°; the computed scale is 24.049943761 difference counts/degree,
+which agrees with firmware's rounded 24.05. Reverse gives the negative
+forward counts. A loaded stop after 1 s adds 82.150334510/88.267180545 counts
+over the next second; unloaded reference stops add 27.5/23 counts.
+
 ### Servo and ultrasonic
 
 - Keep `servo_set_pulse_us` return/clamp behaviour: 1100–1900 µs, centre
@@ -379,6 +427,17 @@ gap response, and floor patches. [Steering observations](LINE_STEERING.md#straig
 confirm narrow overlap and mostly 0/±100 position; ramp behaviour is outside
 the first flat-floor model.
 
+Milestone 2 implements a uniform one-dimensional sensing aperture across
+the nearest line band. Its overlap fraction mixes the recorded endpoints;
+results are rounded and clamped to 12 bits. Tiles support straight, curve,
+cross, blank, and rotation; arbitrary polyline/arc strokes also work. At
+stroke overlaps the strongest coverage wins. This is an explicit optical
+approximation, not an area-integrated sensor measurement. The native gap
+check temporarily places a straight line in the C–L gap and runs the actual
+stroke-to-footprint-to-ADC path. At 22 mm spacing it returns floor values
+202/185/191 (zero rise); the 14 mm case is rejected by that same native
+model, not only by the Python schema pre-check.
+
 ### Obstacles and contact
 
 Support rotated rectangles (boxes) and circles (bottles), with scenario
@@ -396,6 +455,26 @@ injections only; integrate the remaining motion with collision constraints.
 This is a fault-injection model, not a prediction of contact
 forces. Include a record-only mode for comparison, clearly marked as
 non-physical because it allows penetration.
+
+Milestone 2 uses only a conservative both-wheel safety latch, not the full
+response above. Rectangle/rectangle separation uses polygon axes and edge
+distances; bottle contact uses polygon/circle distance. Bound every outline
+point's speed by `(|vL|max + |vR|max) × (1/2 + corner_radius/track)` over the
+substep. Advance by no more than half the current clearance divided by that
+bound, with a normal 100 µs cap. Within a two-microsecond bound, record first
+contact at the current safe pose and set both speeds to zero. Thus a contact
+record can be a few micrometres early; its saved clearance makes this visible.
+The test includes a rotated 0.001 mm box and a circle, so thin obstacles
+cannot be skipped between endpoint tests.
+
+The latch prevents further pose or encoder changes until a new scenario,
+even for a reverse command. This is intentionally simpler than separating
+motion or contact forces. Other contact modes are rejected until the full contact-response work.
+Snapshots carry the latch; the contact event carries obstacle ID/index,
+time, pose, and residual clearance. In the reference box scenario the safe
+contact is at 8.542512 s, rear axle (616.721223724, 8.691295026) mm, heading
++0.230581211°, clearance 0.001337385 mm. The actual firmware then reports a
+left-wheel stall at 9.042200 s; it does not drive through the box.
 
 ## Scenario and trace formats
 
@@ -529,7 +608,8 @@ reduced trail while the full event data stays available.
 
 The standalone build, target description/hooks, minimal SDK headers,
 clock/runtime, Python scenario reader/runner, placeholder devices, scenario,
-and tests now exist. World physics and the viewer paths remain planned.
+and tests now exist. Motion, geometry, contact safety, and IR world physics
+also exist; echo geometry and the viewer remain planned.
 No empty implementation files are added for those later steps.
 
 | Planned path | Content |
@@ -537,7 +617,7 @@ No empty implementation files are added for those later steps.
 | `sim/CMakeLists.txt` | Standalone host build; no Pico import |
 | `sim/targets/` | Source lists, compile options, hook lists/implementations, and state-label rules per firmware target |
 | `sim/include/pico/`, `sim/include/hardware/` | Minimal SDK-compatible headers actually needed by retained firmware |
-| `sim/core/` | Host entry, clock, events, geometry, motion, scenario reader, trace output |
+| `sim/core/` | Host entry/clock, world motion/contact/IR, JSON scenario reader, private native protocol, trace output |
 | `sim/devices/` | Five replacement drivers and retained SDK call implementations |
 | `sim/scenarios/` | Input JSON and documented assumed parameters |
 | `sim/viewer/` | Self-contained HTML template and output generator |
@@ -622,6 +702,14 @@ assumption, not be used to change firmware. D1–D18 logs are unavailable on
 this machine; no replay match is claimed.
 
 ## Build plan and checks
+
+Steps 1–5 now have implementations and passing checks. The no-box reference
+has 3000 snapshots between printed run start and stop; rear-axle absolute
+lateral error from the y = 0 line has maximum 10.066755148 mm and mean
+9.513485314 mm. The centre IR point has maximum 13.626529921 mm and mean
+9.690098619 mm. These are simulator comparisons under the stated guesses,
+not measured track accuracy. The run starts at 5.280300 s and stops by the
+30 s limit at 35.280200 s; no searches or contacts occur.
 
 | Step | Work | Check before the next step |
 | --- | --- | --- |

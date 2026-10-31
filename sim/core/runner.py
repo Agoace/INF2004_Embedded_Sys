@@ -10,6 +10,7 @@ import sys
 import tempfile
 
 from scenario import load
+from protocol import normalise
 
 
 def source_hashes(repo):
@@ -59,7 +60,7 @@ def write_trace(path, trace):
 
 
 def main(repo_path, build_path):
-    parser = argparse.ArgumentParser(description="Milestone 1 stationary firmware simulator")
+    parser = argparse.ArgumentParser(description="Milestone 2 motion/IR firmware simulator")
     parser.add_argument("--scenario", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path, help="Output directory for trace.json")
     args = parser.parse_args()
@@ -75,7 +76,7 @@ def main(repo_path, build_path):
     config = json.loads((build / "target.json").read_text())
     config["compile_commands"] = json.loads((build / "compile_commands.json").read_text())
     header = {
-        "schema_version": 1, "milestone": 1, "source_commit": firmware_revision,
+        "schema_version": 1, "milestone": 2, "source_commit": firmware_revision,
         "repository_commit": revision, "source_hashes": before,
         "simulator_hashes": simulator_hashes(repo),
         "compiler": (build / "compiler.txt").read_text().strip(),
@@ -83,14 +84,10 @@ def main(repo_path, build_path):
         "clock_quantum_us": scenario["clock_quantum_us"],
         "units": {"time": "us", "distance": "mm", "angle": "degrees"},
         "event_order": "advance previous commands; buttons in input order; service devices; observation",
-        "device_model": "stationary placeholders; no world/IR/contact physics",
+        "device_model": "motion, encoders, coast, tile IR; latched safety contact stop; timed NO_RETURN ultrasound",
         "watchdog": {"cpu_soft_seconds": 5, "cpu_hard_seconds": 6, "wall_seconds": 10},
     }
-    floor = scenario["robot"]["ir"]["floor_adc"]
-    lines = [f'{scenario["end_us"]} {scenario["clock_quantum_us"]} '
-             f'{floor[0]} {floor[1]} {floor[2]} {len(scenario["events"])}']
-    lines += [f'{event["at_us"]} {event["pin"]} {int(event["down"])}' for event in scenario["events"]]
-    normalised = "\n".join(lines) + "\n"
+    normalised = normalise(scenario)
     error = None
     output = ""
     try:
@@ -111,7 +108,10 @@ def main(repo_path, build_path):
     events = []
     try:
         for line in output.splitlines():
-            events.append(json.loads(line))
+            event = json.loads(line)
+            if event.get("type") == "contact":
+                event["obstacle_id"] = scenario["obstacles"][event["obstacle_index"]]["id"]
+            events.append(event)
     except ValueError:
         error = "incomplete or invalid native event stream"
     complete = (not error and bool(events) and events[-1].get("type") == "end"

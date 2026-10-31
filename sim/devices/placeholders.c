@@ -1,24 +1,23 @@
-/* Milestone 1 devices: no movement and no line. Not a physics model. */
+/* Motion and IR use the world model. Ultrasound remains a timed placeholder. */
 #include "sim_runtime.h"
 #include <inttypes.h>
-#include <string.h>
+#include "sim_world.h"
 #include "drive.h"
 #include "line_sensors.h"
 #include "servo.h"
 #include "ultrasonic.h"
 #include "wifi_log.h"
 
-static int duty[2];
 static uint16_t pulse = SERVO_CENTRE_US;
 static bool busy, triggered;
 static uint64_t trigger_us, ready_us;
 static ultrasonic_result_t latest = ULTRASONIC_RESULT_NONE;
 
-void drive_init(void) { duty[0] = duty[1] = 0; }
+void drive_init(void) { world_duty(0u, 0); world_duty(1u, 0); world_reset_counts(); }
 void drive_set_wheel(drive_wheel_t wheel, int pct) {
     if (wheel != DRIVE_LEFT && wheel != DRIVE_RIGHT) { sim_error("invalid wheel"); }
     pct = pct > 100 ? 100 : pct < -100 ? -100 : pct;
-    duty[wheel] = pct;
+    world_duty((unsigned int)wheel, pct);
     sim_event("duty", "\"wheel\":%u,\"pct\":%d", (unsigned int)wheel, pct);
 }
 void drive_set(int left, int right) {
@@ -26,9 +25,9 @@ void drive_set(int left, int right) {
     drive_set_wheel(DRIVE_RIGHT, right);
 }
 void drive_stop(void) { drive_set(0, 0); }
-void drive_counts(int32_t *left, int32_t *right) { *left = 0; *right = 0; }
+void drive_counts(int32_t *left, int32_t *right) { world_counts(left, right); }
 void line_sensors_init(void) { }
-void line_sensors_read(uint16_t raw[LP_SENSORS]) { memcpy(raw, sim_floor, sizeof sim_floor); }
+void line_sensors_read(uint16_t raw[LP_SENSORS]) { world_ir(raw); }
 void servo_init(unsigned int pin) {
     (void)pin;
     (void)servo_set_pulse_us(SERVO_CENTRE_US);

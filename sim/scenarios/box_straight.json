@@ -51,7 +51,7 @@
       "profile": "provisional-loaded",
       "loaded_zero_pct": {"value": 12, "assumed": true, "note": "Approved provisional loaded zero, not a measured speed curve"},
       "symmetric_reverse": {"value": true, "assumed": true, "note": "Approved equal forward/reverse magnitude until measured"},
-      "coast_tau_ms": {"value": [50, 50], "assumed": true, "note": "Explicit first response-time guess only; milestone 1 does not move wheels"}
+      "coast_tau_ms": {"value": [50, 50], "assumed": true, "note": "Provisional loaded acceleration/coast time constants; not measured loaded coast"}
     },
     "servo": {"instant_angle": {"value": true, "assumed": true, "note": "No separate servo slew model yet; real firmware settle waits remain"}},
     "ultrasonic": {"beam_deg": 30, "rise_latency_us": 215, "echo_timeout_us": 3000, "trigger_gap_us": 60000}
