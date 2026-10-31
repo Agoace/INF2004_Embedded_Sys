@@ -2,9 +2,12 @@
  * Obstacle detour with straight drives and turns on the spot only (no
  * arcs). Successor of the shelved src/obstacle_bypass.c.
  *
- * The servo is fixed 30 degrees toward the obstacle. Turns go in
- * turn_step_deg steps: turn, stop look_ms, take one
- * reading, then decide. "Seen" = a valid echo nearer than seen_mm.
+ * The servo is fixed 30 degrees toward the obstacle. With sweep_deg_s=0,
+ * turns go in turn_step_deg steps: turn, stop look_ms, read, then decide.
+ * With sweep_deg_s>0, turn continuously and require sweep_seen_count
+ * consecutive seen/unseen readings. Stop and count coast for up to look_ms
+ * before ending a sweep or choosing its blind back-off angle.
+ * "Seen" = a valid echo nearer than seen_mm.
  *
  * The caller stops the robot at OBST_STOP, runs one scan, and picks the
  * detour side S from the PROFILE word. The obstacle is on the other side.
@@ -74,6 +77,11 @@ typedef struct {
     int (*back_off_fn)(int turned_deg); /* optional; result clamped to 0..180 */
     uint8_t return_heading_deg;   /* 0: off; unseen turn at -angle returns to line */
     uint16_t return_max_mm;       /* returning STRAIGHT limit without a line */
+    uint8_t sweep_deg_s;          /* 0: stepped turns; otherwise encoder rate target */
+    uint16_t sweep_ping_ms;       /* minimum interval between sweep readings */
+    uint8_t sweep_seen_count;     /* consecutive seen or unseen readings */
+    uint8_t sweep_min_duty;       /* loaded turn minimum is not measured */
+    uint8_t sweep_max_duty;       /* upper duty clamp, percent */
 } dt_config_t;
 
 /* Step: 3 bits. */
@@ -131,6 +139,37 @@ static inline int dt_servo_deg(dt_word_t w) {
     return (int)((w >> DT_SERVO_SHIFT) & DT_SERVO_MASK) - DT_SERVO_BIAS;
 }
 
+/* Pure per-wheel PI rate controller. Each wheel targets half the turn-count
+ * rate, in opposite directions. Update windows are at least 100 ms.
+ * Gains: P = 0.01 duty/(deg/s), I = 0.1 duty/(deg/s)/s, per wheel,
+ * where wheel rate is expressed as twice its counts / counts-per-degree.
+ * Carry fractional duties between calls (normally 10 ms) to avoid 100 ms
+ * on/off speed cycles at the loaded threshold. No loaded turn fit is claimed.
+ * Initialise at each new sweep. Call at a fixed cadence (normally 10 ms).
+ * direction: +1 left, -1 right. Output duty[] are magnitudes; the caller
+ * applies left=-direction*duty[0], right=direction*duty[1]. */
+typedef struct {
+    int32_t counts[2];
+    int32_t integral_milli[2];
+    uint32_t sample_ms;
+    int rate_deg_s;
+    int32_t duty_milli[2];
+    uint16_t duty_carry[2];
+    int duty[2];
+} dt_sweep_control_t;
+void dt_sweep_control_init(dt_sweep_control_t *ctl, const dt_config_t *cfg,
+                           int32_t left, int32_t right, uint32_t now_ms);
+void dt_sweep_control_update(dt_sweep_control_t *ctl, const dt_config_t *cfg,
+                             int direction, int32_t left, int32_t right, uint32_t now_ms);
+
+typedef enum {
+    DT_SWEEP_NONE = 0,
+    DT_SWEEP_SEEN,
+    DT_SWEEP_LOST,
+    DT_SWEEP_RETURN,
+    DT_SWEEP_LIMIT,
+} dt_sweep_end_t;
+
 typedef struct {
     dt_config_t cfg;
     uint8_t step;       /* dt_step_t */
@@ -158,6 +197,14 @@ typedef struct {
     int32_t l, r;       /* wheel counts at the last update */
     uint32_t settle_ms; /* no trigger before this time */
     uint32_t start_ms;  /* start of the detour */
+    uint8_t sweep_seen, sweep_lost; /* consecutive classifications */
+    uint8_t sweep_end;            /* pending stop/settle, dt_sweep_end_t */
+    uint8_t sweep_last_end;       /* completed sweep, retained for logging */
+    uint32_t sweep_serial;        /* increments once per completed sweep */
+    uint32_t sweep_stop_ms, sweep_quiet_ms;
+    int32_t sweep_stop_x100;      /* count difference x100 at stop request */
+    int sweep_heading;           /* final S-frame heading, coast included */
+    int sweep_coast_x10;         /* coast magnitude, tenths of a degree */
 } dt_t;
 
 /* Start a detour at the STOP point. side and obstacle_mm come from the

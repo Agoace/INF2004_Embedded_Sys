@@ -14,8 +14,9 @@
  *   SCAN    one servo scan (src/obstacle_scan.c); the profile gives the
  *           detour side and the obstacle distance.
  *   DETOUR  src/obstacle_detour.c: the sensor looks 30 degrees
- *           toward the obstacle. Turn away (5-degree steps, stop and look)
- *           until the obstacle passed out of view; then straights that
+ *           toward the obstacle. Turn away (encoder-controlled sweep, or
+ *           5-degree stop/look steps when sweep_deg_s is 0) until the
+ *           obstacle passed out of view; then straights that
  *           end 350 mm (length + width) after their nearest reading, each
  *           followed by a turn toward the obstacle until it is seen and
  *           then back by the operator's formula; until the line is
@@ -90,6 +91,11 @@ static const dt_config_t DETOUR = {
     .back_off_fn = back_off_for,
     .return_heading_deg = 90u, /* operator: unseen at -90 degrees, return to line */
     .return_max_mm = 1000u,    /* operator: maximum return travel without a line */
+    .sweep_deg_s = 20u,       /* 0: old step-stop-look; otherwise target deg/s */
+    .sweep_ping_ms = 60u,     /* HC-SR04 cycle; readings while turning */
+    .sweep_seen_count = 2u,   /* consecutive seen / unseen readings */
+    .sweep_min_duty = 12u,    /* loaded turn minimum not measured; unloaded ~8% */
+    .sweep_max_duty = 30u,    /* turn controller duty ceiling, percent */
     .turn_step_deg = 5u,
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
@@ -237,10 +243,13 @@ static void print_summary(void) {
         printf("%u deg, ", DETOUR.back_off_deg);
     }
     printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%; "
-           "return heading %u deg, return max %u mm\n",
+           "return heading %u deg, return max %u mm; sweep %u deg/s, ping %u ms, "
+           "count %u, duty %u..%u%%\n",
            DETOUR.look_ms, DETOUR.vehicle_mm,
            DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT,
-           DETOUR.return_heading_deg, DETOUR.return_max_mm);
+           DETOUR.return_heading_deg, DETOUR.return_max_mm, DETOUR.sweep_deg_s,
+           DETOUR.sweep_ping_ms, DETOUR.sweep_seen_count,
+           DETOUR.sweep_min_duty, DETOUR.sweep_max_duty);
 }
 
 static void print_log(void) {
@@ -340,6 +349,8 @@ typedef struct {
     obstacle_monitor_t watch;
     dt_t dt;
     search_t search;
+    dt_sweep_control_t sweep;
+    bool sweep_active;
     int duty[2];
     bool straight;
     bool was_hold;
@@ -413,6 +424,9 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
         const uint16_t best = x->dt.best_mm;
         const bool was_returning = x->dt.returning;
         dt_reading(&x->dt, r, now);
+        if (x->dt.sweep_end != DT_SWEEP_NONE) {
+            set_duty(x, 0, 0); /* stop as soon as the sweep reading decides */
+        }
         if (!was_returning && x->dt.returning) {
             printf("[detour] RETURN to line at heading %d\n", x->dt.heading);
         }
@@ -465,7 +479,19 @@ static void straight(ctx_t *x, const int32_t c[2], int dir) {
 }
 
 static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
+    const uint32_t serial = x->dt.sweep_serial;
+    const bool was_returning = x->dt.returning;
     const dt_word_t w = dt_update(&x->dt, lp_line_seen(&lp), c[0], c[1], now);
+    if (x->dt.sweep_serial != serial) {
+        static const char *const ends[] = {"-", "seen", "lost", "return", "limit"};
+        printf("[detour] sweep %s at heading %+d (rate %d deg/s, coast %d.%d deg)\n",
+               ends[x->dt.sweep_last_end], x->dt.sweep_heading,
+               x->sweep.rate_deg_s, x->dt.sweep_coast_x10 / 10,
+               x->dt.sweep_coast_x10 % 10);
+    }
+    if (!was_returning && x->dt.returning) {
+        printf("[detour] RETURN to line at heading %d\n", x->dt.heading);
+    }
     (void)servo_set_pulse_us(servo_pulse(dt_servo_deg(w)));
     const dt_step_t step = dt_step(&x->dt);
     /* Step changes also happen in dt_reading(): compare with the last print. */
@@ -499,6 +525,12 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     }
     const dt_move_t move = dt_move(w);
     const int dir = dt_dir(w);
+    const bool sweep = DETOUR.sweep_deg_s != 0u &&
+        (step == DT_TURN_AWAY || step == DT_TURN_TOWARD) && !x->dt.backing &&
+        move == DT_MOVE_TURN;
+    if (!sweep) {
+        x->sweep_active = false;
+    }
     if (move == DT_MOVE_STOP) { /* a look in a turn */
         set_duty(x, 0, 0);
         return;
@@ -515,7 +547,14 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
         x->hold_r = c[1];
         return;
     }
-    if (move == DT_MOVE_TURN) {
+    if (sweep) {
+        if (!x->sweep_active) {
+            dt_sweep_control_init(&x->sweep, &DETOUR, c[0], c[1], now);
+            x->sweep_active = true;
+        }
+        dt_sweep_control_update(&x->sweep, &DETOUR, dir, c[0], c[1], now);
+        set_duty(x, -dir * x->sweep.duty[0], dir * x->sweep.duty[1]);
+    } else if (move == DT_MOVE_TURN) {
         set_duty(x, -dir * TURN_DUTY_PCT, dir * TURN_DUTY_PCT);
     } else {
         straight(x, c, dir);
