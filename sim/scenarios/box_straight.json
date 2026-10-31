@@ -63,7 +63,7 @@
       "pose": {"value": {"x_mm": 800, "y_mm": 0, "heading_deg": 0}, "assumed": true, "note": "Chosen scenario placement, not a D1-D18 reconstruction"},
       "size_mm": {"value": [120, 120], "assumed": true, "note": "Pure size guess; no box dimensions recorded"},
       "contact": "freeze-both",
-      "echo": "ideal-sector"
+      "echo": {"material": "specular", "max_incidence_deg": {"value": 20, "assumed": true, "note": "Conservative assumed cut from recorded 20-25 degree flat-face loss; geometry is incomplete"}, "corner_echo_max_mm": {"value": 0, "assumed": true, "note": "Off: no isolated corner-return range was recorded"}}
     }
   ],
   "events": [

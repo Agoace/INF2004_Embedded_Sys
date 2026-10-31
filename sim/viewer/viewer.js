@@ -69,7 +69,9 @@
     ctx.save();ctx.translate(...origin);ctx.rotate(rad(h));ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,length,rad(-15),rad(15));ctx.closePath();ctx.fillStyle="#d99b1520";ctx.fill();ctx.strokeStyle="#ac841c80";ctx.lineWidth=1/camera.scale;ctx.stroke();
     path([[0,0],[length,0]]);ctx.strokeStyle="#ab7b00";ctx.stroke();ctx.restore();
   }
-  function echo(){const e=view.trigger;if(!e?.hit || !e.point_mm || !e.origin_mm)return;
+  function echo(){const e=view.trigger;
+    if(e?.no_echo){const p=e.no_echo.point_mm,r=6/camera.scale;ctx.save();ctx.strokeStyle='#73798488';ctx.lineWidth=1.5/camera.scale;path([[p[0]-r,p[1]-r],[p[0]+r,p[1]+r]]);ctx.stroke();path([[p[0]-r,p[1]+r],[p[0]+r,p[1]-r]]);ctx.stroke();label(p,'sampled surface — no echo (incidence)','#737984',8,-10);ctx.restore();}
+    if(!e?.hit || !e.point_mm || !e.origin_mm)return;
     const published=view.result && view.result.t_us>=e.t_us && view.result.ready_us===e.ready_us;
     const valid=published && ((view.result.word>>9)&3)===0;
     const color=valid?"#168044":"#a87e1b";

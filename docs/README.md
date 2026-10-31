@@ -30,6 +30,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Steering Wi-Fi log](STEER_WIFI_LOG.md) — `steer_test` text and 50 ms run log over UDP broadcast (port 4243), packet format, receiver use.
 - [Vehicle Controller](VEHICLE_CONTROLLER.md) — controller state machine built step by step; step 1 is line following.
 - [2D firmware simulation](SIMULATION.md) — design and milestone status; separate host build, deterministic clock, hardware replacements, offline viewer, optional loopback environment editor, limits, and build plan. [Host build and run instructions](../sim/README.md) — offline viewer, local editor, timed echoes/full detour, schema, trace, and tests.
+- [Echo material model and fit limits](SIM_ECHO_FIT.md) — deterministic specular incidence, assumed defaults, and recorded-versus-simulated scan tables.
 - [v1.5 box-size sweep](SIM_BOX_SWEEP.md) — seven fixed-front box cases, results, full main-case console and hooks, and viewer captures; no firmware or model changes.
 - [Obstacle detour handoff](OBSTACLE_DETOUR_HANDOFF.md) — straight-and-turn obstacle detour (successor of the bypass), state at 2026-10-30: design v1.4, track runs D1–D18, open problems, next steps.
 - [Obstacle bypass](OBSTACLE_BYPASS.md) — edge-following bypass ("Blind Bicycle Algorithm"), shelved 2026-10-30 at version 4.1: design, track runs 1–18, open problems, `bypass_test` bench procedure.

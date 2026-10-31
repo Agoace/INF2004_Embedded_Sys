@@ -84,6 +84,10 @@ bool ultrasonic_trigger(void) {
     sim_event("ultrasonic_trigger","\"ready_us\":%" PRIu64 ",\"hit\":%s,\"obstacle_index\":%" PRId64 ",\"distance_mm\":%.9f,\"origin_mm\":[%.9f,%.9f],\"point_mm\":[%.9f,%.9f],\"beam_heading_deg\":%.9f,\"fault_mode\":%u",
         ready_us,echo.hit?"true":"false",echo.hit?(int64_t)echo.obstacle:INT64_C(-1),echo.hit?echo.distance:-1.0,
         echo.origin.x,echo.origin.y,echo.point.x,echo.point.y,echo.angle_deg,fault_mode);
+    if (!echo.hit && echo.surface_hit) {
+        sim_event("ultrasonic_no_echo", "\"obstacle_index\":%zu,\"point_mm\":[%.9f,%.9f],\"distance_mm\":%.9f,\"reason\":\"incidence\"",
+            echo.surface_obstacle,echo.surface_point.x,echo.surface_point.y,echo.surface_distance);
+    }
     if (fault_mode==2u) { publish(ULTRASONIC_STATUS_STUCK_HIGH,(ultrasonic_debug_t){0}); }
     else { busy=true; }
     return true;

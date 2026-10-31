@@ -57,6 +57,9 @@ add_test(NAME sim_motion_ir COMMAND "${Python3_EXECUTABLE}"
 add_test(NAME sim_echo_detour COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_milestone3.py"
     "${CMAKE_CURRENT_BINARY_DIR}/robot_sim")
+add_test(NAME sim_specular_echo COMMAND "${Python3_EXECUTABLE}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_specular.py"
+    "${CMAKE_CURRENT_BINARY_DIR}/robot_sim")
 add_test(NAME sim_environment_server COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_server.py"
     "${CMAKE_CURRENT_BINARY_DIR}/robot_sim")

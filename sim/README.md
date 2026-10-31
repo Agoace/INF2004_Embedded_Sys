@@ -148,7 +148,10 @@ only, not a dependency of the editor or the simulator.
   straight tiles and no box. Calibration succeeds; following ends at the
   real 30 s run limit, with no searches in the reference run.
 - [`scenarios/box_straight.json`](scenarios/box_straight.json) keeps the
-  120 × 120 mm box on the line at x = 800 mm. The real firmware enters
+  120 × 120 mm box on the line at x = 800 mm. Boxes now default to specular
+  echoes (assumed 20° incidence cut, corner echo off). See the
+  [material model and recorded fit limits](../docs/SIM_ECHO_FIT.md).
+  With ideal material, the accepted reference firmware enters
   FOLLOW → STOP → SCAN → DETOUR → FAILED, ending at its 25 s detour time
   limit. It chooses LEFT; no contact occurs. This is not claimed as success.
 - [`scenarios/unloaded_reference.json`](scenarios/unloaded_reference.json)
@@ -179,7 +182,7 @@ are relative start-of-step S-frame values; live `world_pose` is separate.
 Inferred phase boundaries retain pending caller assignments and the last
 context-confirmed phase (`phase_last_confirmed`); idle/calibration
 are NOT_RUNNING, not stale FOLLOW. Printed step order and module pose/heading
-are cross-checked: the reference box run has eight matching transitions.
+are cross-checked: the ideal reference box run has eight matching transitions.
 A separate `-DSIM_OBSERVE_HOOKS=OFF` build gives identical non-hook native
 events. Mismatches are saved under `firmware_observation.step_crosscheck`,
 not hidden by changing firmware or geometry.
