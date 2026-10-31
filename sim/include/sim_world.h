@@ -6,8 +6,8 @@
 
 typedef struct { double x, y; } world_point_t;
 typedef struct {
-    bool loaded, symmetric_reverse;
-    double zero_pct, tau_ms[2];
+    bool loaded, symmetric_reverse, loaded_linear;
+    double zero_pct, tau_ms[2], top_speed_mm_s;
     double x, y, heading_deg;
     double front, rear, width, track, diameter, servo_x, face_offset;
     world_point_t ir[3];

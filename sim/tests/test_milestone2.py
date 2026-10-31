@@ -12,7 +12,7 @@ sys.dont_write_bytecode = True
 SIM = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(SIM / "core"))
 from protocol import normalise
-from scenario import load
+from scenario import load, unwrap, validate, ScenarioError
 from runner import source_hashes, text_lines
 
 LAUNCHER = Path(sys.argv[1]).resolve()
@@ -54,6 +54,63 @@ class MotionIR(unittest.TestCase):
         self.assertEqual(len(records), 5)
         self.assertAlmostEqual(records[-1]["reference_coast_counts"][0], 27.5, places=5)
         self.assertAlmostEqual(records[-1]["reference_coast_counts"][1], 23, places=5)
+
+    def test_loaded_linear(self):
+        note = "operator recollection: about 74 cm/s at 100 % duty, loaded; linear scaling assumed"
+        raw = copy.deepcopy(self.raw)
+        raw["robot"]["motors"] = {
+            "profile": "loaded-linear",
+            "top_speed_mm_s": {"value": 740, "assumed": True, "note": note},
+            "zero_pct": {"value": 12, "assumed": True, "note": "Existing provisional loaded start threshold; not measured"},
+            "coast_tau_ms": {"value": [50, 50], "assumed": True, "note": "Existing provisional loaded acceleration/coast; not measured"},
+            "symmetric_reverse": True,
+        }
+        for top in (740, 600):
+            with self.subTest(top=top):
+                raw["robot"]["motors"]["top_speed_mm_s"]["value"] = top
+                s = unwrap(raw, "$", [])
+                validate(s)
+                result = self.probe_world(s, "motors")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                records = [json.loads(line) for line in result.stdout.splitlines()]
+                for record in records[:-2]:
+                    duty = record["duty"]
+                    expected = 0 if abs(duty) <= 12 else top * (min(abs(duty), 100) - 12) / 88
+                    if duty < 0:
+                        expected = -expected
+                    for target in record["target"]:
+                        self.assertAlmostEqual(target, expected, places=9)
+                speed = top * 8 / 88
+                distance = speed * (1 - 0.05 * (1 - math.exp(-20)))
+                self.assertAlmostEqual(records[-2]["x"], distance, places=7)
+                self.assertAlmostEqual(records[-2]["y"], 0, places=9)
+                for counts in records[-2]["counts"]:
+                    self.assertAlmostEqual(counts, distance * 2535 / 204.204, places=7)
+                self.assertAlmostEqual(records[-1]["coast_counts"],
+                    speed * 0.05 * (1 - math.exp(-20))**2 * 2535 / 204.204, places=7)
+        for field in ("top_speed_mm_s", "zero_pct", "coast_tau_ms"):
+            bad = copy.deepcopy(s)
+            del bad["robot"]["motors"][field]
+            with self.subTest(missing=field), self.assertRaises(ScenarioError):
+                validate(bad)
+        for field, value in (("top_speed_mm_s", 0), ("zero_pct", 100), ("coast_tau_ms", [0, 50])):
+            bad = copy.deepcopy(s)
+            bad["robot"]["motors"][field] = value
+            with self.subTest(invalid=field), self.assertRaises(ScenarioError):
+                validate(bad)
+        raw["robot"]["motors"]["top_speed_mm_s"]["value"] = 740
+        raw["end_us"] = 2010000  # Header/viewer check only; no calibration requested.
+        raw["events"] = []
+        with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
+            path = Path(directory) / "loaded-linear.json"
+            path.write_text(json.dumps(raw))
+            trace = self.run_scenario(path, Path(directory) / "out")
+            self.assertTrue(trace["complete"])
+            guesses = {a["path"]: a for a in trace["header"]["assumed_values"]}
+            for field in ("top_speed_mm_s", "zero_pct", "coast_tau_ms"):
+                self.assertTrue(guesses["$.robot.motors." + field]["assumed"])
+            self.assertEqual(guesses["$.robot.motors.top_speed_mm_s"]["note"], note)
+            self.assertIn(note, (Path(directory) / "out/run.html").read_text())
 
     def test_real_sensor_gap_and_adc(self):
         poses = [(0, [202,2615,191]), (-11, [202,185,191]), (-22, [1645,185,191]), (9, [202,1400,191])]

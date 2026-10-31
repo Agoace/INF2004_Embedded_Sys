@@ -62,9 +62,15 @@ void world_read(FILE *input) {
     world_config_t c = {0};
     if (fscanf(input, "%d %d %lf %lf %lf %lf %lf %lf", &loaded, &reverse,
         &c.zero_pct, &c.tau_ms[0], &c.tau_ms[1], &c.x, &c.y, &c.heading_deg) != 8 ||
-        fscanf(input, "%lf %lf %lf %lf %lf %lf %lf", &c.front, &c.rear, &c.width,
-               &c.track, &c.diameter, &c.servo_x, &c.face_offset) != 7) { sim_error("invalid motion configuration"); }
+        loaded < 0 || loaded > 2) { sim_error("invalid motion configuration"); }
     c.loaded = loaded != 0; c.symmetric_reverse = reverse != 0;
+    c.loaded_linear = loaded == 2;
+    if (c.loaded_linear && (fscanf(input, "%lf", &c.top_speed_mm_s) != 1 ||
+        !isfinite(c.top_speed_mm_s) || c.top_speed_mm_s <= 0.0)) {
+        sim_error("invalid loaded-linear top speed");
+    }
+    if (fscanf(input, "%lf %lf %lf %lf %lf %lf %lf", &c.front, &c.rear, &c.width,
+        &c.track, &c.diameter, &c.servo_x, &c.face_offset) != 7) { sim_error("invalid motion configuration"); }
     for (size_t i = 0; i < 3u; ++i) {
         unsigned int floor, line;
         if (fscanf(input, "%lf %lf %u %u", &c.ir[i].x, &c.ir[i].y, &floor, &line) != 4 ||
@@ -186,6 +192,9 @@ double world_target_speed(unsigned int wheel, int duty) {
     const double zero = cfg.loaded ? cfg.zero_pct : unloaded_zero[wheel];
     if (pct <= zero) { return 0.0; }
     if (duty < 0 && !cfg.symmetric_reverse) { sim_error("asymmetric reverse needs a measured curve"); }
+    if (cfg.loaded_linear) {
+        return (duty < 0 ? -1.0 : 1.0) * cfg.top_speed_mm_s * (pct - zero) / (100.0 - zero);
+    }
     if (cfg.loaded) { pct = unloaded_zero[wheel] + (pct - zero) * (100.0 - unloaded_zero[wheel]) / (100.0 - zero); }
     double speed_rpm;
     if (pct < 10.0) {
