@@ -1,4 +1,4 @@
-# Host firmware simulator — milestone 4
+# Host firmware simulator
 
 This host build reads the real `src/` files. It does not change or link to
 firmware CMake targets. See the [simulation record](../docs/SIMULATION.md)
@@ -78,6 +78,64 @@ The separate `sim/tests/viewer_browser.cjs` can save persistent screenshots:
 SIM_PLAYWRIGHT_MODULE=/absolute/path/to/playwright node sim/tests/viewer_browser.cjs \
   sim/output/box/run.html sim/output/box/trace.json sim/output/viewer-check
 ```
+
+## Optional local environment editor
+
+After the build above, start the standard-library Python server:
+
+```sh
+python3 sim/viewer/serve.py --build sim/build
+# Open http://127.0.0.1:8765
+# Optional port: add --port 9000
+```
+
+Use the printed `127.0.0.1` URL, not a network address or `localhost` alias.
+The server uses the existing built target; it never rebuilds. If the target
+is missing or older than its sources, the page shows the configure/build
+command. Rebuild in a terminal, then reload the page. Stop the server with
+Ctrl-C. This is a local development tool; do not expose it through a proxy.
+
+1. Select a base scenario. Its model, guesses, motor profile and target are
+   shown read-only. The server also refuses changes to those fields.
+2. Set box width (across y), depth (along x), centre and angle, or add/remove
+   a box or bottle. Width/depth are local dimensions before rotation.
+   Resizing keeps the centre fixed. To keep a front face at x=740 with
+   depth 480 and angle 0, set centre x=980.
+3. In **Edit floor**, drag an obstacle to move it. Snap is in mm (0 disables
+   snap). Empty-space dragging pans; wheel zooms. Dimensions are labelled.
+   Enable **Select tiles**, click a grid cell, select straight/curve/cross/
+   blank, and use Rotate 90°. Grid size/origin stay fixed to the base.
+4. Set start x/y/heading and run length. Length is the scenario end time,
+   including boot and calibration; firmware's own deadlines do not change.
+5. Click **Run unchanged firmware**. A full saved run returns, then playback
+   starts. Edit floor returns to the draft without modifying that trace.
+6. Click history entries to switch quickly between saved end views and
+   their drafts. Each entry shows sizes and result, including contact.
+7. **Save as scenario** writes a new `sim/scenarios/NAME.json`, never an
+   overwrite. Names use 1–64 characters from `[a-z0-9_-]`. Saved files use
+   the same schema as hand-written scenarios.
+
+Only environment fields can change. Clock, seed, events, track specs and
+primitives, model and firmware fields remain locked to the chosen base.
+Only one simulation (or save) can run at a time; another request gets a busy
+message. Validation errors appear beside a field where possible. No invalid
+request starts a simulation. The existing native watchdogs still apply.
+
+Each run is retained under `sim/output/web/SESSION-COUNT-HASH/`, with the
+edited `scenario.json`, complete `trace.json`, offline `run.html`, and text
+logs. The history covers this server session; files remain after shutdown.
+Open or copy `run.html` without the server exactly as before.
+
+CTest includes standard-library API/security tests. Optional browser evidence:
+
+```sh
+SIM_PLAYWRIGHT_MODULE=/absolute/path/to/playwright node sim/tests/editor_browser.cjs sim/build
+```
+
+This starts an ephemeral loopback server, tests real reruns and saving,
+removes its temporary saved-scenario fixture, and writes screenshots, timing
+and equivalence evidence to `sim/output/web_check/`. Playwright is for tests
+only, not a dependency of the editor or the simulator.
 
 ## Milestone boundary
 

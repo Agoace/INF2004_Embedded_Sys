@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Local robot environment editor</title><link rel="stylesheet" href="/editor.css"><script defer src="/editor.js"></script></head>
+<body><header><h1>Robot environment editor</h1><span>No firmware or model edits · local batch runs only</span><output id="timing"></output></header>
+<div id="message" role="status"></div><main><aside>
+<label>Base scenario<select id="base"></select></label>
+<div class="actions"><button id="run">Run unchanged firmware</button><button id="edit-floor">Edit floor</button><button id="show-run" disabled>Run viewer</button></div>
+<label>Run length (s)<input id="duration" type="number" step="any" min="0.000001" data-field="end_us"></label>
+<p id="model-summary"></p>
+<fieldset><legend>Robot start (environment placement)</legend><div id="start"></div></fieldset>
+<fieldset><legend>Obstacles · mm</legend><p>Width is across (y). Depth is along (x). Resizing keeps the centre fixed.</p><button id="add-box">Add box</button><button id="add-bottle">Add bottle</button><div id="obstacles"></div></fieldset>
+<fieldset><legend>Track tiles</legend><p>Enable Select tiles, then click a floor cell. Grid size and origin stay fixed to the base scenario.</p><output id="cell">No cell selected</output><select id="tile-type" aria-label="Tile type"><option>straight</option><option>curve</option><option>cross</option><option>blank</option></select><button id="rotate">Rotate 90°</button><output id="rotation"></output></fieldset>
+<fieldset><legend>Save as scenario</legend><label>New name<input id="save-name" pattern="[a-z0-9_\-]+" maxlength="64" data-field="name" placeholder="my_environment"></label><button id="save">Save (never overwrite)</button></fieldset>
+<details><summary>READ-ONLY model, guesses, motor profile, target</summary><pre id="readonly"></pre></details>
+<h2>This server session's runs</h2><p>Click a result to load its saved end view and edit. Results stay listed for quick comparison.</p><div id="history"></div>
+</aside><section id="view"><nav><strong id="mode">Environment preview — not a simulation</strong><button id="fit">Fit floor</button><label>Snap (mm)<input id="snap" type="number" min="0" step="1" value="10"></label><span>Drag objects · wheel zoom · drag empty space to pan (unless selecting tiles)</span><label><input id="grid-mode" type="checkbox">Select tiles</label></nav><canvas id="floor" aria-label="Editable environment floor"></canvas><iframe id="viewer" title="Saved run viewer" hidden></iframe></section></main></body></html>

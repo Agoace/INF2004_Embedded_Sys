@@ -4,7 +4,9 @@
 
 Milestones 1–4 are implemented in [`sim/`](../sim/README.md): host execution,
 motion/IR, servo, timed sector echoes, module-call observations, the real
-scan/detour loop, and the self-contained offline viewer. The target remains unchanged `detour_test` v1.5 at `b9dcb6f`.
+scan/detour loop, and the self-contained offline viewer. An optional local
+environment editor now runs that same built target and opens its saved viewer.
+It cannot change firmware, model, or control values. The target remains unchanged `detour_test` v1.5 at `b9dcb6f`.
 No `src/` or firmware CMake changes were made.
 
 Real GP21 calibration succeeds. The no-box scenario follows for 30 s without
@@ -692,6 +694,67 @@ CTest groups (27 Python tests plus native probes), all ten strict C host
 tests, documentation checks, unchanged firmware hashes, and repeat trace
 checks pass.
 
+## Optional local environment editor
+
+The offline viewer remains independent of a server. The earlier no-live-mode
+choice still applies to firmware execution and replay: there is no streaming
+controller, browser physics, or browser steering. The optional
+[`sim/viewer/serve.py`](../sim/viewer/serve.py) adds **edit, batch run, replay**
+on the local machine. It uses only Python's standard library and the already
+built `robot_sim`. It does not build or flash anything.
+
+```sh
+python3 sim/viewer/serve.py --build sim/build --port 8765
+# Open http://127.0.0.1:8765
+```
+
+The editor HTML, CSS and JavaScript are separate from the unchanged offline
+assets. An environment-preview canvas supports object dragging, snap, pan,
+zoom and dimensions; the existing viewer loads each completed `run.html` in
+a frame and starts playback. Editing a draft never changes a saved trace.
+The session history lists box dimensions and outcomes; click two entries in
+turn to compare their saved end views and return to editing either draft.
+
+The server permits changes only to obstacles, track tiles, robot start pose,
+and scenario end time. Robot geometry/IR/servo/ultrasonic/motor assumptions,
+firmware target, clock, seed, noise, button/fault events, track specifications,
+origin and primitives, and other fields are read-only. These values come
+from the selected base file. The server validates with the existing
+`unwrap`/`validate` rules, then compares every non-environment field against
+that base. A modified request cannot bypass the read-only display.
+
+Each run gets a new `sim/output/web/SESSION-COUNT-HASH/` directory with a
+10-character scenario hash. It holds `scenario.json`, `trace.json`, `run.html`,
+and console/error text. The response includes the full trace. A shared lock
+permits one simulator process at a time; concurrent runs or saves are refused
+with a busy message. Native CPU/wall watchdogs remain unchanged; the server
+also has a 25 s outer process-group timeout. Missing/stale binaries or build
+configuration produce a build command, without starting a run. Freshness
+checks use selected C sources, compiler header dependencies, launcher template,
+and CMake configuration timestamps; non-Make generators use a conservative
+header fallback. Python and web assets do not require rebuilding the native
+binary.
+
+Save as scenario uses the same validation and allows names with 1–64
+characters from `[a-z0-9_-]`. It publishes a complete file atomically and
+refuses existing files or symlinks. The save lock also prevents a new source
+file from racing the simulator's source-hash capture.
+
+The server binds only `127.0.0.1` and checks the peer address, Host and Origin.
+It has no file-browser route or client-supplied executable/output paths.
+Only fixed page assets, valid base names, and this session's known run IDs
+are served. Requests have a 1 MiB limit and a 10 s socket timeout. Child
+commands use argument arrays, never a shell. Do not expose this development
+server through a proxy or on a network interface.
+
+`sim_environment_server` checks the validation boundary, missing/stale build
+messages, busy lock, exclusive save/reload, path/Host/Origin/body limits,
+and rejection of a real socket peer bound to `127.0.0.2`. The optional
+[`editor_browser.cjs`](../sim/tests/editor_browser.cjs) checks the full UI,
+CLI trace equivalence, an offset-box rerun, field errors with no simulation,
+save/reload/refusal, quick history switching, and offline output. Evidence
+and timings are saved in ignored `sim/output/web_check/`.
+
 ## Layout and commands
 
 The standalone build, target description/hooks, minimal SDK headers,
@@ -708,7 +771,7 @@ viewer now exist. Full contact response remains outside this milestone.
 | `sim/core/` | Host entry/clock, world motion/contact/IR, JSON scenario reader, private native protocol, trace output |
 | `sim/devices/` | Five replacement drivers and retained SDK call implementations |
 | `sim/scenarios/` | Input JSON and documented assumed parameters |
-| `sim/viewer/` | Self-contained HTML template and output generator |
+| `sim/viewer/` | Offline HTML generator/assets and optional loopback environment editor/server |
 | `sim/tests/` | Device contracts, geometry tests, repeatability checks |
 | `sim/build/`, `sim/output/` | Ignored host build and generated runs |
 
