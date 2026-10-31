@@ -72,6 +72,8 @@ typedef struct {
     uint16_t counts_per_deg_x100; /* turn on the spot: (right - left) counts per degree x 100 */
     uint16_t total_max_ms;        /* time limit of the detour */
     int (*back_off_fn)(int turned_deg); /* optional; result clamped to 0..180 */
+    uint8_t return_heading_deg;   /* 0: off; unseen turn at -angle returns to line */
+    uint16_t return_max_mm;       /* returning STRAIGHT limit without a line */
 } dt_config_t;
 
 /* Step: 3 bits. */
@@ -140,6 +142,7 @@ typedef struct {
     bool looking;       /* turn: stopped for a look */
     bool seen_once;     /* TURN_AWAY: the obstacle was seen */
     bool backing;       /* TURN_TOWARD: seen, turning chosen back-off away */
+    bool returning;     /* STRAIGHT to line; ignore nearest/vehicle_mm end rule */
     int32_t back_x100;  /* backing ends when the turn x 100 reaches this */
     int last_turned_deg; /* last TURN_TOWARD angle before seen, rounded, >= 0 */
     int last_back_deg;   /* last chosen back-off; retained across step changes */

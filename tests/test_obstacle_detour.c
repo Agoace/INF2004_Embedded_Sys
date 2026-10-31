@@ -126,6 +126,21 @@ static dt_t to_straight(obstacle_side_t side) {
     return dt;
 }
 
+static dt_t to_returning(void) {
+    dt_t dt = to_straight(OBSTACLE_SIDE_LEFT); /* heading +15 */
+    dt.cfg.return_heading_deg = 90u;
+    dt.cfg.return_max_mm = 1000u;
+    (void)drive_to(&dt, 190);
+    read(&dt, NR);
+    (void)turn_to(&dt, -counts(100)); /* absolute heading -85 */
+    read(&dt, NR);
+    check(dt_step(&dt) == DT_TURN_TOWARD && !dt.returning,
+          "return: before -90, keep looking");
+    (void)turn_to(&dt, -counts(105)); /* absolute heading -90 */
+    read(&dt, NR);
+    return dt;
+}
+
 static int half_back_off(int turned_deg) { return turned_deg / 2; }
 
 int main(void) {
@@ -544,6 +559,45 @@ int main(void) {
     read(&dt, 300);
     check(dt_step(&dt) == DT_STRAIGHT && dt.last_turned_deg == 0 && dt.last_back_deg == 0,
           "callback: half of zero enters STRAIGHT immediately");
+
+    /* Return to line uses STRAIGHT, without the nearest/vehicle end rule. */
+    dt = to_returning();
+    check(dt_step(&dt) == DT_STRAIGHT && dt.returning && dt.heading == -90,
+          "return: unseen at -90 starts a returning STRAIGHT");
+    (void)drive_to(&dt, 100);
+    read(&dt, 250);
+    check(dt.from_mm == 0 && dt.best_mm == 0xFFFFu,
+          "return: a valid echo does not restart the distance count");
+    (void)drive_to(&dt, 350);
+    check(dt_step(&dt) == DT_STRAIGHT && dt.returning,
+          "return: vehicle_mm does not end the straight");
+    line = true;
+    (void)update(&dt);
+    check(dt_step(&dt) == DT_ON_LINE && !dt.returning,
+          "return: armed line ends the return with ON_LINE");
+
+    dt = to_returning();
+    (void)drive_to(&dt, 999);
+    check(dt_step(&dt) == DT_STRAIGHT, "return: before return_max_mm, keep driving");
+    (void)drive_to(&dt, 1000);
+    check(dt_step(&dt) == DT_FAILED && dt_fail(&dt) == DT_FAIL_NO_LINE,
+          "return: return_max_mm without a line fails NO_LINE");
+    dt = to_returning();
+    read(&dt, 79);
+    check(dt_fail(&dt) == DT_FAIL_TOO_NEAR, "return: too-near safety stays active");
+
+    dt = to_straight(OBSTACLE_SIDE_LEFT);
+    dt.cfg.return_heading_deg = 90u;
+    dt.cfg.return_max_mm = 1000u;
+    (void)drive_to(&dt, 190);
+    read(&dt, NR);
+    (void)turn_to(&dt, -counts(100));
+    read(&dt, 300);
+    check(dt_step(&dt) == DT_TURN_TOWARD && dt.backing && !dt.returning && dt.last_back_deg == 10,
+          "return: sighting before -90 keeps the fixed back-off behaviour");
+    (void)turn_to(&dt, -counts(100) + counts(10));
+    check(dt_step(&dt) == DT_STRAIGHT && !dt.returning,
+          "return: a seen look ends with a normal STRAIGHT");
 
     /* Word layout. */
     dt = to_straight(OBSTACLE_SIDE_LEFT);

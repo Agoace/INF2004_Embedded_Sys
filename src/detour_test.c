@@ -88,6 +88,8 @@ static int back_off_for(int turned_deg) { return turned_deg / 2; }
 
 static const dt_config_t DETOUR = {
     .back_off_fn = back_off_for,
+    .return_heading_deg = 90u, /* operator: unseen at -90 degrees, return to line */
+    .return_max_mm = 1000u,    /* operator: maximum return travel without a line */
     .turn_step_deg = 5u,
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
@@ -234,9 +236,11 @@ static void print_summary(void) {
     } else {
         printf("%u deg, ", DETOUR.back_off_deg);
     }
-    printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
+    printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%; "
+           "return heading %u deg, return max %u mm\n",
            DETOUR.look_ms, DETOUR.vehicle_mm,
-           DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT);
+           DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT,
+           DETOUR.return_heading_deg, DETOUR.return_max_mm);
 }
 
 static void print_log(void) {
@@ -395,7 +399,11 @@ static void on_result(ctx_t *x, ultrasonic_result_t r, uint32_t now) {
     } else if (x->phase == PHASE_DETOUR) {
         const int8_t at = (int8_t)(x->dt.side * x->dt.servo_deg); /* robot frame */
         const uint16_t best = x->dt.best_mm;
+        const bool was_returning = x->dt.returning;
         dt_reading(&x->dt, r, now);
+        if (!was_returning && x->dt.returning) {
+            printf("[detour] RETURN to line at heading %d\n", x->dt.heading);
+        }
         if (x->dt.best_mm != best) {
             printf("[detour] %s nearest %u mm at %ld mm: count again\n",
                    STEP_NAMES[x->dt.step & 7u], x->dt.best_mm, (long)x->dt.from_mm);
@@ -450,7 +458,7 @@ static void detour_step(ctx_t *x, const int32_t c[2], uint32_t now) {
     const dt_step_t step = dt_step(&x->dt);
     /* Step changes also happen in dt_reading(): compare with the last print. */
     if ((uint8_t)step != x->shown) {
-        if (x->shown == DT_TURN_TOWARD && step == DT_STRAIGHT) {
+        if (x->shown == DT_TURN_TOWARD && step == DT_STRAIGHT && !x->dt.returning) {
             printf("[detour] back off %d of turned %d deg\n",
                    x->dt.last_back_deg, x->dt.last_turned_deg);
         }

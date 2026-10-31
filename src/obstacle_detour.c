@@ -93,6 +93,7 @@ static void begin(dt_t *dt, dt_step_t step) {
     dt->best_mm = NO_ECHO;
     dt->looking = false;
     dt->backing = false;
+    dt->returning = false;
     dt->target_deg = 0u; /* turns look first */
     if (step == DT_ON_LINE) {
         dt->leg_mm = dt->cfg.line_ahead_mm;
@@ -188,7 +189,7 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
     if (dt->step == DT_STRAIGHT) {
         if (status == ULTRASONIC_STATUS_VALID && mm < DT_TOO_NEAR_MM) {
             fail(dt, DT_FAIL_TOO_NEAR);
-        } else if (seen && mm < dt->best_mm) {
+        } else if (!dt->returning && seen && mm < dt->best_mm) {
             dt->best_mm = mm; /* nearest so far: count again from here */
             dt->from_mm = dt->trig_mm;
         }
@@ -218,6 +219,11 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             dt->back_x100 = (int32_t)turn_x100(dt) +
                             (int32_t)back * dt->cfg.counts_per_deg_x100;
         }
+    } else if (!dt->backing && dt->cfg.return_heading_deg != 0u &&
+               (int64_t)dt->heading * dt->cfg.counts_per_deg_x100 + turn_x100(dt) <=
+                   -(int64_t)dt->cfg.return_heading_deg * dt->cfg.counts_per_deg_x100) {
+        end_turn(dt, DT_STRAIGHT);
+        dt->returning = true;
     } else {
         next_look(dt, dt->cfg.toward_max_deg);
     }
@@ -256,6 +262,10 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
         if (dt->armed && line_seen) {
             end_straight(dt);
             begin(dt, DT_ON_LINE);
+        } else if (dt->returning) {
+            if (s >= (int32_t)dt->cfg.return_max_mm) {
+                fail(dt, DT_FAIL_NO_LINE);
+            }
         } else if (s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
             end_straight(dt);
             ++dt->straights;
