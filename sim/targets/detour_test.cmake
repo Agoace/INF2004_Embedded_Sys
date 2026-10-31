@@ -13,6 +13,9 @@ set(SIM_FIRMWARE_SOURCES
 set(SIM_HOOKS dt_init dt_update dt_reading obstacle_update
     obstacle_scan_start obstacle_scan_service lp_update steer_update
     steer_straight steer_reset obstacle_init)
+if(NOT SIM_OBSERVE_HOOKS)
+    set(SIM_HOOKS "")
+endif()
 set_property(SOURCE "${SIM_ENTRY}" APPEND PROPERTY COMPILE_DEFINITIONS main=firmware_main)
 foreach(hook IN LISTS SIM_HOOKS)
     set_property(SOURCE "${SIM_ENTRY}" APPEND PROPERTY

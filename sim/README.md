@@ -1,4 +1,4 @@
-# Host firmware simulator — milestone 2
+# Host firmware simulator — milestone 3
 
 This host build reads the real `src/` files. It does not change or link to
 firmware CMake targets. See the [simulation record](../docs/SIMULATION.md)
@@ -38,29 +38,46 @@ without changes to its sources. Unsupported targets or SDK symbols fail.
   and run limits execute. Calibration is not injected or bypassed.
 - [`core/world.c`](core/world.c) supplies duty/speed response, signed
   fractional encoders, differential drive, the robot rectangle, tile lines,
-  sensor overlap, and conservative contact detection.
+  sensor overlap, conservative contact detection, and sector echo geometry.
 - [`scenarios/no_box_straight.json`](scenarios/no_box_straight.json) has 30
   straight tiles and no box. Calibration succeeds; following ends at the
   real 30 s run limit, with no searches in the reference run.
 - [`scenarios/box_straight.json`](scenarios/box_straight.json) keeps the
-  120 × 120 mm box on the line at x = 800 mm. Contact is recorded; a safety
-  latch stops motion and encoder progress. The real wheel-stall check then
-  ends the run. The robot does not pass through the box.
+  120 × 120 mm box on the line at x = 800 mm. The real firmware enters
+  FOLLOW → STOP → SCAN → DETOUR → FAILED, ending at its 25 s detour time
+  limit. It chooses LEFT; no contact occurs. This is not claimed as success.
 - [`scenarios/unloaded_reference.json`](scenarios/unloaded_reference.json)
   selects the unloaded curve and the explicit synthetic coast fit. The
   loaded scenarios use marked 50 ms acceleration/coast constants per wheel.
-- Servo pulses are clamped and recorded. Ultrasound still gives only
-  NO_RETURN, after 215 µs rise latency plus the 3 ms echo timeout, with a
-  60 ms trigger gap. Publication requires `ultrasonic_service`; no obstacle
-  STOP or detour is expected yet. USB is disconnected; Wi-Fi is a local sink.
+- Servo pulses clamp to 1100–1900 µs and set angle at once, without slew.
+  The real firmware retains its settle waits. The sensor face uses the
+  x = 65 mm axis and the marked 0 mm face offset.
+- [`devices/ultrasonic.c`](devices/ultrasonic.c) implements timed nearest
+  box/circle surface echoes in a closed ±15° sector, not only the centre ray.
+  Geometry is sampled at trigger time. Rise latency is 215 µs; echo time is
+  2d/343 with unit conversion and integer pulse rounding. No echo times out
+  3 ms after rise. The 16-bit result, 60 ms gap, busy rejection, initial NONE,
+  fault streak, and debug values follow the real API. Only service publishes
+  a pending result; injected STUCK_HIGH publishes immediately. Optional
+  falling-edge callbacks run at scheduled completion, not publication time.
 - Physical contact response, escape/reverse from contact, single-wheel
-  contact effects, echo geometry, full phase decoding, and the HTML viewer
-  are later work. Contact is latched until the next process/scenario, even
-  for a separating command. This is a safety stop, not contact dynamics.
+  contact effects, and the HTML viewer are later work. Contact is latched
+  until the next process/scenario, even for a separating command. This is a
+  safety stop, not contact dynamics. The contact regression test injects
+  NO_RETURN to reproduce the milestone 2 contact path explicitly.
+- USB is disconnected; Wi-Fi is a local sink, not a transport model.
 
 External call hooks record public results/state at non-advancing timestamps.
-Complete phase inference, comparison with unhooked runs, and printf step
-sequence checks remain build plan step 7 work.
+[`targets/detour_decode.py`](targets/detour_decode.py) derives run phases and
+step timelines without feeding any state to firmware. Module pose/heading
+are relative start-of-step S-frame values; live `world_pose` is separate.
+Inferred phase boundaries retain pending caller assignments and the last
+context-confirmed phase (`phase_last_confirmed`); idle/calibration
+are NOT_RUNNING, not stale FOLLOW. Printed step order and module pose/heading
+are cross-checked: the reference box run has eight matching transitions.
+A separate `-DSIM_OBSERVE_HOOKS=OFF` build gives identical non-hook native
+events. Mismatches are saved under `firmware_observation.step_crosscheck`,
+not hidden by changing firmware or geometry.
 
 ## Scenario schema
 
@@ -68,7 +85,7 @@ sequence checks remain build plan step 7 work.
 The scenario files supply every required field and show the exact object
 shapes. [`core/protocol.py`](core/protocol.py) converts validated inputs to
 the private native protocol. Unknown/duplicate keys, invalid types, ranges,
-unsupported noise/timing/contact modes, unsorted button events, and missing
+unsupported noise/timing/contact/servo modes, unsorted events, and missing
 values fail before firmware starts. No defaults fill missing model values.
 
 Values can be explicit assumptions:
@@ -100,9 +117,15 @@ area and foam seam effects are not modelled.
 
 Scenario time starts before the 2 s boot wait. GP20/GP21 events are active
 low at absolute times. The supplied press is at 2.1 s, release at 2.3 s.
+An event can instead be `{"at_us": 0, "ultrasonic_fault": "NO_RISE"}`.
+Allowed persistent modes are NORMAL (remove injection), NO_RISE (2 ms rise
+timeout), STUCK_HIGH, and NO_RETURN. A mode is sampled on each accepted
+trigger; it does not change an already pending echo.
 Clock reads advance by the selected quantum (100 µs normally), sleeps by
 exact duration, and conversions/trace writes do not advance time. Physics
-uses at most 100 µs steps and splits at button/snapshot/end events. Contacts
+uses at most 100 µs steps and splits at button/fault/echo/snapshot/end events.
+At ties, integrate old commands, apply buttons then fault events, complete
+echoes, and save the snapshot. Firmware publication still requires service. Contacts
 use smaller conservative steps. CPU limits remain 5 s soft/6 s hard;
 the wall watchdog remains 10 s.
 
@@ -114,7 +137,11 @@ fragments, buttons, duties, servo commands, packets, hooks, and first contact.
 World snapshots are saved at 0 and every 10 ms, plus a non-grid end time.
 They contain rear-axle pose, speeds, fractional `counts`, integer
 `encoder_counts` as returned to firmware, duties, raw ADC values, transformed
-IR points, and the contact latch. Rectangle dimensions stay in the header.
+IR points, servo angle, and the contact latch. Rectangle dimensions stay in
+the header. Trigger events save the sampled origin, beam heading, nearest
+surface point, distance, obstacle index, and fault mode. A geometric `hit`
+can be out of range; the published result word decides validity. Completion and publication
+events are separate; they must not be interpreted as the same timestamp.
 Text lines displayed by the runner use the completing fragment timestamp.
 
 There is no wall timestamp, process ID, or output path in a trace. Identical
@@ -128,6 +155,12 @@ Tests cover the milestone 1 clock/schema/watchdog contracts, real calibration,
 straight/spin/reverse/coast equations, fitted unloaded coast, tile joins,
 cross/curve IR, production gap checks, thin-box/circle no-tunnelling checks,
 real following, contact and no penetration, repeatability, and source hashes.
+Echo tests cover 59/60/511/512 mm, off-axis hits, misses, gap/busy rejection,
+fault streak saturation/reset, immediate STUCK_HIGH, 32-bit wrap, delayed
+publication, callbacks, and in-flight servo changes. The real 13-point scan
+is checked against hand geometry; the full detour is compared with an
+unhooked build and printed labels. See the simulation record for the exact
+reference timeline and handoff-problem A–G comparison.
 The clock/device probe uses an internal physics-disabled configuration only
 to keep clock-wrap tests independent; normal scenarios always enable physics.
 

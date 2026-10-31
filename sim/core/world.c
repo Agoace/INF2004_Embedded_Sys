@@ -18,6 +18,7 @@ static stroke_t *strokes;
 static obstacle_t *obstacles;
 static size_t tile_count, stroke_count, obstacle_count;
 static bool active;
+static double servo_deg;
 
 static const double rpm[2][10] = {
     {26.253, 53.881, 81.486, 109.006, 136.648, 163.417, 190.842, 217.029, 242.664, 260.829},
@@ -35,6 +36,7 @@ void world_destroy(void) {
 void world_init(const world_config_t *config) {
     world_destroy();
     cfg = *config;
+    servo_deg = 0;
     state = (world_state_t){.x = cfg.x, .y = cfg.y, .heading = cfg.heading_deg * PI / 180.0};
     active = true;
 }
@@ -294,6 +296,71 @@ void world_advance(uint64_t start_us, uint64_t end_us) {
         time += step;
     }
 }
+void world_servo(uint16_t pulse) { servo_deg = ((double)pulse - 1500.0) * 0.09; }
+static double cross(world_point_t a, world_point_t b) { return a.x*b.y - a.y*b.x; }
+static void echo_candidate(world_echo_t *best, world_point_t p, size_t index, double heading) {
+    const double x=p.x-best->origin.x, y=p.y-best->origin.y;
+    const double distance=hypot(x,y);
+    const double offset=atan2(sin(atan2(y,x)-heading),cos(atan2(y,x)-heading));
+    if (distance<best->distance && (distance<1e-9 || fabs(offset)<=PI/12+1e-12)) {
+        best->hit=true; best->distance=distance; best->point=p; best->obstacle=index;
+    }
+}
+world_echo_t world_echo(void) {
+    const double heading=state.heading+servo_deg*PI/180;
+    const world_point_t axis=transform((world_point_t){cfg.servo_x,0},state.x,state.y,state.heading);
+    world_echo_t best={.distance=1e30,.angle_deg=heading*180/PI,
+        .origin=transform((world_point_t){cfg.face_offset,0},axis.x,axis.y,heading)};
+    if (!active) { return best; }
+    for (size_t i=0;i<obstacle_count;++i) {
+        const obstacle_t o=obstacles[i];
+        if (o.kind==0) {
+            world_point_t box[4];
+            rectangle(box,o.centre.x,o.centre.y,o.angle,o.width/2,-o.width/2,o.height);
+            for (size_t j=0;j<4u;++j) {
+                const world_point_t a=box[j],b=box[(j+1u)%4u];
+                const world_point_t edge={b.x-a.x,b.y-a.y};
+                const world_point_t delta={a.x-best.origin.x,a.y-best.origin.y};
+                const double square=edge.x*edge.x+edge.y*edge.y;
+                const double t=fmax(0,fmin(1,-(delta.x*edge.x+delta.y*edge.y)/square));
+                echo_candidate(&best,a,i,heading);
+                echo_candidate(&best,(world_point_t){a.x+t*edge.x,a.y+t*edge.y},i,heading);
+                for (int side=-1;side<=1;side+=2) {
+                    const double h=heading+(double)side*PI/12;
+                    const world_point_t ray={cos(h),sin(h)};
+                    const double denominator=cross(ray,edge);
+                    if (fabs(denominator)<1e-12) { continue; }
+                    const double range=cross(delta,edge)/denominator;
+                    const double along=cross(delta,ray)/denominator;
+                    if (range>=0 && along>=0 && along<=1) {
+                        echo_candidate(&best,(world_point_t){best.origin.x+range*ray.x,best.origin.y+range*ray.y},i,heading);
+                    }
+                }
+            }
+        } else {
+            const double dx=o.centre.x-best.origin.x,dy=o.centre.y-best.origin.y;
+            const double distance=hypot(dx,dy),radius=o.width/2;
+            if (distance>0) {
+                echo_candidate(&best,(world_point_t){o.centre.x-radius*dx/distance,o.centre.y-radius*dy/distance},i,heading);
+            } else {
+                echo_candidate(&best,(world_point_t){best.origin.x+radius*cos(heading),best.origin.y+radius*sin(heading)},i,heading);
+            }
+            for (int side=-1;side<=1;side+=2) {
+                const double h=heading+(double)side*PI/12;
+                const double projection=dx*cos(h)+dy*sin(h);
+                const double discriminant=radius*radius-distance*distance+projection*projection;
+                if (discriminant<0) { continue; }
+                for (int root=-1;root<=1;root+=2) {
+                    const double range=projection+(double)root*sqrt(discriminant);
+                    if (range>=0) {
+                        echo_candidate(&best,(world_point_t){best.origin.x+range*cos(h),best.origin.y+range*sin(h)},i,heading);
+                    }
+                }
+            }
+        }
+    }
+    return best;
+}
 void world_snapshot(uint64_t time_us) {
     if (!active) { return; }
     uint16_t raw[3]; world_ir(raw);
@@ -301,9 +368,9 @@ void world_snapshot(uint64_t time_us) {
     world_point_t ir[3];
     for (size_t i = 0; i < 3u; ++i) { ir[i] = transform(cfg.ir[i], state.x, state.y, state.heading); }
     sim_event_at(time_us, "world", "\"x_mm\":%.9f,\"y_mm\":%.9f,\"heading_deg\":%.9f,"
-        "\"speed_mm_s\":[%.9f,%.9f],\"counts\":[%.9f,%.9f],\"encoder_counts\":[%" PRId32 ",%" PRId32 "],\"duty\":[%d,%d],"
+        "\"servo_deg\":%.9f,\"speed_mm_s\":[%.9f,%.9f],\"counts\":[%.9f,%.9f],\"encoder_counts\":[%" PRId32 ",%" PRId32 "],\"duty\":[%d,%d],"
         "\"ir_raw\":[%u,%u,%u],\"ir_points_mm\":[[%.9f,%.9f],[%.9f,%.9f],[%.9f,%.9f]],\"contact\":%s",
-        state.x, state.y, state.heading * 180.0 / PI, state.speed[0], state.speed[1], state.counts[0], state.counts[1], left, right,
+        state.x, state.y, state.heading * 180.0 / PI, servo_deg, state.speed[0], state.speed[1], state.counts[0], state.counts[1], left, right,
         state.duty[0], state.duty[1], (unsigned int)raw[0], (unsigned int)raw[1], (unsigned int)raw[2],
         ir[0].x, ir[0].y, ir[1].x, ir[1].y, ir[2].x, ir[2].y, state.contact ? "true" : "false");
 }

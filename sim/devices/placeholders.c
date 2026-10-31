@@ -1,4 +1,4 @@
-/* Motion and IR use the world model. Ultrasound remains a timed placeholder. */
+/* World-backed motion/IR/servo and a local Wi-Fi sink. */
 #include "sim_runtime.h"
 #include <inttypes.h>
 #include "sim_world.h"
@@ -9,9 +9,6 @@
 #include "wifi_log.h"
 
 static uint16_t pulse = SERVO_CENTRE_US;
-static bool busy, triggered;
-static uint64_t trigger_us, ready_us;
-static ultrasonic_result_t latest = ULTRASONIC_RESULT_NONE;
 
 void drive_init(void) { world_duty(0u, 0); world_duty(1u, 0); world_reset_counts(); }
 void drive_set_wheel(drive_wheel_t wheel, int pct) {
@@ -35,36 +32,9 @@ void servo_init(unsigned int pin) {
 uint16_t servo_set_pulse_us(uint16_t us) {
     pulse = us < SERVO_SAFE_MIN_US ? SERVO_SAFE_MIN_US :
             us > SERVO_SAFE_MAX_US ? SERVO_SAFE_MAX_US : us;
+    world_servo(pulse);
     sim_event("servo", "\"pulse_us\":%u", (unsigned int)pulse);
     return pulse;
-}
-void ultrasonic_init(unsigned int trigger_pin, unsigned int echo_pin, ultrasonic_echo_hook_t hook) {
-    (void)trigger_pin; (void)echo_pin; (void)hook;
-    busy = triggered = false;
-    latest = ULTRASONIC_RESULT_NONE;
-}
-bool ultrasonic_trigger(void) {
-    const uint64_t now = sim_now();
-    if (busy || (triggered && now - trigger_us < 60000u)) { return false; }
-    trigger_us = now;
-    /* Trigger-to-rise latency includes the trigger pulse, as in the driver. */
-    ready_us = now + 215u + 3000u;
-    triggered = busy = true;
-    sim_event("ultrasonic_trigger", "\"ready_us\":%" PRIu64, ready_us);
-    return true;
-}
-bool ultrasonic_service(void) {
-    if (!busy || sim_now() < ready_us) { return false; }
-    busy = false;
-    latest = (ultrasonic_result_t)(ULTRASONIC_STATUS_NO_RETURN << ULTRASONIC_STATUS_SHIFT);
-    sim_event("ultrasonic_result", "\"word\":%u,\"ready_us\":%" PRIu64,
-              (unsigned int)latest, ready_us);
-    return true;
-}
-bool ultrasonic_busy(void) { return busy; }
-ultrasonic_result_t ultrasonic_latest(void) { return latest; }
-ultrasonic_debug_t ultrasonic_debug_latest(void) {
-    return (ultrasonic_debug_t){.rise_latency_us = latest == ULTRASONIC_RESULT_NONE ? 0u : 215u};
 }
 void wifi_log_init(void) { }
 void wifi_log_poll(uint32_t now_ms) { (void)now_ms; }

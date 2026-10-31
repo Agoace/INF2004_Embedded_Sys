@@ -2,11 +2,13 @@
 
 def normalise(s, active=True):
     floor = s["robot"]["ir"]["floor_adc"]
-    rows = [f'{s["end_us"]} {s["clock_quantum_us"]} {floor[0]} {floor[1]} {floor[2]} {len(s["events"])}']
-    rows += [f'{e["at_us"]} {e["pin"]} {int(e["down"])}' for e in s["events"]]
+    buttons = [e for e in s["events"] if "pin" in e]
+    faults = [e for e in s["events"] if "ultrasonic_fault" in e]
+    rows = [f'{s["end_us"]} {s["clock_quantum_us"]} {floor[0]} {floor[1]} {floor[2]} {len(buttons)}']
+    rows += [f'{e["at_us"]} {e["pin"]} {int(e["down"])}' for e in buttons]
     rows.append(str(int(active)))
     if not active:
-        return "\n".join(rows) + "\n"
+        return "\n".join(rows + ["0"]) + "\n"
     robot, track = s["robot"], s["track"]
     motor, pose, geometry, ir = (robot[key] for key in ("motors", "start_pose", "geometry", "ir"))
     rows.append(" ".join(map(str, [int(motor["profile"] == "provisional-loaded"),
@@ -40,4 +42,6 @@ def normalise(s, active=True):
         kind = int(obstacle["type"] == "bottle")
         size = [obstacle["diameter_mm"], 0] if kind else obstacle["size_mm"]
         rows.append(" ".join(map(str, [kind, pose["x_mm"], pose["y_mm"], pose["heading_deg"], *size])))
+    rows.append(str(len(faults)))
+    rows += [f'{e["at_us"]} ' + str(["NORMAL", "NO_RISE", "STUCK_HIGH", "NO_RETURN"].index(e["ultrasonic_fault"])) for e in faults]
     return "\n".join(rows) + "\n"

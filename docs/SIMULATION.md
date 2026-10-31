@@ -2,23 +2,26 @@
 
 ## Status and purpose
 
-Milestones 1–2 are implemented in [`sim/`](../sim/README.md): build plan
-steps 1–5, including motion, encoders, coast, geometry, and IR. The first
-target is the real `detour_test` v1.5 at `b9dcb6f`. No `src/` or firmware
-CMake file changes are required.
+Milestones 1–3 are implemented in [`sim/`](../sim/README.md): host execution,
+motion/IR, servo, timed sector echoes, module-call observations, and the real
+scan/detour loop. The target remains unchanged `detour_test` v1.5 at `b9dcb6f`.
+No `src/` or firmware CMake changes were made.
 
-Real GP21 spin calibration succeeds on the straight-tile model. The no-box
-scenario follows the line to the firmware's 30 s run limit, with no searches.
-The box scenario records contact and stops safely before penetration; the
-real wheel-stall rule ends its run. Ultrasound remains timed NO_RETURN, so
-neither scenario starts a detour. Contact response is a conservative safety
-latch, not full physical response or escape motion. A complete trace means
-the scenario deadline was reached, not detour success.
+Real GP21 calibration succeeds. The no-box scenario follows for 30 s without
+searches. With the box on the line, the firmware now enters FOLLOW → STOP →
+SCAN → DETOUR → FAILED (its own 25 s detour time limit), without contact.
+No simulator logic steers, chooses a side, or decides detour success. See the
+[milestone 3 results](#milestone-3-results) for times, poses, and limitations.
+A complete trace means the scenario deadline, not detour success.
 
-External call hooks record results; full phase decoding and hook/printf
-sequence checks remain step 7 work. Echo geometry and the HTML viewer are
-not implemented. See the [host build instructions](../sim/README.md) for
-commands, schema rules, tests, and milestone limits.
+Hook observations include exact module state and live world pose. The
+separate phase decoder marks inferred/caller-pending boundaries and idle
+intervals. The eight hooked step transitions match all eight printed steps;
+module poses/headings also match the prints. A separate unhooked build gives
+identical native non-hook events, including commands, sensor results, text,
+and snapshots. Full contact response, fault dynamics, and the HTML viewer
+remain later work. Contact still uses the milestone 2 safety latch. See the
+[host instructions](../sim/README.md) for commands and schema rules.
 
 The complete design has two parts: a host program that runs firmware against
 a virtual floor, and an HTML viewer that plays the saved run.
@@ -398,6 +401,39 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   NO_RETURN at the echo timeout and injected NO_RISE at the rise timeout.
   Sample world geometry at trigger time and document that simplification.
 
+Milestone 3 implements these devices in
+[`sim/devices/ultrasonic.c`](../sim/devices/ultrasonic.c) and the world model.
+The face is on the x = 65 mm axis with the explicit assumed zero face offset.
+The conservative robot contact rectangle does not occlude its own sensor.
+For a box, test each edge's endpoints, perpendicular nearest point, and
+intersections with both sector boundaries. For a circle, test the nearest
+radial point and both boundary-ray intersections. Keep the nearest admitted
+surface across all obstacles. This includes off-axis echoes, not just the
+centre ray. The aperture is a closed ±15° sector.
+
+Round the ideal pulse to integer microseconds, then use the real driver's
+rounded pulse-to-mm conversion and packed-field limit. The ideal geometry
+also rejects surfaces beyond 511 mm before rounding the result field. Thus
+a surface at 511.1 mm is NO_RETURN even if diagnostics round to 511 mm.
+Likewise, geometry below 60 mm gets code 0 even if diagnostics round to 60.
+A completed pulse
+can therefore keep diagnostic timing even if its rounded distance exceeds
+511 mm. Longer/no echoes complete at 215 + 3000 µs with zero pulse diagnostic.
+The clock records echo completion at its scheduled time; only a service
+call publishes it. The optional echo callback runs on a completed falling
+edge, not on a timeout. Servo changes during a pending echo do not change
+that trigger's geometry. Trigger gaps use unsigned 32-bit subtraction,
+including wrap; scheduling uses the 64-bit world clock.
+
+Explicit scenario events can set a persistent sensor fault mode:
+`{"at_us": 0, "ultrasonic_fault": "NO_RISE"}`. Modes are `NORMAL`, `NO_RISE`,
+`STUCK_HIGH`, and `NO_RETURN`; they apply to the next accepted trigger, not
+to an already pending measurement. `NORMAL` removes injection. NO_RISE
+finishes after 2000 µs; STUCK_HIGH publishes immediately without busy.
+Only these injected faults increment the streak. VALID/NO_RETURN reset it;
+the streak saturates at 5. The schema rejects servo slew and unimplemented
+beam/timing changes instead of ignoring them.
+
 ### IR readings
 
 Generate raw 12-bit ADC samples, not `line_seen`, position, or events.
@@ -471,8 +507,8 @@ The latch prevents further pose or encoder changes until a new scenario,
 even for a reverse command. This is intentionally simpler than separating
 motion or contact forces. Other contact modes are rejected until the full contact-response work.
 Snapshots carry the latch; the contact event carries obstacle ID/index,
-time, pose, and residual clearance. In the reference box scenario the safe
-contact is at 8.542512 s, rear axle (616.721223724, 8.691295026) mm, heading
+time, pose, and residual clearance. In the milestone 2 reference (only timed NO_RETURN, now reproduced with
+an explicit NO_RETURN injection), safe contact is at 8.542512 s, rear axle (616.721223724, 8.691295026) mm, heading
 +0.230581211°, clearance 0.001337385 mm. The actual firmware then reports a
 left-wheel stall at 9.042200 s; it does not drive through the box.
 
@@ -607,9 +643,10 @@ reduced trail while the full event data stays available.
 ## Layout and commands
 
 The standalone build, target description/hooks, minimal SDK headers,
-clock/runtime, Python scenario reader/runner, placeholder devices, scenario,
+clock/runtime, Python scenario reader/runner, replacement drivers, scenarios,
 and tests now exist. Motion, geometry, contact safety, and IR world physics
-also exist; echo geometry and the viewer remain planned.
+also exist. Servo/echo geometry and observational decoding now exist;
+only the viewer path below remains planned.
 No empty implementation files are added for those later steps.
 
 | Planned path | Content |
@@ -701,9 +738,83 @@ the firmware's current 123 mm setting and must stay visible as an
 assumption, not be used to change firmware. D1–D18 logs are unavailable on
 this machine; no replay match is claimed.
 
+## Milestone 3 results
+
+`box_straight` retains the assumed 120 × 120 mm box at (800, 0) mm. The real
+firmware stops at 7.681700 s with a 224 mm reading (2401 ms into the run).
+The scan completes at 9.808000 s:
+
+```text
+221 217 215 214 214 214 214 214 214 214 215 218 NR
+nearest 214 mm, free step R 7 L 6 -> detour LEFT
+```
+
+Hooked transitions below use actual call completion times. Module pose and
+heading are integer S-frame values relative to the detour origin, stored at
+the start of each step. They are not live world position. World pose is the
+rear axle in the original scenario frame; values below are rounded for display.
+
+| Time s | Step | Module x, y mm; heading ° | World x, y mm; heading ° |
+| ---: | --- | --- | --- |
+| 9.808000 | TURN_AWAY | 0, 0; 0 | 460.664, 7.831; +0.443 |
+| 12.013600 | STRAIGHT | 0, 0; +51 | 462.202, 8.575; +51.214 |
+| 14.870200 | TURN_TOWARD | 220, 271; +51 | 678.978, 283.487; +51.763 |
+| 18.450200 | STRAIGHT | 220, 271; +21 | 682.410, 288.264; +21.980 |
+| 21.300200 | TURN_TOWARD | 546, 396; +21 | 987.843, 459.860; +29.316 |
+| 26.050200 | STRAIGHT | 546, 396; −39 | 991.851, 463.236; −30.185 |
+| 28.900200 | TURN_TOWARD | 817, 176; −39 | 1314.685, 327.176; −22.843 |
+| 34.810200 | FAILED / TIME | 817, 176; −39 | 1321.246, 328.258; −164.291 |
+
+The first STRAIGHT is set by `dt_reading`; its print follows at 12.020200 s.
+The other step prints also match the latest module state. Cross-check result:
+8 printed steps, 8 hook transitions, no omitted states, no mismatches. The
+run summary at 34.810300 s reports 29530 ms, detour failed (time limit),
+1 obstacle stop, 0 detours done, 0 searches, counts L 20952 / R 16993.
+No contact occurs, so there is no contacting corner or edge to report.
+
+The inferred phase boundaries are FOLLOW 5.280400 s, STOP 7.681700 s,
+SCAN 7.981200 s, DETOUR 9.808000 s, and not-running 34.810300 s. The
+100 µs interval from the console run marker to follow reset is unresolved,
+not assigned FOLLOW by assumption. Pending caller assignments are separate
+from module hook completion; these are not instruction-level phase samples.
+
+Comparison with [handoff problems A–G](OBSTACLE_DETOUR_HANDOFF.md#open-problems):
+
+| Problem | This run |
+| --- | --- |
+| A: line accepted while heading away | Not observed. No ON_LINE; the line is seen only initially in TURN_AWAY before arming. |
+| B: ALIGN sweeps past line | Not exercised: no ALIGN. |
+| C: stale follower memory after DONE | Not exercised: no DONE or return to following. |
+| D: line ignored during TURN_TOWARD | Not observed as a crossing: the model line never reappears after the initial turn. The source still ignores line in turns. |
+| E: contact/stall at a corner | Not observed: no contact and no stall. The safety latch is not used. |
+| F: small TURN_AWAY | Not observed: TURN_AWAY ends at module heading +51°. |
+| G: Wi-Fi text loss | Cannot assess with the local sink. The captured text has no missing step labels; real Wi-Fi buffering is not modelled. |
+
+The observed failure is the detour's own time limit during its third
+TURN_TOWARD. World and integer module poses diverge during the provisional
+coast model; both are kept, rather than replacing either with the other.
+These are comparisons under assumptions, not replay of D1–D18 or evidence
+that any handoff problem is fixed. No firmware value was tuned.
+
+The separate real-scan probe puts the sensor at (65, 0) facing a box with
+front x = 365 mm, y = ±60 mm (300 mm nearest distance). Its 13-point profile
+is `NR 305 301 300 300 300 300 300 300 300 301 305 NR`. For a −25.02° pulse
+angle, the nearest admitted front point is on the −10.02° sector boundary:
+`300 / cos(10.02°)` mm. At −19.98°, use `300 / cos(4.98°)`; at 0°, use
+300 mm. Pulse rounding gives the profile values above. The ±29.97° sectors
+miss the box: the largest front-corner bearing is only atan(60/300) = 11.31°.
+This checks the real scan's 13 points, two readings per point, and settle waits.
+
+Unit checks also cover 59/60/511/512 mm on boxes and circles, a 12° off-axis
+box not hit by the centre ray, no hit at 16°, no surface, busy/gap rejection,
+fault streak saturation/reset, injected immediate STUCK_HIGH, 32-bit wrap,
+publication only on service, callback timing, and a servo change during a
+pending measurement. The hook-vs-unhooked comparison checks every native
+non-hook event byte-for-byte as decoded JSON, not only the final result.
+
 ## Build plan and checks
 
-Steps 1–5 now have implementations and passing checks. The no-box reference
+Motion/IR and servo/echo/hook/full-loop work now have passing checks. The no-box reference
 has 3000 snapshots between printed run start and stop; rear-axle absolute
 lateral error from the y = 0 line has maximum 10.066755148 mm and mean
 9.513485314 mm. The centre IR point has maximum 13.626529921 mm and mean

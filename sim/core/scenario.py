@@ -184,15 +184,15 @@ def validate(s):
     for value in motors["coast_tau_ms"]:
         number(value, "robot.motors.coast_tau_ms", 0.001, 10000)
     obj(robot["servo"], "robot.servo", "instant_angle")
-    if not isinstance(robot["servo"]["instant_angle"], bool):
-        fail("robot.servo.instant_angle", "expected boolean")
+    if robot["servo"]["instant_angle"] is not True:
+        fail("robot.servo.instant_angle", "only the approved instantaneous servo model is implemented")
     ultra = robot["ultrasonic"]
     obj(ultra, "robot.ultrasonic", "beam_deg rise_latency_us echo_timeout_us trigger_gap_us")
     for key, value in ultra.items():
         number(value, "robot.ultrasonic." + key, 1, 1000000, integer=True)
-    # M1 has one timing implementation. Reject rather than ignore timing changes.
+    # Reject rather than silently ignore unsupported timing changes.
     if ultra != {"beam_deg": 30, "rise_latency_us": 215, "echo_timeout_us": 3000, "trigger_gap_us": 60000}:
-        fail("robot.ultrasonic", "placeholder ultrasonic requires the documented timing and beam")
+        fail("robot.ultrasonic", "ultrasonic requires the documented timing and beam")
     array(s["obstacles"], "obstacles")
     names = set()
     for i, obstacle in enumerate(s["obstacles"]):
@@ -224,12 +224,18 @@ def validate(s):
     levels = {20: False, 21: False}
     for i, event in enumerate(s["events"]):
         p = f"events[{i}]"
-        obj(event, p, "at_us pin down")
+        if not isinstance(event, dict):
+            fail(p, "expected event object")
+        fault = "ultrasonic_fault" in event
+        obj(event, p, "at_us ultrasonic_fault" if fault else "at_us pin down")
         number(event["at_us"], p + ".at_us", 0, s["end_us"] - 1, integer=True)
-        number(event["pin"], p + ".pin", 20, 21, integer=True)
         if event["at_us"] < previous:
             fail(p, "events must be ordered")
         previous = event["at_us"]
+        if fault:
+            choice(event["ultrasonic_fault"], p, ["NORMAL", "NO_RISE", "STUCK_HIGH", "NO_RETURN"])
+            continue
+        number(event["pin"], p + ".pin", 20, 21, integer=True)
         if not isinstance(event["down"], bool) or event["down"] == levels[event["pin"]]:
             fail(p, "button events must change the level")
         levels[event["pin"]] = event["down"]

@@ -21,6 +21,14 @@ typedef struct {
     uint64_t contact_us;
     size_t obstacle;
 } world_state_t;
+typedef struct {
+    bool hit;
+    size_t obstacle;
+    double distance, angle_deg;
+    world_point_t origin, point;
+} world_echo_t;
+void world_servo(uint16_t pulse);
+world_echo_t world_echo(void);
 void world_init(const world_config_t *config);
 void world_read(FILE *input);
 void world_destroy(void);

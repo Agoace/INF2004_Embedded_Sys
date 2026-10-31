@@ -70,7 +70,7 @@ class Milestone1(unittest.TestCase):
                 load(path)
 
     def test_native_contracts(self):
-        normalised = "5000000000 100 202 185 191 2\n500 21 1\n4000 21 0\n0\n"
+        normalised = "5000000000 100 202 185 191 2\n500 21 1\n4000 21 0\n0\n0\n"
         result = subprocess.run([str(LAUNCHER.parent / "sim_clock_probe")],
                                 input=normalised, text=True, capture_output=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -100,7 +100,8 @@ class Milestone1(unittest.TestCase):
             self.assertIn("[calib] OK. Line reads HIGHER", text)
             self.assertNotIn("[run] Calibration failed:", text)
             self.assertIn("[run] start,", text)
-            self.assertTrue(any(e["type"] == "contact" for e in trace["events"]))
+            self.assertIn("[detour] FAILED", text)
+            self.assertEqual(trace["firmware_observation"]["step_crosscheck"]["status"], "match")
             self.assertEqual(trace["header"]["source_hashes"], before)
             self.assertEqual([e["t_us"] for e in trace["events"] if e["type"] == "button"], [2100000, 2300000])
         self.assertEqual(source_hashes(SIM.parent), before)

@@ -60,7 +60,7 @@ def write_trace(path, trace):
 
 
 def main(repo_path, build_path):
-    parser = argparse.ArgumentParser(description="Milestone 2 motion/IR firmware simulator")
+    parser = argparse.ArgumentParser(description="Milestone 3 timed-echo firmware simulator")
     parser.add_argument("--scenario", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path, help="Output directory for trace.json")
     args = parser.parse_args()
@@ -76,7 +76,7 @@ def main(repo_path, build_path):
     config = json.loads((build / "target.json").read_text())
     config["compile_commands"] = json.loads((build / "compile_commands.json").read_text())
     header = {
-        "schema_version": 1, "milestone": 2, "source_commit": firmware_revision,
+        "schema_version": 1, "milestone": 3, "source_commit": firmware_revision,
         "repository_commit": revision, "source_hashes": before,
         "simulator_hashes": simulator_hashes(repo),
         "compiler": (build / "compiler.txt").read_text().strip(),
@@ -84,7 +84,7 @@ def main(repo_path, build_path):
         "clock_quantum_us": scenario["clock_quantum_us"],
         "units": {"time": "us", "distance": "mm", "angle": "degrees"},
         "event_order": "advance previous commands; buttons in input order; service devices; observation",
-        "device_model": "motion, encoders, coast, tile IR; latched safety contact stop; timed NO_RETURN ultrasound",
+        "device_model": "motion, encoders, coast, tile IR; latched safety contact stop; trigger-sampled ideal 30-degree sector echoes",
         "watchdog": {"cpu_soft_seconds": 5, "cpu_hard_seconds": 6, "wall_seconds": 10},
     }
     normalised = normalise(scenario)
@@ -122,9 +122,17 @@ def main(repo_path, build_path):
     if not complete and error is None:
         error = "missing scenario end record"
     trace = {"header": header, "complete": complete, "events": events}
+    if config["hooks"]:
+        sys.path.insert(0, str(repo / "sim/targets"))
+        from detour_decode import decode
+        trace["firmware_observation"] = decode(events)
+    else:
+        trace["firmware_observation"] = {"status": "hooks disabled"}
     if error is not None:
         trace["error"] = error
     write_trace(args.output / "trace.json", trace)
+    if trace["firmware_observation"].get("step_crosscheck", {}).get("status") == "mismatch":
+        print("observation mismatch: hook/printf step details saved in trace.json", file=sys.stderr)
     for time_us, line in text_lines(events):
         if line:
             print(f"{time_us / 1000000:.6f}s {line}")

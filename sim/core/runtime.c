@@ -1,5 +1,6 @@
 #include "sim_runtime.h"
 #include "sim_world.h"
+#include "sim_devices.h"
 #include <inttypes.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -75,6 +76,7 @@ static void advance(uint64_t delta) {
         uint64_t next = now_us + span;
         if (next_button < button_count && buttons[next_button].us < next) { next = buttons[next_button].us; }
         if (next_snapshot < next) { next = next_snapshot; }
+        if (sim_devices_deadline() < next) { next = sim_devices_deadline(); }
         world_advance(now_us, next);
         now_us = next;
         while (next_button < button_count && buttons[next_button].us == now_us) {
@@ -82,6 +84,7 @@ static void advance(uint64_t delta) {
             down[b.pin - 20u] = b.down != 0u;
             sim_event("button", "\"pin\":%u,\"down\":%s", b.pin, b.down ? "true" : "false");
         }
+        sim_devices_tick();
         if (now_us == next_snapshot) {
             world_snapshot(now_us);
             next_snapshot += 10000u;
@@ -91,6 +94,7 @@ static void advance(uint64_t delta) {
         if (now_us % 10000u != 0u) { world_snapshot(now_us); }
         sim_event("end", "\"reason\":\"scenario_end\",\"complete\":true");
         free(buttons);
+        sim_devices_close();
         world_destroy();
         if (fflush(stdout) != 0 || ferror(stdout)) { exit(2); }
         exit(0);
@@ -145,7 +149,9 @@ int main(void) {
         check_pin(b->pin);
     }
     world_read(stdin);
-    sim_event("start", "\"milestone\":2,\"devices\":\"motion_ir_with_placeholder_ultrasonic\"");
+    sim_devices_read(stdin);
+    sim_devices_tick();
+    sim_event("start", "\"milestone\":3,\"devices\":\"motion_ir_sector_echo\"");
     world_snapshot(0u);
     (void)firmware_main();
     sim_error("firmware returned before scenario end");

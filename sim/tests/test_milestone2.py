@@ -132,7 +132,11 @@ class MotionIR(unittest.TestCase):
 
     def test_real_box_contact_and_no_penetration(self):
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
-            trace = self.run_scenario("box_straight.json", Path(directory) / "box")
+            raw, _, _ = load(SIM / "scenarios/box_straight.json")
+            raw["events"].insert(0, {"at_us": 0, "ultrasonic_fault": "NO_RETURN"})
+            scenario_path = Path(directory) / "contact_safety.json"
+            scenario_path.write_text(json.dumps(raw))
+            trace = self.run_scenario(scenario_path, Path(directory) / "box")
             contacts = [e for e in trace["events"] if e["type"] == "contact"]
             self.assertEqual(len(contacts), 1)
             contact = contacts[0]

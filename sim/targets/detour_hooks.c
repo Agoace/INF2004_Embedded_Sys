@@ -1,26 +1,40 @@
 #include "detour_hooks.h"
 #include "sim_runtime.h"
+#include "sim_world.h"
 #include <inttypes.h>
 
-static void record_dt(const char *call, const dt_t *dt, unsigned int word) {
+static bool line_seen;
+static void record_dt(const char *call, const dt_t *dt, unsigned int word, const char *inputs) {
+    const world_state_t *pose=world_state();
     sim_event("hook", "\"call\":\"%s\",\"step\":%u,\"fail\":%u,\"heading\":%d,"
-        "\"x_mm\":%" PRId32 ",\"y_mm\":%" PRId32 ",\"word\":%u",
-        call, (unsigned int)dt_step(dt), (unsigned int)dt_fail(dt), (int)dt->heading,
-        dt->x, dt->y, word);
+        "\"x_mm\":%" PRId32 ",\"y_mm\":%" PRId32 ",\"word\":%u,"
+        "\"world_pose\":[%.9f,%.9f,%.9f],\"side\":%d,\"armed\":%s,\"line_seen\":%s,\"backing\":%s,\"looking\":%s,\"straights\":%u,\"inputs\":{%s}",
+        call,(unsigned int)dt_step(dt),(unsigned int)dt_fail(dt),(int)dt->heading,
+        dt->x,dt->y,word,pose->x,pose->y,pose->heading*180/3.14159265358979323846,
+        (int)dt->side,dt->armed?"true":"false",line_seen?"true":"false",
+        dt->backing?"true":"false",dt->looking?"true":"false",(unsigned int)dt->straights,inputs);
 }
 void sim_hook_dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side,
     uint16_t mm, int32_t left, int32_t right, uint32_t now) {
     dt_init(dt, cfg, side, mm, left, right, now);
-    record_dt("dt_init", dt, 0u);
+    char inputs[256];
+    (void)snprintf(inputs,sizeof inputs,"\"side\":%d,\"distance_mm\":%u,\"left\":%" PRId32 ",\"right\":%" PRId32 ",\"now_ms\":%" PRIu32,
+        (int)side,(unsigned int)mm,left,right,now);
+    record_dt("dt_init",dt,0u,inputs);
 }
 dt_word_t sim_hook_dt_update(dt_t *dt, bool seen, int32_t left, int32_t right, uint32_t now) {
     const dt_word_t word = dt_update(dt, seen, left, right, now);
-    record_dt("dt_update", dt, word);
+    char inputs[256];
+    (void)snprintf(inputs,sizeof inputs,"\"line_seen\":%s,\"left\":%" PRId32 ",\"right\":%" PRId32 ",\"now_ms\":%" PRIu32,
+        seen?"true":"false",left,right,now);
+    record_dt("dt_update",dt,word,inputs);
     return word;
 }
 void sim_hook_dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now) {
     dt_reading(dt, result, now);
-    record_dt("dt_reading", dt, result);
+    char inputs[256];
+    (void)snprintf(inputs,sizeof inputs,"\"result\":%u,\"now_ms\":%" PRIu32,(unsigned int)result,now);
+    record_dt("dt_reading",dt,result,inputs);
 }
 obstacle_event_word_t sim_hook_obstacle_update(obstacle_monitor_t *watch, ultrasonic_result_t result) {
     const obstacle_event_word_t word = obstacle_update(watch, result);
@@ -39,6 +53,7 @@ obstacle_scan_event_t sim_hook_obstacle_scan_service(void) {
 }
 vc_event_t sim_hook_lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now) {
     const vc_event_t event = lp_update(lp, raw, now);
+    line_seen=lp_line_seen(lp);
     sim_event("hook", "\"call\":\"lp_update\",\"result\":%u,\"seen\":%s,\"position\":%d",
         (unsigned int)event, lp_line_seen(lp) ? "true" : "false", (int)lp->position);
     return event;
