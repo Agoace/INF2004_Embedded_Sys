@@ -11,9 +11,13 @@ def normalise(s, active=True):
         return "\n".join(rows + ["0"]) + "\n"
     robot, track = s["robot"], s["track"]
     motor, pose, geometry, ir = (robot[key] for key in ("motors", "start_pose", "geometry", "ir"))
-    rows.append(" ".join(map(str, [int(motor["profile"] == "provisional-loaded"),
-        int(motor["symmetric_reverse"]), motor["loaded_zero_pct"], *motor["coast_tau_ms"],
+    mode = ["unloaded-reference", "provisional-loaded", "loaded-linear"].index(motor["profile"])
+    zero_key = "zero_pct" if mode == 2 else "loaded_zero_pct"
+    rows.append(" ".join(map(str, [mode,
+        int(motor["symmetric_reverse"]), motor[zero_key], *motor["coast_tau_ms"],
         pose["x_mm"], pose["y_mm"], pose["heading_deg"]])))
+    if mode == 2:
+        rows.append(str(motor["top_speed_mm_s"]))
     rows.append(" ".join(str(geometry[key]) for key in
         ("front_x_mm", "rear_x_mm", "width_mm", "wheel_track_mm", "wheel_diameter_mm", "servo_axis_x_mm", "sensor_face_offset_mm")))
     for point, floor, line in zip(ir["points_mm"], ir["floor_adc"], ir["line_adc"]):

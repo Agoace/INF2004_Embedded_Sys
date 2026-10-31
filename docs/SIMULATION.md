@@ -327,6 +327,22 @@ loaded coast parameters. Do not treat 250 ms firmware pauses as measured
 motor time constants. Continue counts during coast, as the real firmware
 expects.
 
+#### Loaded-linear profile
+
+The optional `loaded-linear` motor profile uses the same curve for both
+wheels: zero speed at or below `zero_pct`, then
+`top_speed_mm_s × (|duty| − zero_pct) / (100 − zero_pct)`. Reverse negates
+this speed. Duties above 100 % are clamped. This speed is in mm/s; it does
+not use the unloaded RPM table or its encoder correction factors.
+
+The operator recalls about 740 mm/s at 100 % duty on the floor. This is
+not a logged measurement. Mark `top_speed_mm_s` 740 with the note
+“operator recollection: about 74 cm/s at 100 % duty, loaded; linear scaling assumed”.
+Mark `zero_pct` 12 and `coast_tau_ms` [50, 50] as provisional assumptions
+too. All three values are required; none has a silent default. The trace
+header and viewer list their assumptions. The `unloaded-reference` and
+`provisional-loaded` profiles and their existing scenarios stay unchanged.
+
 #### Implemented motion equations and coast fit
 
 The production model is [`sim/core/world.c`](../sim/core/world.c).

@@ -175,9 +175,16 @@ def validate(s):
         fail("robot.ir", "C-L gap consistency: gap-centred line gives >=1% rise")
     # The native world repeats this check with its production IR overlap function.
     motors = robot["motors"]
-    obj(motors, "robot.motors", "profile loaded_zero_pct symmetric_reverse coast_tau_ms")
-    choice(motors["profile"], "robot.motors.profile", ["unloaded-reference", "provisional-loaded"])
-    number(motors["loaded_zero_pct"], "robot.motors.loaded_zero_pct", 0, 99)
+    linear = motors.get("profile") == "loaded-linear" if isinstance(motors, dict) else False
+    keys = "profile zero_pct top_speed_mm_s symmetric_reverse coast_tau_ms" if linear else \
+           "profile loaded_zero_pct symmetric_reverse coast_tau_ms"
+    obj(motors, "robot.motors", keys)
+    choice(motors["profile"], "robot.motors.profile",
+           ["unloaded-reference", "provisional-loaded", "loaded-linear"])
+    zero_key = "zero_pct" if linear else "loaded_zero_pct"
+    number(motors[zero_key], "robot.motors." + zero_key, 0, 99)
+    if linear:
+        number(motors["top_speed_mm_s"], "robot.motors.top_speed_mm_s", 0.001, 10000)
     if motors["symmetric_reverse"] is not True:
         fail("robot.motors.symmetric_reverse", "only the approved symmetric reverse model is implemented")
     array(motors["coast_tau_ms"], "robot.motors.coast_tau_ms", 2)

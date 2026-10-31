@@ -29,7 +29,21 @@ static world_config_t config(void) {
 int main(int argc, char **argv) {
     if (argc == 2) {
         world_read(stdin);
-        if (strcmp(argv[1], "ir") == 0) {
+        if (strcmp(argv[1], "motors") == 0) {
+            const int duties[] = {-101, -100, -25, -20, -13, -12, 0, 12, 13, 20, 25, 100, 101};
+            for (size_t i = 0u; i < sizeof duties / sizeof duties[0]; ++i) {
+                printf("{\"duty\":%d,\"target\":[%.12f,%.12f]}\n", duties[i],
+                       world_target_speed(0u, duties[i]), world_target_speed(1u, duties[i]));
+            }
+            world_duty(0u,20); world_duty(1u,20);
+            world_advance(0u,1000000u);
+            printf("{\"x\":%.12f,\"y\":%.12f,\"counts\":[%.12f,%.12f]}\n",
+                   world_state()->x, world_state()->y, world_state()->counts[0], world_state()->counts[1]);
+            const double before = world_state()->counts[0];
+            world_duty(0u,0); world_duty(1u,0);
+            world_advance(1000000u,2000000u);
+            printf("{\"coast_counts\":%.12f}\n", world_state()->counts[0] - before);
+        } else if (strcmp(argv[1], "ir") == 0) {
             uint16_t raw[3]; world_ir(raw);
             printf("{\"raw\":[%u,%u,%u]}\n", (unsigned int)raw[0], (unsigned int)raw[1], (unsigned int)raw[2]);
         } else {
