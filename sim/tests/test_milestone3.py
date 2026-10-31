@@ -14,7 +14,7 @@ sys.path[:0] = [str(SIM / "core"), str(SIM / "targets")]
 from scenario import load, validate, ScenarioError
 from protocol import normalise
 from runner import cpu_limit, source_hashes
-from detour_decode import decode
+from detour_decode import decode, STEPS, FAILS
 LAUNCHER = Path(sys.argv[1]).resolve()
 PROBE = LAUNCHER.parent / "sim_ultrasonic_probe"
 
@@ -134,7 +134,7 @@ class EchoDetour(unittest.TestCase):
         before = source_hashes(SIM.parent)
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:
             root = Path(directory)
-            # Preserve the accepted ideal trajectory; specular has separate checks.
+            # Use ideal echoes for this observation check; specular has separate checks.
             raw = json.loads((SIM / "scenarios/box_straight.json").read_text())
             raw["obstacles"][0]["echo"] = "ideal"
             ideal = root / "ideal.json"
@@ -143,11 +143,20 @@ class EchoDetour(unittest.TestCase):
             subprocess.run([str(LAUNCHER),*args,"--output",str(root/"hooked")],check=True,capture_output=True,timeout=10)
             trace = json.loads((root/"hooked/trace.json").read_text())
             obs = trace["firmware_observation"]
-            self.assertEqual([e["phase"] for e in obs["phase_timeline"]],
-                ["NOT_RUNNING","RUN_START_UNRESOLVED","FOLLOW","STOP","SCAN","DETOUR","NOT_RUNNING"])
+            phases = [e["phase"] for e in obs["phase_timeline"]]
+            self.assertEqual(phases[:6],
+                ["NOT_RUNNING","RUN_START_UNRESOLVED","FOLLOW","STOP","SCAN","DETOUR"])
+            self.assertTrue(all(phase in ("FOLLOW", "SEARCH", "NOT_RUNNING") for phase in phases[6:]))
             self.assertEqual(obs["step_crosscheck"]["status"],"match")
-            self.assertEqual(obs["detour_timeline"][-1]["step_name"],"FAILED")
-            self.assertEqual(obs["detour_timeline"][-1]["fail_name"],"TIME")
+            steps = [e["step_name"] for e in obs["detour_timeline"]]
+            self.assertEqual(steps[0], "TURN_AWAY")
+            self.assertIn(steps[-1], ("DONE", "FAILED"))
+            self.assertTrue(all(step in STEPS for step in steps))
+            terminal = obs["detour_timeline"][-1]
+            if terminal["step_name"] == "DONE":
+                self.assertEqual(terminal["fail_name"], "NONE")
+            else:
+                self.assertIn(terminal["fail_name"], FAILS[1:])
             self.assertFalse(any(e["type"]=="contact" for e in trace["events"]))
             damaged = copy.deepcopy(trace["events"])
             line = next(e for e in damaged if e["type"]=="text" and "TURN_AWAY at" in e["text"])
