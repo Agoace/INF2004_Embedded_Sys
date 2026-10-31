@@ -7,14 +7,15 @@ This record gives the state of the obstacle detour at the end of the 2026-10-30 
 | Item | Value |
 | --- | --- |
 | Branch | `yx`, pushed |
-| Firmware on the robot | `detour_test` v1.4 (commit `5efeacd`) |
+| Firmware on the robot | Still `detour_test` v1.4 (commit `5efeacd`); v1.5 is not flashed or run on the track yet |
+| Current source | `detour_test` v1.5: `line_ahead_mm` 123 mm |
 | Module | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h) |
 | Track test | [`src/detour_test.c`](../src/detour_test.c) (CMake target `detour_test`) |
 | Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`) |
 | Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). It is **not running**: the laptop restarted after the last runs |
 | Run logs | `build/steer_logs/` (not committed), table in [Track runs](#track-runs) |
 
-## Design, version 1.4
+## Design, version 1.5
 
 Only straight drives and turns on the spot. No arcs. The servo is fixed 30° toward the obstacle during the detour.
 
@@ -22,7 +23,7 @@ Only straight drives and turns on the spot. No arcs. The servo is fixed 30° tow
 TURN_AWAY ──▶ STRAIGHT ──▶ TURN_TOWARD ──▶ back off 40° ──▶ STRAIGHT ──▶ ... ──▶ line seen
  until the      350 mm after      until the                                         │
  obstacle was   the nearest       obstacle is                                       ▼
- seen, then     reading           seen                                     ON_LINE 100 mm
+ seen, then     reading           seen                                     ON_LINE 123 mm
  not seen                                                                  ALIGN to heading 0
 ```
 
@@ -32,7 +33,7 @@ TURN_AWAY ──▶ STRAIGHT ──▶ TURN_TOWARD ──▶ back off 40° ─�
 | TURN_AWAY | The obstacle was seen and then is not seen (the sensor passed its edge). Limit 90° |
 | STRAIGHT | 350 mm (vehicle length 190 + width 160) after the nearest reading of this straight; 350 mm from the start with no reading. A line seen in a straight goes to ON_LINE. Limit 5 straights |
 | TURN_TOWARD | The obstacle is seen, then the robot turns 40° back away, by wheel counts with no look. Limit 150° |
-| ON_LINE | 100 mm more (the rear axle on the line) |
+| ON_LINE | 123 mm more (the rear axle on the line) |
 | ALIGN | Turn back to heading 0. The heading is the sum of all turns, from the wheel counts |
 
 - Turns go in 5° steps: turn, stop 150 ms, one reading, then decide.
@@ -52,6 +53,7 @@ TURN_AWAY ──▶ STRAIGHT ──▶ TURN_TOWARD ──▶ back off 40° ─�
 | v1.2 | `a21237e` | Back off 15°; straights 350 mm |
 | v1.3 | `65da406` | Back off 30° |
 | v1.4 | `5efeacd` | Back off 40° |
+| v1.5 | — | `line_ahead_mm` 100 → 123 mm from [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) (calculated from operator dimensions and the echo offset); not run on the track yet |
 
 ## Track runs
 
@@ -100,7 +102,7 @@ The operator decided to fix the line problems (A–D) later, after the 40° back
 | --- | ---: | --- |
 | Turn counts per degree | 24.05 | Calculated from track 111 mm; wheel slip not measured; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
 | Front-corner circle (rear axle to farthest corner) | 150 mm | Calculated, 146.7 mm; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
-| Line sensors ahead of the rear axle | 100 mm | Calculated 123 mm (line sensors at the robot front); the code still uses 100; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
+| Line sensors ahead of the rear axle | 123 mm | Calculated 123 mm (line sensors at the robot front); used since v1.5; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
 
 ## Commands
 

@@ -13,13 +13,13 @@
  *   STOP    forward watch STOP: motors off (coast), wait STOP_SETTLE_MS.
  *   SCAN    one servo scan (src/obstacle_scan.c); the profile gives the
  *           detour side and the obstacle distance.
- *   DETOUR  src/obstacle_detour.c, version 1: the sensor looks 30 degrees
+ *   DETOUR  src/obstacle_detour.c: the sensor looks 30 degrees
  *           toward the obstacle. Turn away (5-degree steps, stop and look)
  *           until the obstacle passed out of view; then straights that
  *           end 350 mm (length + width) after their nearest reading, each
  *           followed by a turn toward the obstacle until it is seen and
  *           then 40 degrees back; until the line is
- *           found in a straight. Then 100 mm on and a turn back along the
+ *           found in a straight. Then 123 mm on and a turn back along the
  *           line, and FOLLOW again with a new forward watch. The motors
  *           stop for MOVE_PAUSE_MS when the motion changes (not between
  *           the steps of one turn). Straights hold the heading with the
@@ -77,9 +77,9 @@ static const steer_config_t STEER_FOLLOW = {
 };
 /* First values: tune on the track. Geometry (docs/OBSTACLE_BYPASS.md):
  * vehicle length 190 mm, track 111 mm, servo axis 65 mm ahead of the rear
- * axle. sweep 150 mm: the front corner circle round the rear axle centre
- * (about 147 mm; measure the rear axle to the front bumper). line_ahead_mm:
- * the line sensors ahead of the rear axle (about; measure). Turn counts:
+ * axle. See docs/CALIBRATION_RESULTS.md, Robot geometry: sweep 150 mm
+ * uses the calculated 146.7 mm front-corner circle; line_ahead_mm is
+ * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
 static const dt_config_t DETOUR = {
@@ -93,7 +93,8 @@ static const dt_config_t DETOUR = {
     .sweep_mm = 150u,
     .margin_mm = 30u,
     .sensor_ahead_mm = 65u,
-    .line_ahead_mm = 100u,
+    .line_ahead_mm = 123u, /* rear axle to line sensors, 65 + 58 mm; v1-v1.4: 100;
+                           * docs/CALIBRATION_RESULTS.md, Robot geometry */
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
     .total_max_ms = 25000u,
@@ -220,7 +221,7 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.4: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
+    printf("[run] detour v1.5: turn steps %u deg (%u.%02u counts/deg), back off %u deg, "
            "look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%\n",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
            DETOUR.counts_per_deg_x100 % 100u, DETOUR.back_off_deg, DETOUR.look_ms,

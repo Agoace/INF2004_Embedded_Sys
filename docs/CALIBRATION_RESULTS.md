@@ -19,7 +19,7 @@ Last updated: 2026-10-30
 | Overall length | 190 mm | Operator, 2026-10-30; [bypass steering](OBSTACLE_BYPASS.md#steering) |
 | Sensor face to robot front | About 58 mm | [Ultrasonic run 7](ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset): echo mean 57.9 mm, not a ruler measurement; the short-range echo read about 11 mm high |
 | Line sensor position | At the very front of the robot | Operator statement, 2026-10-30 session follow-up |
-| Rear axle to line sensors | 123 mm = 65 + 58 mm | Calculated from the offsets and the line sensor position above; the detour code still uses `line_ahead_mm` 100 |
+| Rear axle to line sensors | 123 mm = 65 + 58 mm | Calculated from the offsets and the line sensor position above; used as `line_ahead_mm` since v1.5 |
 | Front-corner circle (rear axle centre to front corner) | 146.7 mm = sqrt(123² + 80²) mm | Calculated from the front offset and half the width above; the detour code uses `sweep_mm` 150 |
 | Turn counts per degree of (right − left) | 24.05 counts/degree | Calculated: 111 × π / 180 mm/degree × 2535 counts / 204.204 mm; wheel slip not measured |
 

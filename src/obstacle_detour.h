@@ -2,8 +2,8 @@
  * Obstacle detour with straight drives and turns on the spot only (no
  * arcs). Successor of the shelved src/obstacle_bypass.c.
  *
- * Version 1, the simple version. The servo is fixed 30 degrees toward the
- * obstacle. Turns go in turn_step_deg steps: turn, stop look_ms, take one
+ * The servo is fixed 30 degrees toward the obstacle. Turns go in
+ * turn_step_deg steps: turn, stop look_ms, take one
  * reading, then decide. "Seen" = a valid echo nearer than seen_mm.
  *
  * The caller stops the robot at OBST_STOP, runs one scan, and picks the
