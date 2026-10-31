@@ -78,7 +78,7 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D17 | v1.4 | `…174850_boot65ed_run6.txt` | Both wheels stopped in the first straight (contact); the STRAIGHT print is missing (text buffer drop) |
 | D18 | v1.4 | `…174956_boot65ed_run7.txt` | **DONE** (line at −20°); followed to the run time limit |
 
-Summary: 17 detours started (all but D2). 5 reached DONE: D8, D11, D14 and D18 on the track line, D10 on a false line. With the back off at 40° (D12–D18), 3 of 7 reached DONE and 3 ended in contact stalls.
+Summary: 17 detours started (all but D2). 6 reached DONE: D8, D11, D14 and D18 on the track line; D10 and D16 probably on a false line. With the back off at 40° (D12–D18), 3 of 7 reached DONE and 3 ended in contact stalls.
 
 ## Open problems
 
@@ -98,9 +98,9 @@ The operator decided to fix the line problems (A–D) later, after the 40° back
 
 | Value | In the code | Note |
 | --- | ---: | --- |
-| Turn counts per degree | 24.05 | Calculated from track 111 mm; wheel slip not measured |
-| Front-corner circle (rear axle to farthest corner) | 150 mm | Estimate; measure the rear axle to the front bumper |
-| Line sensors ahead of the rear axle | 100 mm | Estimate; measure |
+| Turn counts per degree | 24.05 | Calculated from track 111 mm; wheel slip not measured; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
+| Front-corner circle (rear axle to farthest corner) | 150 mm | Calculated, 146.7 mm; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
+| Line sensors ahead of the rear axle | 100 mm | Calculated 123 mm (line sensors at the robot front); the code still uses 100; see [robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
 
 ## Commands
 
