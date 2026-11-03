@@ -22,6 +22,14 @@
  * robot turns right toward the line. With min_pct 0 the rule is the plain
  * duty ratio.
  *
+ * Far gain (optional; far_gain_pct 0 = off): beyond |position| far_from,
+ * far_gain_pct times the part beyond is added to the turn:
+ *   turn += far_gain_pct * (|position| - far_from), with the sign of position
+ * Track runs 2026-11-03 with two line sensors: gain 100 was calm on the
+ * straight but turned too little with the line under or just past a
+ * sensor (position +46..+61) in a curve; gain 200 stopped a wheel at every
+ * sensor crossing (+/-50) and swung the robot from side to side.
+ *
  * D (damping): kd_pct times the change of position since the last update
  * (10 ms). While the line moves back toward the centre, D works against
  * the turn, so the robot does not swing past the line. In a steady curve
@@ -65,6 +73,8 @@ typedef struct {
     uint8_t min_pct;  /* duty at which a loaded wheel starts to turn: speed zero */
     uint8_t max_pct;  /* highest duty, at most 100 */
     int8_t right_trim_pct; /* + adds to the right wheel, - to the left; 0 = none */
+    uint8_t far_from;      /* far gain starts above this |position| */
+    uint16_t far_gain_pct; /* extra P beyond far_from; 0 = off */
 } steer_config_t;
 
 typedef struct {

@@ -72,13 +72,24 @@
 static const steer_config_t STEER_FOLLOW = {
     .base_pct = 25u,
 #ifndef FOLLOW_GAIN_PCT
-#define FOLLOW_GAIN_PCT 200u /* track 2026-11-03: 100 ran off a curve */
+#define FOLLOW_GAIN_PCT 100u
 #endif
 #ifndef FOLLOW_KD_PCT
-#define FOLLOW_KD_PCT 200u
+#define FOLLOW_KD_PCT 100u
 #endif
+#ifndef FOLLOW_FAR_FROM
+#define FOLLOW_FAR_FROM 50u
+#endif
+#ifndef FOLLOW_FAR_GAIN_PCT
+#define FOLLOW_FAR_GAIN_PCT 400u
+#endif
+    /* Track 2026-11-03, two sensors: gain 100 alone ran off a curve
+     * (P1); gain 200 swung from side to side (P2). Gain 100 between the
+     * sensors, then far gain 400: full turn at about +/-60. */
     .gain_pct = FOLLOW_GAIN_PCT,
     .kd_pct = FOLLOW_KD_PCT,
+    .far_from = FOLLOW_FAR_FROM,
+    .far_gain_pct = FOLLOW_FAR_GAIN_PCT,
     .min_pct = 12u,
     .max_pct = 50u,
     .right_trim_pct = 1,

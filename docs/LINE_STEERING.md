@@ -83,6 +83,36 @@ the position between sensors gives only a small kick.
 > against the steady turn in a curve, and run 5 lost the line because the
 > turn was too weak.
 
+## Far gain (two line sensors), 2026-11-03
+
+Optional: `far_from` and `far_gain_pct` in `steer_config_t` (0 = off; the
+other targets keep it off). Beyond |position| `far_from`, the part beyond
+is multiplied by `far_gain_pct` and added to the turn:
+
+```text
+turn = gain_pct × position + kd_pct × change
+     + far_gain_pct × (|position| − far_from), with the sign of position
+```
+
+`detour_test` (pair mode, [Line position](LINE_POSITION.md#pair-mode-two-sensors-2026-11-03)):
+gain 100, D 100, far gain 400 above 50. Full turn at about ±60.
+
+| Run (track, 2026-11-03) | Settings | Result |
+| --- | --- | --- |
+| P1 | gain 100, D 100 | Straight calm (−20 to +12). Curve: line under or just past C (+46 to +61), duty 32/19, too little turn; drove off |
+| P2 | gain 200, D 200 | Swung from side to side: \|position\| ≥ 45 and one wheel stopped about 2/3 of the time on the straight |
+| Next | gain 100, D 100, far 400 above 50 | Simulator, `two_sensor_track`: 12 left/right swaps in 55 s (100/100: 57; 200/200: 759); line never dark |
+
+The pair-mode position jumps from about −50 (line under L) through a
+narrow band to about +50 (under C). Gain 200 gives a full turn at ±50,
+so every sensor crossing stopped a wheel. With the far gain, the turn is
+gentle between the sensors and steep once the line is past a sensor.
+
+Host test: the detour settings at 0, +30, +50, +51, +55, +60, +70, −50,
+−55, −60, far gain off, far_from 0 (same as gain 200), far gain 300, and
+one unit past far_from. Mutation check: 11 of 11 rule changes make the
+test fail (2 survived first; the one-unit test was added).
+
 ## Straight across a junction
 
 `steer_straight()` gives both wheels the base duty (with the trim) and

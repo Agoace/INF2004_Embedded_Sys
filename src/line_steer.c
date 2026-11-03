@@ -32,8 +32,13 @@ steer_word_t steer_update(steer_t *s, int8_t position) {
     int32_t change = s->has_previous ? (int32_t)position - s->previous : 0;
     if (change > STEER_MAX_CHANGE) change = STEER_MAX_CHANGE;
     if (change < -STEER_MAX_CHANGE) change = -STEER_MAX_CHANGE;
-    const int32_t turn =
-        (int32_t)s->cfg.gain_pct * position + (int32_t)s->cfg.kd_pct * change;
+    int32_t turn = (int32_t)s->cfg.gain_pct * position + (int32_t)s->cfg.kd_pct * change;
+    const int32_t far = (int32_t)s->cfg.far_from;
+    if (position > far) {
+        turn += (int32_t)s->cfg.far_gain_pct * (position - far);
+    } else if (position < -far) {
+        turn -= (int32_t)s->cfg.far_gain_pct * (-position - far);
+    }
     const int32_t delta = div_10000_rounded(speed * turn);
 
     /* Wheel speed to duty: min_pct is speed zero. */

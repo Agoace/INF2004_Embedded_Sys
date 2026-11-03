@@ -362,11 +362,11 @@ input. Every target that calls `lp_init()` then calls
   until the other sensor sees the line. Between 89 % and 100 % with the
   other sensor white, the robot recording cannot tell inside from outside.
 - `lp_reset_tracking()` and a new calibration forget the peak.
-- Steering in `detour_test`: gain 200, D 200, the run-10 values. Gain 100
-  ran off a curve on the track (below). At +50 (line under C, about
-  10 mm past the target) the inner wheel stops, close to the turn per mm
-  of the three-sensor run 10. `steer_test` and `bypass_test` also keep
-  200/200. Not tuned for pair mode.
+- Steering in `detour_test`: gain 100, D 100, far gain 400 above 50
+  ([Line steering, far gain](LINE_STEERING.md#far-gain-two-line-sensors-2026-11-03)).
+  Gain 100 alone ran off a curve (P1); gain 200 swung from side to side
+  (P2). `steer_test` and `bypass_test` keep 200/200 without far gain. Not
+  tuned for pair mode.
 - Calibration checks contrast and polarity on L and C only.
 - With target 0 the robot runs about 7 mm right of the line centre (half
   the spacing). `lp_set_pair()` takes another target (per mille of C − L)
@@ -455,6 +455,16 @@ Changes: gain and D back to 200; in pair mode dark after |position| > 50
 gives LINE_LOST after 50 ms. The simulator did not show the weak turn:
 its motors turn more easily than the real ones. Host test: the +55 and
 +50 cases; mutation check 33 of 34 (the same equivalent survivor).
+
+### Track run P2, 2026-11-03, gain 200 / D 200 (boot 2928)
+
+`build/steer_logs/run_20261103-162117_boot2928_run1.txt`, stopped by
+GP21 at 13.5 s. The robot swung from side to side: the position jumped
+between about +50 (under C) and −50 to −84 (under L) every 50–100 ms;
+|position| ≥ 45 and one wheel stopped in about 2/3 of the samples on the
+straight. Three searches, each found the line. From 11.1 s both sensors
+read about 4000 (robot lifted or on a dark area, as in D24). Change:
+far gain (see the steering bullet above).
 
 ### Robot check: spin recording, 2026-11-03, boot 5209
 

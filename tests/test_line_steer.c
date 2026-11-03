@@ -22,7 +22,7 @@ static void expect(steer_t *s, int position, unsigned int left, unsigned int rig
 }
 
 static steer_t make(uint8_t base, uint8_t gain, uint8_t kd, uint8_t min, uint8_t max) {
-    const steer_config_t cfg = {base, gain, kd, min, max, 0};
+    const steer_config_t cfg = {base, gain, kd, min, max, 0, 0u, 0u};
     steer_t s;
     steer_init(&s, &cfg);
     return s;
@@ -101,7 +101,7 @@ int main(void) {
 
     /* steer_test settings with D: braking while the line comes back. */
     {
-        const steer_config_t cfg = {25u, 200u, 200u, 12u, 50u, 1};
+        const steer_config_t cfg = {25u, 200u, 200u, 12u, 50u, 1, 0u, 0u};
         steer_init(&s, &cfg);
         expect(&s, -30, 17u, 34u, "kd 200: line left, no D yet");
         expect(&s, -12, 27u, 24u, "kd 200: line returns fast: D turns the other way");
@@ -110,7 +110,7 @@ int main(void) {
 
     /* Straight: base and trim, no D afterwards. */
     {
-        const steer_config_t cfg = {20u, 100u, 50u, 12u, 30u, 1};
+        const steer_config_t cfg = {20u, 100u, 50u, 12u, 30u, 1, 0u, 0u};
         steer_init(&s, &cfg);
         expect(&s, 40, 23u, 18u, "straight test: start at +40");
         const steer_word_t w = steer_straight(&s);
@@ -124,8 +124,8 @@ int main(void) {
 
     /* set_config keeps the previous position: D goes on. */
     {
-        const steer_config_t fast = {33u, 100u, 100u, 12u, 100u, 0};
-        const steer_config_t calm = {25u, 100u, 100u, 12u, 100u, 0};
+        const steer_config_t fast = {33u, 100u, 100u, 12u, 100u, 0, 0u, 0u};
+        const steer_config_t calm = {25u, 100u, 100u, 12u, 100u, 0, 0u, 0u};
         steer_init(&s, &fast);
         expect(&s, 10, 35u, 31u, "set_config: fast, no D yet");
         steer_set_config(&s, &calm);
@@ -169,22 +169,61 @@ int main(void) {
 
     /* Trim: +1 on the right wheel. */
     {
-        const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1};
+        const steer_config_t trimmed = {20u, 100u, 0u, 12u, 30u, 1, 0u, 0u};
         steer_init(&s, &trimmed);
         expect(&s, 0, 20u, 21u, "trim +1: right wheel +1");
         expect(&s, 25, 22u, 19u, "trim +1 while turning right");
         expect(&s, 100, 28u, 0u, "trim +1: not on a stopped wheel");
         expect(&s, -50, 16u, 25u, "trim +1 while turning left");
-        const steer_config_t trimmed_150 = {20u, 150u, 0u, 12u, 30u, 1};
+        const steer_config_t trimmed_150 = {20u, 150u, 0u, 12u, 30u, 1, 0u, 0u};
         steer_init(&s, &trimmed_150);
         expect(&s, -60, 13u, 28u, "trim +1, gain 150: -60");
         expect(&s, -100, 0u, 30u, "trim +1: capped at max (33 -> 30)");
-        const steer_config_t trimmed_no_min = {20u, 100u, 0u, 0u, 100u, 1};
+        const steer_config_t trimmed_no_min = {20u, 100u, 0u, 0u, 100u, 1, 0u, 0u};
         steer_init(&s, &trimmed_no_min);
         expect(&s, 100, 40u, 0u, "trim +1, min 0: stopped wheel stays stopped");
-        const steer_config_t left_trim = {20u, 100u, 0u, 12u, 30u, -2};
+        const steer_config_t left_trim = {20u, 100u, 0u, 12u, 30u, -2, 0u, 0u};
         steer_init(&s, &left_trim);
         expect(&s, 0, 22u, 20u, "trim -2: left wheel +2");
+    }
+
+    /* Far gain: the detour_test settings without D (base 25, min 12,
+     * max 50, gain 100, far gain 400 above 50). Speed 13. */
+    {
+        const steer_config_t far = {25u, 100u, 0u, 12u, 50u, 0, 50u, 400u};
+        steer_t f;
+        steer_init(&f, &far);
+        expect(&f, 0, 25u, 25u, "far: centred");
+        expect(&f, 30, 29u, 21u, "far: +30, gain 100 only");
+        expect(&f, 50, 32u, 18u, "far: +50, no far part yet");
+        expect(&f, 51, 32u, 18u, "far: +51, far part 400");
+        expect(&f, 55, 35u, 15u, "far: +55, turn 7500");
+        expect(&f, 60, 38u, 0u, "far: +60, full turn");
+        expect(&f, 70, 45u, 0u, "far: +70, beyond full");
+        expect(&f, -55, 15u, 35u, "far: -55, mirrored");
+        expect(&f, -60, 0u, 38u, "far: -60, full turn");
+        expect(&f, -50, 18u, 32u, "far: -50, no far part");
+
+        const steer_config_t off = {25u, 100u, 0u, 12u, 50u, 0, 50u, 0u};
+        steer_init(&f, &off);
+        expect(&f, 60, 33u, 17u, "far gain 0: off");
+
+        const steer_config_t from0 = {30u, 100u, 0u, 0u, 100u, 0, 0u, 100u};
+        steer_init(&f, &from0);
+        expect(&f, -25, 15u, 45u, "far from 0: same as gain 200");
+        expect(&f, 25, 45u, 15u, "far from 0: same as gain 200, right");
+
+        /* One unit past far_from already counts. */
+        const steer_config_t edge = {50u, 0u, 0u, 0u, 100u, 0, 10u, 1000u};
+        steer_init(&f, &edge);
+        expect(&f, 10, 50u, 50u, "far: at far_from, nothing");
+        expect(&f, 11, 55u, 45u, "far: one past far_from");
+        expect(&f, -11, 45u, 55u, "far: one past -far_from");
+
+        /* far_gain above 255 is kept (16-bit field). */
+        const steer_config_t big = {30u, 0u, 0u, 0u, 100u, 0, 0u, 300u};
+        steer_init(&f, &big);
+        expect(&f, 10, 39u, 21u, "far gain 300 at +10");
     }
 
     /* Word layout. */
