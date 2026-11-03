@@ -1,6 +1,9 @@
 # CMake build output
 /build/
 /cmake-build-*/
+/sim/build/
+/sim/output/
+/sim/**/__pycache__/
 CMakeCache.txt
 CMakeFiles/
 

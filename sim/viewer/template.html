@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; base-uri 'none'; object-src 'none'">
+<title>Firmware trace viewer</title><style>/* VIEWER_CSS */</style></head>
+<body><header><h1>Robot trace <span id="name"></span></h1><div id="source"></div></header>
+<nav aria-label="Playback"><button id="play">Play</button><label>Speed <select id="speed"><option value="0.25">0.25×</option><option value="1" selected>1×</option><option value="4">4×</option><option value="16">16×</option></select></label>
+<button id="prev">Previous step</button><button id="next">Next step</button><button id="fit">Fit all</button><button id="focus">Focus robot</button>
+<output id="time">0.000000 s</output><input id="scrub" aria-label="Simulation time in microseconds" type="range" min="0" step="1" value="0"></nav>
+<div id="warning" role="status"></div>
+<main><section id="floor"><canvas id="map" aria-label="Top-down saved world, millimetres, y up"></canvas><div class="legend"><span class="truth">■ true pose</span><span class="belief">▱ firmware estimate</span><span class="echo">● sampled echo</span> · drag to pan · wheel to zoom · +x → +y ↑ (mm)</div><div id="gap"></div></section>
+<aside><section><h2>Saved state</h2><dl><dt>Run phase</dt><dd id="phase"></dd><dt>Detour (last hooked)</dt><dd id="step"></dd><dt>Fail reason</dt><dd id="fail"></dd><dt>True pose</dt><dd id="truth"></dd><dt>Firmware estimate</dt><dd id="belief"></dd><dt>Saved-heading difference</dt><dd id="heading-gap"></dd><dt>Wheel duty L / R</dt><dd id="duties"></dd><dt>Encoder counts L / R</dt><dd id="counts"></dd><dt>Ultrasonic (last published)</dt><dd id="ultra"></dd><dt>Sample time</dt><dd id="sample"></dd></dl><p class="note">The orange estimate uses only the module's saved start-of-step x, y and heading, held between hooks. It is not a live position estimate. Pose interpolation is for drawing only.</p></section>
+<section class="console-box"><h2>Console through current time</h2><pre id="console" tabindex="0"></pre></section>
+<details><summary>ASSUMED inputs</summary><ul id="assumptions"></ul></details><details><summary>Display data and limits</summary><p id="limits"></p><p>IR light = clamped (raw − floor) / (line − floor). ADC, duties, counts, steps and echoes change only at saved times. Solid ray/sector use the current servo command; dashed echo segment stays at the sampled trigger pose. Surface candidates outside range are not valid results. No controller or physics runs here.</p></details></aside></main>
+<script id="viewer-data" type="application/json">__VIEWER_DATA__</script><script>/* VIEWER_JS */</script></body></html>
