@@ -101,7 +101,7 @@ gain 100, D 100, far gain 400 above 50. Full turn at about ±60.
 | --- | --- | --- |
 | P1 | gain 100, D 100 | Straight calm (−20 to +12). Curve: line under or just past C (+46 to +61), duty 32/19, too little turn; drove off |
 | P2 | gain 200, D 200 | Swung from side to side: \|position\| ≥ 45 and one wheel stopped about 2/3 of the time on the straight |
-| Next | gain 100, D 100, far 400 above 50 | Simulator, `two_sensor_track`: 12 left/right swaps in 55 s (100/100: 57; 200/200: 759); line never dark |
+| P3 | gain 100, D 100, far 400 above 50 | 65 s on the track (stopped by GP21); operator: "much better". One wheel stopped 9 % of the time (P2: 54 %); 2.9 turn swaps/s (P1: 2.6, P2: 6.5). 35 searches; 34 in right curves after +60 to +85 at full turn (50/0), each 50–100 ms, each found the line. Simulator: 12 swaps in 55 s (100/100: 57; 200/200: 759) |
 
 The pair-mode position jumps from about −50 (line under L) through a
 narrow band to about +50 (under C). Gain 200 gives a full turn at ±50,
@@ -112,6 +112,13 @@ Host test: the detour settings at 0, +30, +50, +51, +55, +60, +70, −50,
 −55, −60, far gain off, far_from 0 (same as gain 200), far gain 300, and
 one unit past far_from. Mutation check: 11 of 11 rule changes make the
 test fail (2 survived first; the one-unit test was added).
+
+P3 log: `build/steer_logs/run_20261103-163117_boot7a7d_run1.txt` (boot
+7a7d). In the sharpest right curves a full turn (inner wheel stopped,
+outer 50 %) is still not enough: C goes dark past the sensor, and a short
+search turn (50–100 ms) brings the line back. One search (20.6 s) started
+from +15 and turned left for 800 ms. At 54.6 s the forward watch
+stopped for an object at 73 mm and the detour ran to ALIGN before GP21.
 
 ## Straight across a junction
 
