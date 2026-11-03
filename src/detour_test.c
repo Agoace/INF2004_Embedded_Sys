@@ -71,8 +71,14 @@
 /* Line following: the calm settings of steer_test (run 10). */
 static const steer_config_t STEER_FOLLOW = {
     .base_pct = 25u,
-    .gain_pct = 200u,
-    .kd_pct = 200u,
+#ifndef FOLLOW_GAIN_PCT
+#define FOLLOW_GAIN_PCT 100u
+#endif
+#ifndef FOLLOW_KD_PCT
+#define FOLLOW_KD_PCT 100u
+#endif
+    .gain_pct = FOLLOW_GAIN_PCT,
+    .kd_pct = FOLLOW_KD_PCT,
     .min_pct = 12u,
     .max_pct = 50u,
     .right_trim_pct = 1,

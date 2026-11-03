@@ -345,9 +345,10 @@ input. Every target that calls `lp_init()` then calls
 
 | Readings | Position |
 | --- | --- |
-| Both sensors see the line (≥ 5 %) | (C − L − target) / 10, clamped to ±100. Target 0: the line centred between L and C |
-| Only one sensor sees the line | The line left the pair on that side. Keep the largest value on that side until both see the line again: a fading sensor must not reduce the steering |
-| Neither reaches 30 % (dark) | Keep the last position. LINE_LOST after 50 ms (after an outward value, \|position\| ≥ 75) or 300 ms |
+| Both sensors see the line (≥ 5 %) | (C − L − target) / 20: about ±50. Target 0: the line centred between L and C |
+| Only one sensor sees the line, its reading rising | The line comes in from the middle: the same formula, up to about ±50 under the sensor |
+| Only one sensor sees the line, its reading below its peak | The line is past that sensor (operator idea, 2026-11-03: the other sensor is white, so the line is outside). The fall is added: C only (2 × peak − C − L − target) / 20, L only (C − (2 × peak − L) − target) / 20, so about ±50 under the sensor to about ±100 near dark. Clamped to ±100 |
+| Neither reaches 30 % (dark) | Keep the last position and the peak, so a line that comes back outside is still outside. LINE_LOST after 50 ms (after an outward value, \|position\| ≥ 75) or 300 ms |
 
 - The line moves right: L fades and C rises, so the position goes up and
   the robot steers right. The same sign holds when the line is narrower
@@ -355,7 +356,16 @@ input. Every target that calls `lp_init()` then calls
 - No junction flag: two sensors cannot tell a junction from the line. The
   junction straight-through in `steer_test` and `detour_test` does not
   run; at a cross the readings stay equal, so the robot drives straight.
-- Centred: both see the line and |position| ≤ 20.
+- Centred: both see the line and |C − L − target| ≤ 200 per mille.
+- Known limit: a line that goes back inward from under a sensor also
+  makes that reading fall, so the position grows a little (about 5)
+  until the other sensor sees the line. Between 89 % and 100 % with the
+  other sensor white, the robot recording cannot tell inside from outside.
+- `lp_reset_tracking()` and a new calibration forget the peak.
+- Steering in `detour_test`: gain 100, D 100 (was 200, 200), so the
+  turn reaches its limit only near ±100. `steer_test` and `bypass_test`
+  keep their old settings; with pair mode their steering is half as
+  strong between the sensors. Not tuned.
 - Calibration checks contrast and polarity on L and C only.
 - With target 0 the robot runs about 7 mm right of the line centre (half
   the spacing). `lp_set_pair()` takes another target (per mille of C − L)
@@ -373,6 +383,16 @@ clamps, a LOW line, and low contrast on L.
 
 Result 2026-11-03: all tests pass. Mutation check of the pair code: 26 of
 26 rule changes make the test fail (after 6 survivors led to new checks).
+
+Outside range (same day): the block also checks the rising and falling
+reading on both sides, "white" below 5 %, the line coming back, a new
+peak, the stated inward limit, the peak kept through the dark
+(LINE_FOUND outside L at −70), the peak forgotten by
+`lp_reset_tracking()` and by a new calibration, the centred band
+(±200) with a target, and the clamps. Mutation check: 30 of 31 rule
+changes make the test fail. The survivor chooses the lone sensor from L
+instead of C; outside the dark case exactly one sensor sees the line, so
+it gives the same result (equivalent).
 
 ### Simulator results, 2026-11-03
 
@@ -404,6 +424,19 @@ Rerun 2026-11-03 with the fitted model (line 12.5 mm, spot 8 mm):
 
 The target (midway) is where both readings are lowest, about 8 points
 above the dark limit on the robot.
+
+Outside range and new steering (`two_sensor_track`, line 18 mm, sensing
+points 20.9 mm apart, spot 11.5 mm, 55 s):
+
+| Steering gain / D | Line dark | A wheel stopped | Left/right turn swaps | Distance |
+| --- | ---: | ---: | ---: | ---: |
+| 200 / 200 (old) | 0 % | 8.7 % | 759 | 12.8 m |
+| 150 / 150 | 0 % | 0 % | 387 | 13.0 m |
+| 100 / 200 | 0 % | 0 % | 309 | 13.0 m |
+| **100 / 100 (now)** | 0 % | 0 % | **57** | 13.0 m |
+
+Narrower lines (14 mm and 11 mm) go dark midway with every setting
+(20–49 % of samples): the sensing points are 21 mm apart.
 
 ### Robot check: spin recording, 2026-11-03, boot 5209
 

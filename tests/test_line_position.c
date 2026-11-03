@@ -495,13 +495,17 @@ int main(void) {
         (void)pair_step(&q, &HIGH_LINE, 500, 500, t);
         CHECK(q.position == 0 && lp_centred(&q) && lp_line_seen(&q), "pair: equal readings, centred (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 600, 800, ++t);
-        CHECK(q.position == 20 && lp_centred(&q), "pair: +20 is still centred (%d)", q.position);
+        CHECK(q.position == 10 && lp_centred(&q), "pair: C - L 200 is centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 580, 800, ++t);
+        CHECK(q.position == 11 && !lp_centred(&q), "pair: C - L 220 is not centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 800, 600, ++t);
+        CHECK(q.position == -10 && lp_centred(&q), "pair: C - L -200 is centred (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 300, 900, ++t);
-        CHECK(q.position == 60 && !lp_centred(&q) && lp_last_side(&q) == VC_LINE_SIDE_RIGHT,
-              "pair: L fades, C rises: +60 RIGHT (%d)", q.position);
+        CHECK(q.position == 30 && !lp_centred(&q) && lp_last_side(&q) == VC_LINE_SIDE_RIGHT,
+              "pair: L fades, C rises: +30 RIGHT (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 900, 300, ++t);
-        CHECK(q.position == -60 && lp_last_side(&q) == VC_LINE_SIDE_LEFT && !lp_centred(&q),
-              "pair: C fades: -60 LEFT (%d)", q.position);
+        CHECK(q.position == -30 && lp_last_side(&q) == VC_LINE_SIDE_LEFT && !lp_centred(&q),
+              "pair: C fades: -30 LEFT (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 1000, 1000, ++t);
         CHECK(q.position == 0 && !lp_junction(&q) && !lp_junction_hold(&q),
               "pair: both full is not a junction (%d)", q.position);
@@ -509,7 +513,7 @@ int main(void) {
             const uint16_t praw[3] = {reading_pm(&HIGH_LINE, 0u, 500),
                                      reading_pm(&HIGH_LINE, 1u, 700), 4000u};
             (void)lp_update(&q, praw, ++t);
-            CHECK(q.position == 20 && q.norm[LP_RIGHT] == 0u, "pair: right input ignored (%d)", q.position);
+            CHECK(q.position == 10 && q.norm[LP_RIGHT] == 0u, "pair: right input ignored (%d)", q.position);
         }
 
         /* Below LP_LOST_PCT on both: dark, keep the position. */
@@ -517,40 +521,59 @@ int main(void) {
         (void)pair_step(&q, &HIGH_LINE, 0, 290, ++t);
         CHECK(q.position == 0 && !lp_centred(&q), "pair: C at 29 %% alone is dark: keep 0, not centred (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 0, 300, ++t);
-        CHECK(q.position == 30 && !lp_centred(&q), "pair: C at 30 %% alone: +30 (%d)", q.position);
+        CHECK(q.position == 15 && !lp_centred(&q), "pair: C at 30 %% alone, first: +15 (%d)", q.position);
         /* 5 % exactly sees the line (norm 50: raw 388 of 250..3000). */
         (void)pair_step(&q, &HIGH_LINE, 0, 900, ++t);
+        CHECK(q.position == 45, "pair: only C, rising: +45 (%d)", q.position);
         {
             const uint16_t edge[3] = {388u, reading_pm(&HIGH_LINE, 1u, 400), 0u};
             (void)lp_update(&q, edge, ++t);
-            CHECK(q.norm[LP_LEFT] == 50u && q.position == 35, "pair: L at 5 %% sees (%u, %d)",
+            CHECK(q.norm[LP_LEFT] == 50u && q.position == 17, "pair: L at 5 %% sees (%u, %d)",
                   q.norm[LP_LEFT], q.position);
         }
 
-        /* One sensor: keep the largest value on that side. */
+        /* Only C: rising = from the middle, falling = past C. */
         (void)pair_step(&q, &HIGH_LINE, 300, 900, ++t);
-        (void)pair_step(&q, &HIGH_LINE, 0, 400, ++t);
-        CHECK(q.position == 60, "pair: only C, fading: keep +60 (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 49, 400, ++t);
-        CHECK(q.position == 60, "pair: L below 5 %% counts as dark (%d)", q.position);
+        CHECK(q.position == 30, "pair: both, +30 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 950, ++t);
+        CHECK(q.position == 47, "pair: only C 950, first: +47 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, ++t);
+        CHECK(q.position == 50 && q.pair_peak == 1000u, "pair: only C rising to 1000: +50 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 790, ++t);
+        CHECK(q.position == 60, "pair: C falls to 790: past C, +60 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 49, 790, ++t);
+        CHECK(q.position == 58, "pair: L below 5 %% is still white (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 390, ++t);
+        CHECK(q.position == 80, "pair: C 390: +80 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 300, ++t);
+        CHECK(q.position == 85, "pair: C 300: +85 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 590, ++t);
+        CHECK(q.position == 70, "pair: line comes back: +70 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, ++t);
+        CHECK(q.position == 50, "pair: back under C: +50 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 100, 800, ++t);
+        CHECK(q.position == 35 && q.pair_alone == LP_SENSORS, "pair: both again: +35 (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 0, 900, ++t);
-        CHECK(q.position == 90, "pair: only C, larger: +90 (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 0, 350, ++t);
-        CHECK(q.position == 90, "pair: only C, fading: keep +90 (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 100, 400, ++t);
-        CHECK(q.position == 30, "pair: both again: formula (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 0, 600, ++t);
-        CHECK(q.position == 60, "pair: only C, larger than +30: +60 (%d)", q.position);
+        CHECK(q.position == 45 && q.pair_peak >= 899u && q.pair_peak <= 901u, "pair: only C again, new peak 900: +45 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 850, ++t);
+        CHECK(q.position == 47, "pair: the stated limit: C falls a little, +47 (%d)", q.position);
+
+        /* Only L: the same on the left. */
         (void)pair_step(&q, &HIGH_LINE, 800, 0, ++t);
-        CHECK(q.position == -80, "pair: only L after a right value: -80 (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 400, 0, ++t);
-        CHECK(q.position == -80, "pair: only L, fading: keep -80 (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 950, 0, ++t);
-        CHECK(q.position == -95, "pair: only L, larger: -95 (%d)", q.position);
+        CHECK(q.position == -40 && q.pair_alone == LP_LEFT && q.pair_peak == 800u,
+              "pair: only L 800, first: -40 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 1000, 0, ++t);
+        CHECK(q.position == -50, "pair: only L rising: -50 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 600, 0, ++t);
+        CHECK(q.position == -70, "pair: L falls to 600: past L, -70 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 600, 40, ++t);
+        CHECK(q.position == -68, "pair: C below 5 %% is still white (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 350, 0, ++t);
+        CHECK(q.position == -82, "pair: L 350: -82 (%d)", q.position);
 
         /* Dark after an outward value: LINE_LOST at LP_LOST_MS, side kept. */
         (void)pair_step(&q, &HIGH_LINE, 0, 0, 100u);
-        CHECK(q.position == -95 && lp_line_seen(&q), "pair: dark keeps -95 (%d)", q.position);
+        CHECK(q.position == -82 && lp_line_seen(&q), "pair: dark keeps -82 (%d)", q.position);
         CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 149u)) == VC_EVENT_NONE, "pair: not lost at 49 ms");
         {
             const vc_event_t e = pair_step(&q, &HIGH_LINE, 0, 0, 150u);
@@ -558,28 +581,59 @@ int main(void) {
                   "pair: LINE_LOST LEFT at 50 ms");
         }
         {
-            const vc_event_t e = pair_step(&q, &HIGH_LINE, 200, 600, 200u);
-            CHECK(TYPE(e) == VC_EVENT_LINE_FOUND && q.position == 40,
-                  "pair: LINE_FOUND with the formula (%d)", q.position);
+            /* The peak is kept through the dark: the line is still outside. */
+            const vc_event_t e = pair_step(&q, &HIGH_LINE, 600, 0, 200u);
+            CHECK(TYPE(e) == VC_EVENT_LINE_FOUND && q.position == -70,
+                  "pair: LINE_FOUND outside L: -70 (%d)", q.position);
         }
         /* Dark from a small value: the gap wait. */
         (void)pair_step(&q, &HIGH_LINE, 500, 600, 300u);
+        CHECK(q.position == 5, "pair: both: +5 (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 0, 0, 400u);
         CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 699u)) == VC_EVENT_NONE, "pair: gap wait at 299 ms");
         CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 700u)) == VC_EVENT_LINE_LOST, "pair: lost at 300 ms");
 
+        /* lp_reset_tracking and a new calibration forget the peak. */
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 800u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 590, 801u);
+        CHECK(q.position == 70, "pair: past C: +70 (%d)", q.position);
+        lp_reset_tracking(&q);
+        (void)pair_step(&q, &HIGH_LINE, 0, 600, 802u);
+        CHECK(q.position == 30, "pair: after reset, C 600 is new: +30 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 803u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 590, 804u);
+        CHECK(q.position == 70, "pair: past C again: +70 (%d)", q.position);
+        pair_sweep(&q, &HIGH_LINE);
+        CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_OK, "pair: calibrate again");
+        (void)pair_step(&q, &HIGH_LINE, 0, 600, 900u);
+        CHECK(q.position == 30, "pair: after calibration, C 600 is new: +30 (%d)", q.position);
+
         /* Target and clamps. */
         lp_set_pair(&q, true, 200);
-        (void)pair_step(&q, &HIGH_LINE, 500, 500, 800u);
-        CHECK(q.position >= -21 && q.position <= -19, "pair: target 200 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, 1000u);
+        CHECK(q.position >= -11 && q.position <= -9 && lp_centred(&q), "pair: target 200 (%d)", q.position);
+        lp_set_pair(&q, true, 300);
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, 1000u);
+        CHECK(q.position == -15 && !lp_centred(&q), "pair: target 300, equal readings: -15, not centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 400, 700, 1000u);
+        CHECK(q.position == 0 && lp_centred(&q), "pair: target 300 reached: centred (%d)", q.position);
         lp_set_pair(&q, true, -5000);
         CHECK(q.pair_target == -1000, "pair: target clamp low (%d)", q.pair_target);
-        (void)pair_step(&q, &HIGH_LINE, 100, 1000, 801u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 1001u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 500, 1002u);
         CHECK(q.position == 100, "pair: position clamp +100 (%d)", q.position);
         lp_set_pair(&q, true, 5000);
         CHECK(q.pair_target == 1000, "pair: target clamp high (%d)", q.pair_target);
-        (void)pair_step(&q, &HIGH_LINE, 1000, 100, 802u);
+        (void)pair_step(&q, &HIGH_LINE, 1000, 0, 1003u);
+        (void)pair_step(&q, &HIGH_LINE, 500, 0, 1004u);
         CHECK(q.position == -100, "pair: position clamp -100 (%d)", q.position);
+
+        /* Dark with a small C - L is not centred. */
+        lp_set_pair(&q, true, 0);
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, 1100u);
+        CHECK(lp_centred(&q), "pair: centred before the dark step");
+        (void)pair_step(&q, &HIGH_LINE, 0, 150, 1101u);
+        CHECK(!lp_centred(&q), "pair: L white, C 15 %%: not centred");
 
         /* Line reads LOW: same signs. */
         lp_init(&q);
@@ -587,7 +641,7 @@ int main(void) {
         pair_sweep(&q, &LOW_LINE);
         CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_OK && !lp_line_reads_high(&q), "pair: LOW line calibration");
         (void)pair_step(&q, &LOW_LINE, 300, 900, 0u);
-        CHECK(q.position == 60, "pair: LOW line, +60 (%d)", q.position);
+        CHECK(q.position == 30, "pair: LOW line, +30 (%d)", q.position);
 
         /* Low contrast on L is still caught. */
         {

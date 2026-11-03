@@ -40,20 +40,35 @@
  * the right sensor is not used. Course rule (2026-11-03): two line
  * sensors. The sensors are 14.5 mm apart and mounted high (about 9 mm),
  * so their spots are wide and overlap: a line between them reaches both.
- *   - Both see the line: position = (C - L - target) / 10, clamped to
- *     +/-100. The line moves right: L fades or C rises: steer right.
- *   - One sees the line: the line left the pair on that side. The
- *     position keeps its largest value on that side until both see the
- *     line again (a fading sensor must not reduce the steering).
- *   - Neither sees the line: keep the last position; LINE_LOST as above.
+ *   - Both see the line (between the sensors):
+ *     position = (C - L - target) / LP_PAIR_DIVISOR, about +/-50.
+ *     The line moves right: L fades or C rises: steer right.
+ *   - Only one sees the line (2026-11-03, operator): the other sensor is
+ *     white, so the line is near the one that sees it, and past it once
+ *     its reading falls. The module keeps that sensor's highest reading
+ *     (peak) since it became the only one. While the reading rises, the
+ *     line comes in from the middle: the formula above. When it falls
+ *     below the peak, the line is past the sensor: the fall is added,
+ *       C only: position = (2 * peak - C - L - target) / LP_PAIR_DIVISOR
+ *       L only: position = (C - (2 * peak - L) - target) / LP_PAIR_DIVISOR
+ *     so the position goes on from about +/-50 under the sensor to about
+ *     +/-100 when the sensor is nearly dark. Clamped to +/-100.
+ *     Limit: a line that goes back inward from under the sensor also
+ *     makes the reading fall, so the position grows a little (about 5)
+ *     until the other sensor sees the line.
+ *   - Neither sees the line: keep the last position and the peak, so a
+ *     line that comes back on the outside is still outside; LINE_LOST as
+ *     above.
  *   - No junction (two sensors cannot tell a junction from the line).
- *   - Centred: both see the line and |position| <= LP_SIDE_PCT.
+ *   - Centred: both see the line and |C - L - target| <= LP_PAIR_CENTRED.
  * Calibration checks only L and C.
  *
  * Pure logic: no hardware or RTOS calls. See docs/LINE_POSITION.md.
  */
 
 #define LP_SENSORS 3u
+#define LP_PAIR_DIVISOR 20   /* per mille of C - L per position unit */
+#define LP_PAIR_CENTRED 200  /* per mille of C - L - target */
 #define LP_LEFT 0u
 #define LP_CENTRE 1u
 #define LP_RIGHT 2u
@@ -125,6 +140,9 @@ typedef struct {
     /* Pair mode (two sensors, L and C). */
     bool pair;
     int16_t pair_target; /* per mille: C - L reading when on target */
+    uint8_t pair_alone;  /* the only sensor that sees the line: LP_LEFT,
+                            LP_CENTRE, or LP_SENSORS for none */
+    uint16_t pair_peak;  /* its highest reading since then, per mille */
 } lp_t;
 
 /* Where the side came from (for logs and tests). */

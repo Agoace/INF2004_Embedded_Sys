@@ -31,6 +31,8 @@ void lp_init(lp_t *lp) {
     lp->lost_since_ms = 0u;
     lp->pair = false;
     lp->pair_target = 0;
+    lp->pair_alone = (uint8_t)LP_SENSORS;
+    lp->pair_peak = 0u;
     lp_calib_begin(lp);
 }
 
@@ -59,6 +61,8 @@ void lp_reset_tracking(lp_t *lp) {
     lp->hint = (uint8_t)VC_LINE_SIDE_UNKNOWN;
     lp->lost_since_ms = 0u;
     lp->junction_ms = 0u;
+    lp->pair_alone = (uint8_t)LP_SENSORS;
+    lp->pair_peak = 0u;
 }
 
 void lp_calib_begin(lp_t *lp) {
@@ -123,6 +127,8 @@ lp_calib_result_t lp_calib_end(lp_t *lp, unsigned int *bad_mask) {
     lp->baseline_count = 0u;
     lp->fade_side = (uint8_t)VC_LINE_SIDE_UNKNOWN;
     lp->fade_source = (uint8_t)LP_SIDE_SOURCE_NONE;
+    lp->pair_alone = (uint8_t)LP_SENSORS;
+    lp->pair_peak = 0u;
     return LP_CALIB_OK;
 }
 
@@ -289,27 +295,37 @@ static void pair_position(lp_t *lp, bool dark) {
     const int32_t c = lp->norm[LP_CENTRE];
     const int32_t seen = (int32_t)LP_PERMILLE(LP_OUTER_SEEN_PCT);
     if (dark) {
-        return; /* keep the last position */
+        return; /* keep the last position and the peak */
     }
-    int32_t p = (c - l - lp->pair_target) / 10;
+    int32_t diff = c - l; /* C - L, or with the fall past a sensor added */
+    if (l >= seen && c >= seen) {
+        lp->pair_alone = (uint8_t)LP_SENSORS;
+    } else {
+        /* Not dark, so the one that does not see the line is the other. */
+        const unsigned int alone = c >= seen ? LP_CENTRE : LP_LEFT;
+        const int32_t value = c >= seen ? c : l;
+        if (lp->pair_alone != alone) {
+            lp->pair_alone = (uint8_t)alone;
+            lp->pair_peak = (uint16_t)value;
+        } else if (value > lp->pair_peak) {
+            lp->pair_peak = (uint16_t)value;
+        }
+        const int32_t past = 2 * (int32_t)lp->pair_peak - value;
+        diff = alone == LP_CENTRE ? past - l : c - past;
+    }
+    int32_t p = (diff - lp->pair_target) / LP_PAIR_DIVISOR;
     if (p > 100) p = 100;
     if (p < -100) p = -100;
-    if (l < seen || c < seen) {
-        /* One sensor sees the line: it left the pair on that side. Keep
-         * the largest value on that side. */
-        const int32_t previous = lp->position;
-        if ((p > 0 && previous > p) || (p < 0 && previous < p)) {
-            p = previous;
-        }
-    }
     lp->position = (int8_t)p;
 }
 
 static void pair_flags(lp_t *lp) {
     const int32_t seen = (int32_t)LP_PERMILLE(LP_OUTER_SEEN_PCT);
-    const bool both = lp->norm[LP_LEFT] >= seen && lp->norm[LP_CENTRE] >= seen;
+    const int32_t l = lp->norm[LP_LEFT];
+    const int32_t c = lp->norm[LP_CENTRE];
+    const int32_t off = c - l - lp->pair_target;
     set_flag(lp, LP_FLAG_CENTRED,
-             both && lp->position >= -LP_SIDE_PCT && lp->position <= LP_SIDE_PCT);
+             l >= seen && c >= seen && off >= -LP_PAIR_CENTRED && off <= LP_PAIR_CENTRED);
 }
 
 vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) {
