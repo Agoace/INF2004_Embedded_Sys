@@ -348,15 +348,17 @@ input. Every target that calls `lp_init()` then calls
 | Both sensors see the line (≥ 5 %) | (C − L − target) / 20: about ±50. Target 0: the line centred between L and C |
 | Only one sensor sees the line, its reading rising | The line comes in from the middle: the same formula, up to about ±50 under the sensor |
 | Only one sensor sees the line, its reading below its peak | The line is past that sensor (operator idea, 2026-11-03: the other sensor is white, so the line is outside). The fall is added: C only (2 × peak − C − L − target) / 20, L only (C − (2 × peak − L) − target) / 20, so about ±50 under the sensor to about ±100 near dark. Clamped to ±100 |
-| Neither reaches 30 % (dark) | Keep the last position and the peak, so a line that comes back outside is still outside. LINE_LOST after 50 ms if \|position\| > 50 (past a sensor), else after 300 ms |
+| Neither reaches 30 % (dark) | Keep the last position and the peak, so a line that comes back outside is still outside. LINE_LOST after 50 ms if only one sensor saw the line last (it left past that sensor), else after 300 ms |
+| L + C ≥ 125 % (junction) | Keep the position and the peak; not centred. On a plain line L + C reached at most 102 % in the spin recording (38–40 % each midway) |
 
 - The line moves right: L fades and C rises, so the position goes up and
   the robot steers right. The same sign holds when the line is narrower
   than the spacing (C rises first).
-- No junction flag: two sensors cannot tell a junction from the line. The
-  junction straight-through in `steer_test` and `detour_test` does not
-  run; at a cross the readings stay equal, so the robot drives straight.
-- Centred: both see the line and |C − L − target| ≤ 200 per mille.
+- Junction flag (bit 9 of the line word) when L + C ≥ 125 %. Readings are
+  at most 100 %, so each sensor is then at least 25 %. The junction hold
+  is not used, so the straight-through of `detour_test` does not run;
+  the robot keeps the steering it had before the junction.
+- Centred: both see the line, no junction, and |C − L − target| ≤ 200 per mille.
 - Known limit: a line that goes back inward from under a sensor also
   makes that reading fall, so the position grows a little (about 5)
   until the other sensor sees the line. Between 89 % and 100 % with the
@@ -455,6 +457,27 @@ Changes: gain and D back to 200; in pair mode dark after |position| > 50
 gives LINE_LOST after 50 ms. The simulator did not show the weak turn:
 its motors turn more easily than the real ones. Host test: the +55 and
 +50 cases; mutation check 33 of 34 (the same equivalent survivor).
+
+### Junction fix after track run P3, 2026-11-03
+
+P3 (`build/steer_logs/run_20261103-163117_boot7a7d_run1.txt`, see
+[Line steering](LINE_STEERING.md#far-gain-two-line-sensors-2026-11-03)):
+the operator saw one loss after a junction. At 20.15 s the line was
+past C (+50); a junction arm reached L (L 44 %, C 91 %), then both read
+high (L 3029, C 2233). "Both see" reset the memory that the line was past
+C, the position became +15, the robot waited 300 ms and searched left
+for 350 ms before it turned right and found the line.
+
+Change: the junction rule above, and the 50 ms limit now depends on
+which sensor saw the line last (it replaces |position| > 50). In P3,
+L + C ≥ 125 % gave 11 short events, about one every 5–10 s (the
+crossings). Host test: the P3 case (memory kept through the junction,
+LINE_LOST RIGHT 50 ms after it), the 125 % limit on both sides, and
+midway (40 + 40 %) is not a junction. Mutation check: 35 of 36 (the
+same equivalent survivor). The "each at least 25 %" rule was removed: the
+mutation check showed it never decides (readings are at most 100 %).
+Simulator `two_sensor_track`: line never dark, no wheel stopped, 10
+swaps.
 
 ### Track run P2, 2026-11-03, gain 200 / D 200 (boot 2928)
 

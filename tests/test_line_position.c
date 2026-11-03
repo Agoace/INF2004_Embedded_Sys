@@ -494,11 +494,11 @@ int main(void) {
         uint32_t t = 0u;
         (void)pair_step(&q, &HIGH_LINE, 500, 500, t);
         CHECK(q.position == 0 && lp_centred(&q) && lp_line_seen(&q), "pair: equal readings, centred (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 600, 800, ++t);
+        (void)pair_step(&q, &HIGH_LINE, 300, 500, ++t);
         CHECK(q.position == 10 && lp_centred(&q), "pair: C - L 200 is centred (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 580, 800, ++t);
+        (void)pair_step(&q, &HIGH_LINE, 280, 500, ++t);
         CHECK(q.position == 11 && !lp_centred(&q), "pair: C - L 220 is not centred (%d)", q.position);
-        (void)pair_step(&q, &HIGH_LINE, 800, 600, ++t);
+        (void)pair_step(&q, &HIGH_LINE, 500, 300, ++t);
         CHECK(q.position == -10 && lp_centred(&q), "pair: C - L -200 is centred (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 300, 900, ++t);
         CHECK(q.position == 30 && !lp_centred(&q) && lp_last_side(&q) == VC_LINE_SIDE_RIGHT,
@@ -507,8 +507,9 @@ int main(void) {
         CHECK(q.position == -30 && lp_last_side(&q) == VC_LINE_SIDE_LEFT && !lp_centred(&q),
               "pair: C fades: -30 LEFT (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 1000, 1000, ++t);
-        CHECK(q.position == 0 && !lp_junction(&q) && !lp_junction_hold(&q),
-              "pair: both full is not a junction (%d)", q.position);
+        CHECK(q.position == -30 && lp_junction(&q) && !lp_junction_hold(&q) && !lp_centred(&q),
+              "pair: both full is a junction: position kept, no hold, not centred (%d)", q.position);
+        CHECK((lp_word(&q) & 0x0200u) != 0u, "pair: junction bit in the word");
         {
             const uint16_t praw[3] = {reading_pm(&HIGH_LINE, 0u, 500),
                                      reading_pm(&HIGH_LINE, 1u, 700), 4000u};
@@ -603,13 +604,50 @@ int main(void) {
             CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_RIGHT,
                   "pair: +55 lost RIGHT at 50 ms");
         }
-        /* Exactly +50 (under C) waits LP_GAP_LOST_MS. */
+        /* Only C saw the line last, at +50: it left past C, LP_LOST_MS. */
         lp_reset_tracking(&q);
         (void)pair_step(&q, &HIGH_LINE, 0, 1000, 770u);
         CHECK(q.position == 50, "pair: under C, +50 (%d)", q.position);
         (void)pair_step(&q, &HIGH_LINE, 0, 0, 771u);
-        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 1070u)) == VC_EVENT_NONE, "pair: +50 not lost at 299 ms");
-        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 1071u)) == VC_EVENT_LINE_LOST, "pair: +50 lost at 300 ms");
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 820u)) == VC_EVENT_NONE, "pair: +50 alone not lost at 49 ms");
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 821u)) == VC_EVENT_LINE_LOST, "pair: +50 alone lost at 50 ms");
+
+        /* Junction (track run P3): the line is past C, a junction arm
+         * reaches L, both read high, then dark. The memory is kept. */
+        lp_reset_tracking(&q);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 830u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 890, 831u);
+        CHECK(q.position == 55 && q.pair_alone == LP_CENTRE, "pair: past C before the junction (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 440, 910, 832u);
+        CHECK(lp_junction(&q) && q.position == 55 && q.pair_alone == LP_CENTRE && q.pair_peak == 1000u,
+              "pair: arm on L (44 %% + 91 %%): junction, memory kept (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 1000, 900, 833u);
+        CHECK(lp_junction(&q) && q.position == 55 && !lp_centred(&q), "pair: both high: junction (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 0, 834u);
+        CHECK(!lp_junction(&q) && q.position == 55, "pair: dark after the junction keeps +55 (%d)", q.position);
+        {
+            const vc_event_t e = pair_step(&q, &HIGH_LINE, 0, 0, 884u);
+            CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_RIGHT,
+                  "pair: lost RIGHT 50 ms after the junction");
+        }
+        /* Junction limits: sum 125 %% and each 25 %%. */
+        lp_reset_tracking(&q);
+        (void)pair_step(&q, &HIGH_LINE, 600, 650, 900u);
+        CHECK(lp_junction(&q), "pair: 60 + 65 %% is a junction");
+        (void)pair_step(&q, &HIGH_LINE, 610, 630, 901u);
+        CHECK(!lp_junction(&q), "pair: 61 + 63 %% is not a junction");
+        (void)pair_step(&q, &HIGH_LINE, 1000, 250, 902u);
+        CHECK(lp_junction(&q), "pair: 100 + 25 %% is a junction");
+        (void)pair_step(&q, &HIGH_LINE, 1000, 240, 903u);
+        CHECK(!lp_junction(&q), "pair: C 24 %% is not a junction");
+        (void)pair_step(&q, &HIGH_LINE, 251, 1000, 904u);
+        CHECK(q.norm[LP_LEFT] == 250u && lp_junction(&q), "pair: 25 + 100 %% is a junction (L %u)",
+              q.norm[LP_LEFT]);
+        (void)pair_step(&q, &HIGH_LINE, 240, 1000, 905u);
+        CHECK(!lp_junction(&q), "pair: L 24 %% is not a junction");
+        /* Midway on a plain line (38-40 %% each) is not a junction. */
+        (void)pair_step(&q, &HIGH_LINE, 400, 400, 906u);
+        CHECK(!lp_junction(&q) && lp_centred(&q) && q.position == 0, "pair: midway is not a junction");
 
         /* lp_reset_tracking and a new calibration forget the peak. */
         (void)pair_step(&q, &HIGH_LINE, 0, 1000, 800u);

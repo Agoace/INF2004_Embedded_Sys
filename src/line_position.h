@@ -58,10 +58,17 @@
  *     until the other sensor sees the line.
  *   - Neither sees the line: keep the last position and the peak, so a
  *     line that comes back on the outside is still outside. LINE_LOST
- *     after LP_LOST_MS if |position| > LP_PAIR_OUTWARD, else after
- *     LP_GAP_LOST_MS.
- *   - No junction (two sensors cannot tell a junction from the line).
- *   - Centred: both see the line and |C - L - target| <= LP_PAIR_CENTRED.
+ *     after LP_LOST_MS if only one sensor saw the line last (it left past
+ *     that sensor), else after LP_GAP_LOST_MS.
+ *   - Junction: L + C >= LP_PAIR_JUNCTION_SUM (so each is at least 25 %).
+ *     On a plain line the two together reach at most about 100 % (spin
+ *     recording 2026-11-03: 102 %; 38-40 % each with the line midway).
+ *     The position and the peak are not changed (the line before the
+ *     junction is still the best guess), and the robot is not centred.
+ *     Track run P3: a junction arm reset the memory that the line was
+ *     past C; the robot waited 300 ms and searched left first.
+ *     The junction hold (LP_FLAG_JUNCTION_HOLD) is not used.
+ *   - Centred: both see the line, no junction, |C - L - target| <= LP_PAIR_CENTRED.
  * Calibration checks only L and C.
  *
  * Pure logic: no hardware or RTOS calls. See docs/LINE_POSITION.md.
@@ -70,10 +77,7 @@
 #define LP_SENSORS 3u
 #define LP_PAIR_DIVISOR 20   /* per mille of C - L per position unit */
 #define LP_PAIR_CENTRED 200  /* per mille of C - L - target */
-/* Pair mode: dark after |position| > this is outside (LP_LOST_MS); only
- * a line past a sensor gives more than about 50. Track run 2026-11-03:
- * dark at +62 waited LP_GAP_LOST_MS, and the robot drove off a curve. */
-#define LP_PAIR_OUTWARD 50
+#define LP_PAIR_JUNCTION_SUM 1250 /* per mille, L + C */
 #define LP_LEFT 0u
 #define LP_CENTRE 1u
 #define LP_RIGHT 2u

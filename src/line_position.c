@@ -294,7 +294,7 @@ static void pair_position(lp_t *lp, bool dark) {
     const int32_t l = lp->norm[LP_LEFT];
     const int32_t c = lp->norm[LP_CENTRE];
     const int32_t seen = (int32_t)LP_PERMILLE(LP_OUTER_SEEN_PCT);
-    if (dark) {
+    if (dark || lp_junction(lp)) {
         return; /* keep the last position and the peak */
     }
     int32_t diff = c - l; /* C - L, or with the fall past a sensor added */
@@ -324,8 +324,8 @@ static void pair_flags(lp_t *lp) {
     const int32_t l = lp->norm[LP_LEFT];
     const int32_t c = lp->norm[LP_CENTRE];
     const int32_t off = c - l - lp->pair_target;
-    set_flag(lp, LP_FLAG_CENTRED,
-             l >= seen && c >= seen && off >= -LP_PAIR_CENTRED && off <= LP_PAIR_CENTRED);
+    set_flag(lp, LP_FLAG_CENTRED, !lp_junction(lp) && l >= seen && c >= seen &&
+                                      off >= -LP_PAIR_CENTRED && off <= LP_PAIR_CENTRED);
 }
 
 vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) {
@@ -349,7 +349,10 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
         }
     }
     if (lp->pair) {
-        set_flag(lp, LP_FLAG_JUNCTION, false);
+        const uint32_t l = lp->norm[LP_LEFT];
+        const uint32_t c = lp->norm[LP_CENTRE];
+        /* Each reading is at most 1000, so each is at least 250 here. */
+        set_flag(lp, LP_FLAG_JUNCTION, l + c >= (uint32_t)LP_PAIR_JUNCTION_SUM);
     } else {
         set_flag(lp, LP_FLAG_JUNCTION, min_n >= LP_PERMILLE(LP_JUNCTION_PCT));
         track_side(lp, raw, now_ms);
@@ -373,7 +376,7 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
             /* Dark from the middle: the line is probably in a gap, and the
              * gap rise or the hint may give the side late. Wait longer.
              * Dark after an outer sensor: it left outward, LP_LOST_MS. */
-            const bool in_gap = lp->pair ? before <= LP_PAIR_OUTWARD
+            const bool in_gap = lp->pair ? lp->pair_alone == LP_SENSORS
                                          : before < LP_OUTWARD_POSITION;
             const uint32_t limit = in_gap ? LP_GAP_LOST_MS : LP_LOST_MS;
             if ((uint32_t)(now_ms - lp->lost_since_ms) >= limit) {
