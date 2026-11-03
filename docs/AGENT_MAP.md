@@ -38,7 +38,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
-| Barcode reader interface | [`src/barcode_interface.h`](../src/barcode_interface.h), [`docs/BARCODE_INTERFACE.md`](BARCODE_INTERFACE.md) |
+| Code 39 barcode reader | [`src/barcode_interface.h`](../src/barcode_interface.h), [`src/barcode_interface.c`](../src/barcode_interface.c), [`src/robocar_barcode_reader.c`](../src/robocar_barcode_reader.c), [`docs/BARCODE_INTERFACE.md`](BARCODE_INTERFACE.md) |
 | Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
 | Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |

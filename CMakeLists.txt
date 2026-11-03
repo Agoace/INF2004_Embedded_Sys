@@ -17,15 +17,27 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 pico_sdk_init()
 
-# Stable line-task to barcode-decoder contract. The stub is replaced by the
-# Code 39 implementation branch without changing consumers of this target.
+# Stable line-task to Code 39 decoder contract.
 add_library(barcode_interface STATIC
-    src/barcode_interface_stub.c
+    src/barcode_interface.c
 )
 
 target_include_directories(barcode_interface PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/src
 )
+
+add_executable(robocar_barcode_reader
+    src/robocar_barcode_reader.c
+)
+
+target_link_libraries(robocar_barcode_reader PRIVATE
+    barcode_interface
+    pico_stdlib
+)
+
+pico_enable_stdio_usb(robocar_barcode_reader 1)
+pico_enable_stdio_uart(robocar_barcode_reader 0)
+pico_add_extra_outputs(robocar_barcode_reader)
 
 add_executable(pin_probe
     src/pin_probe.c
