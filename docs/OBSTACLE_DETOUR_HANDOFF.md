@@ -137,7 +137,7 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D17 | v1.4 | `…174850_boot65ed_run6.txt` | Both wheels stopped in the first straight (contact); the STRAIGHT print is missing (text buffer drop) |
 | D18 | v1.4 | `…174956_boot65ed_run7.txt` | **DONE** (line at −20°); followed to the run time limit |
 
-### v1.6 runs (2026-11-03)
+### v1.6 and v1.7 runs (2026-11-03)
 
 | Run | Version | File | Result |
 | --- | --- | --- | --- |
@@ -147,6 +147,12 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D21 | v1.6, 14 % | `run_20261103-140245_boot57fc_run3.txt` | Sweep away to +30°; straight; in TURN_TOWARD both wheels stopped at about 14.3 s (contact). The run end text was not received |
 | D22 | v1.6, 14 % | `run_20261103-140304_boot57fc_run4.txt` | Sweep away to +35°; straight to (286, 200); TURN_TOWARD turned about 25° (to about +10°), then both wheels stopped (contact); stall stop at 8.7 s |
 
+| D23 | v1.7 | `run_20261103-141608_boot8b42_run1.txt` | STOP at 21.5 s; detour RIGHT; sweep away to +42° (34°/s); first straight; stopped by GP21 at 28.8 s |
+| D24 | v1.7 | `run_20261103-141640_boot8b42_run2.txt` | Detour RIGHT; sweep away to +57°; straight to (191, 294); TURN_TOWARD swept 148° with no sighting; RETURN at −91°; line after 41 mm; ON_LINE took 2.4 s with the left wheel at 0 counts and all three line sensors near 4000 from 13.5 s; DONE; then straight at 25 % for 4.4 s with the sensors near 4000; stopped by GP21 |
+| D25 | v1.7 | `run_20261103-141708_boot8b42_run3.txt` | Detour LEFT; one echo (261 mm) in the TURN_AWAY sweep, never 2 in a row: the sweep reached the 90° limit (FAILED, turn limit) |
+
+- D24 is the first return-to-line run on the robot. The line sensor values near 4000 on all three sensors are not normal track values; the cause is not known (robot lifted, or a dark area).
+- D25: TURN_AWAY needs the obstacle seen (2 readings) and then lost. A box that the 30° ray does not see at the start never ends the sweep (problem F).
 - At 14 % the sweeps turned at 40–43°/s, not the 20°/s target: the rate control cannot go below the minimum duty.
 - D21 and D22: both wheels stopped together during TURN_TOWARD. The robot turned its corner into the box (problem E). The straight ends 350 mm after the nearest reading, but at +30° to +35° the robot is still beside the box.
 
