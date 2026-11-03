@@ -3,7 +3,8 @@
  * straight drives and turns on the spot only, no arcs.
  *
  *   GP21  spin calibration, then the run after 1 s; press again to stop
- *   GP20  spin calibration only
+ *   GP20  spin calibration only, then the raw spin recording (L, C every
+ *         2 ms, src/line_spin.h) is sent as [raw] text lines
  *
  * The run:
  *   FOLLOW  line following with the calm settings of steer_test, straight
@@ -201,6 +202,14 @@ typedef struct {
 static run_t run;
 static lp_t lp;
 static uint8_t run_number;
+
+/* Lets Wi-Fi send the text buffer during a long printout. */
+static void pump_text(void) {
+    for (unsigned int i = 0u; i < 3u; ++i) {
+        wifi_log_poll(to_ms_since_boot(get_absolute_time()));
+        sleep_ms(5);
+    }
+}
 
 static bool button_pressed(unsigned int pin, bool *previous) {
     const bool down = !gpio_get(pin);
@@ -787,6 +796,7 @@ int main(void) {
 
         if (button_pressed(SPIN_BUTTON_PIN, &previous_spin)) {
             (void)line_spin_calibrate(&lp);
+            line_spin_dump(pump_text);
             printf("\n");
         }
         if (button_pressed(RUN_BUTTON_PIN, &previous_run)) {

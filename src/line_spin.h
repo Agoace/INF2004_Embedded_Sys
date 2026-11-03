@@ -27,6 +27,14 @@ typedef enum {
 
 line_spin_result_t line_spin_calibrate(lp_t *lp);
 
+/* Raw recording of the last spin: L and C ADC readings and the left wheel
+ * count from the start, every 2 ms (at most LINE_SPIN_RECORD_MAX samples).
+ * Each line_spin_calibrate() starts a new recording. line_spin_dump()
+ * prints it as "[raw] <count> <L> <C>" lines and calls pump() every 8
+ * lines so that a slow output (Wi-Fi text) can empty its buffer. */
+#define LINE_SPIN_RECORD_MAX 3000u
+void line_spin_dump(void (*pump)(void));
+
 /* Ends a calibration (lp_calib_end) and prints the result. True if OK. */
 bool line_calib_end_and_report(lp_t *lp);
 

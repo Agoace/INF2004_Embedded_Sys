@@ -1,5 +1,6 @@
 #include "line_spin.h"
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -32,6 +33,41 @@ typedef enum {
     GOAL_OUT,  /* wheel is SPIN_STEP_COUNTS away from home */
     GOAL_HOME, /* wheel has come back to (or just past) home */
 } spin_goal_t;
+
+/* Raw recording of the last spin (see line_spin.h). */
+typedef struct {
+    int16_t count; /* left wheel, from the start of the spin */
+    uint16_t l;
+    uint16_t c;
+} spin_sample_t;
+static spin_sample_t record[LINE_SPIN_RECORD_MAX];
+static unsigned int record_used;
+static unsigned int record_tick;
+
+static void record_add(const uint16_t raw[LP_SENSORS], int32_t left_count) {
+    if ((record_tick++ & 1u) != 0u || record_used >= LINE_SPIN_RECORD_MAX) {
+        return;
+    }
+    record[record_used].count = (int16_t)left_count;
+    record[record_used].l = raw[LP_LEFT];
+    record[record_used].c = raw[LP_CENTRE];
+    ++record_used;
+}
+
+void line_spin_dump(void (*pump)(void)) {
+    printf("[raw] spin recording: %u samples, 2 ms apart; columns: left count, L, C\n",
+           record_used);
+    for (unsigned int i = 0u; i < record_used; ++i) {
+        printf("[raw] %d %u %u\n", record[i].count, record[i].l, record[i].c);
+        if ((i & 7u) == 7u && pump != NULL) {
+            pump();
+        }
+    }
+    printf("[raw] end\n");
+    if (pump != NULL) {
+        pump();
+    }
+}
 
 static uint32_t abs_count(int32_t value) {
     return value < 0 ? (uint32_t)(-value) : (uint32_t)value;
@@ -118,6 +154,7 @@ static bool spin_step(lp_t *lp, int direction, spin_goal_t goal, const int32_t h
             next_sample = delayed_by_us(next_sample, SAMPLE_PERIOD_US);
             uint16_t raw[LP_SENSORS];
             line_sensors_read(raw);
+            record_add(raw, c[DRIVE_LEFT]);
             if (stop_on_line) {
                 (void)lp_update(lp, raw, now);
                 const uint16_t c_now = lp->norm[LP_CENTRE];
@@ -183,6 +220,8 @@ line_spin_result_t line_spin_calibrate(lp_t *lp) {
     int32_t home[2];
     drive_counts(&home[DRIVE_LEFT], &home[DRIVE_RIGHT]);
     lp_calib_begin(lp);
+    record_used = 0u;
+    record_tick = 0u;
 
     printf("[spin] step 1: left\n");
     bool ok = spin_step(lp, -1, GOAL_OUT, home, false);
