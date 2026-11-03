@@ -393,6 +393,29 @@ test-track loop with curves and crosses, no obstacle, 60 s) and
 These are simulator results with an ideal sensor model (uniform spot, no
 noise). They are not robot results.
 
+### Robot check: spin recording, 2026-11-03, boot 5209
+
+`detour_test` GP20 (spin calibration only) with the raw recording of
+[`src/line_spin.c`](../src/line_spin.c): L and C every 2 ms, 1634 samples,
+all received over Wi-Fi. Calibration: L floor 172, line 2487; C floor 158,
+line 2611. Copy on the laptop: `build/steer_logs/spin_raw_boot5209.csv`
+(not committed).
+
+| Crossing | Midway between L and C | Lowest stronger reading |
+| --- | --- | --- |
+| Step 2, line from C to L | L 30 %, C 44 % then L 40 %, C 26 % | 40 % |
+| Step 3, line from L to C | L 38 %, C 38 % | 38 % |
+
+- Both sensors see a line midway between them, so pair mode does not go
+  dark in the middle. The lowest reading (38 %) is above the 30 % dark limit;
+  the margin is small.
+- The position goes from +100 to −100 only in a narrow band of the
+  crossing; outside it one sensor is full and the other is at the floor,
+  and the position stays at ±100.
+- The old 50 ms run logs (2026-10-29 to 11-03) show a dark gap instead.
+  The left sensor read 1911 on the line then and 2487 now, so the sensor
+  mount changed. Use only data from after the change.
+
 ## Open items
 
 - Find out why R reaches only 1645 on the line (sensor height, angle, or
