@@ -396,7 +396,7 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
         }
         break;
     case DT_STRAIGHT:
-        if (dt->armed && line_seen) {
+        if (dt->armed && line_seen && (dt->returning || !dt->cfg.line_return_only)) {
             end_straight(dt);
             begin(dt, DT_ON_LINE);
         } else if (dt->returning) {

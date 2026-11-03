@@ -599,6 +599,43 @@ int main(void) {
     check(dt_step(&dt) == DT_STRAIGHT && !dt.returning,
           "return: a seen look ends with a normal STRAIGHT");
 
+    /* line_return_only: the line counts only in the returning STRAIGHT. */
+    dt = to_straight(OBSTACLE_SIDE_LEFT);
+    dt.cfg.line_return_only = true;
+    (void)drive_to(&dt, 100);
+    line = true;
+    (void)update(&dt);
+    check(dt_step(&dt) == DT_STRAIGHT,
+          "return only: an armed line in a normal STRAIGHT is ignored");
+    line = false;
+    (void)drive_to(&dt, 189);
+    check(dt_step(&dt) == DT_STRAIGHT,
+          "return only: the normal straight end rule stays");
+    (void)drive_to(&dt, 190);
+    check(dt_step(&dt) == DT_TURN_TOWARD,
+          "return only: the normal straight ends at vehicle_mm");
+    dt = to_returning();
+    dt.cfg.line_return_only = true;
+    (void)drive_to(&dt, 100);
+    line = true;
+    (void)update(&dt);
+    check(dt_step(&dt) == DT_ON_LINE,
+          "return only: the line ends the returning STRAIGHT");
+    dt = to_returning();
+    dt.cfg.line_return_only = false;
+    (void)drive_to(&dt, 100);
+    line = true;
+    (void)update(&dt);
+    check(dt_step(&dt) == DT_ON_LINE,
+          "return only off: the line ends the returning STRAIGHT");
+    dt = to_returning();
+    dt.cfg.line_return_only = true;
+    dt.armed = false; /* the line was never lost */
+    line = true;
+    (void)update(&dt);
+    check(dt_step(&dt) == DT_STRAIGHT, "return only: arming rule stays");
+    line = false;
+
     /* Word layout. */
     dt = to_straight(OBSTACLE_SIDE_LEFT);
     w = update(&dt);

@@ -99,6 +99,10 @@ static const dt_config_t DETOUR = {
     .sweep_seen_count = 2u,   /* consecutive seen / unseen readings */
     .sweep_min_duty = 14u,    /* test plan b.3: 12% stalled the left wheel (run 2026-11-03) */
     .sweep_max_duty = 30u,    /* turn controller duty ceiling, percent */
+    /* Operator toggle (2026-11-03): accept the line only after the last
+     * turn to -90 (returning STRAIGHT). Run boot57fc 2 took a false line
+     * at heading +38. false: the line counts in every STRAIGHT. */
+    .line_return_only = true,
     .turn_step_deg = 5u,
     .away_max_deg = 90u,
     .toward_max_deg = 150u,
@@ -237,7 +241,7 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.6: turn steps %u deg (%u.%02u counts/deg), back off ",
+    printf("[run] detour v1.7: turn steps %u deg (%u.%02u counts/deg), back off ",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
            DETOUR.counts_per_deg_x100 % 100u);
     if (DETOUR.back_off_fn) {
@@ -247,12 +251,13 @@ static void print_summary(void) {
     }
     printf("look %u ms, past nearest %u mm, seen < %u mm; turn %d%%, straight %d%%; "
            "return heading %u deg, return max %u mm; sweep %u deg/s, ping %u ms, "
-           "count %u, duty %u..%u%%\n",
+           "count %u, duty %u..%u%%; line %s\n",
            DETOUR.look_ms, DETOUR.vehicle_mm,
            DETOUR.seen_mm, TURN_DUTY_PCT, STRAIGHT_DUTY_PCT,
            DETOUR.return_heading_deg, DETOUR.return_max_mm, DETOUR.sweep_deg_s,
            DETOUR.sweep_ping_ms, DETOUR.sweep_seen_count,
-           DETOUR.sweep_min_duty, DETOUR.sweep_max_duty);
+           DETOUR.sweep_min_duty, DETOUR.sweep_max_duty,
+           DETOUR.line_return_only ? "return only" : "every straight");
 }
 
 static void print_log(void) {

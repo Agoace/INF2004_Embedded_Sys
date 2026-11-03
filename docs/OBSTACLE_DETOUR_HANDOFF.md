@@ -7,15 +7,28 @@ This record gives the state of the obstacle detour at the end of the 2026-10-30 
 | Item | Value |
 | --- | --- |
 | Branch | `yx`, pushed |
-| Firmware on the robot | Still `detour_test` v1.4 (commit `5efeacd`); v1.5 is not flashed or run on the track yet |
-| Current source | `detour_test` v1.6 (see [Version 1.6](#version-16-sim-tested-not-run-on-the-robot)); v1.5 added `line_ahead_mm` 123 mm |
+| Firmware on the robot | `detour_test` v1.6 with sweep minimum duty 14 % (commit `f2bc090`), flashed 2026-11-03 |
+| Current source | `detour_test` v1.7: v1.6 plus the [line toggle](#version-17-line-only-on-the-return); not flashed yet |
 | Module | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h) |
 | Track test | [`src/detour_test.c`](../src/detour_test.c) (CMake target `detour_test`) |
-| Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`) |
-| Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). It is **not running**: the laptop restarted after the last runs |
+| Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`), line toggle 7 of 7 caught (v1.7) |
+| Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). Start it after a laptop restart. The laptop must be on the "Mah Phone" hotspot |
 | Run logs | `build/steer_logs/` (not committed), table in [Track runs](#track-runs) |
 
-## Version 1.6 (sim-tested, not run on the robot)
+## Version 1.7: line only on the return
+
+Operator request 2026-11-03: accept the line only after the last 90° turn.
+
+| Item | Value |
+| --- | --- |
+| Config field | `line_return_only` (bool). `detour_test`: `true` |
+| On | The line counts only in the returning STRAIGHT (after an unseen turn to −`return_heading_deg`). The arming rule stays |
+| Off | The line counts in every STRAIGHT (v1.6 behaviour) |
+| Why | Run D20 took a false line at heading +38° (problem A) |
+| Known risk | A normal STRAIGHT that crosses the track line (D8 at −40°, D14 at −3°, D18 at −20°) now ignores it. The robot can then reach −90° on the far side of the line and drive away from it: `return_max_mm` 1000 mm, then NO_LINE |
+| Needs | `return_heading_deg` ≠ 0, else the line never counts and the detour ends NO_LINE |
+
+## Version 1.6 (first run 2026-11-03)
 
 Source: `detour_test` v1.6. Branch `yx`. The robot still runs v1.4 until the operator flashes v1.6. Test plan: [DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md).
 
@@ -124,7 +137,20 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D17 | v1.4 | `…174850_boot65ed_run6.txt` | Both wheels stopped in the first straight (contact); the STRAIGHT print is missing (text buffer drop) |
 | D18 | v1.4 | `…174956_boot65ed_run7.txt` | **DONE** (line at −20°); followed to the run time limit |
 
-Summary: 17 detours started (all but D2). 6 reached DONE: D8, D11, D14 and D18 on the track line; D10 and D16 probably on a false line. With the back off at 40° (D12–D18), 3 of 7 reached DONE and 3 ended in contact stalls.
+### v1.6 runs (2026-11-03)
+
+| Run | Version | File | Result |
+| --- | --- | --- | --- |
+| D19 | v1.6, sweep min 12 % | `run_20261103-135756_boot3a80_run1.txt` | First TURN_AWAY sweep at 12/12 %: the left wheel slowed to 0; stall stop at 12.2 s. The rate control adds only about 2 % per second. Sweep minimum raised to 14 % |
+| — | v1.6, 14 % | `run_20261103-140132_boot57fc_run1.txt` | Line following only, 54 s, no obstacle; stopped by GP21 |
+| D20 | v1.6, 14 % | `run_20261103-140216_boot57fc_run2.txt` | Sweep away to +38° (41°/s); line seen 130 mm into the first straight (false line, problem A); DONE off the line; the new search ran and failed |
+| D21 | v1.6, 14 % | `run_20261103-140245_boot57fc_run3.txt` | Sweep away to +30°; straight; in TURN_TOWARD both wheels stopped at about 14.3 s (contact). The run end text was not received |
+| D22 | v1.6, 14 % | `run_20261103-140304_boot57fc_run4.txt` | Sweep away to +35°; straight to (286, 200); TURN_TOWARD turned about 25° (to about +10°), then both wheels stopped (contact); stall stop at 8.7 s |
+
+- At 14 % the sweeps turned at 40–43°/s, not the 20°/s target: the rate control cannot go below the minimum duty.
+- D21 and D22: both wheels stopped together during TURN_TOWARD. The robot turned its corner into the box (problem E). The straight ends 350 mm after the nearest reading, but at +30° to +35° the robot is still beside the box.
+
+Summary (D1–D18): 17 detours started (all but D2). 6 reached DONE: D8, D11, D14 and D18 on the track line; D10 and D16 probably on a false line. With the back off at 40° (D12–D18), 3 of 7 reached DONE and 3 ended in contact stalls.
 
 ## Open problems
 

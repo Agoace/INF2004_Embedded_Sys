@@ -1,6 +1,6 @@
 # Detour v1.6 — physical test plan
 
-Target: `detour_test` v1.6 (see [Version 1.6](OBSTACLE_DETOUR_HANDOFF.md#version-16-sim-tested-not-run-on-the-robot)). The sim results are not robot results.
+Target: `detour_test` v1.6 (see [Version 1.6](OBSTACLE_DETOUR_HANDOFF.md#version-16-first-run-2026-11-03)). The sim results are not robot results.
 
 ## a. Build
 

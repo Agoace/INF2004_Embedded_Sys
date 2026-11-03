@@ -32,7 +32,9 @@
  *   ALIGN        Turn back to heading 0 (along the line). Then DONE.
  *
  * The line counts only after the line sensors lost it once in the detour
- * (the robot starts on the line). The heading is the sum of the turns,
+ * (the robot starts on the line). With line_return_only, the line counts
+ * only in the returning STRAIGHT (after the turn to -return_heading_deg);
+ * it then needs return_heading_deg != 0, else the detour ends NO_LINE. The heading is the sum of the turns,
  * from the wheel counts (counts_per_deg_x100), coasting included.
  * NO_RISE and STUCK_HIGH readings give no information: look again. In a
  * straight, a valid echo nearer than DT_TOO_NEAR_MM fails.
@@ -82,6 +84,7 @@ typedef struct {
     uint8_t sweep_seen_count;     /* consecutive seen or unseen readings */
     uint8_t sweep_min_duty;       /* loaded turn minimum is not measured */
     uint8_t sweep_max_duty;       /* upper duty clamp, percent */
+    bool line_return_only;        /* line counts only in the returning STRAIGHT */
 } dt_config_t;
 
 /* Step: 3 bits. */
