@@ -151,6 +151,17 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D24 | v1.7 | `run_20261103-141640_boot8b42_run2.txt` | Detour RIGHT; sweep away to +57°; straight to (191, 294); TURN_TOWARD swept 148° with no sighting; RETURN at −91°; line after 41 mm; ON_LINE took 2.4 s with the left wheel at 0 counts and all three line sensors near 4000 from 13.5 s; DONE; then straight at 25 % for 4.4 s with the sensors near 4000; stopped by GP21 |
 | D25 | v1.7 | `run_20261103-141708_boot8b42_run3.txt` | Detour LEFT; one echo (261 mm) in the TURN_AWAY sweep, never 2 in a row: the sweep reached the 90° limit (FAILED, turn limit) |
 
+### Two-sensor runs (2026-11-03, firmware `e4ba9ec`, v1.7)
+
+| Run | File | Result |
+| --- | --- | --- |
+| (P3) | `run_20261103-163117_boot7a7d_run1.txt` | Not a box test: STOP at 73 mm in a line run. From 61.3 s both line sensors rose to about 4000 and the wheels turned about 60 % faster at the same duty (TURN_TOWARD sweep 125°/s at 14 %): **the robot was lifted**. The 4000 readings counted as the line (ON_LINE, ALIGN). D24 probably had the same cause |
+| D26 | `run_20261103-171104_boot2a9f_run2.txt` | **First complete detour with two sensors.** STOP 237 mm; scan nearest 229 mm, free 6 steps each side, detour LEFT. Sweep away to +42°; straight to (260, 234); TURN_TOWARD saw the box at −46°, back off 25° to −21°; straight to (586, 109); turn to −90°; RETURN; line after 9 mm; ON_LINE; ALIGN; DONE at 27.5 s. Line not seen at DONE: the search found it in 50 ms. Line following then ran 24 s |
+| D27 | same file | Second STOP at 52.0 s, 232 mm (box met again); detour LEFT; in the TURN_AWAY sweep the left wheel (reverse, −15 %) did not turn while the right wheel turned: stall stop at 55.5 s (as D19) |
+
+- D26 ALIGN (−90° to 0° by wheel counts): L and C crossed the line at about −54°, the turn went on, and L saw the line again at 0° (999, about 35 %). ALIGN ended on the line by chance (problem B). Two sightings 54° apart mean the rear axle was not on the line (about 110 mm off, if the line is straight there), or the line curves at the return point.
+- D27: the sweep minimum 14 % does not turn the left wheel in reverse every time. The rate control adds only about 1 % per 50 ms rows (−15, −16) before the stall stop.
+
 - D24 is the first return-to-line run on the robot. The line sensor values near 4000 on all three sensors are not normal track values; the cause is not known (robot lifted, or a dark area).
 - D25: TURN_AWAY needs the obstacle seen (2 readings) and then lost. A box that the 30° ray does not see at the start never ends the sweep (problem F).
 - At 14 % the sweeps turned at 40–43°/s, not the 20°/s target: the rate control cannot go below the minimum duty.
