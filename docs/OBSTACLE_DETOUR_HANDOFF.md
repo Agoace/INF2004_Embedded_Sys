@@ -8,12 +8,22 @@ This record gives the state of the obstacle detour at the end of the 2026-10-30 
 | --- | --- |
 | Branch | `yx`, pushed |
 | Firmware on the robot | `detour_test` v1.6 with sweep minimum duty 14 % (commit `f2bc090`), flashed 2026-11-03 |
-| Current source | `detour_test` v1.7: v1.6 plus the [line toggle](#version-17-line-only-on-the-return); not flashed yet |
+| Current source | `detour_test` [v1.8](#version-18-back-off-at-most-30): v1.7 with the back-off limit 30° |
 | Module | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h) |
 | Track test | [`src/detour_test.c`](../src/detour_test.c) (CMake target `detour_test`) |
 | Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`), line toggle 7 of 7 caught (v1.7) |
 | Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). Start it after a laptop restart. The laptop must be on the "Mah Phone" hotspot |
 | Run logs | `build/steer_logs/` (not committed), table in [Track runs](#track-runs) |
+
+## Version 1.8: back off at most 30°
+
+Operator request 2026-11-03, after D26: the ultrasonic beam flare is
+wider than the 25° limit allowed for. The back-off is now half of the
+TURN_TOWARD angle, **at most 30°** (`BACK_OFF_MAX_DEG` in
+`src/detour_test.c`; v1.7: 25°). The limit changes the result only when
+TURN_TOWARD turned 60° or more (D26: turned 88°, back off 25°; v1.8:
+30°). The run summary prints `detour v1.8` and the limit. No change in
+`src/obstacle_detour.c`; the host test uses its own back-off function.
 
 ## Version 1.7: line only on the return
 
@@ -45,7 +55,7 @@ Source: `detour_test` v1.6. Branch `yx`. The robot still runs v1.4 until the ope
 
 | Field | Value |
 | --- | ---: |
-| `back_off_fn` | `back_off_for` (min(turned/2, 25)) |
+| `back_off_fn` | `back_off_for` (min(turned/2, 25); v1.8: min(turned/2, 30)) |
 | `back_off_deg` (fallback) | 25 |
 | `return_heading_deg` | 90 |
 | `return_max_mm` | 1000 |

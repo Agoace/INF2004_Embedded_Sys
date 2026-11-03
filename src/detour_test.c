@@ -101,11 +101,16 @@ static const steer_config_t STEER_FOLLOW = {
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
  * counts. */
-/* Back off half of the turn toward the obstacle, at most 25 degrees.
- * turned_deg: how far TURN_TOWARD turned. Operator: edit the formula. */
+/* Back off half of the turn toward the obstacle, at most BACK_OFF_MAX_DEG.
+ * turned_deg: how far TURN_TOWARD turned. Operator: edit the formula.
+ * Operator 2026-11-03 (after D26): the ultrasonic beam flare is wider
+ * than the old 25 degree limit allowed for; limit 30 (v1.8). */
+#ifndef BACK_OFF_MAX_DEG
+#define BACK_OFF_MAX_DEG 30
+#endif
 static int back_off_for(int turned_deg) {
     const int half = turned_deg / 2;
-    return half > 25 ? 25 : half;
+    return half > BACK_OFF_MAX_DEG ? BACK_OFF_MAX_DEG : half;
 }
 
 static const dt_config_t DETOUR = {
@@ -267,11 +272,11 @@ static void print_summary(void) {
            run.detours, run.searches);
     printf("[run] wheels L %ld  R %ld counts\n", (long)run.left_counts,
            (long)run.right_counts);
-    printf("[run] detour v1.7: turn steps %u deg (%u.%02u counts/deg), back off ",
+    printf("[run] detour v1.8: turn steps %u deg (%u.%02u counts/deg), back off ",
            DETOUR.turn_step_deg, DETOUR.counts_per_deg_x100 / 100u,
            DETOUR.counts_per_deg_x100 % 100u);
     if (DETOUR.back_off_fn) {
-        printf("fn, ");
+        printf("fn (half, at most %d deg), ", BACK_OFF_MAX_DEG);
     } else {
         printf("%u deg, ", DETOUR.back_off_deg);
     }
