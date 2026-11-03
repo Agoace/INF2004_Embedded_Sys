@@ -348,7 +348,7 @@ input. Every target that calls `lp_init()` then calls
 | Both sensors see the line (≥ 5 %) | (C − L − target) / 20: about ±50. Target 0: the line centred between L and C |
 | Only one sensor sees the line, its reading rising | The line comes in from the middle: the same formula, up to about ±50 under the sensor |
 | Only one sensor sees the line, its reading below its peak | The line is past that sensor (operator idea, 2026-11-03: the other sensor is white, so the line is outside). The fall is added: C only (2 × peak − C − L − target) / 20, L only (C − (2 × peak − L) − target) / 20, so about ±50 under the sensor to about ±100 near dark. Clamped to ±100 |
-| Neither reaches 30 % (dark) | Keep the last position and the peak, so a line that comes back outside is still outside. LINE_LOST after 50 ms (after an outward value, \|position\| ≥ 75) or 300 ms |
+| Neither reaches 30 % (dark) | Keep the last position and the peak, so a line that comes back outside is still outside. LINE_LOST after 50 ms if \|position\| > 50 (past a sensor), else after 300 ms |
 
 - The line moves right: L fades and C rises, so the position goes up and
   the robot steers right. The same sign holds when the line is narrower
@@ -362,10 +362,11 @@ input. Every target that calls `lp_init()` then calls
   until the other sensor sees the line. Between 89 % and 100 % with the
   other sensor white, the robot recording cannot tell inside from outside.
 - `lp_reset_tracking()` and a new calibration forget the peak.
-- Steering in `detour_test`: gain 100, D 100 (was 200, 200), so the
-  turn reaches its limit only near ±100. `steer_test` and `bypass_test`
-  keep their old settings; with pair mode their steering is half as
-  strong between the sensors. Not tuned.
+- Steering in `detour_test`: gain 200, D 200, the run-10 values. Gain 100
+  ran off a curve on the track (below). At +50 (line under C, about
+  10 mm past the target) the inner wheel stops, close to the turn per mm
+  of the three-sensor run 10. `steer_test` and `bypass_test` also keep
+  200/200. Not tuned for pair mode.
 - Calibration checks contrast and polarity on L and C only.
 - With target 0 the robot runs about 7 mm right of the line centre (half
   the spacing). `lp_set_pair()` takes another target (per mille of C − L)
@@ -436,7 +437,24 @@ points 20.9 mm apart, spot 11.5 mm, 55 s):
 | **100 / 100 (now)** | 0 % | 0 % | **57** | 13.0 m |
 
 Narrower lines (14 mm and 11 mm) go dark midway with every setting
-(20–49 % of samples): the sensing points are 21 mm apart.
+(20–49 % of samples): the sensing points are 21 mm apart. Gain 200 with
+D 100 or 150 gives 625 or 678 swaps.
+
+### Track run P1, 2026-11-03, gain 100 / D 100 (boot 5b93)
+
+`build/steer_logs/run_20261103-161130_boot5b93_run1.txt`. The start
+spin did not stop on the line (centre peak 2 %): the line was under L,
+and the robot corrected in 2 s. The straight was steady (position −20
+to +12). In a right curve the line went under C and past it (+46 to
++61), but duty was only 32/19 (counts 122/82 per 50 ms): too little
+turn. C went dark three times; each search found the line. At 6.9 s it
+was dark at +62, waited 300 ms (below the old outward value 75), drove
+off, and the search failed (8.2 s).
+
+Changes: gain and D back to 200; in pair mode dark after |position| > 50
+gives LINE_LOST after 50 ms. The simulator did not show the weak turn:
+its motors turn more easily than the real ones. Host test: the +55 and
++50 cases; mutation check 33 of 34 (the same equivalent survivor).
 
 ### Robot check: spin recording, 2026-11-03, boot 5209
 

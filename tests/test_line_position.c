@@ -592,6 +592,24 @@ int main(void) {
         (void)pair_step(&q, &HIGH_LINE, 0, 0, 400u);
         CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 699u)) == VC_EVENT_NONE, "pair: gap wait at 299 ms");
         CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 700u)) == VC_EVENT_LINE_LOST, "pair: lost at 300 ms");
+        /* Dark past a sensor (|position| > LP_PAIR_OUTWARD): LP_LOST_MS. */
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 710u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 890, 711u);
+        CHECK(q.position == 55, "pair: past C, +55 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 0, 712u);
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 761u)) == VC_EVENT_NONE, "pair: +55 not lost at 49 ms");
+        {
+            const vc_event_t e = pair_step(&q, &HIGH_LINE, 0, 0, 762u);
+            CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_RIGHT,
+                  "pair: +55 lost RIGHT at 50 ms");
+        }
+        /* Exactly +50 (under C) waits LP_GAP_LOST_MS. */
+        lp_reset_tracking(&q);
+        (void)pair_step(&q, &HIGH_LINE, 0, 1000, 770u);
+        CHECK(q.position == 50, "pair: under C, +50 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 0, 771u);
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 1070u)) == VC_EVENT_NONE, "pair: +50 not lost at 299 ms");
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 1071u)) == VC_EVENT_LINE_LOST, "pair: +50 lost at 300 ms");
 
         /* lp_reset_tracking and a new calibration forget the peak. */
         (void)pair_step(&q, &HIGH_LINE, 0, 1000, 800u);

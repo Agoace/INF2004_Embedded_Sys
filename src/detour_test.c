@@ -72,10 +72,10 @@
 static const steer_config_t STEER_FOLLOW = {
     .base_pct = 25u,
 #ifndef FOLLOW_GAIN_PCT
-#define FOLLOW_GAIN_PCT 100u
+#define FOLLOW_GAIN_PCT 200u /* track 2026-11-03: 100 ran off a curve */
 #endif
 #ifndef FOLLOW_KD_PCT
-#define FOLLOW_KD_PCT 100u
+#define FOLLOW_KD_PCT 200u
 #endif
     .gain_pct = FOLLOW_GAIN_PCT,
     .kd_pct = FOLLOW_KD_PCT,

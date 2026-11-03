@@ -57,8 +57,9 @@
  *     makes the reading fall, so the position grows a little (about 5)
  *     until the other sensor sees the line.
  *   - Neither sees the line: keep the last position and the peak, so a
- *     line that comes back on the outside is still outside; LINE_LOST as
- *     above.
+ *     line that comes back on the outside is still outside. LINE_LOST
+ *     after LP_LOST_MS if |position| > LP_PAIR_OUTWARD, else after
+ *     LP_GAP_LOST_MS.
  *   - No junction (two sensors cannot tell a junction from the line).
  *   - Centred: both see the line and |C - L - target| <= LP_PAIR_CENTRED.
  * Calibration checks only L and C.
@@ -69,6 +70,10 @@
 #define LP_SENSORS 3u
 #define LP_PAIR_DIVISOR 20   /* per mille of C - L per position unit */
 #define LP_PAIR_CENTRED 200  /* per mille of C - L - target */
+/* Pair mode: dark after |position| > this is outside (LP_LOST_MS); only
+ * a line past a sensor gives more than about 50. Track run 2026-11-03:
+ * dark at +62 waited LP_GAP_LOST_MS, and the robot drove off a curve. */
+#define LP_PAIR_OUTWARD 50
 #define LP_LEFT 0u
 #define LP_CENTRE 1u
 #define LP_RIGHT 2u
