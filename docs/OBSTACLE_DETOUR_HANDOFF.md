@@ -169,6 +169,10 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D26 | `run_20261103-171104_boot2a9f_run2.txt` | **First complete detour with two sensors.** STOP 237 mm; scan nearest 229 mm, free 6 steps each side, detour LEFT. Sweep away to +42°; straight to (260, 234); TURN_TOWARD saw the box at −46°, back off 25° to −21°; straight to (586, 109); turn to −90°; RETURN; line after 9 mm; ON_LINE; ALIGN; DONE at 27.5 s. Line not seen at DONE: the search found it in 50 ms. Line following then ran 24 s |
 | D27 | same file | Second STOP at 52.0 s, 232 mm (box met again); detour LEFT; in the TURN_AWAY sweep the left wheel (reverse, −15 %) did not turn while the right wheel turned: stall stop at 55.5 s (as D19) |
 
+| D28 | `run_20261103-172508_boot740b_run1.txt` | v1.8. STOP 239 mm, detour LEFT; sweep away to +50°; straight 350 mm (no echo) to (225, 268); TURN_TOWARD swept to −91° with no sighting; RETURN; ON_LINE; ALIGN turned into the box: right wheel stall at 24.6 s. **Operator: bad surface; not a valid test** |
+| D29 | `run_20261103-172551_boot740b_run2.txt` | v1.8. Same as D28: away +51°, straight to (220, 271), no sighting to −91°, return at x 216 mm (before the box front at about 284 mm), left wheel stall in ALIGN at 21.6 s. **Operator: bad surface; not a valid test** |
+
+- D28 and D29 (kept for reference): with no echo in the first straight, the straight is 350 mm; at +50° that is only about 220 mm forward, short of the box front. The run log has no echo readings in turns, so the cause is not proven.
 - D26 ALIGN (−90° to 0° by wheel counts): L and C crossed the line at about −54°, the turn went on, and L saw the line again at 0° (999, about 35 %). ALIGN ended on the line by chance (problem B). Two sightings 54° apart mean the rear axle was not on the line (about 110 mm off, if the line is straight there), or the line curves at the return point.
 - D27: the sweep minimum 14 % does not turn the left wheel in reverse every time. The rate control adds only about 1 % per 50 ms rows (−15, −16) before the stall stop.
 
