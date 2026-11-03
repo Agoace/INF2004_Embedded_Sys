@@ -393,6 +393,18 @@ test-track loop with curves and crosses, no obstacle, 60 s) and
 These are simulator results with an ideal sensor model (uniform spot, no
 noise). They are not robot results.
 
+Rerun 2026-11-03 with the fitted model (line 12.5 mm, spot 8 mm):
+
+| Case | Result |
+| --- | --- |
+| Straight | Steady 7.1 mm right of the line centre; L 36 %, C 39 % |
+| Track | Same path as before; line never dark; no contact |
+| Spot 5 or 11 mm, line 14 mm | Line never dark |
+| Line 11 mm | Midway reading 28 %, below the 30 % dark limit: 4.4 % dark samples, repeated LINE_LOST and search turns; the robot still goes round |
+
+The target (midway) is where both readings are lowest, about 8 points
+above the dark limit on the robot.
+
 ### Robot check: spin recording, 2026-11-03, boot 5209
 
 `detour_test` GP20 (spin calibration only) with the raw recording of
@@ -412,6 +424,13 @@ line 2611. Copy on the laptop: `build/steer_logs/spin_raw_boot5209.csv`
 - The position goes from +100 to −100 only in a narrow band of the
   crossing; outside it one sensor is full and the other is at the floor,
   and the position stays at ±100.
+- Simulator fit (14.5 mm spacing as the ruler, flat-spot model of
+  `sim/core/world.c`): **effective line 12.5 mm, spot 8 mm** gives 38 % on
+  each sensor midway, as recorded. A fit of L against C alone cannot
+  tell 13.6/3 mm from 11.2/11.5 mm; the wheel counts in each sweep select
+  12–13 mm and 7–9 mm. If the line is 18 mm (published), the real spacing
+  is about 20 mm; the readings are the same. Both two-sensor scenarios
+  now use these values and the calibration ADC values above.
 - The old 50 ms run logs (2026-10-29 to 11-03) show a dark gap instead.
   The left sensor read 1911 on the line then and 2487 now, so the sensor
   mount changed. Use only data from after the change.

@@ -48,21 +48,29 @@
       "width_mm": 160
     },
     "ir": {
-      "floor_adc": [
-        202,
-        185,
-        191
-      ],
-      "footprint_mm": {
-        "value": 16,
+      "floor_adc": {
+        "value": [
+          172,
+          158,
+          191
+        ],
         "assumed": true,
-        "note": "Guess. Operator 2026-11-03: sensors mounted about 9 mm high on purpose so that the spots are wide and overlap (a line between two sensors reaches both); width not measured"
+        "note": "L and C from the 2026-11-03 spin calibration (boot 5209); R is the disabled sensor (not read)"
       },
-      "line_adc": [
-        1645,
-        2615,
-        3424
-      ],
+      "footprint_mm": {
+        "value": 8,
+        "assumed": true,
+        "note": "Fitted 2026-11-03 to the spin recording (boot 5209, build/steer_logs/spin_raw_boot5209.csv) with 14.5 mm spacing as the ruler: with a 12.5 mm line, the midway reading is 38 % on each sensor, as recorded (38-40 %)"
+      },
+      "line_adc": {
+        "value": [
+          2487,
+          2611,
+          3424
+        ],
+        "assumed": true,
+        "note": "L and C from the 2026-11-03 spin calibration (boot 5209); R is the disabled sensor (not read)"
+      },
       "points_mm": {
         "value": [
           [
@@ -135,7 +143,11 @@
       "note": "Quarter-circle centre at tile corner, radius half a tile; check against a tile",
       "value": 157.5
     },
-    "line_width_mm": 18,
+    "line_width_mm": {
+      "value": 12.5,
+      "assumed": true,
+      "note": "Effective width fitted to the spin recording 2026-11-03 (with the footprint). The published line is 18 mm; a ruler check is open. If the line is 18 mm, the sensor spacing is about 20 mm instead of 14.5 mm; the readings are the same"
+    },
     "material": "EVA foam",
     "origin_mm": {
       "assumed": true,
