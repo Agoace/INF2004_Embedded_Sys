@@ -23,7 +23,8 @@ def normalise(s, active=True):
     for point, floor, line in zip(ir["points_mm"], ir["floor_adc"], ir["line_adc"]):
         rows.append(f"{point[0]} {point[1]} {floor} {line}")
     rows.append(" ".join(map(str, [ir["footprint_mm"], track["line_width_mm"], track["tile_size_mm"],
-                                   *track["origin_mm"], track["curve_radius_mm"]])))
+                                   *track["origin_mm"], track["curve_radius_mm"],
+                                   int(ir.get("gap_check", True))])))
     rows.append(str(len(track["tiles"])))
     for tile in track["tiles"]:
         kind = ["straight", "curve", "cross", "blank"].index(tile["type"])

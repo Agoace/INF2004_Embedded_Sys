@@ -14,6 +14,12 @@ sensor learns. The first detector is not changed.
   names them the other way round.
 - Events go to the [Vehicle Controller](VEHICLE_CONTROLLER.md)
 
+> **Update 2026-11-03:** the course allows only two line sensors. The robot
+> now uses **pair mode**: left **GP27** (the old left sensor), centre
+> **GP26** (the old centre sensor), right sensor disabled. See
+> [Pair mode](#pair-mode-two-sensors-2026-11-03). The three-sensor mode
+> below is unchanged and selected with `LINE_SENSORS_PAIR 0`.
+
 ## Why
 
 | Fixed thresholds | Normalised |
@@ -45,6 +51,11 @@ with both outer sensors on the line: the weighted average
 | +100 | Line under the right sensor |
 
 ### The gaps between the sensors
+
+> **Update 2026-11-03:** the operator says these gap numbers were not a
+> controlled measurement. The sensors are 14.5 mm apart and about 9 mm
+> high, on purpose, so that the spots are wide and a line between two
+> sensors reaches both. Pair mode does not use the gap rise.
 
 On 2026-10-27 the line, placed between C and L, gave almost nothing:
 
@@ -311,6 +322,76 @@ same: only C fades. Using the recent movement of the position to choose a
 side was considered and not added, because it gives a wrong side after a
 lift. Look at it again if real driving gives "unknown" when the line leaves
 sideways.
+
+## Pair mode (two sensors), 2026-11-03
+
+Course rule: two line sensors. The wiring changed: the old left sensor
+moved from GP28 to **GP27** (left), the old centre sensor moved from GP27
+to **GP26** (centre). The old right sensor is disabled.
+[`src/line_sensors.c`](../src/line_sensors.c) reads only GP27 and GP26 when
+`LINE_SENSORS_PAIR` is 1 (the default in
+[`src/line_sensors.h`](../src/line_sensors.h)) and returns 0 for the right
+input. Every target that calls `lp_init()` then calls
+`lp_set_pair(&lp, LINE_SENSORS_PAIR != 0, 0)`.
+
+| Value | Source |
+| --- | --- |
+| Sensor spacing, centre to centre | 14.5 mm (operator, 2026-11-03) |
+| Sensor height | About 9 mm (operator, 2026-11-03), high on purpose for wide, overlapping spots |
+| Line width | 18 mm, published track specification; not measured |
+| Spot width | Not measured |
+
+### Rules
+
+| Readings | Position |
+| --- | --- |
+| Both sensors see the line (≥ 5 %) | (C − L − target) / 10, clamped to ±100. Target 0: the line centred between L and C |
+| Only one sensor sees the line | The line left the pair on that side. Keep the largest value on that side until both see the line again: a fading sensor must not reduce the steering |
+| Neither reaches 30 % (dark) | Keep the last position. LINE_LOST after 50 ms (after an outward value, \|position\| ≥ 75) or 300 ms |
+
+- The line moves right: L fades and C rises, so the position goes up and
+  the robot steers right. The same sign holds when the line is narrower
+  than the spacing (C rises first).
+- No junction flag: two sensors cannot tell a junction from the line. The
+  junction straight-through in `steer_test` and `detour_test` does not
+  run; at a cross the readings stay equal, so the robot drives straight.
+- Centred: both see the line and |position| ≤ 20.
+- Calibration checks contrast and polarity on L and C only.
+- With target 0 the robot runs about 7 mm right of the line centre (half
+  the spacing). `lp_set_pair()` takes another target (per mille of C − L)
+  for edge following.
+
+### Host test
+
+The pair block in [`tests/test_line_position.c`](../tests/test_line_position.c)
+checks: three-sensor mode rejects the disabled right input, pair
+calibration ignores it, `lp_init` turns pair mode off, the right reading
+is cleared, centred and its ±20 limit, both signs, no junction, the 5 %
+limit, the dark limit, the one-sensor hold on both sides, LINE_LOST at
+50 ms with the side, LINE_FOUND, the 300 ms wait, the target and both
+clamps, a LOW line, and low contrast on L.
+
+Result 2026-11-03: all tests pass. Mutation check of the pair code: 26 of
+26 rule changes make the test fail (after 6 survivors led to new checks).
+
+### Simulator results, 2026-11-03
+
+`detour_test` with pair mode, scenarios
+[`two_sensor_track`](../sim/scenarios/two_sensor_track.json) (the operator's
+test-track loop with curves and crosses, no obstacle, 60 s) and
+[`two_sensor_straight`](../sim/scenarios/two_sensor_straight.json). Spacing
+14.5 mm; spot width 16 mm (guess); the recorded-gap check is off
+(`gap_check: false`).
+
+| Case | Result |
+| --- | --- |
+| Straight | Steady 6.9 mm right of the line centre; no oscillation |
+| Track, spot 16 mm | About 2.5 laps in 55 s through curves and crosses; line never dark; no contact |
+| Track, spot 4, 8, 12, 24 mm | Same: line never dark |
+| Track, line 14 mm and 10 mm | Same: line never dark |
+
+These are simulator results with an ideal sensor model (uniform spot, no
+noise). They are not robot results.
 
 ## Open items
 

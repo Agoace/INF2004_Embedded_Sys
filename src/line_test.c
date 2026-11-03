@@ -84,6 +84,7 @@ int main(void) {
 
     lp_t lp;
     lp_init(&lp);
+    lp_set_pair(&lp, LINE_SENSORS_PAIR != 0, 0);
     printf("Not calibrated. Put the robot on the line and press GP20 (spin)\n");
     printf("or GP21 (slide by hand).\n\n");
 

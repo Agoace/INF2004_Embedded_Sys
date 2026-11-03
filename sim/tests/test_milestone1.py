@@ -56,6 +56,11 @@ class Milestone1(unittest.TestCase):
         self.scenario["robot"]["ir"]["points_mm"] = [[119, 14], [119, 0], [119, -14]]
         with self.assertRaisesRegex(ScenarioError, "gap consistency"):
             validate(self.scenario)
+        self.scenario["robot"]["ir"]["gap_check"] = False
+        validate(self.scenario)  # The operator turned the recorded-gap check off.
+        self.scenario["robot"]["ir"]["gap_check"] = "no"
+        with self.assertRaisesRegex(ScenarioError, "gap_check"):
+            validate(self.scenario)
 
     def test_duplicate_and_invalid_assumption(self):
         with tempfile.TemporaryDirectory(dir=LAUNCHER.parent) as directory:

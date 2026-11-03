@@ -125,6 +125,9 @@ class MotionIR(unittest.TestCase):
         result = self.probe_world(bad)
         self.assertEqual(result.returncode, 2)
         self.assertIn("real IR model failed", result.stderr)
+        bad["robot"]["ir"]["gap_check"] = False
+        result = self.probe_world(bad)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_tile_join_cross_and_curve(self):
         self.scenario["robot"]["start_pose"]["x_mm"] = 196

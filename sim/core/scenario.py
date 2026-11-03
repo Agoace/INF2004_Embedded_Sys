@@ -148,7 +148,11 @@ def validate(s):
     if not math.isclose(geometry["front_x_mm"] - geometry["rear_x_mm"], geometry["length_mm"]):
         fail("robot.geometry", "front minus rear must equal length")
     ir = robot["ir"]
-    obj(ir, "robot.ir", "points_mm footprint_mm floor_adc line_adc")
+    # gap_check is optional: absent means true (the recorded-gap check runs).
+    obj(ir, "robot.ir", "points_mm footprint_mm floor_adc line_adc" +
+        (" gap_check" if isinstance(ir, dict) and "gap_check" in ir else ""))
+    if "gap_check" in ir and not isinstance(ir["gap_check"], bool):
+        fail("robot.ir.gap_check", "expected true or false")
     array(ir["points_mm"], "robot.ir.points_mm", 3)
     for point in ir["points_mm"]:
         array(point, "robot.ir.points_mm", 2)
@@ -171,7 +175,7 @@ def validate(s):
     footprint = ir["footprint_mm"]
     distance = gap / 2
     overlap = max(0.0, min(width / 2, distance + footprint / 2) - max(-width / 2, distance - footprint / 2))
-    if overlap / footprint >= 0.01:
+    if ir.get("gap_check", True) and overlap / footprint >= 0.01:
         fail("robot.ir", "C-L gap consistency: gap-centred line gives >=1% rise")
     # The native world repeats this check with its production IR overlap function.
     motors = robot["motors"]

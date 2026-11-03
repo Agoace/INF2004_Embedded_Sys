@@ -653,6 +653,7 @@ int main(void) {
            "stop). GP20: calibrate only.\n",
            (unsigned long)(RUN_LIMIT_MS / 1000u));
     lp_init(&lp);
+    lp_set_pair(&lp, LINE_SENSORS_PAIR != 0, 0);
 
     bool previous_spin = false;
     bool previous_run = false;

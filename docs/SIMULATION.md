@@ -549,6 +549,14 @@ an explicit NO_RETURN injection), safe contact is at 8.542512 s, rear axle (616.
 +0.230581211°, clearance 0.001337385 mm. The actual firmware then reports a
 left-wheel stall at 9.042200 s; it does not drive through the box.
 
+> **Update 2026-11-03:** `robot.ir.gap_check` (optional, default true)
+> turns the C–L gap consistency check off in the scenario reader and the
+> native world. The operator says the 2026-10-27 gap numbers were not a
+> controlled measurement and that the sensors are 14.5 mm apart with wide,
+> overlapping spots. `two_sensor_straight` and `two_sensor_track` use
+> 14.5 mm spacing, a 16 mm spot (guess) and `gap_check: false`. The
+> firmware uses pair mode ([Line position](LINE_POSITION.md#pair-mode-two-sensors-2026-11-03)).
+
 ## Scenario and trace formats
 
 Choose versioned JSON for scenarios. It is available without another parser

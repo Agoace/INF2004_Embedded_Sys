@@ -521,6 +521,7 @@ int main(void) {
         printf("[run] A saved run is in flash; it prints when a terminal connects.\n");
     }
     lp_init(&lp);
+    lp_set_pair(&lp, LINE_SENSORS_PAIR != 0, 0);
     steer_t steer;
     steer_init(&steer, &STEER);
 

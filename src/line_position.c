@@ -29,7 +29,21 @@ void lp_init(lp_t *lp) {
     lp->position = 0;
     lp->flags = 0u;
     lp->lost_since_ms = 0u;
+    lp->pair = false;
+    lp->pair_target = 0;
     lp_calib_begin(lp);
+}
+
+void lp_set_pair(lp_t *lp, bool on, int16_t target_permille) {
+    lp->pair = on;
+    lp->pair_target = target_permille < -1000 ? -1000
+                      : target_permille > 1000 ? 1000
+                                               : target_permille;
+}
+
+/* Sensors in use: L and C in pair mode, else all three. */
+static unsigned int used(const lp_t *lp) {
+    return lp->pair ? 2u : LP_SENSORS;
 }
 
 void lp_reset_tracking(lp_t *lp) {
@@ -79,7 +93,7 @@ lp_calib_result_t lp_calib_end(lp_t *lp, unsigned int *bad_mask) {
      * module type). */
     uint32_t mean_to_min = 0u;
     uint32_t mean_to_max = 0u;
-    for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
+    for (unsigned int s = 0u; s < used(lp); ++s) {
         if ((uint32_t)(lp->cal_max[s] - lp->cal_min[s]) < LP_MIN_CONTRAST_ADC) {
             *bad_mask |= 1u << s;
         }
@@ -92,7 +106,7 @@ lp_calib_result_t lp_calib_end(lp_t *lp, unsigned int *bad_mask) {
     }
 
     const bool line_high = mean_to_min < mean_to_max;
-    for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
+    for (unsigned int s = 0u; s < used(lp); ++s) {
         const int32_t lo = (int32_t)lp->cal_min[s] << 8;
         const int32_t hi = (int32_t)lp->cal_max[s] << 8;
         lp->floor_q8[s] = line_high ? lo : hi;
@@ -268,6 +282,36 @@ static vc_line_side_t position_side(const lp_t *lp) {
                                         : VC_LINE_SIDE_UNKNOWN;
 }
 
+/* Pair mode position (see line_position.h). dark: neither sensor
+ * reaches LP_LOST_PCT. */
+static void pair_position(lp_t *lp, bool dark) {
+    const int32_t l = lp->norm[LP_LEFT];
+    const int32_t c = lp->norm[LP_CENTRE];
+    const int32_t seen = (int32_t)LP_PERMILLE(LP_OUTER_SEEN_PCT);
+    if (dark) {
+        return; /* keep the last position */
+    }
+    int32_t p = (c - l - lp->pair_target) / 10;
+    if (p > 100) p = 100;
+    if (p < -100) p = -100;
+    if (l < seen || c < seen) {
+        /* One sensor sees the line: it left the pair on that side. Keep
+         * the largest value on that side. */
+        const int32_t previous = lp->position;
+        if ((p > 0 && previous > p) || (p < 0 && previous < p)) {
+            p = previous;
+        }
+    }
+    lp->position = (int8_t)p;
+}
+
+static void pair_flags(lp_t *lp) {
+    const int32_t seen = (int32_t)LP_PERMILLE(LP_OUTER_SEEN_PCT);
+    const bool both = lp->norm[LP_LEFT] >= seen && lp->norm[LP_CENTRE] >= seen;
+    set_flag(lp, LP_FLAG_CENTRED,
+             both && lp->position >= -LP_SIDE_PCT && lp->position <= LP_SIDE_PCT);
+}
+
 vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) {
     if (!lp_calibrated(lp)) {
         return vc_event(VC_EVENT_NONE, 0u);
@@ -275,7 +319,8 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
 
     unsigned int max_n = 0u;
     unsigned int min_n = 1000u;
-    for (unsigned int s = 0u; s < LP_SENSORS; ++s) {
+    lp->norm[LP_RIGHT] = 0u;
+    for (unsigned int s = 0u; s < used(lp); ++s) {
         const uint16_t n = normalise(lp, s, raw[s]);
         lp->norm[s] = n;
         if (n > max_n) max_n = n;
@@ -287,13 +332,22 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
             adapt(&lp->line_q8[s], lp->floor_q8[s], raw[s]);
         }
     }
-    set_flag(lp, LP_FLAG_JUNCTION, min_n >= LP_PERMILLE(LP_JUNCTION_PCT));
-    track_side(lp, raw, now_ms);
+    if (lp->pair) {
+        set_flag(lp, LP_FLAG_JUNCTION, false);
+    } else {
+        set_flag(lp, LP_FLAG_JUNCTION, min_n >= LP_PERMILLE(LP_JUNCTION_PCT));
+        track_side(lp, raw, now_ms);
+    }
 
     if (lp_line_seen(lp)) {
         const bool dark = max_n < LP_PERMILLE(LP_LOST_PCT);
         const int32_t before = lp->position < 0 ? -lp->position : lp->position;
-        update_position(lp, dark);
+        if (lp->pair) {
+            pair_position(lp, dark);
+            pair_flags(lp);
+        } else {
+            update_position(lp, dark);
+        }
         set_side(lp, position_side(lp));
         if (dark) {
             if (!(lp->flags & LP_FLAG_LOST_TIMING)) {
@@ -319,7 +373,12 @@ vc_event_t lp_update(lp_t *lp, const uint16_t raw[LP_SENSORS], uint32_t now_ms) 
     if (max_n < LP_PERMILLE(LP_FOUND_PCT)) {
         return vc_event(VC_EVENT_NONE, 0u);
     }
-    update_position(lp, false);
+    if (lp->pair) {
+        pair_position(lp, false);
+        pair_flags(lp);
+    } else {
+        update_position(lp, false);
+    }
     set_side(lp, position_side(lp));
     set_flag(lp, LP_FLAG_LINE_SEEN, true);
     return vc_event(VC_EVENT_LINE_FOUND, 0u);

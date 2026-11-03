@@ -74,6 +74,22 @@ static vc_event_t step_pm(lp_t *lp, const model_t *m, int l, int c, int r, uint3
     return lp_update(lp, raw, t);
 }
 
+/* Pair mode: L and C only; the right input reads 0 (disabled sensor). */
+static void pair_sweep(lp_t *lp, const model_t *m) {
+    uint16_t raw[3];
+    lp_calib_begin(lp);
+    for (int rep = 0; rep < 3; ++rep) {
+        for (int i = 0; i < 300; ++i) { read3(m, 0, 0, 0, raw); raw[2] = 0u; lp_calib_add(lp, raw); }
+        for (int i = 0; i < 30; ++i) { read3(m, 100, 0, 0, raw); raw[2] = 0u; lp_calib_add(lp, raw); }
+        for (int i = 0; i < 30; ++i) { read3(m, 0, 100, 0, raw); raw[2] = 0u; lp_calib_add(lp, raw); }
+    }
+}
+
+static vc_event_t pair_step(lp_t *lp, const model_t *m, int l, int c, uint32_t t) {
+    const uint16_t raw[3] = {reading_pm(m, 0u, l), reading_pm(m, 1u, c), 0u};
+    return lp_update(lp, raw, t);
+}
+
 /* Line reads HIGH (typical IR module: black reflects less). Sensors differ. */
 static const model_t HIGH_LINE = {{250, 400, 320}, {3000, 2600, 3300}};
 /* Line reads LOW (the assumption in the fixed-threshold detector). */
@@ -444,6 +460,144 @@ int main(void) {
         (void)step_pm(&lp, &HIGH_LINE, 600, 1000, 600, 100u);
         for (t = 101u; t < 150u; ++t) (void)step_pm(&lp, &HIGH_LINE, 40, 1000, 0, t);
         CHECK(lp.baseline_q8[LP_LEFT] == before, "hold: baseline kept");
+    }
+
+    /* Pair mode: two sensors, L and C. */
+    {
+        unsigned int pbad = 0u;
+        lp_t q;
+        lp_init(&q);
+        CHECK(!lp_pair(&q), "pair: off after init");
+        pair_sweep(&q, &HIGH_LINE);
+        CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_LOW_CONTRAST && pbad == 4u,
+              "pair: three-sensor mode rejects the disabled right sensor (bad %u)", pbad);
+        lp_set_pair(&q, true, 0);
+        lp_init(&q);
+        CHECK(!lp_pair(&q), "pair: lp_init turns it off");
+        lp_set_pair(&q, true, 0);
+        lp_set_pair(&q, false, 0);
+        CHECK(!lp_pair(&q), "pair: off again");
+        sweep(&q, &HIGH_LINE);
+        CHECK(lp_calib_end(&q, &bad) == LP_CALIB_OK, "pair: three-sensor calibration");
+        (void)step(&q, &HIGH_LINE, 0, 0, 100, 0u);
+        lp_set_pair(&q, true, 0);
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, 1u);
+        CHECK(q.norm[LP_RIGHT] == 0u, "pair: right reading cleared (%u)", q.norm[LP_RIGHT]);
+        lp_init(&q);
+        lp_set_pair(&q, true, 0);
+        CHECK(lp_pair(&q), "pair: on");
+        pair_sweep(&q, &HIGH_LINE);
+        CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_OK && pbad == 0u && lp_calibrated(&q),
+              "pair: calibration ignores the right sensor (bad %u)", pbad);
+        CHECK(lp_line_reads_high(&q), "pair: polarity from L and C");
+
+        uint32_t t = 0u;
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, t);
+        CHECK(q.position == 0 && lp_centred(&q) && lp_line_seen(&q), "pair: equal readings, centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 600, 800, ++t);
+        CHECK(q.position == 20 && lp_centred(&q), "pair: +20 is still centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 300, 900, ++t);
+        CHECK(q.position == 60 && !lp_centred(&q) && lp_last_side(&q) == VC_LINE_SIDE_RIGHT,
+              "pair: L fades, C rises: +60 RIGHT (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 900, 300, ++t);
+        CHECK(q.position == -60 && lp_last_side(&q) == VC_LINE_SIDE_LEFT && !lp_centred(&q),
+              "pair: C fades: -60 LEFT (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 1000, 1000, ++t);
+        CHECK(q.position == 0 && !lp_junction(&q) && !lp_junction_hold(&q),
+              "pair: both full is not a junction (%d)", q.position);
+        {
+            const uint16_t praw[3] = {reading_pm(&HIGH_LINE, 0u, 500),
+                                     reading_pm(&HIGH_LINE, 1u, 700), 4000u};
+            (void)lp_update(&q, praw, ++t);
+            CHECK(q.position == 20 && q.norm[LP_RIGHT] == 0u, "pair: right input ignored (%d)", q.position);
+        }
+
+        /* Below LP_LOST_PCT on both: dark, keep the position. */
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, ++t);
+        (void)pair_step(&q, &HIGH_LINE, 0, 290, ++t);
+        CHECK(q.position == 0 && !lp_centred(&q), "pair: C at 29 %% alone is dark: keep 0, not centred (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 300, ++t);
+        CHECK(q.position == 30 && !lp_centred(&q), "pair: C at 30 %% alone: +30 (%d)", q.position);
+        /* 5 % exactly sees the line (norm 50: raw 388 of 250..3000). */
+        (void)pair_step(&q, &HIGH_LINE, 0, 900, ++t);
+        {
+            const uint16_t edge[3] = {388u, reading_pm(&HIGH_LINE, 1u, 400), 0u};
+            (void)lp_update(&q, edge, ++t);
+            CHECK(q.norm[LP_LEFT] == 50u && q.position == 35, "pair: L at 5 %% sees (%u, %d)",
+                  q.norm[LP_LEFT], q.position);
+        }
+
+        /* One sensor: keep the largest value on that side. */
+        (void)pair_step(&q, &HIGH_LINE, 300, 900, ++t);
+        (void)pair_step(&q, &HIGH_LINE, 0, 400, ++t);
+        CHECK(q.position == 60, "pair: only C, fading: keep +60 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 49, 400, ++t);
+        CHECK(q.position == 60, "pair: L below 5 %% counts as dark (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 900, ++t);
+        CHECK(q.position == 90, "pair: only C, larger: +90 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 350, ++t);
+        CHECK(q.position == 90, "pair: only C, fading: keep +90 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 100, 400, ++t);
+        CHECK(q.position == 30, "pair: both again: formula (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 0, 600, ++t);
+        CHECK(q.position == 60, "pair: only C, larger than +30: +60 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 800, 0, ++t);
+        CHECK(q.position == -80, "pair: only L after a right value: -80 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 400, 0, ++t);
+        CHECK(q.position == -80, "pair: only L, fading: keep -80 (%d)", q.position);
+        (void)pair_step(&q, &HIGH_LINE, 950, 0, ++t);
+        CHECK(q.position == -95, "pair: only L, larger: -95 (%d)", q.position);
+
+        /* Dark after an outward value: LINE_LOST at LP_LOST_MS, side kept. */
+        (void)pair_step(&q, &HIGH_LINE, 0, 0, 100u);
+        CHECK(q.position == -95 && lp_line_seen(&q), "pair: dark keeps -95 (%d)", q.position);
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 149u)) == VC_EVENT_NONE, "pair: not lost at 49 ms");
+        {
+            const vc_event_t e = pair_step(&q, &HIGH_LINE, 0, 0, 150u);
+            CHECK(TYPE(e) == VC_EVENT_LINE_LOST && vc_event_payload(e) == VC_LINE_SIDE_LEFT,
+                  "pair: LINE_LOST LEFT at 50 ms");
+        }
+        {
+            const vc_event_t e = pair_step(&q, &HIGH_LINE, 200, 600, 200u);
+            CHECK(TYPE(e) == VC_EVENT_LINE_FOUND && q.position == 40,
+                  "pair: LINE_FOUND with the formula (%d)", q.position);
+        }
+        /* Dark from a small value: the gap wait. */
+        (void)pair_step(&q, &HIGH_LINE, 500, 600, 300u);
+        (void)pair_step(&q, &HIGH_LINE, 0, 0, 400u);
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 699u)) == VC_EVENT_NONE, "pair: gap wait at 299 ms");
+        CHECK(TYPE(pair_step(&q, &HIGH_LINE, 0, 0, 700u)) == VC_EVENT_LINE_LOST, "pair: lost at 300 ms");
+
+        /* Target and clamps. */
+        lp_set_pair(&q, true, 200);
+        (void)pair_step(&q, &HIGH_LINE, 500, 500, 800u);
+        CHECK(q.position >= -21 && q.position <= -19, "pair: target 200 (%d)", q.position);
+        lp_set_pair(&q, true, -5000);
+        CHECK(q.pair_target == -1000, "pair: target clamp low (%d)", q.pair_target);
+        (void)pair_step(&q, &HIGH_LINE, 100, 1000, 801u);
+        CHECK(q.position == 100, "pair: position clamp +100 (%d)", q.position);
+        lp_set_pair(&q, true, 5000);
+        CHECK(q.pair_target == 1000, "pair: target clamp high (%d)", q.pair_target);
+        (void)pair_step(&q, &HIGH_LINE, 1000, 100, 802u);
+        CHECK(q.position == -100, "pair: position clamp -100 (%d)", q.position);
+
+        /* Line reads LOW: same signs. */
+        lp_init(&q);
+        lp_set_pair(&q, true, 0);
+        pair_sweep(&q, &LOW_LINE);
+        CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_OK && !lp_line_reads_high(&q), "pair: LOW line calibration");
+        (void)pair_step(&q, &LOW_LINE, 300, 900, 0u);
+        CHECK(q.position == 60, "pair: LOW line, +60 (%d)", q.position);
+
+        /* Low contrast on L is still caught. */
+        {
+            const model_t flat_l = {{250, 400, 320}, {300, 2600, 3300}};
+            lp_init(&q);
+            lp_set_pair(&q, true, 0);
+            pair_sweep(&q, &flat_l);
+            CHECK(lp_calib_end(&q, &pbad) == LP_CALIB_LOW_CONTRAST && pbad == 1u,
+                  "pair: L low contrast (bad %u)", pbad);
+        }
     }
 
     /* Line word layout. */

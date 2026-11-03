@@ -77,8 +77,9 @@ void world_read(FILE *input) {
             floor > 4095u || line > 4095u) { sim_error("invalid IR configuration"); }
         c.floor[i] = (uint16_t)floor; c.line[i] = (uint16_t)line;
     }
-    if (fscanf(input, "%lf %lf %lf %lf %lf %lf", &c.footprint, &c.line_width,
-        &c.tile_size, &c.origin_x, &c.origin_y, &c.curve_radius) != 6) { sim_error("invalid floor configuration"); }
+    int gap_check;
+    if (fscanf(input, "%lf %lf %lf %lf %lf %lf %d", &c.footprint, &c.line_width,
+        &c.tile_size, &c.origin_x, &c.origin_y, &c.curve_radius, &gap_check) != 7) { sim_error("invalid floor configuration"); }
     world_init(&c);
     read_count(input, &tile_count);
     tiles = allocate(tile_count, sizeof *tiles);
@@ -106,7 +107,7 @@ void world_read(FILE *input) {
         o->angle *= PI / 180.0;
         o->max_incidence *= PI / 180.0;
     }
-    if (!world_gap_consistent()) { sim_error("real IR model failed C-L gap consistency"); }
+    if (gap_check != 0 && !world_gap_consistent()) { sim_error("real IR model failed C-L gap consistency"); }
 }
 
 static world_point_t transform(world_point_t p, double x, double y, double h) {

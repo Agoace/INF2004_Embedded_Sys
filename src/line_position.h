@@ -36,6 +36,20 @@
  * With a known side, position = side * 50 * ((1000 - C) + outer) / 1000:
  * 0 under the centre, +/-50 in the gap, +/-100 under an outer sensor.
  *
+ * Pair mode (lp_set_pair): two sensors only, left (L) and centre (C);
+ * the right sensor is not used. Course rule (2026-11-03): two line
+ * sensors. The sensors are 14.5 mm apart and mounted high (about 9 mm),
+ * so their spots are wide and overlap: a line between them reaches both.
+ *   - Both see the line: position = (C - L - target) / 10, clamped to
+ *     +/-100. The line moves right: L fades or C rises: steer right.
+ *   - One sees the line: the line left the pair on that side. The
+ *     position keeps its largest value on that side until both see the
+ *     line again (a fading sensor must not reduce the steering).
+ *   - Neither sees the line: keep the last position; LINE_LOST as above.
+ *   - No junction (two sensors cannot tell a junction from the line).
+ *   - Centred: both see the line and |position| <= LP_SIDE_PCT.
+ * Calibration checks only L and C.
+ *
  * Pure logic: no hardware or RTOS calls. See docs/LINE_POSITION.md.
  */
 
@@ -107,6 +121,10 @@ typedef struct {
     uint8_t fade_source; /* lp_side_source_t */
     uint8_t hint;        /* vc_line_side_t from the caller */
     uint32_t junction_ms; /* time of the last junction reading */
+
+    /* Pair mode (two sensors, L and C). */
+    bool pair;
+    int16_t pair_target; /* per mille: C - L reading when on target */
 } lp_t;
 
 /* Where the side came from (for logs and tests). */
@@ -128,6 +146,14 @@ typedef enum {
 #define LP_FLAG_JUNCTION_HOLD 0x0100u /* Less than LP_JUNCTION_HOLD_MS after a junction */
 
 void lp_init(lp_t *lp);
+
+/* Pair mode on or off (lp_init: off). target_permille: the C - L
+ * reading on target, -1000..1000; 0 = the line centred between L and C.
+ * Call before the calibration sweep. */
+void lp_set_pair(lp_t *lp, bool on, int16_t target_permille);
+static inline bool lp_pair(const lp_t *lp) {
+    return lp->pair;
+}
 
 /* Clear tracking state and timers. Keep calibration and its polarity. */
 void lp_reset_tracking(lp_t *lp);
