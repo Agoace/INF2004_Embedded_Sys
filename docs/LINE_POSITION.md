@@ -338,7 +338,7 @@ input. Every target that calls `lp_init()` then calls
 | --- | --- |
 | Sensor spacing, centre to centre | 14.5 mm (operator, 2026-11-03) |
 | Sensor height | About 9 mm (operator, 2026-11-03), high on purpose for wide, overlapping spots |
-| Line width | 18 mm, published track specification; not measured |
+| Line width | 18 mm (operator, 2026-11-03) |
 | Spot width | Not measured |
 
 ### Rules
@@ -428,9 +428,14 @@ line 2611. Copy on the laptop: `build/steer_logs/spin_raw_boot5209.csv`
   `sim/core/world.c`): **effective line 12.5 mm, spot 8 mm** gives 38 % on
   each sensor midway, as recorded. A fit of L against C alone cannot
   tell 13.6/3 mm from 11.2/11.5 mm; the wheel counts in each sweep select
-  12–13 mm and 7–9 mm. If the line is 18 mm (published), the real spacing
-  is about 20 mm; the readings are the same. Both two-sensor scenarios
-  now use these values and the calibration ADC values above.
+  12–13 mm and 7–9 mm. The fit fixes only the ratios.
+- **Update:** the operator confirms the line is 18 mm wide. Scaled to an
+  18 mm line, the fit gives **sensing points 20.9 mm apart and an 11.5 mm
+  spot**. This does not agree with the 14.5 mm measured on the board; the
+  cause is open (for example, the sensors look slightly outward). The
+  readings are the same; only the distances change. Both two-sensor
+  scenarios use 18 / 20.9 / 11.5 mm and the calibration ADC values above.
+  On a straight the robot then drives 10.3 mm right of the line centre.
 - The old 50 ms run logs (2026-10-29 to 11-03) show a dark gap instead.
   The left sensor read 1911 on the line then and 2487 now, so the sensor
   mount changed. Use only data from after the change.

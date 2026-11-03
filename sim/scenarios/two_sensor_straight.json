@@ -13,11 +13,7 @@
   "track": {
     "tile_size_mm": 315,
     "thickness_mm": 10,
-    "line_width_mm": {
-      "value": 12.5,
-      "assumed": true,
-      "note": "Effective width fitted to the spin recording 2026-11-03 (with the footprint). The published line is 18 mm; a ruler check is open. If the line is 18 mm, the sensor spacing is about 20 mm instead of 14.5 mm; the readings are the same"
-    },
+    "line_width_mm": 18,
     "material": "EVA foam",
     "origin_mm": {
       "value": [
@@ -253,7 +249,7 @@
         "value": [
           [
             119,
-            14.5
+            20.9
           ],
           [
             119,
@@ -261,16 +257,16 @@
           ],
           [
             119,
-            -14.5
+            -20.9
           ]
         ],
         "assumed": true,
-        "note": "Operator 2026-11-03: 14.5 mm centre to centre. Two sensors in use: left (GP27) and centre (GP26); the right point is the disabled sensor, ignored by pair mode. x=119 is the earlier board-tip guess"
+        "note": "Effective sensing points, fitted 2026-11-03 to the spin recording (boot 5209) with the 18 mm line (operator) as the ruler: 20.9 mm apart. The operator measured 14.5 mm centre to centre on the board; the difference is open. Left = GP27, centre = GP26; the right point is the disabled sensor"
       },
       "footprint_mm": {
-        "value": 8,
+        "value": 11.5,
         "assumed": true,
-        "note": "Fitted 2026-11-03 to the spin recording (boot 5209, build/steer_logs/spin_raw_boot5209.csv) with 14.5 mm spacing as the ruler: with a 12.5 mm line, the midway reading is 38 % on each sensor, as recorded (38-40 %)"
+        "note": "Fitted 2026-11-03 to the spin recording (boot 5209) with the 18 mm line as the ruler: the midway reading is 38 % on each sensor, as recorded (38-40 %)"
       },
       "floor_adc": {
         "value": [
