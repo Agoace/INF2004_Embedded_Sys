@@ -25,6 +25,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Week 8 Change Requirement 1 notes](week8_change_requirement_1_notes.md) — minimum-bit data representation decisions, calculations, and open measurements.
 - [Ultrasonic driver and bench test](ULTRASONIC_DRIVER.md) — non-blocking HC-SR04+ driver, packed 16-bit result, and range test procedure.
 - [Forward obstacle watch](OBSTACLE_MONITOR.md) — ultrasonic thresholds, NEAR/STOP/CLEAR events, packed event word, and tests.
+- [Two-sensor line tracing (locked)](TWO_SENSOR_LINE_TRACING.md) — locked 2026-11-03: wiring, position rules, steering settings, evidence, and limits.
 - [Normalised line position](LINE_POSITION.md) — per-sensor learned floor and line values, line position −100…+100, LINE_LOST/LINE_FOUND events.
 - [Line steering](LINE_STEERING.md) — line position to left/right wheel duty (proportional, optional D), steer word, `steer_test` bench procedure.
 - [Steering Wi-Fi log](STEER_WIFI_LOG.md) — `steer_test` text and 50 ms run log over UDP broadcast (port 4243), packet format, receiver use.

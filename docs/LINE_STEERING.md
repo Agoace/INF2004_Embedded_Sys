@@ -113,6 +113,11 @@ Host test: the detour settings at 0, +30, +50, +51, +55, +60, +70, −50,
 one unit past far_from. Mutation check: 11 of 11 rule changes make the
 test fail (2 survived first; the one-unit test was added).
 
+P4 (`e4ba9ec`, junction fix, boot 2a9f): 57 s, a wheel stopped 10 %,
+2.6 swaps/s, 35 searches of 50–100 ms each, all in the correct direction
+first; the position was kept through every junction. The operator locked
+this design: [Two-sensor line tracing](TWO_SENSOR_LINE_TRACING.md).
+
 P3 log: `build/steer_logs/run_20261103-163117_boot7a7d_run1.txt` (boot
 7a7d). In the sharpest right curves a full turn (inner wheel stopped,
 outer 50 %) is still not enough: C goes dark past the sensor, and a short

@@ -35,6 +35,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Obstacle detour handoff | [docs/OBSTACLE_DETOUR_HANDOFF.md](OBSTACLE_DETOUR_HANDOFF.md) |
 | Detour v1.6 test plan | [docs/DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
+| Two-sensor line tracing (locked design) | [docs/TWO_SENSOR_LINE_TRACING.md](TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
 | Line steering record | [docs/LINE_STEERING.md](LINE_STEERING.md) |
 | Steering Wi-Fi log | [docs/STEER_WIFI_LOG.md](STEER_WIFI_LOG.md) |

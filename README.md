@@ -15,7 +15,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/ultrasonic_test.c`](src/ultrasonic_test.c) — ultrasonic range and accuracy bench test.
 - [`src/obstacle.c`](src/obstacle.c) — forward obstacle watch: NEAR, STOP, and CLEAR events from ultrasonic results.
 - [`src/obstacle_test.c`](src/obstacle_test.c) — obstacle watch bench test; [`tests/test_obstacle.c`](tests/test_obstacle.c) is its host unit test.
-- [`src/line_position.c`](src/line_position.c) — normalised line position from learned per-sensor values; [`src/line_test.c`](src/line_test.c) is its bench test.
+- [`src/line_position.c`](src/line_position.c) — normalised line position from learned per-sensor values; [`src/line_test.c`](src/line_test.c) is its bench test. Two-sensor line tracing is locked ([two-sensor line tracing](docs/TWO_SENSOR_LINE_TRACING.md)).
 - [`src/line_steer.c`](src/line_steer.c) — line position to left/right wheel duty; [`src/steer_test.c`](src/steer_test.c) is its bench test. [`src/drive.c`](src/drive.c), [`src/line_sensors.c`](src/line_sensors.c), and [`src/line_spin.c`](src/line_spin.c) are shared bench parts. [`src/wifi_log.c`](src/wifi_log.c) sends the `steer_test` log over Wi-Fi to [`scripts/steer_log_receiver.py`](scripts/steer_log_receiver.py) ([steering Wi-Fi log](docs/STEER_WIFI_LOG.md)).
 - [`src/vehicle_controller.c`](src/vehicle_controller.c) — Vehicle Controller state machine (step 1: line following); [`tests/test_vehicle_controller.c`](tests/test_vehicle_controller.c) is its host unit test.
 - [`src/obstacle_scan.c`](src/obstacle_scan.c) — 13-point ±30° servo scan; [`src/scan_test.c`](src/scan_test.c) is its bench test.
