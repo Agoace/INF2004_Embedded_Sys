@@ -70,8 +70,13 @@ int main(void) {
     sleep_ms(2000);
 
     printf("\nNormalised line position test\n");
+#if LINE_SENSORS_PAIR
+    printf("Pair mode: L/C = GP27/GP26, right disabled (see line_sensors.h).\n"
+           "GP20: spin calibration. GP21: hand calibration.\n");
+#else
     printf("L/C/R = GP28/GP27/GP26 (see line_sensors.c). GP20: spin calibration.\n"
            "GP21: hand calibration.\n");
+#endif
 
     line_sensors_init();
     drive_init();
