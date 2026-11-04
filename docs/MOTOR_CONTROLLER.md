@@ -9,7 +9,7 @@ Branch: `yx-motor-controller`.
 | Step | What | State |
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
-| 2 | Pico layer: PWM, encoder interrupt, servo; hooks `mc_tick()` into the `heartbeat` platform module every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)) | Not started |
+| 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
 | 3 | Bench target: step response, both directions, slow turn; tune P, I and feed-forward | Not started |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
@@ -50,6 +50,35 @@ repository measured 111 mm.
 Servo: 1500 µs centre, 1100–1900 µs (±36°), 11.1 µs per degree. Settle
 estimate 42 ms + 3.6 ms per degree, fitted to the scan settle times
 (150 ms for 30°, 60 ms for 5°; [servo obstacle scan](OBSTACLE_SCAN.md)).
+
+## Pico layer
+
+```text
+ main loop                         heartbeat interrupt, every 10 ms (hook)
+ ─────────                         ───────────────────────────────────────
+ mcp_set_speed(l, r) ─┐            lock
+ mcp_set_servo(deg)  ─┤ lock        read encoder counts (sign per wheel)
+ mcp_stop / estop    ─┤ store       mc_tick(counts, ms) → duty, servo pulse
+ mcp_status(&s)      ─┘ copy        write motor PWM and servo PWM
+                                   unlock
+ encoder edges: own GPIO interrupt (quadrature table, from drive.c)
+```
+
+| Part | Rule |
+| --- | --- |
+| Pins | Left PWM GP8/GP9, encoder GP16/GP17 (+1); right PWM GP10/GP11, encoder GP4/GP5 (−1); servo GP15. Copied from `drive.c` and `servo.c`; do not link those files in the same target |
+| Motor PWM | 20 kHz, wrap 6249; level = 6250 × \|duty‰\| / 1000 on the forward or the reverse pin; the other pin 0 |
+| Servo PWM | 50 Hz, 1 count = 1 µs; written only when the pulse changes |
+| Hook | Added by `mcp_init()` with period `tick_ms` (10 heartbeat ticks), phase 0. `mcp_init()` refuses a `tick_ms` that is not a whole number of heartbeat ticks |
+| Lock | `critical_section_t` (interrupts off on this core and a hardware spin lock), so calls are safe from both cores. The hook also holds it while it writes the PWM, so a duty computed before an `mcp_estop()` cannot overwrite it |
+| `mcp_stop()`, `mcp_estop()` | Also write PWM 0 at once; they do not wait for the next tick |
+| Clock | `mcp_now_ms()` = `time_us_64() / 1000`, used by the hook and the main-loop calls. (`time_us_32()` in ms would wrap after 71 minutes.) |
+| `mcp_status()` | One consistent copy: counts, travel, speed, duty, heading, servo, faults, tick count, longest hook time |
+| Size | 1480 bytes of code (`-Os`, Cortex-M0+), core and heartbeat not included |
+
+The servo pulse changes at the next tick, so up to 10 ms after
+`mcp_set_servo()`. The settle estimate starts at the call; the error is
+small against the 42 ms base.
 
 ## Ideas (not implemented)
 
