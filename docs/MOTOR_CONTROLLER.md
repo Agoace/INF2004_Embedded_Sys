@@ -110,6 +110,35 @@ Row format: `MB i step tgtL tgtR spdL spdR dutyL dutyR cntL cntR faults`
 speed and duty over the second half and the heading change from the
 counts, plus the longest hook time and the heartbeat counters.
 
+### Run B1 (2026-11-04, boot 5bf1, `ad2404c`, floor, VIN)
+
+Log `build/steer_logs/text_5bf1.txt`; report
+`python3 scripts/motor_bench_report.py build/steer_logs/text_5bf1.txt`.
+All 17 steps done, no fault, 2101 of 2110 rows received (rows 7–15, in
+the first rest, lost over Wi-Fi). Settings: `MC_ROBOT_CONFIG` as in
+step 1 (untuned).
+
+| Step | Wheel | Time to 90 % (ms) | Overshoot (50 ms avg) | Mean, 2nd half (mm/s) | Ripple sd (mm/s) | Duty, 2nd half (‰) |
+| --- | --- | --- | --- | --- | --- | --- |
+| fwd 150 | L / R | 150 / 180 | 18 % / 17 % | +151 / +149 | 2.2 / 2.8 | 219..242 / 223..241 |
+| rev 150 | L / R | 150 / 170 | 34 % / 24 % | −152 / −150 | 4.1 / 2.5 | 214..233 / 211..230 |
+| fwd 300 | L / R | 230 / 230 | 11 % / 12 % | +310 / +310 | 4.0 / 5.2 | 406..432 / 402..427 |
+| rev 300 | L / R | 220 / 240 | 26 % / 17 % | −325 / −317 | 18.1 / 12.2 | 403..441 / 390..417 |
+| spin L 20 | L / R | 60 / 60 | 100 % / 60 % | −20 / +19 | 3.8 / 3.3 | 82..115 / 75..103 |
+| spin R 20 | L / R | 50 / 50 | 124 % / 100 % | +21 / −20 | 2.6 / 2.7 | 69..97 / 85..108 |
+| fwd 40 | L / R | 90 / 60 | 52 % / 40 % | +40 / +40 | 1.1 / 1.6 | 81..95 / 86..99 |
+| rev 40 | L / R | 70 / 70 | 56 % / 48 % | −41 / −40 | 1.4 / 2.0 | 83..99 / 84..98 |
+
+| Item | Result |
+| --- | --- |
+| Steady speed | Within 2 mm/s of the target at 20, 40 and 150 mm/s, both wheels and both directions. **20 mm/s holds** (the detour sweep case), at 75–115 ‰ duty |
+| Spin | 65.3° and −66.1° for a 3 s step at 20 mm/s (62° from the target alone; the extra is the start overshoot) |
+| Straight drives | Heading change −0.3° (fwd 150), +3.2° (rev 150), +0.2° (fwd 300), +6.7° (rev 300): the left wheel overshoots more in reverse |
+| Overshoot | 11–34 % at 150 and 300 mm/s; 40–124 % at 20 and 40 mm/s (start kick and quantisation: 1 count per tick = 8 mm/s). At 300 mm/s the 1 s step ends before the overshoot is gone |
+| Cause of the overshoot (fwd 150, left) | The wheel lags the set point by about 100 ms. During the lag P and I rise; the duty peaks at 320 ‰ against 230 ‰ steady, then the I term unwinds over about 300 ms |
+| Feed-forward (steady points) | Forward and reverse are now alike (the weak left reverse from the track logs is not seen). Straight-line fit, counts per tick: L fwd 48 + 9.66·v, L rev 59 + 8.89·v, R fwd 56 + 9.39·v, R rev 62 + 8.67·v. The step-1 values are too high (L rev slope 12.0: 308 ‰ against 223 ‰ needed at 150 mm/s). Below 5 counts per tick the duty is flat at about 80–97 ‰ (dead zone) |
+| Timing | Hook at most 88 µs; heartbeat interrupt at most 102 µs (10 % of a tick); no overruns. Missed 424 frames: the main loop stopped during the row print after the run (motors at 0) |
+
 ## Ideas (not implemented)
 
 **Burst drive for the dead zone** (operator idea, 2026-11-04). At 20 kHz the
