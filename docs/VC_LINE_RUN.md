@@ -139,3 +139,28 @@ Changes after P5 (2026-11-04):
 | --- | --- |
 | Motor controller rise limit 2 → 8 counts/tick per tick (about 6400 mm/s²) | +112 mm/s in about 20 ms instead of 70 ms. Check overshoot on the bench (B3) before P6 |
 | Shell step at phase 9 instead of 1 | The command reaches the motors about 1 ms later instead of 9 ms |
+
+## Run P6 (2026-11-04, boot 3f9e run 2)
+
+Changes from P5: rise limit 8, shell step at phase 9. Log
+`build/steer_logs/run_20261104-171448_boot3f9e_run2.txt` (run 1 of this
+boot was lost: the laptop left the hotspot). The operator stopped it at
+25.7 s (GP21): **still wobbly, a little less**. No faults; heartbeat ISR
+max 103 µs, missed frames 0.
+
+| Measure (follow mode) | P4 (duty) | P5 | P6 |
+| --- | --- | --- | --- |
+| Wheel difference follows the command after (best match) | 50 ms (0.90) | 100 ms (0.86) | **50 ms (0.85)** |
+| Side changes (position past ±20) | 2.1 per s | 4.8 per s | **5.5 per s** |
+| Position at ±45 or more | 52 % | 81 % | 78 % |
+| Position spread (sd) | 37 | 54 | 50 |
+| Searches (run summary) | 37 per min | 82 per min | **12 per min** |
+| Mean speed (counts) | 146 mm/s | 115 mm/s | **166 mm/s** |
+| Measured wheel difference per position unit | 1.59 mm/s | 1.21 mm/s | **1.86 mm/s** |
+
+Finding: the delay is now the same as P4, and the line is lost less
+often. But the robot drives **14 % faster** and turns **17 % harder**
+for the same position than in P4. The duty map was measured in straight
+runs; in P4 the open-loop wheels did not reach the mapped speeds while
+turning (load), and the speed loop now does. The swing is faster (about
+2.7 per s).
