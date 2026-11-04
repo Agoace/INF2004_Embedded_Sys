@@ -10,7 +10,7 @@ Branch: `yx-motor-controller`.
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
 | 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: runs B1 and B2 done; B2 meets the speed targets; the slow-start kick is open |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`) |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -165,6 +165,10 @@ set point rises and while the kick runs. Same step list. Log
 | Feed-forward refit to B2 | Offset 52–60 ‰, slope 8.7–9.3: close to the values in use, so no change |
 | Timing | Hook at most 85 µs, heartbeat interrupt at most 99 µs, no overruns |
 
+Decision (2026-11-04, operator): keep the B2 settings; the slow-start
+kick is accepted (about 100 ms at the start of a slow turn; the spin is
+within 3° of the target). Options not taken are under *Ideas*.
+
 ## Ideas (not implemented)
 
 **Burst drive for the dead zone** (operator idea, 2026-11-04). At 20 kHz the
@@ -183,6 +187,14 @@ about 19 mm/s per wheel; the sweeps ran at 40°/s.
 
 If built: the speed loop must average over a full burst cycle. Bench
 test first: the slowest steady speed on the floor for each way.
+
+
+Slow-start kick (from run B2, not taken):
+
+| Option | Effect | Cost |
+| --- | --- | --- |
+| Shorter kick (`kick_counts` 10 → about 4) | Smaller burst at the start of a slow turn | A weak start may not break the static friction; needs a bench run |
+| Start I at the kick duty, not 0 | Removes the 200 ms slow patch after the kick | One more rule in the loop; needs a bench run |
 
 ## Host unit test
 
