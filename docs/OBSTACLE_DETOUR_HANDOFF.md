@@ -184,6 +184,7 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D38 | same file | Third STOP at 88.8 s; the 90 s run limit ended the run |
 
 - v1.8 summary (D30–D37, valid surface): 8 detours, **5 DONE**, 3 stall stops. Every DONE was the first or a later detour that kept turning; every stall was a second detour in a run (about 40–57 s), in the TURN_TOWARD sweep at 14–15 % duty after 15–20° of turn: both wheels slowed to 0 together. The first detours at the same pose turned past −47° without contact, so the likely cause is too little duty later in the run (battery voltage drop), not contact. The rate control adds only about 1 % per 0.5 s (as D19 and D27).
+- Operator decision 2026-11-04: no fix for the second-detour sweep stall (stall boost or a higher sweep minimum were offered).
 - D28 and D29 (kept for reference): with no echo in the first straight, the straight is 350 mm; at +50° that is only about 220 mm forward, short of the box front. The run log has no echo readings in turns, so the cause is not proven.
 - D26 ALIGN (−90° to 0° by wheel counts): L and C crossed the line at about −54°, the turn went on, and L saw the line again at 0° (999, about 35 %). ALIGN ended on the line by chance (problem B). Two sightings 54° apart mean the rear axle was not on the line (about 110 mm off, if the line is straight there), or the line curves at the return point.
 - D27: the sweep minimum 14 % does not turn the left wheel in reverse every time. The rate control adds only about 1 % per 50 ms rows (−15, −16) before the stall stop.
