@@ -7,9 +7,11 @@
  *
  * Layers (docs/ADR_VEHICLE_CONTROLLER.md):
  *   detectors  line position (src/line_position.c) every 1 ms, ultrasonic
- *              reading every 100 ms, wheel counts (motor controller)
- *   modules    LINE (src/line_trace.c) and SEARCH (src/line_search.c);
- *              no SCAN or DETOUR: an obstacle stops the run (NO_MODULE)
+ *              reading at the period the running module asks (default
+ *              100 ms), wheel counts (motor controller)
+ *   modules    LINE (src/line_trace.c), SEARCH (src/line_search.c),
+ *              SCAN (src/servo_scan.c) and DETOUR (src/detour_run.c,
+ *              detour v1.8 in wheel speeds; docs/VC_DETOUR_RUN.md)
  *   shell      src/vehicle_sm.c, every 10 ms (heartbeat flag)
  *   motors     src/motor_ctl_pico.c: the only owner of the motor PWM,
  *              the servo PWM and the encoders; wheel speeds in mm/s
@@ -21,19 +23,25 @@
  * yet in the interrupt, docs/ADR_HEARTBEAT.md).
  *
  * A run stops on: GP21, the time limit RUN_LIMIT_MS, or the shell leaving
- * RUNNING (failed search, ultrasonic fault, obstacle, wheel stall).
+ * RUNNING (failed search, scan or detour, ultrasonic fault, wheel stall).
+ *
+ * Text log: each handoff, the scan profile, and the detour steps (pose,
+ * sweep ends, back off), as detour_test.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
  * (USB_POWER_SAFETY.md).
  *
  * Log: the steering log (docs/STEER_WIFI_LOG.md) every 50 ms, live and
  * replayed after the run. Log header flag SL_FLAG_SPEED: the two wheel
- * fields are the asked wheel speeds in 4 mm/s units.
+ * fields are the asked wheel speeds in 4 mm/s units. Mode 3 (BYPS) is
+ * SCAN or DETOUR; its position field is the scan point + 10 (SCAN) or the
+ * detour step dt_step_t (DETOUR).
  */
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 
+#include "detour_run.h"
 #include "hardware/gpio.h"
 #include "heartbeat_pico.h"
 #include "line_position.h"
@@ -43,6 +51,7 @@
 #include "motor_ctl_pico.h"
 #include "motor_ctl_robot.h"
 #include "pico/stdlib.h"
+#include "servo_scan.h"
 #include "steer_log.h"
 #include "ultrasonic.h"
 #include "vehicle_inputs.h"
@@ -57,7 +66,6 @@
 #define WATCHDOG_MS 100u
 #define START_DELAY_MS 1000u
 #define RUN_LIMIT_MS 90000u
-#define WATCH_PERIOD_MS 100u
 #define LOG_STEPS 5u /* one log entry per 5 shell steps = 50 ms */
 #define LOG_PERIOD_MS 50u
 #define LOG_KEEP_MS 20000u
@@ -92,6 +100,49 @@ static const lt_config_t LINE_CFG = {
 /* Search: 20 % -> 131 mm/s; an eighth wheel turn each way (2535 / 8). */
 static const ls_config_t SEARCH_CFG = {.speed_mm_s = 131, .turn_counts = 2535 / 8};
 
+/* Scan: the robot stands still 300 ms first (detour_test STOP_SETTLE_MS). */
+static const ss_config_t SCAN_CFG = {.stop_ms = 300u};
+
+/* Detour v1.8 (src/detour_test.c, docs/OBSTACLE_DETOUR_HANDOFF.md) with
+ * wheel speeds: straights and the non-sweep turns 131 mm/s (20 %); the
+ * sweeps 20 deg/s = 19 mm/s per wheel, held by the motor controller (no
+ * duty rate control). No heading hold on the straights (operator
+ * 2026-11-04). Back off: half of the turn toward the obstacle, at most
+ * 30 degrees (operator: keep for now). */
+#define BACK_OFF_MAX_DEG 30
+static int back_off_for(int turned_deg) {
+    const int half = turned_deg / 2;
+    return half > BACK_OFF_MAX_DEG ? BACK_OFF_MAX_DEG : half;
+}
+static const dr_config_t DETOUR_CFG = {
+    .dt = {.back_off_fn = back_off_for,
+           .return_heading_deg = 90u,
+           .return_max_mm = 1000u,
+           .sweep_deg_s = 20u,
+           .sweep_ping_ms = 60u,
+           .sweep_seen_count = 2u,
+           .sweep_min_duty = 0u, /* duty rate control: not used */
+           .sweep_max_duty = 0u,
+           .line_return_only = true,
+           .turn_step_deg = 5u,
+           .away_max_deg = 90u,
+           .toward_max_deg = 150u,
+           .max_straights = 5u,
+           .back_off_deg = 25u,
+           .look_ms = 150u,
+           .vehicle_mm = 350u,
+           .sweep_mm = 150u,
+           .margin_mm = 30u,
+           .sensor_ahead_mm = 65u,
+           .line_ahead_mm = 123u,
+           .seen_mm = 400u,
+           .counts_per_deg_x100 = 2405u,
+           .total_max_ms = 40000u},
+    .straight_mm_s = 131,
+    .turn_mm_s = 131,
+    .pause_ms = 250u,
+};
+
 /* Spin calibration (as src/line_spin.c, with wheel speeds). */
 #define CAL_SPEED_MM_S 131 /* line_spin.c: 20 % */
 #define CAL_STEP_COUNTS (2535 / 4)
@@ -112,6 +163,11 @@ static const char *const FAULT_NAMES[] = {"none",      "SAFETY (motor fault)", "
 static const char *const MODULE_NAMES[] = {"NONE", "LINE", "SEARCH", "SCAN", "DETOUR"};
 static const char *const OUT_NAMES[] = {"RUNNING", "OBSTACLE",  "SIDE",  "DONE_LINE",
                                         "DONE_NO_LINE", "LINE_LOST", "FOUND", "FAILED"};
+static const char *const STEP_NAMES[] = {"BACK",    "TURN_AWAY", "STRAIGHT", "TURN_TOWARD",
+                                         "ON_LINE", "ALIGN",     "DONE",     "FAILED"};
+static const char *const DT_FAIL_NAMES[] = {"none",       "no side",   "turn limit", "time",
+                                            "sensor",     "too near",  "no line",    "?"};
+static const char *const SIDE_NAMES[] = {"NONE", "RIGHT", "LEFT", "?"};
 
 static hb_t hb;
 static mc_config_t mc_cfg = MC_ROBOT_CONFIG;
@@ -119,6 +175,8 @@ static int f_1ms, f_10ms, f_20ms;
 static lp_t lp;
 static lt_t lt;
 static ls_t ls;
+static ss_t ss;
+static dr_t dr;
 static vsm_t vsm;
 static uint16_t raw[LP_SENSORS];
 static vc_event_t line_event; /* last LOST or FOUND since the previous step */
@@ -133,6 +191,9 @@ static struct {
     int32_t counts[2];
     uint32_t handoffs;
     uint16_t searches;
+    uint16_t scans;
+    uint16_t detours;
+    uint16_t detours_done;
     uint16_t pings;
     uint32_t log_total;
     sl_entry_t log[LOG_ENTRIES];
@@ -337,8 +398,9 @@ static void print_summary(void) {
            MODULE_NAMES[vsm.last.from % 5u], MODULE_NAMES[vsm.last.to % 5u],
            OUT_NAMES[vsm_outcome_type(vsm.last.outcome) % 8u], vsm_outcome_payload(vsm.last.outcome),
            (unsigned long)run.handoffs);
-    printf("[run] searches %u, pings %u, wheels L %ld  R %ld counts\n", run.searches, run.pings,
-           (long)run.counts[0], (long)run.counts[1]);
+    printf("[run] searches %u, scans %u, detours %u (%u done), pings %u, wheels L %ld  R %ld counts\n",
+           run.searches, run.scans, run.detours, run.detours_done, run.pings, (long)run.counts[0],
+           (long)run.counts[1]);
     mcp_status_t s;
     mcp_status(&s);
     printf("[run] heartbeat isr max %lu us, overruns gap %lu isr %lu, missed in run %lu; mc hook max "
@@ -353,6 +415,91 @@ static void print_summary(void) {
            lt.cfg.steer.base_mm_s, lt.cfg.steer.min_mm_s, lt.cfg.steer.max_mm_s,
            lt.cfg.steer.gain_pct, lt.cfg.steer.kd_pct, lt.cfg.steer.far_gain_pct,
            lt.cfg.steer.far_from, SEARCH_CFG.speed_mm_s, (long)SEARCH_CFG.turn_counts);
+    printf("[run] detour: straight %d mm/s, turn %d mm/s, sweep %u deg/s = %d mm/s, pause %u ms, "
+           "back off half up to %d deg\n",
+           DETOUR_CFG.straight_mm_s, DETOUR_CFG.turn_mm_s, DETOUR_CFG.dt.sweep_deg_s, dr.sweep_mm_s,
+           DETOUR_CFG.pause_ms, BACK_OFF_MAX_DEG);
+}
+
+/* ---------------------------------------------------------------------
+ * Text log of the handoffs and the obstacle modules (as detour_test).
+ * ------------------------------------------------------------------- */
+static struct {
+    uint32_t handoffs;
+    uint8_t step; /* last printed detour step; 0xFF: none */
+    uint32_t sweep_serial;
+    bool returning;
+} shown;
+
+static void print_reading(ultrasonic_result_t r) {
+    const ultrasonic_status_t status = ultrasonic_result_status(r);
+    if (status == ULTRASONIC_STATUS_VALID) {
+        if (ultrasonic_result_too_near(r)) {
+            printf(" TOO_NEAR");
+        } else {
+            printf(" %u", ultrasonic_result_distance(r));
+        }
+    } else {
+        printf(status == ULTRASONIC_STATUS_NO_RETURN ? " NR"
+               : status == ULTRASONIC_STATUS_NO_RISE ? " NO_RISE"
+                                                     : " STUCK");
+    }
+}
+
+static void report(uint32_t now) {
+    if (vsm.handoffs != shown.handoffs) {
+        const uint32_t more = vsm.handoffs - shown.handoffs - 1u;
+        shown.handoffs = vsm.handoffs;
+        const vsm_outcome_t o = vsm.last.outcome;
+        const vsm_outcome_type_t type = vsm_outcome_type(o);
+        printf("[vc] %lu ms: %s -> %s on %s (payload %u)", (unsigned long)(now - run.t0),
+               MODULE_NAMES[vsm.last.from % 5u], MODULE_NAMES[vsm.last.to % 5u], OUT_NAMES[type % 8u],
+               vsm_outcome_payload(o));
+        printf(more ? " (+%lu earlier in this step)\n" : "\n", (unsigned long)more);
+        if (vsm.last.from == VSM_MOD_SCAN && type == VSM_OUT_SIDE) {
+            printf("[scan]");
+            for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; ++i) {
+                print_reading(ss.profile.point[i]);
+            }
+            printf("\n[scan] nearest %u mm, free step R %u L %u -> detour %s\n",
+                   obstacle_profile_distance(ss.word), obstacle_profile_right(ss.word),
+                   obstacle_profile_left(ss.word), SIDE_NAMES[ss_payload_side(vsm_outcome_payload(o))]);
+        }
+        if (vsm.last.from == VSM_MOD_DETOUR) {
+            if (type == VSM_OUT_FAILED) {
+                printf("[detour] failed: %s\n", DT_FAIL_NAMES[vsm_outcome_payload(o) % 8u]);
+            } else if (type == VSM_OUT_DONE_LINE || type == VSM_OUT_DONE_NO_LINE) {
+                ++run.detours_done;
+            }
+        }
+        if (vsm.running == VSM_MOD_DETOUR) {
+            shown.step = 0xFFu;
+            shown.sweep_serial = 0u;
+            shown.returning = false;
+        }
+    }
+    if (vsm.running != VSM_MOD_DETOUR || !dr.started) {
+        return;
+    }
+    const dt_t *dt = &dr.dt;
+    if (dt->sweep_serial != shown.sweep_serial) {
+        static const char *const ends[] = {"-", "seen", "lost", "return", "limit"};
+        shown.sweep_serial = dt->sweep_serial;
+        printf("[detour] sweep %s at heading %+d (coast %d.%d deg)\n", ends[dt->sweep_last_end % 5u],
+               dt->sweep_heading, dt->sweep_coast_x10 / 10, dt->sweep_coast_x10 % 10);
+    }
+    if (dt->returning && !shown.returning) {
+        printf("[detour] RETURN to line at heading %d\n", dt->heading);
+    }
+    shown.returning = dt->returning;
+    if (dt->step != shown.step) {
+        if (shown.step == DT_TURN_TOWARD && dt->step == DT_STRAIGHT && !dt->returning) {
+            printf("[detour] back off %d of turned %d deg\n", dt->last_back_deg, dt->last_turned_deg);
+        }
+        shown.step = dt->step;
+        printf("[detour] %s at %lu ms: pose (%ld, %ld) heading %+d\n", STEP_NAMES[dt->step & 7u],
+               (unsigned long)(now - run.t0), (long)dt->x, (long)dt->y, dt->heading);
+    }
 }
 
 /* ---------------------------------------------------------------------
@@ -369,6 +516,9 @@ static void run_once(bool *previous_run) {
     mcp_clear_faults();
     const uint32_t handoffs0 = vsm.handoffs;
     const uint16_t searches0 = ls.searches;
+    const uint16_t scans0 = ss.scans;
+    const uint16_t detours0 = dr.detours;
+    run.detours_done = 0u;
     mcp_status_t s;
     mcp_status(&s);
     const int32_t start[2] = {s.counts[0], s.counts[1]};
@@ -377,6 +527,7 @@ static void run_once(bool *previous_run) {
     run.t0 = t0;
     line_event = VC_EVENT_NONE;
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, t0);
+    shown.handoffs = vsm.handoffs;
     /* Drop old posts so that only the run's missed frames count. */
     (void)hb_take(&hb, f_1ms);
     (void)hb_take(&hb, f_10ms);
@@ -384,8 +535,10 @@ static void run_once(bool *previous_run) {
     const uint32_t missed0 = hb.missed_frames;
 
     bool echo_new = false;
+    bool ping_sent = false;
     ultrasonic_result_t echo = 0u;
-    uint32_t next_ping_ms = t0 + WATCH_PERIOD_MS; /* let the servo centre first */
+    uint16_t ping_ms = VSM_PING_DEFAULT_MS; /* asked by the running module */
+    uint32_t last_ping_ms = t0;             /* let the servo centre first */
     unsigned int steps = 0u;
     int8_t last_servo = 0;
     bool stop = false;
@@ -399,8 +552,12 @@ static void run_once(bool *previous_run) {
             echo = ultrasonic_latest();
             echo_new = true;
         }
-        if ((int32_t)(now - next_ping_ms) >= 0 && !ultrasonic_busy() && ultrasonic_trigger()) {
-            next_ping_ms = now + WATCH_PERIOD_MS;
+        /* No ping while a result waits for the step: then a ping and an
+         * echo in one step are always in that order (vehicle_inputs.h). */
+        if (ping_ms != 0u && !echo_new && now - last_ping_ms >= ping_ms && !ultrasonic_busy() &&
+            ultrasonic_trigger()) {
+            last_ping_ms = now;
+            ping_sent = true;
             ++run.pings;
             if (!ultrasonic_busy()) { /* STUCK_HIGH: result at once */
                 echo = ultrasonic_latest();
@@ -417,10 +574,14 @@ static void run_once(bool *previous_run) {
         }
 
         mcp_status(&s);
-        const vsm_inputs_t in = {&lp, line_event, {s.counts[0], s.counts[1]}, echo_new, echo};
+        ping_ms = VSM_PING_DEFAULT_MS;
+        const vsm_inputs_t in = {&lp, line_event, {s.counts[0], s.counts[1]}, echo_new, echo,
+                                 &ping_ms, ping_sent};
         line_event = VC_EVENT_NONE;
         echo_new = false;
+        ping_sent = false;
         const vsm_drive_t d = vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        report(now);
         if (d.action == VSM_ACT_STOP) {
             mcp_stop();
         } else {
@@ -443,8 +604,11 @@ static void run_once(bool *previous_run) {
                                  : vsm.running != VSM_MOD_LINE ? 3u
                                  : lt.straight                 ? 2u
                                                                : 0u;
+            const int8_t position = vsm.running == VSM_MOD_SCAN     ? (int8_t)(10 + ss.index)
+                                    : vsm.running == VSM_MOD_DETOUR ? (int8_t)dr.dt.step
+                                                                    : lp.position;
             run.log[run.log_total++ % LOG_ENTRIES] = (sl_entry_t){
-                .position = lp.position,
+                .position = position,
                 .left_pct = log_speed(d.left_mm_s),
                 .right_pct = log_speed(d.right_mm_s),
                 .info = (uint8_t)(mode | ((lp.fade_side & 3u) << 2) | ((lp.fade_source & 3u) << 4) |
@@ -471,6 +635,8 @@ static void run_once(bool *previous_run) {
     run.counts[1] = s.counts[1] - start[1];
     run.handoffs = vsm.handoffs - handoffs0;
     run.searches = (uint16_t)(ls.searches - searches0);
+    run.scans = (uint16_t)(ss.scans - scans0);
+    run.detours = (uint16_t)(dr.detours - detours0);
     run.valid = true;
     print_summary();
     vsm_reset(&vsm);
@@ -508,10 +674,14 @@ int main(void) {
     vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
     (void)vsm_set_module(&vsm, VSM_MOD_LINE, lt_module(&lt));
     (void)vsm_set_module(&vsm, VSM_MOD_SEARCH, ls_module(&ls));
+    ss_init(&ss, &SCAN_CFG);
+    dr_init(&dr, &DETOUR_CFG);
+    (void)vsm_set_module(&vsm, VSM_MOD_SCAN, ss_module(&ss));
+    (void)vsm_set_module(&vsm, VSM_MOD_DETOUR, dr_module(&dr));
 
     wifi_log_init();
     idle_ms(2000u);
-    printf("\nVehicle Controller line test (mm/s). Last reset: %s. mcp_init %s, heartbeat %s.\n"
+    printf("\nVehicle Controller test: line, search, scan, detour (mm/s). Last reset: %s. mcp_init %s, heartbeat %s.\n"
            "GP21: calibrate, then run %lu s (press again to stop). GP20: next D (now %u).\n",
            heartbeat_watchdog_reset() ? "watchdog" : "power or flash", mc_ok ? "ok" : "FAILED",
            hb_ok ? "ok" : "FAILED", (unsigned long)(RUN_LIMIT_MS / 1000u), lt.cfg.steer.kd_pct);

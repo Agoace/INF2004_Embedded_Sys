@@ -425,12 +425,17 @@ pico_enable_stdio_usb(motor_ctl_bench 1)
 pico_enable_stdio_uart(motor_ctl_bench 0)
 pico_add_extra_outputs(motor_ctl_bench)
 
-# Vehicle Controller line test: line tracing and search modules in the
-# shell, wheel speeds through the motor controller (docs/VC_LINE_RUN.md).
+# Vehicle Controller test: line tracing, search, scan and detour modules
+# in the shell, wheel speeds through the motor controller
+# (docs/VC_LINE_RUN.md, docs/VC_DETOUR_RUN.md).
 add_executable(vc_line_test
     src/vc_line_test.c
     src/line_trace.c
     src/line_search.c
+    src/servo_scan.c
+    src/detour_run.c
+    src/obstacle_detour.c
+    src/obstacle_profile.c
     src/line_steer.c
     src/line_position.c
     src/line_sensors.c

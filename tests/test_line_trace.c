@@ -50,7 +50,7 @@ static void test_trace(void) {
     lp_init(&lp);
     lt_t lt;
     lt_init(&lt, &LT);
-    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {1000, 1000}, false, 0u};
+    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {1000, 1000}, false, 0u, 0, false};
     vsm_drive_t d;
     lt_start(&lt, 0u, 0u);
 
@@ -185,7 +185,7 @@ static void test_search(void) {
     lp_init(&lp);
     ls_t ls;
     ls_init(&ls, &LS);
-    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {0, 0}, false, 0u};
+    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {0, 0}, false, 0u, 0, false};
     vsm_drive_t d;
 
     /* Line last seen right: turn right first (left forward). */
@@ -247,7 +247,7 @@ static void test_shell(void) {
     CHECK(vsm_set_module(&v, VSM_MOD_LINE, lt_module(&lt)), "set LINE");
     CHECK(vsm_set_module(&v, VSM_MOD_SEARCH, ls_module(&ls)), "set SEARCH");
     CHECK(vsm_start(&v, VSM_MOD_LINE, 0u, 0u), "start");
-    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {0, 0}, false, 0u};
+    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {0, 0}, false, 0u, 0, false};
     vsm_drive_t d = vsm_step(&v, &in, 0u, 10u);
     CHECK(d.action == VSM_ACT_SPEED && d.left_mm_s == 171, "line in shell: %d", d.left_mm_s);
     in.line_event = vc_event(VC_EVENT_LINE_LOST, VC_LINE_SIDE_LEFT);

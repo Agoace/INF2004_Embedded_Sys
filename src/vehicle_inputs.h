@@ -32,6 +32,27 @@ struct vsm_inputs {
      * ahead unless a module turned it). */
     bool echo_new;
     ultrasonic_result_t echo;
+    /* Ultrasonic ping period (rule 3). Before each step the glue sets it
+     * to its default (VSM_PING_DEFAULT_MS); a running module may change
+     * it in its step. The glue then triggers a reading when this many ms
+     * passed since the last trigger (the driver keeps at least 60 ms).
+     * 0: no readings; VSM_PING_ASAP: at the next allowed time. NULL: the
+     * glue has no ultrasonic sensor. */
+    uint16_t *ping_ms;
+    /* A reading was triggered since the previous step. The glue does not
+     * trigger while an unread result waits, so when ping_sent and
+     * echo_new are both true, the echo is the result of this ping. */
+    bool ping_sent;
 };
+
+#define VSM_PING_DEFAULT_MS 100u
+#define VSM_PING_ASAP 1u
+
+/* Set the ping period, if the glue has a sensor. */
+static inline void vsm_ask_ping(const struct vsm_inputs *in, uint16_t period_ms) {
+    if (in->ping_ms) {
+        *in->ping_ms = period_ms;
+    }
+}
 
 #endif
