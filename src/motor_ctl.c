@@ -122,10 +122,13 @@ static int16_t wheel_control(const mc_config_t *c, unsigned int i, mc_wheel_t *w
                                (int32_t)(((int64_t)c->ff_slope_q8[i][dir] * abs32(sp)) / 65536));
     const int32_t p = (int32_t)(((int64_t)c->kp_q8 * err_q8) / 65536);
     int32_t out = ff + p + w->integral_q8 / 256;
-    /* Anti-windup: integrate only when not saturated in the error sign. */
+    /* Anti-windup: integrate only when not saturated in the error sign,
+     * and not while the set point still rises or the start kick runs: the
+     * wheel lags then, and I would wind up and overshoot (bench run B1). */
     const bool sat_hi = out >= max && err_q8 > 0;
     const bool sat_lo = out <= -max && err_q8 < 0;
-    if (!sat_hi && !sat_lo) {
+    const bool hold = w->kicking || sp != want;
+    if (!sat_hi && !sat_lo && !hold) {
         const int32_t lim = (int32_t)c->integral_max_permille * 256;
         w->integral_q8 = clamp32(w->integral_q8 + (int32_t)(((int64_t)c->ki_q8 * err_q8) / 256),
                                  -lim, lim);

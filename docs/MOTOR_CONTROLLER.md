@@ -10,7 +10,7 @@ Branch: `yx-motor-controller`.
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
 | 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: built, not run |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: run B1 done; feed-forward refit and I hold added; run B2 next |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -35,9 +35,9 @@ steer mixing, calm mode, FOLLOW state, move completion, command queue.
 
 | Part | Rule | Setting ([`motor_ctl_robot.h`](../src/motor_ctl_robot.h)) |
 | --- | --- | --- |
-| Feed-forward | offset + slope × set point, **per wheel and per direction** | Offset 85 ‰ (right reverse 90); slope 9.0 ‰ per count/tick (left reverse 12.0, right reverse 9.4). Rough fit to the track logs of 2026-11-03/04 |
+| Feed-forward | offset + slope × set point, **per wheel and per direction** | Offset / slope (‰, ‰ per count/tick): L fwd 48 / 9.66, L rev 59 / 8.89, R fwd 56 / 9.39, R rev 62 / 8.67. Fit to floor bench run B1 (2026-11-04). Step 1 used a rough fit to the track logs (offset 85–90, slope 9.0–12.0) |
 | P | kp × (set point − measured) | 6.0 ‰ per count/tick (Motion 3.0 at 20 ms, scaled) |
-| I | ki × error each tick; not while the output is at the limit in the error's direction; limit ±400 ‰ | 0.5 per tick |
+| I | ki × error each tick; limit ±400 ‰. **Held** (not integrated) while the output is at the limit in the error's direction, **while the set point still rises, and while the start kick runs** (added after run B1: the wheel lags then, and I wound up and overshot) | 0.5 per tick |
 | Rise limit | Set point rises at most 2 counts/tick per tick (about 1600 mm/s²); falls at once | — |
 | Start kick | From rest or on a direction change: at least 12 % until 10 counts; none in 250 ms = stall | Start policy in [calibration results](CALIBRATION_RESULTS.md) |
 | Stall | Duty ≥ 15 % and no count for 500 ms | Latched |
@@ -173,12 +173,18 @@ spot (±40 mm/s, the detour sweep case) with no stall; rise limit; start
 kick and kick on a direction change; stale stop at exactly 100 ms; stop;
 emergency stop and clear; stall at exactly 500 ms (both duties 0); speed
 sent while latched has no effect; late tick; exact feed-forward, P, clamp
-and anti-windup values; travel, heading; servo pulse, clamp and settle
-time.
+and anti-windup values; I held while the set point rises and while the
+kick runs, and I grows at the target; travel, heading; servo pulse, clamp
+and settle time.
 
 Mutation check 2026-11-04: 35 of 36 caught. The survivor is equivalent
 (`<=` against `<` in the rise limit: both give the asked set point). Four
 redundant lines found by the check were removed.
+
+Mutation check after the I hold (2026-11-04): 38 of 39 caught (3 new
+mutants for the hold rule), the same equivalent survivor. The check first
+showed that the anti-windup test had become empty (the kick held I); the
+test now ends the kick after one tick.
 
 Pico compile check: `arm-none-eabi-gcc` with `-Wall -Wextra -Wconversion
 -Wshadow -Wformat=2 -Werror`: clean; 1.9 KB of code.

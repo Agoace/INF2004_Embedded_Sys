@@ -5,12 +5,13 @@
  * Sources:
  *   - 2535 counts per wheel turn, wheel 65 mm: 12414 counts per metre;
  *     track 111 mm: 24.05 counts per degree (docs/CALIBRATION_RESULTS.md).
- *   - Feed-forward: rough fit to the loaded track logs of 2026-11-03 and
- *     2026-11-04 (duty against counts per 50 ms, divided by 5 for the
- *     10 ms tick). Forward, both wheels: 14 % -> about 6, 20 % -> 15,
- *     32 % -> 25 counts per tick. Reverse: 14 % -> about 5, 20 % -> 10
- *     (left) and 12 (right). MEASURE on the bench: the logs mix straight
- *     drives, turns and curves.
+ *   - Feed-forward: straight-line fit to the steady points of floor bench
+ *     run B1 (2026-11-04, docs/MOTOR_CONTROLLER.md): 20, 40, 150 and
+ *     300 mm/s, each wheel and direction. Below 5 counts per tick the
+ *     real duty is flat at about 80-97 permille (dead zone); the fit is
+ *     about 10 permille low there and the I term adds the rest.
+ *     (Step 1 used a rough fit to the track logs; its reverse values
+ *     were too high.)
  *   - Start kick 12 %, 10 counts, 250 ms (start policy, docs/CALIBRATION_RESULTS.md;
  *     a loaded wheel does not turn below about 12 %).
  *   - Servo: 1500 us centre, safe range 1100-1900 us, 100/9 us per degree
@@ -30,8 +31,8 @@
         .tick_ms = 10u,                                                                  \
         .counts_per_m = 12414u,                                                          \
         .counts_per_deg_x100 = 2405u,                                                    \
-        .ff_offset_permille = {{85u, 85u}, {85u, 90u}},                                  \
-        .ff_slope_q8 = {{2304u, 3072u}, {2304u, 2406u}}, /* 9.0, 12.0; 9.0, 9.4 */      \
+        .ff_offset_permille = {{48u, 59u}, {56u, 62u}},                                  \
+        .ff_slope_q8 = {{2472u, 2275u}, {2404u, 2219u}}, /* 9.66, 8.89; 9.39, 8.67 */   \
         .kp_q8 = 1536u,                                  /* 6.0 */                       \
         .ki_q8 = 128u,                                   /* 0.5 per tick */              \
         .integral_max_permille = 400u,                                                   \
