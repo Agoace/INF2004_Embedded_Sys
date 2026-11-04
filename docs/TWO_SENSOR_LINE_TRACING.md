@@ -70,6 +70,14 @@ Target 0 holds the line midway between L and C, so the robot runs about
 P4 log: `build/steer_logs/run_20261103-165858_boot2a9f_run1.txt` (laptop
 only, not committed).
 
+### Ramp, 2026-11-04
+
+The operator saw the robot jerk on the ramp. Cause: **the barcode sensor
+touched the ramp surface**. With the barcode sensor removed, the robot
+did not jerk (runs boot c481, `build/steer_logs/run_20261104-*_bootc481_run*.txt`).
+No change to the line tracing. Keep the barcode sensor mount clear of the
+ground on the ramp.
+
 ## Limits
 
 - **Sharp right curves:** a full turn (inner wheel stopped, outer 50 %)

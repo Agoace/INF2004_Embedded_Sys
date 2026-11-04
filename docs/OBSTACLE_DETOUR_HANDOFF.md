@@ -172,6 +172,18 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D28 | `run_20261103-172508_boot740b_run1.txt` | v1.8. STOP 239 mm, detour LEFT; sweep away to +50°; straight 350 mm (no echo) to (225, 268); TURN_TOWARD swept to −91° with no sighting; RETURN; ON_LINE; ALIGN turned into the box: right wheel stall at 24.6 s. **Operator: bad surface; not a valid test** |
 | D29 | `run_20261103-172551_boot740b_run2.txt` | v1.8. Same as D28: away +51°, straight to (220, 271), no sighting to −91°, return at x 216 mm (before the box front at about 284 mm), left wheel stall in ALIGN at 21.6 s. **Operator: bad surface; not a valid test** |
 
+| D30 | `run_20261103-173137_boot740b_run3.txt` | v1.8. STOP 226 mm, LEFT; away +48°; TURN_TOWARD saw the box at −47°, back off 30 of 95°; straight to (568, 158); return; DONE at 18.2 s; search found the line |
+| D31 | same file | Second STOP at 40.2 s; away +47°; straight to (238, 255); TURN_TOWARD at 14 %: both wheels slowed to 0 after about 15°; left wheel stall stop at 47.7 s |
+| D32 | `run_20261103-173323_boot740b_run4.txt` | v1.8. STOP 221 mm, LEFT; away +44°; seen at −51°, back off 30 of 95°; DONE at 25.0 s |
+| D33 | same file | Second STOP at 47.2 s; away +41°; TURN_TOWARD at 14–15 %: both wheels slowed to 0; left wheel stall stop at 55.4 s |
+| — | `run_20261104-123613_bootc481_run1.txt` | Line only, over the ramp, barcode sensor removed: no jerk (see [two-sensor line tracing](TWO_SENSOR_LINE_TRACING.md#ramp-2026-11-04)) |
+| D34 | `run_20261104-123900_bootc481_run2.txt` | v1.8. STOP 212 mm; away +46°; seen at −57°, back off 30 of 103°; DONE at 27.1 s |
+| D35 | same file | Second STOP at 49.7 s; away +41°; straight to (264, 229); TURN_TOWARD at 14–15 %: both wheels slowed to 0 after about 20°; right wheel stall stop at 57.6 s |
+| D36 | `run_20261104-124043_bootc481_run3.txt` | v1.8. STOP 220 mm; away +44°; seen at −59°, back off 30 of 103°; DONE at 25.9 s |
+| D37 | same file | Second STOP at 48.6 s; away +45°; seen at −57°, back off 30 of 102°; DONE at 66.5 s |
+| D38 | same file | Third STOP at 88.8 s; the 90 s run limit ended the run |
+
+- v1.8 summary (D30–D37, valid surface): 8 detours, **5 DONE**, 3 stall stops. Every DONE was the first or a later detour that kept turning; every stall was a second detour in a run (about 40–57 s), in the TURN_TOWARD sweep at 14–15 % duty after 15–20° of turn: both wheels slowed to 0 together. The first detours at the same pose turned past −47° without contact, so the likely cause is too little duty later in the run (battery voltage drop), not contact. The rate control adds only about 1 % per 0.5 s (as D19 and D27).
 - D28 and D29 (kept for reference): with no echo in the first straight, the straight is 350 mm; at +50° that is only about 220 mm forward, short of the box front. The run log has no echo readings in turns, so the cause is not proven.
 - D26 ALIGN (−90° to 0° by wheel counts): L and C crossed the line at about −54°, the turn went on, and L saw the line again at 0° (999, about 35 %). ALIGN ended on the line by chance (problem B). Two sightings 54° apart mean the rear axle was not on the line (about 110 mm off, if the line is straight there), or the line curves at the return point.
 - D27: the sweep minimum 14 % does not turn the left wheel in reverse every time. The rate control adds only about 1 % per 50 ms rows (−15, −16) before the stall stop.
