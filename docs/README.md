@@ -25,6 +25,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [ADR: one hardware heartbeat](ADR_HEARTBEAT.md) — accepted 2026-11-04: 1 ms timer interrupt owned by a separate `heartbeat` platform module; ADC sample, `mc_tick()` and watchdog in the interrupt; decisions in the main loop.
 - [ADR: Vehicle Controller runs one module at a time](ADR_VEHICLE_CONTROLLER.md) — accepted 2026-11-04: shared detectors, running module interprets them and returns an outcome, controller maps outcomes to the next module and is the only motor controller caller.
 - [Vehicle state machine](VEHICLE_STATE_MACHINE.md) — the Vehicle Controller shell from the ADR: route table, one module at a time, handoff in the same tick, safety stop, outcome word, host test.
+- [Duty map](DUTY_MAP.md) — loaded floor map from open-loop duty to wheel speed, for moving duty-based settings to the motor controller; bench target `duty_map_bench`.
 - [Heartbeat](HEARTBEAT.md) — the 1 ms time base from the ADR: hooks in the interrupt, flags for the main loop, watchdog, health counters, host test, bench target `heartbeat_test`.
 - [Motor controller](MOTOR_CONTROLLER.md) — the controller from the ADR: interface, speed loop (from Motion), robot settings, host test, step status.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
