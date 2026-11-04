@@ -79,6 +79,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
 | Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](HEARTBEAT.md#host-unit-test), and [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
+| Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
