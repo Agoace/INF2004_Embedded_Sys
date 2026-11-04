@@ -15,7 +15,8 @@
  *              the servo PWM and the encoders; wheel speeds in mm/s
  *
  * Timing: the heartbeat (src/heartbeat_pico.c) runs mc_tick() every 10 ms
- * in its interrupt and restarts the watchdog (100 ms). The line sample and
+ * in its interrupt (phase 0) and restarts the watchdog (100 ms). The shell
+ * steps at phase 9, 1 ms before the next mc_tick. The line sample and
  * lp_update() run in the main loop on a 1 ms flag, as in detour_test (not
  * yet in the interrupt, docs/ADR_HEARTBEAT.md).
  *
@@ -475,7 +476,10 @@ int main(void) {
     static const mc_config_t cfg = MC_ROBOT_CONFIG;
     const bool mc_ok = mcp_init(&hb, &cfg); /* motors 0, servo centre; hook at phase 0 */
     f_1ms = hb_add_flag(&hb, 1u, 0u);
-    f_10ms = hb_add_flag(&hb, 10u, 1u); /* just after the mc_tick at phase 0 */
+    /* Phase 9: the shell step runs 1 ms before the next mc_tick (phase 0),
+     * so its command is used at once (phase 1 waited 9 ms; run P5). The
+     * counts it reads are 9 ms old. */
+    f_10ms = hb_add_flag(&hb, 10u, 9u);
     f_20ms = hb_add_flag(&hb, 20u, 2u);
     const bool hb_ok = f_1ms >= 0 && f_10ms >= 0 && f_20ms >= 0 && heartbeat_start(&hb, WATCHDOG_MS);
 

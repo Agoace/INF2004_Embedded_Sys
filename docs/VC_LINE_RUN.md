@@ -29,7 +29,7 @@ The goal of the first run (P5) is to compare with P4 of the
 | --- | --- |
 | Detectors | Line position every 1 ms; an ultrasonic reading every 100 ms (servo straight); wheel counts. They never decide |
 | Modules | LINE and SEARCH. SCAN and DETOUR are not registered: an obstacle stops the run (shell FAULT NO_MODULE, detail 3) |
-| Shell | `vsm_step()` on the 10 ms flag, routes `VSM_DEFAULT_ROUTES` |
+| Shell | `vsm_step()` on the 10 ms flag at phase 9 (1 ms before the next `mc_tick`; phase 1 until P5), routes `VSM_DEFAULT_ROUTES` |
 | Motor controller | The only writer of motor and servo PWM. A latched stall stops the run (shell FAULT SAFETY) |
 
 Deviation from the [heartbeat ADR](ADR_HEARTBEAT.md): the line sample and
@@ -132,3 +132,10 @@ gains with more delay make the steering swing. Sources of the delay:
 | --- | --- |
 | Speed-up limit `accel_cpt_q8` 512 (16 mm/s per 10 ms): the faster wheel needs about 70 ms for a +112 mm/s change (slowing is not limited) | up to 70 ms |
 | Shell step 1 ms after `mc_tick`; its command waits for the next tick | 9 ms |
+
+Changes after P5 (2026-11-04):
+
+| Change | Effect |
+| --- | --- |
+| Motor controller rise limit 2 → 8 counts/tick per tick (about 6400 mm/s²) | +112 mm/s in about 20 ms instead of 70 ms. Check overshoot on the bench (B3) before P6 |
+| Shell step at phase 9 instead of 1 | The command reaches the motors about 1 ms later instead of 9 ms |
