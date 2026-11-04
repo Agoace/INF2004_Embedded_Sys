@@ -10,7 +10,7 @@ Branch: `yx-motor-controller`.
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
 | 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: run B1 done; feed-forward refit and I hold added; run B2 next |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: runs B1 and B2 done; B2 meets the speed targets; the slow-start kick is open |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -138,6 +138,32 @@ step 1 (untuned).
 | Cause of the overshoot (fwd 150, left) | The wheel lags the set point by about 100 ms. During the lag P and I rise; the duty peaks at 320 ‰ against 230 ‰ steady, then the I term unwinds over about 300 ms |
 | Feed-forward (steady points) | Forward and reverse are now alike (the weak left reverse from the track logs is not seen). Straight-line fit, counts per tick: L fwd 48 + 9.66·v, L rev 59 + 8.89·v, R fwd 56 + 9.39·v, R rev 62 + 8.67·v. The step-1 values are too high (L rev slope 12.0: 308 ‰ against 223 ‰ needed at 150 mm/s). Below 5 counts per tick the duty is flat at about 80–97 ‰ (dead zone) |
 | Timing | Hook at most 88 µs; heartbeat interrupt at most 102 µs (10 % of a tick); no overruns. Missed 424 frames: the main loop stopped during the row print after the run (motors at 0) |
+
+### Run B2 (2026-11-04, boot 8460, `1cf08a1`, floor, VIN)
+
+Changes from B1: feed-forward refit to B1, and the I term held while the
+set point rises and while the kick runs. Same step list. Log
+`build/steer_logs/text_8460.txt`. All 17 steps done, no fault; the same
+9 rows (7–15) lost over Wi-Fi.
+
+| Step | Overshoot B1 → B2 (L / R) | Time to 90 % B1 → B2 (ms, L / R) | Mean, 2nd half B2 (mm/s) | Heading change B1 → B2 |
+| --- | --- | --- | --- | --- |
+| fwd 150 | 18/17 % → **7/8 %** | 150/180 → 170/180 | +149 / +150 | −0.3° → +0.5° |
+| rev 150 | 34/24 % → **7/8 %** | 150/170 → 200/200 | −152 / −151 | +3.2° → −0.7° |
+| fwd 300 | 11/12 % → **5/6 %** | 230/230 → 260/260 | +304 / +304 | +0.2° → +0.5° |
+| rev 300 | 26/17 % → **4/4 %** | 220/240 → 290/290 | −304 / −306 | +6.7° → −0.5° |
+| spin L 20 | 100/60 % → 116/28 % | 60/60 → 50/60 | −20 / +20 | 65.3° → 59.8° |
+| spin R 20 | 124/100 % → 116/116 % | 50/50 → 40/50 | +21 / −19 | −66.1° → −59.1° |
+| fwd 40 | 52/40 % → **12/24 %** | 90/60 → 160/70 | +39 / +39 | −0.6° → +0.5° |
+| rev 40 | 56/48 % → **20/28 %** | 70/70 → 130/120 | −39 / −39 | +0.9° → +0.1° |
+
+| Item | Result |
+| --- | --- |
+| 150 and 300 mm/s | Overshoot 4–8 % (was 11–34 %); ripple sd 1.8–2.7 mm/s (was up to 18); the 300 mm/s mean is now within 6 mm/s in the 1 s step. Rise is 20–70 ms slower: the I term no longer helps during the rise |
+| Straight drives | Heading change at most 0.7° in every straight step (was up to 6.7°): the two wheels now match |
+| Slow spin (20 mm/s) | Still about 2× the target speed in the first 50 ms. Cause: the start kick (120 ‰ until 10 counts) drives the wheel to 40–56 mm/s in 3 ticks; after the kick the speed drops to 8–16 mm/s for about 200 ms while I builds from 0. The turn is 59–60° against 62° from the target |
+| Feed-forward refit to B2 | Offset 52–60 ‰, slope 8.7–9.3: close to the values in use, so no change |
+| Timing | Hook at most 85 µs, heartbeat interrupt at most 99 µs, no overruns |
 
 ## Ideas (not implemented)
 
