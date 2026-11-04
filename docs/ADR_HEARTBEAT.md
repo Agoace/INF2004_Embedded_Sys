@@ -2,7 +2,7 @@
 
 | Item | Value |
 | --- | --- |
-| Status | Accepted, 2026-11-04 (operator: option B) |
+| Status | Accepted, 2026-11-04 (operator: option B); revised 2026-11-04: owner is a separate platform module (decision 7) |
 | Scope | Timing of all modules on core 0 |
 | Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [motor controller](MOTOR_CONTROLLER.md), [interrupt conventions](INTERRUPT_CONVENTIONS.md), [control architecture](CONTROL_ARCHITECTURE.md) |
 
@@ -55,6 +55,29 @@
 | 60 ms | Main loop | Ultrasonic ping start (echo timing stays on its own interrupt) |
 | — | Hardware | Servo pulse (50 Hz PWM) |
 
+7. **Owner: a separate platform module, `heartbeat`** (revised
+   2026-11-04, operator). It owns the 1 ms timer, the hardware watchdog
+   and the "due" flags, and it is not part of any module that it drives.
+   The users hook into it: the motor controller's Pico layer registers
+   `mc_tick()` for every 10th tick, the line sensors register the ADC
+   sample for every tick. Reason: the heartbeat serves every layer
+   ([ADR: Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)); if one of
+   the driven modules owned it, the others would depend on that module.
+8. **Not on the heartbeat:** encoder edges and the ultrasonic echo
+   (events, their own interrupts) and the motor and servo pulses
+   (hardware PWM).
+
+```text
+  heartbeat (1 ms timer, watchdog, flags)          ← platform module
+     │ interrupt hooks            │ flags
+     ▼                            ▼
+  ADC sample, mc_tick       detectors → running module → Vehicle Controller
+                                                           → mc_set_speed (used at the next mc_tick)
+```
+
+Delay from a reading to the motors: at most one 10 ms frame, and always
+the same.
+
 ## Alternatives considered
 
 | Option | Why not chosen |
@@ -64,8 +87,9 @@
 
 ## Consequences
 
-- The Pico layer of the motor controller (step 2) owns the heartbeat
-  timer and the watchdog.
+- A new platform module `heartbeat` owns the timer, the watchdog and the
+  flags (decision 7). The motor controller's Pico layer (step 2) hooks
+  `mc_tick()` into it; it does not own the timer.
 - With μT-Kernel (team firmware, `motion_task_utkernel.c`), the RTOS tick
   takes the place of the heartbeat; the split stays the same.
 - Core 1 (planned in [control architecture](CONTROL_ARCHITECTURE.md))

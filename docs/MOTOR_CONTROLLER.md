@@ -9,7 +9,7 @@ Branch: `yx-motor-controller`.
 | Step | What | State |
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
-| 2 | Pico layer: PWM, encoder interrupt, servo; 1 ms heartbeat interrupt runs `mc_tick()` every 10 ms and restarts the watchdog ([ADR: heartbeat](ADR_HEARTBEAT.md)) | Not started |
+| 2 | Pico layer: PWM, encoder interrupt, servo; hooks `mc_tick()` into the `heartbeat` platform module every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)) | Not started |
 | 3 | Bench target: step response, both directions, slow turn; tune P, I and feed-forward | Not started |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
