@@ -107,3 +107,28 @@ ARM size (`-Os`): `line_trace.c` 340 bytes, `line_search.c` 154 bytes.
 4. Press GP21: spin calibration, then the run after 1 s. Press again to
    stop; run limit 90 s.
 5. Keep it on for about 2 s after it stops (replay).
+
+## Run P5 (2026-11-04, boot 61ae)
+
+Log `build/steer_logs/run_20261104-165030_boot61ae_run1.txt`. The operator
+stopped it at 87.6 s (GP21): **wobbly**. No faults; heartbeat ISR max
+103 µs, missed frames 0, motor controller hook max 86 µs.
+
+| Measure (follow mode) | P4 (duty) | P5 (mm/s) |
+| --- | --- | --- |
+| Side changes (position past ±20) | 2.1 per s | **4.8 per s** |
+| Position at ±45 or more (one sensor only) | 52 % | **81 %** |
+| Searches | 37 per min | **60 per min** |
+| Mean speed (counts) | 146 mm/s | 115 mm/s |
+| Wheel difference follows the command after (best match) | 50 ms (0.90) | **100 ms (0.86)** |
+| Measured / asked wheel difference (spread) | — | 109 / 204 mm/s |
+
+Finding: the settings map correctly on average (asked mean 172 mm/s,
+base 171), but the wheels follow the steering about **50 ms later** than
+with duty, and reach only about half the asked difference. The same
+gains with more delay make the steering swing. Sources of the delay:
+
+| Source | Delay |
+| --- | --- |
+| Speed-up limit `accel_cpt_q8` 512 (16 mm/s per 10 ms): the faster wheel needs about 70 ms for a +112 mm/s change (slowing is not limited) | up to 70 ms |
+| Shell step 1 ms after `mc_tick`; its command waits for the next tick | 9 ms |
