@@ -51,6 +51,25 @@ Servo: 1500 µs centre, 1100–1900 µs (±36°), 11.1 µs per degree. Settle
 estimate 42 ms + 3.6 ms per degree, fitted to the scan settle times
 (150 ms for 30°, 60 ms for 5°; [servo obstacle scan](OBSTACLE_SCAN.md)).
 
+## Ideas (not implemented)
+
+**Burst drive for the dead zone** (operator idea, 2026-11-04). At 20 kHz the
+motor sees the average voltage, so a low duty is a steady weak push below
+the static friction. Short strong pushes with rests between them can
+break the friction and give a lower average speed. Reason: the slowest
+steady speed is about 40–50 mm/s (14 %), but a 20°/s detour sweep needs
+about 19 mm/s per wheel; the sweeps ran at 40°/s.
+
+| Way | How | Cost |
+| --- | --- | --- |
+| Lower PWM frequency | About 100–500 Hz | Audible whine |
+| Bursts | 20 kHz at about 25 % for N ms, then off for M ms | Step-like motion; counts come in bunches |
+| Dither | A small fast change added to the duty | Smaller effect |
+| Brake mode (driver chip) | Brake instead of coast between pulses (`drive.c` coasts now) | Needs the Robo Pico driver chip datasheet |
+
+If built: the speed loop must average over a full burst cycle. Bench
+test first: the slowest steady speed on the floor for each way.
+
 ## Host unit test
 
 ```sh
