@@ -426,6 +426,24 @@ int main(void) {
               "kicking at the target: I held (%ld)", (long)mc.w[0].integral_q8);
     }
 
+    /* 22. Speed limit: +/-460 mm/s each wheel; 0 = none. */
+    start();
+    {
+        mc_set_speed(&mc, 460, -460, now);
+        const int32_t q460 = mc.w[0].target_q8;
+        CHECK(mc.w[1].target_q8 == -q460, "limit: -460 = -(460)");
+        mc_set_speed(&mc, 461, -2000, now);
+        CHECK(mc.w[0].target_q8 == q460 && mc.w[1].target_q8 == -q460, "limit: 461 and -2000 -> +/-460");
+        mc_set_speed(&mc, 459, 0, now);
+        CHECK(mc.w[0].target_q8 < q460 && mc.w[0].target_q8 > 0, "limit: 459 kept");
+        mc_config_t open = CFG;
+        open.max_speed_mm_s = 0u;
+        const int32_t c0[2] = {0, 0};
+        mc_init(&mc, &open, c0, now);
+        mc_set_speed(&mc, 1000, -1000, now);
+        CHECK(mc.w[0].target_q8 > 2 * q460 && mc.w[1].target_q8 < -2 * q460, "limit 0: none");
+    }
+
     /* 20. Servo settle rounding: 1 degree = 42 + 3.6 -> 46 ms. */
     start();
     (void)mc_set_servo(&mc, 1, now);

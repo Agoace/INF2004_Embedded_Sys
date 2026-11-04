@@ -45,11 +45,19 @@ static int32_t speed_q8(const mc_config_t *cfg, int16_t mm_s) {
     return (int32_t)q8;
 }
 
+static int16_t limit_speed(const mc_config_t *cfg, int16_t mm_s) {
+    const int32_t lim = (int32_t)cfg->max_speed_mm_s;
+    if (lim == 0) {
+        return mm_s;
+    }
+    return (int16_t)clamp32(mm_s, -lim, lim);
+}
+
 void mc_set_speed(mc_t *mc, int16_t left_mm_s, int16_t right_mm_s, uint32_t now_ms) {
     /* While a fault is latched the output is 0, and mc_clear_faults()
      * stops the wheels, so a speed sent now has no effect. */
-    mc->w[MC_LEFT].target_q8 = speed_q8(&mc->cfg, left_mm_s);
-    mc->w[MC_RIGHT].target_q8 = speed_q8(&mc->cfg, right_mm_s);
+    mc->w[MC_LEFT].target_q8 = speed_q8(&mc->cfg, limit_speed(&mc->cfg, left_mm_s));
+    mc->w[MC_RIGHT].target_q8 = speed_q8(&mc->cfg, limit_speed(&mc->cfg, right_mm_s));
     mc->command_ms = now_ms;
     mc->has_command = true;
     mc->faults &= (uint8_t)~MC_FAULT_STALE;

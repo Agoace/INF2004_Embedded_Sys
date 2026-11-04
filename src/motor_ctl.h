@@ -72,6 +72,7 @@ typedef struct {
     uint16_t integral_max_permille;
     uint16_t accel_cpt_q8; /* set point rise per tick, counts/tick Q8; 0 = step */
     uint16_t max_permille; /* duty limit */
+    uint16_t max_speed_mm_s; /* asked speed limit, each wheel, both signs; 0 = none */
     uint16_t kick_permille;
     uint16_t kick_counts;
     uint16_t kick_timeout_ms;
@@ -120,7 +121,8 @@ typedef struct {
 
 void mc_init(mc_t *mc, const mc_config_t *cfg, const int32_t counts[MC_WHEELS], uint32_t now_ms);
 
-/* Wheel speeds in mm/s, signed. No effect while a fault is latched. */
+/* Wheel speeds in mm/s, signed, limited to +/-max_speed_mm_s. No effect
+ * while a fault is latched. */
 void mc_set_speed(mc_t *mc, int16_t left_mm_s, int16_t right_mm_s, uint32_t now_ms);
 
 /* Both set points and duties to 0 at once. Not latched. */
