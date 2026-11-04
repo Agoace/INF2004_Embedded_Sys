@@ -43,8 +43,9 @@ code has no duty table.
 Why the result matches: the duty map is close to a straight line from
 8 % to 70 % (about 8.4 mm/s per % between 12 % and 50 %). The rule is
 linear in (value − min), so a straight-line map changes the result only
-by its slope. Example at position +20 after 0: duty 12 + 13 + 6 = 31 % /
-12 + 13 − 6 = 19 % → map about 222 / 123 mm/s; mm/s rule 215 / 127 mm/s.
+by its slope. Example at position +20 after 0 (turn 4000): duty 12 + 13 + 5 = 30 % /
+12 + 13 − 5 = 20 % (trim off) → map 214 / 131 mm/s; mm/s rule 215 / 127
+mm/s.
 
 The motor controller limits the asked speed to 460 mm/s; the max 378 is
 below it.
