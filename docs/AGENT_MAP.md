@@ -36,6 +36,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Detour v1.6 test plan | [docs/DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md) |
 | ADR: motor controller owns the actuators | [docs/ADR_MOTOR_CONTROLLER.md](ADR_MOTOR_CONTROLLER.md) |
 | ADR: one hardware heartbeat | [docs/ADR_HEARTBEAT.md](ADR_HEARTBEAT.md) |
+| ADR: Vehicle Controller runs one module at a time | [docs/ADR_VEHICLE_CONTROLLER.md](ADR_VEHICLE_CONTROLLER.md) |
 | Motor controller record | [docs/MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md) — core [`src/motor_ctl.c`](../src/motor_ctl.c), settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/TWO_SENSOR_LINE_TRACING.md](TWO_SENSOR_LINE_TRACING.md) |

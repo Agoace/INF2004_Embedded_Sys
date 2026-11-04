@@ -23,6 +23,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned instrument packet contract for firmware, receiver, and future dashboard.
 - [ADR: motor controller owns the actuators](ADR_MOTOR_CONTROLLER.md) — accepted 2026-11-04: one owner of motor PWM, servo PWM and encoders; values in, measurements out; no intent; hardware quirks inside.
 - [ADR: one hardware heartbeat](ADR_HEARTBEAT.md) — accepted 2026-11-04: 1 ms timer interrupt; ADC sample, `mc_tick()` and watchdog in the interrupt; decisions in the main loop.
+- [ADR: Vehicle Controller runs one module at a time](ADR_VEHICLE_CONTROLLER.md) — accepted 2026-11-04: shared detectors, running module interprets them and returns an outcome, controller maps outcomes to the next module and is the only motor controller caller.
 - [Motor controller](MOTOR_CONTROLLER.md) — the controller from the ADR: interface, speed loop (from Motion), robot settings, host test, step status.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
 - [Week 8 Change Requirement 1 notes](week8_change_requirement_1_notes.md) — minimum-bit data representation decisions, calculations, and open measurements.
