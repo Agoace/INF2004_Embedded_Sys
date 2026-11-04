@@ -25,7 +25,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/robocar_ir_sensors.c`](src/robocar_ir_sensors.c) — line detection and Code 39 barcode reader firmware.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
-- [`docs/`](docs/README.md) — durable documentation and calibration results. Actuator ownership: [ADR: motor controller](docs/ADR_MOTOR_CONTROLLER.md).
+- [`docs/`](docs/README.md) — durable documentation and calibration results. Actuator ownership: [ADR: motor controller](docs/ADR_MOTOR_CONTROLLER.md); timing: [ADR: heartbeat](docs/ADR_HEARTBEAT.md).
 - [`scripts/`](scripts/) — repository maintenance scripts.
 - [`.githooks/`](.githooks/) — repository-owned Git hooks.
 
