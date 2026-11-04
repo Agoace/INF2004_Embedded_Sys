@@ -44,6 +44,8 @@ FLAG_REPLAY = 0x01
 FLAG_REPLAY_END = 0x02
 FLAG_BYPASS = 0x04  # run from bypass_test: mode 3 is BYPS
 FLAG_DETOUR = 0x08  # with FLAG_BYPASS: run from detour_test
+FLAG_SPEED = 0x10  # run from vc_line_test: wheel fields are mm/s / 4
+SPEED_UNIT = 4
 BYPASS_HEADER_BYTES = 4
 BYPASS_BYTES = 5
 MAX_BYPASS = 40
@@ -129,13 +131,16 @@ def format_bypass(b):
 
 
 TABLE_HEADER = "  t_ms mode  pos  dutyL dutyR  rawL rawC rawR  side src    hint  cntL cntR"
+SPEED_TABLE_HEADER = "  t_ms mode  pos   mm/sL mm/sR  rawL rawC rawR  side src    hint  cntL cntR"
 
 
-def format_entry(index, e, modes=MODES):
+def format_entry(index, e, modes=MODES, speed=False):
     info = e["info"]
-    return ("%6d %s %+4d  %3d %3d  %4d %4d %4d  %s %-6s %s  %4d %4d" % (
+    scale, form = (SPEED_UNIT, "%6d %s %+4d  %5d %5d  %4d %4d %4d  %s %-6s %s  %4d %4d") if speed \
+        else (1, "%6d %s %+4d  %3d %3d  %4d %4d %4d  %s %-6s %s  %4d %4d")
+    return (form % (
         index * LOG_PERIOD_MS, modes.get(info & 3, "?"), e["position"],
-        e["left_pct"], e["right_pct"], e["raw"][0], e["raw"][1], e["raw"][2],
+        e["left_pct"] * scale, e["right_pct"] * scale, e["raw"][0], e["raw"][1], e["raw"][2],
         SIDES[(info >> 2) & 3], SOURCES[(info >> 4) & 3], SIDES[(info >> 6) & 3],
         e["left_counts"], e["right_counts"]))
 
@@ -177,7 +182,7 @@ class Receiver:
     def run_state(self, boot, run):
         return self.runs.setdefault((boot, run), {
             "entries": {}, "live": set(), "replay_at": None, "modes": MODES, "bypass": {},
-            "detour": False})
+            "detour": False, "speed": False})
 
     def handle_bypass(self, boot, body):
         if len(body) < BYPASS_HEADER_BYTES:
@@ -231,11 +236,14 @@ class Receiver:
             state["modes"] = BYPASS_MODES
         if flags & FLAG_DETOUR:
             state["detour"] = True
+        if flags & FLAG_SPEED:
+            state["speed"] = True
         replay = bool(flags & FLAG_REPLAY)
         if replay:
             state["replay_at"] = time.monotonic()
         if self.live and not replay and not state["live"]:
-            print("[log] run %d\n[log] %s" % (run, TABLE_HEADER))
+            print("[log] run %d\n[log] %s" % (
+                run, SPEED_TABLE_HEADER if state["speed"] else TABLE_HEADER))
         for i in range(count):
             off = LOG_HEADER_BYTES + i * ENTRY_BYTES
             e = decode_entry(body[off:off + ENTRY_BYTES])
@@ -244,7 +252,7 @@ class Receiver:
             if not replay:
                 state["live"].add(index)
                 if self.live:
-                    print("[log] " + format_entry(index, e, state["modes"]))
+                    print("[log] " + format_entry(index, e, state["modes"], state["speed"]))
         if flags & FLAG_REPLAY_END:
             self.save_run(boot, run, state)
 
@@ -264,14 +272,15 @@ class Receiver:
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         path = self.out_dir / ("run_%s_boot%04x_run%d.txt" % (stamp, boot, run))
         with path.open("w") as f:
-            name = ("detour_test" if state["detour"]
+            name = ("vc_line_test" if state["speed"]
+                    else "detour_test" if state["detour"]
                     else "bypass_test" if state["modes"] is BYPASS_MODES else "steer_test")
             f.write("# %s run %d, boot %04x, saved %s\n" % (name, run, boot, stamp))
             f.write("# entries %d of %d; received live %d; packets lost %d\n" % (
                 len(indices), expected, len(state["live"]), self.lost.get(boot, 0)))
-            f.write(TABLE_HEADER + "\n")
+            f.write((SPEED_TABLE_HEADER if state["speed"] else TABLE_HEADER) + "\n")
             for index in indices:
-                f.write(format_entry(index, entries[index], state["modes"]) + "\n")
+                f.write(format_entry(index, entries[index], state["modes"], state["speed"]) + "\n")
             bypass = state["bypass"]
             if bypass:
                 last = max(bypass)
@@ -368,6 +377,15 @@ def self_test():
         if not format_detour(dict(want_b, state=1, phase=3)).endswith(" FAILED"):
             print("FAIL detour step 7 is not FAILED")
             failures += 1
+        # vc_line_test run: wheel fields in mm/s (x 4).
+        r.handle(bytes([TYPE_LOG | (VERSION << 4), 0xEF, 0xBE, 9, 0]) +
+                 bytes([7, FLAG_REPLAY | FLAG_REPLAY_END | FLAG_SPEED, 0, 0, 1]) + VECTOR)
+        files = list(pathlib.Path(d).glob("run_*_bootbeef_run7.txt"))
+        text = files[0].read_text() if len(files) == 1 else ""
+        for want in ("# vc_line_test run 7", SPEED_TABLE_HEADER, "SRCH  -37     52   -80"):
+            if want not in text:
+                print("FAIL vc_line_test run file, missing %r:\n%s" % (want, text))
+                failures += 1
         # Bad sizes are ignored.
         r.handle(header + bytes([3, 0, 0, 0, 5]) + VECTOR)
         r.handle(b"\x21")

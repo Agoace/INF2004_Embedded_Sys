@@ -4,7 +4,7 @@ The locked two-sensor line steering
 ([two-sensor line tracing](TWO_SENSOR_LINE_TRACING.md), tag
 `line-tracing-2sensor-v1`) moved from motor duty to wheel speed, so the
 [motor controller](MOTOR_CONTROLLER.md) holds the wheel speeds. Branch:
-`yx-line-steer`. Status: code and host tests done; **not run on the track**.
+`yx-line-steer`. Status: code and host tests done; used by [`vc_line_test`](VC_LINE_RUN.md); **not run on the track**.
 The lock rule applies: a track run and a new record are needed before
 this replaces the duty version.
 

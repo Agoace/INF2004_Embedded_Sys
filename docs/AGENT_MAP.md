@@ -38,6 +38,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | ADR: one hardware heartbeat | [docs/ADR_HEARTBEAT.md](ADR_HEARTBEAT.md) |
 | ADR: Vehicle Controller runs one module at a time | [docs/ADR_VEHICLE_CONTROLLER.md](ADR_VEHICLE_CONTROLLER.md) |
 | Vehicle state machine record | [docs/VEHICLE_STATE_MACHINE.md](VEHICLE_STATE_MACHINE.md) — shell [`src/vehicle_sm.c`](../src/vehicle_sm.c), test [`tests/test_vehicle_sm.c`](../tests/test_vehicle_sm.c) |
+| Vehicle Controller line run | [docs/VC_LINE_RUN.md](VC_LINE_RUN.md) — modules [`src/line_trace.c`](../src/line_trace.c), [`src/line_search.c`](../src/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
 | Line steering in mm/s | [docs/LINE_STEER_MM.md](LINE_STEER_MM.md) — `steer_mm_*` in [`src/line_steer.c`](../src/line_steer.c) |
 | Duty map record | [docs/DUTY_MAP.md](DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/HEARTBEAT.md](HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
