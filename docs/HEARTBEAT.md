@@ -77,4 +77,15 @@ counters, and `missed_frames`.
 | GP20: hang the main loop 3 s | No reset; ticks continue; missed goes up by about 299 (10 ms flag) + 149 (20 ms flag) + 2 (1 s flag) |
 | GP21: stop the heartbeat | Watchdog reset after 50 ms; the next boot prints "Last reset: watchdog" |
 
-Bench result: not run yet.
+### Bench result (2026-11-04, `2b64bf2`, USB power)
+
+| Check | Result |
+| --- | --- |
+| Idle, 45 s | Ticks +1000 per second; 1 ms hook gap 1000..1000 µs, 10 ms hook gap 10000..10000 µs; interrupt work at most 30 µs (3% of a tick); overruns 0; missed 0 |
+| GP20: main loop hung 3 s | No reset. Ticks went on (34000 → 37542 at the first line after the hang). Missed frames 450 = 299 (10 ms) + 149 (20 ms) + 2 (1 s), as expected. Tick gaps stayed 1000 µs during the hang |
+| GP21: heartbeat stopped | Reset in less than 2 s of log time; the next boot printed "Last reset: watchdog" |
+| After the watchdog reset | First second: gaps 998..1000 µs (USB start-up); then 1000..1000 µs |
+
+The 30 µs interrupt time includes only the two bench hooks and the
+watchdog restart. Measure it again when the ADC sample and `mc_tick()`
+are hooked in.
