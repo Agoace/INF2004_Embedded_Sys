@@ -64,9 +64,10 @@
 #define LOG_ENTRIES (LOG_KEEP_MS / LOG_PERIOD_MS)
 #define LIVE_BATCH 5u
 #define SPEED_LOG_UNIT 4 /* mm/s per log unit (int8: up to 508 mm/s) */
-/* Speed loop I gain for this target (MC_ROBOT_CONFIG: 128). P9: 0. */
+/* Speed loop I gain for this target (MC_ROBOT_CONFIG: 128). P9 tested 0:
+ * no change on the straights, 6 mm/s slower, so 128 again. */
 #ifndef VC_LINE_KI_Q8
-#define VC_LINE_KI_Q8 0u
+#define VC_LINE_KI_Q8 128u
 #endif
 
 /* Locked line tracing (docs/TWO_SENSOR_LINE_TRACING.md) mapped to mm/s
@@ -489,8 +490,7 @@ int main(void) {
     line_sensors_init();
     ultrasonic_init(ULTRASONIC_TRIGGER_PIN, ULTRASONIC_ECHO_PIN, NULL);
     hb_init(&hb);
-    /* P9 (docs/VC_LINE_RUN.md): wheel speed loop without the I term, for
-     * this target only; feed-forward and P stay. */
+    /* P9 (docs/VC_LINE_RUN.md) ran without the I term; now the robot value. */
     mc_cfg.ki_q8 = VC_LINE_KI_Q8;
     const bool mc_ok = mcp_init(&hb, &mc_cfg); /* motors 0, servo centre; hook at phase 0 */
     f_1ms = hb_add_flag(&hb, 1u, 0u);

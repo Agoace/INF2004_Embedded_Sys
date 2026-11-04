@@ -4,7 +4,7 @@ The first target in the new layers
 ([ADR: Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)): line tracing and
 line search as modules in the [shell](VEHICLE_STATE_MACHINE.md), wheel
 speeds through the [motor controller](MOTOR_CONTROLLER.md). Branch:
-`yx-line-steer`. Status: built and host-tested; **not run on the track**.
+`yx-line-steer`. Status: run on the track (P5–P9); **stopped at the P7 settings** on 2026-11-04, see [End state](#end-state-2026-11-04).
 The goal of the first run (P5) is to compare with P4 of the
 [locked line tracing](TWO_SENSOR_LINE_TRACING.md).
 
@@ -269,3 +269,17 @@ the line in 12 % of the entries in P4 and 6 % in P7 and P9; position
 zone with a graded position) faster, so the steering acts more like
 left/right only. The log cannot tell whether this is the cause or the
 effect of the swing.
+
+## End state (2026-11-04)
+
+Operator: stop tuning here. `vc_line_test` is left at the P7 settings
+with the robot wheel loop (I on, `ki_q8` 128): base 146 mm/s, min 62,
+max 378, gain 85, D 85 (GP20 steps D 85/130/50), far gain 340 above 50;
+motor controller rise limit 8.
+
+| Item | State |
+| --- | --- |
+| Against P4 (duty) | Fewer searches (33 against 46 per min), same speed, same curves; **more small swings on the straights after a curve** (position sd 35–37 against 26) |
+| Ruled out | Wheel delay (fixed in P6), turn strength, steering D (P8), wheel loop I (P9), inner wheel stops |
+| Open | Swings on the straights. Next idea, not tried: lower gain near the middle (85 → 60 → 45) with the far gain kept for curves |
+| Lock | Not locked: the duty version ([two-sensor line tracing](TWO_SENSOR_LINE_TRACING.md)) stays the locked design |
