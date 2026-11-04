@@ -34,6 +34,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | v1.5 box-size test record | [docs/SIM_BOX_SWEEP.md](SIM_BOX_SWEEP.md) — seven fixed-front box cases, captured console, hooks, and screenshots |
 | Obstacle detour handoff | [docs/OBSTACLE_DETOUR_HANDOFF.md](OBSTACLE_DETOUR_HANDOFF.md) |
 | Detour v1.6 test plan | [docs/DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md) |
+| ADR: motor controller owns the actuators | [docs/ADR_MOTOR_CONTROLLER.md](ADR_MOTOR_CONTROLLER.md) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/TWO_SENSOR_LINE_TRACING.md](TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
