@@ -172,12 +172,17 @@ int main(void) {
         CHECK(mc_heading_cdeg(&mc) > 1000, "spin left: heading %ld", (long)mc_heading_cdeg(&mc));
     }
 
-    /* 7. Set point rise limit: 2 counts/tick per tick. */
+    /* 7. Set point rise limit: accel_cpt_q8 per tick (robot: 8 counts/tick
+     * per tick). 300 mm/s is about 37 counts/tick, above two steps. */
     start();
     run(300, 300, CFG.tick_ms);
-    CHECK(mc.w[0].setpoint_q8 == 512, "rise: first tick %ld", (long)mc.w[0].setpoint_q8);
+    CHECK(CFG.accel_cpt_q8 > 0u && mc.w[0].target_q8 > 2 * (int32_t)CFG.accel_cpt_q8,
+          "rise: test needs a target above two steps");
+    CHECK(mc.w[0].setpoint_q8 == (int32_t)CFG.accel_cpt_q8, "rise: first tick %ld",
+          (long)mc.w[0].setpoint_q8);
     run(300, 300, CFG.tick_ms);
-    CHECK(mc.w[0].setpoint_q8 == 1024, "rise: second tick %ld", (long)mc.w[0].setpoint_q8);
+    CHECK(mc.w[0].setpoint_q8 == 2 * (int32_t)CFG.accel_cpt_q8, "rise: second tick %ld",
+          (long)mc.w[0].setpoint_q8);
     run(300, 300, 1000u);
     run(100, 100, CFG.tick_ms);
     CHECK(mc.w[0].setpoint_q8 == mc.w[0].target_q8, "slowing: at once");

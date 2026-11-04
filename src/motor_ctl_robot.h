@@ -36,7 +36,7 @@
         .kp_q8 = 1536u,                                  /* 6.0 */                       \
         .ki_q8 = 128u,                                   /* 0.5 per tick */              \
         .integral_max_permille = 400u,                                                   \
-        .accel_cpt_q8 = 512u, /* 2 counts/tick per tick: about 1600 mm/s^2 */            \
+        .accel_cpt_q8 = 2048u, /* 8 counts/tick per tick: about 6400 mm/s^2 (P5) */      \
         .max_permille = 800u,                                                            \
         .max_speed_mm_s = 460u, /* 60 % open loop (duty map DM1); wheelies at 80 % */   \
         .kick_permille = 120u,                                                           \
