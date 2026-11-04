@@ -38,6 +38,7 @@
         .integral_max_permille = 400u,                                                   \
         .accel_cpt_q8 = 512u, /* 2 counts/tick per tick: about 1600 mm/s^2 */            \
         .max_permille = 800u,                                                            \
+        .max_speed_mm_s = 460u, /* 60 % open loop (duty map DM1); wheelies at 80 % */   \
         .kick_permille = 120u,                                                           \
         .kick_counts = 10u,                                                              \
         .kick_timeout_ms = 250u,                                                         \

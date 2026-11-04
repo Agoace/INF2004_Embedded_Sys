@@ -42,6 +42,7 @@ steer mixing, calm mode, FOLLOW state, move completion, command queue.
 | Start kick | From rest or on a direction change: at least 12 % until 10 counts; none in 250 ms = stall | Start policy in [calibration results](CALIBRATION_RESULTS.md) |
 | Stall | Duty ≥ 15 % and no count for 500 ms | Latched |
 | Duty limit | 80 % | — |
+| Speed limit | `mc_set_speed()` limits each wheel to ±`max_speed_mm_s` (0 = none) | 460 mm/s: the 60 % point of the duty map (run DM1, `docs/DUTY_MAP.md` on branch `yx-line-steer`); the robot did wheelies at 80 % open loop |
 | Units | 12414 counts per metre (2535 counts, 65 mm wheel); 24.05 counts per degree (track 111 mm) | [Robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
 
 Note: Motion's `motion_config.h` has wheelbase 120 mm (MEASURE); this
@@ -218,6 +219,9 @@ and settle time.
 Mutation check 2026-11-04: 35 of 36 caught. The survivor is equivalent
 (`<=` against `<` in the rise limit: both give the asked set point). Four
 redundant lines found by the check were removed.
+
+Mutation check after the speed limit (2026-11-04): 42 of 43 caught (4
+new mutants), the same equivalent survivor.
 
 Mutation check after the I hold (2026-11-04): 38 of 39 caught (3 new
 mutants for the hold rule), the same equivalent survivor. The check first
