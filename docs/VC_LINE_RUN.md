@@ -230,3 +230,17 @@ Result: D 85 → 130 changes nothing. In 53–58 % of the time the line is
 under one sensor only, where the position stays near ±50 and its change
 (the D input) is near 0, so D has little to act on. The difference to
 P4 is on the straights only (sd 36 against 26); curves are the same.
+
+### Wheel loop test P9 (after P8)
+
+Suspect: the speed loop I term. It builds up in a curve and needs 2–3 s
+to unwind on the straight after it, which matches the swings. P9 runs
+with `ki_q8` 0 for `vc_line_test` only (`VC_LINE_KI_Q8`; the motor
+controller and `MC_ROBOT_CONFIG` do not change). Feed-forward, P (kp_q8
+1536), rise limit and the start kick stay. D stays at 85 (GP20 still
+steps it). The run summary prints the wheel loop values.
+
+| Straights (position sd) | Meaning |
+| --- | --- |
+| About 26 (P4) | The I term causes the swings: fix it in the motor controller |
+| About 36 (P7, P8) | Not the I term: next, the start kick or the 62 mm/s floor |

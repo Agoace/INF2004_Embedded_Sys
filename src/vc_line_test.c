@@ -64,6 +64,10 @@
 #define LOG_ENTRIES (LOG_KEEP_MS / LOG_PERIOD_MS)
 #define LIVE_BATCH 5u
 #define SPEED_LOG_UNIT 4 /* mm/s per log unit (int8: up to 508 mm/s) */
+/* Speed loop I gain for this target (MC_ROBOT_CONFIG: 128). P9: 0. */
+#ifndef VC_LINE_KI_Q8
+#define VC_LINE_KI_Q8 0u
+#endif
 
 /* Locked line tracing (docs/TWO_SENSOR_LINE_TRACING.md) mapped to mm/s
  * through the duty map (docs/LINE_STEER_MM.md): base 25 % -> 171,
@@ -109,6 +113,7 @@ static const char *const OUT_NAMES[] = {"RUNNING", "OBSTACLE",  "SIDE",  "DONE_L
                                         "DONE_NO_LINE", "LINE_LOST", "FOUND", "FAILED"};
 
 static hb_t hb;
+static mc_config_t mc_cfg = MC_ROBOT_CONFIG;
 static int f_1ms, f_10ms, f_20ms;
 static lp_t lp;
 static lt_t lt;
@@ -340,6 +345,8 @@ static void print_summary(void) {
            (unsigned long)hb.isr_max_us, (unsigned long)hb.gap_overruns,
            (unsigned long)hb.isr_overruns, (unsigned long)run.missed,
            (unsigned long)s.tick_max_us, s.faults, (unsigned long)wifi_log_dropped());
+    printf("[run] wheel loop: kp_q8 %u, ki_q8 %u, rise %u\n", mc_cfg.kp_q8, mc_cfg.ki_q8,
+           mc_cfg.accel_cpt_q8);
     printf("[run] line: base %d min %d max %d mm/s, gain %u D %u far %u above %u; search %d mm/s %ld "
            "counts\n",
            lt.cfg.steer.base_mm_s, lt.cfg.steer.min_mm_s, lt.cfg.steer.max_mm_s,
@@ -482,8 +489,10 @@ int main(void) {
     line_sensors_init();
     ultrasonic_init(ULTRASONIC_TRIGGER_PIN, ULTRASONIC_ECHO_PIN, NULL);
     hb_init(&hb);
-    static const mc_config_t cfg = MC_ROBOT_CONFIG;
-    const bool mc_ok = mcp_init(&hb, &cfg); /* motors 0, servo centre; hook at phase 0 */
+    /* P9 (docs/VC_LINE_RUN.md): wheel speed loop without the I term, for
+     * this target only; feed-forward and P stay. */
+    mc_cfg.ki_q8 = VC_LINE_KI_Q8;
+    const bool mc_ok = mcp_init(&hb, &mc_cfg); /* motors 0, servo centre; hook at phase 0 */
     f_1ms = hb_add_flag(&hb, 1u, 0u);
     /* Phase 9: the shell step runs 1 ms before the next mc_tick (phase 0),
      * so its command is used at once (phase 1 waited 9 ms; run P5). The
