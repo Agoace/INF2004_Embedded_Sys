@@ -68,10 +68,13 @@
 /* Locked line tracing (docs/TWO_SENSOR_LINE_TRACING.md) mapped to mm/s
  * through the duty map (docs/LINE_STEER_MM.md): base 25 % -> 171,
  * min 12 % -> 62, max 50 % -> 378. Straight 450 counts across a junction;
- * side hint above 20 counts of turn. */
+ * side hint above 20 counts of turn.
+ * P7 (docs/VC_LINE_RUN.md, after P6): matched to what P4 really did, not
+ * to the straight-run duty map. P4 drove 146 mm/s; P6 turned 17 % harder
+ * than P4 for the same position. Base 146; gain, D and far gain x 0.85. */
 static const lt_config_t LINE_CFG = {
-    .steer = {.base_mm_s = 171, .gain_pct = 100u, .kd_pct = 100u, .min_mm_s = 62,
-              .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 400u},
+    .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
+              .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},
     .straight_counts = 450,
     .hint_counts = 20,
 };

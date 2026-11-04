@@ -164,3 +164,11 @@ for the same position than in P4. The duty map was measured in straight
 runs; in P4 the open-loop wheels did not reach the mapped speeds while
 turning (load), and the speed loop now does. The swing is faster (about
 2.7 per s).
+
+Change for P7 (operator, 2026-11-04): match what P4 really did.
+
+| Setting | P5, P6 | P7 |
+| --- | --- | --- |
+| Base | 171 mm/s | **146 mm/s** (P4 mean speed) |
+| Gain / D / far gain | 100 / 100 / 400 | **85 / 85 / 340** (× 0.85: P4 1.59 against P6 1.86 mm/s per position unit) |
+| Min, max, far from | 62, 378, 50 | the same |
