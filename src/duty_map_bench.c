@@ -119,7 +119,8 @@ static void idle_ms(uint32_t ms) {
 }
 
 static long mm_s(int32_t counts, uint16_t ms) {
-    return ms ? (long)counts * 1000000L / ((long)COUNTS_PER_M * ms) : 0;
+    /* 64-bit: counts x 1e6 is above 2^31 for more than 2147 counts (run DM1, 80 %). */
+    return ms ? (long)((int64_t)counts * 1000000 / ((int64_t)COUNTS_PER_M * ms)) : 0;
 }
 
 static void print_summary(const char *why, unsigned int levels_done) {
