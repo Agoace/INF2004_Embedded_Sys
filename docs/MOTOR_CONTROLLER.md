@@ -10,7 +10,7 @@ Branch: `yx-motor-controller`.
 | --- | --- | --- |
 | 1 | Pure core [`src/motor_ctl.c`](../src/motor_ctl.c), [`src/motor_ctl.h`](../src/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
 | 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Bench target: step response, both directions, slow turn; tune P, I and feed-forward | Not started |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | In progress: built, not run |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -79,6 +79,36 @@ estimate 42 ms + 3.6 ms per degree, fitted to the scan settle times
 The servo pulse changes at the next tick, so up to 10 ms after
 `mcp_set_servo()`. The settle estimate starts at the call; the error is
 small against the 42 ms base.
+
+## Floor bench (step 3)
+
+`motor_ctl_bench` drives a fixed list of wheel speed steps on the floor
+and records one row per 10 ms tick in RAM (up to 24 s). After the run it
+prints a summary and all rows over USB and Wi-Fi (`text_<boot>.txt` from
+`scripts/steer_log_receiver.py`).
+
+| Step | Speed L/R (mm/s) | Time | Checks |
+| --- | --- | --- | --- |
+| fwd 150, rev 150 | ±150 | 1.5 s each | Rise, overshoot, steady error, reverse against forward |
+| fwd 300, rev 300 | ±300 | 1.0 s each | Higher speed, duty limit |
+| spin L 20, spin R 20 | ∓20 / ±20 | 3.0 s each (about 60°) | The slow-turn case (detour sweep, 20°/s): does the I term hold a speed below the dead zone? |
+| fwd 40, rev 40 | ±40 | 2.0 s each | The slowest steady speed seen in the track logs |
+
+Each step is followed by 0.7 s at speed 0 (coast). The list is 21.4 s; the
+net travel is about 0.
+
+| Control | Action |
+| --- | --- |
+| GP21 | Start after 1 s; a second press is an emergency stop |
+| GP20 | Print the last run again |
+
+The run stops early on a latched fault (stall or emergency stop).
+Space: about 40 cm clear ahead and behind, and room to turn.
+
+Row format: `MB i step tgtL tgtR spdL spdR dutyL dutyR cntL cntR faults`
+(mm/s, permille, encoder counts). The summary gives, per step, the mean
+speed and duty over the second half and the heading change from the
+counts, plus the longest hook time and the heartbeat counters.
 
 ## Ideas (not implemented)
 
