@@ -192,3 +192,21 @@ faults; heartbeat ISR max 103 µs, missed frames 0.
 Result: close to P4, with fewer searches. The side changes are still
 more frequent than in P4 although the turn is now 12 % weaker, so turn
 strength is not the only cause.
+
+### D test (after P7)
+
+Operator (2026-11-04): P7 swings less far but makes more small swings.
+The log shows the same main swing as P4 (about 3 Hz) with 30 % larger
+position steps per 50 ms (sd 40 against 31); the inner wheel stops and
+starts as often as in P4 (about 3 per s). Test whether the steering is
+under-damped: only D changes.
+
+GP20 (idle) steps D through 85 (P7) → 130 → 50 → 85 and prints
+`[cfg] steering D …`; the run summary prints the D in use. GP20 no longer
+starts a calibration only.
+
+| D higher (130) | Meaning | Next |
+| --- | --- | --- |
+| Swings less | Under-damped | Try more D |
+| Swings more | D amplifies the position noise | Try D 50 |
+| No change | Not the steering | Wheel speed loop (overshoot 6–12 %, bench B3) |

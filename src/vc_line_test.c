@@ -3,7 +3,7 @@
  * motor controller (docs/VC_LINE_RUN.md).
  *
  *   GP21  spin calibration, then the run after 1 s; press again to stop
- *   GP20  spin calibration only
+ *   GP20  (idle) next steering D from D_STEPS; the value is printed
  *
  * Layers (docs/ADR_VEHICLE_CONTROLLER.md):
  *   detectors  line position (src/line_position.c) every 1 ms, ultrasonic
@@ -72,6 +72,12 @@
  * P7 (docs/VC_LINE_RUN.md, after P6): matched to what P4 really did, not
  * to the straight-run duty map. P4 drove 146 mm/s; P6 turned 17 % harder
  * than P4 for the same position. Base 146; gain, D and far gain x 0.85. */
+/* D test after P7 (docs/VC_LINE_RUN.md): GP20 picks the next D. All other
+ * settings stay. The first value is the P7 value. */
+static const uint8_t D_STEPS[] = {85u, 130u, 50u};
+#define D_STEP_COUNT (sizeof D_STEPS / sizeof D_STEPS[0])
+static unsigned int d_step;
+
 static const lt_config_t LINE_CFG = {
     .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
               .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},
@@ -336,9 +342,9 @@ static void print_summary(void) {
            (unsigned long)s.tick_max_us, s.faults, (unsigned long)wifi_log_dropped());
     printf("[run] line: base %d min %d max %d mm/s, gain %u D %u far %u above %u; search %d mm/s %ld "
            "counts\n",
-           LINE_CFG.steer.base_mm_s, LINE_CFG.steer.min_mm_s, LINE_CFG.steer.max_mm_s,
-           LINE_CFG.steer.gain_pct, LINE_CFG.steer.kd_pct, LINE_CFG.steer.far_gain_pct,
-           LINE_CFG.steer.far_from, SEARCH_CFG.speed_mm_s, (long)SEARCH_CFG.turn_counts);
+           lt.cfg.steer.base_mm_s, lt.cfg.steer.min_mm_s, lt.cfg.steer.max_mm_s,
+           lt.cfg.steer.gain_pct, lt.cfg.steer.kd_pct, lt.cfg.steer.far_gain_pct,
+           lt.cfg.steer.far_from, SEARCH_CFG.speed_mm_s, (long)SEARCH_CFG.turn_counts);
 }
 
 /* ---------------------------------------------------------------------
@@ -497,9 +503,9 @@ int main(void) {
     wifi_log_init();
     idle_ms(2000u);
     printf("\nVehicle Controller line test (mm/s). Last reset: %s. mcp_init %s, heartbeat %s.\n"
-           "GP21: calibrate, then run %lu s (press again to stop). GP20: calibrate only.\n",
+           "GP21: calibrate, then run %lu s (press again to stop). GP20: next D (now %u).\n",
            heartbeat_watchdog_reset() ? "watchdog" : "power or flash", mc_ok ? "ok" : "FAILED",
-           hb_ok ? "ok" : "FAILED", (unsigned long)(RUN_LIMIT_MS / 1000u));
+           hb_ok ? "ok" : "FAILED", (unsigned long)(RUN_LIMIT_MS / 1000u), lt.cfg.steer.kd_pct);
     if (!mc_ok || !hb_ok) {
         for (;;) idle_ms(1000u);
     }
@@ -516,7 +522,12 @@ int main(void) {
         const bool spin_edge = pressed(SPIN_BUTTON_PIN, &previous_spin);
         const bool run_edge = pressed(RUN_BUTTON_PIN, &previous_run);
         if (spin_edge) {
-            (void)calibrate();
+            d_step = (d_step + 1u) % D_STEP_COUNT;
+            lt_config_t c = LINE_CFG;
+            c.steer.kd_pct = D_STEPS[d_step];
+            lt_init(&lt, &c);
+            printf("[cfg] steering D %u (gain %u, far gain %u, base %d mm/s)\n", lt.cfg.steer.kd_pct,
+                   lt.cfg.steer.gain_pct, lt.cfg.steer.far_gain_pct, lt.cfg.steer.base_mm_s);
         } else if (run_edge) {
             if (!calibrate()) {
                 printf("[run] Calibration failed: not started.\n");
