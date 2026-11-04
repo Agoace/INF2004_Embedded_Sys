@@ -244,3 +244,28 @@ steps it). The run summary prints the wheel loop values.
 | --- | --- |
 | About 26 (P4) | The I term causes the swings: fix it in the motor controller |
 | About 36 (P7, P8) | Not the I term: next, the start kick or the 62 mm/s floor |
+
+#### Run P9 (2026-11-04, boot d8fa run 1)
+
+Wheel loop without I (`ki_q8` 0), D 85. Log
+`build/steer_logs/run_20261104-173731_bootd8fa_run1.txt`, 90 s (time
+limit), 1775 of 1800 entries. No faults.
+
+| Run | Side changes | Position sd, straights | sd, curves | Searches | Speed |
+| --- | --- | --- | --- | --- | --- |
+| P4 (duty) | 2.1 per s | 26 | 17 | 46 per min | 146 mm/s |
+| P7 (I on) | 3.6 per s | 37 | 16 | 33 per min | 142 mm/s |
+| P9 (I off) | 3.2 per s | **35** | 16 | 37 per min | 136 mm/s |
+
+Result: the I term is not the cause (straights the same; speed 6 mm/s
+lower without I, as expected).
+
+Straights only, P4 against P7/P9: the turn per position unit is the same
+(0.90 / 0.93 / 0.89 mm/s), and the inner wheel is at 0 in 3–5 % of the
+entries. The difference is where the line is: with the same raw limit
+(30 % between floor 190/160 and line 2600/2450 ADC), both sensors see
+the line in 12 % of the entries in P4 and 6 % in P7 and P9; position
+20–39 in 25 % against 18–19 %. The robot crosses the middle (the only
+zone with a graded position) faster, so the steering acts more like
+left/right only. The log cannot tell whether this is the cause or the
+effect of the swing.
