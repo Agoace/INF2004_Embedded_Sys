@@ -172,3 +172,23 @@ Change for P7 (operator, 2026-11-04): match what P4 really did.
 | Base | 171 mm/s | **146 mm/s** (P4 mean speed) |
 | Gain / D / far gain | 100 / 100 / 400 | **85 / 85 / 340** (× 0.85: P4 1.59 against P6 1.86 mm/s per position unit) |
 | Min, max, far from | 62, 378, 50 | the same |
+
+## Run P7 (2026-11-04, boot 95bc run 1)
+
+Settings as above (base 146, gains × 0.85). Log
+`build/steer_logs/run_20261104-172140_boot95bc_run1.txt`, 1205 of 1205
+entries. The operator stopped it at 60.3 s (GP21): **better**. No
+faults; heartbeat ISR max 103 µs, missed frames 0.
+
+| Measure (follow mode) | P4 (duty) | P6 | P7 |
+| --- | --- | --- | --- |
+| Side changes (position past ±20) | 2.1 per s | 5.5 per s | **3.6 per s** |
+| Position at ±45 or more | 52 % | 78 % | **58 %** |
+| Position spread (sd) | 37 | 50 | **44** |
+| Searches (run summary) | 45 per min | 12 per min | **33 per min** |
+| Mean speed (counts) | 146 mm/s | 166 mm/s | **142 mm/s** |
+| Measured wheel difference per position unit | 1.59 mm/s | 1.86 mm/s | **1.40 mm/s** |
+
+Result: close to P4, with fewer searches. The side changes are still
+more frequent than in P4 although the turn is now 12 % weaker, so turn
+strength is not the only cause.
