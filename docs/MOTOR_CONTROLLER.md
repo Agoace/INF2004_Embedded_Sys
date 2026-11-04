@@ -38,7 +38,7 @@ steer mixing, calm mode, FOLLOW state, move completion, command queue.
 | Feed-forward | offset + slope × set point, **per wheel and per direction** | Offset / slope (‰, ‰ per count/tick): L fwd 48 / 9.66, L rev 59 / 8.89, R fwd 56 / 9.39, R rev 62 / 8.67. Fit to floor bench run B1 (2026-11-04). Step 1 used a rough fit to the track logs (offset 85–90, slope 9.0–12.0) |
 | P | kp × (set point − measured) | 6.0 ‰ per count/tick (Motion 3.0 at 20 ms, scaled) |
 | I | ki × error each tick; limit ±400 ‰. **Held** (not integrated) while the output is at the limit in the error's direction, **while the set point still rises, and while the start kick runs** (added after run B1: the wheel lags then, and I wound up and overshot) | 0.5 per tick |
-| Rise limit | Set point rises at most 2 counts/tick per tick (about 1600 mm/s²); falls at once | — |
+| Rise limit | Set point rises at most 8 counts/tick per tick (about 6400 mm/s²); falls at once. Was 2 (1600 mm/s²) until 2026-11-04: line run P5 showed the wheels followed the steering 50 ms later than with duty, and the steering swung | — |
 | Start kick | From rest or on a direction change: at least 12 % until 10 counts; none in 250 ms = stall | Start policy in [calibration results](CALIBRATION_RESULTS.md) |
 | Stall | Duty ≥ 15 % and no count for 500 ms | Latched |
 | Duty limit | 80 % | — |
