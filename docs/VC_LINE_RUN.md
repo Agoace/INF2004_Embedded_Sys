@@ -210,3 +210,23 @@ starts a calibration only.
 | Swings less | Under-damped | Try more D |
 | Swings more | D amplifies the position noise | Try D 50 |
 | No change | Not the steering | Wheel speed loop (overshoot 6–12 %, bench B3) |
+
+#### Runs P7b and P8 (2026-11-04, boot 2c0b runs 1 and 2)
+
+P7b repeated D 85 (the GP20 press was not registered); P8 used D 130.
+Operator after P7b: it calms, then falls into a stronger swing. The log
+shows the swings come **on the straights after a curve** (1 s windows:
+position sd 6–22 in curves, 40–49 on the straight after; correlation of
+turn rate with sd −0.59), then die out in 2–3 s.
+
+| Run | D | Side changes | Position sd, straight windows (turn < 15 °/s) | sd, curve windows (≥ 40 °/s) | Searches |
+| --- | --- | --- | --- | --- | --- |
+| P4 (duty) | 100 (duty) | 2.1 per s | **26** (max 49) | 17 | 46 per min |
+| P7 | 85 | 3.6 per s | 37 (max 55) | 16 | 33 per min |
+| P7b | 85 | 4.1 per s | 35 (max 49) | 17 | 30 per min |
+| P8 | 130 | 3.9 per s | 36 (max 52) | 16 | 35 per min |
+
+Result: D 85 → 130 changes nothing. In 53–58 % of the time the line is
+under one sensor only, where the position stays near ±50 and its change
+(the D input) is near 0, so D has little to act on. The difference to
+P4 is on the straights only (sd 36 against 26); curves are the same.
