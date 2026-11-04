@@ -363,6 +363,26 @@ target_link_libraries(detour_test PRIVATE
 pico_enable_stdio_usb(detour_test 1)
 pico_enable_stdio_uart(detour_test 0)
 pico_add_extra_outputs(detour_test)
+# Heartbeat bench test: 1 ms timer, hooks, flags, watchdog (no motors).
+add_executable(heartbeat_test
+    src/heartbeat_test.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+)
+
+target_include_directories(heartbeat_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(heartbeat_test PRIVATE
+    pico_stdlib
+    hardware_watchdog
+)
+
+pico_enable_stdio_usb(heartbeat_test 1)
+pico_enable_stdio_uart(heartbeat_test 0)
+pico_add_extra_outputs(heartbeat_test)
+
 # Independent IR line-detection and Code 39 barcode-reading firmware.
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c
