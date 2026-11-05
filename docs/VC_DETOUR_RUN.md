@@ -7,7 +7,7 @@ speeds through the [motor controller](MOTOR_CONTROLLER.md). Branch:
 target as the [Vehicle Controller line run](VC_LINE_RUN.md), now with all
 four modules).
 
-Status: built and host-tested on 2026-11-04; **not run on the track**.
+Status: built and host-tested on 2026-11-04; first track run R1 on 2026-11-05: **one detour done**, see [Run R1](#run-r1-2026-11-05-boot-a21a-run-1).
 Scope of the first track test (operator 2026-11-04): the port only. The
 open detour problems B, D, E and F
 ([detour handoff](OBSTACLE_DETOUR_HANDOFF.md#open-problems)) are not
@@ -121,3 +121,45 @@ them). ARM sizes: `servo_scan` 392 B, `detour_run`
    back off, the return to the line, then line tracing again.
 3. Record the run here: detours done, stalls, sweep rates, and whether
    problem E is gone.
+
+## Run R1 (2026-11-05, boot a21a run 1)
+
+Log `build/steer_logs/run_20261105-135825_boota21a_run1.txt` (1135 of
+1140 entries) and the text log. Box on the track; 57 s. Operator: "it
+works", then the robot ran into a wall at the end ("not a problem").
+
+| Time | Event |
+| --- | --- |
+| 17.4 s | LINE: OBSTACLE at 227 mm → SCAN |
+| 19.6 s | Scan: 228–245 mm from 30° right to 15° left, NR from 20° left. Free step R 7 (blocked), L 4 → detour LEFT |
+| 19.6–22.8 s | TURN_AWAY sweep, lost at +49° |
+| 22.8–25.7 s | STRAIGHT 350 mm |
+| 25.7–31.8 s | TURN_TOWARD sweep, seen at −48° (turned 97°); back off 30° |
+| 31.8–34.8 s | STRAIGHT at −17° |
+| 34.8–39.1 s | TURN_TOWARD to −90°, no echo: RETURN |
+| 39.1–42.0 s | Return straight, ON_LINE, ALIGN to 0°: **DONE** at (563, −53) mm |
+| 42.0 s | DONE_NO_LINE → SEARCH (right, toward the box side) → FOUND after 120 ms → LINE |
+| 45.5 s | Second OBSTACLE at 247 mm (the wall); scan → detour RIGHT |
+| 47.8–55.3 s | TURN_AWAY to +44°, STRAIGHT, TURN_TOWARD seen after 10° (back off 5°), STRAIGHT |
+| 57.0 s | Detour FAILED: too near (echo < 80 mm), the wall. FAULT, robot stopped |
+
+No motor controller faults (0x00); heartbeat ISR 103 µs max, 3 missed
+frames; Wi-Fi 3 packets lost.
+
+### Wheel speeds in the detour
+
+| Motion | Asked | Measured | Note |
+| --- | --- | --- | --- |
+| Sweeps (4) | 19 mm/s per wheel (20 °/s) | 16–18 mm/s, 16.5–18.4 °/s | **No stall** (problem E's low-duty stall did not happen). Jerky: one wheel at 0 in 10–17 of the 50 ms rows (the start kick and 2.4 counts per tick) |
+| Sweep, second detour TURN_TOWARD | 19 | 9–10 mm/s | 950 ms only; ended seen |
+| Straights | 131 mm/s | 123–132 mm/s, turn 0–2.4 °/s | No heading hold needed for these legs |
+| Back off, ALIGN | 131 mm/s | 97–125 mm/s | Short (200–700 ms): mostly the rise |
+
+### Result
+
+- The port works: LINE → SCAN → DETOUR → SEARCH → LINE on the track.
+- Problem E (sweep stall at low duty): not seen. The sweeps ran 15–20 %
+  below 20 °/s, with short wheel stops.
+- The second detour failed on the wall; the operator does not count it.
+- Not tested: DONE_LINE (the first detour ended just off the line, the
+  search found it).
