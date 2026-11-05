@@ -53,8 +53,11 @@ pure parts (`obstacle_scan.h` and `obstacle_profile.c`).
 | STOP (look, coast) | 0 | 0 |
 | New motion | 250 ms at 0 | 250 ms at 0 |
 
-Back off: half of the turn toward the obstacle, at most 30° (operator:
-keep for now).
+Back off: half of the turn toward the obstacle, at most 30° (run R1).
+From 2026-11-05 (operator, after R1): a **fixed 25°** (`back_off_fn`
+NULL, `back_off_deg` 25). With a turn toward the obstacle of less than
+25° (R1, second detour: 10°), the back off turns the robot past the
+heading of the straight before it.
 
 **Risk: 19 mm/s is below every speed tested on the motor controller**
 (lowest: 62 mm/s in DM1). It is 2.4 counts per 10 ms tick. The start

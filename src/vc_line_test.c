@@ -107,15 +107,10 @@ static const ss_config_t SCAN_CFG = {.stop_ms = 300u};
  * wheel speeds: straights and the non-sweep turns 131 mm/s (20 %); the
  * sweeps 20 deg/s = 19 mm/s per wheel, held by the motor controller (no
  * duty rate control). No heading hold on the straights (operator
- * 2026-11-04). Back off: half of the turn toward the obstacle, at most
- * 30 degrees (operator: keep for now). */
-#define BACK_OFF_MAX_DEG 30
-static int back_off_for(int turned_deg) {
-    const int half = turned_deg / 2;
-    return half > BACK_OFF_MAX_DEG ? BACK_OFF_MAX_DEG : half;
-}
+ * 2026-11-04). Back off: a fixed back_off_deg 25 degrees (operator
+ * 2026-11-05, after run R1; before: half of the turn, at most 30). */
 static const dr_config_t DETOUR_CFG = {
-    .dt = {.back_off_fn = back_off_for,
+    .dt = {.back_off_fn = NULL, /* fixed back_off_deg */
            .return_heading_deg = 90u,
            .return_max_mm = 1000u,
            .sweep_deg_s = 20u,
@@ -128,7 +123,7 @@ static const dr_config_t DETOUR_CFG = {
            .away_max_deg = 90u,
            .toward_max_deg = 150u,
            .max_straights = 5u,
-           .back_off_deg = 25u,
+           .back_off_deg = 25u, /* operator 2026-11-05 */
            .look_ms = 150u,
            .vehicle_mm = 350u,
            .sweep_mm = 150u,
@@ -416,9 +411,9 @@ static void print_summary(void) {
            lt.cfg.steer.gain_pct, lt.cfg.steer.kd_pct, lt.cfg.steer.far_gain_pct,
            lt.cfg.steer.far_from, SEARCH_CFG.speed_mm_s, (long)SEARCH_CFG.turn_counts);
     printf("[run] detour: straight %d mm/s, turn %d mm/s, sweep %u deg/s = %d mm/s, pause %u ms, "
-           "back off half up to %d deg\n",
+           "back off %u deg (fixed)\n",
            DETOUR_CFG.straight_mm_s, DETOUR_CFG.turn_mm_s, DETOUR_CFG.dt.sweep_deg_s, dr.sweep_mm_s,
-           DETOUR_CFG.pause_ms, BACK_OFF_MAX_DEG);
+           DETOUR_CFG.pause_ms, DETOUR_CFG.dt.back_off_deg);
 }
 
 /* ---------------------------------------------------------------------
