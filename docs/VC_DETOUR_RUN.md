@@ -182,7 +182,7 @@ about 160 mm across the line and 250 mm along it.
   (fault 0x01), SAFETY stop.
 
 Simulator check (`detour_test` sim with a narrow beam, see
-[simulation](SIMULATION.md)): the same box, same seen angle (−52°),
+[narrow beam](SIMULATION.md#narrow-beam-real-box)): the same box, same seen angle (−52°),
 gives 22 mm clearance at 350 mm, 54 mm at 400, 91 mm at 450 and 500;
 a 40° back off at 350 mm hits the box.
 

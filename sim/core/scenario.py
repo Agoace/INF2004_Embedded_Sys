@@ -199,11 +199,15 @@ def validate(s):
         fail("robot.servo.instant_angle", "only the approved instantaneous servo model is implemented")
     ultra = robot["ultrasonic"]
     obj(ultra, "robot.ultrasonic", "beam_deg rise_latency_us echo_timeout_us trigger_gap_us")
-    for key, value in ultra.items():
+    # Full sector angle: 30 is the data sheet beam; smaller values model the
+    # narrow effective beam of the real sensor (docs/SIMULATION.md).
+    number(ultra["beam_deg"], "robot.ultrasonic.beam_deg", 0.5, 30)
+    timing = {key: value for key, value in ultra.items() if key != "beam_deg"}
+    for key, value in timing.items():
         number(value, "robot.ultrasonic." + key, 1, 1000000, integer=True)
     # Reject rather than silently ignore unsupported timing changes.
-    if ultra != {"beam_deg": 30, "rise_latency_us": 215, "echo_timeout_us": 3000, "trigger_gap_us": 60000}:
-        fail("robot.ultrasonic", "ultrasonic requires the documented timing and beam")
+    if timing != {"rise_latency_us": 215, "echo_timeout_us": 3000, "trigger_gap_us": 60000}:
+        fail("robot.ultrasonic", "ultrasonic requires the documented timing")
     array(s["obstacles"], "obstacles")
     names = set()
     for i, obstacle in enumerate(s["obstacles"]):

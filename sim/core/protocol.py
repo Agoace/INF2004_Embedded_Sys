@@ -19,7 +19,8 @@ def normalise(s, active=True):
     if mode == 2:
         rows.append(str(motor["top_speed_mm_s"]))
     rows.append(" ".join(str(geometry[key]) for key in
-        ("front_x_mm", "rear_x_mm", "width_mm", "wheel_track_mm", "wheel_diameter_mm", "servo_axis_x_mm", "sensor_face_offset_mm")))
+        ("front_x_mm", "rear_x_mm", "width_mm", "wheel_track_mm", "wheel_diameter_mm", "servo_axis_x_mm", "sensor_face_offset_mm"))
+        + " " + str(robot["ultrasonic"]["beam_deg"]))
     for point, floor, line in zip(ir["points_mm"], ir["floor_adc"], ir["line_adc"]):
         rows.append(f"{point[0]} {point[1]} {floor} {line}")
     rows.append(" ".join(map(str, [ir["footprint_mm"], track["line_width_mm"], track["tile_size_mm"],

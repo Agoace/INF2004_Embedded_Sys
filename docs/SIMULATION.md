@@ -396,7 +396,9 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   delay. Real scan/detour settle waits remain in the firmware. A configurable
   slew model can follow later; no measured slew rate is available here.
 - Use a 30° full beam, ±15° about the servo direction
-  ([scan beam](OBSTACLE_SCAN.md#scan-points)). Find the nearest surface in
+  ([scan beam](OBSTACLE_SCAN.md#scan-points)), by default. The scenario
+  value `robot.ultrasonic.beam_deg` (0.5–30, full angle) sets a narrower
+  beam; see [narrow beam](#narrow-beam-real-box). Find the nearest surface in
   the sector, not only on the centre ray. Draw the centre ray, sector, and
   actual echo segment separately so off-axis hits are visible.
 - The operator approved ideal nearest-surface echoes in the 30° sector
@@ -469,7 +471,7 @@ to an already pending measurement. `NORMAL` removes injection. NO_RISE
 finishes after 2000 µs; STUCK_HIGH publishes immediately without busy.
 Only these injected faults increment the streak. VALID/NO_RETURN reset it;
 the streak saturates at 5. The schema rejects servo slew and unimplemented
-beam/timing changes instead of ignoring them.
+timing changes instead of ignoring them.
 
 ### IR readings
 
@@ -894,6 +896,36 @@ at the front, but the sensing elements are behind them. It differs from
 the firmware's current 123 mm setting and must stay visible as an
 assumption, not be used to change firmware. D1–D18 logs are unavailable on
 this machine; no replay match is claimed.
+
+## Narrow beam (real box)
+
+Operator report (2026-11-05): the real box (about 160 mm across the line,
+250 mm along it) always gets a free side on the robot, but with the 30°
+beam the sim scan reads the front face from every point and fails ("no
+free side"). The 30° sector reaches the face at normal incidence from
+each servo angle.
+
+[`box_real_160x250.json`](../sim/scenarios/box_real_160x250.json) uses
+fitted, assumed values: `beam_deg` 5 (±2.5°), specular, 16° incidence,
+corner echoes to 300 mm, box centre (800, −20). Its scan matches the
+free steps of run R2 ([detour run](VC_DETOUR_RUN.md)):
+
+```text
+R2 (real): 487 236 227 227 218 218 218 227 227 236 NR NR NR   R 6 L 4 -> LEFT
+sim:        NR 242  NR 228 225 224 223 224 226 230 NR NR NR   R 6 L 4 -> LEFT
+```
+
+The `detour_test` sweep then sees the side at −52° (R2: −48°) after a
+100° turn (R2: 97°). Closest gap from the robot body to the box with a
+fixed 25° back off, by `vehicle_mm` (duty firmware, not `vc_line_test`):
+
+| `vehicle_mm` | 350 | 400 | 450 | 500 |
+|---|---|---|---|---|
+| Closest gap | 22 mm | 54 mm | 91 mm | 91 mm |
+
+A 40° back off at 350 mm makes contact. Limits: the fit uses one run;
+the 2.5° value is not a measured beam width, and the duty motor model
+does not match the motor-controller timing.
 
 ## Milestone 3 results
 
