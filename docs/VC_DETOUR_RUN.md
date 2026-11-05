@@ -188,3 +188,51 @@ a 40° back off at 350 mm hits the box.
 
 Change (operator 2026-11-05): `vehicle_mm` 350 → **450 mm** in
 `vc_line_test`; back off stays fixed 25°.
+
+## Run R3 (2026-11-05, boot 0491 run 1): straight 450 mm
+
+Log `build/steer_logs/run_20261105-151729_boot0491_run1.txt`, console
+`text_0491.txt`. Same box, two detours in one 90 s run. Back off fixed
+25°, `vehicle_mm` 450. Result: **2 of 2 DONE_LINE, no contact, faults
+0x00**.
+
+| | Detour 1 | Detour 2 |
+|---|---|---|
+| Box face toward the robot | 160 mm (short side) | 250 mm (long side) |
+| Scan | `423 226 221 229 212 212 212 212 233 NR NR NR NR` | `246 230 233 233 229 229 233 238 246 NR NR NR NR` |
+| Free steps → side | R 6, L 3 → LEFT | R 7, L 3 → LEFT |
+| Turn away (sweep lost) | +49° | +44° |
+| Straight 1 end | (295, 339) | (350, 338) |
+| Side seen at (turned) | −50° (99°) | −56° (100°) |
+| Heading after back off 25° | −25° | −31° |
+| Straight 2 end | (702, 149) | (736, 106) |
+| ALIGN end, DONE | (702, −55) | (736, −65) |
+| Detour time | 23.2 s | 22.5 s |
+
+Wheels during the return and ALIGN: no row with a wheel asked to move
+and 0 counts, except the first row after each start pause (R2 had a
+blocked right wheel for 0.5 s in ALIGN).
+
+Estimated closest gap from the robot body to the box (mm). Box edges
+from the scan (sensor face 65 mm ahead of the pose point; detour 1 box
+x 277–527, y −105–+55; detour 2 x 294–454, y −197–+53); robot body from
+pose: front 123, rear 67, half width 80. Odometry only, so about ±20 mm:
+
+| Leg | Detour 1 | Detour 2 |
+|---|---|---|
+| Straight 1 | 93 | 86 |
+| Straight 2 | 79 | 111 |
+| Return | 95 | 202 |
+| ALIGN spin | **71** | 178 |
+
+The sim prediction for the 160 mm face was 91 mm ([narrow
+beam](SIMULATION.md#narrow-beam-real-box)); the robot got 71–95 mm.
+
+Other notes:
+
+- The sweep side angle is still steep (−50°, −56°): the flare
+  over-turn is unchanged; the longer straight 2 makes up for it.
+- Line following: 39 LINE_LOST → SEARCH → FOUND pairs (R2: 8), in
+  bursts every 250–300 ms at 7.5–9.7 s, 39–43 s, 55–60 s and 86–90 s,
+  about the same track place on each lap. Each search found the line
+  in 10–140 ms. Not a detour problem; not examined.
