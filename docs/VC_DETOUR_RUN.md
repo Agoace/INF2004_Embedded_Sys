@@ -166,3 +166,25 @@ frames; Wi-Fi 3 packets lost.
 - The second detour failed on the wall; the operator does not count it.
 - Not tested: DONE_LINE (the first detour ended just off the line, the
   search found it).
+
+## Run R2 (2026-11-05, boot dcb8 run 1): fixed 25° back off
+
+Log `build/steer_logs/run_20261105-143811_bootdcb8_run1.txt`. Real box
+about 160 mm across the line and 250 mm along it.
+
+- Scan `487 236 227 227 218 218 218 227 227 236 NR NR NR`: detour LEFT.
+- TURN_TOWARD saw the side only at −48° (turned 97°): the box echoes
+  only near normal incidence (operator: "the flare is really bad").
+- Back off 25° → −22°; straight 2 ran the full 350 mm and never saw the
+  box; return to −90°, ON_LINE, ALIGN: **DONE_LINE** (the first one).
+- In ALIGN the right wheel stopped (asked 132 mm/s, 0 counts, 40.1–40.6 s):
+  the robot touched the rear of the box. 1.7 s later in LINE: STALL_L
+  (fault 0x01), SAFETY stop.
+
+Simulator check (`detour_test` sim with a narrow beam, see
+[simulation](SIMULATION.md)): the same box, same seen angle (−52°),
+gives 22 mm clearance at 350 mm, 54 mm at 400, 91 mm at 450 and 500;
+a 40° back off at 350 mm hits the box.
+
+Change (operator 2026-11-05): `vehicle_mm` 350 → **450 mm** in
+`vc_line_test`; back off stays fixed 25°.

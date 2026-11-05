@@ -125,7 +125,7 @@ static const dr_config_t DETOUR_CFG = {
            .max_straights = 5u,
            .back_off_deg = 25u, /* operator 2026-11-05 */
            .look_ms = 150u,
-           .vehicle_mm = 350u,
+           .vehicle_mm = 450u, /* operator 2026-11-05 (sim, real box 160 x 250): 350 passed 22 mm from it */
            .sweep_mm = 150u,
            .margin_mm = 30u,
            .sensor_ahead_mm = 65u,
@@ -411,9 +411,9 @@ static void print_summary(void) {
            lt.cfg.steer.gain_pct, lt.cfg.steer.kd_pct, lt.cfg.steer.far_gain_pct,
            lt.cfg.steer.far_from, SEARCH_CFG.speed_mm_s, (long)SEARCH_CFG.turn_counts);
     printf("[run] detour: straight %d mm/s, turn %d mm/s, sweep %u deg/s = %d mm/s, pause %u ms, "
-           "back off %u deg (fixed)\n",
+           "back off %u deg (fixed), past nearest %u mm\n",
            DETOUR_CFG.straight_mm_s, DETOUR_CFG.turn_mm_s, DETOUR_CFG.dt.sweep_deg_s, dr.sweep_mm_s,
-           DETOUR_CFG.pause_ms, DETOUR_CFG.dt.back_off_deg);
+           DETOUR_CFG.pause_ms, DETOUR_CFG.dt.back_off_deg, DETOUR_CFG.dt.vehicle_mm);
 }
 
 /* ---------------------------------------------------------------------
