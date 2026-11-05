@@ -236,3 +236,8 @@ Other notes:
   bursts every 250–300 ms at 7.5–9.7 s, 39–43 s, 55–60 s and 86–90 s,
   about the same track place on each lap. Each search found the line
   in 10–140 ms. Not a detour problem; not examined.
+
+Change (operator 2026-11-05, after R3): `vehicle_mm` 450 → **400 mm**
+("travels a little too far"). Risk: about 45 mm less x at the return,
+so the R3 detour 1 ALIGN gap of 71 mm becomes about 25–35 mm; the sim
+gave 54 mm at 400 for the 160 mm face.
