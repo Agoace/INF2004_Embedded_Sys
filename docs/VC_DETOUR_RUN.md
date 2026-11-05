@@ -241,3 +241,29 @@ Change (operator 2026-11-05, after R3): `vehicle_mm` 450 → **400 mm**
 ("travels a little too far"). Risk: about 45 mm less x at the return,
 so the R3 detour 1 ALIGN gap of 71 mm becomes about 25–35 mm; the sim
 gave 54 mm at 400 for the 160 mm face.
+
+## Run R4 (2026-11-05, boot aff0 run 1): straight 400 mm
+
+Log `build/steer_logs/run_20261105-153125_bootaff0_run1.txt`, console
+`text_aff0.txt`. Same box, two detours; box face per detour not
+recorded. Result: 2 of 2 DONE (1 DONE_LINE, 1 DONE_NO_LINE), no blocked
+wheel, faults 0x00. Operator: "close but far enough"; 400 mm kept.
+
+| | Detour 1 | Detour 2 |
+|---|---|---|
+| Scan | `225 221 217 212 212 217 217 221 230 NR NR NR NR` | `233 229 229 220 220 220 220 229 229 254 NR NR NR` |
+| Free steps → side | R 7, L 3 → LEFT | R 7, L 4 → LEFT |
+| Turn away / side seen | +44° / −54° (98°) | +48° / −54° (102°) |
+| Straight 2 end | (637, 84) | (623, 116) |
+| ON_LINE / ALIGN end | (637, 68) / (637, −55) | (623, 116) / (623, −7) |
+| Outcome | DONE_LINE | DONE_NO_LINE; SEARCH found the line in 0.25 s |
+
+Estimated closest gap (method as in R3): 42–50 mm if the 250 mm face
+was toward the robot, 0–10 mm if the 160 mm face was. Both scans read
+the box from 30° right, so the face cannot be told from the scan.
+
+Detour 2 false line (problem D): at the end of the turn to −90°, the L
+sensor read about 2000 (C about 150) for 300 ms while stopped, about
+48 mm before the real line. ON_LINE then drove its fixed 123 mm, crossed
+the real line (L and C about 1100 at 78.0 s), and stopped about 80 mm
+past it; the ALIGN spin did not see the line. The dark mark is unknown.
