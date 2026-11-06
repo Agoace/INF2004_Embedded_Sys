@@ -13,7 +13,7 @@ static const int8_t QUADRATURE[16] = {
 static volatile int32_t raw_count[MC_WHEELS];
 static uint8_t previous_ab[MC_WHEELS];
 static mc_t mc;
-static ID mtx_motion, tid_motion, cyc_motion;
+static ID mtx_motion, tid_motion, cyc_motion, tid_after_tick;
 static int32_t sampled_counts[MC_WHEELS];
 static uint32_t ticks, tick_max_us, last_run_us, gap_min_us, gap_max_us;
 static uint32_t late_wakes, missed_wakes;
@@ -58,7 +58,9 @@ static void motion_task(INT stacd, void *exinf) {
         ++ticks;
         const uint32_t took = drv_time_us() - started;
         if (took > tick_max_us) tick_max_us = took;
+        const ID notify = tid_after_tick;
         (void)tk_unl_mtx(mtx_motion);
+        if (notify > 0) (void)tk_wup_tsk(notify);
     }
 }
 static void motion_cyclic(void *exinf) {
@@ -102,6 +104,13 @@ int motion_start(void) {
     tid_motion = app_start_task((FP)motion_task, 10, TP_PRC1, "motion_task");
     if (tid_motion < E_OK) return (int)tid_motion;
     return (int)tk_sta_cyc(cyc_motion);
+}
+int motion_notify_after_tick(ID tid) {
+    if (tid < 0) return (int)E_PAR;
+    const ER er = lock_motion();
+    if (er < E_OK) return (int)er;
+    tid_after_tick = tid;
+    return (int)tk_unl_mtx(mtx_motion);
 }
 int motion_set_speed(int16_t left, int16_t right) {
     const ER er = lock_motion();

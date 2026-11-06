@@ -309,6 +309,7 @@ returns the accepted angle through the optional pointer. Calls use
 | `motion_clear_faults()` | Clear latched faults, keep wheels stopped and write PWM 0 |
 | `motion_set_servo(deg, &accepted)` | Clamp through the unchanged core; the next task tick writes the pulse |
 | `motion_status(&s)` | One mutex-protected copy of counts, travel, speed, duty, heading, servo state, faults and timing |
+| `motion_notify_after_tick(tid)` | Wake one client task after each completed tick and mutex release; positive ID registers, 0 disables; keep the client alive until disabled |
 
 Status counts are the coherent **last-tick** sample. Only the core-0
 motion task copies the raw encoder counters under DI/EI; disabling local
@@ -345,7 +346,14 @@ reset level 0; GPIO is below USB and above SysTick/PendSV level 3.
 The bench task has priority 11 on core 0. GP21 arms a run after 1 s;
 press again to ESTOP. GP20 prints the saved log. Buttons use pull-ups,
 active low, polled every 20 ms. The B3 step list is unchanged and the RAM
-log has 2400 rows. No output occurs during a run. The log is not dumped
+log has 2400 rows. The bench registers for a wake after each completed
+motion tick and waits with `tk_slp_tsk(20)`, then drains extra queued wakes
+with `tk_can_wup()`. It records one row per motion tick (10 ms), as in B3.
+`skipped_rows` counts lost rows from extra queued wakes or tick gaps without
+double counting; it must be 0 in a normal run. `tk_dly_tsk(10)` is not used
+for sampling: this kernel adds `TIMER_PERIOD` (10 ms) to the delay, which
+would sample about every 20 ms and lose alternate rows. Step durations
+and button polling still use `drv_time_ms()`. No output occurs during a run. The log is not dumped
 automatically: run on VIN with USB unplugged, then connect USB and press
 GP20 without resetting. The dump pauses 20 ms after each eight rows and
 ends with `tm_usb_dropped` total and dump delta. A new GP21 start clears
