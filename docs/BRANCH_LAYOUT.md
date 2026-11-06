@@ -38,10 +38,10 @@ on staging only. The LINE branch keeps `tests/test_line_steer.c`.
 
 ```sh
 FLAGS='-std=c11 -Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror -Isrc'
-cc $FLAGS host-tests/test_line.c src/line_trace.c src/line_steer.c src/obstacle.c src/line_position.c -o /tmp/test_line
-cc $FLAGS host-tests/test_search.c src/line_search.c src/line_position.c -o /tmp/test_search
-cc $FLAGS host-tests/test_scan.c src/servo_scan.c src/obstacle_profile.c -o /tmp/test_scan
-cc $FLAGS host-tests/test_detour.c src/detour_run.c src/obstacle_detour.c src/line_position.c -o /tmp/test_detour
+cc $FLAGS host-tests/test_line.c src/line_trace.c src/line_steer.c app_program/subsystem5/obstacle.c app_program/subsystem3/line_position.c -o /tmp/test_line
+cc $FLAGS host-tests/test_search.c src/line_search.c app_program/subsystem3/line_position.c -o /tmp/test_search
+cc $FLAGS host-tests/test_scan.c src/servo_scan.c app_program/subsystem5/obstacle_profile.c -o /tmp/test_scan
+cc $FLAGS host-tests/test_detour.c src/detour_run.c src/obstacle_detour.c app_program/subsystem3/line_position.c -o /tmp/test_detour
 ```
 
 Run only the command for the module present on a module branch. Run all
