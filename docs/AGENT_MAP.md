@@ -108,3 +108,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 ## Course template layout
 
 See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; SDK hardware code stays in `src/`. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+
+- [Adr Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)
+
+- [Vehicle State Machine](VEHICLE_STATE_MACHINE.md)
+
+Current module branch: `mtk3-vehicle`. Merge only into `mtk3-staging`.
