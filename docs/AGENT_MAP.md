@@ -195,3 +195,5 @@ vehicle task described below.
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
+
+- [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
