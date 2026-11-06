@@ -131,6 +131,52 @@ void steer_calm_init(steer_calm_t *c);
  * Returns true while calm. */
 bool steer_calm_update(steer_calm_t *c, int8_t position, bool trigger, uint32_t now_ms);
 
+/*
+ * Steering in wheel speed (mm/s), for the motor controller
+ * (docs/ADR_MOTOR_CONTROLLER.md). The same rule as steer_update(), with
+ * base, min and max in mm/s and no trim: the motor controller holds the
+ * wheel speeds, so the wheel differences and the dead zone are not the
+ * caller's work.
+ *
+ * min_mm_s keeps the shape of the duty rule: the inner wheel slows to
+ * min_mm_s, then stops (no reverse). It is a steering setting here, not a
+ * motor limit. Values for the locked line tracing: docs/LINE_STEER_MM.md.
+ *
+ * Steer mm word: bits 0-8 left mm/s (0..511), bits 9-17 right, 18-31 spare.
+ */
+typedef uint32_t steer_mm_word_t;
+#define STEER_MM_MASK 0x1FFu
+#define STEER_MM_RIGHT_SHIFT 9u
+#define STEER_MM_MAX 511
+
+typedef struct {
+    int16_t base_mm_s;     /* both wheels when the line is centred */
+    uint8_t gain_pct;      /* as steer_config_t */
+    uint8_t kd_pct;        /* as steer_config_t */
+    int16_t min_mm_s;      /* inner wheel: lowest speed before it stops */
+    int16_t max_mm_s;      /* highest wheel speed, at most STEER_MM_MAX */
+    uint8_t far_from;      /* as steer_config_t */
+    uint16_t far_gain_pct; /* as steer_config_t */
+} steer_mm_config_t;
+
+typedef struct {
+    steer_mm_config_t cfg;
+    int8_t previous;
+    bool has_previous;
+} steer_mm_t;
+
+void steer_mm_init(steer_mm_t *s, const steer_mm_config_t *cfg);
+void steer_mm_reset(steer_mm_t *s);
+steer_mm_word_t steer_mm_update(steer_mm_t *s, int8_t position);
+steer_mm_word_t steer_mm_straight(steer_mm_t *s);
+
+static inline int16_t steer_mm_left(steer_mm_word_t w) {
+    return (int16_t)(w & STEER_MM_MASK);
+}
+static inline int16_t steer_mm_right(steer_mm_word_t w) {
+    return (int16_t)((w >> STEER_MM_RIGHT_SHIFT) & STEER_MM_MASK);
+}
+
 static inline unsigned int steer_left(steer_word_t w) {
     return w & STEER_DUTY_MASK;
 }
