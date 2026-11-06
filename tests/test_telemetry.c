@@ -39,8 +39,8 @@ int tm_printf(const UB *fmt,...) {
 static void pump(void) { if (setjmp(end)==0) ((void (*)(INT,void *))entry)(0,0);assert(!irq_off); }
 int main(void) {
     telemetry_message_t m={.kind=TELEMETRY_BEGIN};
-    assert(telemetry_send(&m)==E_OBJ);
-    assert(telemetry_init()==E_OK && telemetry_start()==E_OK && telemetry_start()==E_OBJ);
+    assert(telemetry_send(&m)==E_OBJ && !telemetry_running());
+    assert(telemetry_init()==E_OK && telemetry_start()==E_OK && telemetry_start()==E_OBJ && telemetry_running());
     assert(telemetry_send(&m)==E_OK);pump();
     m.kind=TELEMETRY_ROW;full=true;assert(telemetry_send(&m)==E_TMOUT);full=false;
     for (unsigned int i=0u;i<TELEMETRY_ROWS+1u;++i) { assert(telemetry_send(&m)==E_OK);pump(); }

@@ -80,6 +80,7 @@ int telemetry_start(void) {
     if (mbf_telemetry<=0 || task>0) return E_OBJ;
     task=app_start_task((FP)telemetry_task,30,TP_PRC1,"telemetry_task");return task<0 ? (int)task : E_OK;
 }
+bool telemetry_running(void) { return mbf_telemetry>0 && task>0; }
 int telemetry_send(const telemetry_message_t *message) {
     if (mbf_telemetry<=0 || task<=0) return E_OBJ;
     if (!message || message->kind>TELEMETRY_DUMP) return E_PAR;
