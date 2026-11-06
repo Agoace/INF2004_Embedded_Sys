@@ -3,6 +3,7 @@
 #include "motion.h"
 #include "drv_motor_hw.h"
 #include "../platform/drv_time.h"
+#include "../platform/drv_watchdog.h"
 #if !APP_TEST
 #define MAX_ROWS 2400u
 #define START_DELAY_MS 1000u
@@ -48,6 +49,7 @@ static void dump(void) {
     const UW dropped_before = dropped();
     tm_printf((UB*)"\n[bench] stop: %s. rows %u, skipped %lu, faults 0x%02x\n",
               stop_reason, row_count, (unsigned long)skipped_rows, (unsigned int)s.faults);
+    tm_printf((UB*)"[bench] last reset: %s\n", drv_watchdog_reset_name());
     tm_printf((UB*)"[bench] heading end %+ld cdeg; counts L/R %ld/%ld\n",
               (long)heading_end, (long)s.counts[0], (long)s.counts[1]);
     tm_printf((UB*)"[bench] ticks %lu max %lu us, gap %lu..%lu us, late %lu missed %lu\n",

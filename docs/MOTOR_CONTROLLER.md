@@ -382,6 +382,13 @@ The [watchdog record](KERNEL_WATCHDOG.md) defines the motion-only 100 ms
 hardware watchdog, startup prerequisites, reset classification and pending
 S2-U05 two-boot test. It supplements the stale-command stop. A failed
 motion initialization does not start it; motor PWM remains zero.
+`motion_start()` starts the task, then cyclic handler, then watchdog.
+Speed commands are rejected until the watchdog is armed. Each completed
+tick feeds only after PWM writes and mutex release, before notifying the
+bench/client. A stuck task or failed mutex acquisition does not feed.
+Bench dumps print the cached last reset reason. S2-U05 is a separate final
+TEST hook after S1..S5; the next boot reports its scratch-carried elapsed
+observation and does not repeat the automatic reset.
 
 ### Cold-power timer source
 

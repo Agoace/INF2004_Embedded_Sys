@@ -65,3 +65,18 @@ The non-TEST bench adds one task. Empty subsystems use no kernel objects.
 Kernel limits are in `config/config.h`; the USB and radio services also
 use objects. Hardware tests and the floor run must be recorded in
 `testing/subsystem2/TEST_LOG.md`; build success is not a hardware result.
+
+## Hardware watchdog ownership
+
+S2 owns the 100 ms hardware watchdog. Only a completed `motion_task` tick
+feeds it, after PWM writes and mutex release. Startup order is verified
+clock, task, cyclic, watchdog; failed motion init starts no watchdog and
+leaves motor PWM zero. Debug halt pauses it. Stale-command stop remains a
+separate live-task safety check. Dumps show the cached last reset reason.
+
+S2-U05 is TEST-only, runs last after S1..S5 and intentionally stops feeds.
+It resets with wheels lifted, then reports the previous timeout in a later
+TEST line on the next boot. Scratch0/1 are reserved for its one-time marker
+and elapsed observation; SDK/bootrom scratch4..7 are not repurposed.
+S2-U05 and physical reset/stop timing are **Not run**. Read
+[the watchdog record](docs/KERNEL_WATCHDOG.md) before this destructive test.
