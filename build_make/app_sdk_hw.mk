@@ -12,7 +12,9 @@
 # Fixed clk_sys=125 MHz replaces clock_get_hz (needs SDK clocks state).
 # Per-function/data sections and GC are required even for WIFI=none, so
 # unused GPIO IRQ helpers do not pull SDK handlers/runtime into the image.
-# CFLAGS gets the include paths for all app rules; no kernel file is changed.
+# SDK paths are system headers: SDK 2.3.0 GPIO/timer inline headers have
+# conversion/unused-parameter warnings under our strict application flags.
+# Application diagnostics remain enabled; no kernel file is changed.
 
 ifeq ($(strip $(PICO_SDK_PATH)),)
 $(error PICO_SDK_PATH is required by the application hardware adapters)
@@ -38,7 +40,7 @@ APP_SDK_HW_DIRS := \
     src/rp2_common/hardware_sync_spin_lock/include \
     src/rp2040/hardware_regs/include \
     src/rp2040/hardware_structs/include
-CFLAGS += $(addprefix -I"$(PICO_SDK_PATH)/,$(addsuffix ",$(APP_SDK_HW_DIRS))) \
+CFLAGS += $(addprefix -isystem"$(PICO_SDK_PATH)/,$(addsuffix ",$(APP_SDK_HW_DIRS))) \
           -ffunction-sections -fdata-sections
 LFLAGS += -Wl,--gc-sections
 
