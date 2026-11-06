@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted, 2026-11-04 (operator) |
 | Scope | Motor PWM, servo PWM, wheel encoders |
-| Branch for the work | `yx-motor-controller` (from `yx`) |
+| Branch for the work | `mtk3-motion` (from `yx`) |
 
 ## Context
 
@@ -88,8 +88,8 @@ a move is complete). It does not own the servo.
 
 ## Work rules
 
-- One branch for each module. Copy the needed code from other branches by
-  hand; do not merge whole branches.
+- One branch for each module. Merge module branches only into `mtk3-staging`.
+  Copy needed code from other people's branches by hand; do not merge those branches.
 - Code to reuse:
 
   | Source | What |

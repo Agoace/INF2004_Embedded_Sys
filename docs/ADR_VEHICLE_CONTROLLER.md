@@ -4,8 +4,8 @@
 | --- | --- |
 | Status | Accepted, 2026-11-04 (operator) |
 | Scope | Vehicle Controller, task modules, shared detectors |
-| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), `ADR: heartbeat`, [Vehicle Controller step 1](VEHICLE_CONTROLLER.md) |
-| Branch for the work | `mtk3-vehicle` owns the interface; `yx-mod-*` own modules; merge only into `mtk3-staging` |
+| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [ADR: heartbeat](ADR_HEARTBEAT.md), [Vehicle Controller step 1](VEHICLE_CONTROLLER.md) |
+| Branch for the work | `mtk3-vehicle` owns the interface; `mtk3-*` own modules; merge only into `mtk3-staging` |
 
 ## Context
 
@@ -74,7 +74,7 @@
 6. **The Vehicle Controller is the only caller of the motor controller**
    (`mc_set_speed()`, `mc_set_servo()`).
 7. **Timing:** the Vehicle Controller steps the running module in the main
-   loop on the 10 ms heartbeat flag (`ADR: heartbeat`).
+   loop on the 10 ms heartbeat flag ([ADR: heartbeat](ADR_HEARTBEAT.md)).
 
 ### Outcome table (first version)
 

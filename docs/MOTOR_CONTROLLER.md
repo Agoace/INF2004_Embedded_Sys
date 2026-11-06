@@ -9,8 +9,8 @@ Branch: `mtk3-motion`.
 | Step | What | State |
 | --- | --- | --- |
 | 1 | Pure core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), [`app_program/subsystem2/motor_ctl.h`](../app_program/subsystem2/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
-| 2 | Pico layer `src/motor_ctl_pico.c`, `src/motor_ctl_pico.h`: PWM, encoder interrupt, servo; hooks `mc_tick()` into the `heartbeat` every 10 ms (the heartbeat owns the timer and the watchdog: `ADR: heartbeat`). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Floor bench target `motor_ctl_bench` (`src/motor_ctl_bench.c`): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`). Run B3: rise limit 8 (after line run P5) |
+| 2 | Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`). Run B3: rise limit 8 (after line run P5) |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -42,7 +42,7 @@ steer mixing, calm mode, FOLLOW state, move completion, command queue.
 | Start kick | From rest or on a direction change: at least 12 % until 10 counts; none in 250 ms = stall | Start policy in [calibration results](CALIBRATION_RESULTS.md) |
 | Stall | Duty ≥ 15 % and no count for 500 ms | Latched |
 | Duty limit | 80 % | — |
-| Speed limit | `mc_set_speed()` limits each wheel to ±`max_speed_mm_s` (0 = none) | 460 mm/s: the 60 % point of the `duty map` (run DM1); the robot did wheelies at 80 % open loop |
+| Speed limit | `mc_set_speed()` limits each wheel to ±`max_speed_mm_s` (0 = none) | 460 mm/s: the 60 % point of the [duty map](DUTY_MAP.md) (run DM1); the robot did wheelies at 80 % open loop |
 | Units | 12414 counts per metre (2535 counts, 65 mm wheel); 24.05 counts per degree (track 111 mm) | [Robot geometry](CALIBRATION_RESULTS.md#robot-geometry) |
 
 Note: Motion's `motion_config.h` has wheelbase 120 mm (MEASURE); this
@@ -173,7 +173,7 @@ within 3° of the target). Options not taken are under *Ideas*.
 ### Run B3 (2026-11-04, boot ede2, rise limit 8 counts/tick per tick, floor, VIN)
 
 Change from B2: the rise limit 2 → 8 counts/tick per tick (line run P5,
-`Vehicle Controller line run`). Same step list. Log
+[Vehicle Controller line run](VC_LINE_RUN.md)). Same step list. Log
 `build/steer_logs/text_ede2.txt`. All 17 steps done, no fault; the same
 rows 7–15 lost over Wi-Fi.
 

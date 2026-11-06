@@ -115,3 +115,12 @@ ctest --test-dir /tmp/mtk3-host --output-on-failure
 CMake selects the tests whose sources exist on the current branch. It uses
 C11, `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`. Module branches
 keep their independent tests; staging also runs the cross-module tests.
+
+### Integration status
+
+`mtk3-staging` keeps the `f15ae89` integration records, simulator changes,
+log format and bare-metal references. These records describe the earlier
+bare-metal runs, not tests of the template robot runtime. The existing
+RTOS plan is retained as a design input; this branch does not implement it.
+The template still uses its 10 ms kernel tick. No kernel configuration or
+SDK integration was changed to make the pure modules compile.

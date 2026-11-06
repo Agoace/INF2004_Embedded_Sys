@@ -66,7 +66,7 @@
   function beam(){if(!view.pose || view.servo===null)return;
     const p=view.pose,axis=point(p,geometry.servo_axis_x_mm,0),h=p[2]+view.servo;
     const origin=point([axis[0],axis[1],h],geometry.sensor_face_offset_mm,0),length=511;
-    ctx.save();ctx.translate(...origin);ctx.rotate(rad(h));ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,length,rad(-15),rad(15));ctx.closePath();ctx.fillStyle="#d99b1520";ctx.fill();ctx.strokeStyle="#ac841c80";ctx.lineWidth=1/camera.scale;ctx.stroke();
+    ctx.save();ctx.translate(...origin);ctx.rotate(rad(h));ctx.beginPath();ctx.moveTo(0,0);ctx.arc(0,0,length,rad(-scenario.robot.ultrasonic.beam_deg/2),rad(scenario.robot.ultrasonic.beam_deg/2));ctx.closePath();ctx.fillStyle="#d99b1520";ctx.fill();ctx.strokeStyle="#ac841c80";ctx.lineWidth=1/camera.scale;ctx.stroke();
     path([[0,0],[length,0]]);ctx.strokeStyle="#ab7b00";ctx.stroke();ctx.restore();
   }
   function echo(){const e=view.trigger;

@@ -22,6 +22,15 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
 - [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned instrument packet contract for firmware, receiver, and future dashboard.
 - [ADR: motor controller owns the actuators](ADR_MOTOR_CONTROLLER.md) — accepted 2026-11-04: one owner of motor PWM, servo PWM and encoders; values in, measurements out; no intent; hardware quirks inside.
+- [ADR: one hardware heartbeat](ADR_HEARTBEAT.md) — accepted 2026-11-04: 1 ms timer interrupt owned by a separate `heartbeat` platform module; ADC sample, `mc_tick()` and watchdog in the interrupt; decisions in the main loop.
+- [ADR: Vehicle Controller runs one module at a time](ADR_VEHICLE_CONTROLLER.md) — accepted 2026-11-04: shared detectors, running module interprets them and returns an outcome, controller maps outcomes to the next module and is the only motor controller caller.
+- [Vehicle state machine](VEHICLE_STATE_MACHINE.md) — the Vehicle Controller shell from the ADR: route table, one module at a time, handoff in the same tick, safety stop, outcome word, host test.
+- [Vehicle Controller line run](VC_LINE_RUN.md) — line tracing and line search modules in the shell, wheel speeds through the motor controller; target `vc_line_test`; runs P5–P9, stopped at the P7 settings.
+- [Vehicle Controller detour run](VC_DETOUR_RUN.md) — scan and detour modules in the shell (step c), the ping request; same target; not yet run on the track.
+- [Line steering in mm/s](LINE_STEER_MM.md) — the locked line steering moved to wheel speeds for the motor controller: same rule, no trim, settings mapped one to one; not yet run on the track.
+- [Duty map](DUTY_MAP.md) — loaded floor map from open-loop duty to wheel speed, for moving duty-based settings to the motor controller; bench target `duty_map_bench`.
+- [Heartbeat](HEARTBEAT.md) — the 1 ms time base from the ADR: hooks in the interrupt, flags for the main loop, watchdog, health counters, host test, bench target `heartbeat_test`.
+- [Motor controller](MOTOR_CONTROLLER.md) — the controller from the ADR: interface, speed loop (from Motion), robot settings, host test, step status.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
 - [Week 8 Change Requirement 1 notes](week8_change_requirement_1_notes.md) — minimum-bit data representation decisions, calculations, and open measurements.
 - [Ultrasonic driver and bench test](ULTRASONIC_DRIVER.md) — non-blocking HC-SR04+ driver, packed 16-bit result, and range test procedure.
@@ -40,6 +49,8 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
 - [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
 
-- [Branch layout](BRANCH_LAYOUT.md)
+## Branch layout
 
-- [Motor Controller](MOTOR_CONTROLLER.md)
+See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
+
+- [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.

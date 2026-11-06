@@ -21,7 +21,7 @@ endif()
 
 # The SDK import must run before project().
 
-# Shared pure robot logic; SDK code remains in src/.
+# Shared pure robot logic. SDK hardware code remains in src/.
 include_directories(
     ${CMAKE_CURRENT_LIST_DIR}/app_program/subsystem2
     ${CMAKE_CURRENT_LIST_DIR}/app_program/subsystem3
@@ -371,6 +371,130 @@ target_link_libraries(detour_test PRIVATE
 pico_enable_stdio_usb(detour_test 1)
 pico_enable_stdio_uart(detour_test 0)
 pico_add_extra_outputs(detour_test)
+# Heartbeat bench test: 1 ms timer, hooks, flags, watchdog (no motors).
+add_executable(heartbeat_test
+    src/heartbeat_test.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+)
+
+target_include_directories(heartbeat_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(heartbeat_test PRIVATE
+    pico_stdlib
+    hardware_watchdog
+)
+
+pico_enable_stdio_usb(heartbeat_test 1)
+pico_enable_stdio_uart(heartbeat_test 0)
+pico_add_extra_outputs(heartbeat_test)
+
+# Motor controller (core + Pico layer) with the heartbeat, for any target
+# that drives the robot through the motor controller (docs/MOTOR_CONTROLLER.md).
+add_library(motor_ctl_pico STATIC
+    app_program/subsystem2/motor_ctl.c
+    src/motor_ctl_pico.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+)
+
+target_include_directories(motor_ctl_pico PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(motor_ctl_pico PUBLIC
+    pico_stdlib
+    hardware_clocks
+    hardware_gpio
+    hardware_pwm
+    hardware_watchdog
+    pico_sync
+)
+
+# Motor controller floor bench: speed steps, one row per 10 ms (step 3).
+add_executable(motor_ctl_bench
+    src/motor_ctl_bench.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(motor_ctl_bench PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(motor_ctl_bench PRIVATE
+    motor_ctl_pico
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(motor_ctl_bench 1)
+pico_enable_stdio_uart(motor_ctl_bench 0)
+pico_add_extra_outputs(motor_ctl_bench)
+
+# Vehicle Controller test: line tracing, search, scan and detour modules
+# in the shell, wheel speeds through the motor controller
+# (docs/VC_LINE_RUN.md, docs/VC_DETOUR_RUN.md).
+add_executable(vc_line_test
+    src/vc_line_test.c
+    app_program/subsystem3/line_trace.c
+    app_program/subsystem3/line_search.c
+    app_program/subsystem5/servo_scan.c
+    app_program/subsystem5/detour_run.c
+    app_program/subsystem5/obstacle_detour.c
+    app_program/subsystem5/obstacle_profile.c
+    app_program/subsystem3/line_steer.c
+    app_program/subsystem3/line_position.c
+    src/line_sensors.c
+    app_program/subsystem5/obstacle.c
+    src/ultrasonic.c
+    app_program/vehicle/vehicle_sm.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(vc_line_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(vc_line_test PRIVATE
+    motor_ctl_pico
+    hardware_adc
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(vc_line_test 1)
+pico_enable_stdio_uart(vc_line_test 0)
+pico_add_extra_outputs(vc_line_test)
+
+# Duty map bench: open-loop duty levels, speed from the encoder counts.
+add_executable(duty_map_bench
+    src/duty_map_bench.c
+    src/drive.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(duty_map_bench PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(duty_map_bench PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+    hardware_sync
+    hardware_watchdog
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(duty_map_bench 1)
+pico_enable_stdio_uart(duty_map_bench 0)
+pico_add_extra_outputs(duty_map_bench)
+
 # Independent IR line-detection and Code 39 barcode-reading firmware.
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c

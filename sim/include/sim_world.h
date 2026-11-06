@@ -10,6 +10,7 @@ typedef struct {
     double zero_pct, tau_ms[2], top_speed_mm_s;
     double x, y, heading_deg;
     double front, rear, width, track, diameter, servo_x, face_offset;
+    double beam_half; /* ultrasonic sector half angle, radians */
     world_point_t ir[3];
     uint16_t floor[3], line[3];
     double footprint, line_width, tile_size, origin_x, origin_y, curve_radius;

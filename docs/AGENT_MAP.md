@@ -35,6 +35,15 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Obstacle detour handoff | [docs/OBSTACLE_DETOUR_HANDOFF.md](OBSTACLE_DETOUR_HANDOFF.md) |
 | Detour v1.6 test plan | [docs/DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md) |
 | ADR: motor controller owns the actuators | [docs/ADR_MOTOR_CONTROLLER.md](ADR_MOTOR_CONTROLLER.md) |
+| ADR: one hardware heartbeat | [docs/ADR_HEARTBEAT.md](ADR_HEARTBEAT.md) |
+| ADR: Vehicle Controller runs one module at a time | [docs/ADR_VEHICLE_CONTROLLER.md](ADR_VEHICLE_CONTROLLER.md) |
+| Vehicle state machine record | [docs/VEHICLE_STATE_MACHINE.md](VEHICLE_STATE_MACHINE.md) — shell [`app_program/vehicle/vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), test [`tests/test_vehicle_sm.c`](../tests/test_vehicle_sm.c) |
+| Vehicle Controller line run | [docs/VC_LINE_RUN.md](VC_LINE_RUN.md) — modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
+| Vehicle Controller detour run | [docs/VC_DETOUR_RUN.md](VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
+| Line steering in mm/s | [docs/LINE_STEER_MM.md](LINE_STEER_MM.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
+| Duty map record | [docs/DUTY_MAP.md](DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
+| Heartbeat record | [docs/HEARTBEAT.md](HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
+| Motor controller record | [docs/MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/TWO_SENSOR_LINE_TRACING.md](TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
@@ -73,8 +82,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](LINE_STEERING.md#host-unit-test), and [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests/) — run without hardware; see [OBSTACLE_MONITOR.md](OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
+| Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
@@ -86,7 +96,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Simulator devices and SDK headers | [`sim/devices/placeholders.c`](../sim/devices/placeholders.c), [`sim/devices/ultrasonic.c`](../sim/devices/ultrasonic.c), [`sim/include/sim_devices.h`](../sim/include/sim_devices.h), [`sim/include/`](../sim/include/) — motion/IR/servo, timed echo/fault events, local sink, and minimal host SDK surface |
 | Simulator call hooks | [`sim/targets/detour_hooks.c`](../sim/targets/detour_hooks.c), [`sim/targets/detour_decode.py`](../sim/targets/detour_decode.py) — exact external-call observations, separate inferred phases, and hook/printf step checks; no firmware edits |
 | Offline trace viewer | [`sim/viewer/render.py`](../sim/viewer/render.py), [`sim/viewer/template.html`](../sim/viewer/template.html), [`sim/viewer/viewer.js`](../sim/viewer/viewer.js), [`sim/viewer/viewer.css`](../sim/viewer/viewer.css) — self-contained saved-data HTML, true/firmware poses, playback and camera controls |
-| Simulator scenarios | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/scenarios/no_box_straight.json`](../sim/scenarios/no_box_straight.json), [`sim/scenarios/unloaded_reference.json`](../sim/scenarios/unloaded_reference.json); two line sensors: [`sim/scenarios/two_sensor_track.json`](../sim/scenarios/two_sensor_track.json), [`sim/scenarios/two_sensor_straight.json`](../sim/scenarios/two_sensor_straight.json) |
+| Simulator scenarios | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/scenarios/no_box_straight.json`](../sim/scenarios/no_box_straight.json), [`sim/scenarios/unloaded_reference.json`](../sim/scenarios/unloaded_reference.json); narrow-beam real box (run R2 fit): [`sim/scenarios/box_real_160x250.json`](../sim/scenarios/box_real_160x250.json); two line sensors: [`sim/scenarios/two_sensor_track.json`](../sim/scenarios/two_sensor_track.json), [`sim/scenarios/two_sensor_straight.json`](../sim/scenarios/two_sensor_straight.json) |
 | Optional local environment editor | [`sim/viewer/serve.py`](../sim/viewer/serve.py), [`sim/viewer/editor.html`](../sim/viewer/editor.html), [`sim/viewer/editor.js`](../sim/viewer/editor.js), [`sim/viewer/editor.css`](../sim/viewer/editor.css) — loopback-only environment edits, validated batch runs, save and session history; echo materials are editable, robot model/firmware are not |
 | Fixed-front box-size sweep | [`sim/box_sweep.py`](../sim/box_sweep.py), [`sim/scenarios/box_wide_deep.json`](../sim/scenarios/box_wide_deep.json) — generate six size-only variants under `sim/scenarios/`, retain the baseline, and optionally run all seven cases |
 | Simulator tests | [`sim/tests/test_milestone1.py`](../sim/tests/test_milestone1.py), [`sim/tests/probe.c`](../sim/tests/probe.c), [`sim/tests/test_milestone2.py`](../sim/tests/test_milestone2.py), [`sim/tests/model_probe.c`](../sim/tests/model_probe.c), [`sim/tests/test_milestone3.py`](../sim/tests/test_milestone3.py), [`sim/tests/test_specular.py`](../sim/tests/test_specular.py), [`sim/tests/ultrasonic_probe.c`](../sim/tests/ultrasonic_probe.c), [`sim/tests/test_milestone4.py`](../sim/tests/test_milestone4.py), [`sim/tests/viewer_browser.cjs`](../sim/tests/viewer_browser.cjs), [`sim/tests/test_server.py`](../sim/tests/test_server.py), [`sim/tests/editor_browser.cjs`](../sim/tests/editor_browser.cjs) |
@@ -103,12 +113,21 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Current repository | This independent Git repository owns all files below its root. It has no nested repositories or submodules. |
 | Parent superproject checkout | The School Repos superproject tracks this repository as a gitlink. Commit and push here first; then update the gitlink in the parent repository. |
 
-- [Branch layout](BRANCH_LAYOUT.md)
+## Branch layout
+
+See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
+
+Standalone module tests: [`host-tests/`](../host-tests/), one C test per module.
+
+- [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.
 
 ## Course template layout
 
 See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; SDK hardware code stays in `src/`. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
-- [Motor Controller](MOTOR_CONTROLLER.md)
-
-Current module branch: `mtk3-motion`. Merge only into `mtk3-staging`.
+The `mtk3` base contains shared pure helpers. `mtk3-motion` and
+`mtk3-vehicle` start there. LINE, SEARCH, SCAN and DETOUR start from
+`mtk3-vehicle`; only `mtk3-staging` combines them. Independent module tests
+are in [`host-tests/`](../host-tests/); run all host tests with
+[`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are
+still active; robot logic is compiled but not task-wired.
