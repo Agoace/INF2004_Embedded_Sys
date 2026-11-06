@@ -3,8 +3,9 @@
 Hardware results below were supplied by the operator on 2026-11-06.
 A build or a host test is not an on-target result. Keep both wheels lifted
 before powering a TEST image. Earlier passes used USB after flashing;
-they do not validate a cold power-on. The fixed image still needs
-[S0-U01](../subsystem1/TEST_LOG.md), currently **Not run**.
+they do not validate a cold power-on. The fixed image passed
+[S0-U01](../subsystem1/TEST_LOG.md) after a cold power-on, and B4 ran
+from a cold VIN power-on.
 
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
@@ -13,7 +14,7 @@ they do not validate a cold power-on. The fixed image still needs
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
 | S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
-| B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Not run; blocked by cold-power TIMER defect until S0-U01 passes |
+| B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
 
 ## Hardware run records: 2026-11-06
 
@@ -68,10 +69,51 @@ The watchdog tick generator was enabled with CYCLES 0, dividing 12 MHz
 by 512 instead of 12; TIMER ran about 42.7 times too slowly. Post-flash
 watchdog reboot retained boot ROM tick setup and hid the defect.
 Application initialization now sets 12 cycles, waits for RUNNING, and
-checks the TIMER/kernel ratio before enabling motion. The fixed image's
-cold-power S0-U01 is **Not run**. Test every kernel image after a cold
+checks the TIMER/kernel ratio before enabling motion. The fixed image
+passed S0-U01 after a cold power-on. Test every kernel image after a cold
 power-on, not only after a flash. See the
 [motor record](../../docs/MOTOR_CONTROLLER.md#cold-power-timer-source).
+
+### B4: floor, cold VIN power-on
+
+Image: committed `mtk3-motion` f0b4194 bench (`make SMP=0 WIFI=none`).
+USB was unplugged before VIN power-on, so the start was cold. After the run,
+USB was connected with VIN still on, and GP20 printed the RAM log. Log:
+`build/mtk_logs/b4_floor_20261106-170154.txt` (ignored, not committed).
+
+Result: list done, 2110 rows, 0 skipped, faults 0x00, 2110 MB rows
+received, `tm_usb_dropped` 0. Motion ticks 4862, longest tick 112 us, task
+gap 9952..10046 us, 0 late, 0 missed. End heading +216 cdeg.
+
+| Step | Speed L / R, B4 (mm/s) | B3 | Largest speed difference | Heading, B4 (cdeg) | B3 | Heading difference | Duty L / R, B4 (permille) | B3 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| fwd 150 | +150 / +150 | +149 / +150 | 1 mm/s (0.7%) | +70 | +45 | 25 | +221 / +218 | +225 / +222 |
+| rev 150 | -151 / -150 | -149 / -148 | 2 mm/s (1.4%) | -12 | -133 | **121** | -217 / -214 | -227 / -211 |
+| fwd 300 | +305 / +305 | +304 / +304 | 1 mm/s (0.3%) | +58 | +16 | 42 | +405 / +398 | +406 / +402 |
+| rev 300 | -307 / -307 | -308 / -306 | 1 mm/s (0.3%) | -33 | -216 | **183** | -402 / -394 | -404 / -388 |
+| spin L 20 | -21 / +20 | -19 / +19 | **2 mm/s (10.5%)** | +6120 | +5900 | **220** | -85 / +82 | -97 / +77 |
+| spin R 20 | +19 / -20 | +20 / -20 | 1 mm/s (5.0%) | -6058 | -5887 | **171** | +79 / -91 | +93 / -99 |
+| fwd 40 | +40 / +40 | +40 / +38 | **2 mm/s (5.3%)** | +20 | +128 | **108** | +91 / +97 | +98 / +95 |
+| rev 40 | -40 / -40 | -39 / -40 | 1 mm/s (2.6%) | +12 | -158 | **170** | -86 / -87 | -103 / -92 |
+
+Bold: outside the written limit (speed ±5 %, heading ±100 cdeg of B3).
+
+Assessment, agreed with the operator on 2026-11-06:
+
+- **Functional PASS.** All steps ran, with no faults, skipped rows or late
+  ticks. Timing is better than the bare-metal heartbeat.
+- The strict limits are **missed** on 2 speed rows and 6 heading rows. The
+  misses are not worse driving. On all six straight steps, B4 drifted less
+  than B3 (at most 70 cdeg against up to 216). The slow-step misses are
+  1–2 mm/s at 20–40 mm/s. Both spins turned about 2° more, in both
+  directions.
+- B3 is one run, so its own run-to-run spread is unknown. The limits were
+  set tighter than that spread. No extra reference run was made.
+- Duty matches B3 within normal spread. This confirms that the PWM output
+  and the controller are unchanged; floor load sets the duty.
+- For later comparisons: speed within ±5 % **or** ±2 mm/s, whichever is
+  larger; heading on straight steps at most 100 cdeg worse than the
+  reference.
 
 ## B4 reference: B3 measured values
 
