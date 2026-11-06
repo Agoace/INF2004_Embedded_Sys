@@ -74,19 +74,24 @@ EXPORT INT usermain(void)
 	tm_printf((UB*)"all subsystems started\n\n");
 
 #if APP_TEST
-	/* Test build (make TEST=1): run every subsystem's tests in turn,
-	   here in the initial task, while the system is running.  Tests may
-	   call tk_dly_tsk() to let the other tasks work for a while. */
-	tm_printf((UB*)"[TEST] === test run start ===\n");
-	subsystem1_test();
-	subsystem2_test();
-	subsystem3_test();
-	subsystem4_test();
-	subsystem5_test();
-	app_task_report();
-	/* Destructive reset check must follow every other subsystem test. */
-	subsystem2_watchdog_test();
-	tm_printf((UB*)"[TEST] === test run end ===\n");
+	/* Startup stays at priority 1. TEST work must be below motion/sensors,
+	   but above telemetry30 so its nonblocking saturation test still fills. */
+	const ER test_priority = tk_chg_pri(TSK_SELF, 20);
+	CHECK(test_priority, "TEST runner priority 20");
+	if (test_priority >= E_OK) {
+		tm_printf((UB*)"[TEST] === test run start (runner priority 20) ===\n");
+		subsystem1_test();
+		subsystem2_test();
+		subsystem3_test();
+		subsystem4_test();
+		subsystem5_test();
+		app_task_report();
+		/* Destructive reset check follows every other subsystem test. */
+		subsystem2_watchdog_test();
+		tm_printf((UB*)"[TEST] === test run end ===\n");
+	} else {
+		tm_printf((UB*)"[TEST] ABORT: cannot set runner priority 20; tests not run\n");
+	}
 #endif
 
 	/* Sleep forever.  Returning from usermain() would shut down. */

@@ -9,7 +9,7 @@ from a cold VIN power-on.
 
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
-| S2-U01 | TEST image: compare motion status before and after 5 s | 500 ± 1 ticks; maximum task gap ≤ 11000 us; no discarded wakes; report `tick_max_us` and min/max gap | PASS: 499 ticks, gap 9900..10093 us, max 105 us, 0 late/missed |
+| S2-U01 | TEST priority-20 runner: begin/end a separate 5 s timing window; print buffered PROBE A and lifetime INFO afterwards | 500 ± 1 window ticks; maximum complete in-window task gap ≤ 11000 us; no discarded wakes in window; report window work maximum, gaps and late count; retain lifetime extrema/counters | Not run for FIX 1 + PROBE A image. Earlier 445084c FAIL on both boots; see analysis below. Older pre-split PASS is historical |
 | S2-U02 | TEST image: read the warning first; wheels lifted. After a 2 s delay, send 40/40 mm/s once, then no refresh for `stale_ms + 30` ms | `MC_FAULT_STALE` set; both duty values 0; wheels stop | PASS |
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
 | S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
@@ -17,9 +17,54 @@ from a cold VIN power-on.
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
 
+## STEP 7 S2-U01 failure and approved window/probe correction
+
+Operator log (read-only main checkout):
+`build/mtk_logs/s7_test_20261106-215149.txt`, TEST image `445084c`.
+Both boots reported 501 ticks and one lifetime late wake, no discarded
+wakes. Gap ranges were 8991..11024 us and 8535..11475 us; work maxima were
+113 and 198 us. S2-U02 and the last two-boot S2-U05 passed (99 ms).
+These results do not pass the 11000 us gap gate.
+
+Analysis found that only tick count used the 5 s delta. Gap extrema and
+late/missed fields were lifetime values, including S0/S1 beforehand.
+S1 filled its MBF from the initial task at priority 1: BEGIN plus 100 sends
+without yielding. This task outranked motion10 and USB3. The 34 accepted /
+66 lost rows match the 4096-byte MBF and 116-byte messages plus headers.
+That one-off burst, possibly followed by USB service, is the leading cause
+of the late/early pair. It is not yet confirmed by phase snapshots; the old
+log cannot locate the event inside or outside S2's own window. No long
+sensor-lock or interrupt-off section was found that explains 1.5 ms.
+
+The approved correction changes TEST only:
+
+- After startup, the initial TEST runner changes to priority 20. Motion10,
+  line11 and sonar12 can preempt it; telemetry30 still cannot drain the
+  saturation burst while the runner is ready. A failed priority change
+  aborts TEST, not the firmware startup path.
+- The new motion API counts starts inside the window and only complete
+  gaps between those starts. The crossing gap from before the window is
+  excluded. Late count starts at zero; discarded wakes use an unsigned
+  lifetime end-minus-begin delta. Lifetime counters are never reset.
+- Tick count remains 499..501, gap limit remains 11000 us and discarded
+  wakes must remain zero. No ADC/sample/settings/production priority change.
+- Eight small PROBE A snapshots record TIMER us, ticks, lifetime gap/work
+  maxima and late/missed counts around S0 printing, S1 burst, its yield and
+  print, and S2 entry/exit. They are copied under the motion mutex without
+  output. The one PROBE block and lifetime INFO print only after the window.
+  See [expected format](../../docs/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only).
+
+**New-image hardware status: Not run.** Record both boots and the exact
+revision before changing this row. If demotion removes the startup delay,
+all probe late counts can be zero. If a remaining S0/S1/USB delay occurs,
+its lifetime count must stay visible while a clean S2 window reports zero
+late/missed events. Do not fabricate a late event to match that hypothesis,
+or widen the timing limit. Preserve any failing window for review.
+
 ## S2-U05: two-boot watchdog procedure
 
-This new destructive test is **Not run**. It is a separate last hook called
+Earlier images passed this destructive test, including 445084c at 99 ms.
+The new window/probe TEST image is **Not run**. It is a separate last hook called
 by `usermain()` after all other subsystem tests, not inside S2-U01/U02.
 Lift both wheels before TEST power. Keep USB connected for this check.
 

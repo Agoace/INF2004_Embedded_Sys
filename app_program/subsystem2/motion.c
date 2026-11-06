@@ -21,6 +21,11 @@ static uint32_t late_wakes, missed_wakes;
 static bool watchdog_armed;
 #if APP_TEST
 static volatile bool test_requested, test_suppressed;
+static bool window_active;
+static motion_timing_window_t window;
+static uint32_t window_last_us, window_missed_base;
+static motion_timing_probe_t probes[MOTION_PROBE_COUNT];
+static UINT probe_present;
 #endif
 
 static void encoder_irq(unsigned int pin, uint32_t events, void *ctx) {
@@ -63,6 +68,20 @@ static void motion_task(INT stacd, void *exinf) {
         ++ticks;
         const uint32_t took = drv_time_us() - started;
         if (took > tick_max_us) tick_max_us = took;
+#if APP_TEST
+        if (window_active) {
+            if (window.ticks != 0u) {
+                const uint32_t gap = started - window_last_us;
+                if (window.gaps == 0u || gap < window.gap_min_us) window.gap_min_us = gap;
+                if (gap > window.gap_max_us) window.gap_max_us = gap;
+                if (gap > 11000u) ++window.late_wakes;
+                ++window.gaps;
+            }
+            window_last_us = started;
+            ++window.ticks;
+            if (took > window.tick_max_us) window.tick_max_us = took;
+        }
+#endif
         const ID notify = tid_after_tick;
         (void)tk_unl_mtx(mtx_motion);
         /* Only completed control work feeds; never the cyclic handler or dump. */
@@ -138,6 +157,49 @@ int motion_start(void) {
     return (int)E_OK;
 }
 #if APP_TEST
+int motion_timing_window_begin(void) {
+    if (!watchdog_armed) return (int)E_OBJ;
+    const ER er = lock_motion();
+    if (er < E_OK) return (int)er;
+    int result = E_OBJ;
+    if (!window_active) {
+        window = (motion_timing_window_t){0};
+        window_missed_base = missed_wakes;
+        window_active = true;
+        result = E_OK;
+    }
+    (void)tk_unl_mtx(mtx_motion);
+    return result;
+}
+int motion_timing_window_end(motion_timing_window_t *out) {
+    if (!out) return (int)E_PAR;
+    const ER er = lock_motion();
+    if (er < E_OK) return (int)er;
+    int result = E_OBJ;
+    if (window_active) {
+        window.missed_wakes = missed_wakes - window_missed_base;
+        *out = window;
+        window_active = false;
+        result = E_OK;
+    }
+    (void)tk_unl_mtx(mtx_motion);
+    return result;
+}
+int motion_timing_probe_capture(motion_probe_stage_t stage) {
+    if ((unsigned int)stage >= MOTION_PROBE_COUNT) return (int)E_PAR;
+    const ER er = lock_motion();
+    if (er < E_OK) return (int)er;
+    probes[stage] = (motion_timing_probe_t){drv_time_us(),ticks,gap_min_us,
+        gap_max_us,tick_max_us,late_wakes,missed_wakes};
+    probe_present |= 1u << (unsigned int)stage;
+    return (int)tk_unl_mtx(mtx_motion);
+}
+int motion_timing_probe_read(motion_probe_stage_t stage,motion_timing_probe_t *out) {
+    if (!out || (unsigned int)stage >= MOTION_PROBE_COUNT) return (int)E_PAR;
+    if ((probe_present & (1u << (unsigned int)stage)) == 0u) return (int)E_OBJ;
+    *out = probes[stage];
+    return E_OK;
+}
 int motion_watchdog_test_suppress_feed(void) {
     if (!watchdog_armed) return (int)E_OBJ;
     test_requested = true;

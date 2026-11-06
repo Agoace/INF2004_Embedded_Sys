@@ -298,3 +298,97 @@ clean checks pass. Logs and retained probe/compiler evidence are under
 removed at completion. The candidate checkout is retained at `/tmp/mtk3t`.
 No push or flash was performed. All new hardware timing, stack and M1/M2
 acceptance rows remain **Not run**.
+
+## FIX 1 and PROBE A (TEST only)
+
+The operator's `445084c` TEST log reported S2-U01 FAIL on both boots:
+501 ticks, lifetime gaps 8991..11024 and 8535..11475 us, late1/missed0,
+work maxima 113/198 us. S0, S1-U02, S2-U02, S3-U01/U02 and S5-U02 passed;
+S5-U01 had 20/20 valid results near209 mm and S2-U05 passed at99 ms.
+Reported stack high-water maxima were motion416/3072, line344/2048,
+sonar240/2048 and telemetry416/4096 bytes. Instrumented S3 work was about
+1.3% of the elapsed window, max207 us/sample; ISR about7.5%, max114 us.
+These are earlier-image observations, not acceptance of this correction.
+The ignored source log is `build/mtk_logs/s7_test_20261106-215149.txt` in
+the main checkout. The [S2 record](../testing/subsystem2/TEST_LOG.md#step-7-s2-u01-failure-and-approved-windowprobe-correction)
+has the analysis and current status.
+
+The earlier S2 check mixed a tick delta with lifetime gap/counter fields.
+New S1 saturation work at priority1 (100 sends without a yield), plus
+possible USB3 service afterwards, is the leading explanation. It has not
+been confirmed by a phase trace. The actual late wake is not erased or
+reclassified as a hardware pass.
+
+Startup remains at initial priority1. Only TEST changes its runner to20
+before S0/S1, below motion10/line11/sonar12 but above telemetry30. Failure
+to change priority prints ABORT and skips tests. Production priorities,
+eight conversions per ADC channel, pure modules and watchdog feeding are
+unchanged. No extra task, cyclic handler or kernel object is created.
+
+`motion_timing_window_begin/end` are TEST-only. They retain all lifetime
+statistics. Window starts are counted separately; gap extrema/late count
+cover only pairs of starts both inside the window. The first cross-start
+gap is excluded, so N starts give N-1 complete gaps. Missed wakes use the
+lifetime difference across begin/end. S2 keeps the 499..501 tick, <=11000 us
+gap and zero-missed limits. Window work maximum retains the existing
+start-to-PWM measurement interval. Lifetime values print separately as INFO.
+
+PROBE A captures eight fixed-size snapshots without formatting or output:
+before/after S0 print; S1 burst begin/end; after its first yield; after its
+print; S2 entry/exit. The TEST runner alone writes/reads the buffers;
+capture copies motion fields under its short inherited mutex. Reporting
+occurs after the window, from immutable captured values. No per-tick
+console trace, USB/template probe, ADC optimization or Option H is added.
+
+Expected format (numbers below are placeholders, not a predicted pass):
+
+```text
+[TEST] === test run start (runner priority 20) ===
+[TEST] S2-U01 window ticks <N> gaps <N-1> gap <min>..<max> us tick_max_us <work> late <window_count> missed <delta>
+[TEST] S2-U01 INFO lifetime ticks <total> gap <min>..<max> us tick_max_us <work> late <total> missed <total>
+[TEST] PROBE begin: buffered lifetime snapshots (not window values)
+[TEST] PROBE before_S0_print us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE after_S0_print us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE S1_burst_begin us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE S1_burst_end us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE after_S1_yield us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE after_S1_print us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE S2_entry us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE S2_exit us <t> ticks <n> gap <min>..<max> us tick_max_us <work> late <n> missed <n>
+[TEST] PROBE end
+```
+
+Compare S2 entry/exit lifetime counter deltas and the independent window
+result. A prior late1 with zero window late/missed confirms it preceded the
+window. All-zero lifetime late counts are also valid if the lower TEST
+priority removes the delay. A PROBE capture failure prints `unavailable
+error <code>` rather than invented zeros. TIMER us is the raw wrapping
+32-bit timestamp. **New-image S2-U01 and probe hardware status: Not run.**
+
+### FIX 1 local software checks
+
+| Profile | text | data | bss | Warnings |
+| --- | ---: | ---: | ---: | ---: |
+| SMP=0 WIFI=none robot | 62540 | 152 | 118840 | 0 |
+| SMP=0 WIFI=none TEST=1 | 53520 | 152 | 118276 | 0 |
+
+Both profiles passed clean `make -j4 --output-sync=target` builds. All four
+touched application C units passed real-header ARM compilation in both
+profiles with `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`
+(**8/8**). Retained SDK adapter link proofs passed **2/2**. Host tests passed
+**48/48**, including old lifetime failures with a clean window, a 11001 us
+window that must fail, historical missed-count isolation, multiple windows,
+immutable probe snapshots, capture/report order, TEST demotion/failure and
+unchanged production runner policy. No bare-metal/simulator source changed.
+
+The UP/no-radio production loadable ROM binary is byte-identical to the
+operator-built `445084c` image, SHA256:
+`c3aabaacd8cc706197aa7e22ff8eb520de57aa8fdfd28d15140a5a63f8b53544`.
+No TEST timing/probe symbols are present in that production ELF. This
+checks production code isolation, not new-image hardware performance.
+The TEST image adds 1788 text bytes and 264 bss bytes over `445084c`.
+No stack budget, production priority, ADC or watchdog-feed change is made.
+Documentation/map, whitespace, secret-pattern/credential-config and clean
+checks pass. Logs, compiler frame reports, link maps and validation commands
+are retained under `/tmp/step7-fix1-results/`. **No push or flash.**
+New-image S2-U01/PROBE A hardware status remains **Not run**.

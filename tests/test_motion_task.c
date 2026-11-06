@@ -87,6 +87,12 @@ static void tick(uint32_t at) {
     assert(!held && !irq_off);
 }
 int main(int argc, char **argv) {
+#if APP_TEST
+    motion_timing_window_t unopened;
+    assert(motion_timing_window_begin()==E_OBJ);
+    assert(motion_timing_window_end(&unopened)==E_OBJ);
+    assert(motion_timing_probe_capture(MOTION_PROBE_BEFORE_S0_PRINT)==E_OBJ);
+#endif
     init_error = E_SYS;
     output[0] = output[1] = 100;
     assert(motion_init() == E_SYS && check_calls == 0u);
@@ -160,11 +166,39 @@ int main(int argc, char **argv) {
     ((void (*)(void *))cyclic_entry)(0); /* Stuck task: cyclic wake alone never feeds. */
     assert(wd_feeds==7u);
 #if APP_TEST
+    motion_timing_probe_t probe;
+    assert(motion_timing_probe_read(MOTION_PROBE_BEFORE_S0_PRINT,&probe)==E_OBJ);
+    assert(motion_timing_probe_capture((motion_probe_stage_t)-1)==E_PAR);
+    assert(motion_timing_probe_capture(MOTION_PROBE_COUNT)==E_PAR);
+    assert(motion_timing_probe_read(MOTION_PROBE_COUNT,&probe)==E_PAR);
+    assert(motion_timing_probe_read(MOTION_PROBE_BEFORE_S0_PRINT,0)==E_PAR);
+    assert(motion_timing_probe_capture(MOTION_PROBE_BEFORE_S0_PRINT)==E_OK);
+    assert(motion_timing_probe_read(MOTION_PROBE_BEFORE_S0_PRINT,&probe)==E_OK);
+    const motion_timing_probe_t saved=probe;
+    motion_timing_window_t w;
+    assert(motion_timing_window_begin()==E_OK && motion_timing_window_begin()==E_OBJ);
+    assert(motion_timing_window_end(0)==E_PAR);
+    queued=0;tick(250000u); /* Cross-start historical gap is outside the window. */
+    tick(260000u);tick(271500u);
+    queued=3;tick(280000u);
+    assert(motion_timing_window_end(&w)==E_OK && motion_timing_window_end(&w)==E_OBJ);
+    assert(w.ticks==4u && w.gaps==3u && w.gap_min_us==8500u && w.gap_max_us==11500u);
+    assert(w.late_wakes==1u && w.missed_wakes==3u && w.tick_max_us==7u);
+    assert(motion_status(&s)==E_OK && s.gap_max_us==110000u);
+    assert(s.late_wakes==saved.late_wakes+2u && s.missed_wakes==saved.missed_wakes+3u);
+    assert(motion_timing_window_begin()==E_OK);
+    queued=0;tick(350000u);tick(360000u);tick(370000u);
+    assert(motion_timing_window_end(&w)==E_OK && w.ticks==3u && w.gaps==2u);
+    assert(w.gap_min_us==10000u && w.gap_max_us==10000u && w.late_wakes==0u && w.missed_wakes==0u);
+    assert(motion_timing_probe_read(MOTION_PROBE_BEFORE_S0_PRINT,&probe)==E_OK);
+    assert(!memcmp(&probe,&saved,sizeof(probe))); /* Deferred report is immutable. */
+    assert(motion_status(&s)==E_OK && s.gap_max_us==110000u && s.late_wakes>0u && s.missed_wakes>0u);
+    const unsigned int feeds_before=wd_feeds;
     assert(motion_watchdog_test_suppress_feed()==E_OK && !motion_watchdog_test_feed_stopped());
-    tick(190000u);
-    assert(wd_feeds==8u && test_begins==1u && motion_watchdog_test_feed_stopped());
-    tick(200000u);
-    assert(wd_feeds==8u && test_begins==1u); /* Live task, intentional TEST suppression. */
+    tick(380000u);
+    assert(wd_feeds==feeds_before+1u && test_begins==1u && motion_watchdog_test_feed_stopped());
+    tick(390000u);
+    assert(wd_feeds==feeds_before+1u && test_begins==1u); /* Live task, intentional TEST suppression. */
 #endif
     return 0;
 }

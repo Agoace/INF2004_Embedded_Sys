@@ -162,3 +162,16 @@ if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
 endif()
+
+# TEST runner policy and buffered timing evidence; no real scheduler or hardware.
+host_test(test_test_runner tests/test_test_runner.c app_program/app_main.c)
+host_test(test_production_runner tests/test_test_runner.c app_program/app_main.c)
+host_test(test_timing_test_hooks tests/test_timing_test_hooks.c
+    app_program/subsystem1/subsystem1_test.c app_program/subsystem2/subsystem2_test.c)
+foreach(test IN ITEMS test_test_runner test_production_runner test_timing_test_hooks)
+    target_include_directories(${test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endforeach()
+target_compile_definitions(test_test_runner PRIVATE APP_TEST=1)
+target_compile_definitions(test_timing_test_hooks PRIVATE APP_TEST=1)
+add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priority_failure)
+add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
