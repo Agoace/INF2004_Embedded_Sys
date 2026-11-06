@@ -12,7 +12,7 @@ from a cold VIN power-on.
 | S2-U01 | TEST priority-20 runner: begin/end a separate 5 s timing window; print buffered PROBE A and lifetime INFO afterwards | 500 ± 1 window ticks; maximum complete in-window task gap ≤ 11000 us; no discarded wakes in window; report window work maximum, gaps and late count; retain lifetime extrema/counters | PASS 2026-11-06 (3f889a1), both boots: window gap 9984..10016 and 9791..10210 us, late 0, missed 0. The earlier 445084c FAIL was a test artefact. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S2-U02 | TEST image: read the warning first; wheels lifted. After a 2 s delay, send 40/40 mm/s once, then no refresh for `stale_ms + 30` ms | `MC_FAULT_STALE` set; both duty values 0; wheels stop | PASS |
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
-| S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
+| S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | PASS 2026-11-06 (BENCH, mtk3-staging 8df29d6): ESTOP during fwd 300 (about 330 mm/s, duty about 410), wheels stopped at once and stayed stopped (operator); faults 0x04. Scope not used. See the S2-U04 run below |
 | S2-U05 | TEST=1 LAST, after S1..S5: wheels lifted; warning, stop feeds after one final tick, expect reboot; leave power connected and capture next boot's later previous-boot line | Own watchdog TIMER reset; previous elapsed sample 90..110 ms (last observation, not exact reset instant); motor pins reset and wheels remain stopped; no endless reset loop | PASS 2026-11-06: second boot reported `watchdog reset after 99 ms`, no repeat reset; wheels stopped (log `build/mtk_logs/s2u05_20261106-201116.txt`) |
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
@@ -247,3 +247,18 @@ S0-U01 line of the first boot was lost before USB connected. Second boot
 S2-U01 PASS (gap 9361..10643 us), S2-U02 PASS, then
 `S2-U05 previous boot: watchdog reset after 99 ms` and PASS, with no second
 reset. Result: **PASS**.
+
+## S2-U04 run: 2026-11-06
+
+BENCH image (`make SMP=0 WIFI=none BENCH=1`) from mtk3-staging 8df29d6,
+wheels lifted, USB and VIN connected. Logs (ignored, not committed):
+`build/mtk_logs/s2u04_*.txt` and `build/mtk_logs/s2u04b_*.txt`.
+
+| Try | ESTOP time | Result |
+| --- | --- | --- |
+| 1 | 80 ms after the bench itself set rest (duty already 0) | Not valid: no active drive to stop. ESTOP latched (0x04) |
+| 2 | During fwd 300: speed 330 mm/s, duty 408/403 in the last row | **PASS**: the operator saw the wheels stop at once and stay stopped for about 3 s. ESTOP latched (0x04). Gap 9961..10031 us, late 0, missed 0 |
+
+The bench stops its RAM log at ESTOP, so the log has no rows after the
+stop. The duty 0 and "no later tick restores an old duty" result comes from
+the operator observation. Possible improvement: log about 1 s after ESTOP.
