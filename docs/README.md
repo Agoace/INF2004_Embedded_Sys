@@ -41,3 +41,5 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
 
 - [Branch layout](BRANCH_LAYOUT.md)
+
+- [Motor Controller](MOTOR_CONTROLLER.md)
