@@ -172,12 +172,17 @@ int main(void) {
         CHECK(mc_heading_cdeg(&mc) > 1000, "spin left: heading %ld", (long)mc_heading_cdeg(&mc));
     }
 
-    /* 7. Set point rise limit: 2 counts/tick per tick. */
+    /* 7. Set point rise limit: accel_cpt_q8 per tick (robot: 8 counts/tick
+     * per tick). 300 mm/s is about 37 counts/tick, above two steps. */
     start();
     run(300, 300, CFG.tick_ms);
-    CHECK(mc.w[0].setpoint_q8 == 512, "rise: first tick %ld", (long)mc.w[0].setpoint_q8);
+    CHECK(CFG.accel_cpt_q8 > 0u && mc.w[0].target_q8 > 2 * (int32_t)CFG.accel_cpt_q8,
+          "rise: test needs a target above two steps");
+    CHECK(mc.w[0].setpoint_q8 == (int32_t)CFG.accel_cpt_q8, "rise: first tick %ld",
+          (long)mc.w[0].setpoint_q8);
     run(300, 300, CFG.tick_ms);
-    CHECK(mc.w[0].setpoint_q8 == 1024, "rise: second tick %ld", (long)mc.w[0].setpoint_q8);
+    CHECK(mc.w[0].setpoint_q8 == 2 * (int32_t)CFG.accel_cpt_q8, "rise: second tick %ld",
+          (long)mc.w[0].setpoint_q8);
     run(300, 300, 1000u);
     run(100, 100, CFG.tick_ms);
     CHECK(mc.w[0].setpoint_q8 == mc.w[0].target_q8, "slowing: at once");
@@ -307,6 +312,7 @@ int main(void) {
         ponly.kp_q8 = 25600u; /* 100 */
         ponly.ki_q8 = 256u;
         ponly.max_permille = 300u;
+        ponly.kick_counts = 0u; /* kick over after the first tick, so I is not held by it */
         mc_init(&mc, &ponly, c0, 0u);
         for (uint32_t k = 1u; k <= 10u; ++k) {
             mc_set_speed(&mc, 161, -161, k * 10u);
@@ -368,6 +374,79 @@ int main(void) {
         now += 20u;
         mc_tick(&mc, c, now, &out);
         CHECK(mc.w[0].speed_cpt == 20, "late tick: %d counts/tick", mc.w[0].speed_cpt);
+    }
+
+    /* 21. I holds while the set point rises and while the kick runs. */
+    {
+        mc_config_t ic = CFG;
+        ic.kp_q8 = 0u;
+        ic.ki_q8 = 256u;          /* 1.0 per tick */
+        ic.accel_cpt_q8 = 256u;   /* 1 count/tick per tick */
+        ic.kick_permille = 100u;
+        ic.kick_counts = 10u;
+        ic.kick_timeout_ms = 1000u;
+        ic.stall_min_permille = 1000u;
+        const int32_t c0[2] = {0, 0};
+        mc_init(&mc, &ic, c0, 0u);
+        /* 81 mm/s = 10.06 counts/tick: about 10 ticks of rise. The wheel
+         * does not move, so the error is large the whole time. */
+        uint32_t t = 0u;
+        for (int k = 0; k < 5; ++k) {
+            t += 10u;
+            mc_set_speed(&mc, 81, 0, t);
+            mc_tick(&mc, c0, t, &out);
+        }
+        CHECK(mc.w[0].setpoint_q8 < mc.w[0].target_q8 && mc.w[0].integral_q8 == 0,
+              "rising: I held (%ld)", (long)mc.w[0].integral_q8);
+        /* Kick done (wheel turned 10 counts), set point still rising. */
+        int32_t moved[2] = {10, 0};
+        t += 10u;
+        mc_set_speed(&mc, 81, 0, t);
+        mc_tick(&mc, moved, t, &out);
+        CHECK(!mc.w[0].kicking && mc.w[0].integral_q8 == 0, "kick over, still rising: I held");
+        /* One more tick: no kick, set point still below the target. */
+        t += 10u;
+        mc_set_speed(&mc, 81, 0, t);
+        mc_tick(&mc, moved, t, &out);
+        CHECK(!mc.w[0].kicking && mc.w[0].setpoint_q8 < mc.w[0].target_q8 && mc.w[0].integral_q8 == 0,
+              "no kick, still rising: I held (%ld)", (long)mc.w[0].integral_q8);
+        /* Set point at the target, wheel stopped again: I grows. */
+        for (int k = 0; k < 10; ++k) {
+            t += 10u;
+            mc_set_speed(&mc, 81, 0, t);
+            mc_tick(&mc, moved, t, &out);
+        }
+        CHECK(mc.w[0].setpoint_q8 == mc.w[0].target_q8 && mc.w[0].integral_q8 > 0,
+              "at the target: I grows (%ld)", (long)mc.w[0].integral_q8);
+        /* At the target but kicking (from rest, no rise limit): I held. */
+        ic.accel_cpt_q8 = 0u;
+        mc_init(&mc, &ic, c0, 0u);
+        t = 0u;
+        for (int k = 0; k < 5; ++k) {
+            t += 10u;
+            mc_set_speed(&mc, 81, 0, t);
+            mc_tick(&mc, c0, t, &out);
+        }
+        CHECK(mc.w[0].kicking && mc.w[0].setpoint_q8 == mc.w[0].target_q8 && mc.w[0].integral_q8 == 0,
+              "kicking at the target: I held (%ld)", (long)mc.w[0].integral_q8);
+    }
+
+    /* 22. Speed limit: +/-460 mm/s each wheel; 0 = none. */
+    start();
+    {
+        mc_set_speed(&mc, 460, -460, now);
+        const int32_t q460 = mc.w[0].target_q8;
+        CHECK(mc.w[1].target_q8 == -q460, "limit: -460 = -(460)");
+        mc_set_speed(&mc, 461, -2000, now);
+        CHECK(mc.w[0].target_q8 == q460 && mc.w[1].target_q8 == -q460, "limit: 461 and -2000 -> +/-460");
+        mc_set_speed(&mc, 459, 0, now);
+        CHECK(mc.w[0].target_q8 < q460 && mc.w[0].target_q8 > 0, "limit: 459 kept");
+        mc_config_t open = CFG;
+        open.max_speed_mm_s = 0u;
+        const int32_t c0[2] = {0, 0};
+        mc_init(&mc, &open, c0, now);
+        mc_set_speed(&mc, 1000, -1000, now);
+        CHECK(mc.w[0].target_q8 > 2 * q460 && mc.w[1].target_q8 < -2 * q460, "limit 0: none");
     }
 
     /* 20. Servo settle rounding: 1 degree = 42 + 3.6 -> 46 ms. */

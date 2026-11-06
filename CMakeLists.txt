@@ -383,6 +383,75 @@ pico_enable_stdio_usb(heartbeat_test 1)
 pico_enable_stdio_uart(heartbeat_test 0)
 pico_add_extra_outputs(heartbeat_test)
 
+# Motor controller (core + Pico layer) with the heartbeat, for any target
+# that drives the robot through the motor controller (docs/MOTOR_CONTROLLER.md).
+add_library(motor_ctl_pico STATIC
+    src/motor_ctl.c
+    src/motor_ctl_pico.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+)
+
+target_include_directories(motor_ctl_pico PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(motor_ctl_pico PUBLIC
+    pico_stdlib
+    hardware_clocks
+    hardware_gpio
+    hardware_pwm
+    hardware_watchdog
+    pico_sync
+)
+
+# Motor controller floor bench: speed steps, one row per 10 ms (step 3).
+add_executable(motor_ctl_bench
+    src/motor_ctl_bench.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(motor_ctl_bench PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(motor_ctl_bench PRIVATE
+    motor_ctl_pico
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(motor_ctl_bench 1)
+pico_enable_stdio_uart(motor_ctl_bench 0)
+pico_add_extra_outputs(motor_ctl_bench)
+
+# Duty map bench: open-loop duty levels, speed from the encoder counts.
+add_executable(duty_map_bench
+    src/duty_map_bench.c
+    src/drive.c
+    src/heartbeat.c
+    src/heartbeat_pico.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(duty_map_bench PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(duty_map_bench PRIVATE
+    pico_stdlib
+    hardware_gpio
+    hardware_pwm
+    hardware_sync
+    hardware_watchdog
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(duty_map_bench 1)
+pico_enable_stdio_uart(duty_map_bench 0)
+pico_add_extra_outputs(duty_map_bench)
+
 # Independent IR line-detection and Code 39 barcode-reading firmware.
 add_executable(robocar_ir_sensors
     src/robocar_ir_sensors.c

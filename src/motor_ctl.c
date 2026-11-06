@@ -45,11 +45,19 @@ static int32_t speed_q8(const mc_config_t *cfg, int16_t mm_s) {
     return (int32_t)q8;
 }
 
+static int16_t limit_speed(const mc_config_t *cfg, int16_t mm_s) {
+    const int32_t lim = (int32_t)cfg->max_speed_mm_s;
+    if (lim == 0) {
+        return mm_s;
+    }
+    return (int16_t)clamp32(mm_s, -lim, lim);
+}
+
 void mc_set_speed(mc_t *mc, int16_t left_mm_s, int16_t right_mm_s, uint32_t now_ms) {
     /* While a fault is latched the output is 0, and mc_clear_faults()
      * stops the wheels, so a speed sent now has no effect. */
-    mc->w[MC_LEFT].target_q8 = speed_q8(&mc->cfg, left_mm_s);
-    mc->w[MC_RIGHT].target_q8 = speed_q8(&mc->cfg, right_mm_s);
+    mc->w[MC_LEFT].target_q8 = speed_q8(&mc->cfg, limit_speed(&mc->cfg, left_mm_s));
+    mc->w[MC_RIGHT].target_q8 = speed_q8(&mc->cfg, limit_speed(&mc->cfg, right_mm_s));
     mc->command_ms = now_ms;
     mc->has_command = true;
     mc->faults &= (uint8_t)~MC_FAULT_STALE;
@@ -122,10 +130,13 @@ static int16_t wheel_control(const mc_config_t *c, unsigned int i, mc_wheel_t *w
                                (int32_t)(((int64_t)c->ff_slope_q8[i][dir] * abs32(sp)) / 65536));
     const int32_t p = (int32_t)(((int64_t)c->kp_q8 * err_q8) / 65536);
     int32_t out = ff + p + w->integral_q8 / 256;
-    /* Anti-windup: integrate only when not saturated in the error sign. */
+    /* Anti-windup: integrate only when not saturated in the error sign,
+     * and not while the set point still rises or the start kick runs: the
+     * wheel lags then, and I would wind up and overshoot (bench run B1). */
     const bool sat_hi = out >= max && err_q8 > 0;
     const bool sat_lo = out <= -max && err_q8 < 0;
-    if (!sat_hi && !sat_lo) {
+    const bool hold = w->kicking || sp != want;
+    if (!sat_hi && !sat_lo && !hold) {
         const int32_t lim = (int32_t)c->integral_max_permille * 256;
         w->integral_q8 = clamp32(w->integral_q8 + (int32_t)(((int64_t)c->ki_q8 * err_q8) / 256),
                                  -lim, lim);
