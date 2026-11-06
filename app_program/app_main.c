@@ -23,6 +23,7 @@
  */
 
 #include "app.h"
+#include "platform/drv_time.h"
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
@@ -64,6 +65,9 @@ EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
 EXPORT INT usermain(void)
 {
 	T_RVER	ver;
+
+	/* Cold boot does not set the TIMER 1 us source; do this before any user. */
+	CHECK(drv_time_init(), "drv_time_init");
 
 	/* tk_ref_ver: ask the kernel who it is */
 	tk_ref_ver(&ver);

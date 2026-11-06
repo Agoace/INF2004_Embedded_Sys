@@ -72,3 +72,9 @@ foreach(test IN ITEMS test_motion_task test_gpio_irq)
         target_include_directories(${test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     endif()
 endforeach()
+
+# Kernel time checks use host doubles, never real kernel/SDK headers.
+host_test(test_drv_time tests/test_drv_time.c app_program/platform/drv_time.c)
+if(TARGET test_drv_time)
+    target_include_directories(test_drv_time BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()

@@ -137,7 +137,9 @@ kernel task; other robot modules are not task-wired.
 ## Kernel platform
 
 - [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
-- [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — microsecond and millisecond hardware clock.
+- [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
+- [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
+- [`testing/subsystem1/TEST_LOG.md`](../testing/subsystem1/TEST_LOG.md) — shared platform S0-U01 cold-power clock test, run by the S1 TEST hook.
 - Corresponding `*_hw.c` files include SDK headers only; kernel-side files include no SDK headers.
 - The template demo tasks and their hardware tests are removed. GP19 is free.
 
