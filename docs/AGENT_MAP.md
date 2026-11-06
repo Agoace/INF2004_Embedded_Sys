@@ -43,7 +43,7 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Line steering in mm/s | [docs/LINE_STEER_MM.md](LINE_STEER_MM.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
 | Duty map record | [docs/DUTY_MAP.md](DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/HEARTBEAT.md](HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
-| Motor controller record | [docs/MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
+| Motor controller record | [docs/MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/TWO_SENSOR_LINE_TRACING.md](TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/LINE_POSITION.md](LINE_POSITION.md) |
@@ -140,3 +140,12 @@ kernel task; other robot modules are not task-wired.
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — microsecond and millisecond hardware clock.
 - Corresponding `*_hw.c` files include SDK headers only; kernel-side files include no SDK headers.
 - The template demo tasks and their hardware tests are removed. GP19 is free.
+
+## Motion kernel task
+
+- [`app_program/subsystem2/motion.c`](../app_program/subsystem2/motion.c) and [`motion.h`](../app_program/subsystem2/motion.h) — controller task and inherited-mutex API.
+- [`drv_motor_hw.c`](../app_program/subsystem2/drv_motor_hw.c) — SDK-only PWM, encoder inputs and buttons.
+- [`motion_bench.c`](../app_program/subsystem2/motion_bench.c) — RAM log and paced USB dump; not started in TEST builds.
+- [`motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h) — unchanged robot settings, moved from `src/`.
+- [`testing/subsystem2/TEST_LOG.md`](../testing/subsystem2/TEST_LOG.md) — U01–U04 and B4; all not run.
+- [`tests/test_motion_task.c`](../tests/test_motion_task.c), [`tests/test_gpio_irq.c`](../tests/test_gpio_irq.c), and [`tests/mtk_stubs/`](../tests/mtk_stubs/) — strict host tests with kernel/hardware doubles.

@@ -21,7 +21,7 @@
 #include "heartbeat.h"
 #include "heartbeat_pico.h"
 #include "motor_ctl_pico.h"
-#include "motor_ctl_robot.h"
+#include "../app_program/subsystem2/motor_ctl_robot.h"
 #include "pico/stdlib.h"
 #include "wifi_log.h"
 

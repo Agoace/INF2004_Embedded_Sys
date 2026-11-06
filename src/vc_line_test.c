@@ -49,7 +49,7 @@
 #include "line_sensors.h"
 #include "../app_program/subsystem3/line_trace.h"
 #include "motor_ctl_pico.h"
-#include "motor_ctl_robot.h"
+#include "../app_program/subsystem2/motor_ctl_robot.h"
 #include "pico/stdlib.h"
 #include "../app_program/subsystem5/servo_scan.h"
 #include "steer_log.h"
