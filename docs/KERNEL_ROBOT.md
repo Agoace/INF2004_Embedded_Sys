@@ -8,8 +8,8 @@ Pure LINE/SEARCH/SCAN/DETOUR modules, routes, motor tuning and
 are unchanged. The configuration contract compares the reference block
 in [`src/vc_line_test.c`](../src/vc_line_test.c) exactly (NULL becomes 0).
 Earlier watchdog-image S2-U05 and M1 passes do not validate this new image.
-All new task-split hardware checks are **Not run**. No flash or push was
-performed by this change. Build success does not approve floor driving.
+The task-split hardware checks passed on 2026-11-06: TEST image 3f889a1,
+M1-S7 and M2-S7. See the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06). R5 (full track) is not run.
 
 Lift both wheels before TEST power. S2-U02 briefly drives real motors;
 S2-U05 runs LAST and intentionally resets, then reports the previous reset
@@ -107,8 +107,8 @@ copy and statistics; it excludes queue removal, mutex exit, scheduler and
 wake overhead. Higher-priority preemption is included. It is instrumented
 processing wall cost, **not exact total CPU utilization**. ISR measurements
 exclude wrapper entry/exit and final counter stores. TIMER resolution is
-1 us; accumulated unsigned counters use window subtraction. Hardware values
-remain Not run; do not substitute the 48 us conversion estimate for them.
+1 us; accumulated unsigned counters use window subtraction. Measured on
+2026-11-06: ISR max 114 us, 69–75 per-mille (see the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 
 ## Ultrasonic request/result service
 
@@ -178,7 +178,7 @@ new multi-task health-vote watchdog. Debug halt deliberately pauses it.
 | Lower-priority telemetry, ~110 ms target | Message-driven priority30 owner drains when ready instead of waiting 110 ms; no MQTT/network calls |
 | Drive expiry and safety | Existing latest-value/stale-command/ESTOP path retained; no new drive mailbox/generation protocol |
 | Critical-task progress watchdog | Explicit approved motion-only feeding; stale command, line age and sonar deadlines stop bad sessions |
-| Timing/stack evidence | Instrumentation and host doubles implemented; ISR/processing/stack/physical deadline evidence remains Not run |
+| Timing/stack evidence | Instrumentation and host doubles implemented; ISR, processing and stack measured on 2026-11-06 (see the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)); physical stop latency not run |
 
 ## KR1 rows and VE events
 
@@ -241,7 +241,7 @@ Repeat [M1/M2](../testing/integration/KERNEL_ROBOT.md) on this new image;
 repeat S0-U01, S2-U01/U02/U04/U05, S3-U01/U02/U03 and S5-U01/U02 first.
 Do not reuse old-image hardware passes. New task CPU cost, ISR duration,
 stack high-water, overloaded timing, physical STOP and sensor optics are
-**Not run**. Exact measured values must be recorded before floor approval.
+**Not run** unless listed in the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
 
 ## Local STEP 7 software validation
 
@@ -296,8 +296,8 @@ map links/anchors, diff whitespace, local secret checks and tracked-tree
 clean checks pass. Logs and retained probe/compiler evidence are under
 `/tmp/step7-results/`; generated firmware and other scratch worktrees are
 removed at completion. The candidate checkout is retained at `/tmp/mtk3t`.
-No push or flash was performed. All new hardware timing, stack and M1/M2
-acceptance rows remain **Not run**.
+No push or flash was performed. Hardware timing, stack and M1/M2 results:
+see the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
 
 ## FIX 1 and PROBE A (TEST only)
 
@@ -363,7 +363,7 @@ result. A prior late1 with zero window late/missed confirms it preceded the
 window. All-zero lifetime late counts are also valid if the lower TEST
 priority removes the delay. A PROBE capture failure prints `unavailable
 error <code>` rather than invented zeros. TIMER us is the raw wrapping
-32-bit timestamp. **New-image S2-U01 and probe hardware status: Not run.**
+32-bit timestamp. **Hardware: PASS on 2026-11-06** (see the [step 7 results](../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 
 ### FIX 1 local software checks
 
@@ -391,4 +391,4 @@ No stack budget, production priority, ADC or watchdog-feed change is made.
 Documentation/map, whitespace, secret-pattern/credential-config and clean
 checks pass. Logs, compiler frame reports, link maps and validation commands
 are retained under `/tmp/step7-fix1-results/`. **No push or flash.**
-New-image S2-U01/PROBE A hardware status remains **Not run**.
+S2-U01 and PROBE A passed on hardware on 2026-11-06.

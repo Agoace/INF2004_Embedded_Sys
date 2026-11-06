@@ -88,8 +88,10 @@ Application stacks use TA_USERBUF, 8-byte alignment and a fill pattern;
 bytes, including motion. Initial budgets are not physical measurements;
 require at least 256 untouched bytes after full load/dump. Template service
 stacks are outside this report. Vehicle deadline overruns and line/ISR
-elapsed-work counters are also reported. New task-split hardware tests,
-M1/M2 repeats, CPU/ISR/stack and physical safety are **Not run**. See
+elapsed-work counters are also reported. The task-split TEST checks,
+M1/M2 repeats and CPU/ISR/stack measurements **passed on 2026-11-06** (see
+[step 7 results](testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
+Physical stop latency and the full track (R5) are not run. See
 [task/object and plan-vs-port tables](docs/KERNEL_ROBOT.md).
 
 ## Hardware watchdog ownership

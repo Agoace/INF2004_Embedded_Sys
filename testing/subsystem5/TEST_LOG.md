@@ -2,7 +2,7 @@
 
 | ID | Procedure | Pass condition | Status |
 | --- | --- | --- | --- |
-| S5-U01 | TEST=1, wheels lifted; put a flat object 60..511 mm from the sensor and measure with a ruler. Capture 20 pings, median/min/max and unknown count. | Valid distances agree with manual distance within sensor tolerance; no sensor fault streak; explain any unknowns | Not run |
+| S5-U01 | TEST=1, wheels lifted; put a flat object 60..511 mm from the sensor and measure with a ruler. Capture 20 pings, median/min/max and unknown count. | Valid distances agree with manual distance within sensor tolerance; no sensor fault streak; explain any unknowns | Partial 2026-11-06 (445084c): 20/20 valid, median 209–210 mm (object, not checked with a ruler). 3f889a1: no fixed object. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
 GP3 sends a 10 us trigger. GP2 echo uses both edges on the shared core-0
 GPIO13 dispatcher, priority 1. No SDK IRQ handler is registered. TIMER
@@ -19,7 +19,7 @@ only, with DI/EI for shared phase snapshots.
 
 | ID | Procedure and acceptance | Status |
 | --- | --- | --- |
-| S5-U02 | TEST: fixed-object S5-U01 now uses service requests/results; reject old-generation request; verify echo-loss unknown, one-shot deadline and no stale SCAN result in DETOUR | Not run |
+| S5-U02 | TEST: fixed-object S5-U01 now uses service requests/results; reject old-generation request; verify echo-loss unknown, one-shot deadline and no stale SCAN result in DETOUR | PASS 2026-11-06 (TEST, both images). SCAN/DETOUR use seen in M2-S7. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
 Service owns trigger, echo, 60 ms minimum interval and request correlation.
 SCAN retains its existing settle state machine and settings; motion retains

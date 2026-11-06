@@ -2,7 +2,7 @@
 
 | ID | Procedure | Pass condition | Status |
 | --- | --- | --- | --- |
-| S3-U01 | TEST=1, wheels lifted. Move a black/white card under GP27 L and GP26 C during the 1 s window. | Actual TIMER window count within 1%; both raw means 0..4095 and nonzero spread; no missed conversions/alarms | Not run |
+| S3-U01 | TEST=1, wheels lifted. Move a black/white card under GP27 L and GP26 C during the 1 s window. | Actual TIMER window count within 1%; both raw means 0..4095 and nonzero spread; no missed conversions/alarms | PASS 2026-11-06: 1009 samples in 1 s, 0 missed (no card moved; spread from the floor only). [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
 Alarm 0 / TIMER IRQ0 runs on core 0 at priority 2, below GPIO IRQ13 at 1.
 Each 1 ms sample is the integer mean of eight ADC conversions per channel,
@@ -20,7 +20,7 @@ configuration or kernel source is changed. GP29/ADC3 is never selected.
 
 | ID | Procedure and acceptance | Status |
 | --- | --- | --- |
-| S3-U02 | TEST: line task processes timestamped samples, no queue drops; snapshot age <=10000 us; report task elapsed max/sample, total and per-mille window cost; report three-channel ISR max/total/per-mille and GP28 ADC2 range | Not run |
+| S3-U02 | TEST: line task processes timestamped samples, no queue drops; snapshot age <=10000 us; report task elapsed max/sample, total and per-mille window cost; report three-channel ISR max/total/per-mille and GP28 ADC2 range | PASS 2026-11-06: age <= 993 us, task 7–13 per-mille, ISR 69–75 per-mille, ISR max 114 us. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S3-U03 | Bench only, do not drive: GP28 analog barcode input, VBAT jumper open; show bars at intended height and record raw range, narrow-bar visibility and ISR cost | Not run |
 
 S3 now averages eight ADC conversions on each of L/ADC1, C/ADC0 and

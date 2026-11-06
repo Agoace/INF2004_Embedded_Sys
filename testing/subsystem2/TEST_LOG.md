@@ -9,7 +9,7 @@ from a cold VIN power-on.
 
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
-| S2-U01 | TEST priority-20 runner: begin/end a separate 5 s timing window; print buffered PROBE A and lifetime INFO afterwards | 500 ± 1 window ticks; maximum complete in-window task gap ≤ 11000 us; no discarded wakes in window; report window work maximum, gaps and late count; retain lifetime extrema/counters | Not run for FIX 1 + PROBE A image. Earlier 445084c FAIL on both boots; see analysis below. Older pre-split PASS is historical |
+| S2-U01 | TEST priority-20 runner: begin/end a separate 5 s timing window; print buffered PROBE A and lifetime INFO afterwards | 500 ± 1 window ticks; maximum complete in-window task gap ≤ 11000 us; no discarded wakes in window; report window work maximum, gaps and late count; retain lifetime extrema/counters | PASS 2026-11-06 (3f889a1), both boots: window gap 9984..10016 and 9791..10210 us, late 0, missed 0. The earlier 445084c FAIL was a test artefact. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S2-U02 | TEST image: read the warning first; wheels lifted. After a 2 s delay, send 40/40 mm/s once, then no refresh for `stale_ms + 30` ms | `MC_FAULT_STALE` set; both duty values 0; wheels stop | PASS |
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
 | S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
@@ -54,7 +54,7 @@ The approved correction changes TEST only:
   output. The one PROBE block and lifetime INFO print only after the window.
   See [expected format](../../docs/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only).
 
-**New-image hardware status: Not run.** Record both boots and the exact
+**New-image hardware status: PASS 2026-11-06** (see the S2-U01 row). Record both boots and the exact
 revision before changing this row. If demotion removes the startup delay,
 all probe late counts can be zero. If a remaining S0/S1/USB delay occurs,
 its lifetime count must stay visible while a clean S2 window reports zero
@@ -64,7 +64,7 @@ or widen the timing limit. Preserve any failing window for review.
 ## S2-U05: two-boot watchdog procedure
 
 Earlier images passed this destructive test, including 445084c at 99 ms.
-The new window/probe TEST image is **Not run**. It is a separate last hook called
+The new window/probe TEST image passed (99 ms) on 2026-11-06. It is a separate last hook called
 by `usermain()` after all other subsystem tests, not inside S2-U01/U02.
 Lift both wheels before TEST power. Keep USB connected for this check.
 
