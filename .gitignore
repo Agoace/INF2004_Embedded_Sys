@@ -3,7 +3,8 @@
 /cmake-build-*/
 /sim/build/
 /sim/output/
-/sim/**/__pycache__/
+__pycache__/
+*.py[cod]
 CMakeCache.txt
 CMakeFiles/
 
