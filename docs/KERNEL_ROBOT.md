@@ -158,7 +158,39 @@ These tests are not sensor, scheduling or physical stop measurements.
 - [R5 integration procedure](../testing/integration/KERNEL_ROBOT.md): track
   comparison with [R4](VC_DETOUR_RUN.md), still **Not run**.
 
-Final build sizes, check counts and branch revisions are recorded below
-when checks complete. RAM includes 72016 row bytes and 6144 event bytes;
+Final build sizes, check counts and branch revisions follow. RAM includes 72016 row bytes and 6144 event bytes;
 the bench buffer is absent from a robot image. Dynamic kernel/task stack
 usage and hardware ISR timing must still be measured on target.
+
+### Local check result
+
+No push or flash. Code merges through `c09c3f1`; line branch `95c12f7`,
+scan branch `bcaefd5`; parent base/motion/staging remain `dcf1135`,
+`8bf7272`, `b69f2ed`. All integrations use merge commits, no history rewrite.
+
+| Profile | Text | Data | BSS | Warnings |
+| --- | ---: | ---: | ---: | ---: |
+| UP robot, radio off | 54596 | 28 | 98732 | 0 |
+| UP BENCH, radio off | 40314 | 28 | 75916 | 0 |
+| UP TEST, radio off | 40530 | 24 | 19912 | 0 |
+| Default SMP robot, radio on | 300500 | 96 | 105176 | 0 |
+
+The largest static data+BSS is 105272 bytes, leaving 156872 of the linker
+RAM region before dynamic kernel allocations and task stacks. This is a
+static budget, not a measured runtime margin.
+
+Final checks: four clean make profiles at -j4; 13 touched ARM units per
+profile (52 total) with strict warnings-as-errors; strict host 29/29;
+documentation checker 43 files, no broken links or anchors. Module-branch
+host suites passed 15/15 each. Earlier in this same port, the retained SDK
+hardware link proof passed all four profiles, simulator 6/6 passed, and the
+full bare-metal Pico W build passed with a temporary example-only Wi-Fi
+configuration removed afterward. These three checks were not repeated
+after the final kernel-only diagnostic/rise-deadline fixes: the operator
+requested wrap-up with only build/strict ARM/host/docs checks remaining.
+No later simulator or bare-metal source change was made.
+
+Logs stay in `/tmp/kernel-robot-results/`; generated binaries, build
+directories and module worktrees are removed. Only `/tmp/mtk3t` remains.
+S3-U01, S5-U01, R5, runtime stack use, ISR timing and physical safety are
+not tested on hardware. The phase/watchdog differences above remain open.
