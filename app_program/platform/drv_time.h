@@ -1,6 +1,9 @@
 #ifndef DRV_TIME_H
 #define DRV_TIME_H
 #include <stdint.h>
+#include <stdbool.h>
+/* True only after a successful drv_time_init() in this boot. */
+bool drv_time_ready(void);
 /* Task context, core 0 before subsystem startup; repeated calls are safe. */
 int drv_time_init(void);
 /* Compare TIMER against elapsed kernel time over about 100 ms, limit 2%. */

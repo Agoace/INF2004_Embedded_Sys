@@ -2,6 +2,13 @@
 
 ## μT-Kernel layer
 
+### Hardware watchdog
+
+The [watchdog record](KERNEL_WATCHDOG.md) defines the motion-only 100 ms
+hardware watchdog, startup prerequisites, reset classification and pending
+S2-U05 two-boot test. It supplements the stale-command stop. A failed
+motion initialization does not start it; motor PWM remains zero.
+
 ### Cold-power timer source
 
 Test every kernel image after a cold power-on, not only after a flash.
@@ -60,6 +67,10 @@ src/rp2_common/hardware_adc/include
 src/rp2_common/hardware_timer/include
 src/rp2_common/hardware_ticks/include
 src/rp2_common/hardware_watchdog/include
+src/rp2_common/pico_bootrom/include
+src/rp2_common/boot_bootrom_headers/include
+src/rp2_common/pico_flash/include
+src/rp2_common/hardware_boot_lock/include
 src/rp2_common/hardware_resets/include
 src/rp2_common/hardware_clocks/include
 src/rp2_common/hardware_irq/include
@@ -76,7 +87,10 @@ fragment reuses the template's existing `mtkernel_3/cyw43/gpio.o`, not a
 duplicate copy. No PWM/resets .c files exist: the selected APIs are inline.
 Timer and clocks .c files are not added. Source added:
 `src/rp2_common/hardware_ticks/ticks.c`; its RP2040 `tick_start()` only
-writes the tick register and needs no SDK runtime or watchdog .c file.
+writes the tick register and needs no SDK runtime. Also added:
+`src/rp2_common/hardware_watchdog/watchdog.c`; only its runtime-free
+RP2040 enable/update/reason paths are retained. No bootrom/flash/boot-lock
+.c source is compiled.
 
 Per-function/data sections and linker garbage collection are enabled in
 all profiles, also radio-off, so unused GPIO SDK interrupt helpers do not
