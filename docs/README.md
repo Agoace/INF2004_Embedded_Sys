@@ -45,3 +45,5 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Adr Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)
 
 - [Vehicle State Machine](VEHICLE_STATE_MACHINE.md)
+
+- [Line Steer Mm](LINE_STEER_MM.md)

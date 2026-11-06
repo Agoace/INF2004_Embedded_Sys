@@ -41,7 +41,7 @@ position:   −100   ←   −50   ←   0    →   +50   →   +100
 | Neither reaches 30 % (dark) | Keep the position and the peak. LINE_LOST after 50 ms if one sensor saw the line last, else after 300 ms |
 | L + C ≥ 125 % (junction) | Keep the position and the peak; not centred |
 
-Steering (`src/line_steer.c`, `detour_test` settings):
+Steering (`app_program/subsystem3/line_steer.c`, `detour_test` settings):
 
 | Setting | Value |
 | --- | --- |

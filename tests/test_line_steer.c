@@ -1,13 +1,13 @@
 /*
- * Host unit test for src/line_steer.c. It needs no Pico hardware.
+ * Host unit test for app_program/subsystem3/line_steer.c. It needs no Pico hardware.
  *
  *   cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
- *      tests/test_line_steer.c src/line_steer.c -o build/test_line_steer
+ *      tests/test_line_steer.c app_program/subsystem3/line_steer.c -o build/test_line_steer
  *   ./build/test_line_steer
  */
 #include <stdio.h>
 
-#include "line_steer.h"
+#include "../app_program/subsystem3/line_steer.h"
 
 static int failures;
 
@@ -232,6 +232,131 @@ int main(void) {
         const steer_word_t w = steer_update(&s, 50);
         if (w != (45u | (15u << 7))) {
             printf("FAIL word 0x%04X\n", w);
+            ++failures;
+        }
+    }
+
+    /* ---- Steering in mm/s ---- */
+
+    /* Same rule: with the duty numbers as mm/s (trim 0), the output is the
+     * same as steer_update() for a sequence with D and far gain. */
+    {
+        const steer_config_t pc = {25u, 100u, 100u, 12u, 50u, 0, 50u, 400u};
+        const steer_mm_config_t mc = {25, 100u, 100u, 12, 50, 50u, 400u};
+        steer_t d;
+        steer_mm_t m;
+        steer_init(&d, &pc);
+        steer_mm_init(&m, &mc);
+        const int seq[] = {0, 10, 30, 55, 80, 100, 70, 20, -5, -40, -60, -100, -100, -30, 0, 46, 61, 0};
+        int bad = 0;
+        for (unsigned int i = 0; i < sizeof seq / sizeof seq[0]; ++i) {
+            const steer_word_t wd = steer_update(&d, (int8_t)seq[i]);
+            const steer_mm_word_t wm = steer_mm_update(&m, (int8_t)seq[i]);
+            if ((unsigned int)steer_mm_left(wm) != steer_left(wd) ||
+                (unsigned int)steer_mm_right(wm) != steer_right(wd)) {
+                printf("FAIL mm same rule at %d: mm %d/%d, duty %u/%u\n", seq[i], steer_mm_left(wm),
+                       steer_mm_right(wm), steer_left(wd), steer_right(wd));
+                ++bad;
+            }
+        }
+        failures += bad;
+    }
+
+    /* Locked line tracing in mm/s (docs/LINE_STEER_MM.md): base 171, min 62,
+     * max 378, gain 100, D 100, far gain 400 above 50. */
+    {
+        const steer_mm_config_t lk = {171, 100u, 100u, 62, 378, 50u, 400u};
+        steer_mm_t m;
+        steer_mm_init(&m, &lk);
+        steer_mm_word_t w = steer_mm_update(&m, 0);
+        if (steer_mm_left(w) != 171 || steer_mm_right(w) != 171) {
+            printf("FAIL mm centred: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
+            ++failures;
+        }
+        /* +20, change +20: turn 100*20 + 100*20 = 4000 -> 109*0.4 = 43.6 -> 44. */
+        w = steer_mm_update(&m, 20);
+        if (steer_mm_left(w) != 215 || steer_mm_right(w) != 127) {
+            printf("FAIL mm +20: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
+            ++failures;
+        }
+        /* +100 (change limited to +25): turn 10000 + 2500 + 400*50 = 32500
+         * -> 354; left 525 -> 378, right 0 -> 0 (no reverse). */
+        w = steer_mm_update(&m, 100);
+        if (steer_mm_left(w) != 378 || steer_mm_right(w) != 0) {
+            printf("FAIL mm +100: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
+            ++failures;
+        }
+        /* Inner wheel at the floor: speed part above 0 gives at least 62. */
+        steer_mm_reset(&m);
+        w = steer_mm_update(&m, 99); /* turn 9900 + 400*49 = 29500 -> 322: right 109-322 < 0 */
+        if (steer_mm_right(w) != 0) {
+            printf("FAIL mm +99 right %d\n", steer_mm_right(w));
+            ++failures;
+        }
+        steer_mm_reset(&m);
+        w = steer_mm_update(&m, 40); /* turn 4000 -> 44: right 62 + 65 = 127 */
+        if (steer_mm_right(w) != 127 || steer_mm_left(w) != 215) {
+            printf("FAIL mm +40 no D: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
+            ++failures;
+        }
+        /* Straight: base both, D forgotten. */
+        (void)steer_mm_update(&m, 60);
+        w = steer_mm_straight(&m);
+        if (steer_mm_left(w) != 171 || steer_mm_right(w) != 171 || m.has_previous) {
+            printf("FAIL mm straight: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
+            ++failures;
+        }
+        w = steer_mm_update(&m, 40); /* no D after straight: same as +40 above */
+        if (steer_mm_left(w) != 215) {
+            printf("FAIL mm after straight: %d\n", steer_mm_left(w));
+            ++failures;
+        }
+    }
+
+    /* Limits: max above 511 is set to 511; word layout 9 + 9 bits. */
+    {
+        const steer_mm_config_t big = {400, 100u, 0u, 0, 2000, 100u, 0u};
+        steer_mm_t m;
+        steer_mm_init(&m, &big);
+        if (m.cfg.max_mm_s != STEER_MM_MAX) {
+            printf("FAIL mm max limit %d\n", m.cfg.max_mm_s);
+            ++failures;
+        }
+        const steer_mm_config_t over = {400, 100u, 0u, 0, 512, 100u, 0u};
+        steer_mm_init(&m, &over);
+        if (m.cfg.max_mm_s != STEER_MM_MAX) {
+            printf("FAIL mm max 512 -> 511: %d\n", m.cfg.max_mm_s);
+            ++failures;
+        }
+        const steer_mm_config_t at = {400, 100u, 0u, 0, 511, 100u, 0u};
+        steer_mm_init(&m, &at);
+        if (m.cfg.max_mm_s != 511) {
+            printf("FAIL mm max 511 kept %d\n", m.cfg.max_mm_s);
+            ++failures;
+        }
+        /* +50: 400 + 200 = 600 -> 511, right 200 - 89 = 111. */
+        const steer_mm_word_t w = steer_mm_update(&m, 50);
+        if (w != (511u | (111u << 9))) {
+            printf("FAIL mm word 0x%05lX\n", (unsigned long)w);
+            ++failures;
+        }
+        if (steer_mm_left(0xFFFFFFFFu) != 511 || steer_mm_right(0xFFFFFFFFu) != 511 ||
+            steer_mm_right(0x1FFu) != 0) {
+            printf("FAIL mm word fields\n");
+            ++failures;
+        }
+    }
+
+    /* Max clamp pushes the other wheel below min: it stops (shared rule).
+     * base 300, min 62, max 378, gain 100, at -70: left 62 + 238 - 167 = 133,
+     * right 62 + 238 + 167 = 467 -> 378, left 133 - 89 = 44 < 62 -> 0. */
+    {
+        const steer_mm_config_t hi = {300, 100u, 0u, 62, 378, 100u, 0u};
+        steer_mm_t m;
+        steer_mm_init(&m, &hi);
+        const steer_mm_word_t w = steer_mm_update(&m, -70);
+        if (steer_mm_left(w) != 0 || steer_mm_right(w) != 378) {
+            printf("FAIL clamp below min: %d/%d\n", steer_mm_left(w), steer_mm_right(w));
             ++failures;
         }
     }
