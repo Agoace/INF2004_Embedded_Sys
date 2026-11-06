@@ -275,3 +275,6 @@ GP21 calibrates then starts the robot, or latches ESTOP during a session;
 GP20 dumps saved RAM data instead of changing D. TEST images start neither
 button task. Read [the kernel robot safety/design record](docs/KERNEL_ROBOT.md)
 and pass the lifted-wheel checks before floor work. R5 has not run.
+
+The barcode work is not started. The ideas for it are in
+[Barcode reading ideas](docs/BARCODE_READING_IDEAS.md).
