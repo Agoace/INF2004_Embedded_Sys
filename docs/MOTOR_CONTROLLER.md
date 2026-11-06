@@ -365,9 +365,12 @@ TEST builds do not start the button bench task. They run S0-U01 (the
 platform clock comparison), U01 (5 s of ticks) and U02 (a brief
 lifted-wheel stale-command test). Before the clock fix, S2-U01/U02/U03
 passed and B4-lifted passed its functional checks on USB after flashing.
-U03 passed after a left motor/encoder wire fault was repaired. U04 and
-floor B4 remain **not run**; floor testing is blocked until cold-power
-S0-U01 passes on the fixed image. See exact measurements and the B3 means in
+U03 passed after a left motor/encoder wire fault was repaired. With the
+clock fix, S0-U01 passed after a cold power-on, and floor B4 (cold VIN
+start) passed functionally: 2110 rows, 0 faults, task gap 9952..10046 us,
+speeds and duty close to B3. Its strict B3 limits were missed on slow
+speeds and on heading, within run-to-run spread; straight steps drifted less
+than B3. U04 remains **not run**. See exact measurements and the B3 means in
 [`testing/subsystem2/TEST_LOG.md`](../testing/subsystem2/TEST_LOG.md).
 Host doubles check the dispatcher, core affinity, mutex ownership, wake
 accounting, encoder signs, stale stop and immediate ESTOP ordering; they
