@@ -146,7 +146,10 @@ subfolders, is compiled automatically.
 **Working as a team:** record owners, pins, priorities and the interfaces
 between subsystems in **`TEAM.md`**, and record every test in **`testing/`**
 (see `testing/README.md`). `make TEST=1` builds a test image that runs all
-the subsystem tests at power-up. Short videos of tests and demos are shared
+the subsystem tests at power-up. **Lift both wheels before powering a TEST
+image: S2-U02 sends a brief real 40/40 mm/s command automatically.** The
+button bench is disabled in TEST builds. See [the S2 procedures](testing/subsystem2/TEST_LOG.md).
+Short videos of tests and demos are shared
 as unlisted YouTube links, listed in **`videos/`**.
 
 Pins: use **GP0–GP22 and GP26–GP28**. GP0/GP1 are free unless your team

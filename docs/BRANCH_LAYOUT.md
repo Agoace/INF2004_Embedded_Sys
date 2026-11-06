@@ -79,7 +79,7 @@ yx + template/main -> mtk3
 | Subsystem 5 | Ultrasonic and obstacle: pure `ultrasonic.h`, `obstacle.[ch]`, `obstacle_profile.[ch]`, pure `obstacle_scan.h`, `servo_scan.[ch]`, `detour_run.[ch]`, `obstacle_detour.[ch]` |
 | `app_program/vehicle/` | Shared types in `vehicle_controller.h`; interface `vehicle_sm.[ch]` and `vehicle_inputs.h` |
 | `src/` | Bare-metal reference programs and SDK hardware layers |
-| `tests/` | Host tests and independent CMake build; no kernel or SDK |
+| `tests/` | Independent host tests; kernel glue uses host doubles, no kernel/SDK runtime |
 | `host-tests/` | One independent host test per new module, present on its branch |
 
 **Pure modules stay separate from hardware and kernel code.** Every C file below
@@ -101,7 +101,8 @@ code; no barcode runtime port is done by this layout change.
 
 SCAN and DETOUR share the same `servo_scan.h` SIDE payload interface.
 Cross-module tests belong only to staging. Motor Pico/bench code and robot
-settings stay in `src/`; the template has no motor hardware port yet.
+settings are now in `app_program/subsystem2/motor_ctl_robot.h`. The kernel
+motor hardware port uses SDK-only `drv_motor_hw.c`; `src/` keeps the bare-metal reference.
 The template demo is removed. The motion branch connects the motor
 controller to a kernel task; other modules are not task-wired yet.
 No robot hardware or timing behaviour is validated by a successful build.
@@ -123,9 +124,10 @@ keep their independent tests; staging also runs the cross-module tests.
 `mtk3-staging` keeps the `f15ae89` integration records, simulator changes,
 log format and bare-metal references. These records describe the earlier
 bare-metal runs, not tests of the template robot runtime. The existing
-RTOS plan is retained as a design input; this branch does not implement it.
-The template still uses its 10 ms kernel tick. No kernel configuration or
-SDK integration was changed to make the pure modules compile.
+RTOS plan is retained as a design input. Motion step 1 implements only the
+motor task, not the full vehicle plan. The kernel tick remains 10 ms.
+The app-owned SDK hardware fragment adds headers and selected sources;
+it changes no kernel source or configuration.
 
 ## Kernel platform bring-up
 

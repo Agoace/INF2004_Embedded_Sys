@@ -157,3 +157,5 @@ kernel task; other robot modules are not task-wired.
 - [Motor controller — SDK subset](MOTOR_CONTROLLER.md#sdk-hardware-subset) — exhaustive paths, sources and APIs that must not be used.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
+
+- [μT-Kernel motion bring-up checks](MTK3_MOTION_CHECKS.md) — candidate revisions, SDK link proof, sizes, IRQ priority and hardware checks still not run.

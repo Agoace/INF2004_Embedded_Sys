@@ -64,3 +64,5 @@ Kernel motion bring-up: [Motor controller — μT-Kernel layer](MOTOR_CONTROLLER
 On-target procedures: [Subsystem 2 test log](../testing/subsystem2/TEST_LOG.md); all not run.
 
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
+
+- [μT-Kernel motion bring-up checks](MTK3_MOTION_CHECKS.md) — local candidate, build/link results, image sizes and not-run hardware checks.
