@@ -135,3 +135,8 @@ if(TARGET test_motion_watchdog)
     target_include_directories(test_motion_watchdog BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_watchdog PRIVATE APP_TEST=1 APP_BENCH=1)
 endif()
+
+host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
+if(TARGET test_app_task)
+    target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()

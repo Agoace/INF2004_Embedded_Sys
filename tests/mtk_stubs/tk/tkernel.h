@@ -48,4 +48,28 @@ void mock_di(UINT *irq);
 void mock_ei(UINT irq);
 #define DI(irq) mock_di(&(irq))
 #define EI(irq) mock_ei(irq)
+#define TA_USERBUF 0x20u
+#define TA_RNG3 0x300u
+#define TA_TFIFO 0u
+#define TA_WMUL 8u
+#define TMO_POL 0
+#define TWF_ORW 1u
+#define TWF_BITCLR 0x20u
+#define E_TMOUT (-50)
+typedef int SZ;
+typedef struct { FP task; PRI itskpri; SZ stksz; UW tskatr; void *bufptr; UW assprc; } T_CTSK;
+typedef struct { UW mbfatr; SZ bufsz; INT maxmsz; void *bufptr; } T_CMBF;
+typedef struct { UW flgatr; UINT iflgptn; } T_CFLG;
+ID tk_cre_tsk(const T_CTSK *c);
+ER tk_sta_tsk(ID id, INT code);
+ER tk_del_tsk(ID id);
+ID tk_get_tid(void);
+void tk_ext_tsk(void);
+ID tk_cre_mbf(const T_CMBF *c);
+ER tk_snd_mbf(ID id, const void *msg, INT size, TMO timeout);
+INT tk_rcv_mbf(ID id, void *msg, TMO timeout);
+ID tk_cre_flg(const T_CFLG *c);
+ER tk_set_flg(ID id, UINT bits);
+ER tk_clr_flg(ID id, UINT mask);
+ER tk_wai_flg(ID id, UINT bits, UINT mode, UINT *result, TMO timeout);
 #endif
