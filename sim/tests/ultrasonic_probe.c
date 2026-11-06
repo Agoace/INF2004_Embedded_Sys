@@ -3,8 +3,8 @@
 #include "sim_world.h"
 #include "pico/stdlib.h"
 #include "servo.h"
-#include "../../app_program/subsystem5/ultrasonic.h"
-#include "../../app_program/subsystem5/obstacle_scan.h"
+#include "../../src/ultrasonic.h"
+#include "../../src/obstacle_scan.h"
 #include <assert.h>
 #include <inttypes.h>
 #include <stdlib.h>
