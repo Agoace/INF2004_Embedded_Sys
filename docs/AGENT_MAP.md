@@ -89,6 +89,7 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](TELEMETRY_SCHEMA.md) |
 | Eventual control architecture | [`CONTROL_ARCHITECTURE.md`](CONTROL_ARCHITECTURE.md) |
+| Barcode reading ideas (not built) | [`BARCODE_READING_IDEAS.md`](BARCODE_READING_IDEAS.md) |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
 | Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |
