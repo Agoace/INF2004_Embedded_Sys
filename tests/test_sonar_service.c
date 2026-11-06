@@ -6,7 +6,8 @@
 static FP entry;static jmp_buf end;static unsigned int sleeps;
 static sonar_request_t queue[8];static unsigned int head,tail;
 static uint32_t now,last_trigger;static unsigned int triggers;
-static bool busy,done,full;static int held;static UINT flags;
+static bool busy,done,full,immediate;static int held;static UINT flags;
+static ultrasonic_result_t result=100u;
 ID tk_cre_mtx(const T_CMTX *c) { assert(c->mtxatr==TA_INHERIT);return 1; }
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(sonar_request_t));return 2; }
 ID tk_cre_flg(const T_CFLG *c) { (void)c;return 3; }
@@ -40,10 +41,10 @@ void drv_ultrasonic_listen(int id) { assert(id==7); }
 bool drv_ultrasonic_service(void) { if (!done) return false;done=false;busy=false;return true; }
 bool drv_ultrasonic_trigger(void) {
     if (busy || (triggers && now-last_trigger<60u)) return false;
-    busy=true;last_trigger=now;++triggers;return true;
+    busy=!immediate;last_trigger=now;++triggers;return true;
 }
 bool drv_ultrasonic_busy(void) { return busy; }
-ultrasonic_result_t drv_ultrasonic_latest(void) { return 100u; }
+ultrasonic_result_t drv_ultrasonic_latest(void) { return result; }
 static void pump(uint32_t at) { now=at;sleeps=0u;if (setjmp(end)==0) ((void (*)(INT,void *))entry)(0,0);assert(!held); }
 int main(void) {
     assert(sonar_service_init()==E_OK && sonar_service_start()==E_OK);
@@ -71,5 +72,17 @@ int main(void) {
     assert(sonar_result_read(&s,&fresh)==E_OK && fresh && s.status==SONAR_DEADLINE && !s.valid);
     done=true;pump(203u);assert(sonar_result_read(&s,&fresh)==E_OK && !fresh);
     r.angle=31;assert(sonar_request(&r)==E_PAR);
+    r.angle=0;r.generation=5u;r.id=6u;r.deadline_ms=400u;r.not_before_ms=300u;
+    assert(sonar_request(&r)==E_OK);pump(240u);assert(triggers==4u);
+    pump(300u);assert(triggers==5u);
+    result=(ultrasonic_result_t)(ULTRASONIC_STATUS_NO_RETURN<<ULTRASONIC_STATUS_SHIFT);
+    done=true;pump(304u);
+    assert(sonar_result_read(&s,&fresh)==E_OK && fresh && !s.valid && s.status==SONAR_ECHO &&
+        ultrasonic_result_status(s.echo)==ULTRASONIC_STATUS_NO_RETURN);
+    immediate=true;result=(ultrasonic_result_t)(ULTRASONIC_STATUS_STUCK_HIGH<<ULTRASONIC_STATUS_SHIFT);
+    r.generation=6u;r.id=7u;r.deadline_ms=500u;r.not_before_ms=0u;
+    assert(sonar_request(&r)==E_OK);pump(400u);
+    assert(sonar_result_read(&s,&fresh)==E_OK && fresh && !s.valid && !s.pending &&
+        s.ping_generation==6u && s.ping_id==7u && s.ping_sequence==6u);
     return 0;
 }
