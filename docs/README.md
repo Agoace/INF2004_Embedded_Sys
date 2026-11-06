@@ -47,3 +47,8 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Vehicle State Machine](VEHICLE_STATE_MACHINE.md)
 
 - [Line Steer Mm](LINE_STEER_MM.md)
+
+Kernel platform entry points and the removed template demo are recorded in
+[Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).
+
+Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).

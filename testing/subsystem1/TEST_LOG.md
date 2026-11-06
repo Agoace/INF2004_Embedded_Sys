@@ -1,26 +1,40 @@
-# Subsystem 1 — test log
+# Subsystem 1 and shared platform test log
 
-**Subsystem:** LED heartbeat (example)  ·  **Student ID:** <student ID>  ·  **Code:** `app_program/subsystem1/`
+Subsystem 1 remains a stub. Its TEST hook runs the shared timer check in
+the initial task; it creates no new task.
 
-See `testing/README.md` for how to run tests and record results.
+| ID | Check and procedure | Pass condition | Status |
+| --- | --- | --- | --- |
+| S0-U01 | TEST image, both wheels lifted: remove all power, then apply USB or VIN power. Compare TIMER time with kernel time over a nominal 1 s window. Repeat after cold power-on for every kernel image. | Prints TIMER us and elapsed kernel ms; ratio differs from 1000 us/ms by at most 1%; kernel errors fail the check | PASS 2026-11-06, warm and cold (see below) |
 
-## Test cases
+`subsystem1_test.c` calls `drv_time_check_window(1000, 1, ...)` and prints
+one PASS/FAIL line before the S2 tests. The actual kernel window can be
+about 1010 ms because `tk_dly_tsk()` adds one kernel tick. Compare measured
+time, not the requested delay. `drv_time_check()` separately checks a
+short window with a 2% limit before motion is enabled.
 
-Define a test here before running it. Test IDs never change.
+The original TIMER source defect was found after a cold VIN power-on on
+2026-11-06. Post-flash tests did not expose it. Do not run the floor bench
+until S0-U01 passes after a cold power-on. Lift both wheels before power:
+the TEST image's later S2-U02 test sends a real short speed command.
 
-| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
-|---|---|---|---|---|---|
-| S1-U01 | cyclic handler is running | | auto | `subsystem1_test.c` | `[TEST] S1-U01 PASS` |
-| S1-U02 | LED task sleeps between ticks (not busy) | | auto | `subsystem1_test.c` | `[TEST] S1-U02 PASS` |
-| S1-U03 | LED on GP19 toggles every 250 ms | | manual | 1. Flash normal image. 2. Watch LED / measure with scope. | 2 Hz blink, 50 % duty |
+## Hardware run records: 2026-11-06
 
-*Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
-**manual** = a person observes the result (LED, scope, meter, phone app…).
+Image: `mtk3` 1806ed0 / `mtk3-motion` f0b4194, `make SMP=0 WIFI=none TEST=1`.
+For the cold run, a local debug copy added only a wait for the USB terminal
+(up to 15 s) and two prints of the WATCHDOG_TICK register at the start of
+`usermain()`. That copy was not committed. Without the wait, the TEST output
+of the first seconds is lost before the host opens the port.
 
-## Results
+| Start | WATCHDOG_TICK before `drv_time_init()` | After | S0-U01 | S2-U01 task gap |
+| --- | --- | --- | --- | --- |
+| Warm, after a picotool flash | `0x0000260c` (CYCLES 12, set by boot ROM) | `0x0000560c` | PASS: TIMER 1009986 us, kernel 1010 ms | 9770..10317 us |
+| Cold, USB plugged in after all power removed | `0x000eae00` (CYCLES 0: the defect) | `0x0006660c` (CYCLES 12) | PASS: TIMER 1009991 us, kernel 1010 ms | 9458..10548 us |
 
-Add a new row for every run. Never edit or delete old rows.
+S2-U02 also passed in both runs. Log of the cold run:
+`build/mtk_logs/s0_cold_dbg_20261106-165924.txt` (ignored, not committed).
 
-| Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
-|---|---|---|---|---|---|---|
-| YYYY-MM-DD | S1-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+The committed bench image was then started cold on VIN for floor run B4
+([subsystem 2 log](../subsystem2/TEST_LOG.md)). Its TIMER-measured task gap
+was 9952..10046 us against the 10 ms kernel cycle, so the fix also holds in
+the normal image after a cold VIN power-on.
