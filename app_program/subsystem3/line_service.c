@@ -68,7 +68,8 @@ int line_calibration_begin(void) {
 }
 lp_calib_result_t line_calibration_end(void) {
     if (!ready || tk_loc_mtx(mutex,TMO_FEVR)<0) return LP_CALIB_NO_DATA;
-    const lp_calib_result_t result=lp_calib_end(&snapshot.line,0);
+    unsigned int bad=0u;
+    const lp_calib_result_t result=lp_calib_end(&snapshot.line,&bad);
     calibrating=false;snapshot.norm_peak=0u;
     (void)tk_unl_mtx(mutex);return result;
 }
