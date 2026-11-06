@@ -117,4 +117,4 @@ See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
 
 Standalone module tests: [`host-tests/`](../host-tests/). See [Branch layout](BRANCH_LAYOUT.md) for commands.
 
-This branch owns LINE. Merge module branches only into `yx-staging`.
+Staging combines the module branches. Merge module branches only into `yx-staging`.
