@@ -72,15 +72,23 @@ int motion_init(void) {
     if (tk_get_prc() != 1) return (int)E_CTX;
 #endif
     if (mtx_motion > 0) return (int)E_OBJ;
+    /* Establish zero motor PWM before checking the clock; never enable motion
+     * with a bad TIMER rate, even if usermain's earlier initialization failed. */
+    drv_motor_hw_init(config.servo_centre_us);
+    int er = drv_time_init();
+    if (er >= E_OK) er = drv_time_check();
+    if (er < E_OK) {
+        tm_printf((UB*)"ERROR motion: TIMER clock check failed (%d); motors disabled.\n", er);
+        return er;
+    }
     T_CMTX m = {0};
     m.mtxatr = TA_INHERIT;
     mtx_motion = tk_cre_mtx(&m);
     if (mtx_motion < E_OK) return (int)mtx_motion;
     mc_init(&mc, &config, sampled_counts, drv_time_ms());
-    drv_motor_hw_init(mc.servo_us);
     previous_ab[MC_LEFT] = drv_motor_hw_ab(MC_LEFT);
     previous_ab[MC_RIGHT] = drv_motor_hw_ab(MC_RIGHT);
-    int er = drv_gpio_irq_init();
+    er = drv_gpio_irq_init();
     if (er >= E_OK) er = drv_gpio_irq_add(DRV_MOTOR_ENCODER_MASK, encoder_irq, 0);
     if (er < E_OK) { (void)tk_del_mtx(mtx_motion); mtx_motion = 0; return er; }
     T_CCYC c = {0};

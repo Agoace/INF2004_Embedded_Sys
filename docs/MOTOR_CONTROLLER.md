@@ -361,10 +361,13 @@ GP20 without resetting. The dump pauses 20 ms after each eight rows and
 ends with `tm_usb_dropped` total and dump delta. A new GP21 start clears
 old faults; a completed/stopped run keeps its rows and fault state.
 
-TEST builds do not start the button bench task. They run U01 (5 s of
-ticks) and U02 (a brief lifted-wheel stale-command test). All robot tests,
-including U03/U04 and B4, are **not run**. See the procedures, criteria
-and copied B3 reference means in
+TEST builds do not start the button bench task. They run S0-U01 (the
+platform clock comparison), U01 (5 s of ticks) and U02 (a brief
+lifted-wheel stale-command test). Before the clock fix, S2-U01/U02/U03
+passed and B4-lifted passed its functional checks on USB after flashing.
+U03 passed after a left motor/encoder wire fault was repaired. U04 and
+floor B4 remain **not run**; floor testing is blocked until cold-power
+S0-U01 passes on the fixed image. See exact measurements and the B3 means in
 [`testing/subsystem2/TEST_LOG.md`](../testing/subsystem2/TEST_LOG.md).
 Host doubles check the dispatcher, core affinity, mutex ownership, wake
 accounting, encoder signs, stale stop and immediate ESTOP ordering; they
@@ -402,6 +405,20 @@ The template Wi-Fi `time_us_64()` in
 and has the same cold-power defect. The early application initialization
 covers later Wi-Fi calls without changes to template kernel or library
 files. It cannot correct any time read before `usermain()`.
+
+`motion_init()` first sets up zero motor PWM, then calls `drv_time_init()`
+and `drv_time_check()`. A failure prints one clear motion error and returns
+before a mutex, cyclic handler or motion task is created. `motion_start()`
+then fails, so `subsystem2_start()` does not start the bench. The servo may
+be centered; all motor PWM remains zero. Host doubles check both failure
+paths and confirm that no bench task starts.
+
+The operator found the defect on 2026-11-06 after cold VIN power-on:
+11165 motion ticks represented about 112 s of real time, but TIMER gaps
+were only 233..235 us. The nominal 500 ms rest lasted about 21 s, followed
+by an unexpected forward step; the 2400-row log filled early. The ignored
+local log is `build/mtk_logs/usb_console.txt`. Earlier post-flash success
+is not cold-power validation. See the [S2 hardware record](../testing/subsystem2/TEST_LOG.md).
 
 ### SDK hardware subset
 
