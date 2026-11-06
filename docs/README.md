@@ -56,3 +56,6 @@ See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
 - [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.
 
 - [Course template layout checks](MTK3_LAYOUT_CHECKS.md)
+
+Kernel platform entry points and the removed template demo are recorded in
+[Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).

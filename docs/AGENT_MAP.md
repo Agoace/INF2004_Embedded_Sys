@@ -123,13 +123,20 @@ Standalone module tests: [`host-tests/`](../host-tests/), one C test per module.
 
 ## Course template layout
 
-See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; SDK hardware code stays in `src/`. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle` start there. LINE, SEARCH, SCAN and DETOUR start from
 `mtk3-vehicle`; only `mtk3-staging` combines them. Independent module tests
 are in [`host-tests/`](../host-tests/); run all host tests with
-[`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are
-still active; robot logic is compiled but not task-wired.
+[`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are removed. The motion branch provides the first
+kernel task; other robot modules are not task-wired.
 
 - [Course template layout checks](MTK3_LAYOUT_CHECKS.md)
+
+## Kernel platform
+
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
+- [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — microsecond and millisecond hardware clock.
+- Corresponding `*_hw.c` files include SDK headers only; kernel-side files include no SDK headers.
+- The template demo tasks and their hardware tests are removed. GP19 is free.

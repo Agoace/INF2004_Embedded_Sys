@@ -122,8 +122,7 @@ screen /dev/ttyACM0 115200            # Linux
 ```
 
 On Windows, use PuTTY or the VS Code *Serial Monitor* on the new COM port.
-You should see the task reports. Connect an LED with a 330 Ω resistor from
-**GP19** to GND to see subsystem 1's LED blink.
+You should see the task reports. The old GP19 LED demo is removed; GP19 is not claimed.
 
 **2.5 Write your own code**
 
@@ -134,10 +133,7 @@ subfolders, is compiled automatically.
   every subsystem's `subsystemN_init()` (create kernel objects), then every
   `subsystemN_start()` (start tasks). Read its comments first.
 - **One folder per student:** `app_program/subsystem1/` … `subsystem5/`.
-  Subsystems 1–4 hold a working example, one task each (LED, producer,
-  consumer, monitor). Together they use the main micro T-Kernel APIs and
-  pass data between subsystems. Subsystem 5 is an empty template.
-  Replace the examples with your own subsystems.
+  The demo is removed. Empty subsystems keep only init/start/test stubs.
 - `subsystemN.h` is that subsystem's public interface: the object IDs and
   data formats the other subsystems may use.
 - `app.h` holds the definitions shared by the whole team.
@@ -170,7 +166,7 @@ after `make`. They can be combined in any order:
 ```sh
 make -j8                          # defaults: SMP=1 CONSOLE=usb_cdc WIFI=cyw43 TEST=0 CRASH_REPORT=0
 make SMP=0 -j8                    # single-core build
-make CONSOLE=uart WIFI=none -j8   # no USB console, radio off (no Pico SDK needed)
+make SMP=0 WIFI=none -j8          # robot bring-up: USB console, radio off
 make TEST=1 -j8                   # firmware with the subsystem self-tests
 make CRASH_REPORT=1 -j8           # also see crash reports, on GP0/GP1 (uses those pins)
 ```
@@ -259,4 +255,7 @@ T-License 2.2. This dual-core RP2040 port is derived from the official
 
 ## Robot logic and reference firmware
 
-See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/BRANCH_LAYOUT.md#mtk3-layout). The template example tasks still run; the robot logic is compiled but is not connected to those tasks. The GP19 example LED is still active.
+See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; other robot modules are not task-wired yet.
+
+The robot platform needs Pico SDK register headers even with `WIFI=none`.
+Keep the USB console enabled for the initial bring-up builds.
