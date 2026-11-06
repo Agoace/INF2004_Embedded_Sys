@@ -28,8 +28,8 @@ static void sample(uint16_t v) {
     assert(!held);
 }
 int main(void) {
-    line_snapshot_t s;assert(line_snapshot_read(&s,false)==E_OBJ);
-    assert(line_service_init()==E_OK && line_service_start()==E_OK && listens==1u);
+    line_snapshot_t s;assert(line_snapshot_read(&s,false)==E_OBJ && !line_service_running());
+    assert(line_service_init()==E_OK && line_service_start()==E_OK && listens==1u && line_service_running());
     assert(line_service_start()==E_OBJ);
     assert(line_snapshot_read(&s,false)==E_OK && !s.valid);
     assert(line_calibration_begin()==E_OK);
