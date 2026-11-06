@@ -38,3 +38,10 @@ The committed bench image was then started cold on VIN for floor run B4
 ([subsystem 2 log](../subsystem2/TEST_LOG.md)). Its TIMER-measured task gap
 was 9952..10046 us against the 10 ms kernel cycle, so the fix also holds in
 the normal image after a cold VIN power-on.
+
+## Task-split telemetry checks
+
+| ID | Procedure and acceptance | Status |
+| --- | --- | --- |
+| S1-U02 | TEST: bounded producer burst at priority 1 fills MBF; sends return without waiting, lost count increases; after allowing consumer to run, accepted rows are retained | Not run |
+| S1-U03 | GP20 dump after a full robot session: valid KR1/VE CSV, telemetry loss 0, dump `tm_usb_dropped` delta 0, control deadlines remain within limits, per-task stack free margin >=256 bytes | Not run |

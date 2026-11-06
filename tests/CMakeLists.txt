@@ -84,3 +84,8 @@ host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
 if(TARGET test_app_task)
     target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+host_test(test_telemetry tests/test_telemetry.c app_program/subsystem1/telemetry.c)
+if(TARGET test_telemetry)
+    target_include_directories(test_telemetry BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
