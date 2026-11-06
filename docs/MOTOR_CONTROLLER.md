@@ -296,6 +296,8 @@ requests discarded by `tk_can_wup()`. These are lifetime counters.
 
 ### API and ownership
 
+A task function never returns; end it with tk_ext_tsk().
+
 All `motion_*` control/status calls are for task context. They return
 `E_OK` or a negative kernel error. `motion_set_servo(deg, &accepted)` also
 returns the accepted angle through the optional pointer. Calls use

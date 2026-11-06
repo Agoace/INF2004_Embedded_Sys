@@ -99,7 +99,10 @@ static void bench_task(INT stacd, void *exinf) {
     uint32_t previous_tick = 0u;
     unsigned int step = 0u;
     tm_printf((UB*)"[bench] GP21: start after 1 s / estop. GP20: dump saved RAM log.\n");
-    if (motion_notify_after_tick(tk_get_tid()) < E_OK) return;
+    if (motion_notify_after_tick(tk_get_tid()) < E_OK) {
+        tm_printf((UB*)"[bench] tick notification registration failed; task exits.\n");
+        tk_ext_tsk();
+    }
     for (;;) {
         /* tk_dly_tsk(10) adds a kernel tick: it would lose alternate rows. */
         (void)tk_slp_tsk(20);
