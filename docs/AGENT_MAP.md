@@ -184,7 +184,7 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
-- [Kernel robot design](KERNEL_ROBOT.md) — rates, ownership, log bits, memory and timing differences.
+- [Kernel robot design](KERNEL_ROBOT.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits, software validation and pending hardware checks.
 - [R5 procedure](../testing/integration/KERNEL_ROBOT.md) — pending track check, compare with bare-metal R4.
 
 ## Kernel hardware watchdog

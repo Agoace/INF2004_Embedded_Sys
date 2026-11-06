@@ -242,3 +242,59 @@ repeat S0-U01, S2-U01/U02/U04/U05, S3-U01/U02/U03 and S5-U01/U02 first.
 Do not reuse old-image hardware passes. New task CPU cost, ISR duration,
 stack high-water, overloaded timing, physical STOP and sensor optics are
 **Not run**. Exact measured values must be recorded before floor approval.
+
+## Local STEP 7 software validation
+
+Validated source revision: `e4a8318`, after the `--no-ff` merge of current
+staging `17f3717`. Later completion changes are documentation only.
+These are local build/test results, not hardware acceptance.
+
+| Profile | text | data | bss | Compiler warnings |
+| --- | ---: | ---: | ---: | ---: |
+| SMP=0 WIFI=none robot | 62540 | 152 | 118840 | 0 |
+| SMP=0 WIFI=none BENCH=1 | 41774 | 148 | 95388 | 0 |
+| SMP=0 WIFI=none TEST=1 | 51732 | 152 | 118012 | 0 |
+| Default SMP/radio | 308632 | 216 | 125280 | 0 |
+
+Each profile used a clean `make -j4 --output-sync=target`. All 16 touched
+application C units passed a second real-header ARM compile in each profile
+with `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`: **64/64**.
+Runtime-free retained SDK adapter link probes passed **4/4**, including
+watchdog/time prerequisites and no Pico runtime linkage. Vehicle object's
+undefined symbols contain service APIs, not drv_line/drv_ultrasonic calls.
+SDK headers remain confined to adapter `*_hw.c` files.
+
+| Host branch suite | Passed |
+| --- | ---: |
+| Platform, mtk3 | 15/15 |
+| LINE, mtk3-line | 19/19 |
+| Sonar, mtk3-scan | 20/20 |
+| Telemetry, mtk3-telemetry | 16/16 |
+| Staging integration | 43/43 |
+
+Doubles cover timestamped sample processing/LP barcode separation,
+calibration abort retention, LINE freshness, generation/ID/angle rejection,
+not-before timing, deadline delivery, actual-trigger identity, immediate
+STUCK_HIGH, unknown NO_RETURN, old WATCH timestamp retention, result flag
+reset, cyclic-start failure, service-start gating, nonblocking telemetry
+loss/storage/dump ownership and vehicle deadline/WATCH-progress stops.
+The configuration/routing and KR1/VE contract tests also pass.
+
+Compiler stack-frame reports (UP robot) show vehicle_task 728 bytes,
+line_task 48, sonar_task 88, telemetry_task 256, app_task_report 144.
+These are **individual static frames**, including compiler inlining, not
+complete call-chain/interrupt costs or runtime high-water measurements.
+They do not replace physical margin checks. The largest static RAM use is
+125496 bytes (default data+bss); 136648 bytes remain in the 256 KiB linker
+RAM region before dynamic kernel/message-buffer/template-stack use. The
+19456-byte application-stack reserve is already included in bss.
+
+No pure module/configuration, `src/`, `sim/`, Ziven source or template/
+kernel/lib/device/include/config file changed relative to current staging.
+Bare-metal/simulator checks were therefore not repeated. Documentation,
+map links/anchors, diff whitespace, local secret checks and tracked-tree
+clean checks pass. Logs and retained probe/compiler evidence are under
+`/tmp/step7-results/`; generated firmware and other scratch worktrees are
+removed at completion. The candidate checkout is retained at `/tmp/mtk3t`.
+No push or flash was performed. All new hardware timing, stack and M1/M2
+acceptance rows remain **Not run**.

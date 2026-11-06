@@ -78,7 +78,7 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 
 
 
-- [Kernel robot program](KERNEL_ROBOT.md) — default robot / BENCH selection, ADC and echo rates, calibration, RAM/CSV format, limits and pending R5.
+- [Kernel robot program](KERNEL_ROBOT.md) — five core-0 tasks, object/plan tables, sensor freshness/deadlines, RAM/CSV format, stack/timing limits, software results and pending STEP 7 hardware acceptance.
 
 - [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.
 
