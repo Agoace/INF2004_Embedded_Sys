@@ -1,25 +1,13 @@
-# Subsystem 5 — test log
+# Subsystem 5 kernel ultrasonic checks
 
-**Subsystem:** <name>  ·  **Student ID:** <student ID>  ·  **Code:** `app_program/subsystem5/`
+| ID | Procedure | Pass condition | Status |
+| --- | --- | --- | --- |
+| S5-U01 | TEST=1, wheels lifted; put a flat object 60..511 mm from the sensor and measure with a ruler. Capture 20 pings, median/min/max and unknown count. | Valid distances agree with manual distance within sensor tolerance; no sensor fault streak; explain any unknowns | Not run |
 
-See `testing/README.md` for how to run tests and record results.
-
-## Test cases
-
-Define a test here before running it. Test IDs never change.
-
-| ID | What is tested | Requirement / interface | Method | Steps / how | Expected result |
-|---|---|---|---|---|---|
-| S5-U01 | example: runs in a task context | | auto | `subsystem5_test.c` | `[TEST] S5-U01 PASS` |
-| S5-U02 | | | manual | 1. … 2. … | |
-
-*Method:* **auto** = `TEST_CHECK` in code, result printed on the console;
-**manual** = a person observes the result (LED, scope, meter, phone app…).
-
-## Results
-
-Add a new row for every run. Never edit or delete old rows.
-
-| Date | Test ID | Commit | Tester | Result | Log / evidence | Notes |
-|---|---|---|---|---|---|---|
-| YYYY-MM-DD | S5-U01 | `abc1234` | | PASS / FAIL | `logs/YYYY-MM-DD_….txt` | |
+GP3 sends a 10 us trigger. GP2 echo uses both edges on the shared core-0
+GPIO13 dispatcher, priority 1. No SDK IRQ handler is registered. TIMER
+microseconds, the 2 ms rise timeout, 3 ms echo timeout, 60 ms minimum ping
+interval, packed result and unknown-on-no-echo rules match `src/ultrasonic.c`.
+Servo PWM remains owned by motion. Kernel tasks alone publish results;
+the GPIO callback only records edge times and phase. All APIs are core-0
+only, with DI/EI for shared phase snapshots.

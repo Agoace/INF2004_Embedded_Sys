@@ -167,3 +167,9 @@ kernel task; other robot modules are not task-wired.
 - [`app_program/subsystem3/drv_line.c`](../app_program/subsystem3/drv_line.c) — core-0 1 ms TIMER alarm 0 queue; SDK-only `drv_line_hw.c` averages eight ADC reads per L/C channel.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
+
+## Kernel ultrasonic acquisition
+
+- [`app_program/subsystem5/drv_ultrasonic.c`](../app_program/subsystem5/drv_ultrasonic.c) — core-0 echo state machine with GPIO13 edge dispatch and TIMER timestamps; SDK-only `drv_ultrasonic_hw.c` drives GP3.
+- [`tests/test_drv_ultrasonic.c`](../tests/test_drv_ultrasonic.c) — edge, timeout, distance and fault doubles.
+- [`testing/subsystem5/TEST_LOG.md`](../testing/subsystem5/TEST_LOG.md) — S5-U01 fixed-object checks.
