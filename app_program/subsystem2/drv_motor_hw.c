@@ -17,19 +17,25 @@ static void input(unsigned int pin, bool pull_up) {
     if (pull_up) gpio_pull_up(pin);
     else gpio_disable_pulls(pin);
 }
+static inline void init_motor_pwm(unsigned int forward, unsigned int reverse) {
+    gpio_set_function(forward, GPIO_FUNC_PWM);
+    gpio_set_function(reverse, GPIO_FUNC_PWM);
+    pwm_config cfg = pwm_get_default_config();
+    pwm_config_set_clkdiv(&cfg, 1.0f);
+    pwm_config_set_wrap(&cfg, MOTOR_WRAP);
+    pwm_init(pwm_gpio_to_slice_num(forward), &cfg, true);
+    pwm_set_gpio_level(forward, 0u);
+    pwm_set_gpio_level(reverse, 0u);
+}
 void drv_motor_hw_init(uint16_t servo_us) {
     /* USE_PTMR=0 leaves PWM reset asserted. This inline SDK reset helper
      * needs no SDK runtime. S2 owns PWM initialization before all clients. */
     reset_unreset_block_num_wait_blocking(RESET_PWM);
+    /* Constant pins let GCC check RP2040 slice bounds in the SDK's shared
+     * RP2040/RP2350 GPIO-to-slice helper (only 8 slices on this chip). */
+    init_motor_pwm(8u, 9u);
+    init_motor_pwm(10u, 11u);
     for (unsigned int i = 0u; i < 2u; ++i) {
-        gpio_set_function(FORWARD[i], GPIO_FUNC_PWM);
-        gpio_set_function(REVERSE[i], GPIO_FUNC_PWM);
-        pwm_config cfg = pwm_get_default_config();
-        pwm_config_set_clkdiv(&cfg, 1.0f);
-        pwm_config_set_wrap(&cfg, MOTOR_WRAP);
-        pwm_init(pwm_gpio_to_slice_num(FORWARD[i]), &cfg, true);
-        pwm_set_gpio_level(FORWARD[i], 0u);
-        pwm_set_gpio_level(REVERSE[i], 0u);
         input(ENC_A[i], false);
         input(ENC_B[i], false);
     }
