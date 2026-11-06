@@ -33,18 +33,48 @@ These figures are estimates, not measurements on this hardware:
 | Work | Estimated load | Timing form |
 | --- | --- | --- |
 | Two motor encoder interrupts | About 4 kHz combined at full speed | Interrupt driven; already proven |
-| Three IR line sensors | 100–200 Hz | Control loop input |
+| Two IR line sensors and the analog barcode sensor | 1 kHz (1 ms) | Timer interrupt; see the pin update below |
 | Motor control loop | 50–100 Hz | Time-critical |
 | Ultrasonic sensor | 10–20 Hz | Must not block steering |
 | GY-511 over I2C | 50–100 Hz if used | Tolerates some jitter |
 | Wi-Fi telemetry | 1 Hz | Tolerates jitter |
 
-The three line sensors use GP26, GP27, and GP28. These are ADC0, ADC1, and
-ADC2, so each sensor has its own ADC channel. The fourth IR sensor uses a
-digital output and does not use the ADC. The three ADC conversions are
-sequential and are estimated at about 2 microseconds each, or about 6
-microseconds total. This is not a meaningful cost in a 100–200 Hz control
-loop. A single `gpio_get` for the digital sensor is effectively free.
+**Pin update (2026-11-06).** The text below this table describes an older
+layout. The current pins are:
+
+| Pin | ADC | Use |
+| --- | --- | --- |
+| GP26 | ADC0 | Centre line sensor (C) |
+| GP27 | ADC1 | Left line sensor (L) |
+| GP28 | ADC2 | **Barcode sensor, analog output** |
+| GP7 | – | Not used (the old digital barcode input) |
+
+The 2-sensor line tracing moved the old left sensor from GP28 to GP27. The
+barcode sensor uses its analog output, not its digital output. Reason: the
+sensor must be about 5.5 mm or more above the floor, so that it does not
+touch the ramp. At that height its view can cover more than one bar. A fixed
+digital switching level can then miss a narrow bar. An analog value with a
+switching level from the measured minimum and maximum can still find a
+smaller dip. The barcode code (Ziven) still reads the digital GP7 input. We
+update it when the barcode work starts.
+
+All three channels share one ADC. One conversion takes about 2 µs. The 1 ms
+timer interrupt takes 8 samples per channel: 24 conversions, about 48 µs.
+
+Narrowest bar and time under the sensor:
+
+| Narrowest bar | At 146 mm/s (line base speed) | At 460 mm/s (speed limit) |
+| --- | --- | --- |
+| 5 mm (large barcode) | 34 ms | 11 ms |
+| 3 mm | 21 ms | 6.5 ms |
+| 2 mm (small barcode) | 14 ms | 4.3 ms |
+
+A decoder needs about 4 or more samples per narrow bar. With 1 ms samples,
+this is sufficient at line speed and marginal at the speed limit. If the
+sensor can see a 2 mm bar at 5.5 mm height is not measured. A bench test
+with a 2 mm and a 5 mm bar is planned.
+
+Older text (three line sensors):
 
 The Robo Pico datasheet identifies GP26 and GP27 with Grove port 6, and GP26
 with GP28 on Grove ports 5 and 7. These pins are already broken out on the
@@ -115,7 +145,10 @@ loop.
 
 ## IR and battery wiring decision
 
-GP28 is allocated to the third line-tracing IR sensor. The Robo Pico VBAT
+GP28 is now allocated to the analog barcode sensor (see the pin update
+above). The old text follows: GP28 was allocated to the third line-tracing IR
+sensor. The VBAT jumper caution below still applies. **Keep the VBAT sense
+jumper open**, or the barcode reading includes `VIN/2`. The Robo Pico VBAT
 sense jumper routes `VIN/2` to GP28/ADC2, so the battery sense cannot be used
 at the same time. The operator chose the IR sensor instead of supply-voltage
 telemetry because the current supply is a USB power bank with a regulated 5 V
