@@ -67,3 +67,33 @@ conversion warnings in unused GPIO 64-bit helpers and conversion/unused
 parameter warnings in timer inline helpers with our strict flags. System
 headers keep vendor diagnostics separate; the application still passes
 `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror` unchanged.
+
+#### Repeat the link-only proof
+
+The source is [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c).
+It is not in the application wildcard and is never called. After a full
+build, use [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py)
+before changing the object profile:
+
+```sh
+cd build_make
+make clean SMP=0 WIFI=none
+make SMP=0 WIFI=none -j8 > /tmp/motion-up.log 2>&1
+cd ..
+python3 scripts/check-sdk-hw-link.py /tmp/motion-up.log --output-dir /tmp/sdk-proof-up
+```
+
+Repeat for `SMP=0 WIFI=none TEST=1` and the default SMP/radio profile.
+The script rejects a log/profile mismatch, compiles the SDK-only probe
+with strict flags, and retains it with `--undefined=app_sdk_hw_link_probe`
+in a separate ELF. `adc_init`, GPIO setup and the probe must be retained,
+with no undefined symbols. No probe UF2 is made. Do not call or flash it.
+
+The template radio profile already has a `clock_get_hz()` compatibility
+function in `cyw43_utk_compat.c` that returns constant 125000000. This is
+not SDK clocks runtime state. Neither the motor adapter nor the link
+probe calls it; radio-off builds must not depend on that conditional shim.
+The kernel already configures CLK_ADC from PLL USB to 48 MHz in
+`startup_clock(CLKATR_USB | CLKATR_ADC | CLKATR_RTC | CLKATR_PREI)`.
+This source check is not a measured ADC result; the line driver is not
+implemented in this step.
