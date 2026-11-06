@@ -70,8 +70,8 @@ Narrowest bar and time under the sensor:
 | 2 mm (small barcode) | 14 ms | 4.3 ms |
 
 A decoder needs about 4 or more samples per narrow bar. With 1 ms samples,
-this is sufficient at line speed and marginal at the speed limit. If the
-sensor can see a 2 mm bar at 5.5 mm height is not measured. A bench test
+this is sufficient at line speed and marginal at the speed limit. It is not yet
+measured if the sensor can see a 2 mm bar at 5.5 mm height. A bench test
 with a 2 mm and a 5 mm bar is planned.
 
 Older text (three line sensors):
