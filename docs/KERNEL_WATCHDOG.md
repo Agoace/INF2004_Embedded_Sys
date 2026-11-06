@@ -81,3 +81,39 @@ Host tests cover startup prerequisites, no feed before start, cached reset
 reason, reason/magic classification, one-time marker consumption, elapsed
 wrap, task/cyclic/watchdog ordering and one feed per completed tick. They
 do not prove hardware timeout, PWM reset state or physical stopping.
+
+## Local verification record
+
+No push or flash was performed. The main `mtk3-staging` checkout remains
+at `c9a5552`. Platform implementation: `mtk3` `6ded3c9`. Motion integration:
+`mtk3-motion` `71a8fac`, including the non-fast-forward base merge
+`71aa810`. Staging merges base in `b008254` and motion in `c3d4301`.
+The final staging commit adds the KR1 reset header and startup gate;
+`git log -1 mtk3-staging-next` gives its revision.
+
+All builds used `make -j4` with clean objects and target-synchronized logs.
+Logs are outside the repository at `/tmp/watchdog-results/`.
+
+| Image | Text bytes | Data bytes | BSS bytes | Build warnings |
+| --- | ---: | ---: | ---: | ---: |
+| UP robot, `SMP=0 WIFI=none` | 55484 | 28 | 98740 | 0 |
+| UP bench, plus `BENCH=1` | 41218 | 28 | 75932 | 0 |
+| UP TEST, plus `TEST=1` | 42558 | 32 | 19936 | 0 |
+| Default SMP robot/radio | 301404 | 96 | 105176 | 0 |
+
+- Strict ARM: 11 startup/platform/motion/vehicle units per profile, **44/44**.
+  Flags: `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`.
+- Forced SDK hardware/watchdog link proofs: **4/4**, no undefined symbols.
+- Strict host suites: platform **14/14**, motion **21/21**, staging **35/35**.
+  The staging contract test checks all three reset header names in both
+  row and event decoder modes; no decoder format change is needed.
+- Documentation checker: **44 files**, no broken links or anchors.
+- Whitespace, conflict-marker and new-secret checks: pass. No local secret
+  configuration is added. Source under `src/` and `sim/` is unchanged, so
+  simulator and bare-metal builds were not repeated.
+- S2-U05 and physical stop/reset timing: **Not run**. Prior M1/M2 results
+  predate this watchdog image and do not validate its hardware behaviour.
+
+The largest static data+BSS is 105272 bytes, leaving 156872 linker RAM
+bytes before dynamic allocations/stacks. This is not a runtime stack or
+interrupt-latency measurement.

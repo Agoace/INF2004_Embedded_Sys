@@ -11,6 +11,16 @@ spec.loader.exec_module(decoder)
 payload = subprocess.check_output([sys.argv[1]], text=True).strip()
 assert decoder.decode(payload) == [89980, 2, 4, 4095, 1234, -100, -378, 378,
                                    -511, 511, 400, 0, 400, 0, -36, 165, 0]
+# Descriptive reset metadata must not alter either CSV stream.
+for reason in ("power/RUN", "watchdog", "other"):
+    capture = f"[robot] KR1 reset {reason}; idle rows 1 events 1\nKR 0 {payload}\nVE 10 1 0 2 4\n"
+    csv_rows = subprocess.check_output(
+        [sys.executable, str(root / "scripts/robot_log_decode.py")], input=capture, text=True).splitlines()
+    assert len(csv_rows) == 2 and csv_rows[1].split(",") == ["0", *map(str, decoder.decode(payload))]
+    csv_events = subprocess.check_output(
+        [sys.executable, str(root / "scripts/robot_log_decode.py"), "--events"],
+        input=capture, text=True).splitlines()
+    assert len(csv_events) == 2 and csv_events[1] == "10,1,0,2,4"
 ref = (root / "src/vc_line_test.c").read_text()
 first = ref.index("static const lt_config_t LINE_CFG")
 last = ref.index("typedef enum {\n    STOP_BUTTON", first)

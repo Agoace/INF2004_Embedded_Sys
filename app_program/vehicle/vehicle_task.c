@@ -6,6 +6,7 @@
 #include "../subsystem3/drv_line.h"
 #include "../subsystem5/drv_ultrasonic.h"
 #include "../platform/drv_time.h"
+#include "../platform/drv_watchdog.h"
 #include "vehicle_inputs.h"
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
@@ -217,8 +218,8 @@ static void dump(void) {
     const UW before=dropped();
     motion_status_t s;
     (void)motion_status(&s);
-    tm_printf((UB*)"[robot] KR1 %s rows %lu events %lu lost_events %lu lost_wakes %lu faults %u gap %lu..%lu us\n",
-        reason,(unsigned long)rows_used,(unsigned long)events_used,(unsigned long)events_lost,
+    tm_printf((UB*)"[robot] KR1 reset %s; %s rows %lu events %lu lost_events %lu lost_wakes %lu faults %u gap %lu..%lu us\n",
+        drv_watchdog_reset_name(),reason,(unsigned long)rows_used,(unsigned long)events_used,(unsigned long)events_lost,
         (unsigned long)wake_lost,(unsigned int)s.faults,(unsigned long)s.gap_min_us,(unsigned long)s.gap_max_us);
     drv_line_stats_t stats; drv_line_stats(&stats);
     tm_printf((UB*)"[robot] counts L/R %ld/%ld; line L floor/line %u/%u C %u/%u; sampled %lu missed %lu dropped %lu (lifetime)\n",
@@ -335,6 +336,7 @@ static void vehicle_task(INT stacd,void *exinf) {
 int vehicle_task_start(void) {
     motion_status_t status;
     int er=motion_status(&status);
+    if (er>=E_OK && !status.watchdog_armed) er=(int)E_OBJ;
     if (er>=E_OK) er=drv_line_init();
     if (er>=E_OK) er=drv_ultrasonic_init();
     if (er<E_OK) return er;

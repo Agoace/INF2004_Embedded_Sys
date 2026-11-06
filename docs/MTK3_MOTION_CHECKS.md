@@ -2,6 +2,10 @@
 
 ## Scope and local revisions
 
+This is a historical step-1 record. The later
+[hardware watchdog record](KERNEL_WATCHDOG.md) supersedes its statements
+that the watchdog counter/source is absent and records current checks.
+
 This record covers step 1 only: shared GPIO/time platform, the S2 motor
 task, SDK hardware adapter and RAM floor bench. No line/vehicle/scan task
 is connected. No hardware was flashed by this change. Operator-supplied

@@ -407,8 +407,9 @@ adapter calls runtime-free `tick_start(TICK_WATCHDOG, 12)`, where 12 is the
 kernel `XOSC_MHz` value, and polls `WATCHDOG_TICK_RUNNING_BITS` with a bounded
 CPU-iteration wait. SDK 2.3.0 `tick_is_running()` checks ENABLE only on
 RP2040, so it is not sufficient here. Repeated initialization leaves an
-already correct generator unchanged. No TIMER count is reset, and the
-watchdog reset counter is not enabled. Failure returns `E_SYS` and the
+already correct generator unchanged. No TIMER count is reset. Time
+initialization alone does not enable the watchdog reset counter;
+`motion_start()` enables it later. Failure returns `E_SYS` and the
 startup `CHECK` prints an error.
 
 `drv_time_check()` compares TIMER microseconds with elapsed `tk_get_otm()`

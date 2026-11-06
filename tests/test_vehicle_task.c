@@ -11,6 +11,8 @@ static jmp_buf done;
 static uint32_t now;
 static unsigned int samples, starts, notifications, estops, prints, line_drives;
 static int line_error;
+static bool watchdog_ready;
+const char *drv_watchdog_reset_name(void) { return "power/RUN"; }
 static int16_t asked[2];
 static int32_t counts[2];
 static ID listener;
@@ -50,7 +52,8 @@ bool drv_motor_hw_button_down(unsigned int pin) {
 }
 int motion_notify_after_tick(ID id) { listener=id; ++notifications; return E_OK; }
 int motion_status(motion_status_t *s) {
-    *s=(motion_status_t){0}; s->counts[0]=counts[0]; s->counts[1]=counts[1]; return E_OK;
+    *s=(motion_status_t){0}; s->watchdog_armed=watchdog_ready;
+    s->counts[0]=counts[0]; s->counts[1]=counts[1]; return E_OK;
 }
 int motion_clear_faults(void) { return E_OK; }
 int motion_set_speed(int16_t l,int16_t r) {
@@ -61,6 +64,8 @@ int motion_stop(void) { asked[0]=asked[1]=0; return E_OK; }
 int motion_estop(void) { ++estops; return motion_stop(); }
 int motion_set_servo(int deg,int *accepted) { (void)deg; (void)accepted; return E_OK; }
 int main(void) {
+    assert(vehicle_task_start()==E_OBJ && starts==0u);
+    watchdog_ready=true;
     line_error=E_SYS; assert(vehicle_task_start()==E_SYS && starts==0u);
     line_error=E_OK; assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);

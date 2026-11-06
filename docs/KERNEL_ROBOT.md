@@ -96,14 +96,25 @@ as its ping, in reference order. Servo commands go only through motion.
   wheel stops still run on 10 ms boundaries. Hardware must validate this
   phase change, jitter and stopping distance on R5; do not claim identical
   interrupt latency or track behaviour from host tests.
-- The bare-metal heartbeat hardware watchdog is not ported here. The
-  existing motion stale-command stop remains; it is not a guarantee against
-  a stalled CPU. No SDK watchdog/clock/time runtime is linked.
+- The [hardware watchdog](KERNEL_WATCHDOG.md) now resets after about 100 ms
+  without a completed motion tick. Only motion feeds, after PWM writes and
+  mutex release. Startup requires a verified clock, task and cyclic handler;
+  failed startup permits no speed command or robot task. Debug halt pauses
+  the watchdog. Startup hangs before enable are outside its protection.
+  The stale-command stop remains a separate live-task check. Hardware reset
+  latency and physical stopping still need S2-U05 (Not run). Only runtime-free
+  SDK watchdog code is added; no SDK clock/time runtime is linked.
 - Extra GP21 safety handling during calibration and lost-sample stop checks
   are deliberate safety additions. All hardware results for this robot
   image remain pending.
 
 ## KR1 rows and VE events
+
+The GP20 `[robot] KR1` header includes `reset power/RUN`, `reset watchdog`
+or `reset other`, from the boot snapshot captured before watchdog enable.
+See [reset classification](KERNEL_WATCHDOG.md#last-reset-reason) for limits.
+The decoder ignores descriptive header text, so existing CSV columns and
+16-byte row/event formats do not change. RAM logs do not survive reset.
 
 `KR index hex` contains 32 hex digits (16 bytes). Bit numbering is
 little-endian, least significant bit first. All fields use explicit masks
@@ -193,4 +204,4 @@ No later simulator or bare-metal source change was made.
 Logs stay in `/tmp/kernel-robot-results/`; generated binaries, build
 directories and module worktrees are removed. Only `/tmp/mtk3t` remains.
 S3-U01, S5-U01, R5, runtime stack use, ISR timing and physical safety are
-not tested on hardware. The phase/watchdog differences above remain open.
+not tested on hardware. The phase difference and hardware watchdog validation above remain open.
