@@ -1,7 +1,7 @@
 # Robo Pico — RTOS Concurrency & Multicore Architecture Plan
 
 **Project:** INF2004 Embedded Systems / Pico W Robo Car  
-**Reference branch:** [`yx-detour`](https://github.com/Agoace/INF2004_Embedded_Sys/tree/yx-detour), inspected at `3ef9e4b` (2026-11-05)  
+**Reference branch:** `yx-detour` (now tag [`archive/yx-detour`](https://github.com/Agoace/INF2004_Embedded_Sys/tree/archive/yx-detour)), inspected at `3ef9e4b` (2026-11-05)  
 **Status:** Proposed implementation plan, **not an implemented RTOS design**  
 **Scope:** Task scheduling, cooperative navigation handoffs, shared sensor observations, motor ownership, timing, safety, and an optional second-core migration.  
 **Non-goal:** Redesign the existing obstacle-detour geometry or claim that the existing firmware already uses μT-Kernel.

@@ -115,7 +115,7 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 
 ## Branch layout
 
-See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
+See [Branch layout](BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](BRANCH_LAYOUT.md#archived-branches) of deleted branches.
 
 Standalone module tests: [`host-tests/`](../host-tests/), one C test per module.
 

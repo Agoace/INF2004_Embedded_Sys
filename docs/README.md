@@ -51,7 +51,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 
 ## Branch layout
 
-See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
+See [Branch layout](BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](BRANCH_LAYOUT.md#archived-branches) of deleted branches.
 
 - [Adr Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)
 

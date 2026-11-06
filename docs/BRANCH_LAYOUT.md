@@ -1,32 +1,43 @@
 # Branch layout
 
-Use one branch for each module. Merge module branches only into `yx-staging`.
-Copy needed code from other people's branches by hand. Do not merge those
-branches. Do not merge `yx-line-abstraction`.
+The current layout is the [mtk3 layout](#mtk3-layout). Merge module
+branches only into `mtk3-staging`, with `--no-ff`. Do not rebase. Copy
+needed code from other people's branches by hand. Do not merge those
+branches.
 
-```text
-yx (942e158)
-  +-- yx-heartbeat ----------+
-  +-- yx-motor-controller ---+
-  +-- yx-vehicle-controller -+--> yx-staging
-        +-- yx-mod-line -----+
-        +-- yx-mod-search ---+
-        +-- yx-mod-scan -----+
-        +-- yx-mod-detour ---+
-```
+## Active branches
 
-The diagram shows ownership, not a rewrite of existing history. The four
-`yx-mod-*` branches start at `yx-vehicle-controller`. Existing branches
-keep their history: heartbeat already contains an early motor core; motor
-and vehicle branches inherit heartbeat. The vehicle branch also inherits
-the motor controller. These dependencies stay in place.
+| Branch | Use |
+| --- | --- |
+| `mtk3` | Base: course template and platform code |
+| `mtk3-motion`, `mtk3-vehicle`, `mtk3-line`, `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Module branches |
+| `mtk3-staging` | Integration; the robot program |
+| `main` | Original course-template history. Do not change it |
+| `ziven-barcode-algo` | Barcode code (Ziven), not ported yet. Do not merge |
+| `yanshan` | MQTT reference code (Buddy 1), for the later telemetry work. Do not merge |
+| `jaison-imu` | IMU reference code, for subsystem 4. Do not merge |
 
-The source snapshot is `yx-detour` at `3ef9e4b`. Keep that branch unchanged.
-The shared detectors and `obstacle_detour` are already on `yx` and do not
-change. `motor_ctl_pico` uses heartbeat, so its inherited heartbeat stays.
-Both SCAN and DETOUR carry the same `servo_scan.h`: its SIDE payload is a
-SCAN-to-DETOUR interface. A later change can move the payload helpers to
-the interface branch. Do not change them in this snapshot.
+## Archived branches
+
+The superseded branches were deleted on 2026-11-06. Before the delete,
+every commit of each branch was reachable from a kept branch or one of
+the archive tags below. To see an old branch, use its tag, for example
+`git switch --detach archive/yx-detour`.
+
+| Tag | Commit | Also contains the history of |
+| --- | --- | --- |
+| `archive/yx-staging` | f15ae89 | `yx-heartbeat`, `yx-motor-controller`, `yx-vehicle-controller`, `yx-mod-line`, `yx-mod-search`, `yx-mod-scan`, `yx-mod-detour` (the old bare-metal module layout) |
+| `archive/yx-detour` | 3ef9e4b | `yx-line-steer`; the bare-metal detour runs R1 to R4 |
+| `archive/exp-detour-tuning` | 7c7c64d | `exp/backoff-0`; simulator back-off tests |
+| `archive/yx-line-abstraction` | 249eac5 | `motor-line-manager` (Buddy 2 motion and line manager) |
+| `archive/joseph` | ad7527d | Joseph's motion control and speed tests |
+| `line-tracing-2sensor-v1` | e4ba9ec | Locked 2-sensor line tracing; `yx-line_tracing` is in `mtk3` |
+
+`yx`, `sim`, `vehicle-controller`, `ziven-barcode-reader-2` and
+`ziven-barcode-interface` were already in `mtk3` or `ziven-barcode-algo`.
+
+Earlier records name these old branches. Read such a name as the archive
+tag above.
 
 ## Tests and integration
 
@@ -56,10 +67,9 @@ snapshot; documentation records this branch layout.
 ## mtk3 layout
 
 The course template is merged from `template/main` at `c3b0954`. The base
-branch `mtk3` starts at `yx` (`942e158`). Keep all existing branches unchanged.
-Module snapshots come from `yx-staging` at `f15ae89`. Only include paths
-change in the module files. Do not push these branches before operator review.
-
+branch `mtk3` starts at `yx` (`942e158`). Module snapshots come from
+`yx-staging` at `f15ae89` (now `archive/yx-staging`). Only include paths
+change in the module files. 
 ```text
 yx + template/main -> mtk3
   +-- mtk3-motion ------------------+
@@ -88,7 +98,7 @@ kernel headers or SDK headers. Platform and hardware adapters use SDK-only
 `*_hw.c` files; their kernel-side files never include SDK headers. References may include pure application
 headers; application code must never include files from `src/`. Standard
 C headers remain allowed. Module branches merge only into `mtk3-staging`.
-Other people's code is copied by hand. Never merge `yx-line-abstraction`.
+Other people's code is copied by hand.
 
 `line_sensors.c` mixes ADC reads and logic, so it and its hardware header
 stay in `src/`. `ultrasonic.c`, `obstacle_scan.c`, `*_pico.c`, heartbeat,

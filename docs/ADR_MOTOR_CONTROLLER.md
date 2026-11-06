@@ -28,7 +28,7 @@ So each caller must know the robot's hardware quirks:
 | Servo centre and safe range (1100–1900 µs) | `servo.h` | [Servo obstacle scan](OBSTACLE_SCAN.md) |
 | Servo settle time before a ping | `obstacle_scan.c` timing | [Servo obstacle scan](OBSTACLE_SCAN.md) |
 
-The team Motion module (Buddy 2, branch `motor-line-manager`,
+The team Motion module (Buddy 2, branch `motor-line-manager`, now in tag `archive/yx-line-abstraction`,
 `src/motion/`, `docs/MOTION_CONTROL.md`) already owns the motors and has
 a closed-loop speed control. But it also holds intent: `motion_set_steer()`
 (steer mixing), `motion_set_slow()` (a line-following "calm" mode), a
