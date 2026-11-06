@@ -4,9 +4,11 @@
 # PICO_SDK_PATH. They cover PWM/ADC/timer, GPIO/resets/clocks/base, their
 # platform support and header-only IRQ/sync declarations. Header availability
 # does NOT grant ownership of SDK IRQ, spinlock, timer/alarm or clock APIs.
-# Sources: src/rp2_common/hardware_adc/adc.c always; hardware_gpio/gpio.c only
+# Sources: hardware_adc/adc.c and hardware_ticks/ticks.c always;
+# hardware_gpio/gpio.c only
 # for WIFI=none (WIFI=cyw43 already builds it as mtkernel_3/cyw43/gpio.o).
 # PWM/resets are inline: no .c exists. Timer/clocks .c are NOT compiled.
+# ticks.c writes WATCHDOG_TICK directly; no watchdog/runtime source is added.
 # GPIO IRQ helper sections are discarded: the kernel owns GPIO IRQ13.
 # No pico_runtime, crt0, stdlib, irq.c, sync.c, multicore or time init.
 # Fixed clk_sys=125 MHz replaces clock_get_hz (needs SDK clocks state).
@@ -33,6 +35,8 @@ APP_SDK_HW_DIRS := \
     src/rp2_common/hardware_pwm/include \
     src/rp2_common/hardware_adc/include \
     src/rp2_common/hardware_timer/include \
+    src/rp2_common/hardware_ticks/include \
+    src/rp2_common/hardware_watchdog/include \
     src/rp2_common/hardware_resets/include \
     src/rp2_common/hardware_clocks/include \
     src/rp2_common/hardware_irq/include \
@@ -44,7 +48,7 @@ CFLAGS += $(addprefix -isystem"$(PICO_SDK_PATH)/,$(addsuffix ",$(APP_SDK_HW_DIRS
           -ffunction-sections -fdata-sections
 LFLAGS += -Wl,--gc-sections
 
-APP_SDK_HW_NAMES := adc
+APP_SDK_HW_NAMES := adc ticks
 ifeq ($(WIFI),none)
 APP_SDK_HW_NAMES += gpio
 endif
