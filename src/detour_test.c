@@ -52,7 +52,7 @@
 #include "line_spin.h"
 #include "line_steer.h"
 #include "../app_program/subsystem5/obstacle.h"
-#include "obstacle_detour.h"
+#include "../app_program/subsystem5/obstacle_detour.h"
 #include "../app_program/subsystem5/obstacle_profile.h"
 #include "obstacle_scan.h"
 #include "pico/stdio_usb.h"

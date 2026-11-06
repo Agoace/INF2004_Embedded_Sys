@@ -1,6 +1,6 @@
-/* Pure sweep/controller tests. Link with src/obstacle_detour.c only. */
+/* Pure sweep/controller tests. Link with app_program/subsystem5/obstacle_detour.c only. */
 #include <stdio.h>
-#include "obstacle_detour.h"
+#include "../app_program/subsystem5/obstacle_detour.h"
 
 static int failures;
 #define CHECK(ok, text) do { if (!(ok)) { printf("FAIL: %s\n", text); ++failures; } } while (0)

@@ -312,7 +312,7 @@ which is another unmeasured assumption.
 Wheel speed = corrected RPM × 204.204 / 60 mm/s. Use 2535 counts per wheel
 turn, from [shared encoder calibration](CALIBRATION_RESULTS.md#current-shared-calibration)
 and the firmware wheel circumference in
-[`obstacle_detour.h`](../src/obstacle_detour.h). Accumulate fractional counts
+[`obstacle_detour.h`](../app_program/subsystem5/obstacle_detour.h). Accumulate fractional counts
 and publish signed integer counts, forward positive on both sides.
 Integrate differential drive: centre speed = (vL + vR)/2; turn rate =
 (vR − vL)/111. Use bounded substeps or the exact circular update.

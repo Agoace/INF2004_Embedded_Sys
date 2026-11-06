@@ -2,7 +2,7 @@
 set(SIM_ENTRY "${REPO}/src/detour_test.c")
 set(SIM_FIRMWARE_SOURCES
     "${SIM_ENTRY}"
-    "${REPO}/src/obstacle_detour.c"
+    "${REPO}/app_program/subsystem5/obstacle_detour.c"
     "${REPO}/app_program/subsystem5/obstacle.c"
     "${REPO}/app_program/subsystem5/obstacle_profile.c"
     "${REPO}/src/obstacle_scan.c"

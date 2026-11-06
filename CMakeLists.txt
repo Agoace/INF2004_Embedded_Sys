@@ -339,7 +339,7 @@ pico_add_extra_outputs(bypass_test)
 
 add_executable(detour_test
     src/detour_test.c
-    src/obstacle_detour.c
+    app_program/subsystem5/obstacle_detour.c
     app_program/subsystem5/obstacle.c
     app_program/subsystem5/obstacle_profile.c
     src/obstacle_scan.c

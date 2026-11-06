@@ -64,7 +64,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Servo obstacle scan | [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`app_program/subsystem5/obstacle_scan.h`](../app_program/subsystem5/obstacle_scan.h) |
 | Obstacle profile analysis | [`app_program/subsystem5/obstacle_profile.c`](../app_program/subsystem5/obstacle_profile.c), [`app_program/subsystem5/obstacle_profile.h`](../app_program/subsystem5/obstacle_profile.h) |
 | Obstacle bypass | [`src/obstacle_bypass.c`](../src/obstacle_bypass.c), [`src/obstacle_bypass.h`](../src/obstacle_bypass.h); bench test [`src/bypass_test.c`](../src/bypass_test.c) |
-| Obstacle detour (straights and turns on the spot) | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
+| Obstacle detour (straights and turns on the spot) | [`app_program/subsystem5/obstacle_detour.c`](../app_program/subsystem5/obstacle_detour.c), [`app_program/subsystem5/obstacle_detour.h`](../app_program/subsystem5/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
 | Normalised line position | [`app_program/subsystem3/line_position.c`](../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../app_program/subsystem3/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
 | Line steering | [`src/line_steer.c`](../src/line_steer.c), [`src/line_steer.h`](../src/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
@@ -114,3 +114,7 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [Vehicle State Machine](VEHICLE_STATE_MACHINE.md)
 
 Current module branch: `mtk3-vehicle`. Merge only into `mtk3-staging`.
+
+Current module branch: `mtk3-detour`. Merge only into `mtk3-staging`.
+
+Independent module test: [`host-tests/test_detour.c`](../host-tests/test_detour.c).
