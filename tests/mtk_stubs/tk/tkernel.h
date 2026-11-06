@@ -35,6 +35,8 @@ ER tk_unl_mtx(ID id);
 ER tk_del_mtx(ID id);
 ID tk_cre_cyc(const T_CCYC *c);
 ER tk_sta_cyc(ID id);
+ID tk_get_tid(void);
+void tk_ext_tsk(void);
 ER tk_slp_tsk(TMO timeout);
 INT tk_can_wup(ID id);
 ER tk_wup_tsk(ID id);

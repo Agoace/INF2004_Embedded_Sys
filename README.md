@@ -262,3 +262,12 @@ See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), an
 
 The robot platform needs Pico SDK register headers even with `WIFI=none`.
 Keep the USB console enabled for the initial bring-up builds.
+
+### Kernel robot image
+
+The default normal image now runs the four-module robot program. Use
+`make SMP=0 WIFI=none BENCH=1 -j4` for the earlier motion-only bench.
+GP21 calibrates then starts the robot, or latches ESTOP during a session;
+GP20 dumps saved RAM data instead of changing D. TEST images start neither
+button task. Read [the kernel robot safety/design record](docs/KERNEL_ROBOT.md)
+and pass the lifted-wheel checks before floor work. R5 has not run.

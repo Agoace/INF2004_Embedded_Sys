@@ -4,5 +4,9 @@
 EXPORT ER subsystem2_init(void) { return (ER)motion_init(); }
 EXPORT ER subsystem2_start(void) {
     const int er = motion_start();
+#if APP_BENCH
     return er < E_OK ? (ER)er : (ER)motion_bench_start();
+#else
+    return (ER)er;
+#endif
 }

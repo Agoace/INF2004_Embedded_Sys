@@ -173,3 +173,13 @@ kernel task; other robot modules are not task-wired.
 - [`app_program/subsystem5/drv_ultrasonic.c`](../app_program/subsystem5/drv_ultrasonic.c) — core-0 echo state machine with GPIO13 edge dispatch and TIMER timestamps; SDK-only `drv_ultrasonic_hw.c` drives GP3.
 - [`tests/test_drv_ultrasonic.c`](../tests/test_drv_ultrasonic.c) — edge, timeout, distance and fault doubles.
 - [`testing/subsystem5/TEST_LOG.md`](../testing/subsystem5/TEST_LOG.md) — S5-U01 fixed-object checks.
+
+## Kernel robot integration
+
+- [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-12 core-0 task: calibration, four-module shell, buttons and paced dump.
+- [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
+- [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
+- [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder.
+- [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
+- [Kernel robot design](KERNEL_ROBOT.md) — rates, ownership, log bits, memory and timing differences.
+- [R5 procedure](../testing/integration/KERNEL_ROBOT.md) — pending track check, compare with bare-metal R4.

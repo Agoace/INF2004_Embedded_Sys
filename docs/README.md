@@ -76,3 +76,5 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [μT-Kernel motion bring-up checks](MTK3_MOTION_CHECKS.md) — local candidate, build/link results, image sizes and not-run hardware checks.
 
 
+
+- [Kernel robot program](KERNEL_ROBOT.md) — default robot / BENCH selection, ADC and echo rates, calibration, RAM/CSV format, limits and pending R5.

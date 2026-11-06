@@ -5,8 +5,18 @@
 #include "hardware/clocks.h"
 #include "hardware/resets.h"
 #include "hardware/ticks.h"
+#include "../../app_program/subsystem3/drv_line_hw.h"
+#include "../../app_program/subsystem5/drv_ultrasonic_hw.h"
 uint32_t app_sdk_hw_link_probe(void) {
     tick_start(TICK_WATCHDOG, 12u);
+    uint16_t raw[3];
+    (void)drv_line_hw_init();
+    (void)drv_line_hw_read(raw);
+    drv_line_hw_alarm(timer_time_us_32(timer_hw) + 1000u);
+    drv_line_hw_ack();
+    drv_ultrasonic_hw_init();
+    drv_ultrasonic_hw_pulse();
+    (void)drv_ultrasonic_hw_echo();
     reset_unreset_block_num_wait_blocking(RESET_PWM);
     gpio_set_function(8u, GPIO_FUNC_PWM);
     pwm_config p = pwm_get_default_config();

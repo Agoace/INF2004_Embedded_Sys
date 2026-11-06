@@ -3,7 +3,7 @@
 #include "motion.h"
 #include "drv_motor_hw.h"
 #include "../platform/drv_time.h"
-#if !APP_TEST
+#if !APP_TEST && APP_BENCH
 #define MAX_ROWS 2400u
 #define START_DELAY_MS 1000u
 #define DUMP_ROWS_PER_CHUNK 8u

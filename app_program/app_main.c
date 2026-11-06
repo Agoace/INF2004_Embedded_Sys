@@ -24,6 +24,7 @@
 
 #include "app.h"
 #include "platform/drv_time.h"
+#include "vehicle/vehicle_task.h"
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
@@ -93,6 +94,7 @@ EXPORT INT usermain(void)
 	CHECK(subsystem3_start(), "subsystem3_start");
 	CHECK(subsystem4_start(), "subsystem4_start");
 	CHECK(subsystem5_start(), "subsystem5_start");
+	CHECK(vehicle_task_start(), "vehicle_task_start");
 
 	tm_printf((UB*)"all subsystems started\n\n");
 

@@ -32,7 +32,8 @@ def main():
     mqtt = int("-DTM_MQTT=1" in flags)
     crash = int("-DTM_CONSOLE_UART=1" in flags)
     test = int("-DAPP_TEST=1" in flags)
-    expected = f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}-test{test}"
+    bench = int("-DAPP_BENCH=1" in flags)
+    expected = f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}-test{test}-bench{bench}"
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
         parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")
@@ -55,7 +56,8 @@ def main():
     symbols = subprocess.check_output(["arm-none-eabi-nm", str(elf)], text=True)
     (out / "symbols.txt").write_text(symbols)
     names = {line.split()[-1] for line in symbols.splitlines() if line.split()}
-    for name in ("app_sdk_hw_link_probe", "adc_init", "gpio_set_function", "tick_start"):
+    for name in ("app_sdk_hw_link_probe", "adc_init", "gpio_set_function", "tick_start",
+                 "drv_line_hw_init", "drv_line_hw_read", "drv_ultrasonic_hw_pulse"):
         if name not in names:
             raise SystemExit(f"missing retained symbol: {name}")
     undefined = subprocess.check_output(["arm-none-eabi-nm", "-u", str(elf)], text=True)
@@ -65,7 +67,7 @@ def main():
     forbidden = {"clock_get_hz", "irq_set_exclusive_handler", "timer_time_us_64", "runtime_init"}
     if forbidden & {line.split()[-1] for line in probe_refs.splitlines() if line.split()}:
         raise SystemExit("probe requires a forbidden SDK runtime function")
-    print(f"PASS {expected}: retained PWM/GPIO/ADC/reset/timer32/tick probe links: {elf}")
+    print(f"PASS {expected}: retained PWM/GPIO/ADC/alarm/ultrasonic/reset/timer32/tick probe links: {elf}")
     print("Link-only result. Hardware tests remain NOT RUN. Do not flash this ELF.")
 
 

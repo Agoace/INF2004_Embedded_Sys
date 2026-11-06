@@ -80,7 +80,12 @@ int main(void) {
     assert(subsystem2_start() == E_OBJ && bench_calls == 0u && error_lines == 2u);
     check_error = E_OK;
     assert(motion_init() == E_OK && mutex_calls == 1u);
-    assert(subsystem2_start() == E_OK && bench_calls == 1u);
+    assert(subsystem2_start() == E_OK);
+#if APP_BENCH
+    assert(bench_calls == 1u);
+#else
+    assert(bench_calls == 0u);
+#endif
     tick(10000u);
     assert(notify_calls == 0u);
     assert(motion_notify_after_tick(-1) == E_PAR);

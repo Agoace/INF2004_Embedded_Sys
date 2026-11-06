@@ -151,3 +151,17 @@ or SDK includes. New kernel-side adapters include no SDK headers; new
 `*_hw.c` adapters include no kernel headers. GPIO IRQ 13 has one core-0
 owner and priority 1. See [Motor controller](MOTOR_CONTROLLER.md#μt-kernel-layer)
 and TEAM.md. No on-target test is marked as passed by a build.
+
+## Kernel robot port
+
+`mtk3-line` merges the base before adding paired ADC hardware and the core-0
+1 ms TIMER alarm-0 queue. `mtk3-scan` merges the base before adding the
+ultrasonic GPIO/TIMER adapter. Both merge into the candidate with `--no-ff`.
+No history is rewritten. Pure module settings and source stay unchanged.
+
+The staging-only integration is `app_program/vehicle/vehicle_task.c` plus
+the reference-extracted settings and fixed RAM log/decoder. A normal build
+runs the robot; `BENCH=1` selects only the S2 bench, and `TEST=1` selects
+subsystem checks with neither button task. Selection changes the image
+name and stale-object profile. See [Kernel robot program](KERNEL_ROBOT.md)
+for rates, ADC ownership, known phase/watchdog differences and R5 status.

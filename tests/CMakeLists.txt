@@ -89,3 +89,26 @@ host_test(test_drv_ultrasonic tests/test_drv_ultrasonic.c app_program/subsystem5
 if(TARGET test_drv_ultrasonic)
     target_include_directories(test_drv_ultrasonic BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+host_test(test_vehicle_log tests/test_vehicle_log.c app_program/vehicle/vehicle_log.c)
+if(TARGET test_vehicle_log)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME test_robot_contract COMMAND "${Python3_EXECUTABLE}"
+        "${REPO}/tests/test_robot_contract.py" "$<TARGET_FILE:test_vehicle_log>")
+endif()
+# The two button owners are mutually exclusive build modes.
+host_test(test_motion_task_bench tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/subsystem2.c)
+if(TARGET test_motion_task_bench)
+    target_include_directories(test_motion_task_bench BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_motion_task_bench PRIVATE APP_BENCH=1)
+endif()
+
+host_test(test_vehicle_task tests/test_vehicle_task.c app_program/vehicle/vehicle_task.c
+    app_program/vehicle/vehicle_log.c ${vehicle_sm_source} ${line_position_source}
+    ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
+    ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
+if(TARGET test_vehicle_task)
+    target_include_directories(test_vehicle_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
