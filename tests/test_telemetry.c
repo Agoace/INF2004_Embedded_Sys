@@ -55,6 +55,6 @@ int main(void) {
     m.kind=TELEMETRY_DUMP;memset(&m.data.info,0,sizeof(m.data.info));
     assert(telemetry_send(&m)==E_OK);telemetry_stats(&s);assert(s.busy);
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
-    assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==1u);
+    assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
     return 0;
 }

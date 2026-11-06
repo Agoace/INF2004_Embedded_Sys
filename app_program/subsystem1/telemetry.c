@@ -43,6 +43,7 @@ static void dump(void) {
             (unsigned int)e->from,(unsigned int)e->to,(unsigned int)e->word);
         if ((i+1u)%8u==0u) (void)tk_dly_tsk(20u);
     }
+    app_task_report(); /* Include the earlier report/formatting path in high water. */
     (void)tk_dly_tsk(20u);
     const UW after=dropped();
     tm_printf((UB*)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
