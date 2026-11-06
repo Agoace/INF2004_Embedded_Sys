@@ -48,3 +48,5 @@ Kernel platform entry points and the removed template demo are recorded in
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
 
 - [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.
+
+- [Application task stacks](APPLICATION_TASKS.md) — static stacks, margin and high-water reporting.

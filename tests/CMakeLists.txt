@@ -79,3 +79,8 @@ if(TARGET test_watchdog_hw)
     target_include_directories(test_watchdog_hw BEFORE PRIVATE "${REPO}/tests/watchdog_stubs")
     target_compile_definitions(test_watchdog_hw PRIVATE APP_TEST=1)
 endif()
+
+host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
+if(TARGET test_app_task)
+    target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
