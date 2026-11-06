@@ -184,3 +184,9 @@ vehicle task described below.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](KERNEL_ROBOT.md) — rates, ownership, log bits, memory and timing differences.
 - [R5 procedure](../testing/integration/KERNEL_ROBOT.md) — pending track check, compare with bare-metal R4.
+
+## Kernel hardware watchdog
+
+- [`app_program/platform/drv_watchdog.c`](../app_program/platform/drv_watchdog.c) and [`drv_watchdog_hw.c`](../app_program/platform/drv_watchdog_hw.c) — kernel startup/feed guard and SDK-only hardware/reset snapshot.
+- [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
+- [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.

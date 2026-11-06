@@ -7,8 +7,12 @@
 #include "hardware/ticks.h"
 #include "../../app_program/subsystem3/drv_line_hw.h"
 #include "../../app_program/subsystem5/drv_ultrasonic_hw.h"
+#include "../../app_program/platform/drv_watchdog_hw.h"
 uint32_t app_sdk_hw_link_probe(void) {
     tick_start(TICK_WATCHDOG, 12u);
+    (void)drv_watchdog_hw_reset(0);
+    (void)drv_watchdog_hw_start(100u, 12u);
+    drv_watchdog_hw_feed();
     uint16_t raw[3];
     (void)drv_line_hw_init();
     (void)drv_line_hw_read(raw);

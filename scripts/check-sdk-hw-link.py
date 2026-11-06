@@ -57,7 +57,9 @@ def main():
     (out / "symbols.txt").write_text(symbols)
     names = {line.split()[-1] for line in symbols.splitlines() if line.split()}
     for name in ("app_sdk_hw_link_probe", "adc_init", "gpio_set_function", "tick_start",
-                 "drv_line_hw_init", "drv_line_hw_read", "drv_ultrasonic_hw_pulse"):
+                 "drv_line_hw_init", "drv_line_hw_read", "drv_ultrasonic_hw_pulse",
+                 "drv_watchdog_hw_start", "watchdog_enable", "watchdog_update",
+                 "watchdog_caused_reboot", "watchdog_enable_caused_reboot"):
         if name not in names:
             raise SystemExit(f"missing retained symbol: {name}")
     undefined = subprocess.check_output(["arm-none-eabi-nm", "-u", str(elf)], text=True)
@@ -67,7 +69,7 @@ def main():
     forbidden = {"clock_get_hz", "irq_set_exclusive_handler", "timer_time_us_64", "runtime_init"}
     if forbidden & {line.split()[-1] for line in probe_refs.splitlines() if line.split()}:
         raise SystemExit("probe requires a forbidden SDK runtime function")
-    print(f"PASS {expected}: retained PWM/GPIO/ADC/alarm/ultrasonic/reset/timer32/tick probe links: {elf}")
+    print(f"PASS {expected}: retained PWM/GPIO/ADC/alarm/ultrasonic/reset/timer32/tick/watchdog probe links: {elf}")
     print("Link-only result. Hardware tests remain NOT RUN. Do not flash this ELF.")
 
 
