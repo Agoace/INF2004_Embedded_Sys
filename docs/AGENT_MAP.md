@@ -112,3 +112,9 @@ The parent-workspace link resolves only when this repository is checked out as a
 ## Branch layout
 
 See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
+
+## Module tests
+
+Standalone module tests: [`host-tests/`](../host-tests/). See [Branch layout](BRANCH_LAYOUT.md) for commands.
+
+This branch owns LINE. Merge module branches only into `yx-staging`.
