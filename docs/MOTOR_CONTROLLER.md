@@ -329,7 +329,7 @@ The kernel `cpu_clock.c` configures PLL SYS to 125 MHz (1500 / 6 / 2).
 Motor slices 4/5 use div 1, wrap 6249: 20 kHz. Servo GP15, slice 7 channel
 B, uses div 125 and wrap 19999: 50 Hz and 1 us per count. With
 `USE_PTMR=0` the kernel does not release PWM reset; the hardware owner
-atomically releases it and waits for `reset_done` before setup.
+uses the SDK reset/unreset helper and waits for `reset_done` before setup.
 
 Pins, signs and the quadrature table match `src/motor_ctl_pico.c`: left
 GP8 forward/GP9 reverse and GP16/17 encoder sign +1; right GP10/11 and
@@ -361,6 +361,13 @@ accounting, encoder signs, stale stop and immediate ESTOP ordering; they
 do not measure hardware timing or physical safety.
 
 ### SDK hardware subset
+
+`drv_motor_hw.c` uses `gpio_set_function()`, `pwm_get_default_config()`,
+`pwm_config_set_clkdiv()`, `pwm_config_set_wrap()`, `pwm_init()`,
+`pwm_set_gpio_level()` and `pwm_gpio_to_slice_num()`, close to the
+bare-metal adapter. It also uses GPIO input/pull/read helpers. No hand-written
+PWM/GPIO register setup remains in this adapter. The opposite motor pin
+is cleared before applying duty, as in the bare-metal source.
 
 The app-owned [`build_make/app_sdk_hw.mk`](../build_make/app_sdk_hw.mk)
 is included by [`the application build hook`](../build_make/mtkernel_3/app_program/subdir.mk).
