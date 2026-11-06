@@ -16,5 +16,6 @@ int line_service_start(void);
 int line_snapshot_read(line_snapshot_t *out, bool consume_event);
 int line_calibration_begin(void);
 lp_calib_result_t line_calibration_end(void);
+int line_calibration_abort(void); /* retain prior learned ends */
 int line_tracking_reset(void);
 #endif
