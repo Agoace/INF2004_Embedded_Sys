@@ -14,3 +14,19 @@ because task service has not run. Width/field limits remain in task context.
 Servo PWM remains owned by motion. Kernel tasks alone publish results;
 the GPIO callback only records edge times and phase. All APIs are core-0
 only, with DI/EI for shared phase snapshots.
+
+## Task-split image checks
+
+| ID | Procedure and acceptance | Status |
+| --- | --- | --- |
+| S5-U02 | TEST: fixed-object S5-U01 now uses service requests/results; reject old-generation request; verify echo-loss unknown, one-shot deadline and no stale SCAN result in DETOUR | Not run |
+
+Service owns trigger, echo, 60 ms minimum interval and request correlation.
+SCAN retains its existing settle state machine and settings; motion retains
+servo PWM. This is an approved difference from RTOS plan section 7. A
+one-shot conflict is rejected, not overwritten. Results have request ID,
+generation, actual trigger sequence, timestamp and deadline. WATCH waits
+for a consumer ACK before another trigger. No echo is unknown, never clear.
+A 10 ms cyclic handles deadlines; echo edges also wake the service. The
+2 ms rise deadline remains in the ISR. Late old-generation echoes are
+drained but not published as a new owner's measurement.

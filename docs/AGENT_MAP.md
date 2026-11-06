@@ -197,3 +197,4 @@ vehicle task described below.
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
+- [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.

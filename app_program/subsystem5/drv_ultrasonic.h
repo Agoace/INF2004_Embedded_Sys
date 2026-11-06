@@ -5,6 +5,7 @@ typedef struct { uint32_t rise_latency_us, pulse_us, distance_mm; } ultrasonic_d
 /* Core-0 task API; echo ISR shares GPIO13 with encoders. */
 int drv_ultrasonic_init(void);
 bool drv_ultrasonic_trigger(void);
+void drv_ultrasonic_listen(int task_id); /* core-0 service wake on echo edge */
 bool drv_ultrasonic_service(void);
 bool drv_ultrasonic_busy(void);
 ultrasonic_result_t drv_ultrasonic_latest(void);

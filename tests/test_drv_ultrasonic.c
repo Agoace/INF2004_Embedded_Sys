@@ -7,6 +7,7 @@ static drv_gpio_irq_fn edge;
 static uint32_t now;
 static bool high;
 static int disabled;
+ER tk_wup_tsk(ID id) { (void)id;return E_OK; }
 int drv_time_init(void) { return E_OK; }
 uint32_t drv_time_us(void) { return now; }
 INT tk_get_prc(void) { return 1; }
