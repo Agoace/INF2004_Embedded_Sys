@@ -15,7 +15,7 @@ uint32_t drv_time_hw_ms(void) { return hw_us / 1000u; }
 ER tk_get_otm(SYSTIM *time) {
     time->hi = 0; time->lo = os_ms; return time_error;
 }
-ER tk_dly_tsk(TMO timeout) {
+ER tk_dly_tsk(RELTIM timeout) {
     assert(timeout > 0); ++delay_calls;
     /* Like the kernel, add TIMER_PERIOD; the test must use measured time. */
     const uint32_t elapsed = (uint32_t)timeout + 10u;
