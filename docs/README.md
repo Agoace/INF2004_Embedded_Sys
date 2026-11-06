@@ -47,10 +47,12 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Detour v1.6 test plan](DETOUR_V1_6_TEST_PLAN.md) — physical test plan: build, bench checks, track runs, pass/fail, measurements still owed to the simulator.
 - [Obstacle bypass](OBSTACLE_BYPASS.md) — edge-following bypass ("Blind Bicycle Algorithm"), shelved 2026-10-30 at version 4.1: design, track runs 1–18, open problems, `bypass_test` bench procedure.
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
-- [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
+- [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) — parent workspace state. This link opens the parent record on GitHub.
 
 ## Branch layout
 
 See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
 
 - [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.
+
+- [Course template layout checks](MTK3_LAYOUT_CHECKS.md)

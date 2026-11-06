@@ -9,7 +9,7 @@ Use this map before editing an unfamiliar part of the repository.
 | Current repository | This file: `docs/AGENT_MAP.md` |
 | Parent workspace | [School Repos map](https://github.com/Agoace/School-Repos/blob/main/docs/AGENT_MAP.md) |
 
-The parent-workspace link resolves only when this repository is checked out as a School Repos submodule. It does not resolve in a standalone clone.
+The parent-workspace link opens the School Repos map on GitHub, so it also works in a standalone worktree.
 
 ## Documentation locations
 
@@ -131,3 +131,5 @@ The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 are in [`host-tests/`](../host-tests/); run all host tests with
 [`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are
 still active; robot logic is compiled but not task-wired.
+
+- [Course template layout checks](MTK3_LAYOUT_CHECKS.md)
