@@ -10,7 +10,15 @@
 #include "../app_program/subsystem1/telemetry.h"
 static FP entry;static jmp_buf done;static uint32_t now;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
-static int line_error;static bool watchdog_ready,calibrating,stale,overrun;
+static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,sonar_stale;
+bool line_service_running(void) { return services_ready; }
+bool sonar_service_running(void) { return services_ready; }
+bool telemetry_running(void) { return services_ready; }
+static sonar_request_t sonar_command;
+static sonar_snapshot_t echo_snapshot;
+static bool echo_fresh,await_ack;
+static uint32_t next_ping;
+static unsigned int sonar_timeouts;
 static int16_t asked[2];static int32_t counts[2];static ID listener;
 static lp_t line;static vc_event_t line_event;static uint16_t raw[3],peak;
 ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==13 && core==1u);entry=f;++starts;return 7; }
@@ -27,6 +35,16 @@ ER tk_slp_tsk(TMO t) {
             if (e!=VC_EVENT_NONE) line_event=e;
             if (line.norm[LP_CENTRE]>peak) peak=line.norm[LP_CENTRE];
         }
+    }
+    if (!sonar_stale && sonar_command.mode==SONAR_WATCH && !await_ack && (int32_t)(now-next_ping)>=0) {
+        echo_snapshot.generation=sonar_command.generation;echo_snapshot.id=sonar_command.id;
+        echo_snapshot.angle=sonar_command.angle;echo_snapshot.ping_generation=sonar_command.generation;
+        echo_snapshot.ping_id=sonar_command.id;echo_snapshot.ping_angle=sonar_command.angle;
+        ++echo_snapshot.ping_sequence;++echo_snapshot.result_sequence;
+        echo_snapshot.trigger_ms=now;echo_snapshot.timestamp_ms=now;echo_snapshot.deadline_ms=now+(uint32_t)sonar_command.interval_ms*2u+20u;
+        echo_snapshot.echo=(ultrasonic_result_t)(ULTRASONIC_STATUS_NO_RETURN<<ULTRASONIC_STATUS_SHIFT);
+        echo_snapshot.status=SONAR_ECHO;echo_fresh=true;await_ack=true;
+        next_ping=now+sonar_command.interval_ms;
     }
     if (now>=8000u) longjmp(done,1);
     return E_OK;
@@ -46,18 +64,24 @@ int line_snapshot_read(line_snapshot_t *s,bool consume) {
 int line_calibration_begin(void) { lp_calib_begin(&line);calibrating=true;return E_OK; }
 lp_calib_result_t line_calibration_end(void) { unsigned int bad;calibrating=false;peak=0u;return lp_calib_end(&line,&bad); }
 int line_calibration_abort(void) { calibrating=false;return E_OK; }
-int sonar_result_read(sonar_snapshot_t *s,bool *fresh) { *s=(sonar_snapshot_t){0};*fresh=false;return E_OK; }
-int sonar_request(const sonar_request_t *r) { assert(r->mode<=SONAR_ACK);++requests;return E_OK; }
+int sonar_result_read(sonar_snapshot_t *s,bool *fresh) { *s=echo_snapshot;*fresh=echo_fresh;echo_fresh=false;return E_OK; }
+int sonar_request(const sonar_request_t *r) {
+    assert(r->mode<=SONAR_ACK);++requests;
+    if (r->mode==SONAR_ACK) await_ack=false;
+    else { sonar_command=*r;await_ack=false;next_ping=r->not_before_ms; }
+    return E_OK;
+}
 void telemetry_stats(telemetry_stats_t *s) { *s=(telemetry_stats_t){0}; }
 int telemetry_send(const telemetry_message_t *m) {
     assert(m->kind<=TELEMETRY_DUMP);
     if (m->kind==TELEMETRY_ROW) ++rows;
     if (m->kind==TELEMETRY_INFO && m->data.info.overruns>max_overruns) max_overruns=m->data.info.overruns;
+    if (m->kind==TELEMETRY_INFO && !strcmp(m->data.info.reason,"sonar watch stale")) ++sonar_timeouts;
     return E_OK;
 }
 void drv_motor_hw_buttons_init(void) { }
 bool drv_motor_hw_button_down(unsigned int pin) {
-    return pin==21u && ((now>=20u && now<50u) || (now>=5000u && now<5050u));
+    return pin==21u && ((now>=20u && now<50u) || (!sonar_stale && now>=5000u && now<5050u));
 }
 int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
@@ -76,14 +100,17 @@ int motion_estop(void) { ++estops;return motion_stop(); }
 int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_OK; }
 int main(int argc,char **argv) {
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
+    sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
     assert(vehicle_task_start()==E_OBJ && starts==0u);watchdog_ready=true;
+    assert(vehicle_task_start()==E_OBJ && starts==0u);services_ready=true;
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
     line_error=E_OK;assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
+    else if (sonar_stale) assert(sonar_timeouts>0u);
     else assert(estops==1u && line_drives>0u && rows>0u && requests>0u);
     return 0;
 }

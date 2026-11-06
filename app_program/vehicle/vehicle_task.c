@@ -180,6 +180,7 @@ static void run_once(void) {
     uint8_t mode=255u;uint16_t interval=0u;
     bool outstanding=false;ultrasonic_result_t echo=ULTRASONIC_RESULT_NONE;
     uint32_t seen_ping=0u,seen_result=0u,last_ping=run_start,last_log=run_start-20u;
+    uint32_t request_deadline=0u,watch_deadline=0u;
     int8_t last_servo=0;uint8_t pending_bits=0u;
     while (!cancelled) {
         if (!wait_tick()) break;
@@ -195,11 +196,14 @@ static void run_once(void) {
         if (echo_new && (int32_t)(now-sonar.deadline_ms)>0) { reason="stale sonar result";break; }
         if (echo_new) {
             echo=sonar.echo;outstanding=false;
+            if (mode==SONAR_WATCH) watch_deadline=sonar.deadline_ms;
             if (mode==SONAR_WATCH) {
                 sonar_request_t ack={.generation=generation,.id=request_id,.mode=SONAR_ACK};
                 if (!request(&ack)) break;
             }
         }
+        if (mode==SONAR_WATCH && (int32_t)(now-watch_deadline)>0) { reason="sonar watch stale";break; }
+        if (mode==SONAR_ONCE && outstanding && (int32_t)(now-request_deadline)>0) { reason="sonar request deadline";break; }
         seen_ping=sonar.ping_sequence;seen_result=sonar.result_sequence;
         motion_status_t s;if (motion_status(&s)<E_OK) { reason="motion status failed";break; }
         if (vc_event_type(line_event)==VC_EVENT_LINE_LOST) pending_bits|=1u;
@@ -232,6 +236,7 @@ static void run_once(void) {
                 .deadline_ms=now+100u,.not_before_ms=last_ping+ping_ms,.angle=last_servo};
             if (!request(&r)) break;
             mode=desired;interval=rate;outstanding=desired==SONAR_ONCE;
+            request_deadline=r.deadline_ms;watch_deadline=now+(uint32_t)rate*2u+20u;
         }
         if (now-run_start>=RUN_LIMIT_MS) { reason="90 s time limit";break; }
     }
@@ -278,6 +283,7 @@ static void vehicle_task(INT code,void *ctx) {
 int vehicle_task_start(void) {
     motion_status_t s;line_snapshot_t line;sonar_snapshot_t sonar;bool fresh;
     int er=motion_status(&s);if (er>=E_OK && !s.watchdog_armed) er=E_OBJ;
+    if (er>=E_OK && (!line_service_running() || !sonar_service_running() || !telemetry_running())) er=E_OBJ;
     if (er>=E_OK) er=line_snapshot_read(&line,false);
     if (er>=E_OK) er=sonar_result_read(&sonar,&fresh);
     if (er<E_OK) return er;

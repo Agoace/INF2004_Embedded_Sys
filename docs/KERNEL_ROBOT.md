@@ -33,7 +33,10 @@ make -j4                           # robot, default SMP/radio profile
 The following application tasks are pinned to physical core 0 (`TP_PRC1`)
 in both profiles; the SMP build does not move application work to core 1.
 Lower priority numbers run first. USB/radio template tasks remain above
-application tasks. No template file is changed.
+application tasks. No template file is changed. Vehicle activation requires
+an armed motion watchdog and successfully started line, sonar and telemetry
+services (including the sonar deadline cyclic). Failed startup is reported
+by the existing init/start CHECK path and does not permit a robot session.
 
 | Task/context | Priority | Release | Owns / kernel objects | Stack bytes |
 | --- | ---: | --- | --- | ---: |
@@ -117,8 +120,10 @@ session rather than waiting. The service alone calls trigger/service/busy.
 
 - WATCH keeps the requested interval and hardware minimum 60 ms. A result
   must be acknowledged before another trigger, preserving the no-ping-over-
-  unconsumed-result rule. Its result age limit is publication time plus
-  twice the interval and 20 ms, not the line age limit.
+  unconsumed-result rule. Its result age limit is actual trigger time plus
+  twice the interval and 20 ms, not the line age limit. A late service cannot
+  relabel an old echo as fresh. Vehicle also enforces a WATCH progress timer
+  and one-shot delivery deadline when the service produces no result.
 - ONCE is used at each SCAN measurement point. The vehicle passes its old
   last-ping/not-before timing and a 100 ms deadline, enough for the 60 ms
   minimum interval and echo timeout. Deadline failure stops the session.
