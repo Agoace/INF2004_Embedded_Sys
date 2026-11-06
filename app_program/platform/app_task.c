@@ -1,8 +1,9 @@
 #include "app_task.h"
 #include <stdbool.h>
 #include <tm/tmonitor.h>
+#include <tk/syslib.h>
 #define FILL 0xa5u
-static uint64_t motion_stack[256], line_stack[256], sonar_stack[256];
+static uint64_t motion_stack[384], line_stack[256], sonar_stack[256];
 static uint64_t vehicle_stack[512], telemetry_stack[512], bench_stack[512];
 typedef struct { const char *name; uint64_t *stack; uint32_t size, high; ID id; } slot_t;
 #define SLOT(n,s) {n,s,sizeof(s),0u,0}
@@ -48,8 +49,10 @@ unsigned int app_task_stacks(app_stack_t *out,unsigned int capacity) {
         uint32_t free=0u;
         while (free<s->size && b[free]==FILL) ++free;
         const uint32_t used=s->size-free;
+        UINT irq;DI(irq);
         if (used>s->high) s->high=used;
         out[n++]=(app_stack_t){s->name,s->size,s->high,s->size-s->high};
+        EI(irq);
     }
     return n;
 }
