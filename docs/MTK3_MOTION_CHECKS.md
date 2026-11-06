@@ -8,12 +8,15 @@ is connected. No hardware was flashed by this change. Operator-supplied
 2026-11-06 post-flash results now include S2-U01/U02/U03 and functional
 B4-lifted passes. Cold-power S0-U01, S2-U04 and floor B4 remain **Not run**.
 
-- Base `mtk3`: `165a574`, from `c24abf6`; cold-power tick initialization,
-  rate check, S0-U01 and host ratio tests.
-- `mtk3-motion`: `7ea8fcf`, from `3d7b35e`; base merge `e9fb754`, then
-  zero-PWM clock gate, failure-path tests and operator hardware records.
-- Candidate code merges: `mtk3-staging-next` through `6bfd56f`;
-  base merge `4927e95`, motion merge `6bfd56f`.
+- Base `mtk3`: `1806ed0`, from `c24abf6`; cold-power tick initialization,
+  rate check, S0-U01 and host ratio tests in `165a574`; correct unsigned
+  `RELTIM` delay interface in `1806ed0`.
+- `mtk3-motion`: `f0b4194`, from `3d7b35e`; base merges `e9fb754` and
+  `f0b4194`; zero-PWM clock gate, failure-path tests and operator hardware
+  records in `7ea8fcf`; navigation refresh `efa3950`.
+- Candidate code merges: `mtk3-staging-next` through `bb6b979`;
+  initial base/motion merges `4927e95`/`6bfd56f`, delay-type correction
+  merges `3b47be3`/`bb6b979`.
   Both base and motion use real `--no-ff` merges; no history was rewritten.
 - `mtk3-staging` remains at `d9cfea6` in the main checkout. The operator
   will review the candidate before Main_Worker advances it. No push.
@@ -37,7 +40,7 @@ Toolchain: Arm GNU 14.3.Rel1, GCC 14.3.1; Pico SDK 2.3.0 at
 | `make SMP=0 WIFI=none -j8` | Pass; 0 warnings |
 | `make SMP=0 WIFI=none TEST=1 -j8` | Pass; 0 warnings |
 | `make -j8` (default SMP=1, USB, radio) | Pass; 0 warnings |
-| Strict ARM compile of new platform/motion units (initial bring-up) | 9 per profile, 27 total; pass |
+| Strict ARM compile of six touched platform/motion/startup units | 6 per profile, 18 total; pass, 0 warnings |
 | Retained SDK hardware link probe, all three profiles | Pass; no unresolved symbols |
 | Committed `scripts/check-sdk-hw-link.py`, all three profiles | Pass |
 | Independent strict host CMake/CTest suite | 23/23 pass |
@@ -67,6 +70,10 @@ bare-metal Pico W build and the documentation checker. Fresh build paths:
 Bare-metal configuration used only a temporary copy of
 `src/wifi_config.h.example`; it was removed after the build.
 Base-only strict host tests passed 12/12; motion-only tests passed 15/15.
+The extra strict ARM check found a signed `TMO` cast where the real
+`tk_dly_tsk()` argument is unsigned `RELTIM`; the code and host double were
+corrected, then all three make profiles, SDK proofs, strict ARM units,
+host tests and simulator tests were rerun successfully.
 
 ## Image sizes and SDK change
 
