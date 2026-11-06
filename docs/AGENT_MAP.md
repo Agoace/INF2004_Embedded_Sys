@@ -114,3 +114,7 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [Vehicle State Machine](VEHICLE_STATE_MACHINE.md)
 
 Current module branch: `mtk3-vehicle`. Merge only into `mtk3-staging`.
+
+Current module branch: `mtk3-search`. Merge only into `mtk3-staging`.
+
+Independent module test: [`host-tests/test_search.c`](../host-tests/test_search.c).
