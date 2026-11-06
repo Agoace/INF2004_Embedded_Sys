@@ -8,17 +8,21 @@ is connected. No hardware was flashed. All on-target tests remain **Not run**.
 
 - Base `mtk3`: `c24abf6`; platform commit `3149f18`, SDK hook `ec45183`,
   external-header policy `07f2669`, repeatable link proof `c24abf6`.
-- `mtk3-motion`: `18438c8`; base merged before implementation (`4535e90`),
-  task/bench `8ef6709`, SDK adapter `959c2b0`, constant-pin setup `f268bdd`.
-- Candidate code merges: `mtk3-staging-next` through `c89c402`.
+- `mtk3-motion`: `3d7b35e`; base merged before implementation (`4535e90`),
+  task/bench `8ef6709`, SDK adapter `959c2b0`, constant-pin setup `f268bdd`,
+  per-tick bench notification `e5c96fe`, safe task exit `3d7b35e`.
+- Candidate code merges: `mtk3-staging-next` through `c5917e2`.
   Both base and motion use real `--no-ff` merges; no history was rewritten.
 - `mtk3-staging` remains at `2117122` in the main checkout. The operator
   will review the candidate before Main_Worker advances it. No push.
 
-All work and builds use `/tmp/mtk3m`, outside School-Repos. Logs, normal
-ELF/UF2 files, separate link-probe ELFs/maps and symbol lists are in
-`/tmp/mtk3-motor-results/`. The main checkout is unchanged. Build output
-and the dummy bare-metal configuration are not committed.
+All work uses `/tmp/mtk3m` and a temporary motion-branch worktree,
+`/tmp/mtk3mo`, outside School-Repos. The motion worktree was removed after
+merging. Initial results are in `/tmp/mtk3-motor-results/`; the per-tick
+fix rerun logs are in `/tmp/mtk3-notify-results/`. Host and firmware build
+directories and link-probe outputs are removed after checks. The main
+checkout is unchanged. Build output and the dummy bare-metal configuration
+are not committed.
 
 ## Build and host checks
 
@@ -30,7 +34,7 @@ Toolchain: Arm GNU 14.3.Rel1, GCC 14.3.1; Pico SDK 2.3.0 at
 | `make SMP=0 WIFI=none -j8` | Pass; 0 warnings |
 | `make SMP=0 WIFI=none TEST=1 -j8` | Pass; 0 warnings |
 | `make -j8` (default SMP=1, USB, radio) | Pass; 0 warnings |
-| Strict ARM compile of new platform/motion units | 9 per profile, 27 total; pass |
+| Strict ARM compile of new platform/motion units (initial bring-up) | 9 per profile, 27 total; pass |
 | Retained SDK hardware link probe, all three profiles | Pass; no unresolved symbols |
 | Committed `scripts/check-sdk-hw-link.py`, all three profiles | Pass |
 | Independent strict host CMake/CTest suite | 22/22 pass |
@@ -45,7 +49,16 @@ Strict flags: `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`.
 SDK headers are external system headers. The host scheduler/hardware
 doubles test mutex ownership, core affinity, encoder signs, last-tick
 count snapshots, stale stop, ESTOP ordering, GPIO dispatch/acknowledgment
-and queued/late wake counters. These are not timing or hardware tests.
+and queued/late wake counters. The notify test also checks one client wake
+per completed tick, after mutex release, and no client wake before
+registration or after disabling it. These are not timing or hardware tests.
+
+The per-tick fix reran all three clean firmware builds and SDK link proofs,
+the strict 22-test host suite, the 6-test simulator suite, the full
+bare-metal Pico W build and the documentation checker. Simulator output
+used `/tmp/mtk3-notify-sim` because `/tmp/simb` had another checkout's cache.
+Bare-metal configuration used only a temporary copy of
+`src/wifi_config.h.example`; it was removed after the build.
 
 ## Image sizes and SDK change
 
@@ -54,11 +67,12 @@ The link-only probe is not in these images.
 
 | Profile | Text | Data | BSS | Text change from register adapter at `1aa506b` |
 | --- | ---: | ---: | ---: | ---: |
-| UP, radio off | 39942 | 28 | 75912 | -30922 |
-| UP TEST, radio off | 37418 | 24 | 18296 | -31586 |
-| Default SMP, radio on | 285786 | 92 | 82352 | +416 |
+| UP, radio off | 39762 | 28 | 75916 | -31102 |
+| UP TEST, radio off | 37438 | 24 | 18300 | -31566 |
+| Default SMP, radio on | 285606 | 92 | 82356 | +236 |
 
-Data and BSS are unchanged from the register adapter. The UP text decrease
+Data is unchanged from the register adapter; BSS adds 4 bytes for the
+notification client task ID. The UP text decrease
 is **not** an adapter-only saving: the app SDK hook enables section garbage
 collection for radio-off profiles, which the template previously enabled
 only with radio on. The default SMP profile already used it. The normal
@@ -105,6 +119,17 @@ work: **lift both wheels before power with TEST=1**, which sends a real
 brief speed command. The normal bench needs GP21 to start after 1 s;
 GP21 again latches ESTOP, GP20 prints the saved run. Never reset before
 dumping. No printing occurs during a run; dumps pause after eight rows.
+
+The bench records one row after each completed 10 ms motion tick, as in B3.
+Motion wakes the registered bench task after releasing its mutex. The bench
+uses `tk_slp_tsk(20)` and drains extra wakes with `tk_can_wup()`; extra wakes
+and tick gaps count lost rows without double counting. `skipped_rows` must
+be 0 in a normal run. Do not sample with `tk_dly_tsk(10)`: this kernel adds
+one 10 ms `TIMER_PERIOD` to a task delay, causing about 20 ms between rows.
+Button polling remains 20 ms and step timing uses `drv_time_ms()`.
+Task functions must not return: a failed bench registration prints one
+error line, then calls `tk_ext_tsk()`. Motion has an endless task loop;
+subsystem test functions run inside the initial task, not as task entries.
 
 There is no measured jitter, physical stop, encoder sign or B4 result yet.
 If task-gap jitter exceeds 1 ms, stop floor testing and review Option H;
