@@ -1,0 +1,99 @@
+#include "subsystem1.h"
+#include <tk/syslib.h>
+#include "telemetry.h"
+#include "../platform/drv_watchdog.h"
+#include "../platform/app_task.h"
+static ID mbf_telemetry,task;
+static telemetry_stats_t stats;
+static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
+static telemetry_event_t events[TELEMETRY_EVENTS];
+static telemetry_info_t info;
+static uint32_t loss_base;
+#if TM_CONSOLE_USB_CDC
+IMPORT volatile UW tm_usb_dropped;
+static UW dropped(void) { return tm_usb_dropped; }
+#else
+static UW dropped(void) { return 0u; }
+#endif
+void telemetry_stats(telemetry_stats_t *out) { UINT irq;DI(irq);*out=stats;EI(irq); }
+static void lose(void) { UINT irq;DI(irq);++stats.lost;EI(irq); }
+static void dump(void) {
+    const UW before=dropped();
+    telemetry_stats_t st;telemetry_stats(&st);
+    tm_printf((UB*)"[robot] KR1 reset %s; %s rows %lu events %lu lost_telemetry %lu lost_wakes %lu overruns %lu response_max_us %lu faults %u gap %lu..%lu us\n",
+        drv_watchdog_reset_name(),info.reason,(unsigned long)st.rows,(unsigned long)st.events,
+        (unsigned long)(st.lost-loss_base),(unsigned long)info.wake_lost,(unsigned long)info.overruns,
+        (unsigned long)info.response_max_us,(unsigned int)info.faults,
+        (unsigned long)info.gap_min_us,(unsigned long)info.gap_max_us);
+    tm_printf((UB*)"[robot] counts L/R %ld/%ld; line L floor/line %u/%u C %u/%u; sampled %lu missed %lu dropped %lu; barcode raw %u; ISR max %lu us line sample max %lu us\n",
+        (long)info.counts[0],(long)info.counts[1],(unsigned int)info.floor[0],(unsigned int)info.line[0],
+        (unsigned int)info.floor[1],(unsigned int)info.line[1],(unsigned long)info.sampled,
+        (unsigned long)info.missed,(unsigned long)info.dropped,(unsigned int)info.raw_bc,
+        (unsigned long)info.isr_max_us,(unsigned long)info.line_max_us);
+    app_task_report();
+    for (uint32_t i=0u;i<st.rows;++i) {
+        tm_printf((UB*)"KR %lu ",(unsigned long)i);
+        for (unsigned int b=0u;b<TELEMETRY_BYTES;++b) tm_printf((UB*)"%02x",(unsigned int)rows[i][b]);
+        tm_printf((UB*)"\n");
+        if ((i+1u)%8u==0u) (void)tk_dly_tsk(20u);
+    }
+    for (uint32_t i=0u;i<st.events;++i) {
+        const telemetry_event_t *e=&events[i];
+        tm_printf((UB*)"VE %lu %u %u %u %u\n",(unsigned long)e->ms,(unsigned int)e->kind,
+            (unsigned int)e->from,(unsigned int)e->to,(unsigned int)e->word);
+        if ((i+1u)%8u==0u) (void)tk_dly_tsk(20u);
+    }
+    (void)tk_dly_tsk(20u);
+    const UW after=dropped();
+    tm_printf((UB*)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
+        (unsigned long)after,(unsigned long)(after-before));
+    UINT irq;DI(irq);stats.busy=false;EI(irq);
+}
+static void telemetry_task(INT code,void *ctx) {
+    (void)code;(void)ctx;
+    for (;;) {
+        telemetry_message_t m;
+        if (tk_rcv_mbf(mbf_telemetry,&m,TMO_FEVR)!=(INT)sizeof(m)) continue;
+        switch (m.kind) {
+        case TELEMETRY_BEGIN:
+            stats.rows=0u;stats.events=0u;stats.storage_full=false;loss_base=m.loss_base;break;
+        case TELEMETRY_ROW:
+            if (stats.rows==TELEMETRY_ROWS) { stats.storage_full=true;lose();break; }
+            for (unsigned int i=0u;i<TELEMETRY_BYTES;++i) rows[stats.rows][i]=m.data.row[i];
+            ++stats.rows;break;
+        case TELEMETRY_EVENT:
+            if (stats.events==TELEMETRY_EVENTS) { stats.storage_full=true;lose();break; }
+            events[stats.events++]=m.data.event;break;
+        case TELEMETRY_INFO: info=m.data.info;info.reason[sizeof(info.reason)-1u]='\0';break;
+        case TELEMETRY_DUMP: info=m.data.info;info.reason[sizeof(info.reason)-1u]='\0';dump();break;
+        default: lose();break;
+        }
+    }
+}
+int telemetry_init(void) {
+    if (mbf_telemetry>0) return E_OK;
+    const T_CMBF c={.mbfatr=TA_TFIFO,.bufsz=4096,.maxmsz=(INT)sizeof(telemetry_message_t)};
+    mbf_telemetry=tk_cre_mbf(&c);return mbf_telemetry<0 ? (int)mbf_telemetry : E_OK;
+}
+int telemetry_start(void) {
+    if (mbf_telemetry<=0 || task>0) return E_OBJ;
+    task=app_start_task((FP)telemetry_task,30,TP_PRC1,"telemetry_task");return task<0 ? (int)task : E_OK;
+}
+int telemetry_send(const telemetry_message_t *message) {
+    if (mbf_telemetry<=0 || task<=0) return E_OBJ;
+    if (!message || message->kind>TELEMETRY_DUMP) return E_PAR;
+    telemetry_message_t m=*message;
+    UINT irq;DI(irq);
+    const bool conflict=stats.busy;
+    m.loss_base=stats.lost;
+    if (!conflict && m.kind==TELEMETRY_DUMP) stats.busy=true;
+    EI(irq);
+    if (conflict) { lose();return E_OBJ; }
+    const ER er=tk_snd_mbf(mbf_telemetry,&m,(INT)sizeof(m),TMO_POL);
+    if (er<E_OK) {
+        lose();
+        if (m.kind==TELEMETRY_DUMP) { DI(irq);stats.busy=false;EI(irq); }
+    }
+    return (int)er;
+}
+_Static_assert(sizeof(telemetry_event_t)==12u,"VE event layout");

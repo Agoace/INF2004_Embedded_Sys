@@ -150,3 +150,8 @@ host_test(test_sonar_service tests/test_sonar_service.c app_program/subsystem5/s
 if(TARGET test_sonar_service)
     target_include_directories(test_sonar_service BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+host_test(test_telemetry tests/test_telemetry.c app_program/subsystem1/telemetry.c)
+if(TARGET test_telemetry)
+    target_include_directories(test_telemetry BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()

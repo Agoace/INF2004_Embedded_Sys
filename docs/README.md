@@ -82,3 +82,5 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.
 
 - [Application task stacks](APPLICATION_TASKS.md) — static stacks, margin and high-water reporting.
+
+- [Kernel telemetry](KERNEL_TELEMETRY.md) — message-buffer transport and RAM log owner.
