@@ -29,7 +29,7 @@
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
- *   prc = TP_PRC1 (core 0), TP_PRC2 (core 1), or 0 for "any core".
+ *   Registered application tasks use prc = TP_PRC1 (core 0).
  */
 EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
 {

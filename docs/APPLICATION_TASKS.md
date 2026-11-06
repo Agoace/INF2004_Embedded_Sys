@@ -9,19 +9,22 @@ application tasks can run, so no allocation lock is needed.
 
 | Task | Stack bytes |
 | --- | ---: |
-| motion_task | 2048 |
+| motion_task | 3072 |
 | line_task | 2048 |
 | sonar_task | 2048 |
 | vehicle_task | 4096 |
 | telemetry_task | 4096 |
 | motion_bench | 4096 |
 
-All six regions reserve 18432 bytes of static RAM even when a profile does
+All six regions reserve 19456 bytes of static RAM even when a profile does
 not start all six tasks. These are initial conservative budgets, not
 measured hardware needs. Sensor tasks do no formatting. Vehicle has extra
 margin for nested module calls; telemetry and bench have extra margin for
-`tm_printf()` (about 1 KB) and the stack-report copy. The earlier motion
-budget of 2048 bytes is retained. Future tasks must register a region.
+`tm_printf()` (about 1 KB) and the stack-report copy. The motion region
+has 3072 total bytes, 896 more than the earlier 2048 + 128 kernel-allocated
+stack. TA_USERBUF sizes include the system/context budget; the kernel does
+not add its default 128 bytes to a supplied region. Future tasks must
+register a region.
 
 `app_task_stacks()` scans upward from the low end of each downward-growing
 stack. It records the largest observed use and never reduces that record.

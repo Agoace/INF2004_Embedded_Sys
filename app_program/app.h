@@ -25,10 +25,10 @@
  *  WiFi (4) tasks sit above every application task.  Motion uses priority 10, the highest application priority; the bench
  *  uses 11. See TEAM.md for ownership.
  * --------------------------------------------------------------------- */
-#define TASK_STACK_SIZE		2048	/* bytes; tm_printf needs ~1 KB */
+#define TASK_STACK_SIZE		2048	/* legacy default; app_task.c registers actual sizes */
 
-/* Create and start a task.  prc = TP_PRC1 (core 0), TP_PRC2 (core 1), or
-   0 for "any core".  Defined in app_main.c. */
+/* Create/start a registered core-0 task (prc = TP_PRC1).
+   app_main.c delegates to the static-stack helper in platform/app_task.c. */
 IMPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name);
 
 /* ---------------------------------------------------------------------
