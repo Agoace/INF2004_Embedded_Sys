@@ -72,19 +72,20 @@ yx + template/main -> mtk3
 
 | Area | Files and owner |
 | --- | --- |
-| Subsystem 1 | Wi-Fi and telemetry; template example LED task remains active on GP19 |
-| Subsystem 2 | Motion: `motor_ctl.[ch]`; template producer remains active |
-| Subsystem 3 | Line and barcode: `line_position.[ch]`, `line_steer.[ch]`, `line_trace.[ch]`, `line_search.[ch]`; template consumer remains active |
-| Subsystem 4 | IMU: no robot module yet; template monitor remains active |
+| Subsystem 1 | Wi-Fi and telemetry; empty stub; LED demo removed, GP19 free |
+| Subsystem 2 | Motion: `motor_ctl.[ch]`; producer demo removed |
+| Subsystem 3 | Line and barcode: `line_position.[ch]`, `line_steer.[ch]`, `line_trace.[ch]`, `line_search.[ch]`; consumer demo removed |
+| Subsystem 4 | IMU: no robot module yet; monitor demo removed |
 | Subsystem 5 | Ultrasonic and obstacle: pure `ultrasonic.h`, `obstacle.[ch]`, `obstacle_profile.[ch]`, pure `obstacle_scan.h`, `servo_scan.[ch]`, `detour_run.[ch]`, `obstacle_detour.[ch]` |
 | `app_program/vehicle/` | Shared types in `vehicle_controller.h`; interface `vehicle_sm.[ch]` and `vehicle_inputs.h` |
 | `src/` | Bare-metal reference programs and SDK hardware layers |
 | `tests/` | Host tests and independent CMake build; no kernel or SDK |
 | `host-tests/` | One independent host test per new module, present on its branch |
 
-**Logic in `app_program/`; SDK code outside.** Every C file below
+**Pure modules stay separate from hardware and kernel code.** Every C file below
 `app_program/` is compiled by the template. Pure modules do not include
-kernel headers or SDK headers. References may include pure application
+kernel headers or SDK headers. Platform and hardware adapters use SDK-only
+`*_hw.c` files; their kernel-side files never include SDK headers. References may include pure application
 headers; application code must never include files from `src/`. Standard
 C headers remain allowed. Module branches merge only into `mtk3-staging`.
 Other people's code is copied by hand. Never merge `yx-line-abstraction`.
@@ -101,7 +102,8 @@ code; no barcode runtime port is done by this layout change.
 SCAN and DETOUR share the same `servo_scan.h` SIDE payload interface.
 Cross-module tests belong only to staging. Motor Pico/bench code and robot
 settings stay in `src/`; the template has no motor hardware port yet.
-Robot functions are compiled, not connected to the example task workflow.
+The template demo is removed. The motion branch connects the motor
+controller to a kernel task; other modules are not task-wired yet.
 No robot hardware or timing behaviour is validated by a successful build.
 
 ### Host tests
@@ -115,3 +117,11 @@ ctest --test-dir /tmp/mtk3-host --output-on-failure
 CMake selects the tests whose sources exist on the current branch. It uses
 C11, `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`. Module branches
 keep their independent tests; staging also runs the cross-module tests.
+
+## Kernel platform bring-up
+
+`mtk3` adds `app_program/platform/`: one core-0 GPIO IRQ dispatcher and
+hardware timer access. IRQ 13 uses priority 1; USB IRQ 5 retains reset
+priority 0. Kernel code and SDK register code stay in separate translation
+units. The robot platform uses SDK register headers, including when the
+radio is off. Build it with `PICO_SDK_PATH` set and the USB console enabled.
