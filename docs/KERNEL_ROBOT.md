@@ -204,4 +204,4 @@ No later simulator or bare-metal source change was made.
 Logs stay in `/tmp/kernel-robot-results/`; generated binaries, build
 directories and module worktrees are removed. Only `/tmp/mtk3t` remains.
 S3-U01, S5-U01, R5, runtime stack use, ISR timing and physical safety are
-not tested on hardware. The phase difference and hardware watchdog validation above remain open.
+not tested on hardware. The phase difference above remains open. The hardware watchdog passed S2-U05 and M1 on 2026-11-06.

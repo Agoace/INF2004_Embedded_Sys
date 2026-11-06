@@ -13,7 +13,7 @@ from a cold VIN power-on.
 | S2-U02 | TEST image: read the warning first; wheels lifted. After a 2 s delay, send 40/40 mm/s once, then no refresh for `stale_ms + 30` ms | `MC_FAULT_STALE` set; both duty values 0; wheels stop | PASS |
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
 | S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
-| S2-U05 | TEST=1 LAST, after S1..S5: wheels lifted; warning, stop feeds after one final tick, expect reboot; leave power connected and capture next boot's later previous-boot line | Own watchdog TIMER reset; previous elapsed sample 90..110 ms (last observation, not exact reset instant); motor pins reset and wheels remain stopped; no endless reset loop | Not run |
+| S2-U05 | TEST=1 LAST, after S1..S5: wheels lifted; warning, stop feeds after one final tick, expect reboot; leave power connected and capture next boot's later previous-boot line | Own watchdog TIMER reset; previous elapsed sample 90..110 ms (last observation, not exact reset instant); motor pins reset and wheels remain stopped; no endless reset loop | PASS 2026-11-06: second boot reported `watchdog reset after 99 ms`, no repeat reset; wheels stopped (log `build/mtk_logs/s2u05_20261106-201116.txt`) |
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
 
@@ -190,3 +190,15 @@ in the Wi-Fi text transfer. Do not require B4 to repeat that loss.
    any motion fault. Preserve the distinction between post-flash/lifted
    results and cold-power/floor results. Before floor B4, require S0-U01
    to pass after cold power-on on the fixed image.
+
+## S2-U05 result: 2026-11-06
+
+Image `mtk3-staging-next` dd75b28, `make SMP=0 WIFI=none TEST=1`, wheels
+lifted, VIN on and then USB. First boot: S2-U01 PASS (gap 9627..10376 us),
+S2-U02 PASS, S3-U01 PASS (1009 samples in 1009603 us, 0 missed), S5-U01 no
+object (manual check, not done), then the S2-U05 warning and the reset. The
+S0-U01 line of the first boot was lost before USB connected. Second boot
+(after the watchdog reset): S0-U01 PASS (TIMER 1009990 us, kernel 1010 ms),
+S2-U01 PASS (gap 9361..10643 us), S2-U02 PASS, then
+`S2-U05 previous boot: watchdog reset after 99 ms` and PASS, with no second
+reset. Result: **PASS**.

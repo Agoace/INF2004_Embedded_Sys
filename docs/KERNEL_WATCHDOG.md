@@ -52,7 +52,7 @@ scratch4 value from the newly started watchdog.
 
 ## S2-U05 two-boot TEST procedure
 
-This is a destructive reset test, **Not run**. It runs last, after S1..S5,
+This is a destructive reset test. Result 2026-11-06: **PASS**, reset after 99 ms (see the [S2 test log](../testing/subsystem2/TEST_LOG.md)). It runs last, after S1..S5,
 not inside the early S2 test sequence. Both wheels must be lifted.
 
 1. Cold-power a TEST image. Save earlier test output. S2-U05 stops the motors,
@@ -111,8 +111,8 @@ Logs are outside the repository at `/tmp/watchdog-results/`.
 - Whitespace, conflict-marker and new-secret checks: pass. No local secret
   configuration is added. Source under `src/` and `sim/` is unchanged, so
   simulator and bare-metal builds were not repeated.
-- S2-U05 and physical stop/reset timing: **Not run**. Prior M1/M2 results
-  predate this watchdog image and do not validate its hardware behaviour.
+- S2-U05 on hardware: **PASS** (reset after 99 ms, no repeat reset). M1
+  on the robot image with the watchdog: **PASS**, header `reset power/RUN`.
 
 The largest static data+BSS is 105272 bytes, leaving 156872 linker RAM
 bytes before dynamic allocations/stacks. This is not a runtime stack or
