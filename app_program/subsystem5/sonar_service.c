@@ -3,7 +3,7 @@
 #include "drv_ultrasonic.h"
 #include "../platform/drv_time.h"
 static ID mutex,requests,results,cyclic,task;
-static bool ready,physical,await_ack,have_generation,once_reserved,admission_ready;
+static bool ready,physical,await_ack,have_generation,once_reserved,admission_ready,cyclic_running;
 static uint32_t admitted_generation;
 static sonar_request_t current,inflight;
 static sonar_snapshot_t snapshot;
@@ -12,9 +12,11 @@ static void publish(uint8_t status,ultrasonic_result_t echo,uint32_t now) {
     if (tk_loc_mtx(mutex,TMO_FEVR)<E_OK) return;
     snapshot.generation=current.generation;snapshot.id=current.id;snapshot.angle=current.angle;
     snapshot.echo=echo;snapshot.status=status;snapshot.pending=false;
-    snapshot.valid=status==SONAR_ECHO && ultrasonic_result_status(echo)==ULTRASONIC_STATUS_VALID;
-    snapshot.timestamp_ms=now;
-    snapshot.deadline_ms=current.mode==SONAR_WATCH ? now+(uint32_t)current.interval_ms*2u+20u : current.deadline_ms;
+    /* A delayed service must not relabel an old echo as a fresh observation. */
+    snapshot.timestamp_ms=status==SONAR_ECHO ? snapshot.trigger_ms : now;
+    snapshot.deadline_ms=current.mode==SONAR_WATCH ? snapshot.timestamp_ms+(uint32_t)current.interval_ms*2u+20u : current.deadline_ms;
+    snapshot.valid=status==SONAR_ECHO && ultrasonic_result_status(echo)==ULTRASONIC_STATUS_VALID &&
+        (int32_t)(snapshot.deadline_ms-now)>=0;
     ++snapshot.result_sequence;
     if (current.generation==admitted_generation && current.mode==SONAR_ONCE) once_reserved=false;
     (void)tk_unl_mtx(mutex);(void)tk_set_flg(results,1u);
@@ -34,6 +36,7 @@ static void accept(const sonar_request_t *r,uint32_t now) {
     if (tk_loc_mtx(mutex,TMO_FEVR)>=E_OK) {
         snapshot.generation=r->generation;snapshot.id=r->id;snapshot.angle=r->angle;
         snapshot.valid=false;snapshot.pending=false;snapshot.status=SONAR_EMPTY;
+        (void)tk_clr_flg(results,~1u);
         (void)tk_unl_mtx(mutex);
     }
     if (r->mode==SONAR_STOP) publish(SONAR_CANCELLED,ULTRASONIC_RESULT_NONE,now);
@@ -95,10 +98,11 @@ int sonar_service_start(void) {
     if (!ready || task>0) return E_OBJ;
     task=app_start_task((FP)sonar_task,12,TP_PRC1,"sonar_task");if (task<0) return (int)task;
     drv_ultrasonic_listen((int)task);
-    return (int)tk_sta_cyc(cyclic);
+    const ER er=tk_sta_cyc(cyclic);cyclic_running=er>=E_OK;return (int)er;
 }
+bool sonar_service_running(void) { return ready && task>0 && cyclic_running; }
 int sonar_request(const sonar_request_t *r) {
-    if (!ready || task<=0) return E_OBJ;
+    if (!sonar_service_running()) return E_OBJ;
     if (!r || r->mode>SONAR_ACK || r->angle < -30 || r->angle > 30 ||
         (r->mode==SONAR_WATCH && r->interval_ms<60u)) return E_PAR;
     const ER lock=tk_loc_mtx(mutex,TMO_POL);if (lock<0) return (int)lock;

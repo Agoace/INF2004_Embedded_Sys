@@ -6,13 +6,13 @@
 static FP entry;static jmp_buf end;static unsigned int sleeps;
 static sonar_request_t queue[8];static unsigned int head,tail;
 static uint32_t now,last_trigger;static unsigned int triggers;
-static bool busy,done,full,immediate;static int held;static UINT flags;
+static bool busy,done,full,immediate,cyclic_failure;static int held;static UINT flags;
 static ultrasonic_result_t result=100u;
 ID tk_cre_mtx(const T_CMTX *c) { assert(c->mtxatr==TA_INHERIT);return 1; }
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(sonar_request_t));return 2; }
 ID tk_cre_flg(const T_CFLG *c) { (void)c;return 3; }
 ID tk_cre_cyc(const T_CCYC *c) { assert(c->cyctim==10u && c->assprc==1u);return 4; }
-ER tk_sta_cyc(ID id) { assert(id==4);return E_OK; }
+ER tk_sta_cyc(ID id) { assert(id==4);return cyclic_failure ? E_SYS : E_OK; }
 ER tk_loc_mtx(ID id,TMO t) { (void)t;assert(id==1 && !held);held=1;return E_OK; }
 ER tk_unl_mtx(ID id) { assert(id==1 && held);held=0;return E_OK; }
 ER tk_snd_mbf(ID id,const void *msg,INT size,TMO t) {
@@ -26,6 +26,7 @@ INT tk_rcv_mbf(ID id,void *msg,TMO t) {
     memcpy(msg,&queue[tail++%8u],sizeof(sonar_request_t));return (INT)sizeof(sonar_request_t);
 }
 ER tk_set_flg(ID id,UINT bits) { assert(id==3);flags|=bits;return E_OK; }
+ER tk_clr_flg(ID id,UINT mask) { assert(id==3);flags&=mask;return E_OK; }
 ER tk_wai_flg(ID id,UINT bits,UINT mode,UINT *out,TMO t) {
     assert(id==3 && mode==(TWF_ORW|TWF_BITCLR) && t==TMO_POL);
     if (!(flags&bits)) return E_TMOUT;
@@ -46,8 +47,15 @@ bool drv_ultrasonic_trigger(void) {
 bool drv_ultrasonic_busy(void) { return busy; }
 ultrasonic_result_t drv_ultrasonic_latest(void) { return result; }
 static void pump(uint32_t at) { now=at;sleeps=0u;if (setjmp(end)==0) ((void (*)(INT,void *))entry)(0,0);assert(!held); }
-int main(void) {
-    assert(sonar_service_init()==E_OK && sonar_service_start()==E_OK);
+int main(int argc,char **argv) {
+    (void)argv;cyclic_failure=argc>1;
+    assert(!sonar_service_running() && sonar_service_init()==E_OK);
+    if (cyclic_failure) {
+        assert(sonar_service_start()==E_SYS && !sonar_service_running());
+        const sonar_request_t rejected={.mode=SONAR_STOP};assert(sonar_request(&rejected)==E_OBJ);
+        return 0;
+    }
+    assert(sonar_service_start()==E_OK && sonar_service_running());
     sonar_request_t r={.generation=1u,.id=1u,.mode=SONAR_ONCE,.deadline_ms=100u,.interval_ms=60u};
     assert(sonar_request(&r)==E_OK);pump(0u);assert(triggers==1u);
     r.id=2u;assert(sonar_request(&r)==E_OBJ); /* Explicit conflict, no silent overwrite. */
@@ -84,5 +92,15 @@ int main(void) {
     assert(sonar_request(&r)==E_OK);pump(400u);
     assert(sonar_result_read(&s,&fresh)==E_OK && fresh && !s.valid && !s.pending &&
         s.ping_generation==6u && s.ping_id==7u && s.ping_sequence==6u);
+    immediate=false;result=100u;r.generation=7u;r.id=8u;r.mode=SONAR_WATCH;
+    assert(sonar_request(&r)==E_OK);pump(400u);pump(460u);assert(triggers==7u);
+    done=true;pump(800u); /* Delayed completion must keep its old observation time. */
+    assert(sonar_result_read(&s,&fresh)==E_OK && fresh && !s.valid &&
+        s.timestamp_ms==460u && s.deadline_ms==600u);
+    r.generation=8u;r.id=9u;r.mode=SONAR_STOP;
+    assert(sonar_request(&r)==E_OK);pump(801u); /* Leave cancellation notification unread. */
+    r.generation=9u;r.id=10u;r.mode=SONAR_WATCH;
+    assert(sonar_request(&r)==E_OK);pump(802u);
+    assert(sonar_result_read(&s,&fresh)==E_OK && !fresh && s.status==SONAR_EMPTY && s.generation==9u && s.ping_generation==7u);
     return 0;
 }

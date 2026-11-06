@@ -149,6 +149,7 @@ endif()
 host_test(test_sonar_service tests/test_sonar_service.c app_program/subsystem5/sonar_service.c)
 if(TARGET test_sonar_service)
     target_include_directories(test_sonar_service BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    add_test(NAME test_sonar_cyclic_failure COMMAND test_sonar_service cyclic)
 endif()
 
 host_test(test_telemetry tests/test_telemetry.c app_program/subsystem1/telemetry.c)

@@ -11,6 +11,7 @@ typedef struct {
     uint8_t mode;
 } sonar_request_t;
 typedef enum { SONAR_EMPTY,SONAR_ECHO,SONAR_DEADLINE,SONAR_CANCELLED } sonar_status_t;
+/* ECHO timestamp is actual trigger time, not the later service publication. */
 typedef struct {
     uint32_t generation,id,ping_sequence,result_sequence,trigger_ms,timestamp_ms,deadline_ms;
     uint32_t ping_generation,ping_id;
@@ -22,6 +23,7 @@ typedef struct {
 } sonar_snapshot_t;
 int sonar_service_init(void);
 int sonar_service_start(void);
+bool sonar_service_running(void);
 /* Copies by value through MBF, TMO_POL; callers must retry or stop on failure. */
 int sonar_request(const sonar_request_t *request);
 int sonar_result_read(sonar_snapshot_t *out,bool *new_result);
