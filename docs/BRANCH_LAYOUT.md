@@ -125,3 +125,18 @@ hardware timer access. IRQ 13 uses priority 1; USB IRQ 5 retains reset
 priority 0. Kernel code and SDK register code stay in separate translation
 units. The robot platform uses SDK register headers, including when the
 radio is off. Build it with `PICO_SDK_PATH` set and the USB console enabled.
+
+## Kernel motion step 1
+
+`mtk3-motion` merges `mtk3` before adding the motor task; no branch is
+rebased. `mtk3-staging` merges both with real merge commits. The platform
+base removes the LED/producer/consumer/monitor demo; all empty subsystems
+keep only init/start/test stubs. Motion owns S2 and connects its init/start
+functions to `motion_init()` and `motion_start()`. The floor bench starts
+only in normal builds; TEST builds run the lifted-wheel checks instead.
+
+Robot settings move from `src/` to S2. Pure modules still have no kernel
+or SDK includes. New kernel-side adapters include no SDK headers; new
+`*_hw.c` adapters include no kernel headers. GPIO IRQ 13 has one core-0
+owner and priority 1. See [Motor controller](MOTOR_CONTROLLER.md#μt-kernel-layer)
+and TEAM.md. No on-target test is marked as passed by a build.

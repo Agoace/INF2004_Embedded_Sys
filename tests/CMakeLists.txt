@@ -62,3 +62,13 @@ host_test(module_line host-tests/test_line.c ${line_trace_source} ${line_steer_s
 host_test(module_search host-tests/test_search.c ${line_search_source} ${line_position_source})
 host_test(module_scan host-tests/test_scan.c ${servo_scan_source} ${obstacle_profile_source})
 host_test(module_detour host-tests/test_detour.c ${detour_run_source} ${obstacle_detour_source} ${line_position_source})
+
+# Kernel-side glue tests use explicit host doubles, never real kernel headers.
+host_test(test_motion_task tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c)
+host_test(test_gpio_irq tests/test_gpio_irq.c app_program/platform/drv_gpio_irq.c)
+foreach(test IN ITEMS test_motion_task test_gpio_irq)
+    if(TARGET ${test})
+        target_include_directories(${test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    endif()
+endforeach()

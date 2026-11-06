@@ -8,7 +8,7 @@ Branch: `mtk3-motion`.
 
 | Step | What | State |
 | --- | --- | --- |
-| 1 | Pure core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), [`app_program/subsystem2/motor_ctl.h`](../app_program/subsystem2/motor_ctl.h); robot settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
+| 1 | Pure core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), [`app_program/subsystem2/motor_ctl.h`](../app_program/subsystem2/motor_ctl.h); robot settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) | Done 2026-11-04 |
 | 2 | Pico layer `src/motor_ctl_pico.c`, `src/motor_ctl_pico.h`: PWM, encoder interrupt, servo; hooks `mc_tick()` into the `heartbeat` every 10 ms (the heartbeat owns the timer and the watchdog: `ADR: heartbeat`). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
 | 3 | Floor bench target `motor_ctl_bench` (`src/motor_ctl_bench.c`): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`). Run B3: rise limit 8 (after line run P5) |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
@@ -33,7 +33,7 @@ Adapted from Motion (Buddy 2), `origin/motor-line-manager`,
 `src/motion/motion_control.c`, `wheel_control()`. Intent parts not copied:
 steer mixing, calm mode, FOLLOW state, move completion, command queue.
 
-| Part | Rule | Setting ([`motor_ctl_robot.h`](../src/motor_ctl_robot.h)) |
+| Part | Rule | Setting ([`motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h)) |
 | --- | --- | --- |
 | Feed-forward | offset + slope × set point, **per wheel and per direction** | Offset / slope (‰, ‰ per count/tick): L fwd 48 / 9.66, L rev 59 / 8.89, R fwd 56 / 9.39, R rev 62 / 8.67. Fit to floor bench run B1 (2026-11-04). Step 1 used a rough fit to the track logs (offset 85–90, slope 9.0–12.0) |
 | P | kp × (set point − measured) | 6.0 ‰ per count/tick (Motion 3.0 at 20 ms, scaled) |
@@ -258,3 +258,104 @@ test now ends the kick after one tick.
 
 Pico compile check: `arm-none-eabi-gcc` with `-Wall -Wextra -Wconversion
 -Wshadow -Wformat=2 -Werror`: clean; 1.9 KB of code.
+
+## μT-Kernel layer
+
+Step 1 of the kernel bring-up uses `mtk3-motion`, merged only into
+`mtk3-staging`. Code: [`motion.c`](../app_program/subsystem2/motion.c),
+[`motion.h`](../app_program/subsystem2/motion.h), hardware adapter
+[`drv_motor_hw.c`](../app_program/subsystem2/drv_motor_hw.c), floor bench
+[`motion_bench.c`](../app_program/subsystem2/motion_bench.c). Robot settings
+are in [`motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h).
+The pure `motor_ctl.[ch]` and its tuning values are unchanged.
+
+### Decision: T first, H only if needed
+
+- **T (accepted):** the 10 ms `cyc_motion` handler only calls
+  `tk_wup_tsk()`. `motion_task`, priority 10 and pinned to processor 1
+  (`TP_PRC1`, physical core 0), copies encoder counts with DI/EI, calls
+  `mc_tick()` and writes motor/servo PWM. It calls `tk_can_wup()` before
+  the work; queued requests are discarded and counted, not replayed as
+  a burst of short controller intervals.
+- **Why T:** controller work stays in task context. The same inherited
+  mutex protects task work and API calls; there is no interrupt handler
+  that must take a task mutex or duplicate controller state.
+- **H (fallback, not implemented):** move the bounded controller update
+  to a hardware timer interrupt only if measured task-gap jitter exceeds
+  1 ms (outside 9000–11000 us), or U01/B4 loses wakes. Review the ISR/API
+  sharing design first; an ISR must not acquire `mtx_motion`. Do not
+  claim a hard timing guarantee before hardware measurement.
+
+The kernel tick remains 10 ms. The `motion_task` priority is above every
+other application task, but below kernel USB (3), radio (4) and the initial
+test task (1). No print call or sleep is inside the controller mutex.
+`tick_max_us` includes mutex wait and work through the PWM writes.
+`gap_min_us` and `gap_max_us` measure successive task-start times;
+`late_wakes` counts gaps above 11000 us. `missed_wakes` counts queued
+requests discarded by `tk_can_wup()`. These are lifetime counters.
+
+### API and ownership
+
+All `motion_*` control/status calls are for task context. They return
+`E_OK` or a negative kernel error. `motion_set_servo(deg, &accepted)` also
+returns the accepted angle through the optional pointer. Calls use
+`mtx_motion` with `TA_INHERIT`, including calls from the other core.
+
+| Call | Rule |
+| --- | --- |
+| `motion_set_speed(l, r)` | Refresh within `stale_ms` (100 ms) |
+| `motion_stop()` | Clear requested motion and write PWM 0 inside the mutex |
+| `motion_estop()` | Latch ESTOP and write PWM 0 inside the mutex; a previous computation cannot overwrite it |
+| `motion_clear_faults()` | Clear latched faults, keep wheels stopped and write PWM 0 |
+| `motion_set_servo(deg, &accepted)` | Clamp through the unchanged core; the next task tick writes the pulse |
+| `motion_status(&s)` | One mutex-protected copy of counts, travel, speed, duty, heading, servo state, faults and timing |
+
+Status counts are the coherent **last-tick** sample. Only the core-0
+motion task copies the raw encoder counters under DI/EI; disabling local
+interrupts on core 1 would not protect a live core-0 encoder read.
+Stop/ESTOP writes do not wait for the next 10 ms task tick. PWM compare
+registers take effect at the next 20 kHz wrap (at most 50 us), as in the
+bare-metal controller. Stop is coast, not active braking.
+
+### Hardware and interrupt boundary
+
+Kernel-side `motion.c` and `drv_gpio_irq.c` include no SDK headers.
+SDK/register-only `*_hw.c` files include no kernel headers, avoiding the
+kernel/SDK `size_t` conflict. `drv_time_us()` reads TIMERAWL;
+`drv_time_ms()` reads a stable high/low hardware timer pair before division,
+so milliseconds do not jump back after the 32-bit microsecond wrap.
+
+The kernel `cpu_clock.c` configures PLL SYS to 125 MHz (1500 / 6 / 2).
+Motor slices 4/5 use div 1, wrap 6249: 20 kHz. Servo GP15, slice 7 channel
+B, uses div 125 and wrap 19999: 50 Hz and 1 us per count. With
+`USE_PTMR=0` the kernel does not release PWM reset; the hardware owner
+atomically releases it and waits for `reset_done` before setup.
+
+Pins, signs and the quadrature table match `src/motor_ctl_pico.c`: left
+GP8 forward/GP9 reverse and GP16/17 encoder sign +1; right GP10/11 and
+GP4/5 sign -1. Encoder inputs have no pulls and use both edges.
+The shared core-0 dispatcher owns IRQ 13 (`IO_IRQ_BANK0`), installed with
+`tk_def_int(TA_HLNG)`. It dispatches registered pin masks and acknowledges
+edge bits in IO_BANK0 INTR before callbacks. GPIO uses unshifted priority
+1. The template USB IRQ5 bridge does not write NVIC priority, so it keeps
+reset level 0; GPIO is below USB and above SysTick/PendSV level 3.
+
+### Bench and tests
+
+The bench task has priority 11 on core 0. GP21 arms a run after 1 s;
+press again to ESTOP. GP20 prints the saved log. Buttons use pull-ups,
+active low, polled every 20 ms. The B3 step list is unchanged and the RAM
+log has 2400 rows. No output occurs during a run. The log is not dumped
+automatically: run on VIN with USB unplugged, then connect USB and press
+GP20 without resetting. The dump pauses 20 ms after each eight rows and
+ends with `tm_usb_dropped` total and dump delta. A new GP21 start clears
+old faults; a completed/stopped run keeps its rows and fault state.
+
+TEST builds do not start the button bench task. They run U01 (5 s of
+ticks) and U02 (a brief lifted-wheel stale-command test). All robot tests,
+including U03/U04 and B4, are **not run**. See the procedures, criteria
+and copied B3 reference means in
+[`testing/subsystem2/TEST_LOG.md`](../testing/subsystem2/TEST_LOG.md).
+Host doubles check the dispatcher, core affinity, mutex ownership, wake
+accounting, encoder signs, stale stop and immediate ESTOP ordering; they
+do not measure hardware timing or physical safety.

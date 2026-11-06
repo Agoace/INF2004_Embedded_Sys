@@ -24,7 +24,7 @@
 #ifndef MOTOR_CTL_ROBOT_H
 #define MOTOR_CTL_ROBOT_H
 
-#include "../app_program/subsystem2/motor_ctl.h"
+#include "motor_ctl.h"
 
 #define MC_ROBOT_CONFIG                                                                  \
     {                                                                                    \

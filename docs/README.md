@@ -46,3 +46,6 @@ Kernel platform entry points and the removed template demo are recorded in
 [Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).
 
 - [Motor controller](MOTOR_CONTROLLER.md) — pure core and kernel layer.
+
+Kernel motion bring-up: [Motor controller — μT-Kernel layer](MOTOR_CONTROLLER.md#μt-kernel-layer).
+On-target procedures: [Subsystem 2 test log](../testing/subsystem2/TEST_LOG.md); all not run.

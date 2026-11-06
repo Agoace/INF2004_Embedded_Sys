@@ -22,8 +22,8 @@
 
 /* ---------------------------------------------------------------------
  *  Task priorities: 1 is the highest; the kernel's USB console (3) and
- *  WiFi (4) tasks sit above every application task.  Each subsystem
- *  has its own band (TEAM.md section 4), defined in its own header.
+ *  WiFi (4) tasks sit above every application task.  Motion uses priority 10, the highest application priority; the bench
+ *  uses 11. See TEAM.md for ownership.
  * --------------------------------------------------------------------- */
 #define TASK_STACK_SIZE		2048	/* bytes; tm_printf needs ~1 KB */
 
