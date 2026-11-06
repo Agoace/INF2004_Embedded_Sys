@@ -63,3 +63,7 @@ python3 scripts/check-docs.py
 ```
 
 The pre-commit hook runs this check only when relevant files are staged. Use `git commit --no-verify` only when you intentionally need to bypass the hook.
+
+## Branch layout
+
+See [Branch layout](docs/BRANCH_LAYOUT.md) for module ownership and merge rules.

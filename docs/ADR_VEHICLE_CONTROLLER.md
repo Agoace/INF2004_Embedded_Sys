@@ -5,7 +5,7 @@
 | Status | Accepted, 2026-11-04 (operator) |
 | Scope | Vehicle Controller, task modules, shared detectors |
 | Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [ADR: heartbeat](ADR_HEARTBEAT.md), [Vehicle Controller step 1](VEHICLE_CONTROLLER.md) |
-| Branch for the work | `yx-vehicle-controller` (create when the work starts; `vehicle-controller` on origin holds step 1) |
+| Branch for the work | `yx-vehicle-controller` owns the interface; `yx-mod-*` own modules; merge only into `yx-staging` |
 
 ## Context
 

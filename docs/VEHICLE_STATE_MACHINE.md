@@ -2,7 +2,7 @@
 
 The shell from [ADR: Vehicle Controller](ADR_VEHICLE_CONTROLLER.md). It
 runs one module at a time and maps module outcomes to the next module.
-Branch: `yx-vehicle-controller`.
+Branch: `yx-vehicle-controller` (interface). Modules use `yx-mod-*`; merge only into `yx-staging`.
 
 - Code (pure, host-tested): [`src/vehicle_sm.c`](../src/vehicle_sm.c), [`src/vehicle_sm.h`](../src/vehicle_sm.h)
 - Host unit test: [`tests/test_vehicle_sm.c`](../tests/test_vehicle_sm.c)
@@ -18,10 +18,10 @@ name so that the line detector does not change.
 | Step | Scope | Status |
 | --- | --- | --- |
 | a | Shell: route table, start and step of the running module, handoff in the same tick, safety stop, operator start/stop/reset | Done 2026-11-04: host-tested |
-| b | Line tracing module (wheel speeds in mm/s) | Not started; branch `yx-line-steer`; needs a new track run (line tracing is locked) |
-| c | Detour and scan modules | Not started; branch `yx-detour` |
-| d | Line search module | Not started |
-| e | Glue on the Pico: detectors on the heartbeat, `vsm_step()` on the 10 ms flag, drive command to `mcp_*` | Not started |
+| b | Line tracing module (wheel speeds in mm/s) | Done 2026-11-04: host-tested (`Vehicle Controller line run`); needs a track run (line tracing is locked) |
+| c | Detour and scan modules | Done 2026-11-04: host-tested (`Vehicle Controller detour run`); needs a track run |
+| d | Line search module | Done 2026-11-04: host-tested, same record |
+| e | Glue on the Pico: detectors on the heartbeat, `vsm_step()` on the 10 ms flag, drive command to `mcp_*` | First version 2026-11-04: `vc_line_test` (LINE and SEARCH only; line sample on a 1 ms main-loop flag) |
 
 ## States
 
