@@ -107,8 +107,13 @@ The parent-workspace link resolves only when this repository is checked out as a
 
 ## Course template layout
 
-See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; SDK hardware code stays in `src/`. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
-- [Motor Controller](MOTOR_CONTROLLER.md)
+## Kernel platform
 
-Current module branch: `mtk3-motion`. Merge only into `mtk3-staging`.
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
+- [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — microsecond and millisecond hardware clock.
+- Corresponding `*_hw.c` files include SDK headers only; kernel-side files include no SDK headers.
+- The template demo tasks and their hardware tests are removed. GP19 is free.
+
+- [Motor controller](MOTOR_CONTROLLER.md) — subsystem 2.

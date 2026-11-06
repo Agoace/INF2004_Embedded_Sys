@@ -1,195 +1,67 @@
 # Team and subsystems
 
-Subsystem rows name the planned robot owners. The original example tasks
-still run: GP19 remains the example LED, with its existing interfaces and
-object budget below. Robot logic is compiled but is not task-wired yet.
-Replace example claims only when the example code is removed.
+## 1. Owners
 
-Fill this in at the start of the project and keep it up to date. It is the
-single place that says **who owns what**, so that five people can work in
-one firmware image without clashing over pins, priorities, or kernel objects.
+| Subsystem | Responsibility | Code |
+| --- | --- | --- |
+| 1 | Wi-Fi and telemetry | `app_program/subsystem1/` |
+| 2 | Motion: motors, servo, encoders and floor bench | `app_program/subsystem2/` |
+| 3 | Line and barcode | `app_program/subsystem3/` |
+| 4 | IMU | `app_program/subsystem4/` |
+| 5 | Ultrasonic and obstacle | `app_program/subsystem5/` |
 
-A **subsystem** is one student's part of the product, with its own folder.
-It may contain several tasks and own several peripherals (see section 3).
-
-Rule: **only the owner edits a subsystem's folders.** To change another
-subsystem, ask its owner or open a pull request for them to review.
-
-## 1. Members and subsystems
-
-| # | Subsystem (what it does) | Student ID | GitHub username | Code | Tests |
-|---|---|---|---|---|---|
-| 1 | Wi-Fi / telemetry | | | `app_program/subsystem1/` | `testing/subsystem1/` |
-| 2 | Motion | | | `app_program/subsystem2/` | `testing/subsystem2/` |
-| 3 | Line + barcode | | | `app_program/subsystem3/` | `testing/subsystem3/` |
-| 4 | IMU | | | `app_program/subsystem4/` | `testing/subsystem4/` |
-| 5 | Ultrasonic + obstacle | | | `app_program/subsystem5/` | `testing/subsystem5/` |
-
-Shared files (`app_program/app_main.c`, `app_program/app.h`, this file)
-are changed only by agreement of the team. The exception is claiming an empty
-row in this file (a pin, a peripheral, an interface ID), which anyone may do
-(section 2).
+The template demo tasks, tests and interfaces are removed. GP19 is free.
+Empty subsystems create no objects. Keep the init/start order in `app_main.c`.
+Only the owner changes a subsystem. Shared platform and configuration changes
+need team agreement.
 
 ## 2. Pins
 
-One owner per pin. Claim a pin here **before** you wire or code it.
-
-**Why:** two subsystems using the same pin is one of the most common and
-hardest-to-find mistakes in a team project. The code builds without any
-error, but the hardware misbehaves. Each subsystem can pass its own tests
-and then fail once they are combined, and two outputs driving the same pin
-against each other can damage it. Writing the claim down first means a clash
-is spotted when someone edits this table, not hours later on the bench.
-
-**No instructor check needed.** The team keeps this table itself. You do not
-need the instructor, or the rest of the team, to check or approve a claim:
-if the row is empty, fill it in and commit. If two people claim the same
-pin, they agree between themselves who moves. Only the *reserved* rows are
-fixed.
-
-| Pin | Owner | Used for |
-|---|---|---|
-| GP23, GP24, GP25, GP29 | *reserved* | Pico W radio |
-| GP0 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP1 | | (taken whenever the team builds with `CRASH_REPORT=1`) |
-| GP2 | S5 | Ultrasonic Echo |
-| GP3 | S5 | Ultrasonic Trigger |
-| GP4 | S2 | Right encoder A |
-| GP5 | S2 | Right encoder B |
-| GP6 | | |
-| GP7 | | |
-| GP8 | S2 | Left motor PWM A |
-| GP9 | S2 | Left motor PWM B |
-| GP10 | S2 | Right motor PWM A |
-| GP11 | S2 | Right motor PWM B |
-| GP12 | | |
-| GP13 | | |
-| GP14 | | |
+| Pins | Owner | Use |
+| --- | --- | --- |
+| GP8 / GP9 | S2 | Left motor forward / reverse PWM |
+| GP10 / GP11 | S2 | Right motor forward / reverse PWM |
+| GP16 / GP17 | S2 | Left encoder A / B; count sign +1 |
+| GP4 / GP5 | S2 | Right encoder A / B; count sign -1 |
 | GP15 | S2 | Servo PWM |
-| GP16 | S2 | Left encoder A |
-| GP17 | S2 | Left encoder B |
-| GP18 | | |
-| GP19 | *example:* S1 | external LED (LED + 330 Ω to GND) |
-| GP20 | Shared control | Start / stop button |
-| GP21 | Shared control | Mode button |
-| GP22 | | |
-| GP26 | S3 | Centre line sensor, ADC0 |
-| GP27 | S3 | Left line sensor, ADC1 |
-| GP28 | | (ADC2 capable) |
+| GP20 / GP21 | S2 bench | Print saved run / start or emergency stop; pull-up, active low |
+| GP27 / GP26 | S3 | Left / centre line sensor |
+| GP2 / GP3 | S5 | Ultrasonic echo / trigger |
+| GP23 / GP24 / GP25 / GP29 | Reserved | Pico W radio |
+| GP0 / GP1 | Console when enabled | UART0 TX / RX; used with CRASH_REPORT=1 or CONSOLE=uart |
+| GP19 | Unclaimed | Old LED demo removed |
 
-## 3. Peripherals
+## 3. Tasks and peripherals
 
-**Subsystems, tasks and peripherals are three different things:**
+| Task | Priority | Processor | Responsibility |
+| --- | --- | --- | --- |
+| Kernel USB service | 3 | 1 (core 0) | Console; no application TinyUSB calls |
+| Kernel radio service, when enabled | 4 | 1 (core 0) | Radio and network stack |
+| `motion_task` on motion branch | 10 | 1 (`TP_PRC1`, core 0) | 10 ms controller, motor and servo PWM |
+| `motion_bench` on motion branch | 11 | 1 (`TP_PRC1`, core 0) | Button polling and RAM log; not started in TEST builds |
 
-| Term | What it is | Example |
-|---|---|---|
-| **Subsystem** | one student's part of the product, one folder | "environment sensing", "motor control", "user interface" |
-| **Task** | one thread of execution. A subsystem may have **as many tasks as it needs** | a sampling task and a filtering task, both in "environment sensing" |
-| **Peripheral** | one hardware block on the RP2040 | I2C0, UART1, the ADC |
+`motion_task` is the highest-priority application task. `cyc_motion` only
+wakes it. GPIO IRQ 13 and all encoder state have one owner: core 0. The
+shared dispatcher uses priority 1; USB IRQ 5 keeps reset priority 0.
+SysTick and PendSV use priority 3. Do not enable these GPIO events on core 1.
 
-A driver is **not** a subsystem. It is code *inside* the subsystem that
-needs that hardware: the "environment sensing" subsystem contains the I2C
-sensor code, and owns I2C0. Write it as `drv_<name>.c` / `drv_<name>.h` in
-that subsystem's folder, never under `device/`, and call it only from the
-peripheral's owning task. The kernel's own drivers in `device/` (serial,
-I2C, ADC) may be used instead; switching one on in `config/config_device.h`
-changes shared configuration, so record it in the table below first.
+The motion owner uses PWM slices 4 and 5 for motors, slice 7 for the servo.
+The kernel ADC driver remains the ADC owner; line sampling is not ported yet.
+No application task may call radio, lwIP or TinyUSB functions directly.
 
-**The rule: each peripheral is driven by exactly one task, its *owning
-task*.** That task can be in any subsystem, and one subsystem may own
-several peripherals (one owning task each, or one task owning all of them).
-Every other task, in the same subsystem or another one, asks the owning task
-through a kernel object (section 5) and never touches that peripheral itself.
+## 4. Interfaces
 
-*Why:* this port runs tasks on both cores at the same time. If two tasks
-drive the same I2C or UART block at once, their transfers get mixed up, and
-the drivers have no locking to stop it.
+| ID | Owner | Users | Contract |
+| --- | --- | --- | --- |
+| IF-01 | S2 | Bench and future vehicle task | `motion_*` API; values in, one consistent status out; `mtx_motion` uses priority inheritance |
 
-| Peripheral | Owner subsystem | Owning task | Pins |
-|---|---|---|---|
-| UART1 | | | |
-| I2C0 | | | |
-| I2C1 | | | |
-| SPI0 | | | |
-| SPI1 | | | |
-| ADC | S3 | Kernel `adca`; robot owning task not connected yet | GP26/GP27 |
-| PWM slices 4, 5, 7 | S2 | Motion owning task not connected yet | GP8–11, GP15 |
-| WiFi radio, TCP/IP, MQTT | *kernel* | `cyw43_utk_task` (built in) | GP23–25, GP29 |
+The old LED/producer/consumer/monitor IF-01 through IF-05 are removed. This
+IF-01 is a new interface, not the old sample mailbox.
 
-### WiFi and MQTT are special
+## 5. Object budget
 
-The radio and the network stack belong to the kernel's built-in WiFi service
-task, `cyw43_utk_task` (`lib/libwifi/sysdepend/pico_rp2040/`). **No student
-task may call `cyw43_...`, lwIP or MQTT functions, not even from a
-"WiFi subsystem".** The calls are not safe from any other task, on either core.
-
-What students *can* do:
-
-- **Read the connection state** from any task, which is always safe:
-  ```c
-  #include "cyw43_utk.h"
-  T_CYW43_UTK_STATUS st;
-  cyw43_utk_get_status(&st);   /* st.ready, st.link_status, st.ip_addr, ... */
-  ```
-- **Send or receive data over the network** by adding code that *runs
-  inside the service task*. The MQTT client is in
-  `lib/liblwip/sysdepend/pico_rp2040/mqtt_utk.c`. It publishes a heartbeat
-  today. A "cloud / reporting" subsystem would add a kernel object
-  (e.g. a message buffer) that application tasks fill. The MQTT code then
-  reads it with `TMO_POL` (never blocking) and publishes it.
-  Because this changes shared library code, **agree it with the team and
-  the instructor first**, and record it as an interface in section 5.
-  It needs the `NET=lwip MQTT=1` build (README section 3).
-
-## 4. Task priorities
-
-1 is the highest. 1–4 are used by the kernel (USB console 3, WiFi 4). Each subsystem gets its own band by default;
-change it only by team agreement. Write down every task you create.
-
-| Subsystem | Priority band | Tasks (name – priority – core) |
-|---|---|---|
-| 1 | 12–13 | *example:* led_task – 12 – any |
-| 2 | 14–15 | *example:* producer_task – 14 – core 1 |
-| 3 | 16–17 | *example:* consumer_task – 16 – core 0 |
-| 4 | 18–19 | *example:* monitor_task – 18 – any |
-| 5 | 20–21 | |
-
-Core: `TP_PRC1` = core 0, `TP_PRC2` = core 1, or "any".
-
-## 5. Interfaces between subsystems
-
-Every arrow between two subsystems is listed here. The **provider** creates
-the kernel object and publishes its ID in its own `subsystemN.h`; the **user** only
-sends to it or waits on it. Agree on the data format before coding.
-
-| ID | From → To | Mechanism | Object ID name | Data / meaning | Agreed by |
-|---|---|---|---|---|---|
-| IF-01 | S2 → S3 | mailbox (owned by S3) | `mbx_samples` | `SAMPLE_MSG` in `subsystem2.h` | *example* |
-| IF-02 | S3 → S2 | semaphore + fixed memory pool (owned by S2) | `sem_slots`, `mpf_samples` | receiver returns the block, then 1 slot | *example* |
-| IF-03 | S3 → S4 | message buffer + event flag (owned by S4) | `mbf_summary`, `flg_events` | text line ≤ `S4_SUMMARY_MAX` bytes, then `FLG_BATCH` | *example* |
-| IF-04 | S4 → S3 | shared data under a mutex (owned by S3) | `app_stats`, `mtx_stats` | `APP_STATS`, read only while locked | *example* |
-| IF-05 | S4 → S1 | task control | `tid_led` | `tk_sus_tsk` / `tk_rsm_tsk` / `tk_chg_pri` | *example* |
-| IF-06 | | | | | |
-
-Each interface is tested by at least one integration test
-(`testing/integration/TEST_LOG.md`).
-
-## 6. Kernel object budget
-
-Limits are set in `config/config.h`. If the team needs more, raise the
-limit there. The numbers below are the example's usage.
-
-| Object | Limit | S1 | S2 | S3 | S4 | S5 |
-|---|---|---|---|---|---|---|
-| Task | 32 | 1 | 1 | 1 | 1 | |
-| Semaphore | 16 | | 1 | | | |
-| Event flag | 16 | | | | 1 | |
-| Mailbox | 12 | | | 1 | | |
-| Mutex | 12 | | | 1 | | |
-| Message buffer | 12 | | | | 1 | |
-| Fixed memory pool | 12 | | 1 | | | |
-| Variable memory pool | 12 | | | | | |
-| Cyclic handler | 12 | 1 | | | | |
-| Alarm handler | 12 | | | | 1 | |
-
-(The kernel's USB and WiFi service tasks also use a few of these.)
+Motion uses one inherited mutex, one 10 ms cyclic handler, and one task.
+The non-TEST bench adds one task. Empty subsystems use no kernel objects.
+Kernel limits are in `config/config.h`; the USB and radio services also
+use objects. Hardware tests and the floor run must be recorded in
+`testing/subsystem2/TEST_LOG.md`; build success is not a hardware result.
