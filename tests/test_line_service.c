@@ -40,6 +40,10 @@ int main(void) {
     sample(3500u);
     assert(line_snapshot_read(&s,true)==E_OK && s.valid && s.sequence==17u && s.cpu_us>0u && s.sample_max_us>0u);
     assert(s.acquisition.samples==42u && s.line.pair);
+    const uint16_t floor=lp_floor(&s.line,0u);
+    assert(line_calibration_begin()==E_OK);sample(1234u);
+    assert(line_calibration_abort()==E_OK);
+    assert(line_snapshot_read(&s,false)==E_OK && lp_floor(&s.line,0u)==floor);
     assert(line_tracking_reset()==E_OK);
     assert(line_snapshot_read(&s,false)==E_OK && s.event==VC_EVENT_NONE && s.norm_peak==0u);
     return 0;

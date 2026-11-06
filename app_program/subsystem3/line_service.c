@@ -73,6 +73,12 @@ lp_calib_result_t line_calibration_end(void) {
     calibrating=false;snapshot.norm_peak=0u;
     (void)tk_unl_mtx(mutex);return result;
 }
+int line_calibration_abort(void) {
+    if (!ready) return E_OBJ;
+    const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
+    calibrating=false;snapshot.norm_peak=0u;snapshot.event=VC_EVENT_NONE;
+    return (int)tk_unl_mtx(mutex);
+}
 int line_tracking_reset(void) {
     if (!ready) return E_OBJ;
     const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
