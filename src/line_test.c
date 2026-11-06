@@ -14,7 +14,7 @@
 
 #include "drive.h"
 #include "hardware/gpio.h"
-#include "line_position.h"
+#include "../app_program/subsystem3/line_position.h"
 #include "line_sensors.h"
 #include "line_spin.h"
 #include "pico/stdlib.h"

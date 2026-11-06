@@ -57,7 +57,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "obstacle_profile.h"
+#include "../app_program/subsystem5/obstacle_profile.h"
 #include "ultrasonic.h"
 
 /* Free readings in a row that end the pivot. */

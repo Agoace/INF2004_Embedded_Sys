@@ -1,5 +1,5 @@
 /*
- * Host unit test for the pure parts of src/obstacle_scan.h: the angle and
+ * Host unit test for the pure parts of app_program/subsystem5/obstacle_scan.h: the angle and
  * pulse tables and the reading-combine rule. It needs no Pico hardware.
  *
  *   cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
@@ -8,7 +8,7 @@
  */
 #include <stdio.h>
 
-#include "obstacle_scan.h"
+#include "../app_program/subsystem5/obstacle_scan.h"
 #include "servo.h"
 
 static int failures;

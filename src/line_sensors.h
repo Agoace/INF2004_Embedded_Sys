@@ -15,7 +15,7 @@
 
 #include <stdint.h>
 
-#include "line_position.h"
+#include "../app_program/subsystem3/line_position.h"
 
 #ifndef LINE_SENSORS_PAIR
 #define LINE_SENSORS_PAIR 1

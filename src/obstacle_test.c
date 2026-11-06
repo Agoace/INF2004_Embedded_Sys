@@ -15,7 +15,7 @@
 #include <stdio.h>
 
 #include "hardware/gpio.h"
-#include "obstacle.h"
+#include "../app_program/subsystem5/obstacle.h"
 #include "pico/stdlib.h"
 #include "ultrasonic.h"
 

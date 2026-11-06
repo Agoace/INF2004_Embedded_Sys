@@ -4,7 +4,7 @@ This record describes the first part of the Obstacle Scan Task: the forward
 watch. It turns each packed ultrasonic result into events for the Vehicle
 Controller. The servo scan and the obstacle profile are later steps.
 
-- Code: [`src/obstacle.c`](../src/obstacle.c), [`src/obstacle.h`](../src/obstacle.h)
+- Code: [`app_program/subsystem5/obstacle.c`](../app_program/subsystem5/obstacle.c), [`app_program/subsystem5/obstacle.h`](../app_program/subsystem5/obstacle.h)
 - Host unit test: [`tests/test_obstacle.c`](../tests/test_obstacle.c)
 - Bench test: [`src/obstacle_test.c`](../src/obstacle_test.c)
 - Input: the 16-bit result from the [ultrasonic driver](ULTRASONIC_DRIVER.md)
@@ -121,7 +121,7 @@ The test runs on the development computer and needs no hardware:
 
 ```sh
 cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
-   tests/test_obstacle.c src/obstacle.c -o build/test_obstacle
+   tests/test_obstacle.c app_program/subsystem5/obstacle.c -o build/test_obstacle
 ./build/test_obstacle
 ```
 

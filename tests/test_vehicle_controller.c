@@ -9,7 +9,7 @@
  */
 #include <stdio.h>
 
-#include "vehicle_controller.h"
+#include "../app_program/vehicle/vehicle_controller.h"
 
 static int failures;
 static const char *test_name;

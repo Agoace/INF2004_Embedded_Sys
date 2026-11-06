@@ -1,4 +1,4 @@
-#include "vehicle_controller.h"
+#include "../app_program/vehicle/vehicle_controller.h"
 
 static const int search_offsets[VC_SEARCH_STEPS] = VC_SEARCH_OFFSETS_DEG;
 

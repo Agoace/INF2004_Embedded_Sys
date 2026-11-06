@@ -17,7 +17,7 @@ follows [Change Requirement 1](week8_change_requirement_1_notes.md#13-buddy-5--u
 
 | File | Purpose |
 | --- | --- |
-| [`src/ultrasonic.h`](../src/ultrasonic.h) | Public API, status codes, packed result layout |
+| [`app_program/subsystem5/ultrasonic.h`](../app_program/subsystem5/ultrasonic.h) | Public API, status codes, packed result layout |
 | [`src/ultrasonic.c`](../src/ultrasonic.c) | Echo interrupt, timeout detection, conversion, publication |
 | [`src/ultrasonic_test.c`](../src/ultrasonic_test.c) | Bench test: live readings and 50-reading batch statistics |
 

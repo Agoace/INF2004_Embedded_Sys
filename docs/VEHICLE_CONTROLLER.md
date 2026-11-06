@@ -3,7 +3,7 @@
 This record describes the Vehicle Controller state machine. It is built one
 step at a time on the `vehicle-controller` branch.
 
-- Code: [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`src/vehicle_controller.h`](../src/vehicle_controller.h)
+- Code: [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h)
 - Host unit test: [`tests/test_vehicle_controller.c`](../tests/test_vehicle_controller.c)
 - Design: [system statechart](../design-review/system_statechart.mmd), [task interaction](../design-review/task_interaction.mmd)
 - Bit widths: [Week 8 notes, sections 33–38](week8_change_requirement_1_notes.md#33-vehicle-controller-state)

@@ -6,9 +6,9 @@ the ultrasonic sensor through 13 points and records the nearest echo at each
 point. The profile analysis then chooses the shorter way around the
 obstacle. It does not estimate the obstacle width.
 
-- Code: [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`src/obstacle_scan.h`](../src/obstacle_scan.h)
+- Code: [`src/obstacle_scan.c`](../src/obstacle_scan.c), [`app_program/subsystem5/obstacle_scan.h`](../app_program/subsystem5/obstacle_scan.h)
 - Servo: [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h)
-- Profile analysis: [`src/obstacle_profile.c`](../src/obstacle_profile.c), [`src/obstacle_profile.h`](../src/obstacle_profile.h)
+- Profile analysis: [`app_program/subsystem5/obstacle_profile.c`](../app_program/subsystem5/obstacle_profile.c), [`app_program/subsystem5/obstacle_profile.h`](../app_program/subsystem5/obstacle_profile.h)
 - Host unit tests: [`tests/test_obstacle_scan.c`](../tests/test_obstacle_scan.c), [`tests/test_obstacle_profile.c`](../tests/test_obstacle_profile.c)
 - Bench test: [`src/scan_test.c`](../src/scan_test.c)
 - Related: [forward obstacle watch](OBSTACLE_MONITOR.md), [ultrasonic driver](ULTRASONIC_DRIVER.md)
@@ -187,7 +187,7 @@ clamp, and the combine rules.
 
 ```sh
 cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
-   tests/test_obstacle_profile.c src/obstacle_profile.c \
+   tests/test_obstacle_profile.c app_program/subsystem5/obstacle_profile.c \
    -o build/test_obstacle_profile
 ./build/test_obstacle_profile
 ```

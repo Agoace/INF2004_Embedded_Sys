@@ -1,13 +1,13 @@
 /*
- * Host unit test for src/obstacle.c. It needs no Pico hardware.
+ * Host unit test for app_program/subsystem5/obstacle.c. It needs no Pico hardware.
  *
  *   cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
- *      tests/test_obstacle.c src/obstacle.c -o build/test_obstacle
+ *      tests/test_obstacle.c app_program/subsystem5/obstacle.c -o build/test_obstacle
  *   ./build/test_obstacle
  */
 #include <stdio.h>
 
-#include "obstacle.h"
+#include "../app_program/subsystem5/obstacle.h"
 
 static int failures;
 

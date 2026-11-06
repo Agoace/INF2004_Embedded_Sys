@@ -1,10 +1,10 @@
 #ifndef SIM_DETOUR_HOOKS_H
 #define SIM_DETOUR_HOOKS_H
-#include "line_position.h"
+#include "../../app_program/subsystem3/line_position.h"
 #include "line_steer.h"
-#include "obstacle.h"
+#include "../../app_program/subsystem5/obstacle.h"
 #include "obstacle_detour.h"
-#include "obstacle_scan.h"
+#include "../../app_program/subsystem5/obstacle_scan.h"
 void sim_hook_dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side,
     uint16_t mm, int32_t left, int32_t right, uint32_t now);
 dt_word_t sim_hook_dt_update(dt_t *dt, bool seen, int32_t left, int32_t right, uint32_t now);

@@ -1,15 +1,15 @@
 /*
- * Host unit test for src/line_position.c. It needs no Pico hardware.
+ * Host unit test for app_program/subsystem3/line_position.c. It needs no Pico hardware.
  *
  *   cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
- *      tests/test_line_position.c src/line_position.c \
+ *      tests/test_line_position.c app_program/subsystem3/line_position.c \
  *      -o build/test_line_position
  *   ./build/test_line_position
  */
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "line_position.h"
+#include "../app_program/subsystem3/line_position.h"
 
 static int failures;
 

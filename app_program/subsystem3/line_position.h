@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "vehicle_controller.h"
+#include "../vehicle/vehicle_controller.h"
 
 /*
  * Normalised line position from the three analogue IR line sensors.

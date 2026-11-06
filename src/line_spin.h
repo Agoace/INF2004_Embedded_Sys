@@ -17,7 +17,7 @@
 
 #include <stdbool.h>
 
-#include "line_position.h"
+#include "../app_program/subsystem3/line_position.h"
 
 typedef enum {
     LINE_SPIN_OK = 0,          /* calibrated and back on the line */

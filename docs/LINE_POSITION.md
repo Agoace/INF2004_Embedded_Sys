@@ -5,7 +5,7 @@ branch. It replaces the fixed ADC thresholds of the first line detector
 (`src/line_detector.c`: black ≤ 1200, white ≥ 2600) with values that each
 sensor learns. The first detector is not changed.
 
-- Code: [`src/line_position.c`](../src/line_position.c), [`src/line_position.h`](../src/line_position.h)
+- Code: [`app_program/subsystem3/line_position.c`](../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../app_program/subsystem3/line_position.h)
 - Host unit test: [`tests/test_line_position.c`](../tests/test_line_position.c)
 - Bench test: [`src/line_test.c`](../src/line_test.c); spin calibration in [`src/line_spin.c`](../src/line_spin.c)
 - Steering from the position: [Line steering](LINE_STEERING.md)
@@ -196,7 +196,7 @@ line task.
 
 ```sh
 cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
-   tests/test_line_position.c src/line_position.c \
+   tests/test_line_position.c app_program/subsystem3/line_position.c \
    -o build/test_line_position
 ./build/test_line_position
 ```

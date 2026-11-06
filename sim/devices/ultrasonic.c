@@ -2,7 +2,7 @@
 #include "sim_devices.h"
 #include "sim_runtime.h"
 #include "sim_world.h"
-#include "ultrasonic.h"
+#include "../../app_program/subsystem5/ultrasonic.h"
 #include <inttypes.h>
 #include <math.h>
 #include <stdlib.h>

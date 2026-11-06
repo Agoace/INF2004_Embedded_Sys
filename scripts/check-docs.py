@@ -2,7 +2,8 @@
 """Check repository Markdown links and GitHub-style heading anchors.
 
 The standard-library-only checker scans Markdown files at the repository root
-and below ``docs/``. The repository has no component documentation locations.
+and below ``docs/``. Imported template trees (kernel, lib, device, include, build_make, config,
+etc, tools, app_program, testing, videos) are not scanned.
 Dependency, build, vendor, and Git metadata directories are outside this scope.
 The check is mechanical: it does not verify prose, commands, or live state.
 """

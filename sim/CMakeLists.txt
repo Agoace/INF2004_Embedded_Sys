@@ -6,6 +6,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
 get_filename_component(REPO "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+include_directories("${REPO}/app_program/subsystem2" "${REPO}/app_program/subsystem3"
+    "${REPO}/app_program/subsystem5" "${REPO}/app_program/vehicle")
 set(SIM_FIRMWARE detour_test CACHE STRING "Firmware source set")
 if(NOT SIM_FIRMWARE STREQUAL "detour_test")
     message(FATAL_ERROR "Unsupported SIM_FIRMWARE: ${SIM_FIRMWARE}")

@@ -13,7 +13,7 @@
 #include <stdlib.h>
 
 #include "hardware/gpio.h"
-#include "obstacle_profile.h"
+#include "../app_program/subsystem5/obstacle_profile.h"
 #include "obstacle_scan.h"
 #include "pico/stdlib.h"
 #include "ultrasonic.h"

@@ -20,6 +20,14 @@ if(NOT DEFINED PICO_BOARD)
 endif()
 
 # The SDK import must run before project().
+
+# Shared pure robot logic; SDK code remains in src/.
+include_directories(
+    ${CMAKE_CURRENT_LIST_DIR}/app_program/subsystem2
+    ${CMAKE_CURRENT_LIST_DIR}/app_program/subsystem3
+    ${CMAKE_CURRENT_LIST_DIR}/app_program/subsystem5
+    ${CMAKE_CURRENT_LIST_DIR}/app_program/vehicle
+)
 include(pico_sdk_import.cmake)
 
 project(inf2004_embedded_sys LANGUAGES C CXX ASM)
@@ -196,7 +204,7 @@ pico_add_extra_outputs(ultrasonic_test)
 
 add_executable(obstacle_test
     src/obstacle_test.c
-    src/obstacle.c
+    app_program/subsystem5/obstacle.c
     src/ultrasonic.c
 )
 
@@ -217,7 +225,7 @@ pico_add_extra_outputs(obstacle_test)
 
 add_executable(scan_test
     src/scan_test.c
-    src/obstacle_profile.c
+    app_program/subsystem5/obstacle_profile.c
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c
@@ -242,7 +250,7 @@ pico_add_extra_outputs(scan_test)
 
 add_executable(line_test
     src/line_test.c
-    src/line_position.c
+    app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
     src/drive.c
@@ -267,7 +275,7 @@ pico_add_extra_outputs(line_test)
 add_executable(steer_test
     src/steer_test.c
     src/line_steer.c
-    src/line_position.c
+    app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
     src/drive.c
@@ -297,13 +305,13 @@ pico_add_extra_outputs(steer_test)
 add_executable(bypass_test
     src/bypass_test.c
     src/obstacle_bypass.c
-    src/obstacle.c
-    src/obstacle_profile.c
+    app_program/subsystem5/obstacle.c
+    app_program/subsystem5/obstacle_profile.c
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c
     src/line_steer.c
-    src/line_position.c
+    app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
     src/drive.c
@@ -332,13 +340,13 @@ pico_add_extra_outputs(bypass_test)
 add_executable(detour_test
     src/detour_test.c
     src/obstacle_detour.c
-    src/obstacle.c
-    src/obstacle_profile.c
+    app_program/subsystem5/obstacle.c
+    app_program/subsystem5/obstacle_profile.c
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c
     src/line_steer.c
-    src/line_position.c
+    app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
     src/drive.c
