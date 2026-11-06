@@ -76,7 +76,7 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Obstacle detour (straights and turns on the spot) | [`app_program/subsystem5/obstacle_detour.c`](../app_program/subsystem5/obstacle_detour.c), [`app_program/subsystem5/obstacle_detour.h`](../app_program/subsystem5/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
 | Normalised line position | [`app_program/subsystem3/line_position.c`](../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../app_program/subsystem3/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
-| Line steering | [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../app_program/subsystem3/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
+| Line steering | [`src/line_steer.c`](../app_program/subsystem3/line_steer.c), [`src/line_steer.h`](../app_program/subsystem3/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
 | Steering Wi-Fi log | [`src/wifi_log.c`](../src/wifi_log.c), packet format [`src/steer_log.c`](../src/steer_log.c); receiver [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) |
 | Drive, IR reads, spin calibration (bench parts) | [`src/drive.c`](../src/drive.c), [`src/line_sensors.c`](../src/line_sensors.c), [`src/line_spin.c`](../src/line_spin.c) |
 | Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
@@ -161,3 +161,9 @@ kernel task; other robot modules are not task-wired.
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
 
 - [μT-Kernel motion bring-up checks](MTK3_MOTION_CHECKS.md) — candidate revisions, SDK link proof, sizes, IRQ priority and hardware checks still not run.
+
+## Kernel line acquisition
+
+- [`app_program/subsystem3/drv_line.c`](../app_program/subsystem3/drv_line.c) — core-0 1 ms TIMER alarm 0 queue; SDK-only `drv_line_hw.c` averages eight ADC reads per L/C channel.
+- [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
+- [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.

@@ -53,9 +53,14 @@ For repository structure and implementation entry points, see the [Agent Navigat
 
 See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
 
+- [Adr Vehicle Controller](ADR_VEHICLE_CONTROLLER.md)
+
 - [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.
 
 - [Course template layout checks](MTK3_LAYOUT_CHECKS.md)
+
+
+- [Line Steer Mm](LINE_STEER_MM.md)
 
 Kernel platform entry points and the removed template demo are recorded in
 [Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).
@@ -67,3 +72,4 @@ Cold-power timer gate: [S0-U01 platform test](../testing/subsystem1/TEST_LOG.md)
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
 
 - [μT-Kernel motion bring-up checks](MTK3_MOTION_CHECKS.md) — local candidate, build/link results, image sizes and not-run hardware checks.
+
