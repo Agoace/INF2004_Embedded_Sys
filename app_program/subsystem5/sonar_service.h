@@ -5,7 +5,7 @@
 #include "ultrasonic.h"
 typedef enum { SONAR_STOP,SONAR_WATCH,SONAR_ONCE,SONAR_ACK } sonar_mode_t;
 typedef struct {
-    uint32_t generation,id,deadline_ms;
+    uint32_t generation,id,deadline_ms,not_before_ms;
     uint16_t interval_ms;
     int8_t angle;
     uint8_t mode;
@@ -13,6 +13,8 @@ typedef struct {
 typedef enum { SONAR_EMPTY,SONAR_ECHO,SONAR_DEADLINE,SONAR_CANCELLED } sonar_status_t;
 typedef struct {
     uint32_t generation,id,ping_sequence,result_sequence,trigger_ms,timestamp_ms,deadline_ms;
+    uint32_t ping_generation,ping_id;
+    int8_t ping_angle;
     ultrasonic_result_t echo;
     int8_t angle;
     uint8_t status;

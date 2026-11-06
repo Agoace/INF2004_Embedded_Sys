@@ -37,7 +37,7 @@ static void accept(const sonar_request_t *r,uint32_t now) {
         (void)tk_unl_mtx(mutex);
     }
     if (r->mode==SONAR_STOP) publish(SONAR_CANCELLED,ULTRASONIC_RESULT_NONE,now);
-    next_ms=now+(r->mode==SONAR_WATCH ? r->interval_ms : 0u);
+    next_ms=r->not_before_ms!=0u ? r->not_before_ms : now+(r->mode==SONAR_WATCH ? r->interval_ms : 0u);
 }
 static void sonar_task(INT code,void *ctx) {
     (void)code;(void)ctx;
@@ -66,6 +66,7 @@ static void sonar_task(INT code,void *ctx) {
         inflight=current;physical=true;next_ms=now+current.interval_ms;
         if (tk_loc_mtx(mutex,TMO_FEVR)>=E_OK) {
             snapshot.trigger_ms=now;snapshot.pending=true;++snapshot.ping_sequence;
+            snapshot.ping_generation=current.generation;snapshot.ping_id=current.id;snapshot.ping_angle=current.angle;
             (void)tk_unl_mtx(mutex);
         }
         /* STUCK_HIGH is an immediate result, exactly as in the reference. */

@@ -51,13 +51,13 @@ int main(void) {
     assert(sonar_request(&r)==E_OK);pump(0u);assert(triggers==1u);
     r.id=2u;assert(sonar_request(&r)==E_OBJ); /* Explicit conflict, no silent overwrite. */
     sonar_snapshot_t s;bool fresh;
-    assert(sonar_result_read(&s,&fresh)==E_OK && !fresh && s.pending && s.ping_sequence==1u);
+    assert(sonar_result_read(&s,&fresh)==E_OK && !fresh && s.pending && s.ping_sequence==1u && s.ping_generation==1u && s.ping_id==1u);
     done=true;pump(4u);assert(sonar_result_read(&s,&fresh)==E_OK && fresh && s.valid && s.id==1u);
     assert(sonar_result_read(&s,&fresh)==E_OK && !fresh);
     r.deadline_ms=200u;assert(sonar_request(&r)==E_OK);pump(4u);assert(triggers==1u);
     pump(60u);assert(triggers==2u);
     r.generation=2u;r.mode=SONAR_STOP;assert(sonar_request(&r)==E_OK);pump(61u);
-    assert(sonar_result_read(&s,&fresh)==E_OK && fresh && s.status==SONAR_CANCELLED && !s.valid);
+    assert(sonar_result_read(&s,&fresh)==E_OK && fresh && s.status==SONAR_CANCELLED && !s.valid && s.ping_generation==1u && s.ping_id==2u);
     const uint32_t sequence=s.result_sequence;
     done=true;pump(62u);assert(sonar_result_read(&s,&fresh)==E_OK && !fresh && s.result_sequence==sequence);
     r.generation=1u;r.mode=SONAR_ONCE;assert(sonar_request(&r)==E_OBJ);
