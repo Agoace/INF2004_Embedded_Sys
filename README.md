@@ -17,6 +17,8 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/obstacle_test.c`](src/obstacle_test.c) — obstacle watch bench test; [`tests/test_obstacle.c`](tests/test_obstacle.c) is its host unit test.
 - [`src/line_position.c`](src/line_position.c) — normalised line position from learned per-sensor values; [`src/line_test.c`](src/line_test.c) is its bench test. Two-sensor line tracing is locked ([two-sensor line tracing](docs/TWO_SENSOR_LINE_TRACING.md)).
 - [`src/line_steer.c`](src/line_steer.c) — line position to left/right wheel duty; [`src/steer_test.c`](src/steer_test.c) is its bench test. [`src/drive.c`](src/drive.c), [`src/line_sensors.c`](src/line_sensors.c), and [`src/line_spin.c`](src/line_spin.c) are shared bench parts. [`src/wifi_log.c`](src/wifi_log.c) sends the `steer_test` log over Wi-Fi to [`scripts/steer_log_receiver.py`](scripts/steer_log_receiver.py) ([steering Wi-Fi log](docs/STEER_WIFI_LOG.md)).
+- [`src/heartbeat.c`](src/heartbeat.c) — 1 ms time base for all modules: interrupt hooks, main-loop flags, watchdog ([heartbeat](docs/HEARTBEAT.md)); [`tests/test_heartbeat.c`](tests/test_heartbeat.c) is its host unit test; `heartbeat_test` is the bench target.
+- [`src/motor_ctl.c`](src/motor_ctl.c) — motor controller core: the only owner of motor PWM, servo and encoders; wheel speeds in, measurements out ([motor controller](docs/MOTOR_CONTROLLER.md)); [`tests/test_motor_ctl.c`](tests/test_motor_ctl.c) is its host unit test.
 - [`src/vehicle_controller.c`](src/vehicle_controller.c) — Vehicle Controller state machine (step 1: line following); [`tests/test_vehicle_controller.c`](tests/test_vehicle_controller.c) is its host unit test.
 - [`src/obstacle_scan.c`](src/obstacle_scan.c) — 13-point ±30° servo scan; [`src/scan_test.c`](src/scan_test.c) is its bench test.
 - [`src/obstacle_bypass.c`](src/obstacle_bypass.c) — obstacle bypass by edge following; [`src/bypass_test.c`](src/bypass_test.c) is its bench test ([obstacle bypass](docs/OBSTACLE_BYPASS.md)).
@@ -24,7 +26,7 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/robocar_ir_sensors.c`](src/robocar_ir_sensors.c) — line detection and Code 39 barcode reader firmware.
 - [`CMakeLists.txt`](CMakeLists.txt) — firmware build definitions.
 - [`pico_sdk_import.cmake`](pico_sdk_import.cmake) — Pico SDK locator supplied by the SDK.
-- [`docs/`](docs/README.md) — durable documentation and calibration results. Actuator ownership: [ADR: motor controller](docs/ADR_MOTOR_CONTROLLER.md).
+- [`docs/`](docs/README.md) — durable documentation and calibration results. Actuator ownership: [ADR: motor controller](docs/ADR_MOTOR_CONTROLLER.md); timing: [ADR: heartbeat](docs/ADR_HEARTBEAT.md); task control: [ADR: Vehicle Controller](docs/ADR_VEHICLE_CONTROLLER.md).
 - [`scripts/`](scripts/) — repository maintenance scripts.
 - [`.githooks/`](.githooks/) — repository-owned Git hooks.
 
@@ -60,3 +62,7 @@ python3 scripts/check-docs.py
 ```
 
 The pre-commit hook runs this check only when relevant files are staged. Use `git commit --no-verify` only when you intentionally need to bypass the hook.
+
+## Branch layout
+
+See [Branch layout](docs/BRANCH_LAYOUT.md) for module ownership and merge rules.

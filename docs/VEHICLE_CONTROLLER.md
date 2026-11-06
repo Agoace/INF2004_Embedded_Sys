@@ -3,6 +3,10 @@
 This record describes the Vehicle Controller state machine. It is built one
 step at a time on the `vehicle-controller` branch.
 
+New shape (2026-11-04): [ADR: Vehicle Controller](ADR_VEHICLE_CONTROLLER.md).
+The controller will run one module at a time and map module outcomes to the
+next module; step 1 below is the old flat shape.
+
 - Code: [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`src/vehicle_controller.h`](../src/vehicle_controller.h)
 - Host unit test: [`tests/test_vehicle_controller.c`](../tests/test_vehicle_controller.c)
 - Design: [system statechart](../design-review/system_statechart.mmd), [task interaction](../design-review/task_interaction.mmd)

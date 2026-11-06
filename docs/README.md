@@ -22,6 +22,10 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Wi-Fi telemetry dashboard architecture](WIFI_TELEMETRY_DASHBOARD.md) — Pico-to-Pi telemetry, localhost dashboard, and private tailnet access.
 - [Telemetry JSON schema](TELEMETRY_SCHEMA.md) — versioned instrument packet contract for firmware, receiver, and future dashboard.
 - [ADR: motor controller owns the actuators](ADR_MOTOR_CONTROLLER.md) — accepted 2026-11-04: one owner of motor PWM, servo PWM and encoders; values in, measurements out; no intent; hardware quirks inside.
+- [ADR: one hardware heartbeat](ADR_HEARTBEAT.md) — accepted 2026-11-04: 1 ms timer interrupt owned by a separate `heartbeat` platform module; ADC sample, `mc_tick()` and watchdog in the interrupt; decisions in the main loop.
+- [ADR: Vehicle Controller runs one module at a time](ADR_VEHICLE_CONTROLLER.md) — accepted 2026-11-04: shared detectors, running module interprets them and returns an outcome, controller maps outcomes to the next module and is the only motor controller caller.
+- [Heartbeat](HEARTBEAT.md) — the 1 ms time base from the ADR: hooks in the interrupt, flags for the main loop, watchdog, health counters, host test, bench target `heartbeat_test`.
+- [Motor controller](MOTOR_CONTROLLER.md) — the controller from the ADR: interface, speed loop (from Motion), robot settings, host test, step status.
 - [Eventual control architecture](CONTROL_ARCHITECTURE.md) — planned line-following workload, timing constraints, and proposed core split.
 - [Week 8 Change Requirement 1 notes](week8_change_requirement_1_notes.md) — minimum-bit data representation decisions, calculations, and open measurements.
 - [Ultrasonic driver and bench test](ULTRASONIC_DRIVER.md) — non-blocking HC-SR04+ driver, packed 16-bit result, and range test procedure.
@@ -39,3 +43,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Obstacle bypass](OBSTACLE_BYPASS.md) — edge-following bypass ("Blind Bicycle Algorithm"), shelved 2026-10-30 at version 4.1: design, track runs 1–18, open problems, `bypass_test` bench procedure.
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
+
+## Branch layout
+
+See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
