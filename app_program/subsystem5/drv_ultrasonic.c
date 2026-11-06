@@ -40,6 +40,8 @@ static volatile uint32_t fall_us;
 
 /* Written only by drv_ultrasonic_service() and drv_ultrasonic_trigger(). */
 static bool has_triggered;
+static ID listener;
+void drv_ultrasonic_listen(int id) { UINT irq; DI(irq); listener=(ID)id; EI(irq); }
 static uint8_t failure_streak;
 static volatile ultrasonic_result_t latest_result = ULTRASONIC_RESULT_NONE;
 static ultrasonic_debug_t latest_debug;
@@ -69,6 +71,7 @@ static void echo_irq_handler(unsigned int pin, uint32_t events, void *ctx) {
         fall_us = now;
         phase = PHASE_DONE;
     }
+    if (listener>0) (void)tk_wup_tsk(listener);
 }
 
 int drv_ultrasonic_init(void) {

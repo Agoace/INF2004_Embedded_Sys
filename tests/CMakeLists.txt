@@ -89,3 +89,8 @@ host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
 if(TARGET test_app_task)
     target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+host_test(test_sonar_service tests/test_sonar_service.c app_program/subsystem5/sonar_service.c)
+if(TARGET test_sonar_service)
+    target_include_directories(test_sonar_service BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
