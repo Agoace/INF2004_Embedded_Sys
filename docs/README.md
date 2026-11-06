@@ -52,3 +52,5 @@ On-target procedures and operator results: [Subsystem 2 test log](../testing/sub
 Cold-power timer gate: [S0-U01 platform test](../testing/subsystem1/TEST_LOG.md), not yet run on the fixed image.
 
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
+
+- [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.

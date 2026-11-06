@@ -136,3 +136,9 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [Motor controller — SDK subset](MOTOR_CONTROLLER.md#sdk-hardware-subset) — exhaustive paths, sources and APIs that must not be used.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
+
+## Kernel hardware watchdog
+
+- [`app_program/platform/drv_watchdog.c`](../app_program/platform/drv_watchdog.c) and [`drv_watchdog_hw.c`](../app_program/platform/drv_watchdog_hw.c) — kernel startup/feed guard and SDK-only hardware/reset snapshot.
+- [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
+- [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.

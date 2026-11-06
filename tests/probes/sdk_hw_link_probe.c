@@ -5,8 +5,12 @@
 #include "hardware/clocks.h"
 #include "hardware/resets.h"
 #include "hardware/ticks.h"
+#include "../../app_program/platform/drv_watchdog_hw.h"
 uint32_t app_sdk_hw_link_probe(void) {
     tick_start(TICK_WATCHDOG, 12u);
+    (void)drv_watchdog_hw_reset(0);
+    (void)drv_watchdog_hw_start(100u, 12u);
+    drv_watchdog_hw_feed();
     reset_unreset_block_num_wait_blocking(RESET_PWM);
     gpio_set_function(8u, GPIO_FUNC_PWM);
     pwm_config p = pwm_get_default_config();

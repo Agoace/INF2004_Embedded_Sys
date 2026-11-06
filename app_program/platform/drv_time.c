@@ -2,9 +2,12 @@
 #include <tk/tkernel.h>
 #include "drv_time.h"
 #include "drv_time_hw.h"
+static bool ready;
+bool drv_time_ready(void) { return ready; }
 int drv_time_init(void) {
     /* Kernel startup selects the 12 MHz XOSC for clk_ref. */
-    return drv_time_hw_init((uint32_t)XOSC_MHz) == 0 ? (int)E_OK : (int)E_SYS;
+    ready = drv_time_hw_init((uint32_t)XOSC_MHz) == 0;
+    return ready ? (int)E_OK : (int)E_SYS;
 }
 uint32_t drv_time_us(void) { return drv_time_hw_us(); }
 uint32_t drv_time_ms(void) { return drv_time_hw_ms(); }

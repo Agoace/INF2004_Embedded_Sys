@@ -28,9 +28,10 @@ static void ratio(uint32_t num, uint32_t den, int expected) {
     assert(drv_time_check() == expected);
 }
 int main(void) {
-    assert(drv_time_init() == E_OK && drv_time_init() == E_OK && init_calls == 2u);
+    assert(!drv_time_ready());
+    assert(drv_time_init() == E_OK && drv_time_init() == E_OK && init_calls == 2u && drv_time_ready());
     init_error = -1;
-    assert(drv_time_init() == E_SYS);
+    assert(drv_time_init() == E_SYS && !drv_time_ready());
     init_error = 0;
     ratio(100u, 100u, E_OK);
     ratio(427u, 10u, E_SYS);

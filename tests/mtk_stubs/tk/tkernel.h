@@ -5,7 +5,9 @@
 #define EXPORT
 #define IMPORT extern
 #define CONST const
+#ifndef APP_TEST
 #define APP_TEST 0
+#endif
 #define TP_PRC1 1u
 #define TA_HLNG 1u
 #define TA_INHERIT 2u
