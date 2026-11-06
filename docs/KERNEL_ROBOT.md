@@ -79,7 +79,8 @@ kernel or device source is changed.
 The ultrasonic phase machine, result conversion and fault streak are
 ported from `src/ultrasonic.c`: GP3 trigger at least 10 us; GP2 edges use
 TIMER timestamps; rise timeout 2 ms, echo timeout 3 ms, minimum trigger
-interval 60 ms. No echo is unknown, not clear. The vehicle retains the
+interval 60 ms. The callback rejects late rises even before task service,
+so the 10 ms task interval cannot turn a timed-out ping into a valid echo. No echo is unknown, not clear. The vehicle retains the
 module-requested ping interval and never sends a new ping while an echo
 waits for consumption. A STUCK_HIGH result is consumed in the same step
 as its ping, in reference order. Servo commands go only through motion.
@@ -129,8 +130,8 @@ that a single row cannot represent. It has 512 fixed 12-byte entries.
 change (from/to modules, word low byte=state, high byte=fault),
 3 = motor faults, 4 = end of shell run (word=fault detail),
 5 = end of calibration/run session (word=cancelled flag). The initial
-kind-2 entry uses IDLE/RUNNING as from/to. Overflow counts lost events and
-stops the session. Rows are not a rolling log: a new GP21 clears the saved
+kind-2 entry is NONE to LINE, state RUNNING. Overflow counts lost events
+and stops the session. Rows are not a rolling log: a new GP21 clears the saved
 session; a stop preserves it. Row times begin at shell start, so calibration
 is not part of the 90 s row budget. Calibration failures keep event/status
 information but have no driving rows.

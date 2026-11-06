@@ -258,7 +258,7 @@ T-License 2.2. This dual-core RP2040 port is derived from the official
 
 ## Robot logic and reference firmware
 
-See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; other robot modules are not task-wired yet.
+See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; staging connects the four robot modules through the vehicle task.
 
 The robot platform needs Pico SDK register headers even with `WIFI=none`.
 Keep the USB console enabled for the initial bring-up builds.

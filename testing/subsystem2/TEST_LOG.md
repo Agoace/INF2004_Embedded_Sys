@@ -150,7 +150,8 @@ in the Wi-Fi text transfer. Do not require B4 to repeat that loss.
    bench task is not started in TEST builds.
 2. Record S2-U01 and S2-U02 output. If gap jitter exceeds 1 ms, do not run
    on the floor. Reconsider Option H as described in the motor record.
-3. Use the normal single-core radio-off image for U03, U04 and B4. Clear
+3. Use the normal single-core radio-off **BENCH=1** image for U03, U04
+   and B4. The default image now runs the robot task, not this bench. Clear
    the space in front of and behind the robot. Keep access to GP21.
 4. Each GP21 start clears previous latched faults after the 1 s delay.
    A stop/fault does not print or erase the RAM log. Do not reset or power

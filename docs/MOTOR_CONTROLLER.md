@@ -345,7 +345,9 @@ reset level 0; GPIO is below USB and above SysTick/PendSV level 3.
 
 ### Bench and tests
 
-The bench task has priority 11 on core 0. GP21 arms a run after 1 s;
+The bench task has priority 11 on core 0 and now requires `BENCH=1`.
+The default normal image selects the [kernel robot program](KERNEL_ROBOT.md)
+instead; only one task owns the buttons and tick notification slot. GP21 arms a run after 1 s;
 press again to ESTOP. GP20 prints the saved log. Buttons use pull-ups,
 active low, polled every 20 ms. The B3 step list is unchanged and the RAM
 log has 2400 rows. The bench registers for a wake after each completed
@@ -361,7 +363,7 @@ GP20 without resetting. The dump pauses 20 ms after each eight rows and
 ends with `tm_usb_dropped` total and dump delta. A new GP21 start clears
 old faults; a completed/stopped run keeps its rows and fault state.
 
-TEST builds do not start the button bench task. They run S0-U01 (the
+TEST builds start neither the button bench nor the robot task. They run S0-U01 (the
 platform clock comparison), U01 (5 s of ticks) and U02 (a brief
 lifted-wheel stale-command test). Before the clock fix, S2-U01/U02/U03
 passed and B4-lifted passed its functional checks on USB after flashing.
@@ -434,7 +436,9 @@ is cleared before applying duty, as in the bare-metal source.
 
 The app-owned [`build_make/app_sdk_hw.mk`](../build_make/app_sdk_hw.mk)
 is included by [`the application build hook`](../build_make/mtkernel_3/app_program/subdir.mk).
-No kernel source or template platform makefile changes. `PICO_SDK_PATH` is
+No kernel source changes. Robot selection adds `BENCH` to the profile,
+image name and C flags in `build_make/pico_rp2040.mk`; the SDK source hook
+stays app-owned. `PICO_SDK_PATH` is
 required, also for UART/radio-off builds. SDK version: 2.3.0.
 
 Every added include path, relative to `PICO_SDK_PATH`:
@@ -464,8 +468,8 @@ src/rp2040/hardware_regs/include
 src/rp2040/hardware_structs/include
 ```
 
-Source added: `src/rp2_common/hardware_adc/adc.c`. It is compiled for the
-step-2 proof only; no line driver calls it yet. Source added for
+Source added: `src/rp2_common/hardware_adc/adc.c`. The S3 line adapter now
+uses it as well as the retained SDK link proof. Source added for
 `WIFI=none`: `src/rp2_common/hardware_gpio/gpio.c`. For `WIFI=cyw43` the
 fragment reuses the template's existing `mtkernel_3/cyw43/gpio.o`, not a
 duplicate copy. No PWM/resets .c files exist: the selected APIs are inline.
@@ -527,5 +531,5 @@ not SDK clocks runtime state. Neither the motor adapter nor the link
 probe calls it; radio-off builds must not depend on that conditional shim.
 The kernel already configures CLK_ADC from PLL USB to 48 MHz in
 `startup_clock(CLKATR_USB | CLKATR_ADC | CLKATR_RTC | CLKATR_PREI)`.
-This source check is not a measured ADC result; the line driver is not
-implemented in this step.
+This source check is not a measured ADC result. The new S3 driver checks
+its source/divider and owns ADC0/1; S3-U01 on the robot image is not run.

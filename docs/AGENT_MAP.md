@@ -130,7 +130,8 @@ The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle`; only `mtk3-staging` combines them. Independent module tests
 are in [`host-tests/`](../host-tests/); run all host tests with
 [`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are removed. The motion branch provides the first
-kernel task; other robot modules are not task-wired.
+kernel task. Staging now connects LINE/SEARCH/SCAN/DETOUR through the
+vehicle task described below.
 
 - [Course template layout checks](MTK3_LAYOUT_CHECKS.md)
 

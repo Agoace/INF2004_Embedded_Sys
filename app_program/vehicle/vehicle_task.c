@@ -40,7 +40,7 @@ static bool pressed(unsigned int pin, bool *previous) {
 }
 static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word) {
     if (!active) return;
-    if (events_used == EVENT_CAPACITY) { ++events_lost; cancelled = true; return; }
+    if (events_used == EVENT_CAPACITY) { ++events_lost; cancelled = true; reason = "event buffer full"; return; }
     events[events_used++] = (event_t){drv_time_ms()-run_start, word, kind, from, to, 0u};
 }
 static bool wait_tick(void) {
@@ -220,6 +220,11 @@ static void dump(void) {
     tm_printf((UB*)"[robot] KR1 %s rows %lu events %lu lost_events %lu lost_wakes %lu faults %u gap %lu..%lu us\n",
         reason,(unsigned long)rows_used,(unsigned long)events_used,(unsigned long)events_lost,
         (unsigned long)wake_lost,(unsigned int)s.faults,(unsigned long)s.gap_min_us,(unsigned long)s.gap_max_us);
+    drv_line_stats_t stats; drv_line_stats(&stats);
+    tm_printf((UB*)"[robot] counts L/R %ld/%ld; line L floor/line %u/%u C %u/%u; sampled %lu missed %lu dropped %lu (lifetime)\n",
+        (long)s.counts[0],(long)s.counts[1],(unsigned int)lp_floor(&lp,0u),(unsigned int)lp_line(&lp,0u),
+        (unsigned int)lp_floor(&lp,1u),(unsigned int)lp_line(&lp,1u),(unsigned long)stats.samples,
+        (unsigned long)stats.missed,(unsigned long)stats.dropped);
     for (uint32_t i=0u;i<rows_used;++i) {
         tm_printf((UB*)"KR %lu ",(unsigned long)i);
         for (unsigned int b=0u;b<VR_BYTES;++b) tm_printf((UB*)"%02x",(unsigned int)rows[i].bytes[b]);
@@ -242,7 +247,7 @@ static void run_once(void) {
     (void)motion_clear_faults(); vsm_reset(&vsm);
     line_event=VC_EVENT_NONE;
     run_start=drv_time_ms(); rows_used=0u;
-    event(2u,VSM_IDLE,VSM_RUNNING,0u);
+    event(2u,VSM_MOD_NONE,VSM_MOD_LINE,VSM_RUNNING);
     (void)vsm_start(&vsm,VSM_MOD_LINE,0u,run_start);
     bool echo_new=false,ping_sent=false;
     ultrasonic_result_t echo=ULTRASONIC_RESULT_NONE;

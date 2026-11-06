@@ -104,7 +104,8 @@ Cross-module tests belong only to staging. Motor Pico/bench code and robot
 settings are now in `app_program/subsystem2/motor_ctl_robot.h`. The kernel
 motor hardware port uses SDK-only `drv_motor_hw.c`; `src/` keeps the bare-metal reference.
 The template demo is removed. The motion branch connects the motor
-controller to a kernel task; other modules are not task-wired yet.
+controller to a kernel task. Staging now connects the four pure modules
+through the vehicle task and hardware adapters recorded below.
 No robot hardware or timing behaviour is validated by a successful build.
 
 ### Host tests
@@ -144,7 +145,8 @@ rebased. `mtk3-staging` merges both with real merge commits. The platform
 base removes the LED/producer/consumer/monitor demo; all empty subsystems
 keep only init/start/test stubs. Motion owns S2 and connects its init/start
 functions to `motion_init()` and `motion_start()`. The floor bench starts
-only in normal builds; TEST builds run the lifted-wheel checks instead.
+only with BENCH=1 in normal builds; the default selects the robot task.
+TEST builds run lifted-wheel subsystem checks with neither button task.
 
 Robot settings move from `src/` to S2. Pure modules still have no kernel
 or SDK includes. New kernel-side adapters include no SDK headers; new
