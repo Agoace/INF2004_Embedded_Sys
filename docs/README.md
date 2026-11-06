@@ -46,3 +46,5 @@ Kernel platform entry points and the removed template demo are recorded in
 [Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).
 
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
+
+- [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.
