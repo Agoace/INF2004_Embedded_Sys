@@ -65,7 +65,8 @@ host_test(module_detour host-tests/test_detour.c ${detour_run_source} ${obstacle
 
 # Kernel-side glue tests use explicit host doubles, never real kernel headers.
 host_test(test_motion_task tests/test_motion_task.c
-    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c)
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/subsystem2.c)
 host_test(test_gpio_irq tests/test_gpio_irq.c app_program/platform/drv_gpio_irq.c)
 foreach(test IN ITEMS test_motion_task test_gpio_irq)
     if(TARGET ${test})

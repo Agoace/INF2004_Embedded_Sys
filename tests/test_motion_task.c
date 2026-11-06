@@ -3,6 +3,7 @@
 #include <setjmp.h>
 #include <tk/tkernel.h>
 #include "../app_program/subsystem2/motion.h"
+#include "../app_program/subsystem2/subsystem2.h"
 #include "../app_program/subsystem2/drv_motor_hw.h"
 #include "../app_program/platform/drv_gpio_irq.h"
 static FP task_entry, cyclic_entry;
@@ -11,11 +12,17 @@ static void *encoder_ctx;
 static jmp_buf sleep_again;
 static unsigned int sleeps;
 static int held, irq_off, queued;
-static unsigned int wake_calls, notify_calls;
+static unsigned int wake_calls, notify_calls, bench_calls, error_lines, mutex_calls;
+static int init_error, check_error;
+static unsigned int check_calls;
 static uint32_t now_us;
 static uint8_t ab[2];
 static int16_t output[2];
-ID tk_cre_mtx(const T_CMTX *m) { assert(m->mtxatr == TA_INHERIT); return 1; }
+ID tk_cre_mtx(const T_CMTX *m) { assert(m->mtxatr == TA_INHERIT); ++mutex_calls; return 1; }
+int drv_time_init(void) { return init_error; }
+int drv_time_check(void) { ++check_calls; return check_error; }
+int motion_bench_start(void) { ++bench_calls; return E_OK; }
+int tm_printf(const UB *format, ...) { (void)format; ++error_lines; return 0; }
 ER tk_loc_mtx(ID id, TMO timeout) { assert(id == 1 && timeout == TMO_FEVR && !held); held = 1; return E_OK; }
 ER tk_unl_mtx(ID id) { assert(id == 1 && held); held = 0; return E_OK; }
 ER tk_del_mtx(ID id) { (void)id; return E_OK; }
@@ -49,7 +56,7 @@ int drv_gpio_irq_add(uint32_t mask, drv_gpio_irq_fn fn, void *ctx) {
 }
 uint32_t drv_time_us(void) { return now_us; }
 uint32_t drv_time_ms(void) { return now_us / 1000u; }
-void drv_motor_hw_init(uint16_t servo) { assert(servo == 1500u); }
+void drv_motor_hw_init(uint16_t servo) { assert(servo == 1500u); output[0] = output[1] = 0; }
 uint8_t drv_motor_hw_ab(unsigned int wheel) { return ab[wheel]; }
 void drv_motor_hw_write(const int16_t duty[2], uint16_t servo) {
     (void)servo; assert(held && !irq_off); output[0] = duty[0]; output[1] = duty[1]; now_us += 7u;
@@ -62,8 +69,18 @@ static void tick(uint32_t at) {
     assert(!held && !irq_off);
 }
 int main(void) {
-    assert(motion_init() == E_OK);
-    assert(motion_start() == E_OK);
+    init_error = E_SYS;
+    output[0] = output[1] = 100;
+    assert(motion_init() == E_SYS && check_calls == 0u);
+    assert(output[0] == 0 && output[1] == 0 && mutex_calls == 0u);
+    assert(subsystem2_start() == E_OBJ && bench_calls == 0u);
+    init_error = E_OK; check_error = E_SYS;
+    assert(motion_init() == E_SYS && check_calls == 1u);
+    assert(mutex_calls == 0u && task_entry == 0 && cyclic_entry == 0);
+    assert(subsystem2_start() == E_OBJ && bench_calls == 0u && error_lines == 2u);
+    check_error = E_OK;
+    assert(motion_init() == E_OK && mutex_calls == 1u);
+    assert(subsystem2_start() == E_OK && bench_calls == 1u);
     tick(10000u);
     assert(notify_calls == 0u);
     assert(motion_notify_after_tick(-1) == E_PAR);
