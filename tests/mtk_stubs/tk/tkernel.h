@@ -20,12 +20,12 @@
 #define E_LIMIT (-34)
 #define E_OBJ (-41)
 typedef int ID, ER, INT, PRI, TMO;
-typedef unsigned int UINT, UW;
+typedef unsigned int UINT, UW, RELTIM;
 typedef unsigned char UB;
 typedef void (*FP)();
 typedef struct { int32_t hi; uint32_t lo; } SYSTIM;
 ER tk_get_otm(SYSTIM *time);
-ER tk_dly_tsk(TMO timeout);
+ER tk_dly_tsk(RELTIM timeout);
 typedef struct { unsigned int mtxatr; } T_CMTX;
 typedef struct { unsigned int cycatr; FP cychdr; unsigned int cyctim, cycphs, assprc; } T_CCYC;
 typedef struct { unsigned int intatr; FP inthdr; } T_DINT;
