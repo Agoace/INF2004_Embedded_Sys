@@ -1,13 +1,13 @@
 /*
- * Host unit test for src/obstacle_detour.c. It needs no Pico hardware.
+ * Host unit test for app_program/subsystem5/obstacle_detour.c. It needs no Pico hardware.
  *   cc -std=c11 -Wall -Wextra -Wconversion -Wshadow -Werror -Isrc \
- *      tests/test_obstacle_detour.c src/obstacle_detour.c \
+ *      tests/test_obstacle_detour.c app_program/subsystem5/obstacle_detour.c \
  *      -o build/test_obstacle_detour
  *   ./build/test_obstacle_detour
  */
 #include <stdio.h>
 
-#include "obstacle_detour.h"
+#include "../app_program/subsystem5/obstacle_detour.h"
 
 static int failures;
 

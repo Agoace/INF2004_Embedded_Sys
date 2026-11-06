@@ -48,7 +48,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "../app_program/subsystem5/obstacle_profile.h"
+#include "obstacle_profile.h"
 #include "ultrasonic.h"
 
 /* Servo settle time before a reading: base + per degree of movement. The

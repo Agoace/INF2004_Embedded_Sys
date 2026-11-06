@@ -3,7 +3,7 @@
 #include "../../app_program/subsystem3/line_position.h"
 #include "../../app_program/subsystem3/line_steer.h"
 #include "../../app_program/subsystem5/obstacle.h"
-#include "obstacle_detour.h"
+#include "../../app_program/subsystem5/obstacle_detour.h"
 #include "../../app_program/subsystem5/obstacle_scan.h"
 void sim_hook_dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side,
     uint16_t mm, int32_t left, int32_t right, uint32_t now);

@@ -9,7 +9,7 @@ This record gives the state of the obstacle detour at the end of the 2026-10-30 
 | Branch | `yx`, pushed |
 | Firmware on the robot | `detour_test` v1.6 with sweep minimum duty 14 % (commit `f2bc090`), flashed 2026-11-03 |
 | Current source | `detour_test` [v1.8](#version-18-back-off-at-most-30): v1.7 with the back-off limit 30° |
-| Module | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h) |
+| Module | [`app_program/subsystem5/obstacle_detour.c`](../app_program/subsystem5/obstacle_detour.c), [`app_program/subsystem5/obstacle_detour.h`](../app_program/subsystem5/obstacle_detour.h) |
 | Track test | [`src/detour_test.c`](../src/detour_test.c) (CMake target `detour_test`) |
 | Host test | [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c): passes; mutation check 76 of 76 caught (commit `4284a9e`), line toggle 7 of 7 caught (v1.7) |
 | Receiver | [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) knows `detour_test` runs (log flag `SL_FLAG_DETOUR`, step names). Start it after a laptop restart. The laptop must be on the "Mah Phone" hotspot |
@@ -23,7 +23,7 @@ TURN_TOWARD angle, **at most 30°** (`BACK_OFF_MAX_DEG` in
 `src/detour_test.c`; v1.7: 25°). The limit changes the result only when
 TURN_TOWARD turned 60° or more (D26: turned 88°, back off 25°; v1.8:
 30°). The run summary prints `detour v1.8` and the limit. No change in
-`src/obstacle_detour.c`; the host test uses its own back-off function.
+`app_program/subsystem5/obstacle_detour.c`; the host test uses its own back-off function.
 
 ## Version 1.7: line only on the return
 
@@ -225,7 +225,7 @@ cmake --build build --target detour_test
 fuser -k /dev/ttyACM0; picotool load -f -x build/detour_test.uf2
 (setsid python3 -u scripts/steer_log_receiver.py >> /tmp/wifi_recv.log 2>&1 &)
 cc -std=c11 -Wall -Wextra -Wconversion -Wshadow -Werror -Isrc \
-   tests/test_obstacle_detour.c src/obstacle_detour.c -o build/test_obstacle_detour
+   tests/test_obstacle_detour.c app_program/subsystem5/obstacle_detour.c -o build/test_obstacle_detour
 ./build/test_obstacle_detour
 ```
 
