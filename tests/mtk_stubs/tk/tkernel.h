@@ -12,6 +12,8 @@
 #define TA_ASSPRC 0x10000u
 #define TMO_FEVR (-1)
 #define TSK_SELF 0
+#define XOSC_MHz 12
+#define E_SYS (-5)
 #define E_OK 0
 #define E_PAR (-17)
 #define E_CTX (-25)
@@ -21,6 +23,9 @@ typedef int ID, ER, INT, PRI, TMO;
 typedef unsigned int UINT, UW;
 typedef unsigned char UB;
 typedef void (*FP)();
+typedef struct { int32_t hi; uint32_t lo; } SYSTIM;
+ER tk_get_otm(SYSTIM *time);
+ER tk_dly_tsk(TMO timeout);
 typedef struct { unsigned int mtxatr; } T_CMTX;
 typedef struct { unsigned int cycatr; FP cychdr; unsigned int cyctim, cycphs, assprc; } T_CCYC;
 typedef struct { unsigned int intatr; FP inthdr; } T_DINT;
