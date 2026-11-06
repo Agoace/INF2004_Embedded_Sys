@@ -22,6 +22,7 @@ typedef struct {
 typedef struct { uint32_t lost,rows,events;bool busy,storage_full; } telemetry_stats_t;
 int telemetry_init(void);
 int telemetry_start(void);
+bool telemetry_running(void);
 /* Core-0 task producers, value copy, MBF TMO_POL; never wait for the consumer. */
 int telemetry_send(const telemetry_message_t *message);
 void telemetry_stats(telemetry_stats_t *out);
