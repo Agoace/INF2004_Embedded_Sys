@@ -54,6 +54,7 @@ IMPORT ER subsystem5_start(void);
 #if APP_TEST
 IMPORT void subsystem1_test(void);
 IMPORT void subsystem2_test(void);
+IMPORT void subsystem2_watchdog_test(void); /* destructive S2-U05; run last */
 IMPORT void subsystem3_test(void);
 IMPORT void subsystem4_test(void);
 IMPORT void subsystem5_test(void);

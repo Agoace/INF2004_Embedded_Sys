@@ -5,6 +5,7 @@
 #include "drv_motor_hw.h"
 #include "../platform/drv_gpio_irq.h"
 #include "../platform/drv_time.h"
+#include "../platform/drv_watchdog.h"
 
 static const mc_config_t config = MC_ROBOT_CONFIG;
 static const int8_t QUADRATURE[16] = {
@@ -17,6 +18,10 @@ static ID mtx_motion, tid_motion, cyc_motion, tid_after_tick;
 static int32_t sampled_counts[MC_WHEELS];
 static uint32_t ticks, tick_max_us, last_run_us, gap_min_us, gap_max_us;
 static uint32_t late_wakes, missed_wakes;
+static bool watchdog_armed;
+#if APP_TEST
+static volatile bool test_requested, test_suppressed;
+#endif
 
 static void encoder_irq(unsigned int pin, uint32_t events, void *ctx) {
     (void)events; (void)ctx;
@@ -60,6 +65,17 @@ static void motion_task(INT stacd, void *exinf) {
         if (took > tick_max_us) tick_max_us = took;
         const ID notify = tid_after_tick;
         (void)tk_unl_mtx(mtx_motion);
+        /* Only completed control work feeds; never the cyclic handler or dump. */
+        if (watchdog_armed) {
+#if APP_TEST
+            if (!test_suppressed) {
+                drv_watchdog_feed();
+                if (test_requested && drv_watchdog_test_begin() >= E_OK) test_suppressed = true;
+            }
+#else
+            drv_watchdog_feed();
+#endif
+        }
         if (notify > 0) (void)tk_wup_tsk(notify);
     }
 }
@@ -111,8 +127,24 @@ int motion_start(void) {
     if (mtx_motion <= 0 || cyc_motion <= 0 || tid_motion > 0) return (int)E_OBJ;
     tid_motion = app_start_task((FP)motion_task, 10, TP_PRC1, "motion_task");
     if (tid_motion < E_OK) return (int)tid_motion;
-    return (int)tk_sta_cyc(cyc_motion);
+    const ER cyclic = tk_sta_cyc(cyc_motion);
+    if (cyclic < E_OK) return (int)cyclic;
+    const int er = drv_watchdog_start(100u);
+    if (er < E_OK) {
+        tm_printf((UB*)"ERROR motion: watchdog start failed (%d); speed commands disabled.\n", er);
+        return er;
+    }
+    watchdog_armed = true;
+    return (int)E_OK;
 }
+#if APP_TEST
+int motion_watchdog_test_suppress_feed(void) {
+    if (!watchdog_armed) return (int)E_OBJ;
+    test_requested = true;
+    return (int)E_OK;
+}
+bool motion_watchdog_test_feed_stopped(void) { return test_suppressed; }
+#endif
 int motion_notify_after_tick(ID tid) {
     if (tid < 0) return (int)E_PAR;
     const ER er = lock_motion();
@@ -121,6 +153,7 @@ int motion_notify_after_tick(ID tid) {
     return (int)tk_unl_mtx(mtx_motion);
 }
 int motion_set_speed(int16_t left, int16_t right) {
+    if (!watchdog_armed) return (int)E_OBJ;
     const ER er = lock_motion();
     if (er < E_OK) return (int)er;
     mc_set_speed(&mc, left, right, drv_time_ms());
@@ -169,5 +202,6 @@ int motion_status(motion_status_t *s) {
     s->ticks = ticks; s->tick_max_us = tick_max_us;
     s->gap_min_us = gap_min_us; s->gap_max_us = gap_max_us;
     s->late_wakes = late_wakes; s->missed_wakes = missed_wakes;
+    s->watchdog_armed = watchdog_armed;
     return (int)tk_unl_mtx(mtx_motion);
 }

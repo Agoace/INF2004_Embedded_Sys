@@ -17,6 +17,7 @@ typedef struct {
     uint32_t gap_min_us, gap_max_us;
     uint32_t late_wakes; /* gaps greater than 11 ms */
     uint32_t missed_wakes; /* queued wake requests discarded by tk_can_wup */
+    bool watchdog_armed; /* hardware enabled; TEST may deliberately suppress feeds */
 } motion_status_t;
 int motion_init(void);
 int motion_start(void);
@@ -31,4 +32,9 @@ int motion_clear_faults(void);
 int motion_set_servo(int deg, int *accepted_deg);
 int motion_status(motion_status_t *status);
 int motion_bench_start(void);
+#if APP_TEST
+/* TEST-only: motion acknowledges just after its final feed. */
+int motion_watchdog_test_suppress_feed(void);
+bool motion_watchdog_test_feed_stopped(void);
+#endif
 #endif

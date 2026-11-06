@@ -13,8 +13,34 @@ from a cold VIN power-on.
 | S2-U02 | TEST image: read the warning first; wheels lifted. After a 2 s delay, send 40/40 mm/s once, then no refresh for `stale_ms + 30` ms | `MC_FAULT_STALE` set; both duty values 0; wheels stop | PASS |
 | S2-U03 | Normal bench image, idle, wheels lifted: turn each wheel forward by hand, then press GP20 for status | Left and right counts both increase for forward rotation; pins/signs match the table in TEAM.md; reverse rotation decreases counts | PASS after left wire fault repair; left motor and encoder were dead before repair; bare-metal bench confirmed the wire fault |
 | S2-U04 | Normal bench image, wheels lifted: press GP21, wait for a drive step, press GP21 again, then press GP20 | ESTOP remains latched; both motor PWM channels become 0 without waiting for the next 10 ms task tick; later ticks cannot restore an old duty. Confirm physical stop and, where available, PWM with a scope | Not run |
+| S2-U05 | TEST=1 LAST, after S1..S5: wheels lifted; warning, stop feeds after one final tick, expect reboot; leave power connected and capture next boot's later previous-boot line | Own watchdog TIMER reset; previous elapsed sample 90..110 ms (last observation, not exact reset instant); motor pins reset and wheels remain stopped; no endless reset loop | Not run |
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
+
+## S2-U05: two-boot watchdog procedure
+
+This new destructive test is **Not run**. It is a separate last hook called
+by `usermain()` after all other subsystem tests, not inside S2-U01/U02.
+Lift both wheels before TEST power. Keep USB connected for this check.
+
+1. Save earlier tests and the S2-U05 warning. Motor PWM is zero before the
+   warning. After a 1 s USB delivery pause, motion feeds once more after
+   a completed tick and acknowledges feed suppression. No other task feeds.
+   Expect reset about 100 ms after the final feed. Do not press RUN or
+   remove power; doing so discards or invalidates the result.
+2. USB can disconnect during reset. Reopen it and wait for the rebooted
+   image's later TEST output: `S2-U05 previous boot: watchdog reset after
+   N ms (last observed before reset; target 100 ms)`, then PASS/FAIL.
+   Scratch0/1 carry the last elapsed observation; scratch4 remains the SDK
+   enable/reboot marker. The result is consumed once, so this second boot
+   does not repeat the reset. Save both boot logs and the tested revision.
+
+The elapsed value is the last live CPU observation before reset, not a
+hardware-latched reset timestamp. Use a scope/independent timer to verify
+strict reset/physical stop latency. Debug halt pauses the watchdog; do not
+halt during the test. See [watchdog design](../../docs/KERNEL_WATCHDOG.md).
+Failure to initialize the motion clock or start the task/cyclic prevents
+watchdog startup and driving; S2-U05 reports that it is not armed.
 
 ## Hardware run records: 2026-11-06
 

@@ -108,6 +108,8 @@ EXPORT INT usermain(void)
 	subsystem3_test();
 	subsystem4_test();
 	subsystem5_test();
+	/* Destructive reset check must follow every other subsystem test. */
+	subsystem2_watchdog_test();
 	tm_printf((UB*)"[TEST] === test run end ===\n");
 #endif
 

@@ -1,6 +1,7 @@
 /* Host scheduler/hardware doubles: checks the glue, not real-time behaviour. */
 #include <assert.h>
 #include <setjmp.h>
+#include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/subsystem2/motion.h"
 #include "../app_program/subsystem2/subsystem2.h"
@@ -14,7 +15,21 @@ static unsigned int sleeps;
 static int held, irq_off, queued;
 static unsigned int wake_calls, notify_calls, bench_calls, error_lines, mutex_calls;
 static int init_error, check_error;
-static unsigned int check_calls;
+static unsigned int check_calls, wd_starts, wd_feeds, hw_writes;
+static int cyclic_started, cyclic_error, task_error, watchdog_error;
+#if APP_TEST
+static unsigned int test_begins;
+#endif
+int drv_watchdog_start(uint32_t ms) {
+    assert(ms==100u && task_entry!=0 && cyclic_started && !held);
+    ++wd_starts; return watchdog_error;
+}
+void drv_watchdog_feed(void) {
+    assert(cyclic_started && !held && !irq_off && hw_writes>wd_feeds); ++wd_feeds;
+}
+#if APP_TEST
+int drv_watchdog_test_begin(void) { ++test_begins; return E_OK; }
+#endif
 static uint32_t now_us;
 static uint8_t ab[2];
 static int16_t output[2];
@@ -31,9 +46,11 @@ ID tk_cre_cyc(const T_CCYC *c) {
     assert((c->cycatr & TA_ASSPRC) != 0u);
     cyclic_entry = c->cychdr; return 2;
 }
-ER tk_sta_cyc(ID id) { assert(id == 2); return E_OK; }
+ER tk_sta_cyc(ID id) { assert(id == 2); if (cyclic_error) return E_SYS; cyclic_started=1; return E_OK; }
 ID app_start_task(FP entry, PRI pri, UW prc, const char *name) {
-    (void)name; assert(pri == 10 && prc == TP_PRC1); task_entry = entry; return 3;
+    (void)name; assert(pri == 10 && prc == TP_PRC1);
+    if (task_error) return E_SYS;
+    task_entry = entry; return 3;
 }
 ER tk_slp_tsk(TMO timeout) {
     assert(timeout == TMO_FEVR);
@@ -59,7 +76,8 @@ uint32_t drv_time_ms(void) { return now_us / 1000u; }
 void drv_motor_hw_init(uint16_t servo) { assert(servo == 1500u); output[0] = output[1] = 0; }
 uint8_t drv_motor_hw_ab(unsigned int wheel) { return ab[wheel]; }
 void drv_motor_hw_write(const int16_t duty[2], uint16_t servo) {
-    (void)servo; assert(held && !irq_off); output[0] = duty[0]; output[1] = duty[1]; now_us += 7u;
+    (void)servo; assert(held && !irq_off); ++hw_writes;
+    output[0] = duty[0]; output[1] = duty[1]; now_us += 7u;
 }
 void drv_motor_hw_stop(void) { assert(held); output[0] = output[1] = 0; }
 static void tick(uint32_t at) {
@@ -68,7 +86,7 @@ static void tick(uint32_t at) {
     if (setjmp(sleep_again) == 0) ((void (*)(INT, void *))task_entry)(0, 0);
     assert(!held && !irq_off);
 }
-int main(void) {
+int main(int argc, char **argv) {
     init_error = E_SYS;
     output[0] = output[1] = 100;
     assert(motion_init() == E_SYS && check_calls == 0u);
@@ -77,10 +95,24 @@ int main(void) {
     init_error = E_OK; check_error = E_SYS;
     assert(motion_init() == E_SYS && check_calls == 1u);
     assert(mutex_calls == 0u && task_entry == 0 && cyclic_entry == 0);
-    assert(subsystem2_start() == E_OBJ && bench_calls == 0u && error_lines == 2u);
+    assert(subsystem2_start() == E_OBJ && bench_calls == 0u && error_lines == 2u && wd_starts == 0u);
     check_error = E_OK;
     assert(motion_init() == E_OK && mutex_calls == 1u);
-    assert(subsystem2_start() == E_OK);
+    assert(motion_set_speed(40,40)==E_OBJ); /* No driving before watchdog startup. */
+    if (argc>1) {
+        cyclic_error=strcmp(argv[1],"cyclic")==0;
+        task_error=strcmp(argv[1],"task")==0;
+        watchdog_error=strcmp(argv[1],"watchdog")==0 ? E_SYS : E_OK;
+        assert(cyclic_error || task_error || watchdog_error);
+        assert(subsystem2_start()==E_SYS && bench_calls==0u);
+        assert(wd_starts==(watchdog_error ? 1u : 0u) && wd_feeds==0u);
+        motion_status_t failed;
+        assert(motion_status(&failed)==E_OK && !failed.watchdog_armed);
+        assert(motion_set_speed(40,40)==E_OBJ && output[0]==0 && output[1]==0);
+        if (watchdog_error) { tick(10000u); assert(wd_feeds==0u); }
+        return 0;
+    }
+    assert(subsystem2_start() == E_OK && wd_starts==1u);
 #if APP_BENCH
     assert(bench_calls == 1u);
 #else
@@ -124,5 +156,15 @@ int main(void) {
     assert(motion_set_servo(999, &accepted) == E_OK && accepted == 36);
     assert(motion_stop() == E_OK && output[0] == 0 && output[1] == 0);
     assert(motion_status(0) == E_PAR);
+    assert(s.watchdog_armed && wd_starts==1u && wd_feeds==7u);
+    ((void (*)(void *))cyclic_entry)(0); /* Stuck task: cyclic wake alone never feeds. */
+    assert(wd_feeds==7u);
+#if APP_TEST
+    assert(motion_watchdog_test_suppress_feed()==E_OK && !motion_watchdog_test_feed_stopped());
+    tick(190000u);
+    assert(wd_feeds==8u && test_begins==1u && motion_watchdog_test_feed_stopped());
+    tick(200000u);
+    assert(wd_feeds==8u && test_begins==1u); /* Live task, intentional TEST suppression. */
+#endif
     return 0;
 }
