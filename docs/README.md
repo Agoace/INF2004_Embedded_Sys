@@ -43,3 +43,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 - [Obstacle bypass](OBSTACLE_BYPASS.md) — edge-following bypass ("Blind Bicycle Algorithm"), shelved 2026-10-30 at version 4.1: design, track runs 1–18, open problems, `bypass_test` bench procedure.
 - [Servo obstacle scan](OBSTACLE_SCAN.md) — mounted servo limits, 13-point ±30° scan (5° steps), PROFILE event (shorter way around, no width), and tests.
 - [School Repos checkout ledger](../../../docs/README.md#coursework-checkout-ledger) — parent workspace state. This link resolves only in a School Repos submodule checkout.
+
+## Branch layout
+
+See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.

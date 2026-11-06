@@ -106,3 +106,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | --- | --- |
 | Current repository | This independent Git repository owns all files below its root. It has no nested repositories or submodules. |
 | Parent superproject checkout | The School Repos superproject tracks this repository as a gitlink. Commit and push here first; then update the gitlink in the parent repository. |
+
+## Branch layout
+
+See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
