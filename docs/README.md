@@ -61,7 +61,8 @@ Kernel platform entry points and the removed template demo are recorded in
 [Branch layout](BRANCH_LAYOUT.md#kernel-platform-bring-up).
 
 Kernel motion bring-up: [Motor controller — μT-Kernel layer](MOTOR_CONTROLLER.md#μt-kernel-layer).
-On-target procedures: [Subsystem 2 test log](../testing/subsystem2/TEST_LOG.md); all not run.
+On-target procedures and operator results: [Subsystem 2 test log](../testing/subsystem2/TEST_LOG.md).
+Cold-power timer gate: [S0-U01 platform test](../testing/subsystem1/TEST_LOG.md), not yet run on the fixed image.
 
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
 

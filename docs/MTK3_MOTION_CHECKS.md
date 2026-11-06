@@ -4,23 +4,26 @@
 
 This record covers step 1 only: shared GPIO/time platform, the S2 motor
 task, SDK hardware adapter and RAM floor bench. No line/vehicle/scan task
-is connected. No hardware was flashed. All on-target tests remain **Not run**.
+is connected. No hardware was flashed by this change. Operator-supplied
+2026-11-06 post-flash results now include S2-U01/U02/U03 and functional
+B4-lifted passes. Cold-power S0-U01, S2-U04 and floor B4 remain **Not run**.
 
-- Base `mtk3`: `c24abf6`; platform commit `3149f18`, SDK hook `ec45183`,
-  external-header policy `07f2669`, repeatable link proof `c24abf6`.
-- `mtk3-motion`: `3d7b35e`; base merged before implementation (`4535e90`),
-  task/bench `8ef6709`, SDK adapter `959c2b0`, constant-pin setup `f268bdd`,
-  per-tick bench notification `e5c96fe`, safe task exit `3d7b35e`.
-- Candidate code merges: `mtk3-staging-next` through `c5917e2`.
+- Base `mtk3`: `165a574`, from `c24abf6`; cold-power tick initialization,
+  rate check, S0-U01 and host ratio tests.
+- `mtk3-motion`: `7ea8fcf`, from `3d7b35e`; base merge `e9fb754`, then
+  zero-PWM clock gate, failure-path tests and operator hardware records.
+- Candidate code merges: `mtk3-staging-next` through `6bfd56f`;
+  base merge `4927e95`, motion merge `6bfd56f`.
   Both base and motion use real `--no-ff` merges; no history was rewritten.
-- `mtk3-staging` remains at `2117122` in the main checkout. The operator
+- `mtk3-staging` remains at `d9cfea6` in the main checkout. The operator
   will review the candidate before Main_Worker advances it. No push.
 
-All work uses `/tmp/mtk3m` and a temporary motion-branch worktree,
-`/tmp/mtk3mo`, outside School-Repos. The motion worktree was removed after
-merging. Initial results are in `/tmp/mtk3-motor-results/`; the per-tick
-fix rerun logs are in `/tmp/mtk3-notify-results/`. Host and firmware build
-directories and link-probe outputs are removed after checks. The main
+This change uses `/tmp/mtk3t`, `/tmp/mtk3b` and `/tmp/mtk3mo`, outside
+School-Repos. The base and motion worktrees are removed after merging.
+Cold-power fix build/check logs are in `/tmp/mtk3-cold-results/`.
+Initial results were in `/tmp/mtk3-motor-results/`; per-tick fix results
+were in `/tmp/mtk3-notify-results/`. Host and firmware build directories
+and link-probe outputs are removed after checks. The main
 checkout is unchanged. Build output and the dummy bare-metal configuration
 are not committed.
 
@@ -37,7 +40,7 @@ Toolchain: Arm GNU 14.3.Rel1, GCC 14.3.1; Pico SDK 2.3.0 at
 | Strict ARM compile of new platform/motion units (initial bring-up) | 9 per profile, 27 total; pass |
 | Retained SDK hardware link probe, all three profiles | Pass; no unresolved symbols |
 | Committed `scripts/check-sdk-hw-link.py`, all three profiles | Pass |
-| Independent strict host CMake/CTest suite | 22/22 pass |
+| Independent strict host CMake/CTest suite | 23/23 pass |
 | Simulator, `SIM_FIRMWARE=detour_test` | 6/6 pass |
 | Bare-metal Pico W CMake configure and full build | Pass; placeholder config removed after build |
 | Documentation checker | Pass |
@@ -51,31 +54,33 @@ doubles test mutex ownership, core affinity, encoder signs, last-tick
 count snapshots, stale stop, ESTOP ordering, GPIO dispatch/acknowledgment
 and queued/late wake counters. The notify test also checks one client wake
 per completed tick, after mutex release, and no client wake before
-registration or after disabling it. These are not timing or hardware tests.
+registration or after disabling it. New time doubles cover ratio 1.0,
+42.7 and its inverse, 0.97/1.03 failures at a 2% limit, exact 0.98/1.02
+boundaries, counter wrap and kernel errors. Motion doubles check that
+both initialization and rate-check failures leave motor PWM zero and
+create no mutex/cyclic/task or bench. These are not hardware timing tests.
 
-The per-tick fix reran all three clean firmware builds and SDK link proofs,
-the strict 22-test host suite, the 6-test simulator suite, the full
-bare-metal Pico W build and the documentation checker. Simulator output
-used `/tmp/mtk3-notify-sim` because `/tmp/simb` had another checkout's cache.
+The cold-power fix reran all three clean firmware builds and SDK link
+proofs, the strict 23-test host suite, the 6-test simulator suite, the full
+bare-metal Pico W build and the documentation checker. Fresh build paths:
+`/tmp/mtk3-cold-host`, `/tmp/mtk3-cold-sim`, `/tmp/mtk3-cold-bm`.
 Bare-metal configuration used only a temporary copy of
 `src/wifi_config.h.example`; it was removed after the build.
+Base-only strict host tests passed 12/12; motion-only tests passed 15/15.
 
 ## Image sizes and SDK change
 
 Sizes below are bytes from `arm-none-eabi-size`, normal images only.
 The link-only probe is not in these images.
 
-| Profile | Text | Data | BSS | Text change from register adapter at `1aa506b` |
+| Profile | Text | Data | BSS | Text change from `d9cfea6` |
 | --- | ---: | ---: | ---: | ---: |
-| UP, radio off | 39762 | 28 | 75916 | -31102 |
-| UP TEST, radio off | 37438 | 24 | 18300 | -31566 |
-| Default SMP, radio on | 285606 | 92 | 82356 | +236 |
+| UP, radio off | 40266 | 28 | 75916 | +504 |
+| UP TEST, radio off | 38086 | 24 | 18300 | +648 |
+| Default SMP, radio on | 286138 | 92 | 82356 | +532 |
 
-Data is unchanged from the register adapter; BSS adds 4 bytes for the
-notification client task ID. The UP text decrease
-is **not** an adapter-only saving: the app SDK hook enables section garbage
-collection for radio-off profiles, which the template previously enabled
-only with radio on. The default SMP profile already used it. The normal
+Data and BSS are unchanged from `d9cfea6`. The app SDK hook keeps section
+garbage collection enabled for all profiles, including radio-off. The normal
 bench reserves 2400 static rows (57600 bytes); TEST builds omit that log
 and bench task. No kernel capacity/configuration value was changed.
 
@@ -94,6 +99,11 @@ and [`build_make/app_sdk_hw.mk`](../build_make/app_sdk_hw.mk).
 - Timer: hardware header and inline `timer_time_us_32()` compile/link;
   no timer/alarm/time initialization .c files are added. The application
   64-bit read stays a stable high/low register read.
+- Tick source: SDK `hardware_ticks/ticks.c`, runtime-free on RP2040.
+  `tick_start(TICK_WATCHDOG, 12)` is retained in the forced probe and normal
+  images. The adapter separately polls the real RUNNING bit with a bounded
+  CPU wait; SDK 2.3.0 `tick_is_running()` checks ENABLE only on RP2040.
+  No watchdog .c source or watchdog reset counter is enabled.
 - No SDK startup, stdlib, IRQ, sync, multicore, clocks or time runtime
   sources are added. `clock_get_hz()` is not called by the motor adapter
   or probe. The template's radio compatibility shim with that name
@@ -113,7 +123,9 @@ GPIO IRQ13: unshifted priority **1**, core 0 only, `tk_def_int(TA_HLNG)`.
 USB IRQ5 keeps reset priority **0** because the existing USB bridge does
 not write its priority. GPIO is below USB, above SysTick/PendSV priority 3.
 
-S2-U01/U02/U03/U04 and B4 remain **Not run**. Read
+Operator post-flash S2-U01/U02/U03 and B4-lifted functional checks passed;
+see the exact results and lifted-versus-floor limits in the S2 log.
+S0-U01 on the fixed image, S2-U04 and floor B4 remain **Not run**. Read
 [the S2 test log](../testing/subsystem2/TEST_LOG.md) before any hardware
 work: **lift both wheels before power with TEST=1**, which sends a real
 brief speed command. The normal bench needs GP21 to start after 1 s;
@@ -131,7 +143,27 @@ Task functions must not return: a failed bench registration prints one
 error line, then calls `tk_ext_tsk()`. Motion has an endless task loop;
 subsystem test functions run inside the initial task, not as task entries.
 
-There is no measured jitter, physical stop, encoder sign or B4 result yet.
+## Cold-power defect and remaining hardware gate
+
+A cold VIN boot exposed a TIMER source rate about 42.7 times too slow:
+11165 kernel motion ticks but TIMER task gaps only 233..235 us. A 500 ms
+rest lasted about 21 s before an unexpected forward step; the row buffer
+filled. The local source log is `build/mtk_logs/usb_console.txt`.
+
+The RP2040 WATCHDOG_TICK reset value enables a divide-by-512 tick, not the
+required divide-by-12 tick from 12 MHz `clk_ref`. A post-flash reboot can
+retain boot ROM setup and hide the fault. `usermain()` now initializes the
+tick before subsystems; motion sets zero motor PWM, then initializes and
+checks TIMER against actual elapsed kernel time, rejecting error above 2%.
+S0-U01 checks about 1 s at a tighter 1% limit. It is **Not run** on hardware.
+Test every kernel image after a cold power-on, not only after a flash.
+
+Template Wi-Fi `time_us_64()` in
+`lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_compat.c` reads this same TIMER
+and has the same defect. Early application initialization covers later
+calls; no template kernel/library files were changed. Floor B4 stays
+blocked until the fixed image passes cold-power S0-U01.
+
 If task-gap jitter exceeds 1 ms, stop floor testing and review Option H;
 it is not implemented. Do not treat compile/link success as approval of
 hardware timing, electrical behaviour or the full RTOS vehicle plan.
