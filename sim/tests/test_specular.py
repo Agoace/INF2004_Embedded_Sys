@@ -25,9 +25,10 @@ def target(distance=200, angle=0, size=None):
             'contact': 'freeze-both', 'echo': material()}
 
 
-def probe(obstacle, scan=False):
+def probe(obstacle, scan=False, beam_deg=30):
     _, s, _ = load(SIM / 'scenarios/no_box_straight.json')
     s.update(end_us=3000000 if scan else 100000, events=[], obstacles=[obstacle])
+    s['robot']['ultrasonic']['beam_deg'] = beam_deg
     validate(s)
     result = subprocess.run([str(LAUNCHER.parent / 'sim_ultrasonic_probe')],
         input=normalise(s), capture_output=True, text=True, timeout=10,
@@ -37,8 +38,8 @@ def probe(obstacle, scan=False):
     return [json.loads(line) for line in result.stdout.splitlines()]
 
 
-def readings(obstacle):
-    points = [e for e in probe(obstacle, True) if e['type'] == 'scan_point']
+def readings(obstacle, beam_deg=30):
+    points = [e for e in probe(obstacle, True, beam_deg) if e['type'] == 'scan_point']
     return ['NR' if (e['word'] >> 9) & 3 else e['word'] & 511 for e in points]
 
 
@@ -99,6 +100,38 @@ class Specular(unittest.TestCase):
         o.pop('size_mm');o['pose']['x_mm']=65+200+33
         echo=next(e for e in probe(o) if e['type']=='ultrasonic_trigger')
         self.assertTrue(echo['hit']);self.assertAlmostEqual(echo['distance_mm'],200)
+
+    def test_beam_setting_schema(self):
+        _, s, _ = load(SIM / 'scenarios/no_box_straight.json')
+        for beam in [0.5, 5, 30]:
+            s['robot']['ultrasonic']['beam_deg'] = beam
+            validate(s)
+        for beam in [0.4, 31, True, 'x']:
+            s['robot']['ultrasonic']['beam_deg'] = beam
+            with self.assertRaises(ScenarioError):
+                validate(s)
+        s['robot']['ultrasonic'].update(beam_deg=5, trigger_gap_us=50000)
+        with self.assertRaises(ScenarioError):
+            validate(s)
+
+    def test_narrow_beam_real_box_scan(self):
+        # Run R2 box (docs/VC_DETOUR_RUN.md): 160 mm face, 250 mm deep,
+        # centre 20 mm right, 218 mm ahead of the sensor. Recorded:
+        # 487 236 227 227 218 218 218 227 227 236 NR NR NR (R 6, L 4).
+        box = target(218, 0, [250, 160])
+        box['pose'].update(x_mm=65+218+125, y_mm=-20)
+        box['echo'] = material(incidence=16, corner=300)
+        wide = readings(box, 30)
+        narrow = readings(box, 5)
+        # The 30 degree sector reaches the face at normal incidence from
+        # every scan point: no free side (the old model failed this box).
+        self.assertNotIn('NR', wide)
+        # A 5 degree beam sees the right corner at -25, the face, and no
+        # echo from +20 (left free step 4), as recorded.
+        self.assertNotEqual(narrow[1], 'NR')
+        self.assertEqual(narrow[10:], ['NR', 'NR', 'NR'])
+        self.assertTrue(all(v != 'NR' for v in narrow[3:10]))
+        self.assertAlmostEqual(narrow[6], 218, delta=2)
 
     def test_corner_range_on_off_and_boundary(self):
         o=target(300-0.5,45,[120,120])

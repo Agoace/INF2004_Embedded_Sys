@@ -425,6 +425,41 @@ pico_enable_stdio_usb(motor_ctl_bench 1)
 pico_enable_stdio_uart(motor_ctl_bench 0)
 pico_add_extra_outputs(motor_ctl_bench)
 
+# Vehicle Controller test: line tracing, search, scan and detour modules
+# in the shell, wheel speeds through the motor controller
+# (docs/VC_LINE_RUN.md, docs/VC_DETOUR_RUN.md).
+add_executable(vc_line_test
+    src/vc_line_test.c
+    src/line_trace.c
+    src/line_search.c
+    src/servo_scan.c
+    src/detour_run.c
+    src/obstacle_detour.c
+    src/obstacle_profile.c
+    src/line_steer.c
+    src/line_position.c
+    src/line_sensors.c
+    src/obstacle.c
+    src/ultrasonic.c
+    src/vehicle_sm.c
+    src/steer_log.c
+    src/wifi_log.c
+)
+
+target_include_directories(vc_line_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/src
+)
+
+target_link_libraries(vc_line_test PRIVATE
+    motor_ctl_pico
+    hardware_adc
+    pico_cyw43_arch_lwip_threadsafe_background
+)
+
+pico_enable_stdio_usb(vc_line_test 1)
+pico_enable_stdio_uart(vc_line_test 0)
+pico_add_extra_outputs(vc_line_test)
+
 # Duty map bench: open-loop duty levels, speed from the encoder counts.
 add_executable(duty_map_bench
     src/duty_map_bench.c

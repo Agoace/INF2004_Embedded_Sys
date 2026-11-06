@@ -69,8 +69,11 @@ void world_read(FILE *input) {
         !isfinite(c.top_speed_mm_s) || c.top_speed_mm_s <= 0.0)) {
         sim_error("invalid loaded-linear top speed");
     }
-    if (fscanf(input, "%lf %lf %lf %lf %lf %lf %lf", &c.front, &c.rear, &c.width,
-        &c.track, &c.diameter, &c.servo_x, &c.face_offset) != 7) { sim_error("invalid motion configuration"); }
+    double beam_deg;
+    if (fscanf(input, "%lf %lf %lf %lf %lf %lf %lf %lf", &c.front, &c.rear, &c.width,
+        &c.track, &c.diameter, &c.servo_x, &c.face_offset, &beam_deg) != 8 ||
+        !isfinite(beam_deg) || beam_deg <= 0.0 || beam_deg > 30.0) { sim_error("invalid motion configuration"); }
+    c.beam_half = beam_deg * PI / 360.0;
     for (size_t i = 0; i < 3u; ++i) {
         unsigned int floor, line;
         if (fscanf(input, "%lf %lf %u %u", &c.ir[i].x, &c.ir[i].y, &floor, &line) != 4 ||
@@ -319,7 +322,7 @@ static void echo_candidate(world_echo_t *best, world_point_t p, size_t index, do
     const double x=p.x-best->origin.x, y=p.y-best->origin.y;
     const double distance=hypot(x,y);
     const double offset=atan2(sin(atan2(y,x)-heading),cos(atan2(y,x)-heading));
-    if (distance>=1e-9 && fabs(offset)>PI/12+1e-12) { return; }
+    if (distance>=1e-9 && fabs(offset)>cfg.beam_half+1e-12) { return; }
     if (distance<best->surface_distance) {
         best->surface_hit=true; best->surface_distance=distance;
         best->surface_point=p; best->surface_obstacle=index;
@@ -358,7 +361,7 @@ world_echo_t world_echo(void) {
                 echo_candidate(&best,a,i,heading,normal,true);
                 echo_candidate(&best,(world_point_t){a.x+t*edge.x,a.y+t*edge.y},i,heading,normal,false);
                 for (int side=-1;side<=1;side+=2) {
-                    const double h=heading+(double)side*PI/12;
+                    const double h=heading+(double)side*cfg.beam_half;
                     const world_point_t ray={cos(h),sin(h)};
                     const double denominator=cross(ray,edge);
                     if (fabs(denominator)<1e-12) { continue; }
@@ -380,7 +383,7 @@ world_echo_t world_echo(void) {
                     (world_point_t){cos(heading),sin(heading)},false);
             }
             for (int side=-1;side<=1;side+=2) {
-                const double h=heading+(double)side*PI/12;
+                const double h=heading+(double)side*cfg.beam_half;
                 const double projection=dx*cos(h)+dy*sin(h);
                 const double discriminant=radius*radius-distance*distance+projection*projection;
                 if (discriminant<0) { continue; }

@@ -18,6 +18,9 @@ This repository contains Raspberry Pi Pico W coursework for the INF2004 Embedded
 - [`src/line_position.c`](src/line_position.c) — normalised line position from learned per-sensor values; [`src/line_test.c`](src/line_test.c) is its bench test. Two-sensor line tracing is locked ([two-sensor line tracing](docs/TWO_SENSOR_LINE_TRACING.md)).
 - [`src/line_steer.c`](src/line_steer.c) — line position to left/right wheel duty; [`src/steer_test.c`](src/steer_test.c) is its bench test. [`src/drive.c`](src/drive.c), [`src/line_sensors.c`](src/line_sensors.c), and [`src/line_spin.c`](src/line_spin.c) are shared bench parts. [`src/wifi_log.c`](src/wifi_log.c) sends the `steer_test` log over Wi-Fi to [`scripts/steer_log_receiver.py`](scripts/steer_log_receiver.py) ([steering Wi-Fi log](docs/STEER_WIFI_LOG.md)).
 - [`src/vehicle_sm.c`](src/vehicle_sm.c) — Vehicle Controller shell: runs one module at a time and maps module outcomes to the next module ([vehicle state machine](docs/VEHICLE_STATE_MACHINE.md)); [`tests/test_vehicle_sm.c`](tests/test_vehicle_sm.c) is its host unit test.
+- [`src/line_trace.c`](src/line_trace.c) and [`src/line_search.c`](src/line_search.c) — line tracing and line search modules for the Vehicle Controller shell; `vc_line_test` ([`src/vc_line_test.c`](src/vc_line_test.c)) runs them on the track through the motor controller ([Vehicle Controller line run](docs/VC_LINE_RUN.md)); [`tests/test_line_trace.c`](tests/test_line_trace.c) is their host unit test.
+- [`src/servo_scan.c`](src/servo_scan.c) and [`src/detour_run.c`](src/detour_run.c) — scan and detour modules for the same shell and target ([Vehicle Controller detour run](docs/VC_DETOUR_RUN.md)); [`tests/test_obstacle_modules.c`](tests/test_obstacle_modules.c) is their host unit test.
+- [`src/duty_map_bench.c`](src/duty_map_bench.c) — floor bench: open-loop duty levels, speed from the encoder counts ([duty map](docs/DUTY_MAP.md)).
 - [`src/heartbeat.c`](src/heartbeat.c) — 1 ms time base for all modules: interrupt hooks, main-loop flags, watchdog ([heartbeat](docs/HEARTBEAT.md)); [`tests/test_heartbeat.c`](tests/test_heartbeat.c) is its host unit test; `heartbeat_test` is the bench target.
 - [`src/motor_ctl.c`](src/motor_ctl.c) — motor controller core: the only owner of motor PWM, servo and encoders; wheel speeds in, measurements out ([motor controller](docs/MOTOR_CONTROLLER.md)); [`tests/test_motor_ctl.c`](tests/test_motor_ctl.c) is its host unit test; [`src/motor_ctl_pico.c`](src/motor_ctl_pico.c) is its Pico layer (PWM, encoders, servo, heartbeat hook); `motor_ctl_bench` ([`src/motor_ctl_bench.c`](src/motor_ctl_bench.c)) is the floor bench target.
 - [`src/vehicle_controller.c`](src/vehicle_controller.c) — Vehicle Controller state machine (step 1: line following); [`tests/test_vehicle_controller.c`](tests/test_vehicle_controller.c) is its host unit test.
@@ -67,3 +70,5 @@ The pre-commit hook runs this check only when relevant files are staged. Use `gi
 ## Branch layout
 
 See [Branch layout](docs/BRANCH_LAYOUT.md) for module ownership and merge rules.
+
+- [Robo Pico RTOS multicore plan](docs/robo_pico_rtos_multicore_plan.md) — proposed task and core split.

@@ -38,6 +38,10 @@ The parent-workspace link resolves only when this repository is checked out as a
 | ADR: one hardware heartbeat | [docs/ADR_HEARTBEAT.md](ADR_HEARTBEAT.md) |
 | ADR: Vehicle Controller runs one module at a time | [docs/ADR_VEHICLE_CONTROLLER.md](ADR_VEHICLE_CONTROLLER.md) |
 | Vehicle state machine record | [docs/VEHICLE_STATE_MACHINE.md](VEHICLE_STATE_MACHINE.md) — shell [`src/vehicle_sm.c`](../src/vehicle_sm.c), test [`tests/test_vehicle_sm.c`](../tests/test_vehicle_sm.c) |
+| Vehicle Controller line run | [docs/VC_LINE_RUN.md](VC_LINE_RUN.md) — modules [`src/line_trace.c`](../src/line_trace.c), [`src/line_search.c`](../src/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
+| Vehicle Controller detour run | [docs/VC_DETOUR_RUN.md](VC_DETOUR_RUN.md) — modules [`src/servo_scan.c`](../src/servo_scan.c), [`src/detour_run.c`](../src/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
+| Line steering in mm/s | [docs/LINE_STEER_MM.md](LINE_STEER_MM.md) — `steer_mm_*` in [`src/line_steer.c`](../src/line_steer.c) |
+| Duty map record | [docs/DUTY_MAP.md](DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/HEARTBEAT.md](HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
 | Motor controller record | [docs/MOTOR_CONTROLLER.md](MOTOR_CONTROLLER.md) — core [`src/motor_ctl.c`](../src/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`src/motor_ctl_robot.h`](../src/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Vehicle Controller record | [docs/VEHICLE_CONTROLLER.md](VEHICLE_CONTROLLER.md) |
@@ -92,7 +96,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Simulator devices and SDK headers | [`sim/devices/placeholders.c`](../sim/devices/placeholders.c), [`sim/devices/ultrasonic.c`](../sim/devices/ultrasonic.c), [`sim/include/sim_devices.h`](../sim/include/sim_devices.h), [`sim/include/`](../sim/include/) — motion/IR/servo, timed echo/fault events, local sink, and minimal host SDK surface |
 | Simulator call hooks | [`sim/targets/detour_hooks.c`](../sim/targets/detour_hooks.c), [`sim/targets/detour_decode.py`](../sim/targets/detour_decode.py) — exact external-call observations, separate inferred phases, and hook/printf step checks; no firmware edits |
 | Offline trace viewer | [`sim/viewer/render.py`](../sim/viewer/render.py), [`sim/viewer/template.html`](../sim/viewer/template.html), [`sim/viewer/viewer.js`](../sim/viewer/viewer.js), [`sim/viewer/viewer.css`](../sim/viewer/viewer.css) — self-contained saved-data HTML, true/firmware poses, playback and camera controls |
-| Simulator scenarios | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/scenarios/no_box_straight.json`](../sim/scenarios/no_box_straight.json), [`sim/scenarios/unloaded_reference.json`](../sim/scenarios/unloaded_reference.json); two line sensors: [`sim/scenarios/two_sensor_track.json`](../sim/scenarios/two_sensor_track.json), [`sim/scenarios/two_sensor_straight.json`](../sim/scenarios/two_sensor_straight.json) |
+| Simulator scenarios | [`sim/scenarios/box_straight.json`](../sim/scenarios/box_straight.json), [`sim/scenarios/no_box_straight.json`](../sim/scenarios/no_box_straight.json), [`sim/scenarios/unloaded_reference.json`](../sim/scenarios/unloaded_reference.json); narrow-beam real box (run R2 fit): [`sim/scenarios/box_real_160x250.json`](../sim/scenarios/box_real_160x250.json); two line sensors: [`sim/scenarios/two_sensor_track.json`](../sim/scenarios/two_sensor_track.json), [`sim/scenarios/two_sensor_straight.json`](../sim/scenarios/two_sensor_straight.json) |
 | Optional local environment editor | [`sim/viewer/serve.py`](../sim/viewer/serve.py), [`sim/viewer/editor.html`](../sim/viewer/editor.html), [`sim/viewer/editor.js`](../sim/viewer/editor.js), [`sim/viewer/editor.css`](../sim/viewer/editor.css) — loopback-only environment edits, validated batch runs, save and session history; echo materials are editable, robot model/firmware are not |
 | Fixed-front box-size sweep | [`sim/box_sweep.py`](../sim/box_sweep.py), [`sim/scenarios/box_wide_deep.json`](../sim/scenarios/box_wide_deep.json) — generate six size-only variants under `sim/scenarios/`, retain the baseline, and optionally run all seven cases |
 | Simulator tests | [`sim/tests/test_milestone1.py`](../sim/tests/test_milestone1.py), [`sim/tests/probe.c`](../sim/tests/probe.c), [`sim/tests/test_milestone2.py`](../sim/tests/test_milestone2.py), [`sim/tests/model_probe.c`](../sim/tests/model_probe.c), [`sim/tests/test_milestone3.py`](../sim/tests/test_milestone3.py), [`sim/tests/test_specular.py`](../sim/tests/test_specular.py), [`sim/tests/ultrasonic_probe.c`](../sim/tests/ultrasonic_probe.c), [`sim/tests/test_milestone4.py`](../sim/tests/test_milestone4.py), [`sim/tests/viewer_browser.cjs`](../sim/tests/viewer_browser.cjs), [`sim/tests/test_server.py`](../sim/tests/test_server.py), [`sim/tests/editor_browser.cjs`](../sim/tests/editor_browser.cjs) |
@@ -113,8 +117,6 @@ The parent-workspace link resolves only when this repository is checked out as a
 
 See [Branch layout](BRANCH_LAYOUT.md) for module ownership and merge rules.
 
-## Module tests
+Standalone module tests: [`host-tests/`](../host-tests/), one C test per module.
 
-Standalone module tests: [`host-tests/`](../host-tests/). See [Branch layout](BRANCH_LAYOUT.md) for commands.
-
-Staging combines the module branches. Merge module branches only into `yx-staging`.
+- [Robo Pico RTOS multicore plan](robo_pico_rtos_multicore_plan.md) — proposed task and core split.

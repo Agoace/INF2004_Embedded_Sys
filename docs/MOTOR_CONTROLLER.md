@@ -173,7 +173,7 @@ within 3° of the target). Options not taken are under *Ideas*.
 ### Run B3 (2026-11-04, boot ede2, rise limit 8 counts/tick per tick, floor, VIN)
 
 Change from B2: the rise limit 2 → 8 counts/tick per tick (line run P5,
-`Vehicle Controller line run`). Same step list. Log
+[Vehicle Controller line run](VC_LINE_RUN.md)). Same step list. Log
 `build/steer_logs/text_ede2.txt`. All 17 steps done, no fault; the same
 rows 7–15 lost over Wi-Fi.
 

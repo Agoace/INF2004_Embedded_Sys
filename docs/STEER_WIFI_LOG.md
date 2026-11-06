@@ -73,7 +73,7 @@ LOG packet: header, then:
 | Bytes | Field |
 | --- | --- |
 | 5 | Run number (0: a saved run from before the restart) |
-| 6 | Flags: bit 0 replay, bit 1 last replay packet, bit 2 `bypass_test` run (mode 3 is BYPS) |
+| 6 | Flags: bit 0 replay, bit 1 last replay packet, bit 2 `bypass_test` run (mode 3 is BYPS), bit 3 `detour_test` run, bit 4 `vc_line_test` run (`SL_FLAG_SPEED`: the wheel fields are asked speeds in 4 mm/s units, [Vehicle Controller line run](VC_LINE_RUN.md)) |
 | 7–8 | Index of the first entry (time = index × 50 ms) |
 | 9 | Number of entries, at most 20 |
 | 10… | Entries, 11 bytes each |

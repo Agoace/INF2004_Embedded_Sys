@@ -40,6 +40,9 @@
  * Log header flag bit 3 (SL_FLAG_DETOUR, with bit 2): the run is from
  * detour_test; in the reading records, state << 2 | phase is the detour
  * step (dt_step_t, src/obstacle_detour.h) and steer is 0.
+ * Log header flag bit 4 (SL_FLAG_SPEED): the run is from vc_line_test;
+ * the two duty fields are the asked wheel speeds in 4 mm/s units
+ * (-127..+127 = -508..+508 mm/s).
  *
  * BYPASS packets (bypass_test): the header, then a 4-byte bypass header
  * (run number; index of the first record, little-endian; number of
@@ -81,6 +84,7 @@
 #define SL_FLAG_REPLAY_END 0x02u
 #define SL_FLAG_BYPASS 0x04u
 #define SL_FLAG_DETOUR 0x08u
+#define SL_FLAG_SPEED 0x10u
 
 #define SL_BYPASS_HEADER_BYTES 4u
 #define SL_BYPASS_BYTES 5u
