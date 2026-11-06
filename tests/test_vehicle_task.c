@@ -1,75 +1,89 @@
-/* Host smoke scheduler: button ownership, calibration/start/estop, no run printing. */
+/* Host scheduler: service-only inputs, calibration, stop, deadline and telemetry. */
 #include <assert.h>
 #include <setjmp.h>
+#include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem2/motion.h"
-#include "../app_program/subsystem3/drv_line.h"
-#include "../app_program/subsystem5/drv_ultrasonic.h"
-static FP entry;
-static jmp_buf done;
-static uint32_t now;
-static unsigned int samples, starts, notifications, estops, prints, line_drives;
-static int line_error;
-static bool watchdog_ready;
-const char *drv_watchdog_reset_name(void) { return "power/RUN"; }
-static int16_t asked[2];
-static int32_t counts[2];
-static ID listener;
-ID app_start_task(FP fn,PRI priority,UW core,const char *name) {
-    (void)name; assert(priority==12 && core==TP_PRC1); entry=fn; ++starts; return 7;
-}
+#include "../app_program/subsystem3/line_service.h"
+#include "../app_program/subsystem5/sonar_service.h"
+#include "../app_program/subsystem1/telemetry.h"
+static FP entry;static jmp_buf done;static uint32_t now;
+static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
+static int line_error;static bool watchdog_ready,calibrating,stale,overrun;
+static int16_t asked[2];static int32_t counts[2];static ID listener;
+static lp_t line;static vc_event_t line_event;static uint16_t raw[3],peak;
+ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==13 && core==1u);entry=f;++starts;return 7; }
 ID tk_get_tid(void) { return 7; }
 void tk_ext_tsk(void) { assert(0); }
-ER tk_slp_tsk(TMO timeout) {
-    assert(timeout==20); now+=10u; samples=10u;
-    counts[0]+=asked[0]/6; counts[1]+=asked[1]/6;
+ER tk_slp_tsk(TMO t) {
+    assert(t==20);now+=10u;counts[0]+=asked[0]/6;counts[1]+=asked[1]/6;
+    for (unsigned int i=0u;i<10u;++i) {
+        const uint32_t ms=now-9u+i;
+        raw[0]=(ms/20u)%2u ? 500u : 3500u;raw[1]=(ms/30u)%2u ? 500u : 3500u;raw[2]=0u;
+        if (calibrating) lp_calib_add(&line,raw);
+        else {
+            const vc_event_t e=lp_update(&line,raw,ms);
+            if (e!=VC_EVENT_NONE) line_event=e;
+            if (line.norm[LP_CENTRE]>peak) peak=line.norm[LP_CENTRE];
+        }
+    }
     if (now>=8000u) longjmp(done,1);
     return E_OK;
 }
-INT tk_can_wup(ID id) { assert(id==TSK_SELF); return 0; }
-ER tk_dly_tsk(RELTIM delay) { (void)delay; assert(0); return E_OK; }
-int tm_printf(const UB *format,...) { (void)format; ++prints; return 0; }
+INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
+int tm_printf(const UB *f,...) { (void)f;++prints;return 0; }
 uint32_t drv_time_ms(void) { return now; }
 uint32_t drv_time_us(void) { return now*1000u; }
-int drv_line_init(void) { return line_error; }
-void drv_line_stats(drv_line_stats_t *s) { *s=(drv_line_stats_t){0}; }
-void drv_line_flush(void) { samples=0u; }
-bool drv_line_take(drv_line_sample_t *s) {
-    if (!samples) return false;
-    --samples; s->us=(now- samples)*1000u;
-    s->raw[0]=(now/20u)%2u ? 500u : 3500u;
-    s->raw[1]=(now/30u)%2u ? 500u : 3500u; s->raw[2]=0u; return true;
+int line_snapshot_read(line_snapshot_t *s,bool consume) {
+    if (line_error) return line_error;
+    *s=(line_snapshot_t){.line=line,.event=line_event,.valid=true,.timestamp_us=now*1000u,.norm_peak=peak,.raw_bc=4095u};
+    for (unsigned int i=0u;i<3u;++i) s->raw[i]=raw[i];
+    if (stale && now>=3000u) s->timestamp_us-=11000u;
+    if (consume) line_event=VC_EVENT_NONE;
+    return E_OK;
 }
-int drv_ultrasonic_init(void) { return E_OK; }
-bool drv_ultrasonic_service(void) { return false; }
-bool drv_ultrasonic_busy(void) { return false; }
-bool drv_ultrasonic_trigger(void) { return true; }
-ultrasonic_result_t drv_ultrasonic_latest(void) { return (uint16_t)(ULTRASONIC_STATUS_NO_RETURN<<9u); }
+int line_calibration_begin(void) { lp_calib_begin(&line);calibrating=true;return E_OK; }
+lp_calib_result_t line_calibration_end(void) { unsigned int bad;calibrating=false;peak=0u;return lp_calib_end(&line,&bad); }
+int line_calibration_abort(void) { calibrating=false;return E_OK; }
+int sonar_result_read(sonar_snapshot_t *s,bool *fresh) { *s=(sonar_snapshot_t){0};*fresh=false;return E_OK; }
+int sonar_request(const sonar_request_t *r) { assert(r->mode<=SONAR_ACK);++requests;return E_OK; }
+void telemetry_stats(telemetry_stats_t *s) { *s=(telemetry_stats_t){0}; }
+int telemetry_send(const telemetry_message_t *m) {
+    assert(m->kind<=TELEMETRY_DUMP);
+    if (m->kind==TELEMETRY_ROW) ++rows;
+    if (m->kind==TELEMETRY_INFO && m->data.info.overruns>max_overruns) max_overruns=m->data.info.overruns;
+    return E_OK;
+}
 void drv_motor_hw_buttons_init(void) { }
 bool drv_motor_hw_button_down(unsigned int pin) {
     return pin==21u && ((now>=20u && now<50u) || (now>=5000u && now<5050u));
 }
-int motion_notify_after_tick(ID id) { listener=id; ++notifications; return E_OK; }
+int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
-    *s=(motion_status_t){0}; s->watchdog_armed=watchdog_ready;
-    s->counts[0]=counts[0]; s->counts[1]=counts[1]; return E_OK;
+    *s=(motion_status_t){0};s->watchdog_armed=watchdog_ready;s->ticks=now/10u;
+    s->counts[0]=counts[0];s->counts[1]=counts[1];return E_OK;
 }
 int motion_clear_faults(void) { return E_OK; }
 int motion_set_speed(int16_t l,int16_t r) {
     if (l>0 && r>0) ++line_drives;
-    asked[0]=l; asked[1]=r; return E_OK;
+    asked[0]=l;asked[1]=r;
+    if (overrun && (l!=0 || r!=0)) now+=11u;
+    return E_OK;
 }
-int motion_stop(void) { asked[0]=asked[1]=0; return E_OK; }
-int motion_estop(void) { ++estops; return motion_stop(); }
-int motion_set_servo(int deg,int *accepted) { (void)deg; (void)accepted; return E_OK; }
-int main(void) {
-    assert(vehicle_task_start()==E_OBJ && starts==0u);
-    watchdog_ready=true;
-    line_error=E_SYS; assert(vehicle_task_start()==E_SYS && starts==0u);
-    line_error=E_OK; assert(vehicle_task_start()==E_OK && starts==1u);
+int motion_stop(void) { asked[0]=asked[1]=0;return E_OK; }
+int motion_estop(void) { ++estops;return motion_stop(); }
+int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_OK; }
+int main(int argc,char **argv) {
+    stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
+    lp_init(&line);lp_set_pair(&line,true,0);
+    assert(vehicle_task_start()==E_OBJ && starts==0u);watchdog_ready=true;
+    line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
+    line_error=E_OK;assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
-    assert(listener==7 && notifications==1u && prints==1u && estops==1u);
-    assert(asked[0]==0 && asked[1]==0 && line_drives>0u);
+    assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
+    if (overrun) assert(max_overruns>0u);
+    else if (stale) assert(estops>0u);
+    else assert(estops==1u && line_drives>0u && rows>0u && requests>0u);
     return 0;
 }

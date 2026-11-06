@@ -126,7 +126,8 @@ Standalone module tests: [`host-tests/`](../host-tests/), one C test per module.
 See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
-`mtk3-vehicle` start there. LINE, SEARCH, SCAN and DETOUR start from
+`mtk3-vehicle` start there. `mtk3-telemetry` also starts from `mtk3`.
+LINE, SEARCH, SCAN and DETOUR start from
 `mtk3-vehicle`; only `mtk3-staging` combines them. Independent module tests
 are in [`host-tests/`](../host-tests/); run all host tests with
 [`tests/CMakeLists.txt`](../tests/CMakeLists.txt). The template examples are removed. The motion branch provides the first
@@ -165,7 +166,7 @@ vehicle task described below.
 
 ## Kernel line acquisition
 
-- [`app_program/subsystem3/drv_line.c`](../app_program/subsystem3/drv_line.c) — core-0 1 ms TIMER alarm 0 queue; SDK-only `drv_line_hw.c` averages eight ADC reads per L/C channel.
+- [`app_program/subsystem3/drv_line.c`](../app_program/subsystem3/drv_line.c) — core-0 1 ms TIMER alarm 0 queue and task wake; SDK-only `drv_line_hw.c` averages eight reads per L/C/barcode channel; ISR timing counters.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
@@ -177,7 +178,7 @@ vehicle task described below.
 
 ## Kernel robot integration
 
-- [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-12 core-0 task: calibration, four-module shell, buttons and paced dump.
+- [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder.

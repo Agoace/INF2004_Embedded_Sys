@@ -11,6 +11,7 @@ branches.
 | --- | --- |
 | `mtk3` | Base: course template and platform code |
 | `mtk3-motion`, `mtk3-vehicle`, `mtk3-line`, `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Module branches |
+| `mtk3-telemetry` | S1 nonblocking MBF transport, RAM log and dump owner; starts from `mtk3` |
 | `mtk3-staging` | Integration; the robot program |
 | `main` | Original course-template history. Do not change it |
 | `ziven-barcode-algo` | Barcode code (Ziven), not ported yet. Do not merge |
@@ -72,6 +73,7 @@ branch `mtk3` starts at `yx` (`942e158`). Module snapshots come from
 change in the module files. 
 ```text
 yx + template/main -> mtk3
+  +-- mtk3-telemetry ---------------+
   +-- mtk3-motion ------------------+
   +-- mtk3-vehicle -----------------+--> mtk3-staging
         +-- mtk3-line --------------+
@@ -82,9 +84,9 @@ yx + template/main -> mtk3
 
 | Area | Files and owner |
 | --- | --- |
-| Subsystem 1 | Wi-Fi and telemetry; empty stub; LED demo removed, GP19 free |
+| Subsystem 1 | `telemetry.[ch]`: priority-30 MBF consumer, RAM log/dump; future Wi-Fi publication boundary, no MQTT now; GP19 free |
 | Subsystem 2 | Motion: `motor_ctl.[ch]`; producer demo removed |
-| Subsystem 3 | Line and barcode: `line_position.[ch]`, `line_steer.[ch]`, `line_trace.[ch]`, `line_search.[ch]`; consumer demo removed |
+| Subsystem 3 | `line_service.[ch]`: per-sample task and snapshot/calibration owner; barcode raw only. Pure modules: `line_position.[ch]`, `line_steer.[ch]`, `line_trace.[ch]`, `line_search.[ch]`; consumer demo removed |
 | Subsystem 4 | IMU: no robot module yet; monitor demo removed |
 | Subsystem 5 | Ultrasonic and obstacle: pure `ultrasonic.h`, `obstacle.[ch]`, `obstacle_profile.[ch]`, pure `obstacle_scan.h`, `servo_scan.[ch]`, `detour_run.[ch]`, `obstacle_detour.[ch]` |
 | `app_program/vehicle/` | Shared types in `vehicle_controller.h`; interface `vehicle_sm.[ch]` and `vehicle_inputs.h` |
@@ -177,3 +179,14 @@ runs the robot; `BENCH=1` selects only the S2 bench, and `TEST=1` selects
 subsystem checks with neither button task. Selection changes the image
 name and stale-object profile. See [Kernel robot program](KERNEL_ROBOT.md)
 for rates, ADC ownership, known phase/watchdog differences and R5 status.
+
+## STEP 7 task split
+
+`mtk3` owns the application-only static-stack helper. `mtk3-line` owns
+per-sample line processing and its snapshot. `mtk3-scan` owns asynchronous
+sonar requests/results. New `mtk3-telemetry`, created from `mtk3`, owns S1
+RAM logging and dump transport. Staging alone rewires the robot consumer.
+Use fresh worktrees, commit in the owning branch, then merge `--no-ff`
+into the candidate; never rebase or merge another student's reference
+branch. [Kernel robot](KERNEL_ROBOT.md) has the task/object and plan-vs-port
+tables. No MQTT or barcode algorithm is added in this step.

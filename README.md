@@ -265,7 +265,11 @@ Keep the USB console enabled for the initial bring-up builds.
 
 ### Kernel robot image
 
-The default normal image now runs the four-module robot program. Use
+The default normal image runs the four-module robot with separate core-0
+motion, line, sonar, vehicle and telemetry tasks (priorities 10/11/12/13/30).
+Vehicle consumes snapshots; S1 owns the RAM log and GP20 dump. TEST/GP20
+report application stack high-water, line/ISR cost and vehicle overruns.
+These new task-split hardware checks and M1/M2 repeats are Not run. Use
 `make SMP=0 WIFI=none BENCH=1 -j4` for the earlier motion-only bench.
 GP21 calibrates then starts the robot, or latches ESTOP during a session;
 GP20 dumps saved RAM data instead of changing D. TEST images start neither

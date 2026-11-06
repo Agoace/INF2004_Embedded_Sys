@@ -155,3 +155,8 @@ host_test(test_telemetry tests/test_telemetry.c app_program/subsystem1/telemetry
 if(TARGET test_telemetry)
     target_include_directories(test_telemetry BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+if(TARGET test_vehicle_task)
+    add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
+    add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
+endif()

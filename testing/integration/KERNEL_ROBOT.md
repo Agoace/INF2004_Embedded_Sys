@@ -51,3 +51,18 @@ committed): `build/mtk_logs/m1_line_*` and `build/mtk_logs/m2_obst_*`
 
 Task gap in M2 (±0.74 ms) was wider than in the motion bench runs (±0.05 ms)
 and still below the 11 ms limit. Watch it in R5.
+
+## STEP 7 task-split image: new acceptance
+
+Prior M1/M2/M1-W passes are old-image evidence, not acceptance of this port.
+
+| ID | Procedure and acceptance | Status |
+| --- | --- | --- |
+| S7-U01 | Cold-power TEST, wheels lifted: S0-U01 and S2 tests pass; S1-U02 saturation returns without blocking; S3-U02 shows <=10 ms line age, no dropped/missed samples and measured ISR/task elapsed costs; S5-U01/U02 request checks; per-app-task stack free >=256 bytes; S2-U05 last resets near 100 ms and next boot does not repeat | Not run |
+| M1-S7 | Repeat M1 on task-split UP/no-radio image: calibration, LINE/SEARCH recovery and GP21 stop; no line losses from queue/scheduling, no vehicle overruns or telemetry loss; decode contiguous KR/VE; USB dump delta0; record all stack/CPU/ISR counters | Not run |
+| M2-S7 | Repeat M2: SCAN real-trigger acknowledgements and one-shot deadlines, late old-generation results not consumed by DETOUR; box clearance and stable line reacquisition where tiles permit; no contact/stall/fault, lost samples/wakes, overruns or telemetry loss; dump/stack checks as M1-S7 | Not run |
+
+GP28 analog visibility and ISR timing also need S3-U03. Preserve the tested
+revision/profile, both TEST boots and full GP20 output. These checks need
+explicit hardware authorization; no flash or physical test was performed
+by the STEP 7 change. Follow the safety preconditions above.

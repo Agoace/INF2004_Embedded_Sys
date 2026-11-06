@@ -4,16 +4,15 @@
 
 | Subsystem | Responsibility | Code |
 | --- | --- | --- |
-| 1 | Wi-Fi and telemetry | `app_program/subsystem1/` |
-| 2 | Motion: motors, servo, encoders and floor bench | `app_program/subsystem2/` |
-| 3 | Line and barcode | `app_program/subsystem3/` |
-| 4 | IMU | `app_program/subsystem4/` |
-| 5 | Ultrasonic and obstacle | `app_program/subsystem5/` |
+| 1 | Telemetry RAM log and USB dump; future Wi-Fi publication boundary | `app_program/subsystem1/` |
+| 2 | Motion: motors, servo, encoders and exclusive floor bench | `app_program/subsystem2/` |
+| 3 | Line acquisition/filter/calibration snapshot and sampled-only barcode raw | `app_program/subsystem3/` |
+| 4 | IMU, not yet ported | `app_program/subsystem4/` |
+| 5 | Ultrasonic request/echo service and pure obstacle modules | `app_program/subsystem5/` |
 
-The template demo tasks, tests and interfaces are removed. GP19 is free.
-Empty subsystems create no objects. Keep the init/start order in `app_main.c`.
-Only the owner changes a subsystem. Shared platform and configuration changes
-need team agreement.
+The template demos are removed. GP19 is free. Keep subsystem init/start
+order in `app_main.c`. Shared platform and configuration changes require
+team agreement. STEP 7 keeps pure modules/settings unchanged.
 
 ## 2. Pins
 
@@ -24,75 +23,81 @@ need team agreement.
 | GP16 / GP17 | S2 | Left encoder A / B; count sign +1 |
 | GP4 / GP5 | S2 | Right encoder A / B; count sign -1 |
 | GP15 | S2 | Servo PWM |
-| GP20 / GP21 | Robot task, or S2 bench with BENCH=1 | Dump saved RAM run / calibrate then start or emergency stop; pull-up, active low |
+| GP20 / GP21 | Vehicle or exclusive S2 bench | Dump request / calibrate-start or ESTOP; pull-up, active low |
 | GP27 / GP26 | S3 | Left / centre line sensor |
+| GP28 | S3 | Barcode analog ADC2, sampled only; VBAT jumper open |
 | GP2 / GP3 | S5 | Ultrasonic echo / trigger |
 | GP23 / GP24 / GP25 / GP29 | Reserved | Pico W radio |
-| GP0 / GP1 | Console when enabled | UART0 TX / RX; used with CRASH_REPORT=1 or CONSOLE=uart |
+| GP0 / GP1 | Console when enabled | UART0 TX / RX; CRASH_REPORT=1 or CONSOLE=uart |
 | GP19 | Unclaimed | Old LED demo removed |
 
 ## 3. Tasks and peripherals
 
-| Task | Priority | Processor | Responsibility |
-| --- | --- | --- | --- |
-| Kernel USB service | 3 | 1 (core 0) | Console; no application TinyUSB calls |
-| Kernel radio service, when enabled | 4 | 1 (core 0) | Radio and network stack |
-| `motion_task` on motion branch | 10 | 1 (`TP_PRC1`, core 0) | 10 ms controller, motor and servo PWM |
-| `motion_bench`, BENCH=1 only | 11 | 1 (`TP_PRC1`, core 0) | Button polling and RAM log; never with robot task or TEST |
-| `vehicle_task`, default normal image | 12 | 1 (`TP_PRC1`, core 0) | Four-module shell after each motion tick; calibration, buttons and RAM log |
+All application tasks run on physical core 0 (`TP_PRC1`).
 
-`motion_task` is the highest-priority application task. `cyc_motion` only
-wakes it. GPIO IRQ 13 and all encoder state have one owner: core 0. The
-shared dispatcher uses priority 1; USB IRQ 5 keeps reset priority 0.
-TIMER alarm 0 / IRQ0 samples line ADC at 1 ms, priority 2, core 0 only.
-SysTick and PendSV use priority 3. Do not enable these GPIO or alarm events
-on core 1. GPIO2 echo shares IRQ13 with the encoders; callbacks timestamp
-edges, then task context converts the result. No SDK IRQ runtime is used.
+| Task | Priority | Release / responsibility | Stack bytes |
+| --- | ---: | --- | ---: |
+| Kernel USB service | 3 | Template console owner, no application TinyUSB calls | Template |
+| Kernel radio service | 4 | Template radio/network owner | Template |
+| motion_task | 10 | 10 ms cyclic, motor/servo PWM, stale stop and watchdog | 3072 |
+| line_task | 11 | Every 1 ms sample wake; raw queue, lp and calibration snapshot | 2048 |
+| sonar_task | 12 | Request/edge wakes plus 10 ms deadline cyclic | 2048 |
+| vehicle_task | 13 | Motion after-tick wake, modules, spin behaviour, buttons, commands | 4096 |
+| telemetry_task | 30 | MBF receive, RAM log and paced GP20 dump | 4096 |
+| motion_bench, exclusive BENCH | 11 | Earlier bench; never with vehicle or TEST | 4096 |
 
-The motion owner uses PWM slices 4 and 5 for motors, slice 7 for the servo.
-The S3 adapter owns ADC0/1 and releases ADC reset; CLK_ADC is PLL_USB
-48 MHz / 1. The template `adca` device stays unopened: never use it while
-S3 owns ADC. The app never selects ADC3 / GP29. The alarm ISR averages
-eight conversions per channel, L then C; task context owns line logic.
-No application task may call radio, lwIP or TinyUSB functions directly.
+The ADC ISR retains eight-conversion means per channel. The line task
+processes every timestamped sample. It passes L/C/zero to pure lp logic;
+barcode raw is a separate observation, with no decoder. S3 owns ADC0/1/2;
+the template `adca` device stays unopened and ADC3/GP29 is never selected.
+ADC IRQ0 uses priority 2. GPIO13 uses priority 1 for encoders/echo; USB IRQ5
+keeps priority 0, SysTick/PendSV priority 3. Do not enable application
+ADC/GPIO events on core 1. Motion owns PWM slices 4/5 and servo slice7.
+
+SCAN keeps existing servo-settle logic/settings; motion keeps servo PWM.
+The service only pings. This approved difference from plan section7 avoids
+changing pure navigation logic or adding a second settle delay. Priority12
+allows the sonar service to run before navigation13. Per-sample line wakes
+avoid the 10 ms kernel tick granularity; measured CPU cost is still owed.
 
 ## 4. Interfaces
 
-| ID | Owner | Users | Contract |
+| ID | Owner | Consumer | Contract |
 | --- | --- | --- | --- |
-| IF-01 | S2 | Bench or vehicle task | `motion_*` inherited-mutex API; one exclusive after-tick notify client |
-| IF-02 | S3 | Vehicle task | `drv_line_take` core-0 queue: 1 ms timestamps, mean L/C ADC, right zero; lost-sample counters |
-| IF-03 | S5 | Vehicle task | `drv_ultrasonic_*` core-0 API; same packed word and ping/timeout rules as reference |
-| IF-04 | Vehicle | Operator | KR1 RAM log and VE event list, GP20 paced dump, CSV decoder |
+| IF-01 | S2 | Vehicle or bench | motion_* inherited-mutex API; exclusive after-tick listener |
+| IF-02 | S3 | Vehicle | line_snapshot_read; inherited mutex; raw L/C/raw_bc, lp, validity/time/counters; only LINE age >10 ms stops active motion |
+| IF-03 | S5 | Vehicle | sonar_request MBF TMO_POL; correlated result mutex + event flag; WATCH/ONCE/STOP, generation/ID/angle/deadline; ping_sent means real trigger |
+| IF-04 | S1 | Vehicle producers/operator | telemetry_send MBF TMO_POL; by-value rows/events/info/dump; lost count on full buffer, never blocks |
 
-The old LED/producer/consumer/monitor IF-01 through IF-05 are removed. This
-IF-01 is a new interface, not the old sample mailbox.
+No sensor hardware access, queue draining or dump loop remains in vehicle;
+buttons may stay there. Ultrasonic results use their own deadline/age,
+not the LINE 10 ms limit. No echo is unknown, never clear. No application
+control task may call radio, lwIP or TinyUSB directly. MQTT is not added.
 
-## 5. Object budget
+## 5. Objects, measurement and acceptance
 
-Motion uses one inherited mutex, one 10 ms cyclic handler, and one task.
-A normal image adds exactly one task: vehicle priority 12, or bench
-priority 11 with BENCH=1. TEST adds neither. S3 adds one interrupt handler,
-S5 one GPIO dispatcher client; neither creates a task. All application
-task functions are endless or end with `tk_ext_tsk()`, never return.
-Empty subsystems use no kernel objects.
-Kernel limits are in `config/config.h`; the USB and radio services also
-use objects. Hardware tests and the floor run must be recorded in
-`testing/subsystem2/TEST_LOG.md`; S3/S5 checks and R5 are in their test logs.
-See [kernel robot design](docs/KERNEL_ROBOT.md) for rates, memory and
-known timing differences. Build success is not a hardware result.
+Robot uses five application tasks, three inherited mutexes, two cyclic
+handlers, two message buffers (256/4096 bytes) and one result event flag.
+TEST starts four service/motion tasks, neither button task; BENCH starts
+only motion/bench. S4 creates no objects. Existing kernel limits suffice.
+No template file is changed. Every task loops forever or exits through
+`tk_ext_tsk()`, never returns.
+
+Application stacks use TA_USERBUF, 8-byte alignment and a fill pattern;
+19456 bytes reserve all six regions. TEST/GP20 report high-water/free
+bytes, including motion. Initial budgets are not physical measurements;
+require at least 256 untouched bytes after full load/dump. Template service
+stacks are outside this report. Vehicle deadline overruns and line/ISR
+elapsed-work counters are also reported. New task-split hardware tests,
+M1/M2 repeats, CPU/ISR/stack and physical safety are **Not run**. See
+[task/object and plan-vs-port tables](docs/KERNEL_ROBOT.md).
 
 ## Hardware watchdog ownership
 
-S2 owns the 100 ms hardware watchdog. Only a completed `motion_task` tick
-feeds it, after PWM writes and mutex release. Startup order is verified
-clock, task, cyclic, watchdog; failed motion init starts no watchdog and
-leaves motor PWM zero. Debug halt pauses it. Stale-command stop remains a
-separate live-task safety check. Dumps show the cached last reset reason.
-
-S2-U05 is TEST-only, runs last after S1..S5 and intentionally stops feeds.
-It resets with wheels lifted, then reports the previous timeout in a later
-TEST line on the next boot. Scratch0/1 are reserved for its one-time marker
-and elapsed observation; SDK/bootrom scratch4..7 are not repurposed.
-S2-U05 **PASS** on 2026-11-06: reset after 99 ms, no repeat reset. Read
-[the watchdog record](docs/KERNEL_WATCHDOG.md) before this destructive test.
+Only completed motion ticks feed the 100 ms hardware watchdog, after PWM
+writes and mutex release. Failed clock/task/cyclic startup does not enable
+it or driving. Debug halt pauses it. Stale-command stop remains separate.
+S2-U05 runs LAST in TEST, uses scratch0/1 for a one-time result, and never
+repurposes SDK/bootrom scratch4..7. The earlier watchdog image passed
+S2-U05 on 2026-11-06 (99 ms, no repeat) and M1. This task-split image must
+repeat the checks. Read [watchdog procedure](docs/KERNEL_WATCHDOG.md).
