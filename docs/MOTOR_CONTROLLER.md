@@ -61,3 +61,9 @@ only during the one S2 hardware initialization, before any PWM client
 runs. The free-running hardware timer is read, not reinitialized;
 64-bit time uses the stable high/low register pair, not SDK alarm/time
 initialization. SDK-only adapters must not include `tk/` headers.
+
+SDK directories use `-isystem`, not application `-I` paths. SDK 2.3.0 has
+conversion warnings in unused GPIO 64-bit helpers and conversion/unused
+parameter warnings in timer inline helpers with our strict flags. System
+headers keep vendor diagnostics separate; the application still passes
+`-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror` unchanged.
