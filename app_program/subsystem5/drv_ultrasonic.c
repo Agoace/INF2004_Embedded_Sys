@@ -57,7 +57,11 @@ static void echo_irq_handler(unsigned int pin, uint32_t events, void *ctx) {
     (void)pin; (void)ctx;
 
     const uint32_t now = drv_time_us();
-    if ((events & GPIO_IRQ_EDGE_RISE) != 0u && phase == PHASE_WAIT_RISE) {
+    /* Task service is 10 ms in the kernel robot, not the reference's fast
+     * main loop. Enforce the 2 ms rise deadline here too, so a late echo
+     * cannot become VALID merely because service has not run yet. */
+    if ((events & GPIO_IRQ_EDGE_RISE) != 0u && phase == PHASE_WAIT_RISE &&
+        now - trigger_us < RISE_TIMEOUT_US) {
         rise_us = now;
         phase = PHASE_WAIT_FALL;
     }

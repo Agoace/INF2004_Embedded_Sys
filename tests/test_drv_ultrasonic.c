@@ -42,5 +42,18 @@ int main(void) {
     const uint32_t t = now; echo(t + 200u, 8u); echo(t + 300u, 4u);
     assert(drv_ultrasonic_service() && ultrasonic_result_too_near(drv_ultrasonic_latest()));
     assert(drv_ultrasonic_debug_latest().pulse_us == 100u);
+    now += 60000u;
+    const uint32_t late = now;
+    assert(drv_ultrasonic_trigger());
+    echo(late + 2100u, 8u); echo(late + 2500u, 4u);
+    assert(drv_ultrasonic_service());
+    assert(ultrasonic_result_status(drv_ultrasonic_latest()) == ULTRASONIC_STATUS_NO_RISE);
+    now += 60000u;
+    const uint32_t far = now;
+    assert(drv_ultrasonic_trigger());
+    echo(far + 200u, 8u); echo(far + 3200u, 4u);
+    assert(drv_ultrasonic_service());
+    assert(ultrasonic_result_status(drv_ultrasonic_latest()) == ULTRASONIC_STATUS_NO_RETURN);
+    assert(drv_ultrasonic_debug_latest().distance_mm == 515u);
     return 0;
 }
