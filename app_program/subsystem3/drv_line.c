@@ -7,7 +7,7 @@
 #define CAPACITY 128u
 static drv_line_sample_t queue[CAPACITY];
 static volatile unsigned int head, tail;
-static drv_line_stats_t stats;
+static volatile drv_line_stats_t stats;
 static uint32_t next_us;
 static bool ready;
 static void alarm_irq(UINT intno) {
