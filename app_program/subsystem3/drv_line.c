@@ -10,14 +10,16 @@ static volatile unsigned int head, tail;
 static volatile drv_line_stats_t stats;
 static uint32_t next_us;
 static bool ready;
+static ID listener;
 static void alarm_irq(UINT intno) {
+    const uint32_t entry=drv_time_us();
     drv_line_hw_ack();
     drv_line_sample_t sample = {.us = drv_time_us()};
     const int er = drv_line_hw_read(sample.raw);
     ++stats.samples;
     if (er != 0) ++stats.missed;
     else {
-        for (unsigned int i = 0u; i < 2u; ++i) {
+        for (unsigned int i = 0u; i < 3u; ++i) {
             if (sample.raw[i] < stats.min[i]) stats.min[i] = sample.raw[i];
             if (sample.raw[i] > stats.max[i]) stats.max[i] = sample.raw[i];
         }
@@ -30,6 +32,10 @@ static void alarm_irq(UINT intno) {
     while ((int32_t)(next_us - now) <= 0) { next_us += 1000u; ++stats.missed; }
     drv_line_hw_alarm(next_us);
     ClearInt(intno);
+    if (listener>0) (void)tk_wup_tsk(listener);
+    const uint32_t cost=drv_time_us()-entry;
+    stats.isr_us+=cost;
+    if (cost>stats.isr_max_us) stats.isr_max_us=cost;
 }
 int drv_line_init(void) {
 #if TK_SUPPORT_SMP
@@ -41,7 +47,7 @@ int drv_line_init(void) {
     const T_DINT d = {.intatr = TA_HLNG, .inthdr = (FP)alarm_irq};
     const ER er = tk_def_int(0u, &d);
     if (er < E_OK) return (int)er;
-    stats.min[0] = stats.min[1] = 4095u;
+    stats.min[0] = stats.min[1] = stats.min[2] = 4095u;
     drv_line_hw_ack(); ClearInt(0u);
     next_us = drv_time_us() + 1000u;
     drv_line_hw_alarm(next_us);
@@ -55,5 +61,6 @@ bool drv_line_take(drv_line_sample_t *sample) {
     if (available) { *sample = queue[tail]; tail = (tail + 1u) % CAPACITY; }
     EI(irq); return available;
 }
+void drv_line_listen(int id) { UINT irq; DI(irq); listener=(ID)id; EI(irq); }
 void drv_line_flush(void) { UINT irq; DI(irq); tail = head; EI(irq); }
 void drv_line_stats(drv_line_stats_t *s) { UINT irq; DI(irq); *s = stats; EI(irq); }

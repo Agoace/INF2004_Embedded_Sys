@@ -20,13 +20,14 @@ int drv_line_hw_init(void) {
     adc_init();
     adc_gpio_init(27u); /* left ADC1 */
     adc_gpio_init(26u); /* centre ADC0; never ADC3 / GP29 */
+    adc_gpio_init(28u); /* barcode ADC2: no pulls, digital input disabled */
     timer_hw->inte |= 1u;
     return 0;
 }
 int drv_line_hw_read(uint16_t raw[3]) {
-    raw[2] = 0u;
-    for (unsigned int s = 0u; s < 2u; ++s) {
-        adc_select_input(s == 0u ? 1u : 0u);
+    static const unsigned int channel[3] = {1u,0u,2u};
+    for (unsigned int s = 0u; s < 3u; ++s) {
+        adc_select_input(channel[s]);
         uint32_t sum = 0u;
         for (unsigned int i = 0u; i < 8u; ++i) {
             /* Bound a failed ADC conversion instead of hanging an interrupt. */

@@ -15,3 +15,18 @@ queue drops or missed alarms.
 The app releases ADC reset and selects PLL_USB=48 MHz / 1 for CLK_ADC.
 The template ADC device `adca` stays unopened. No template device,
 configuration or kernel source is changed. GP29/ADC3 is never selected.
+
+## Task-split image checks
+
+| ID | Procedure and acceptance | Status |
+| --- | --- | --- |
+| S3-U02 | TEST: line task processes timestamped samples, no queue drops; snapshot age <=10000 us; report task elapsed max/sample, total and per-mille window cost; report three-channel ISR max/total/per-mille and GP28 ADC2 range | Not run |
+| S3-U03 | Bench only, do not drive: GP28 analog barcode input, VBAT jumper open; show bars at intended height and record raw range, narrow-bar visibility and ISR cost | Not run |
+
+S3 now averages eight ADC conversions on each of L/ADC1, C/ADC0 and
+barcode/ADC2 every 1 ms (24 total). Barcode is raw observation only; no
+decoder or Ziven source is changed. Pure line logic receives L/C/zero,
+never ADC2. See the [control architecture](../../docs/CONTROL_ARCHITECTURE.md)
+for the GP28 wiring and bar timing constraints. ISR timing excludes wrapper
+entry/exit and its final statistics stores; task timing is elapsed work,
+including any higher-priority preemption, an upper bound on CPU cost.
