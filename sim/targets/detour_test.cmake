@@ -6,7 +6,7 @@ set(SIM_FIRMWARE_SOURCES
     "${REPO}/app_program/subsystem5/obstacle.c"
     "${REPO}/app_program/subsystem5/obstacle_profile.c"
     "${REPO}/src/obstacle_scan.c"
-    "${REPO}/src/line_steer.c"
+    "${REPO}/app_program/subsystem3/line_steer.c"
     "${REPO}/app_program/subsystem3/line_position.c"
     "${REPO}/src/line_spin.c"
     "${REPO}/src/steer_log.c")

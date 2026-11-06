@@ -1,7 +1,7 @@
 #ifndef SIM_DETOUR_HOOKS_H
 #define SIM_DETOUR_HOOKS_H
 #include "../../app_program/subsystem3/line_position.h"
-#include "line_steer.h"
+#include "../../app_program/subsystem3/line_steer.h"
 #include "../../app_program/subsystem5/obstacle.h"
 #include "obstacle_detour.h"
 #include "../../app_program/subsystem5/obstacle_scan.h"

@@ -47,7 +47,7 @@
 #include "../app_program/subsystem3/line_position.h"
 #include "line_sensors.h"
 #include "line_spin.h"
-#include "line_steer.h"
+#include "../app_program/subsystem3/line_steer.h"
 #include "pico/stdio_usb.h"
 #include "pico/stdlib.h"
 #include "steer_log.h"

@@ -67,7 +67,7 @@ The parent-workspace link resolves only when this repository is checked out as a
 | Obstacle detour (straights and turns on the spot) | [`src/obstacle_detour.c`](../src/obstacle_detour.c), [`src/obstacle_detour.h`](../src/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
 | Normalised line position | [`app_program/subsystem3/line_position.c`](../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../app_program/subsystem3/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
-| Line steering | [`src/line_steer.c`](../src/line_steer.c), [`src/line_steer.h`](../src/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
+| Line steering | [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../app_program/subsystem3/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
 | Steering Wi-Fi log | [`src/wifi_log.c`](../src/wifi_log.c), packet format [`src/steer_log.c`](../src/steer_log.c); receiver [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) |
 | Drive, IR reads, spin calibration (bench parts) | [`src/drive.c`](../src/drive.c), [`src/line_sensors.c`](../src/line_sensors.c), [`src/line_spin.c`](../src/line_spin.c) |
 | Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |

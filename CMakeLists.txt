@@ -274,7 +274,7 @@ pico_add_extra_outputs(line_test)
 
 add_executable(steer_test
     src/steer_test.c
-    src/line_steer.c
+    app_program/subsystem3/line_steer.c
     app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
@@ -310,7 +310,7 @@ add_executable(bypass_test
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c
-    src/line_steer.c
+    app_program/subsystem3/line_steer.c
     app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c
@@ -345,7 +345,7 @@ add_executable(detour_test
     src/obstacle_scan.c
     src/servo.c
     src/ultrasonic.c
-    src/line_steer.c
+    app_program/subsystem3/line_steer.c
     app_program/subsystem3/line_position.c
     src/line_sensors.c
     src/line_spin.c

@@ -4,7 +4,7 @@ This record describes proportional line steering on the `yx-line_tracing`
 branch: the [normalised line position](LINE_POSITION.md) sets the left and
 right wheel duty.
 
-- Code: [`src/line_steer.c`](../src/line_steer.c), [`src/line_steer.h`](../src/line_steer.h)
+- Code: [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../app_program/subsystem3/line_steer.h)
 - Host unit test: [`tests/test_line_steer.c`](../tests/test_line_steer.c)
 - Bench test: [`src/steer_test.c`](../src/steer_test.c)
 - Shared bench parts: [`src/drive.c`](../src/drive.c) (motors and encoders),
@@ -176,7 +176,7 @@ Steer word: 14 bits used.
 
 ```sh
 cc -std=c11 -Wall -Wextra -Wconversion -Isrc \
-   tests/test_line_steer.c src/line_steer.c -o build/test_line_steer
+   tests/test_line_steer.c app_program/subsystem3/line_steer.c -o build/test_line_steer
 ./build/test_line_steer
 ```
 
