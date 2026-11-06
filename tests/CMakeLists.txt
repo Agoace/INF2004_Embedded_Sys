@@ -68,3 +68,8 @@ host_test(test_drv_time tests/test_drv_time.c app_program/platform/drv_time.c)
 if(TARGET test_drv_time)
     target_include_directories(test_drv_time BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
+
+host_test(test_drv_ultrasonic tests/test_drv_ultrasonic.c app_program/subsystem5/drv_ultrasonic.c)
+if(TARGET test_drv_ultrasonic)
+    target_include_directories(test_drv_ultrasonic BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
