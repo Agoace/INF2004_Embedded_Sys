@@ -51,6 +51,7 @@ int line_service_start(void) {
     drv_line_listen((int)task_id);
     return E_OK;
 }
+bool line_service_running(void) { return ready && task_id>0; }
 int line_snapshot_read(line_snapshot_t *out,bool consume) {
     if (!out) return E_PAR;
     if (!ready) return E_OBJ;

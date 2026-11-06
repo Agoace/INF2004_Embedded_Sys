@@ -12,6 +12,7 @@ typedef struct {
 } line_snapshot_t;
 int line_service_init(void);
 int line_service_start(void);
+bool line_service_running(void);
 /* Short inherited-mutex copy; only vehicle consumes the latched event. */
 int line_snapshot_read(line_snapshot_t *out, bool consume_event);
 int line_calibration_begin(void);
