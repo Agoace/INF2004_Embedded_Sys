@@ -1,5 +1,6 @@
 #ifndef MOTION_H
 #define MOTION_H
+#include <tk/tkernel.h>
 #include "motor_ctl.h"
 /* Task-context API only. Every call takes priority-inheritance mtx_motion. */
 typedef struct {
@@ -19,6 +20,9 @@ typedef struct {
 } motion_status_t;
 int motion_init(void);
 int motion_start(void);
+/* One client: positive task ID to wake after each tick, or 0 to disable.
+ * The client must stay alive until disabled; a wake already in flight can arrive. */
+int motion_notify_after_tick(ID tid);
 int motion_set_speed(int16_t left_mm_s, int16_t right_mm_s);
 int motion_stop(void);
 int motion_estop(void);

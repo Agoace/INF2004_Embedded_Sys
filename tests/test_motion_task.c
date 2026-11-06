@@ -11,7 +11,7 @@ static void *encoder_ctx;
 static jmp_buf sleep_again;
 static unsigned int sleeps;
 static int held, irq_off, queued;
-static unsigned int wake_calls;
+static unsigned int wake_calls, notify_calls;
 static uint32_t now_us;
 static uint8_t ab[2];
 static int16_t output[2];
@@ -34,7 +34,12 @@ ER tk_slp_tsk(TMO timeout) {
     return E_OK;
 }
 INT tk_can_wup(ID id) { assert(id == TSK_SELF); return queued; }
-ER tk_wup_tsk(ID id) { assert(id == 3); ++wake_calls; return E_OK; }
+ER tk_wup_tsk(ID id) {
+    assert(!held && !irq_off);
+    if (id == 3) ++wake_calls;
+    else { assert(id == 4); ++notify_calls; }
+    return E_OK;
+}
 INT tk_get_prc(void) { return 1; }
 void mock_di(UINT *irq) { assert(!irq_off); *irq = 0u; irq_off = 1; }
 void mock_ei(UINT irq) { assert(irq == 0u && irq_off); irq_off = 0; }
@@ -60,6 +65,9 @@ int main(void) {
     assert(motion_init() == E_OK);
     assert(motion_start() == E_OK);
     tick(10000u);
+    assert(notify_calls == 0u);
+    assert(motion_notify_after_tick(-1) == E_PAR);
+    assert(motion_notify_after_tick(4) == E_OK);
     const uint8_t left[] = {2, 3, 1, 0}, right[] = {1, 3, 2, 0};
     for (unsigned int i = 0u; i < 4u; ++i) {
         ab[0] = left[i]; encoder(16u, 8u, encoder_ctx);
@@ -86,6 +94,10 @@ int main(void) {
     tick(170000u);
     assert(motion_status(&s) == E_OK && s.missed_wakes == 2u && s.late_wakes == 2u);
     assert(s.gap_max_us == 110000u && wake_calls == 6u);
+    assert(notify_calls == 5u); /* Exactly one per tick, even with queued wakes. */
+    assert(motion_notify_after_tick(0) == E_OK);
+    tick(180000u);
+    assert(wake_calls == 7u && notify_calls == 5u);
     int accepted;
     assert(motion_set_servo(999, &accepted) == E_OK && accepted == 36);
     assert(motion_stop() == E_OK && output[0] == 0 && output[1] == 0);

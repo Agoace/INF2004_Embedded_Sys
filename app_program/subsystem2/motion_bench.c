@@ -14,7 +14,7 @@ static const step_t STEPS[] = {
     {"rev 150", 1500u, -150, -150},   {"rest", 700u, 0, 0},
     {"fwd 300", 1000u, 300, 300},     {"rest", 700u, 0, 0},
     {"rev 300", 1000u, -300, -300},   {"rest", 700u, 0, 0},
-    {"spin L 20", 3000u, -20, 20},    {"rest", 700u, 0, 0},
+    {"spin L 20", 3000u, -20, 20},    {"rest", 700u, 0, 0}, /* about 60 degrees */
     {"spin R 20", 3000u, 20, -20},    {"rest", 700u, 0, 0},
     {"fwd 40", 2000u, 40, 40},        {"rest", 700u, 0, 0},
     {"rev 40", 2000u, -40, -40},      {"rest", 700u, 0, 0},
@@ -99,7 +99,11 @@ static void bench_task(INT stacd, void *exinf) {
     uint32_t previous_tick = 0u;
     unsigned int step = 0u;
     tm_printf((UB*)"[bench] GP21: start after 1 s / estop. GP20: dump saved RAM log.\n");
+    if (motion_notify_after_tick(tk_get_tid()) < E_OK) return;
     for (;;) {
+        /* tk_dly_tsk(10) adds a kernel tick: it would lose alternate rows. */
+        (void)tk_slp_tsk(20);
+        const INT queued = tk_can_wup(TSK_SELF);
         const uint32_t now = drv_time_ms();
         if (now - button_ms >= 20u) {
             button_ms = now;
@@ -126,7 +130,12 @@ static void bench_task(INT stacd, void *exinf) {
             motion_status_t s;
             if (motion_status(&s) < E_OK) { (void)motion_stop(); mode = IDLE; stop_reason = "status failed"; }
             else if (s.ticks != previous_tick) {
-                if (previous_tick != 0u) skipped_rows += s.ticks - previous_tick - 1u;
+                if (previous_tick != 0u) {
+                    const uint32_t gaps = s.ticks - previous_tick - 1u;
+                    const uint32_t extra = queued > 0 ? (uint32_t)queued : 0u;
+                    /* Both measure lost rows; do not count the same loss twice. */
+                    skipped_rows += gaps > extra ? gaps : extra;
+                }
                 previous_tick = s.ticks;
                 while (step < STEP_COUNT && now - step_start >= STEPS[step].ms) {
                     step_start += STEPS[step].ms; ++step;
@@ -150,7 +159,6 @@ static void bench_task(INT stacd, void *exinf) {
                 }
             }
         }
-        (void)tk_dly_tsk(10);
     }
 }
 int motion_bench_start(void) {
