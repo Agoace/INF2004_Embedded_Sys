@@ -2,6 +2,7 @@
 #define OBSTACLE_SCAN_DRIVER_H
 
 #include "../app_program/subsystem5/obstacle_scan.h"
+#include "ultrasonic.h"
 
 /* Set up the servo. ultrasonic_init() must be called separately. */
 void obstacle_scan_init(unsigned int servo_pin);
