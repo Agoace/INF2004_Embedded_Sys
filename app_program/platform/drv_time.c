@@ -19,7 +19,7 @@ int drv_time_check_window(uint32_t window_ms, unsigned int tolerance_pct,
     er = tk_get_otm(&before);
     if (er < E_OK) return (int)er;
     const uint32_t start = drv_time_us();
-    er = tk_dly_tsk((TMO)window_ms);
+    er = tk_dly_tsk((RELTIM)window_ms);
     if (er < E_OK) return (int)er;
     er = tk_get_otm(&after);
     if (er < E_OK) return (int)er;
