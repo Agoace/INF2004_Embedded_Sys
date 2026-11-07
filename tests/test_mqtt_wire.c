@@ -7,7 +7,67 @@ static void emit(const char *topic,const uint8_t *data,size_t size) {
     for (size_t i=0u;i<size;++i) printf("%02x",(unsigned int)data[i]);
     putchar('\n');
 }
+static void emit_batch(const char *name,const rm_log_batch_t *header,const uint8_t *records) {
+    uint8_t frame[RM_LOG_BATCH_MAX_SIZE];
+    const size_t size=rm_pack_log_batch(frame,sizeof(frame),header,records);
+    assert(size==RM_LOG_BATCH_HEADER_SIZE+((size_t)header->count*RM_LOG_RECORD_SIZE));
+    assert(frame[0]==1u && frame[1]==header->kind && frame[2]==header->count && frame[3]==header->flags);
+    printf("batch/%s ",name);
+    for (size_t i=0u;i<size;++i) printf("%02x",(unsigned int)frame[i]);
+    putchar('\n');
+}
+static void test_batch_packer(void) {
+    uint8_t records[RM_LOG_BATCH_MAX_COUNT*RM_LOG_RECORD_SIZE],frame[RM_LOG_BATCH_MAX_SIZE];
+    for (size_t i=0u;i<sizeof(records);++i) records[i]=(uint8_t)(i*7u+3u);
+    rm_log_batch_t header={.kind=RM_LOG_ROWS,.count=10u,.flags=RM_LOG_FLAG_JUMPED,.generation=0x01020304u,
+        .first_index=0x0a0b0c0du,.publish_ms=0x11121314u,.newest_ms=0x21222324u,.log_rows=0x31323334u,
+        .skipped_before=0x41424344u,.stream_id=0u};
+    memset(frame,0xa5,sizeof(frame));
+    assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==192u);
+    assert(frame[4]==0u && frame[8]==4u && frame[11]==1u && frame[12]==0x0du && frame[15]==0x0au);
+    assert(frame[16]==0x14u && frame[20]==0x24u && frame[24]==0x34u && frame[28]==0x44u);
+    assert(memcmp(frame+32,records,160u)==0);
+    /* Invalid input returns zero and leaves the output unchanged. */
+    uint8_t before[RM_LOG_BATCH_MAX_SIZE];memset(frame,0xa5,sizeof(frame));memcpy(before,frame,sizeof(frame));
+    header.count=0u;assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==0u);
+    header.count=RM_LOG_BATCH_MAX_COUNT+1u;assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==0u);
+    header.count=2u;header.kind=RM_LOG_ROW;assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==0u);
+    header.kind=RM_LOG_BEGIN;assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==0u);
+    header.kind=RM_LOG_ROWS;assert(rm_pack_log_batch(frame,63u,&header,records)==0u);
+    assert(rm_pack_log_batch(NULL,sizeof(frame),&header,records)==0u);
+    assert(rm_pack_log_batch(frame,sizeof(frame),NULL,records)==0u);
+    assert(rm_pack_log_batch(frame,sizeof(frame),&header,NULL)==0u);
+    assert(memcmp(frame,before,sizeof(frame))==0);
+    assert(rm_pack_log_batch(frame,64u,&header,records)==64u);
+    header.count=RM_LOG_BATCH_MAX_COUNT;assert(rm_pack_log_batch(frame,224u,&header,records)==224u);
+    /* Fixtures for the Python decoder: live, jump, new generation, refill, max, wrap. */
+    uint8_t events[3u*RM_EVENT_SIZE];
+    for (uint8_t i=0u;i<3u;++i) {
+        rm_event_t event={.kind=(uint8_t)(i+1u),.from=i,.to=(uint8_t)(i+1u),.sequence=100u+i,
+            .uptime_ms=5000u+i,.word=(uint16_t)(0x1200u+i),.detail=(uint8_t)(i+7u),.flags=(uint8_t)(i&1u)};
+        rm_pack_event(events+((size_t)i*RM_EVENT_SIZE),&event);
+    }
+    header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=10u,.generation=7u,.first_index=100u,
+        .publish_ms=5000u,.newest_ms=4950u,.log_rows=125u};
+    emit_batch("live",&header,records);
+    header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=1u,.flags=RM_LOG_FLAG_JUMPED,.generation=7u,
+        .first_index=240u,.publish_ms=9000u,.newest_ms=8990u,.log_rows=300u,.skipped_before=115u};
+    emit_batch("jump",&header,records);
+    header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=2u,.flags=RM_LOG_FLAG_NEW_GENERATION,.generation=8u,
+        .first_index=0u,.publish_ms=20000u,.newest_ms=19990u,.log_rows=2u,.skipped_before=33u};
+    emit_batch("newgen",&header,records);
+    header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=12u,.flags=RM_LOG_FLAG_REFILL,.stream_id=111u,
+        .generation=7u,.first_index=24u,.publish_ms=7000u,.log_rows=300u};
+    emit_batch("refill_rows",&header,records);
+    header=(rm_log_batch_t){.kind=RM_LOG_EVENTS,.count=3u,.flags=RM_LOG_FLAG_REFILL,.stream_id=111u,
+        .generation=7u,.first_index=4u,.publish_ms=7001u,.log_rows=300u};
+    emit_batch("refill_events",&header,events);
+    header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=1u,.generation=1u,.first_index=5u,
+        .publish_ms=5u,.newest_ms=0xfffffff0u,.log_rows=6u};
+    emit_batch("wrap",&header,records);
+}
 int main(void) {
+    test_batch_packer();
     uint8_t bytes[RM_HEARTBEAT_SIZE];
     const rm_state_t state={.flags=0xffu,.state=0x13u,.module=0x25u,.motion_faults=0x81u,
         .uptime_ms=0x12345678u,.sequence=0xfedcba98u,.line_age_ms=10u,.motion_age_ms=20u,
