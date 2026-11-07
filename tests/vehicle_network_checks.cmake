@@ -27,3 +27,5 @@ foreach(odo_test test_odometry test_run_stats)
         target_link_libraries(${odo_test} PRIVATE m)
     endif()
 endforeach()
+
+host_test(test_cpu_load tests/test_cpu_load.c app_program/platform/cpu_load.c)

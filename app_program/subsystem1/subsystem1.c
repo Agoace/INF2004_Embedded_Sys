@@ -6,6 +6,7 @@
 #if TM_MQTT
 #include "robot_network.h"
 #include "robot_health.h"
+#include "../platform/idle_meter.h"
 #endif
 
 /* Create queues, health cyclic and telemetry objects. Network is optional. */
@@ -28,6 +29,7 @@ EXPORT ER subsystem1_start(void)
 {
 #if TM_MQTT
     CHECK(robot_health_start(), "health task (noncritical)");
+    CHECK(idle_meter_start(), "idle meter (noncritical)");
 #endif
 #if APP_BENCH && !APP_TEST
     return E_OK;

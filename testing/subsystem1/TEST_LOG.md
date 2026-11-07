@@ -53,9 +53,10 @@ Follow [the broker runbook](../../docs/MQTT_RUNBOOK.md).
 
 | ID | Check | Result |
 | --- | --- | --- |
-| S1-U04 | MQTT connect, AP loss and broker restart/reconnect; no effect on boot, RAM log or driving | Not run |
-| S1-U05 | Live robot/log stream (QoS 0, 10-row batches about every 100 ms, data age, jump/skip report, reconnect), DUMP QoS 1 refill time and merge by index, Wi-Fi hook max wall time with streaming on; nominal state5Hz/heartbeat1Hz, sonar history/event loss and signed binary CSV; Wi-Fi20 poll/work/gap and stack data during driving/dump | Not run |
+| S1-U04 | MQTT connect, AP loss and broker restart/reconnect; retained OFFLINE will and ONLINE after CONNACK, keepalive 5 s (broker silence threshold about 7.5 s plus delivery/timer delay); no effect on boot, RAM log or driving | Not run |
+| S1-U05 | Live robot/log stream (QoS 0, 10-row batches about every 100 ms, data age, jump/skip report, reconnect), DUMP QoS 1 refill time and merge by index, Wi-Fi hook max wall time with streaming on; nominal state5Hz/heartbeat1Hz, signed distance/duty and encoder heading/rate, completed obstacle profiles (width unavailable), detour records and retained run summary, CPU field, sonar history/event loss and signed binary CSV; Wi-Fi20 poll/work/gap and stack data during driving/dump | Not run |
 | S1-U06 | NORMAL robot: fallback ESTOP-only, configured-token matching all opcodes, idle START/CALIBRATE, duplicate/full queue, dedicated ESTOP, live DUMP/ABORT | Not run |
+| S1-U07 | MQTT TEST, idle board, wheels lifted: print calibrated CPU reference and load; establish expected range and independent target accuracy; verify deadlines and >=256 B stack margin | Not run; expected range not established. [Method](../../docs/CPU_LOAD.md) |
 
 Commands are not consumed by TEST/BENCH because those profiles do not start
 vehicle. A broker PUBACK is not vehicle acceptance. GP21 remains the real

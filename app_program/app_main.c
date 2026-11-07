@@ -26,6 +26,9 @@
 #include "platform/drv_time.h"
 #include "vehicle/vehicle_task.h"
 #include "platform/app_task.h"
+#if TM_MQTT
+#include "platform/idle_meter.h"
+#endif
 
 /* TEST work runs below motion/sensors and above telemetry (30). */
 #define TEST_RUNNER_PRIORITY 20
@@ -47,6 +50,10 @@ EXPORT INT usermain(void)
 
     /* Kernel hardware startup sets 1 us TIMER ticks; verify idempotently. */
     CHECK(drv_time_init(), "drv_time_init");
+#if TM_MQTT
+    /* Before application startup: no watchdog or acquisition deadline yet. */
+    CHECK(idle_meter_calibrate(), "CPU meter calibration (noncritical)");
+#endif
 
     /* tk_ref_ver: ask the kernel who it is */
     tk_ref_ver(&ver);

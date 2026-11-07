@@ -17,6 +17,7 @@ application tasks can run, so no allocation lock is needed.
 | telemetry_task | 4096 |
 | motion_bench | 4096 |
 | health_task, MQTT only | 2048 |
+| idle_meter, MQTT only, priority 32 | 512 |
 
 All six regions reserve 19456 bytes of static RAM even when a profile does
 not start all six tasks. MQTT adds the health region, for 21504 bytes total;

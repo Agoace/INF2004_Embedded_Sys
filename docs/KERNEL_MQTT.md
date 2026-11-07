@@ -1,5 +1,20 @@
 # Kernel MQTT telemetry
 
+## Added observations
+
+State v3 adds signed distance, wheel duty and encoder-derived heading/rate at
+unchanged 5 Hz. Completed scan profiles and detours use separate last-record
+boards with sequence gaps, not the event queue. The run summary uses QoS 1
+and retain, with retry and reconnect publication. The vehicle's pure
+`run_stats` observer never returns commands or alters module inputs.
+
+Heartbeat v2 adds total core-0 CPU load from the calibrated lowest-priority
+meter; see [method and unmeasured target limits](CPU_LOAD.md). A retained
+ONLINE/OFFLINE last will uses a 5-second keepalive; recent state is still
+required to establish that a robot is online. Barcode/IMU/JUNCTION and scan
+stage are reserved contracts, not implemented sensors or navigation changes.
+All byte layouts and estimator limits are in [the wire contract](MQTT_WIRE.md).
+
 ## Purpose and safety
 
 STEP 8 adds **non-critical telemetry**, not a network controller. Driving

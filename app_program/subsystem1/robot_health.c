@@ -16,6 +16,7 @@
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
 #include "../platform/drv_watchdog.h"
+#include "../platform/idle_meter.h"
 
 /* Default extra health provider. Integration code can override it. */
 void __attribute__((weak)) robot_health_collect(rm_heartbeat_t *out)
@@ -26,7 +27,7 @@ void __attribute__((weak)) robot_health_collect(rm_heartbeat_t *out)
 /* Health task and cyclic timing. */
 #define HEALTH_PERIOD_MS     1000u
 #define HEALTH_TASK_PRIORITY 31
-#define HEALTH_STACK_SLOTS   7u
+#define HEALTH_STACK_SLOTS   8u
 
 static ID health_task;
 static ID health_cyclic;
@@ -46,6 +47,7 @@ static void refresh(void)
     v.value.uptime_ms = drv_time_ms();
     v.value.reset_reason = (uint8_t)drv_watchdog_last_reset();
     v.value.stack_min_free = RM_NO_DATA_U16;
+    v.value.cpu_load_permille = idle_meter_load_permille();
     app_stack_t stacks[HEALTH_STACK_SLOTS];
     const unsigned int n = app_task_stacks(stacks, HEALTH_STACK_SLOTS);
     for (unsigned int i = 0u; i < n; ++i) {

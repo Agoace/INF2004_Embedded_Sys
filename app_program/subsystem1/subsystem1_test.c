@@ -1,7 +1,13 @@
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
 #include "subsystem1.h"
 #include "../platform/drv_time.h"
 #include "telemetry.h"
 #include "../subsystem2/motion.h"
+#if TM_MQTT
+#include "robot_health.h"
+#include "../platform/idle_meter.h"
+#endif
 
 #if APP_TEST
 /* Tests run in the initial task while the low-priority telemetry task waits. */
@@ -27,5 +33,18 @@ EXPORT void subsystem1_test(void) {
         accepted>0u && after.lost>before.lost && after.rows>0u ? "PASS" : "FAIL",accepted,
         (unsigned long)(after.lost-before.lost),(unsigned long)after.rows);
     (void)motion_timing_probe_capture(MOTION_PROBE_AFTER_S1_PRINT);
+#if TM_MQTT
+    /* Observation only: establish an idle-board range from target evidence. */
+    (void)tk_dly_tsk(2200u);
+    rm_heartbeat_t health;
+    uint32_t timestamp_us;
+    const int load_result = robot_health_try_read(&health, &timestamp_us);
+    tm_printf((UB *)"[TEST] S1-U07 %s: CPU load %u permille, peak %lu iter/s "
+                     "(idle board, wheels lifted; range not established)\n",
+              load_result >= E_OK && health.cpu_load_permille <= 1000u
+                  ? "PASS" : "FAIL",
+              load_result >= E_OK ? health.cpu_load_permille : 65535u,
+              (unsigned long)idle_meter_peak_rate());
+#endif
 }
 #endif

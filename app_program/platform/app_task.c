@@ -19,6 +19,7 @@
 #define TELEMETRY_STACK_WORDS 512
 #define BENCH_STACK_WORDS     512
 #define HEALTH_STACK_WORDS    256
+#define IDLE_STACK_WORDS       64
 #define STACK_LOW_MARGIN      256u
 
 static uint64_t motion_stack[MOTION_STACK_WORDS];
@@ -29,6 +30,7 @@ static uint64_t telemetry_stack[TELEMETRY_STACK_WORDS];
 static uint64_t bench_stack[BENCH_STACK_WORDS];
 #if TM_MQTT
 static uint64_t health_stack[HEALTH_STACK_WORDS];
+static uint64_t idle_stack[IDLE_STACK_WORDS];
 #endif
 typedef struct {
     const char *name;
@@ -47,7 +49,8 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack),
                          SLOT("motion_bench", bench_stack)
 #if TM_MQTT
                              ,
-                         SLOT("health_task", health_stack)
+                         SLOT("health_task", health_stack),
+                         SLOT("idle_meter", idle_stack)
 #endif
 };
 /* Compare two C strings. Returns true when they are equal. */
