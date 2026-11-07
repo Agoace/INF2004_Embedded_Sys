@@ -58,7 +58,10 @@ void rm_pack_event(uint8_t out[RM_EVENT_SIZE],const rm_event_t *value);
 void rm_pack_heartbeat(uint8_t out[RM_HEARTBEAT_SIZE],const rm_heartbeat_t *value);
 void rm_pack_command(uint8_t out[RM_COMMAND_SIZE],const rm_command_t *value);
 void rm_pack_log(uint8_t out[RM_LOG_SIZE],const rm_log_t *value);
-/* Invalid input leaves out unchanged. Token comparison visits all 16 bytes. */
+/* Invalid input leaves out unchanged. With commands_enabled (a valid,
+ * non-example token configured), all commands require a matching token;
+ * comparison visits all 16 bytes. Otherwise only a shape-valid ESTOP is
+ * accepted, without checking its token. expected_token must still be nonnull. */
 bool rm_command_decode(const uint8_t *data,size_t len,const uint8_t expected_token[RM_TOKEN_SIZE],bool commands_enabled,rm_command_t *out);
 bool rm_command_allowed(uint8_t opcode,bool idle);
 #endif

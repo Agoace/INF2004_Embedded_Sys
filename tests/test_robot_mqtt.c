@@ -11,6 +11,10 @@
 #include "../app_program/subsystem1/telemetry.h"
 #include "../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define FIXTURE_TOKEN_HEX "00112233445566778899aabbccddeeff"
+#ifndef ROBOT_MQTT_COMMAND_TOKEN_HEX
+/* Test TU only: the production TU independently uses its zero-token default. */
+#define ROBOT_MQTT_COMMAND_TOKEN_HEX ""
+#endif
 typedef struct {
     const char *topic;uint8_t data[RM_HEARTBEAT_SIZE];uint16_t length;uint8_t qos;
     err_t result;mqtt_request_cb_t callback;void *arg;
@@ -190,17 +194,31 @@ static void test_commands(void) {
     assert(commands_received==1u && command_lost==7u);
     queue_full=true;deliver("robot/cmd",data,RM_COMMAND_SIZE,11u,RM_COMMAND_SIZE);
     assert(commands_received==1u && command_lost==8u);
-    queue_full=false;data[1]=RM_CMD_ESTOP;
+    queue_full=false;data[1]=RM_CMD_ESTOP;data[6]^=1u;
     deliver("robot/cmd",data,RM_COMMAND_SIZE,0u,RM_COMMAND_SIZE);
+    assert(commands_received==1u && command_lost==9u); /* Configured ESTOP requires the token too. */
+    data[6]^=1u;deliver("robot/cmd",data,RM_COMMAND_SIZE,0u,RM_COMMAND_SIZE);
     assert(commands_received==2u && last_command.opcode==RM_CMD_ESTOP);
 }
-static void test_disabled_commands(void) {
+static void test_unconfigured_commands(void) {
     start_connected();
     rm_heartbeat_t value={0};robot_network_metrics(&value);assert((value.flags&16u)==0u);
     rm_command_t command={.opcode=RM_CMD_ESTOP,.request_id=1u};
     uint8_t data[RM_COMMAND_SIZE];rm_pack_command(data,&command);
     deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);
-    assert(commands_received==0u && command_lost==1u);
+    assert(commands_received==1u && last_command.opcode==RM_CMD_ESTOP && command_lost==0u);
+    for (uint8_t opcode=RM_CMD_DUMP;opcode<=RM_CMD_START;++opcode) {
+        command.opcode=opcode;rm_pack_command(data,&command);
+        deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);
+    }
+    assert(commands_received==1u && command_lost==3u);
+    command.opcode=RM_CMD_ESTOP;memset(command.token,0xa5,sizeof(command.token));rm_pack_command(data,&command);
+    deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);
+    assert(commands_received==2u && command_lost==3u); /* Token field is unchecked. */
+    data[0]=2u;deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);data[0]=1u;
+    deliver("robot/cmd",data,RM_COMMAND_SIZE-1u,3u,RM_COMMAND_SIZE-1u);
+    data[1]=5u;deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);
+    assert(commands_received==2u && command_lost==6u);
 }
 static void test_schedule(void) {
     start_connected();
@@ -318,7 +336,7 @@ static void test_log_retry(const char *scenario) {
 }
 int main(int argc,char **argv) {
     assert(argc==1 || argc==2);
-    if (!(argc==2 && !strcmp(argv[1],"disabled"))) assert(strcmp(ROBOT_MQTT_COMMAND_TOKEN_HEX,FIXTURE_TOKEN_HEX)==0);
+    if (!(argc==2 && !strcmp(argv[1],"unconfigured"))) assert(strcmp(ROBOT_MQTT_COMMAND_TOKEN_HEX,FIXTURE_TOKEN_HEX)==0);
     if (argc==1) test_log(false,false);
     else if (!strcmp(argv[1],"connection")) test_connection();
     else if (!strcmp(argv[1],"commands")) test_commands();
@@ -327,7 +345,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"log")) test_log(false,false);
     else if (!strcmp(argv[1],"abort")) test_log(true,false);
     else if (!strcmp(argv[1],"begin_snapshot")) test_log(false,true);
-    else if (!strcmp(argv[1],"disabled")) test_disabled_commands();
+    else if (!strcmp(argv[1],"unconfigured")) test_unconfigured_commands();
     else if (!strcmp(argv[1],"disconnect")) test_disconnect_log(false);
     else if (!strcmp(argv[1],"disconnect_abort")) test_disconnect_log(true);
     else if (!strcmp(argv[1],"begin_async") || !strcmp(argv[1],"begin_generation") ||

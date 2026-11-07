@@ -21,7 +21,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/event` | 16 | Vehicle event, including command decisions |
 | `robot/heartbeat` | 100 | Link state, health and loss counters |
 | `robot/log` | 32 | One paced RAM dump frame |
-| `robot/cmd` | 22 | Token-guarded command, QoS 1, not retained |
+| `robot/cmd` | 22 | Command, QoS 1, not retained; token policy below |
 
 ## State
 
@@ -145,7 +145,8 @@ flag bit 0 set, and the RAM event index as their sequence.
 | 98 | u16 | Reserved zero |
 
 Flags: bit 0 Wi-Fi up; 1 MQTT connected; 2 subscribed; 3 RAM dump active;
-4 commands enabled; 5 health fresh. Upper bits are zero. A retained/busy
+4 restricted commands configured (the wire/CSV name remains `commands_enabled`);
+5 health fresh. Upper bits are zero. A retained/busy
 health sample must have bit 5 clear. Busy counters count bounded-read failures;
 they do not mean that a consumer waited for a lock.
 
@@ -167,17 +168,33 @@ not reset these lifetime counters.
 | 2 | u32 | Request ID |
 | 6–21 | bytes | Raw 16-byte command token |
 
-The C decoder rejects wrong version, length, opcode, token, and disabled
-commands. Token comparison visits all 16 bytes. Invalid input leaves output
-unchanged. `rm_command_allowed()` allows authenticated ESTOP and DUMP in any
-state; CALIBRATE and START require idle. Request-ID duplicate handling belongs
-to the integration layer, not the codec. A valid ESTOP remains accepted even
-when repeated. Commands are disabled by default. An example all-zero token
-must remain disabled.
+The decoder always checks version, exact length, and known opcode. Invalid
+input leaves output unchanged. Token policy depends on the robot configuration:
 
-The token prevents accidental commands on a trusted network. It provides no
+| Robot configuration | ESTOP | DUMP, CALIBRATE, START |
+| --- | --- | --- |
+| Valid 32-hex-digit token with at least one nonzero byte | Matching token required | Matching token required |
+| No token, example all-zero token, or invalid token | Accepted with any token field | Rejected and counted |
+
+An unconfigured robot therefore accepts a well-formed 22-byte ESTOP without
+checking its token. The 16-byte token field is still required. A configured
+robot checks the token for **every** opcode, including ESTOP. Comparison visits
+all 16 bytes. There is no separate enable setting. The decoder's
+`commands_enabled` parameter and heartbeat flag retain their existing names,
+but mean that restricted commands have a valid token configured, not that
+unconfigured ESTOP is disabled. The expected-token pointer must remain valid
+in both modes.
+
+`rm_command_allowed()` permits ESTOP and DUMP in any state after the token
+policy check; CALIBRATE and START require idle. Request-ID duplicate handling
+belongs to the integration layer, not the codec. A valid ESTOP remains
+accepted even when repeated. The default all-zero example selects ESTOP-only
+mode, not unrestricted access to other commands.
+
+A configured token prevents accidental commands on a trusted network. It provides no
 encryption and does not prevent capture or replay. Do not expose this service
-to an untrusted network. A broker publish acknowledgement does not prove that
+to an untrusted network. An unconfigured robot permits any network peer to
+request ESTOP. A broker publish acknowledgement does not prove that
 the robot accepted or executed a command; inspect the command-decision event.
 Remote ESTOP is best-effort only. Use GP21 for the physical ESTOP. A network
 failure increments diagnostic counters; it does not cause a motor/vehicle
@@ -216,11 +233,18 @@ It connects to an existing broker; it does not start a broker.
 
 ```sh
 python3 scripts/mqtt_robot.py --host BROKER --csv robot.csv
+python3 scripts/mqtt_robot.py --host BROKER --command estop
 python3 scripts/mqtt_robot.py --host BROKER --command estop --token-file /private/robot-token
 python3 scripts/mqtt_robot.py --host BROKER --command dump --token-file /private/robot-token --request-id 123
 ```
 
-The token file must be a regular file owned by the current user, with mode
+`--token-file` is optional only for ESTOP. Without it, the client sends 16
+zero token bytes. This works only on an unconfigured robot. A configured robot
+requires its correct token file even for ESTOP. START, CALIBRATE, and DUMP
+always require a token file on the client and a valid configured token on the
+robot. Command publication is not proof of acceptance.
+
+When supplied, the token file must be a regular file owned by the current user, with mode
 `0600`, and exactly 32 hex digits with an optional final newline. Symbolic
 links are rejected. Do not put the token in a command-line argument, log, or
 repository file. The client never prints token bytes. A command uses a random

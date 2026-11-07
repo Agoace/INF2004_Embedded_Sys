@@ -174,6 +174,20 @@ class WireTests(unittest.TestCase):
             self.assertEqual(calls[-1], ("publish", "robot/cmd", self.samples["robot/cmd"], 1, False))
             self.assertNotIn(bytes(range(16)).hex(), error.getvalue())
             self.assertIn("not robot acceptance", error.getvalue())
+            for optional_file in ([], ["--token-file", str(token)]):
+                calls.clear()
+                with mock.patch.dict(sys.modules, modules), contextlib.redirect_stdout(io.StringIO()), \
+                        contextlib.redirect_stderr(io.StringIO()):
+                    self.assertEqual(wire.main(["--host", "test.invalid", "--command", "estop",
+                                               "--request-id", "123", *optional_file]), 0)
+                expected_token = bytes(range(16)) if optional_file else bytes(16)
+                self.assertEqual(calls[-1], ("publish", "robot/cmd", wire.pack_command(1, 123, expected_token), 1, False))
+
+    def test_non_estop_requires_token_file(self):
+        for command in ("start", "calibrate", "dump"):
+            with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error:
+                wire.main(["--host", "test.invalid", "--command", command])
+            self.assertEqual(error.exception.code, 2)
 
     def test_command_input(self):
         for opcode, request, token in ((0, 1, bytes(16)), (5, 1, bytes(16)),
