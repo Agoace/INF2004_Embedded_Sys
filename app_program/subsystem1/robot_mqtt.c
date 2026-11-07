@@ -23,6 +23,7 @@
 #include "log_stream.h"
 #include "robot_mqtt_config.h"
 #include "../platform/drv_time.h"
+#include "../platform/boot_id.h"
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define RETRY_MS 3000u
 
@@ -136,6 +137,7 @@ static void configure(void)
     /* Absent/empty/all-zero example token: ESTOP-only fallback in decoder.
      * A valid configured token restricts EVERY command, including ESTOP. */
     commands_enabled = good && any != 0u;
+    log_stream_init(boot_id_get());
     configured = true;
 }
 
@@ -236,6 +238,7 @@ void robot_network_metrics(rm_heartbeat_t *out)
     out->wifi_start_status = cyw43_utk_start_status();
     out->wifi_requested_priority = WIFI_TASK_PRIORITY;
     robot_queue_metrics(out);
+    out->boot_id = boot_id_get();
 }
 
 /*
@@ -355,7 +358,7 @@ static void service_status(uint32_t now)
     if (!status_pending || !due(now, status_retry_at)) {
         return;
     }
-    rm_pack_status(bytes, RM_STATUS_ONLINE);
+    rm_pack_status(bytes, RM_STATUS_ONLINE, boot_id_get());
     error = mqtt_publish(client, TOPIC_STATUS, bytes, RM_STATUS_SIZE,
                          QOS_AT_LEAST_ONCE, RETAIN_ON, status_done, NULL);
     inc(error == ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
@@ -394,6 +397,7 @@ static void service_summary(uint32_t now)
         robot_network_summary(&cursor, &value) < E_OK) {
         return;
     }
+    value.boot_id = boot_id_get();
     rm_pack_summary(bytes, &value);
     error = mqtt_publish(client, TOPIC_SUMMARY, bytes, RM_SUMMARY_SIZE,
                          QOS_AT_LEAST_ONCE, RETAIN_ON, summary_done, NULL);
@@ -470,6 +474,7 @@ static void service(uint32_t now)
         v.uptime_ms = drv_time_ms();
         v.sequence = ++state_sequence;
         uint8_t bytes[RM_STATE_SIZE];
+        v.boot_id = boot_id_get();
         rm_pack_state(bytes, &v);
         (void)publish("robot/state", bytes, sizeof(bytes));
         state_at = now + STATE_PERIOD_MS;
@@ -482,9 +487,8 @@ static void service(uint32_t now)
         if (er >= E_OK) {
             health_cache = v;
             health_present = true;
-        } else {
-            robot_network_busy(ROBOT_BOARD_HEALTH);
         }
+        robot_network_board_result(ROBOT_BOARD_HEALTH, er);
         /* Producer uptime is in milliseconds: a stalled health board must
          * not become fresh again at the 71-minute microsecond wrap. */
         v = health_cache;
@@ -510,6 +514,7 @@ static void service(uint32_t now)
     }
     if (have_event && budget > 0u) {
         uint8_t bytes[RM_EVENT_SIZE];
+        pending_event.boot_id = boot_id_get();
         rm_pack_event(bytes, &pending_event);
         if (publish("robot/event", bytes, sizeof(bytes))) {
             have_event = false;
@@ -522,6 +527,7 @@ static void service(uint32_t now)
     }
     if (have_obstacle && (budget > 0u)) {
         uint8_t bytes[RM_OBSTACLE_SIZE];
+        pending_obstacle.boot_id = boot_id_get();
         rm_pack_obstacle(bytes, &pending_obstacle);
         if (publish(TOPIC_OBSTACLE, bytes, sizeof(bytes))) {
             have_obstacle = false;
@@ -534,6 +540,7 @@ static void service(uint32_t now)
     }
     if (have_detour && (budget > 0u)) {
         uint8_t bytes[RM_DETOUR_SIZE];
+        pending_detour.boot_id = boot_id_get();
         rm_pack_detour(bytes, &pending_detour);
         if (publish(TOPIC_DETOUR, bytes, sizeof(bytes))) {
             have_detour = false;
@@ -546,7 +553,7 @@ static void service(uint32_t now)
             const int er =
                 robot_network_sonar(&sonar_cursor, &pending_sonar, &missed);
             metrics.sonar_history_missed += missed;
-            if (er == E_OBJ) {
+            if (er == E_TMOUT) {
                 robot_network_busy(ROBOT_BOARD_SONAR);
             }
             have_sonar = er >= E_OK;
@@ -555,6 +562,7 @@ static void service(uint32_t now)
             break;
         }
         uint8_t bytes[RM_SONAR_SIZE];
+        pending_sonar.boot_id = boot_id_get();
         rm_pack_sonar(bytes, &pending_sonar);
         if (!publish("robot/sonar", bytes, sizeof(bytes))) {
             --budget;
@@ -571,6 +579,10 @@ static void service(uint32_t now)
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */
 void cyw43_utk_app_poll(void)
 {
+    if (boot_id_get() == 0u) {
+        /* Failed entropy cannot publish a repeatable boot identity. */
+        return;
+    }
     const uint32_t started = drv_time_us();
     const uint32_t now = drv_time_ms();
     if (!configured) {
@@ -593,7 +605,7 @@ void cyw43_utk_app_poll(void)
                 client = mqtt_client_new();
             }
             if (client != NULL) {
-                rm_pack_status(will_payload, RM_STATUS_OFFLINE);
+                rm_pack_status(will_payload, RM_STATUS_OFFLINE, boot_id_get());
                 const struct mqtt_connect_client_info_t info = {
                     .client_id = ROBOT_MQTT_CLIENT_ID,
                     .keep_alive = KEEPALIVE_S,

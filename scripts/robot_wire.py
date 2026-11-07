@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure robot binary v1 decoder, log merge store and command packer.
+"""Pure versioned robot decoder, boot-scoped log merge store and command packer.
 
 No network and no Paho import: the recorder and the dashboard both use this module.
 """
@@ -11,12 +11,21 @@ import sys
 
 VERSION = 1
 # Recorded topics and their newest payload size. The log has variable batch sizes.
-SIZES = {"state": 72, "sonar": 32, "event": 16, "heartbeat": 100, "log": 32,
-         "obstacle": 20, "status": 2, "detour": 32, "summary": 44,
+SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
+         "obstacle": 24, "status": 6, "detour": 36, "summary": 48,
          "barcode": 20, "imu": 12}
-# State version -> payload size. Version 2 adds distances, version 3 adds duty and heading.
-STATE_SIZES = {1: 48, 2: 60, 3: 72}
-HEARTBEAT_VERSIONS = (1, 2)  # version 2 adds the CPU load in the last two bytes
+# State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity.
+STATE_SIZES = {1: 48, 2: 60, 3: 72, 4: 76}
+HEARTBEAT_VERSIONS = (1, 2, 3)
+TOPIC_SIZES = {
+    "state": STATE_SIZES, "heartbeat": {1: 100, 2: 100, 3: 108},
+    "sonar": {1: 32, 2: 36}, "event": {1: 16, 2: 20},
+    "obstacle": {1: 20, 2: 24}, "detour": {1: 32, 2: 36},
+    "summary": {1: 44, 2: 48}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
+    "barcode": {1: 20}, "imu": {1: 12}}
+BOOT_OFFSETS = {"state": (4, 72), "heartbeat": (3, 100), "sonar": (2, 32),
+                "event": (2, 16), "obstacle": (2, 20), "detour": (2, 32),
+                "summary": (2, 44), "status": (2, 2), "log": (2, 32)}
 CPU_UNKNOWN = 0xFFFF
 RESERVED_TOPICS = ("barcode", "imu")  # reserved, never published yet
 RESERVED_SIZES = {("barcode", 1): 20, ("imu", 1): 12, ("imu", 2): 12}  # (topic, kind) -> size
@@ -98,14 +107,13 @@ def decode(topic, data):
     _require(topic == "robot/" + name and name in SIZES, "unknown topic")
     if name == "log" and len(data) >= 2 and data[1] in (LOG_ROWS, LOG_EVENTS):
         return parse_log_batch(data)[0]
-    if name == "state":
-        _require(len(data) == 0 or data[0] in STATE_SIZES, "unknown version")
-        _require(len(data) == STATE_SIZES.get(data[0] if data else 0), "wrong payload length")
-    else:
-        _require(len(data) == SIZES[name], "wrong payload length")
-        versions = HEARTBEAT_VERSIONS if name == "heartbeat" else (VERSION,)
-        _require(data[0] in versions, "unknown version")
+    _require(len(data) > 0, "wrong payload length")
+    _require(data[0] in TOPIC_SIZES[name], "unknown version")
+    _require(len(data) == TOPIC_SIZES[name][data[0]], "wrong payload length")
     result = {"version": data[0]}
+    version, offset = BOOT_OFFSETS[name]
+    if data[0] >= version:
+        result["boot_id"] = _u32(data, offset)
     if name == "state":
         _require((_u16(data, 18) & 0xF000) == 0 and (_u32(data, 44) >> 20) == 0,
                  "state reserved bits")
@@ -151,8 +159,13 @@ def decode(topic, data):
                       sequence=_u32(data, 4), uptime_ms=_u32(data, 8), word=_u16(data, 12),
                       detail=data[14], run_relative=data[15] & 1)
     elif name == "heartbeat":
-        _require((data[1] & 0xC0) == 0 and data[3] == 0 and _u16(data, 42) == 0 and
+        unavailable_mask = data[3] if data[0] >= 3 else 0
+        _require((data[1] & 0xC0) == 0 and _u16(data, 42) == 0 and
+                 (data[3] & (0xE0 if data[0] >= 3 else 0xFF)) == 0 and
                  data[2] <= 2 and data[83] <= 3, "heartbeat reserved bits or enum")
+        if data[0] >= 3:
+            result.update(board_unavailable_mask=unavailable_mask,
+                          board_unavailable=_u32(data, 104))
         cpu = _u16(data, 98)
         if data[0] == 1:
             _require(cpu == 0, "heartbeat reserved bits or enum")
@@ -295,17 +308,21 @@ def parse_log_batch(data):
     Each record is a flat dict with its index; event fields use the event_ prefix.
     """
     _require(len(data) >= LOG_HEADER_SIZE, "log batch shorter than header")
-    _require(data[0] == VERSION, "unknown version")
+    _require(data[0] in (1, 2), "unknown version")
+    header_size = 36 if data[0] == 2 else LOG_HEADER_SIZE
+    _require(len(data) >= header_size, "log batch shorter than header")
     kind, count, flags = data[1], data[2], data[3]
     _require(kind in (LOG_ROWS, LOG_EVENTS), "log batch kind")
     _require(1 <= count <= LOG_MAX_COUNT, "log batch count")
-    _require(len(data) == LOG_HEADER_SIZE + LOG_RECORD_SIZE * count, "log batch length")
+    _require(len(data) == header_size + LOG_RECORD_SIZE * count, "log batch length")
     _require(flags & ~7 == 0, "log batch unknown flags")
     header = {"version": data[0], "kind": kind, "count": count, "flags": flags,
               "stream_id": _u32(data, 4), "generation": _u32(data, 8),
               "first_index": _u32(data, 12), "publish_ms": _u32(data, 16),
               "newest_ms": _u32(data, 20), "log_rows": _u32(data, 24),
               "skipped_before": _u32(data, 28)}
+    if data[0] == 2:
+        header["boot_id"] = _u32(data, 32)
     header.update(_flags(flags, LOG_FLAGS))
     if header["refill"]:
         _require(not header["new_generation"] and not header["jumped"],
@@ -316,7 +333,7 @@ def parse_log_batch(data):
         _require(header["stream_id"] == 0, "live batch with stream ID")
     records = []
     for i in range(count):
-        body = bytes(data[LOG_HEADER_SIZE + LOG_RECORD_SIZE * i:][:LOG_RECORD_SIZE])
+        body = bytes(data[header_size + LOG_RECORD_SIZE * i:][:LOG_RECORD_SIZE])
         record = {"index": header["first_index"] + i, "body_hex": body.hex()}
         if kind == LOG_ROWS:
             record.update(decode_kr1(body))
@@ -341,8 +358,8 @@ def _format_ranges(ranges):
     return ", ".join(f"{a}" if a == b else f"{a}-{b}" for a, b in ranges)
 
 
-class LogStream:
-    """Merge live and DUMP log records by (generation, kind, index) and track gaps.
+class _LogSession:
+    """Merge live and DUMP records within one boot/session, and track gaps.
 
     handle() returns the CSV rows to write: each new record once, and every control
     frame. Duplicates (QoS 1 retries, live and refill overlap) are dropped.
@@ -477,6 +494,159 @@ class LogStream:
         return lines
 
 
+class BootSession:
+    """Track live boot identity; retained/history messages never move the live boot.
+
+    A local session suffix also separates legacy resets and accidental boot-ID
+    reuse. Uptime comparisons are per source, modulo 2**32, never between topics.
+    Only state, heartbeat and live log publish times establish an uptime boundary.
+    """
+
+    def __init__(self):
+        self.current = "legacy:0"
+        self.boot_id = None
+        self.serial = 0
+        self.scopes = {}
+        self.active_ids = set()
+        self.clocks = {}
+        self.offline = False
+
+    def scope_for(self, fields):
+        boot = fields.get("boot_id")
+        if boot is None:
+            return self.current
+        if boot not in self.scopes:
+            self.scopes[boot] = f"boot:{boot:08x}:0"
+        return self.scopes[boot]
+
+    def _start(self, boot, renew=False):
+        self.serial += 1
+        if boot is None:
+            self.current = f"legacy:{self.serial}"
+        else:
+            if renew:
+                self.scopes[boot] = f"boot:{boot:08x}:{self.serial}"
+            self.current = self.scopes[boot]
+            self.active_ids.add(boot)
+        self.boot_id = boot
+        self.clocks.clear()
+        self.offline = False
+
+    def observe(self, topic, fields, retained=False):
+        scope = self.scope_for(fields)
+        # Summaries, completed detours and refill rows can refer to old history.
+        historical = (topic in ("robot/summary", "robot/detour") or
+                      (topic == "robot/log" and (fields.get("refill") or
+                                                "publish_ms" not in fields)))
+        if retained or historical or fields.get("known") == 0:
+            if topic == "robot/status" and (self.boot_id is None or scope == self.current):
+                if not fields["robot_online"]:
+                    self.offline = True
+                elif self.offline:
+                    self._start(fields.get("boot_id", self.boot_id), renew=True)
+                    return self.current
+            return scope
+        boot = fields.get("boot_id", self.boot_id)
+        if boot is not None and boot != self.boot_id:
+            if boot in self.active_ids:
+                return scope  # delayed frame of a boot already superseded
+            self._start(boot)
+        if topic == "robot/status":
+            if not fields["robot_online"]:
+                self.offline = True
+            elif self.offline:
+                self._start(boot, renew=True)
+            return self.current
+        timestamp = None
+        if topic in ("robot/state", "robot/heartbeat"):
+            timestamp = fields["uptime_ms"]
+        elif topic == "robot/log":
+            timestamp = fields.get("publish_ms")
+        if timestamp is not None:
+            previous = self.clocks.get(topic)
+            if previous is not None and ((timestamp - previous) & 0xFFFFFFFF) > 0x80000000:
+                self._start(boot, renew=True)
+            self.clocks[topic] = timestamp
+        return self.scope_for(fields)
+
+
+class LogStream:
+    """Keep independent log stores per boot/session, including DUMP cursors and gaps.
+
+    Refill can repair a gap only in the same boot. Every returned CSV row carries
+    boot_session; explicit boot_id is inherited from the outer log frame.
+    """
+
+    def __init__(self, report=None):
+        self.report = report or (lambda message: print(message, file=sys.stderr))
+        self.sessions = BootSession()
+        self.stores = {}
+        self.boot_ids = {}
+
+    def observe(self, topic, fields, retained=False):
+        return self.sessions.observe(topic, fields, retained)
+
+    def _session(self, fields):
+        scope = self.observe("robot/log", fields)
+        if scope not in self.stores:
+            prefix = "" if scope == "legacy:0" else f"[{scope}] "
+            self.stores[scope] = _LogSession(report=lambda msg: self.report(prefix + msg))
+            self.boot_ids[scope] = fields.get("boot_id")
+        return scope, self.stores[scope]
+
+    def handle(self, data):
+        if len(data) >= 2 and data[1] in (LOG_ROWS, LOG_EVENTS):
+            return self._batch(*parse_log_batch(data))
+        fields = decode("robot/log", data)
+        scope, store = self._session(fields)
+        return [dict(row, boot_session=scope) for row in store.handle(data)]
+
+    def _batch(self, header, records):
+        scope, store = self._session(header)
+        return [dict(row, boot_session=scope) for row in store._batch(header, records)]
+
+    @property
+    def seen(self):
+        return {(scope, generation, kind): indexes
+                for scope, store in self.stores.items()
+                for (generation, kind), indexes in store.seen.items()}
+
+    @property
+    def live_next(self):
+        return {(scope, generation): index for scope, store in self.stores.items()
+                for generation, index in store.live_next.items()}
+
+    @property
+    def gaps(self):
+        return [dict(gap, boot_session=scope, boot_id=self.boot_ids[scope])
+                for scope, store in self.stores.items() for gap in store.gaps]
+
+    @property
+    def dumps(self):
+        return {(scope, dump_id): dump for scope, store in self.stores.items()
+                for dump_id, dump in store.dumps.items()}
+
+    @property
+    def duplicates(self):
+        return sum(store.duplicates for store in self.stores.values())
+
+    @property
+    def old_generation_skipped(self):
+        return sum(store.old_generation_skipped for store in self.stores.values())
+
+    def summary(self):
+        if not self.stores:
+            return []
+        rows = sum(len(v) for (_, _, kind), v in self.seen.items() if kind == LOG_ROWS)
+        events = sum(len(v) for (_, _, kind), v in self.seen.items() if kind == LOG_EVENTS)
+        lines = [f"log summary: {rows} rows, {events} events, "
+                 f"{self.duplicates} duplicates dropped"]
+        for scope, store in self.stores.items():
+            prefix = "" if scope == "legacy:0" else f"[{scope}] "
+            lines.extend(prefix + line for line in store.summary()[1:])
+        return lines
+
+
 def pack_command(opcode, request_id, token):
     _require(opcode in COMMANDS.values(), "unknown command")
     _require(0 <= request_id <= 0xFFFFFFFF, "request ID range")
@@ -500,11 +670,10 @@ def read_token(path):
 
 
 def csv_fields():
-    fields = {"received_unix_s", "topic"}
-    for name, size in SIZES.items():
-        versions = {"state": STATE_SIZES, "heartbeat": HEARTBEAT_VERSIONS}.get(name, (VERSION,))
-        for version in versions:
-            sample = bytearray(STATE_SIZES[version] if name == "state" else size)
+    fields = {"received_unix_s", "topic", "boot_session"}
+    for name, versions in TOPIC_SIZES.items():
+        for version, size in versions.items():
+            sample = bytearray(size)
             sample[0] = version
             if name in ("event", "status", "barcode", "imu"):
                 sample[1] = 1

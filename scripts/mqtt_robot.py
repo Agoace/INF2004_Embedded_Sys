@@ -82,7 +82,9 @@ def main(argv=None):
                 rows = log_stream.handle(message.payload)
             else:
                 fields = decode(message.topic, message.payload)
-                rows = [] if fields.get("known") == 0 else [fields]
+                scope = log_stream.observe(message.topic, fields,
+                                           bool(getattr(message, "retain", False)))
+                rows = [] if fields.get("known") == 0 else [dict(fields, boot_session=scope)]
         except ValueError as error:
             print(f"discarded {message.topic}: {error}", file=sys.stderr)
             return

@@ -70,24 +70,23 @@ void robot_network_state(rm_state_t *out)
     static age_t ma;
     static age_t va;
     static uint32_t motion_us;
-    const bool l = line_snapshot_try_read(&line) >= E_OK;
-    const bool m = motion_snapshot_try_read(&motion, &motion_us) >= E_OK;
-    const bool v = vehicle_snapshot_try_read(&vehicle) >= E_OK;
+    const int line_result = line_snapshot_try_read(&line);
+    const int motion_result = motion_snapshot_try_read(&motion, &motion_us);
+    const int vehicle_result = vehicle_snapshot_try_read(&vehicle);
+    const bool l = line_result >= E_OK;
+    const bool m = motion_result >= E_OK;
+    const bool v = vehicle_result >= E_OK;
     sonar_snapshot_t sonar;
-    const bool s = sonar_snapshot_try_read(&sonar) >= E_OK;
+    const int sonar_result = sonar_snapshot_try_read(&sonar);
+    const bool s = sonar_result >= E_OK;
     /* Writers may preempt this reader. Observe time AFTER the copies, so a
      * newly published timestamp cannot appear to be in our future. */
     const uint32_t now = drv_time_ms();
     const uint32_t us = drv_time_us();
-    if (!l) {
-        robot_network_busy(ROBOT_BOARD_LINE);
-    }
-    if (!m) {
-        robot_network_busy(ROBOT_BOARD_MOTION);
-    }
-    if (!v) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
-    }
+    robot_network_board_result(ROBOT_BOARD_LINE, line_result);
+    robot_network_board_result(ROBOT_BOARD_MOTION, motion_result);
+    robot_network_board_result(ROBOT_BOARD_VEHICLE, vehicle_result);
+    robot_network_board_result(ROBOT_BOARD_SONAR, sonar_result);
     *out = (rm_state_t){0};
     out->line_age_ms = age(&la, line.sequence, line.timestamp_us, now, us, l);
     out->motion_age_ms = age(&ma, motion.ticks, motion_us, now, us, m);
@@ -105,13 +104,13 @@ void robot_network_state(rm_state_t *out)
     if (v && out->vehicle_age_ms <= VEHICLE_FRESH_MS) {
         out->flags |= 8u;
     }
-    if (!l) {
+    if (line_result == E_TMOUT) {
         out->flags |= STATE_LINE_BUSY_FLAG;
     }
-    if (!m) {
+    if (motion_result == E_TMOUT) {
         out->flags |= STATE_MOTION_BUSY_FLAG;
     }
-    if (!v) {
+    if (vehicle_result == E_TMOUT) {
         out->flags |= STATE_VEHICLE_BUSY_FLAG;
     }
     if (vehicle.active) {
@@ -141,8 +140,6 @@ void robot_network_state(rm_state_t *out)
             now - sonar.timestamp_ms <= SONAR_FRESH_MS) {
             echo = sonar.echo;
         }
-    } else {
-        robot_network_busy(ROBOT_BOARD_SONAR);
     }
     const vr_values_t values = {
         .elapsed_ms = now,
@@ -198,11 +195,10 @@ int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out)
     rm_obstacle_t report;
     const int result = vehicle_obstacle_try_read(&report);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (report.scan_id == *cursor) {
@@ -219,11 +215,10 @@ int robot_network_detour(uint32_t *cursor, rm_detour_t *out)
     rm_detour_t value;
     const int result = vehicle_detour_try_read(&value);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (value.sequence == *cursor) {
@@ -240,11 +235,10 @@ int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
     rm_summary_t value;
     const int result = vehicle_summary_try_read(&value);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (value.run_id == *cursor) {
@@ -263,12 +257,10 @@ void robot_health_collect(rm_heartbeat_t *out)
     static motion_status_t motion;
     static vehicle_snapshot_t vehicle;
     uint32_t us;
-    if (motion_snapshot_try_read(&motion, &us) < E_OK) {
-        robot_network_busy(ROBOT_BOARD_MOTION);
-    }
-    if (vehicle_snapshot_try_read(&vehicle) < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
-    }
+    robot_network_board_result(ROBOT_BOARD_MOTION,
+                               motion_snapshot_try_read(&motion, &us));
+    robot_network_board_result(ROBOT_BOARD_VEHICLE,
+                               vehicle_snapshot_try_read(&vehicle));
     out->motion_late = motion.late_wakes;
     out->motion_missed = motion.missed_wakes;
     out->vehicle_overruns = vehicle.overruns;

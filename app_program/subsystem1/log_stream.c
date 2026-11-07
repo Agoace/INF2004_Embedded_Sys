@@ -99,6 +99,7 @@ static dump_t s_dump;
 static log_stream_stats_t s_stats;
 static uint8_t s_records[RM_LOG_BATCH_MAX_COUNT * RM_LOG_RECORD_SIZE];
 static uint8_t s_frame[RM_LOG_BATCH_MAX_SIZE];
+static uint32_t s_boot_id;
 
 /**
  * Wrap-safe "now is at or after deadline" test for 32-bit millisecond times.
@@ -171,7 +172,7 @@ static uint32_t copy_events(uint32_t generation, uint32_t first, uint32_t count)
             event.word = raw.word;
             event.detail = raw.detail;
             event.flags = EVENT_FLAG_RUN_TIME;
-            rm_pack_event(&s_records[copied * RM_LOG_RECORD_SIZE], &event);
+            rm_pack_log_event(&s_records[copied * RM_LOG_RECORD_SIZE], &event);
             ++copied;
         }
     }
@@ -254,6 +255,7 @@ static void live_service(log_stream_publish_fn publish)
     header.newest_ms = after.newest_ms;
     header.log_rows = after.rows;
     header.skipped_before = s_live.skipped_pending;
+    header.boot_id = s_boot_id;
     length = rm_pack_log_batch(s_frame, sizeof(s_frame), &header, s_records);
     if ((length == 0u) || (publish(s_frame, length, LOG_QOS_LIVE, 0u) != 0)) {
         s_live.retry_armed = true;
@@ -355,6 +357,7 @@ static bool dump_control(log_stream_publish_fn publish, frame_type_t type)
         /* END keeps the defaults. */
     }
     frame.kind = kind;
+    frame.boot_id = s_boot_id;
     frame.dump_id = s_dump.id;
     frame.generation = s_dump.generation;
     store_word(&frame.body[BODY_WORD0], word0);
@@ -392,6 +395,7 @@ static bool dump_data(log_stream_publish_fn publish)
         header.first_index = first;
         header.publish_ms = drv_time_ms();
         header.log_rows = s_dump.rows_total;
+        header.boot_id = s_boot_id;
         length =
             rm_pack_log_batch(s_frame, sizeof(s_frame), &header, s_records);
         accepted = (length != 0u) &&
@@ -506,8 +510,9 @@ static void dump_service(log_stream_publish_fn publish)
 /*
  * Reset live and DUMP stream state before network service starts.
  */
-void log_stream_init(void)
+void log_stream_init(uint32_t boot_id)
 {
+    s_boot_id = boot_id;
     (void)memset(&s_live, 0, sizeof(s_live));
     (void)memset(&s_dump, 0, sizeof(s_dump));
     (void)memset(&s_stats, 0, sizeof(s_stats));

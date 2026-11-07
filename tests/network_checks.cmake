@@ -16,7 +16,7 @@ host_test(test_log_stream tests/test_log_stream.c
 if(TARGET test_log_stream)
     target_include_directories(test_log_stream BEFORE PRIVATE "${REPO}/tests/mqtt_stubs")
     target_compile_definitions(test_log_stream PRIVATE TM_MQTT=1)
-    foreach(scenario live_batches live_steady live_jump_lag live_jump_reconnect
+    foreach(scenario two_boot_ids live_batches live_steady live_jump_lag live_jump_reconnect
             live_generation live_failures dump_flow dump_complete dump_failures
             dump_link_down dump_abort dump_throughput shared_budget)
         add_test(NAME test_log_stream_${scenario} COMMAND test_log_stream ${scenario})

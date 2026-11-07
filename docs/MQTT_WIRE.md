@@ -7,8 +7,8 @@ The pure C codec is [mqtt_wire.h](../app_program/subsystem1/mqtt_wire.h) and
 client is [mqtt_robot.py](../scripts/mqtt_robot.py). No codec function uses
 kernel, radio, or TCP/IP headers. The sonar service has no MQTT dependency.
 
-Each message starts with its version byte: state `3`, heartbeat `2`, and
-all other implemented messages `1`. Integers use little-endian byte order.
+Each message starts with its topic version: state `4`, heartbeat `3`, other
+implemented observations `2`, and commands `1`. Integers use little-endian byte order.
 Signed fields use two's-complement representation. Offsets below are in bytes,
 from zero. Wire messages do not use C structure layout or C bit-fields.
 Send exactly the specified number of bytes. Reserved bits and bytes are zero.
@@ -17,18 +17,83 @@ bits. Each topic has its own layout; there is no common message-type byte.
 
 | Topic | Bytes | Purpose |
 | --- | ---: | --- |
-| `robot/state` | 72 | State v3, ages, distance, duty and encoder odometry |
-| `robot/sonar` | 32 | One completed sonar history result |
-| `robot/event` | 16 | Vehicle event, including command decisions |
-| `robot/heartbeat` | 100 | Link state, health and loss counters |
-| `robot/log` | 32, or 32 + 16 x count | Live RAM-log rows (QoS 0) and DUMP refill (QoS 1) |
+| `robot/state` | 76 | State v3, ages, distance, duty and encoder odometry |
+| `robot/sonar` | 36 | One completed sonar history result |
+| `robot/event` | 20 | Vehicle event, including command decisions |
+| `robot/heartbeat` | 108 | Link state, health and loss counters |
+| `robot/log` | 36, or 36 + 16 x count | Live RAM-log rows (QoS 0) and DUMP refill (QoS 1) |
 | `robot/cmd` | 22 | Command, QoS 1, not retained; token policy below |
-| `robot/obstacle` | 20 | Completed scan profile, QoS 0, not retained |
-| `robot/detour` | 32 | Finished detour, QoS 0, not retained |
-| `robot/summary` | 44 | End-of-run totals, QoS 1, retained |
-| `robot/status` | 2 | Online/offline and last will, QoS 1, retained |
+| `robot/obstacle` | 24 | Completed scan profile, QoS 0, not retained |
+| `robot/detour` | 36 | Finished detour, QoS 0, not retained |
+| `robot/summary` | 48 | End-of-run totals, QoS 1, retained |
+| `robot/status` | 6 | Online/offline and last will, QoS 1, retained |
 | `robot/barcode` | 20 | Reserved; not implemented |
 | `robot/imu` | 12 | Reserved; 4-byte header plus 8-byte snapshot; not implemented |
+
+## Boot identity and sessions
+
+A generation, sequence or run ID can restart after power loss. Never deduplicate
+across boots by generation/index alone. New observation frames carry the same
+32-bit boot ID, initialized once before application tasks/watchdog startup.
+The firmware reads RP2040 `ROSC_RANDOMBIT` directly, with TIMER-separated bit
+samples and Von Neumann pair extraction. Equal pairs are discarded; differing
+pairs supply one bit. The source must be enabled; sampling is bounded to
+16384 pairs. Failure or an all-zero result does not manufacture an ID: the
+network observer stays off, while local driving startup continues. There is
+no SDK runtime dependency, persistent counter, flash write or watchdog-scratch
+assumption. Clock configuration is not changed.
+
+ROSC is asynchronous to the XOSC/PLL system clock. This is a random observation
+label, not cryptographic randomness or a uniqueness guarantee. Pair extraction
+removes independent stationary bit bias, not arbitrary correlation. A 32-bit
+uniform-label birthday collision probability is about 0.0116% over 1000 boots;
+16 bits would give about 7.3% over 100 boots and 99.95% over 1000. Thus 16 bits
+plus uptime is not an adequate identity. Target entropy quality still needs
+hardware observation; host doubles test bounds and state, not physical entropy.
+
+The laptop keys log records by `(boot_id, generation, kind, index)` and also
+tracks a local session. A genuine live OFFLINE-to-ONLINE transition or a
+per-topic uptime rollback starts a new session. Uptime differences must handle
+the 49.7-day wrap; retained history and refill timestamps are not live boot
+evidence. Historical summaries keep their own boot ID and are labelled as
+previous-boot data; they must not switch the current live identity. Reset
+sequence baselines, pending decisions and live/gap state on a session boundary.
+Do not clear recorded rows merely because a new boot is seen.
+
+OFFLINE-to-ONLINE may also be a same-boot reconnect. Conservatively starting a
+local session can emit visible duplicate rows in that case; this is preferable
+to silently dropping a reboot whose random ID collided. Legacy versions remain
+accepted, but their inferred sessions cannot reject all delayed old frames.
+
+### Minimum-bit wire cost
+
+The only general addition is a 32-bit boot label per observation frame. RAM log
+records remain 16 bytes; one ID covers the entire batch. The heartbeat also
+adds a 32-bit unavailable counter and reuses its reserved byte for the mask.
+
+| Topic | Previous bytes/version | New bytes/version | Why identity is present |
+| --- | --- | --- | --- |
+| `robot/log` batch | 32 + 16 x count / v1 | 36 + 16 x count / v2 | Deduplication, gap/refill and DUMP identity must survive generation restart |
+| `robot/log` control | 32 / v1 | 36 / v2 | DUMP request IDs and generations can repeat after boot |
+| `robot/state` | 72 / v3 | 76 / v4 | Delayed old idle/active state must not drive new-boot command gates |
+| `robot/heartbeat` | 100 / v2 | 108 / v3 | Establish live identity and distinguish absent boards from contention |
+| `robot/sonar` | 32 / v1 | 36 / v2 | History/ping sequence restarts must not mix scan charts across boots |
+| `robot/event` live | 16 / v1 | 20 / v2 | Event sequences and pending-command decisions can restart |
+| `robot/obstacle` | 20 / v1 | 24 / v2 | Scan IDs can repeat |
+| `robot/detour` | 32 / v1 | 36 / v2 | Detour sequence resets must not mix table entries |
+| `robot/summary` | 44 / v1 | 48 / v2 | Retained prior-boot run 1 must not look like current run 1 |
+| `robot/status` | 2 / v1 | 6 / v2 | Associate retained ONLINE/OFFLINE with the correct boot |
+| `robot/cmd` | 22 / v1 | 22 / v1 | Unchanged; command/token contract is not a stored observation |
+| Embedded log event | 16 / v1 | 16 / v1 | Inherits the enclosing log-frame ID; no per-record duplication |
+| Reserved barcode / IMU | 20 / 12 | 20 / 12 | Not implemented; no extra fields added |
+
+State at 5 Hz adds only 20 payload bytes/second. Dropping its ID is not
+unambiguous: subscriber reconnect can deliver state before retained status,
+and delayed old state can arrive after a new-ID heartbeat. A new boot's
+uptime can exceed the old last observation, so uptime cannot prove binding.
+The same issue applies to delayed sonar results. Explicit identity avoids
+misbinding, rather than relying on a timeout or treating all old idle data as
+current. Topic names remain unprefixed; this protocol assumes one robot.
 
 ## State
 
@@ -50,9 +115,11 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | 64 | i32 | Encoder heading, 0.01 degree, positive left, since motion init |
 | 68 | i16 | Encoder turn rate, 0.1 degree/s, positive left |
 | 70 | u16 | Reserved zero |
+| 72 | u32 | Boot ID |
 
 State v1 has 48 bytes; v2 has 60 bytes (the three distance fields).
-The client can accept all three; firmware sends v3 at the unchanged 5 Hz rate.
+V3 has 72 bytes; v4 appends the boot ID. Clients accept v1 through v4;
+firmware sends v4 at the unchanged 5 Hz rate.
 Mean distance truncates toward zero. All added values inherit motion age and
 freshness. A busy motion read is not a new measurement.
 
@@ -91,6 +158,7 @@ normalised L/C fields added here.
 | 24 | u16 | Existing packed ultrasonic result |
 | 26 | u16 | Reserved zero |
 | 28 | u32 | Physical ping sequence |
+| 32 | u32 | Boot ID (sonar v2; v1 has 32 bytes) |
 
 Status: EMPTY 0, ECHO 1, DEADLINE 2, CANCELLED 3. ECHO includes sensor error
 results, not only valid distances. The packed echo has distance in bits 0–8,
@@ -126,6 +194,7 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 | 12 | u16 | Event word |
 | 14 | u8 | Detail |
 | 15 | u8 | Bit 0 run-relative time; upper bits zero |
+| 16 | u32 | Boot ID (live event v2; embedded log event v1 stays 16 bytes) |
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
 6 command decision; 7 JUNCTION (reserved, not emitted). For kind 6, detail is 0 accepted, 1 not idle,
@@ -147,7 +216,7 @@ flag bit 0 set, and the RAM event index as their sequence.
 | 0 | u8 | Version |
 | 1 | u8 | Flags, below |
 | 2 | u8 | Reset reason: 0 power/RUN, 1 watchdog, 2 other |
-| 3 | u8 | Reserved zero |
+| 3 | u8 | v3 unavailable-board mask: line bit 0, sonar 1, motion 2, vehicle 3, health 4 |
 | 4 | u32 | Uptime, ms |
 | 8 | u32 | Connect attempts |
 | 12, 16, 20 | u32 each | Telemetry, event, command loss counts |
@@ -168,8 +237,16 @@ flag bit 0 set, and the RAM event index as their sequence.
 | 92 | i32 | Wi-Fi startup status |
 | 96, 97 | u8 each | Requested, observed Wi-Fi task priority |
 | 98 | u16 | v2 CPU load, permille 0–1000; 65535 unknown (v1 reserved zero) |
+| 100 | u32 | Boot ID (v3) |
+| 104 | u32 | Total unavailable-board observations since boot (v3) |
 
-Heartbeat v2 remains 100 bytes. The load includes task and interrupt time on
+Heartbeat v1/v2 has 100 bytes; v3 has 108. Main-board `E_OBJ`/`E_NOEXS`
+reads increment unavailable, not busy. A successful read clears its mask bit;
+a busy read leaves the mask unchanged. Empty history cursors do not mean an
+absent board. TEST has no vehicle role, so its vehicle bit can be set without
+continually increasing `vehicle_busy`.
+
+The load includes task and interrupt time on
 core 0; with SMP=0 this includes Wi-Fi. It is not a per-task load. The
 lowest-priority task counts the same loop used in a 4 ms, interrupts-disabled
 calibration before application startup. Health samples it each second. Other
@@ -205,7 +282,7 @@ the writer. SCAN, side selection and detour control are unchanged.
 
 | Offset | Type | Field |
 | --- | --- | --- |
-| 0 | u8 | Version 1 |
+| 0 | u8 | Version 2 |
 | 1 | u8 | Flags: closest valid bit 0, too near bit 1, left blocked bit 2, right blocked bit 3 |
 | 2 | u8 | Decision: NONE 0, RIGHT 1, LEFT 2 |
 | 3 | i8 | Closest angle, degrees; negative right |
@@ -215,6 +292,7 @@ the writer. SCAN, side selection and detour control are unchanged.
 | 14 | u16 | Existing packed PROFILE word |
 | 16, 17 | u8 each | Right, left free step, 0–6; 7 blocked |
 | 18, 19 | u8 each | Right, left clearance angle, step times 5 degrees; 255 blocked |
+| 20 | u32 | Boot ID (obstacle v2; v1 has 20 bytes) |
 
 Flag bits 4–5 reserve scan stage: 0 not reported (current firmware), 1 coarse,
 2 fine, 3 reserved. Bits 6–7 are zero. Equal closest distances prefer the
@@ -228,7 +306,7 @@ Sequence gaps indicate overwritten records. QoS 0 does not guarantee delivery.
 
 | Offset | Type | Field |
 | --- | --- | --- |
-| 0 | u8 | Version 1 |
+| 0 | u8 | Version 2 |
 | 1 | u8 | Outcome: DONE_LINE 3, DONE_NO_LINE 4, FAILED 7, ABORTED 8 |
 | 2 | u8 | Side: NONE 0, RIGHT 1, LEFT 2 |
 | 3 | u8 | Bit 0 lateral estimate valid; other bits zero |
@@ -238,6 +316,7 @@ Sequence gaps indicate overwritten records. QoS 0 does not guarantee delivery.
 | 24 | u16 | Maximum absolute lateral offset from start heading, mm |
 | 26 | u16 | Outcome payload |
 | 28 | u32 | Related obstacle scan ID; 0 unknown |
+| 32 | u32 | Boot ID (detour v2; v1 has 32 bytes) |
 
 DONE_NO_LINE payload uses the **line** side enum: UNKNOWN 0, LEFT 1, RIGHT 2.
 This is opposite to the obstacle enum. FAILED payload uses `dt_fail_t`: NONE
@@ -260,8 +339,8 @@ without network service can overwrite older summaries; run-ID gaps show this.
 
 | Offset | Type | Field |
 | --- | --- | --- |
-| 0 | u8 | Version 1 |
-| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2 |
+| 0 | u8 | Version 2 |
+| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; bits 3–7 reserved zero |
 | 2 | u8 | Stop source: unknown 0, GP21 1, MQTT 2, fault 3, limit 4 |
 | 3 | u8 | Stop reason, below |
 | 4 | u32 | Run ID since boot |
@@ -276,6 +355,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | 37, 38 | u8, u16 | Shell fault and detail, existing `vsm_fault_t` contract |
 | 40, 41 | u8 each | Reserved barcode success/failure counts (zero) |
 | 42 | u16 | Reserved hump peak (65535 unavailable; units not implemented) |
+| 44 | u32 | Boot ID (summary v2; v1 has 44 bytes) |
 
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
@@ -290,8 +370,9 @@ never changes commands, detector inputs, SCAN or navigation state.
 
 ## Link status and last will
 
-`robot/status` is two bytes: version 1, then ONLINE 1 or OFFLINE 2. Both bytes
-are nonzero. CONNECT supplies the OFFLINE will with explicit `will_msg_len=2`,
+`robot/status` v2 is six bytes: version 2, then ONLINE 1 or OFFLINE 2, then
+a u32 boot ID at offset 2. Version 1 remains the old two-byte form. CONNECT
+supplies the OFFLINE will with explicit `will_msg_len=6`,
 QoS 1 and retain. This lwIP implementation otherwise uses `strlen` when the
 length is zero; the explicit length avoids string/binary ambiguity. After
 CONNACK the robot publishes retained ONLINE at QoS 1, retrying failures.
@@ -404,7 +485,8 @@ complete data. Completeness comes from DUMP, merged by index.
 
 ### Batch frame (kinds ROWS 5 and EVENTS 6)
 
-Length is 32 + 16 x count bytes; count is 1 to 12. Record i has index
+Version 2 length is 36 + 16 x count bytes; count is 1 to 12. Version 1 used
+a 32-byte header. Record i has index
 `first_index + i`. There is no per-record index byte.
 
 | Offset | Type | Field |
@@ -420,7 +502,8 @@ Length is 32 + 16 x count bytes; count is 1 to 12. Record i has index
 | 20 | u32 | Newest-row time: robot uptime, ms, when the newest row in the RAM log was logged. Zero for a refill |
 | 24 | u32 | Rows in the RAM log when the frame was built |
 | 28 | u32 | Skipped rows just before `first_index` (live only; zero in a refill) |
-| 32+ | bytes | Count records of 16 bytes: literal KR1 rows, or event records (event flag bit 0 set: run-relative time) |
+| 32 | u32 | Boot ID |
+| 36+ | bytes | Count records of 16 bytes: literal KR1 rows, or v1 event records (event flag bit 0 set: run-relative time); records inherit outer boot ID |
 
 Flags: bit 0 REFILL (DUMP frame, QoS 1); bit 1 NEW_GENERATION (first live
 frame after a new run generation began); bit 2 JUMPED (live cursor jumped to
@@ -449,11 +532,12 @@ Times are 32-bit ms and wrap after 49.7 days; subtract with wraparound.
 - QoS 0 gives no delivery confirmation. A lost frame leaves an index gap that
   the client must report. A failed publish is retried later with the same
   cursor.
-- Each frame is at most 224 bytes of payload (10 rows: 192 bytes).
+- Each frame is at most 228 bytes of payload (10 rows: 196 bytes). A maximum
+  QoS 1 batch needs 244 of 255 usable output-ring bytes; the ring stays 256 B.
 
 ### Control frames (kinds BEGIN 0, END 3, ABORT 4)
 
-These 32-byte frames are QoS 1. Kinds ROW 1 and EVENT 2 (one record per frame)
+These v2 36-byte frames are QoS 1 (v1 was 32 bytes). Kinds ROW 1 and EVENT 2 (one record per frame)
 are retired and never sent.
 
 | Offset | Type | Field |
@@ -465,6 +549,7 @@ are retired and never sent.
 | 8 | u32 | RAM run generation |
 | 12 | u32 | Frame index (zero) |
 | 16–31 | bytes | Body, below |
+| 32 | u32 | Boot ID |
 
 | Kind | Body |
 | --- | --- |
@@ -481,12 +566,12 @@ BEGIN (wait for PUBACK); batches of up to 12 rows, then up to 12 events, with
 REFILL set and the dump ID as stream ID; END after every batch is acknowledged.
 Up to three QoS 1 batches are in flight. The robot advances its refill cursor
 only on PUBACK. After an MQTT reconnect it resends the unacknowledged batches
-from RAM, so a client must drop duplicates by (generation, kind, index). A new
+from RAM, so a client must drop duplicates by (boot ID, generation, kind, index). A new
 run generation sends ABORT and ends the dump. One dump runs at a time; a
 second request while one is active is refused. A dump needs about 14 s for a
 full log at 100 ms round-trip time (about 28 s at 200 ms). Live frames have
 priority for each poll, and use no QoS 1 request slot, so a dump does not
-delay them. Merge refill records into the live CSV by (generation, index),
+delay them. Merge refill records into the live CSV by (boot ID, generation, index),
 and report any index missing after END. A dump never stops driving or logging.
 
 ## Client

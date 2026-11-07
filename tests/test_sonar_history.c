@@ -38,11 +38,11 @@ int main(void) {
     assert(cursor==count+20u && missed==0u);
     const sonar_history_entry_t saved=item;
     store_word(&history_guard,1u);missed=99u;
-    assert(sonar_history_read(&cursor,&item,&missed)==E_OBJ && missed==0u);
+    assert(sonar_history_read(&cursor,&item,&missed)==E_TMOUT && missed==0u);
     assert(memcmp(&saved,&item,sizeof(item))==0 && cursor==count+20u);
     store_word(&history_guard,2u);
     change_on_load=&history_guard;change_countdown=1u;
-    assert(sonar_history_read(&cursor,&item,&missed)==E_OBJ);
+    assert(sonar_history_read(&cursor,&item,&missed)==E_TMOUT);
     store_word(&board_guard,1u);
     assert(sonar_snapshot_try_read(&board)==E_TMOUT);
     store_word(&board_guard,2u);change_on_load=&board_guard;change_countdown=1u;
@@ -54,6 +54,6 @@ int main(void) {
     assert(sonar_history_read(&cursor,&item,&missed)==E_OK && cursor==UINT32_MAX);
     assert(sonar_history_read(&cursor,&item,&missed)==E_OK && cursor==0u);
     assert(sonar_history_read(&cursor,&item,&missed)==E_OK && cursor==1u);
-    assert(sonar_history_read(&cursor,&item,&missed)==E_TMOUT);
+    assert(sonar_history_read(&cursor,&item,&missed)==E_NOEXS);
     return 0;
 }

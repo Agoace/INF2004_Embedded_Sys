@@ -65,7 +65,8 @@ typedef struct {
     sonar_snapshot_t result;
 } sonar_history_entry_t;
 
-/* One next publication. E_TMOUT: no new entry; E_OBJ: busy or not ready.
+/* One next publication. E_NOEXS: no new entry; E_TMOUT: writer busy;
+ * E_OBJ: service not ready. These results are distinct for health accounting.
  * Set cursor to zero initially. Overflow returns the oldest retained entry
  * and reports the number of evicted entries. Busy leaves cursor/out intact.
  * Readers must run at least once per 2^31 publications. No retry loop. */

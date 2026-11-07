@@ -41,6 +41,8 @@ int vehicle_summary_try_read(rm_summary_t *out) { if (summary_error<0) return su
 static rm_obstacle_t obstacle_value;static int obstacle_error=E_NOEXS;
 int vehicle_obstacle_try_read(rm_obstacle_t *out) { if (obstacle_error<0) return obstacle_error;*out=obstacle_value;return E_OK; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
+static unsigned int unavailable_reads[5];
+void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result==E_TMOUT) ++busy[board]; }
 static uint16_t row_bits(const uint8_t *row,unsigned int offset,unsigned int width) {
     uint16_t value=0u;
     for (unsigned int bit=0u;bit<width;++bit)
@@ -161,6 +163,17 @@ int main(void) {
         assert(robot_network_summary(&summary_cursor,&r)==E_NOEXS);
         summary_cursor=0u; /* a new connection asks for the last summary again */
         assert(robot_network_summary(&summary_cursor,&r)==E_OK && r.run_id==2u);
+    }
+    /* An absent TEST vehicle is not a busy writer, in either reader. */
+    {
+        const unsigned int before_busy=busy[ROBOT_BOARD_VEHICLE];
+        const unsigned int before_absent=unavailable_reads[ROBOT_BOARD_VEHICLE];
+        vehicle_error=E_OBJ;
+        robot_network_state(&value);
+        assert((value.flags&64u)==0u && (value.flags&8u)==0u);
+        robot_health_collect(&health);
+        assert(busy[ROBOT_BOARD_VEHICLE]==before_busy);
+        assert(unavailable_reads[ROBOT_BOARD_VEHICLE]==before_absent+2u);
     }
     return 0;
 }

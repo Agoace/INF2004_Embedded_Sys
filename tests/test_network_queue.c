@@ -100,6 +100,22 @@ int main(int argc,char **argv) {
     assert(metrics.event_lost==event_loss_base+1u && metrics.command_lost==command_loss_base+3u);
     assert(metrics.line_busy==1u && metrics.sonar_busy==2u && metrics.motion_busy==3u && metrics.vehicle_busy==4u && metrics.health_busy==5u);
     assert(metrics.publish_ok==123u);
+    /* TEST has no vehicle role: absence must not inflate contention. */
+    for (unsigned int i=0u;i<233u;++i) robot_network_board_result(ROBOT_BOARD_VEHICLE,E_OBJ);
+    robot_queue_metrics(&metrics);
+    assert(metrics.vehicle_busy==4u && metrics.board_unavailable==233u);
+    assert(metrics.board_unavailable_mask==(1u<<ROBOT_BOARD_VEHICLE));
+    robot_network_board_result(ROBOT_BOARD_VEHICLE,E_TMOUT);
+    robot_queue_metrics(&metrics);
+    assert(metrics.vehicle_busy==5u && metrics.board_unavailable==233u);
+    assert(metrics.board_unavailable_mask==(1u<<ROBOT_BOARD_VEHICLE));
+    robot_network_board_result(ROBOT_BOARD_VEHICLE,E_OK);
+    robot_network_board_result(ROBOT_BOARD_COUNT,E_OBJ);
+    robot_queue_metrics(&metrics);
+    assert(metrics.board_unavailable_mask==0u && metrics.board_unavailable==233u);
+    robot_network_board_result(ROBOT_BOARD_VEHICLE,E_PAR);
+    robot_queue_metrics(&metrics);
+    assert(metrics.vehicle_busy==5u && metrics.board_unavailable==233u);
     assert(irq_off==0u && di_count==ei_count);
     return 0;
 }

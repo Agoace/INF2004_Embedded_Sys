@@ -214,6 +214,10 @@ vehicle task described below.
 
 ## STEP 8 MQTT navigation
 
+- [Timing investigation](MOTION_TIMING_INVESTIGATION.md) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](MTK3_STEP8_HARDWARE_RESULTS.md) remain tied to the tested earlier image.
+
+- [`boot_id.c`](../app_program/platform/boot_id.c), [`boot_id_hw.c`](../app_program/platform/boot_id_hw.c), and [`boot_entropy.c`](../app_program/platform/boot_entropy.c) — bounded ROSC per-boot observation label and pure bit extraction; [`test_boot_id.c`](../tests/test_boot_id.c). Binary two-boot fixtures: [`mqtt_boot_fixtures.h`](../tests/mqtt_boot_fixtures.h).
+
 - [Follow-up handoff](MTK3_FOLLOWUP_HANDOFF.md) — final owner tips, commit sequence, helper cleanup/recovery and hardware limits.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).

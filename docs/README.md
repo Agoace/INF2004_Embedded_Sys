@@ -92,8 +92,10 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [Local template changes](TEMPLATE_CHANGES.md) — approved deviations, early TIMER, Wi-Fi priority/hook/timing and update checks.
 
 - [Kernel MQTT design](KERNEL_MQTT.md) — non-critical network policy, pull boards, queues, ownership and measured timing limits.
-- [MQTT binary wire protocol](MQTT_WIRE.md) — version1 topic layouts, masks/LE and decoder contract.
+- [MQTT binary wire protocol](MQTT_WIRE.md) — per-topic versions, boot identity, minimum-bit byte table, masks/LE and decoder contract.
 - [MQTT operator runbook](MQTT_RUNBOOK.md) — scoped Mosquitto/firewall, private settings, laptop CSV/commands and pending hardware checks.
 - [MQTT dashboard runbook](MQTT_DASHBOARD.md) — live laptop dashboard: how to run it, panels, button rules, command result and local web security.
 
+- [STEP 8 hardware results](MTK3_STEP8_HARDWARE_RESULTS.md) — operator results from 2026-11-07, limits and new-image checks.
+- [Motion timing investigation](MOTION_TIMING_INVESTIGATION.md) — lifetime-gap confound, opt-in diagnostic capture and proposed per-run window.
 - [STEP 8 software validation](MTK3_STEP8_VALIDATION.md) — six profiles, strict ARM/host/link checks, bindings and memory limitations; no hardware acceptance.

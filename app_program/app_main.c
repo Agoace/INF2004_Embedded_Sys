@@ -28,6 +28,7 @@
 #include "platform/app_task.h"
 #if TM_MQTT
 #include "platform/idle_meter.h"
+#include "platform/boot_id.h"
 #endif
 
 /* TEST work runs below motion/sensors and above telemetry (30). */
@@ -56,6 +57,7 @@ EXPORT INT usermain(void)
 #if TM_MQTT
     /* Before application startup: no watchdog or acquisition deadline yet. */
     CHECK(idle_meter_calibrate(), "CPU meter calibration (noncritical)");
+    CHECK(boot_id_init(), "boot observation ID (noncritical)");
 #endif
 
     /* tk_ref_ver: ask the kernel who it is */

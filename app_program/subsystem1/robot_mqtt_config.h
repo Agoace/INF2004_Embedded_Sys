@@ -7,7 +7,7 @@
 #ifndef ROBOT_MQTT_CONFIG_H
 #define ROBOT_MQTT_CONFIG_H
 /* Application-owned settings. Never use the template demo MQTT settings. */
-#if defined(__has_include)
+#if !defined(ROBOT_MQTT_NO_PRIVATE_CONFIG) && defined(__has_include)
 #if __has_include("robot_mqtt_secrets.h")
 #include "robot_mqtt_secrets.h"
 #endif

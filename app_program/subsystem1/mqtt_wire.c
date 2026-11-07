@@ -4,21 +4,25 @@
 #include "mqtt_wire.h"
 #include <string.h>
 
-#define WIRE_BYTE_MASK            255u
-#define WIRE_BYTE_BITS            8
-#define WIRE_HALF_BITS            16
-#define WIRE_HIGH_BYTE_BITS       24
-#define WIRE_NIBBLE_MASK          15u
-#define WIRE_NIBBLE_BITS          4
-#define WIRE_ADC_MASK             4095u
-#define WIRE_NORM_MASK            1023u
-#define WIRE_NORM_BITS            10
-#define WIRE_KR1_BYTES            16u
-#define WIRE_SUMMARY_FLAGS_MASK   7u
-#define WIRE_HEARTBEAT_FLAGS_MASK 63u
-#define WIRE_SONAR_STATUS_MASK    3u
-#define WIRE_SONAR_VALID_FLAG     4u
-#define WIRE_SONAR_PENDING_FLAG   8u
+#define WIRE_BYTE_MASK                     255u
+#define WIRE_BYTE_BITS                     8
+#define WIRE_HALF_BITS                     16
+#define WIRE_HIGH_BYTE_BITS                24
+#define WIRE_NIBBLE_MASK                   15u
+#define WIRE_NIBBLE_BITS                   4
+#define WIRE_ADC_MASK                      4095u
+#define WIRE_NORM_MASK                     1023u
+#define WIRE_NORM_BITS                     10
+#define WIRE_KR1_BYTES                     16u
+#define WIRE_SUMMARY_FLAGS_MASK            7u
+#define WIRE_HEARTBEAT_FLAGS_MASK          63u
+#define WIRE_SONAR_STATUS_MASK             3u
+#define WIRE_SONAR_VALID_FLAG              4u
+#define WIRE_SONAR_PENDING_FLAG            8u
+#define WIRE_BOARD_MASK                    0x1fu
+#define WIRE_HEARTBEAT_UNAVAILABLE_OFFSET  3u
+#define WIRE_HEARTBEAT_BOOT_OFFSET         100u
+#define WIRE_HEARTBEAT_ABSENT_COUNT_OFFSET 104u
 
 enum {
     COMMAND_VERSION_OFFSET = 0,
@@ -129,6 +133,7 @@ void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
     put16(out + DUTY_RIGHT_PERMILLE_OFFSET, (uint16_t)v->duty_right_permille);
     put32(out + HEADING_CDEG_OFFSET, (uint32_t)v->heading_cdeg);
     put16(out + TURN_RATE_DDPS_OFFSET, (uint16_t)v->turn_rate_ddps);
+    put32(out + RM_STATE_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
@@ -153,7 +158,7 @@ void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
     };
 
     memset(out, 0, RM_OBSTACLE_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_OBSTACLE_VERSION;
     out[FLAGS_OFFSET] = v->flags;
     out[DECISION_OFFSET] = v->decision;
     out[CLOSEST_ANGLE_DEG_OFFSET] = (uint8_t)v->closest_angle_deg;
@@ -165,6 +170,7 @@ void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
     out[LEFT_FREE_STEP_OFFSET] = v->left_free_step;
     out[RIGHT_CLEAR_DEG_OFFSET] = v->right_clear_deg;
     out[LEFT_CLEAR_DEG_OFFSET] = v->left_clear_deg;
+    put32(out + RM_OBSTACLE_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
@@ -189,7 +195,7 @@ void rm_pack_detour(uint8_t out[RM_DETOUR_SIZE], const rm_detour_t *v)
     };
 
     memset(out, 0, RM_DETOUR_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_DETOUR_VERSION;
     out[OUTCOME_OFFSET] = v->outcome;
     out[SIDE_OFFSET] = v->side;
     out[FLAGS_OFFSET] = (uint8_t)(v->flags & RM_DETOUR_LATERAL_VALID);
@@ -201,6 +207,7 @@ void rm_pack_detour(uint8_t out[RM_DETOUR_SIZE], const rm_detour_t *v)
     put16(out + MAX_LATERAL_MM_OFFSET, v->max_lateral_mm);
     put16(out + PAYLOAD_OFFSET, v->payload);
     put32(out + SCAN_ID_OFFSET, v->scan_id);
+    put32(out + RM_DETOUR_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
@@ -234,7 +241,7 @@ void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v)
     };
 
     memset(out, 0, RM_SUMMARY_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_SUMMARY_VERSION;
     out[FLAGS_OFFSET] = (uint8_t)(v->flags & WIRE_SUMMARY_FLAGS_MASK);
     out[STOP_SOURCE_OFFSET] = v->stop_source;
     out[STOP_REASON_OFFSET] = v->stop_reason;
@@ -255,12 +262,14 @@ void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v)
     out[BARCODE_OK_OFFSET] = v->barcode_ok;
     out[BARCODE_FAILED_OFFSET] = v->barcode_failed;
     put16(out + HUMP_PEAK_OFFSET, v->hump_peak);
+    put32(out + RM_SUMMARY_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
  * Pack the online or offline state for the retained status topic.
  */
-void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state)
+void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state,
+                    uint32_t boot_id)
 {
     /* Byte offsets in this topic's wire frame. */
     enum {
@@ -268,8 +277,9 @@ void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state)
         BODY_OFFSET = 1,
     };
 
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_STATUS_VERSION;
     out[BODY_OFFSET] = state;
+    put32(out + RM_STATUS_SIZE - sizeof(uint32_t), boot_id);
 }
 
 /*
@@ -293,7 +303,7 @@ void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *v)
     };
 
     memset(out, 0, RM_SONAR_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_SONAR_VERSION;
     out[STATUS_OFFSET] = (uint8_t)((v->status & WIRE_SONAR_STATUS_MASK) |
                                    (v->valid ? WIRE_SONAR_VALID_FLAG : 0u) |
                                    (v->pending ? WIRE_SONAR_PENDING_FLAG : 0u));
@@ -306,12 +316,13 @@ void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *v)
     put32(out + TIMESTAMP_MS_OFFSET, v->timestamp_ms);
     put16(out + ECHO_OFFSET, v->echo);
     put32(out + PING_SEQUENCE_OFFSET, v->ping_sequence);
+    put32(out + RM_SONAR_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
  * Pack a vehicle event, keeping only the defined flag bits.
  */
-void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *v)
+void rm_pack_log_event(uint8_t out[RM_EVENT_RECORD_SIZE], const rm_event_t *v)
 {
     /* Byte offsets in this topic's wire frame. */
     enum {
@@ -326,7 +337,7 @@ void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *v)
         FLAGS_OFFSET = 15,
     };
 
-    memset(out, 0, RM_EVENT_SIZE);
+    memset(out, 0, RM_EVENT_RECORD_SIZE);
     out[VERSION_OFFSET] = RM_VERSION;
     out[KIND_OFFSET] = v->kind;
     out[FROM_OFFSET] = v->from;
@@ -336,6 +347,14 @@ void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *v)
     put16(out + WORD_OFFSET, v->word);
     out[DETAIL_OFFSET] = v->detail;
     out[FLAGS_OFFSET] = (uint8_t)(v->flags & 1u);
+}
+
+/* Pack a live event; embedded log events retain the v1 record layout. */
+void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *v)
+{
+    rm_pack_log_event(out, v);
+    out[0] = RM_EVENT_VERSION;
+    put32(out + RM_EVENT_RECORD_SIZE, v->boot_id);
 }
 
 /*
@@ -411,6 +430,10 @@ void rm_pack_heartbeat(uint8_t out[RM_HEARTBEAT_SIZE], const rm_heartbeat_t *v)
     out[WIFI_REQUESTED_PRIORITY_OFFSET] = v->wifi_requested_priority;
     out[WIFI_OBSERVED_PRIORITY_OFFSET] = v->wifi_observed_priority;
     put16(out + CPU_LOAD_PERMILLE_OFFSET, v->cpu_load_permille);
+    out[WIRE_HEARTBEAT_UNAVAILABLE_OFFSET] =
+        (uint8_t)(v->board_unavailable_mask & WIRE_BOARD_MASK);
+    put32(out + WIRE_HEARTBEAT_BOOT_OFFSET, v->boot_id);
+    put32(out + WIRE_HEARTBEAT_ABSENT_COUNT_OFFSET, v->board_unavailable);
 }
 
 /*
@@ -448,12 +471,13 @@ void rm_pack_log(uint8_t out[RM_LOG_SIZE], const rm_log_t *v)
     };
 
     memset(out, 0, RM_LOG_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_LOG_VERSION;
     out[KIND_OFFSET] = v->kind;
     put32(out + DUMP_ID_OFFSET, v->dump_id);
     put32(out + GENERATION_OFFSET, v->generation);
     put32(out + INDEX_OFFSET, v->index);
     memcpy(out + BODY_OFFSET, v->body, RM_LOG_RECORD_SIZE);
+    put32(out + RM_LOG_SIZE - sizeof(uint32_t), v->boot_id);
 }
 
 /*
@@ -498,7 +522,7 @@ size_t rm_pack_log_batch(uint8_t *out, size_t capacity,
         return 0u;
     }
     (void)memset(out, 0, RM_LOG_BATCH_HEADER_SIZE);
-    out[VERSION_OFFSET] = RM_VERSION;
+    out[VERSION_OFFSET] = RM_LOG_VERSION;
     out[KIND_OFFSET] = header->kind;
     out[COUNT_OFFSET] = header->count;
     out[FLAGS_OFFSET] = header->flags;
@@ -509,6 +533,7 @@ size_t rm_pack_log_batch(uint8_t *out, size_t capacity,
     put32(out + NEWEST_MS_OFFSET, header->newest_ms);
     put32(out + LOG_ROWS_OFFSET, header->log_rows);
     put32(out + SKIPPED_BEFORE_OFFSET, header->skipped_before);
+    put32(out + RM_LOG_BATCH_HEADER_SIZE - sizeof(uint32_t), header->boot_id);
     (void)memcpy(out + RM_LOG_BATCH_HEADER_SIZE, records,
                  (size_t)header->count * RM_LOG_RECORD_SIZE);
     return length;

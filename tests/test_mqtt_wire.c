@@ -11,7 +11,7 @@ static void emit_batch(const char *name,const rm_log_batch_t *header,const uint8
     uint8_t frame[RM_LOG_BATCH_MAX_SIZE];
     const size_t size=rm_pack_log_batch(frame,sizeof(frame),header,records);
     assert(size==RM_LOG_BATCH_HEADER_SIZE+((size_t)header->count*RM_LOG_RECORD_SIZE));
-    assert(frame[0]==1u && frame[1]==header->kind && frame[2]==header->count && frame[3]==header->flags);
+    assert(frame[0]==RM_LOG_VERSION && frame[1]==header->kind && frame[2]==header->count && frame[3]==header->flags);
     printf("batch/%s ",name);
     for (size_t i=0u;i<size;++i) printf("%02x",(unsigned int)frame[i]);
     putchar('\n');
@@ -23,10 +23,10 @@ static void test_batch_packer(void) {
         .first_index=0x0a0b0c0du,.publish_ms=0x11121314u,.newest_ms=0x21222324u,.log_rows=0x31323334u,
         .skipped_before=0x41424344u,.stream_id=0u};
     memset(frame,0xa5,sizeof(frame));
-    assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==192u);
+    assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==196u);
     assert(frame[4]==0u && frame[8]==4u && frame[11]==1u && frame[12]==0x0du && frame[15]==0x0au);
     assert(frame[16]==0x14u && frame[20]==0x24u && frame[24]==0x34u && frame[28]==0x44u);
-    assert(memcmp(frame+32,records,160u)==0);
+    assert(memcmp(frame+RM_LOG_BATCH_HEADER_SIZE,records,160u)==0);
     /* Invalid input returns zero and leaves the output unchanged. */
     uint8_t before[RM_LOG_BATCH_MAX_SIZE];memset(frame,0xa5,sizeof(frame));memcpy(before,frame,sizeof(frame));
     header.count=0u;assert(rm_pack_log_batch(frame,sizeof(frame),&header,records)==0u);
@@ -38,14 +38,14 @@ static void test_batch_packer(void) {
     assert(rm_pack_log_batch(frame,sizeof(frame),NULL,records)==0u);
     assert(rm_pack_log_batch(frame,sizeof(frame),&header,NULL)==0u);
     assert(memcmp(frame,before,sizeof(frame))==0);
-    assert(rm_pack_log_batch(frame,64u,&header,records)==64u);
-    header.count=RM_LOG_BATCH_MAX_COUNT;assert(rm_pack_log_batch(frame,224u,&header,records)==224u);
+    assert(rm_pack_log_batch(frame,68u,&header,records)==68u);
+    header.count=RM_LOG_BATCH_MAX_COUNT;assert(rm_pack_log_batch(frame,228u,&header,records)==228u);
     /* Fixtures for the Python decoder: live, jump, new generation, refill, max, wrap. */
-    uint8_t events[3u*RM_EVENT_SIZE];
+    uint8_t events[3u*RM_EVENT_RECORD_SIZE];
     for (uint8_t i=0u;i<3u;++i) {
         rm_event_t event={.kind=(uint8_t)(i+1u),.from=i,.to=(uint8_t)(i+1u),.sequence=100u+i,
             .uptime_ms=5000u+i,.word=(uint16_t)(0x1200u+i),.detail=(uint8_t)(i+7u),.flags=(uint8_t)(i&1u)};
-        rm_pack_event(events+((size_t)i*RM_EVENT_SIZE),&event);
+        rm_pack_log_event(events+((size_t)i*RM_EVENT_RECORD_SIZE),&event);
     }
     header=(rm_log_batch_t){.kind=RM_LOG_ROWS,.count=10u,.generation=7u,.first_index=100u,
         .publish_ms=5000u,.newest_ms=4950u,.log_rows=125u};
@@ -94,17 +94,17 @@ static void test_obstacle_status(void)
         .profile_word = 0x5a5au, .right_free_step = 7u, .left_free_step = 3u,
         .right_clear_deg = 255u, .left_clear_deg = 15u};
     rm_pack_obstacle(bytes, &value);
-    assert(bytes[0] == 1u && bytes[1] == 0x0fu && bytes[2] == 2u && bytes[3] == 226u);
+    assert(bytes[0] == RM_OBSTACLE_VERSION && bytes[1] == 0x0fu && bytes[2] == 2u && bytes[3] == 226u);
     assert(bytes[4] == 4u && bytes[7] == 1u && bytes[8] == 0xf0u && bytes[11] == 0xffu);
     assert(bytes[12] == 0xfeu && bytes[13] == 1u && bytes[14] == 0x5au && bytes[15] == 0x5au);
     assert(bytes[16] == 7u && bytes[17] == 3u && bytes[18] == 255u && bytes[19] == 15u);
     emit_named("obstacle", bytes, RM_OBSTACLE_SIZE);
     uint8_t status[RM_STATUS_SIZE];
-    rm_pack_status(status, RM_STATUS_ONLINE);
-    assert(status[0] == 1u && status[1] == 1u);
+    rm_pack_status(status, RM_STATUS_ONLINE, 0x11223344u);
+    assert(status[0] == RM_STATUS_VERSION && status[1] == 1u);
     emit_named("status_online", status, RM_STATUS_SIZE);
-    rm_pack_status(status, RM_STATUS_OFFLINE);
-    assert(status[0] == 1u && status[1] == 2u); /* neither byte is 0x00 */
+    rm_pack_status(status, RM_STATUS_OFFLINE, 0x11223344u);
+    assert(status[0] == RM_STATUS_VERSION && status[1] == 2u); /* neither byte is 0x00 */
     emit_named("status_offline", status, RM_STATUS_SIZE);
 }
 static void emit_named(const char *name,const uint8_t *data,size_t size) {
@@ -165,7 +165,7 @@ static void test_detour_summary(void)
         .end_ms = 0x00000010u, .duration_ms = 32u, .distance_mm = 0xa1b2c3d4u,
         .max_lateral_mm = 0x1234u, .payload = 0x0567u, .scan_id = 0x0a0b0c0du};
     rm_pack_detour(bytes, &detour);
-    assert(bytes[0] == 1u && bytes[1] == 3u && bytes[2] == 2u && bytes[3] == 1u);
+    assert(bytes[0] == RM_DETOUR_VERSION && bytes[1] == 3u && bytes[2] == 2u && bytes[3] == 1u);
     assert(bytes[4] == 4u && bytes[7] == 1u && bytes[8] == 0xf0u && bytes[11] == 0xffu);
     assert(bytes[12] == 0x10u && bytes[15] == 0u && bytes[16] == 32u);
     assert(bytes[20] == 0xd4u && bytes[23] == 0xa1u && bytes[24] == 0x34u && bytes[25] == 0x12u);
@@ -192,7 +192,7 @@ static void test_detour_summary(void)
         .hump_peak = 0x0a0bu};
     uint8_t summary_bytes[RM_SUMMARY_SIZE];
     rm_pack_summary(summary_bytes, &summary);
-    assert(summary_bytes[0] == 1u && summary_bytes[1] == 7u); /* flags masked */
+    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 7u); /* upper flags remain reserved */
     assert(summary_bytes[2] == 1u && summary_bytes[3] == 1u && summary_bytes[4] == 4u);
     assert(summary_bytes[8] == 0x88u && summary_bytes[9] == 0x13u);
     assert(summary_bytes[12] == 0x32u && summary_bytes[13] == 0xefu);
@@ -220,7 +220,7 @@ static void test_detour_summary(void)
     rm_heartbeat_t beat = {.flags = 0x37u, .uptime_ms = 60000u,
         .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
     rm_pack_heartbeat(heartbeat_bytes, &beat);
-    assert(heartbeat_bytes[0] == 2u && heartbeat_bytes[98] == 0xffu && heartbeat_bytes[99] == 0xffu);
+    assert(heartbeat_bytes[0] == RM_HEARTBEAT_VERSION && heartbeat_bytes[98] == 0xffu && heartbeat_bytes[99] == 0xffu);
     emit_named("heartbeat_v2_unknown", heartbeat_bytes, RM_HEARTBEAT_SIZE);
     beat.cpu_load_permille = 0x0123u;
     rm_pack_heartbeat(heartbeat_bytes, &beat);
@@ -233,7 +233,9 @@ static void test_detour_summary(void)
     assert(event_bytes[1] == 7u);
     emit_named("event_junction", event_bytes, RM_EVENT_SIZE);
 }
+#include "mqtt_boot_fixtures.h"
 int main(void) {
+    test_boot_fixtures();
     test_batch_packer();
     test_detour_summary();
     test_dashboard_fixtures();
@@ -250,7 +252,7 @@ int main(void) {
     assert(bytes[60]==0xe0u && bytes[61]==0xfcu && bytes[62]==0xffu && bytes[63]==0x7fu);
     assert(bytes[64]==0x79u && bytes[65]==0x29u && bytes[66]==0xedu && bytes[67]==0xffu);
     assert(bytes[68]==0x73u && bytes[69]==0xedu && bytes[70]==0u && bytes[71]==0u);
-    assert(bytes[0]==3u && bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
+    assert(bytes[0]==RM_STATE_VERSION && bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
     assert(bytes[48]==0xc0u && bytes[49]==0x1du && bytes[50]==0xfeu && bytes[51]==0xffu);
     assert(bytes[52]==0xffu && bytes[55]==0x7fu && bytes[56]==0xf9u && bytes[59]==0xffu);
     emit("state",bytes,RM_STATE_SIZE);
@@ -271,10 +273,10 @@ int main(void) {
         .motion_busy=15u,.vehicle_busy=16u,.health_busy=17u,.latest_sonar_history_sequence=18u,
         .health_age_ms=65535u,.wifi_link_status=-3,.mqtt_state=3u,.wifi_poll_gap_max_us=19u,
         .wifi_poll_gap_samples=20u,.wifi_start_status=-50,.wifi_requested_priority=20u,.wifi_observed_priority=20u,.cpu_load_permille=0x0123u};
-    rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[0]==2u && bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0x23u && bytes[99]==0x01u);
+    rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[0]==RM_HEARTBEAT_VERSION && bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0x23u && bytes[99]==0x01u);
     emit("heartbeat",bytes,RM_HEARTBEAT_SIZE);
     rm_log_t log={.kind=RM_LOG_EVENT,.dump_id=111u,.generation=222u,.index=333u};
-    memcpy(log.body,event_bytes,16u);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);
+    rm_pack_log_event(log.body,&event);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);
     emit("log",bytes,RM_LOG_SIZE);
     rm_command_t command={.opcode=RM_CMD_START,.request_id=0x12345678u},decoded={.opcode=99u};
     for (size_t i=0u;i<RM_TOKEN_SIZE;++i) command.token[i]=(uint8_t)i;

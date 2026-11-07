@@ -98,6 +98,7 @@ class DashboardModel:
         self.state = None  # {"fields": dict, "rx": ms}
         self.heartbeat = None
         self.status = None  # robot/status: {"online": bool, "retained": bool, "rx": ms}
+        self.statuses = {}  # retained status can arrive before that boot's first live frame
         self.obstacle = None
         self.obstacle_scan_id = None
         self.obstacle_missed = 0
@@ -130,27 +131,64 @@ class DashboardModel:
             self.broker_connected = bool(connected)
             if not connected:
                 self.status = None  # the broker will send the retained status again
+                self.statuses.clear()
 
     def ingest(self, topic, payload, retained=False):
         """Decode one message. A malformed message is counted and never changes state."""
         with self.lock:
             now = self.now_ms()
             try:
+                previous = self.log.sessions.current
                 if topic == "robot/log":
                     rows = self.log.handle(payload)
-                    self._log_rows(rows, now)
+                    if self.log.sessions.current != previous:
+                        self._new_boot()
+                    current_rows = [r for r in rows
+                                    if r["boot_session"] == self.log.sessions.current]
+                    self._log_rows(current_rows, now)
+                    heard_live = bool(current_rows)
                 else:
-                    self._store(topic, robot_wire.decode(topic, payload), now, retained)
+                    fields = robot_wire.decode(topic, payload)
+                    scope = self.log.observe(topic, fields, retained)
+                    if self.log.sessions.current != previous:
+                        self._new_boot()
+                    # Old retained history is labelled, never used as live state.
+                    if (scope != self.log.sessions.current and topic != "robot/summary"
+                            and self.log.sessions.boot_id is not None):
+                        if topic == "robot/status":
+                            self._store(topic, dict(fields, boot_session=scope), now, retained)
+                        return
+                    self._store(topic, dict(fields, boot_session=scope), now, retained)
+                    heard_live = (not retained and fields.get("known") != 0 and
+                                  topic != "robot/summary")
             except ValueError as error:
                 self.discarded += 1
                 self.last_discard = f"{topic}: {error}"
                 return
-            self.last_message_ms = now
+            if heard_live:
+                self.last_message_ms = now
+
+    def _new_boot(self):
+        """Invalidate all current readings and command decisions, but retain scoped logs."""
+        self.state = self.heartbeat = self.sonar = self.obstacle = None
+        self.status = self.statuses.get(self.log.sessions.current)
+        self.sonar_profile.clear()
+        self.trend.clear()
+        self.events.clear()
+        self.detours.clear()
+        self.obstacle_scan_id = self.detour_sequence = self.event_sequence = None
+        self.obstacle_missed = self.detour_missed = self.event_gaps = 0
+        self.pending = self.last_decision = self.last_message_ms = None
+        self.reserved = {"barcode": None, "imu": None, "imu_event": None}
+        self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
 
     def _store(self, topic, fields, now, retained=False):
         if topic == "robot/status":
-            self.status = {"online": bool(fields["robot_online"]), "retained": retained,
-                           "rx": now}
+            status = {"online": bool(fields["robot_online"]), "retained": retained, "rx": now}
+            self.statuses[fields["boot_session"]] = status
+            if (fields["boot_session"] == self.log.sessions.current or
+                    self.log.sessions.boot_id is None):
+                self.status = status
         elif topic == "robot/obstacle":
             self._store_obstacle(fields, now)
         elif topic in ("robot/barcode", "robot/imu"):
@@ -164,6 +202,10 @@ class DashboardModel:
         elif topic == "robot/detour":
             self._store_detour(fields, now)
         elif topic == "robot/summary":
+            if (self.summary is not None and
+                    self.summary["fields"]["boot_session"] == self.log.sessions.current and
+                    fields["boot_session"] != self.log.sessions.current):
+                return  # do not replace a current summary with an older retained copy
             self.summary = {"fields": fields, "rx": now, "retained": retained}
         elif topic == "robot/state":
             self.state = {"fields": fields, "rx": now}
@@ -388,7 +430,10 @@ class DashboardModel:
         """Return everything the page needs as one JSON-ready dict."""
         with self.lock:
             now = self.now_ms()
-            return {"broker": {"connected": self.broker_connected},
+            return {"boot": {"boot_id": self.log.sessions.boot_id,
+                             "session": self.log.sessions.current,
+                             "inferred": self.log.sessions.boot_id is None},
+                    "broker": {"connected": self.broker_connected},
                     "robot": self.robot_status(now),
                     "token_configured": self.token_configured,
                     "gaps": self.gap_counts(),
@@ -407,6 +452,15 @@ def _sonar_distance(fields):
         return f"{fields['echo_mm']} mm"
     return _name(ECHO_STATUS, fields["echo_status"]) if fields["status"] == 1 \
         else _name(SONAR_STATUS, fields["status"])
+
+
+def _unavailable_text(fields):
+    if "board_unavailable_mask" not in fields:
+        return "not reported (old heartbeat)"
+    names = ("line", "sonar", "motion", "vehicle", "health")
+    absent = [name for bit, name in enumerate(names)
+              if fields["board_unavailable_mask"] & (1 << bit)]
+    return ", ".join(absent) if absent else "none"
 
 
 def _cpu_text(fields):
@@ -432,6 +486,8 @@ def vehicle_panel(model, now):
                  ("Running", "yes" if fields["active"] else "no"),
                  ("Motion faults", fields["motion_faults"]),
                  ("Vehicle board", "fresh" if fields["vehicle_fresh"] else "not fresh")]
+    rows.append(("Boot / session", model.log.sessions.current +
+                 (" (inferred legacy session)" if model.log.sessions.boot_id is None else "")))
     command = model.last_command(now)
     rows.append(("Last command", "none sent" if command is None else
                  f"{command['command']} #{command['request_id']}"))
@@ -648,6 +704,8 @@ def health_panel(model, now):
             ("Busy reads: line / sonar / motion / vehicle / health",
              f"{f['line_busy']} / {f['sonar_busy']} / {f['motion_busy']} / "
              f"{f['vehicle_busy']} / {f['health_busy']}"),
+            ("Unavailable boards (last explicit read)", _unavailable_text(f)),
+            ("Unavailable observations (total)", f.get("board_unavailable", "not reported")),
             ("Vehicle overruns", f["vehicle_overruns"]),
             ("Motion late / missed", f"{f['motion_late']} / {f['motion_missed']}"),
             ("CPU load", _cpu_text(f)),
@@ -767,10 +825,15 @@ def summary_panel(model, now):
     if f["detour_aborted"]:
         rows.append(("Detour", "a detour was still running when the run ended"))
     notes = ["age = time since this summary arrived"]
+    scope = f["boot_session"]
+    rows.append(("Boot / session", scope))
+    if scope != model.log.sessions.current:
+        notes.append("previous boot/session: not the current robot's run summary")
     if record["retained"]:
         notes.append("this is the broker's retained copy: it may be from an earlier run")
     state = model.state
-    if state is not None and now - state["rx"] <= STALE_MS and state["fields"]["active"]:
+    if (scope == model.log.sessions.current and state is not None and
+            now - state["rx"] <= STALE_MS and state["fields"]["active"]):
         notes.append("a new run is in progress: this summary is the previous run")
     return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
                       rows=rows, note="; ".join(notes))
@@ -781,7 +844,8 @@ def log_panel(model, now):
     info = model.log_info
     gaps = model.gap_counts()
     last = info["last"]
-    rows = [("Live rows received", info["live_rows"]),
+    rows = [("Boot / session", model.log.sessions.current),
+            ("Live rows received", info["live_rows"]),
             ("Refill rows (DUMP) merged", info["refill_rows"]),
             ("Rows lost (index gaps)", gaps["lost_rows"]),
             ("Rows skipped (jumps)", gaps["jumped_rows"]),
@@ -794,4 +858,5 @@ def log_panel(model, now):
                  ("Generation / last index", f"{last['generation']} / {last['index']}")]
     items = [{"age_ms": None, "text": message} for message in reversed(model.log_messages)]
     return make_panel("log", "RAM log stream", age, rows=rows, items=items,
-                      note="" if last else "no live log rows yet")
+                      note=("" if last else "no live log rows yet; ") +
+                      "receive counts: current session; gaps and duplicates: all sessions")
