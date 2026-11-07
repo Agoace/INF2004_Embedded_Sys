@@ -7,7 +7,8 @@ if(TARGET test_robot_mqtt)
         ROBOT_MQTT_BROKER_IP="192.0.2.10"
         ROBOT_MQTT_COMMAND_TOKEN_HEX="00112233445566778899aabbccddeeff")
     foreach(scenario connection commands schedule retained abort begin_snapshot
-            begin_async begin_generation row_mem open_busy disconnect disconnect_abort)
+            begin_async begin_generation row_mem open_busy disconnect disconnect_abort
+            health_stalled health_missing)
         add_test(NAME test_robot_mqtt_${scenario} COMMAND test_robot_mqtt ${scenario})
     endforeach()
 endif()
