@@ -259,3 +259,10 @@ See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), an
 
 The robot platform needs Pico SDK register headers even with `WIFI=none`.
 Keep the USB console enabled for the initial bring-up builds.
+
+## Local template changes
+
+See [the template change ledger](docs/TEMPLATE_CHANGES.md) for approved shared
+changes, their reasons, and the procedure after a lecturer update. Template
+source is not frozen. Run `python3 scripts/check-template-changes.py` to check
+the recorded file list. No SDK startup/runtime is added.

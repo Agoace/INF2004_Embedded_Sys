@@ -172,7 +172,7 @@ static int32_t wifi_try_join(void)
 {
     int32_t err;
 
-    tm_printf((UB*)"wifi: joining \"%s\" ...\n", WIFI_SSID);
+    tm_printf((UB*)"wifi: joining configured network ...\n");
 
     err = cyw43_wifi_join(&cyw43_state,
                           strlen(WIFI_SSID), (const uint8_t*)WIFI_SSID,
@@ -279,6 +279,7 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #endif
 
     for(;;) {
+        cyw43_utk_poll_begin();
 #if TM_NET_LWIP
         cyw43_thread_enter();
         if(cyw43_poll != NULL) cyw43_poll();
@@ -334,15 +335,14 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #if TM_NET_LWIP
         sys_check_timeouts();
 #if TM_MQTT
-        /* mqtt_utk_start() is idempotent (see its own connecting/is_connected
-         * guard), so calling it on every poll iteration once the link is up
-         * is fine -- it only actually does anything on the first call, or
-         * again after connection_cb() schedules a retry. */
+        /* Run the application hook on the sole lwIP owner, once per
+         * link-up poll. Its weak default retains the template MQTT demo. */
         if(radio_status.link_status == CYW43_LINK_UP) {
-            mqtt_utk_start();
+            cyw43_utk_app_poll();
         }
 #endif
 #endif
+        cyw43_utk_poll_end();
         (void)tk_dly_tsk(CYW43_POLL_MS);
     }
 }

@@ -50,3 +50,6 @@ config/wifi_secrets.h
 
 # macOS
 .DS_Store
+
+# App-owned MQTT command token/broker settings (never commit).
+app_program/subsystem1/robot_mqtt_secrets.h

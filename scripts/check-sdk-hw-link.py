@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Retain an SDK hardware probe in a separate ELF. Never run or flash it."""
+"""Retain an SDK hardware probe in a separate ELF. Never run or flash it.
+
+Shared template deviations: docs/TEMPLATE_CHANGES.md; checked separately by
+scripts/check-template-changes.py. This probe checks SDK runtime boundaries.
+"""
 import argparse
 from pathlib import Path
 import shlex
