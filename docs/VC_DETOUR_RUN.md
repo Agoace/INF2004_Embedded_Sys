@@ -148,7 +148,34 @@ and record each `robot/obstacle` scan ID and attempt, each event kind 8, the
 KR1 module 5 rows, and the final route. Pass: a reverse is 100 ± 10 mm,
 the robot does not contact the box, and a free side reaches DETOUR, or
 three blocked profiles stop with `DT_FAIL_NO_SIDE`. A reverse timeout must
-stop with summary reason 13. This check is **Not run**.
+stop with summary reason 13.
+
+### Result M2-reattempt (2026-11-07, MQTT image `48c69d3`): PASS
+
+Box upright (12 cm wide, 17 cm tall), robot stops at about 220 mm.
+Nine runs, observed through MQTT; GP20 dump of the last run
+(`tm_usb_dropped` 0).
+
+| Item | Result |
+|---|---|
+| First scan blocked on both sides | 5 of 9 runs; the other 4 found a free side only at the 30° point |
+| Reverse when blocked | 7 reverses in 5 runs; never more than 2 per run |
+| Reverse leg (KR1 module 5 rows, run 9) | about -100 mm/s for about 1 s, then stop |
+| Centre echo change per reverse | +101, +114, +102, +115, +115, +102, +102 mm; one +27 mm (run 6, attempt 2, robot at the tile edge) |
+| Free side after the reverses | 5 of 5 runs, at 329-435 mm |
+| Box contact | None |
+| Events kind 8, attempt numbers, summary count | Correct in every run |
+| Reverse timeout (reason 13) | Not seen (no reverse took 3 s) |
+
+The DETOUR after a reattempt stalled in 4 runs or the operator stopped
+it: the 2-tile test area is too short for a detour that starts at
+330-435 mm, and the robot left the tiles. DETOUR is not changed by this
+package. The reattempt is the scope of this check.
+
+Cause of "both sides blocked": the ultrasonic cone still returns an echo
+from an edge about 20° away from the sensor axis. At 220 mm the 12 cm box
+edges are at ±15°, so the 30° points still see the box. At 434 mm the
+edges are at ±8° and the 30° point is free.
 
 1. Box on the track. Same procedure as the line runs (VIN, GP21).
 2. Look for: the scan side, the sweeps at 20 °/s without a stall, the
