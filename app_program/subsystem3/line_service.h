@@ -15,7 +15,7 @@ int line_service_start(void);
 bool line_service_running(void);
 /* Short inherited-mutex copy; only vehicle consumes the latched event. */
 int line_snapshot_read(line_snapshot_t *out, bool consume_event);
-/* MQTT builds: bounded read-only copy; never consumes events or waits.
+/* Transport-independent bounded copy; never consumes events or waits.
  * E_TMOUT busy, E_OBJ unready; failed output unchanged. */
 int line_snapshot_try_read(line_snapshot_t *out);
 int line_calibration_begin(void);
