@@ -27,12 +27,19 @@ void cyw43_utk_task(int32_t stacd, void *exinf);
 /* TM_MQTT only: Wi-Fi task context, after sys_check_timeouts(), link UP.
  * Only this task may call lwIP. An application may override the weak demo. */
 void cyw43_utk_app_poll(void);
+
 /* Wall time, including interruption/preemption. Not CPU load. gap threshold
  * is strictly >10000 us. All copies/updates use short core-0 critical sections. */
 typedef struct {
-    uint32_t polls,gaps,gap_max_us,gaps_over_10000;
-    uint32_t work_max_us,work_total_us,probe_max_us;
+    uint32_t polls;
+    uint32_t gaps;
+    uint32_t gap_max_us;
+    uint32_t gaps_over_10000;
+    uint32_t work_max_us;
+    uint32_t work_total_us;
+    uint32_t probe_max_us;
 } T_CYW43_TIMING;
+
 int32_t cyw43_utk_timing_read(T_CYW43_TIMING *out);
 int32_t cyw43_utk_timing_window_begin(void);
 int32_t cyw43_utk_timing_window_end(T_CYW43_TIMING *out);

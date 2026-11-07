@@ -172,7 +172,7 @@ static int32_t wifi_try_join(void)
 {
     int32_t err;
 
-    tm_printf((UB*)"wifi: joining configured network ...\n");
+    tm_printf((UB *)"wifi: joining configured network ...\n");
 
     err = cyw43_wifi_join(&cyw43_state,
                           strlen(WIFI_SSID), (const uint8_t*)WIFI_SSID,
