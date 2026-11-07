@@ -93,6 +93,10 @@ int main(int argc, char **argv) {
     assert(motion_timing_window_end(&unopened)==E_OBJ);
     assert(motion_timing_probe_capture(MOTION_PROBE_BEFORE_S0_PRINT)==E_OBJ);
 #endif
+    motion_status_t board_status;uint32_t board_us=123u;
+    assert(motion_snapshot_try_read(0,&board_us)==E_PAR);
+    assert(motion_snapshot_try_read(&board_status,0)==E_PAR);
+    assert(motion_snapshot_try_read(&board_status,&board_us)==E_OBJ && board_us==123u);
     init_error = E_SYS;
     output[0] = output[1] = 100;
     assert(motion_init() == E_SYS && check_calls == 0u);
@@ -124,6 +128,7 @@ int main(int argc, char **argv) {
 #else
     assert(bench_calls == 0u);
 #endif
+    assert(motion_snapshot_try_read(&board_status,&board_us)==E_TMOUT && board_us==123u);
     tick(10000u);
     assert(notify_calls == 0u);
     assert(motion_notify_after_tick(-1) == E_PAR);
@@ -137,6 +142,9 @@ int main(int argc, char **argv) {
     assert(motion_status(&s) == E_OK && s.counts[0] == 0 && s.counts[1] == 0);
     tick(20000u);
     assert(motion_status(&s) == E_OK && s.counts[0] == 4 && s.counts[1] == 4);
+    assert(motion_snapshot_try_read(&board_status,&board_us)==E_OK && !held);
+    assert(board_us==20000u && board_status.ticks==2u && board_status.counts[0]==4 && board_status.counts[1]==4);
+    assert(board_status.watchdog_armed && board_status.faults==s.faults);
     assert(s.ticks == 2u && s.gap_min_us == 10000u && s.tick_max_us == 7u);
     assert(motion_set_speed(150, 150) == E_OK);
     tick(30000u);
