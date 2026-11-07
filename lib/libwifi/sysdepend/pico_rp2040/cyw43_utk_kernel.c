@@ -5,10 +5,11 @@
 
 IMPORT void cyw43_utk_task(INT stacd, void *exinf);
 
-/* USB CDC drains at priority 3 on the same physical core.  Keep radio polling
- * below it so firmware download and the 2 ms poll cadence cannot overflow the
- * console ring, while remaining well above the qualification task. */
-#define CYW43_TASK_PRIORITY  4
+/* The template used priority 4: below USB 3, above its qualification task.
+ * Driving tasks 10-13 must not wait for network processing. Create the radio
+ * at priority 20 directly; USB stays at 3 and telemetry stays at 30.
+ * See docs/TEMPLATE_CHANGES.md for the local deviation and update procedure. */
+#define CYW43_TASK_PRIORITY  20
 #if TM_NET_LWIP
 /* lwIP's own call chains (tcp_input/dhcp/etharp) run on this same task and
  * go deeper than the bare radio poll loop did. */
