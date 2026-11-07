@@ -168,7 +168,8 @@ class WireTests(unittest.TestCase):
             self.assertEqual(cli.main(["--host", "test.invalid"]), 0)
         self.assertEqual(calls[0], ("api", version2))
         self.assertEqual(len(list(csv.DictReader(io.StringIO(output.getvalue())))), 1)
-        self.assertEqual(calls[2][1], [("robot/" + name, 0) for name in wire.SIZES])
+        self.assertEqual(calls[2][1], [("robot/" + name, 1 if name == "log" else 0)
+                                       for name in wire.SIZES])
         with tempfile.TemporaryDirectory() as folder:
             token = Path(folder) / "private-token"
             token.write_text(bytes(range(16)).hex())
