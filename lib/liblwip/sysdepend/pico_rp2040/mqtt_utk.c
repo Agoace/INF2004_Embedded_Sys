@@ -45,6 +45,13 @@ static u8_t		rx_truncated;
 
 static void heartbeat_timeout(void *arg);
 
+/* The application hook is called only by the Wi-Fi/lwIP owner. Keep the
+ * template demo available when no application provides a strong definition. */
+void __attribute__((weak)) cyw43_utk_app_poll(void)
+{
+	mqtt_utk_start();
+}
+
 /* mqtt.c NUL-terminates the topic before handing it over, but it is only
  * valid for the duration of this call -- copy it out. */
 static void incoming_publish_cb(void *arg, const char *topic, u32_t tot_len)
