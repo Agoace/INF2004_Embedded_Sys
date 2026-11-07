@@ -192,7 +192,7 @@ static void test_detour_summary(void)
         .hump_peak = 0x0a0bu};
     uint8_t summary_bytes[RM_SUMMARY_SIZE];
     rm_pack_summary(summary_bytes, &summary);
-    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 255u); /* v2 packs 5-bit reattempt count */
+    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 7u); /* upper flags remain reserved */
     assert(summary_bytes[2] == 1u && summary_bytes[3] == 1u && summary_bytes[4] == 4u);
     assert(summary_bytes[8] == 0x88u && summary_bytes[9] == 0x13u);
     assert(summary_bytes[12] == 0x32u && summary_bytes[13] == 0xefu);
@@ -276,7 +276,7 @@ int main(void) {
     rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[0]==RM_HEARTBEAT_VERSION && bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0x23u && bytes[99]==0x01u);
     emit("heartbeat",bytes,RM_HEARTBEAT_SIZE);
     rm_log_t log={.kind=RM_LOG_EVENT,.dump_id=111u,.generation=222u,.index=333u};
-    memcpy(log.body,event_bytes,16u);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);
+    rm_pack_log_event(log.body,&event);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);
     emit("log",bytes,RM_LOG_SIZE);
     rm_command_t command={.opcode=RM_CMD_START,.request_id=0x12345678u},decoded={.opcode=99u};
     for (size_t i=0u;i<RM_TOKEN_SIZE;++i) command.token[i]=(uint8_t)i;

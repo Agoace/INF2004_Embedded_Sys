@@ -68,6 +68,7 @@ err_t mqtt_client_connect(mqtt_client_t *client,const ip_addr_t *address,u16_t p
     assert(strcmp(info->client_id,"inf2004-robot")==0 && info->keep_alive==5u);
     assert(strcmp(info->will_topic,"robot/status")==0 && info->will_msg_len==RM_STATUS_SIZE && info->will_qos==1u && info->will_retain==1u);
     assert((uint8_t)info->will_msg[0]==RM_STATUS_VERSION && (uint8_t)info->will_msg[1]==2u);
+    for(unsigned int i=0u;i<4u;++i) assert((uint8_t)info->will_msg[2u+i]==(uint8_t)(boot_identity>>(8u*i)));
     ++connect_count;connection_callback=callback;connection_arg=arg;return connect_result;
 }
 void mqtt_set_inpub_callback(mqtt_client_t *client,mqtt_incoming_publish_cb_t publish,
@@ -101,8 +102,8 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
 void robot_network_state(rm_state_t *value) { assert(in_hook);*value=(rm_state_t){.flags=15u,.state=2u,.raw_bc=321u}; }
 int robot_network_sonar(uint32_t *cursor,rm_sonar_t *value,uint32_t *missed) {
     assert(in_hook);++sonar_reads;*missed=sonar_missed;sonar_missed=0u;
-    if (sonar_busy) return E_OBJ;
-    if (sonar_tail==sonar_head) return E_TMOUT;
+    if (sonar_busy) return E_TMOUT;
+    if (sonar_tail==sonar_head) return E_NOEXS;
     *value=sonar[sonar_tail++];*cursor=value->history_sequence;return E_OK;
 }
 static rm_obstacle_t obstacles[4];static unsigned int obstacle_head,obstacle_tail;
@@ -138,7 +139,7 @@ int robot_command_push(const robot_command_t *value) {
 void robot_command_lost(void) { ++command_lost; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
 static unsigned int unavailable_reads[5];
-void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result<0) ++busy[board]; }
+void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result==E_TMOUT) ++busy[board]; }
 void robot_queue_metrics(rm_heartbeat_t *value) {
     value->command_lost=command_lost;value->event_lost=event_lost;
     value->line_busy=busy[0];value->sonar_busy=busy[1];value->motion_busy=busy[2];
@@ -184,7 +185,7 @@ static void start_connected(void) {
 static void test_no_boot_id(void) {
     boot_identity=0u;poll_at(0u);poll_at(10000u);
     assert(new_count==0u && connect_count==0u && publication_count==0u);
-    boot_identity=0x11223344u;poll_at(10001u);
+    boot_identity=0x11003300u;poll_at(10001u); /* binary will includes zero bytes */
     assert(connect_count==1u); /* observer only; driving is not gated */
 }
 static void test_connection(void) {

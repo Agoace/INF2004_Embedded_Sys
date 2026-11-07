@@ -14,7 +14,7 @@
 #define WIRE_NORM_MASK                     1023u
 #define WIRE_NORM_BITS                     10
 #define WIRE_KR1_BYTES                     16u
-#define WIRE_SUMMARY_FLAGS_MASK            255u
+#define WIRE_SUMMARY_FLAGS_MASK            7u
 #define WIRE_HEARTBEAT_FLAGS_MASK          63u
 #define WIRE_SONAR_STATUS_MASK             3u
 #define WIRE_SONAR_VALID_FLAG              4u

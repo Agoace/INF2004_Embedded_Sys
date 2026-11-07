@@ -17,6 +17,20 @@ from a cold VIN power-on.
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
 
+## STEP 8 operator follow-up — 2026-11-07
+
+Earlier STEP 8 Wi-Fi TEST: S0-U01 cold-power TIMER error 0; S2-U01 Wi-Fi
+priority 20 and late 0. First timing window 9508..10248 us, lifetime
+9508..10491 us; second window 9518..10482 us. S2-U05 watchdog also passed.
+These do not validate the later boot-ID or diagnostic image.
+
+M1-MQTT lifetime gap 9916..10087 us; later ESTOP run 8952..11038 us exceeds
+the gate by 38 us. M2 successful detour later reported 9902..10099 us.
+Do not treat lifetime extrema as per-run extrema or guess a cause. See
+[hardware details](../../docs/MTK3_STEP8_HARDWARE_RESULTS.md) and the
+[diagnostic-only investigation](../../docs/MOTION_TIMING_INVESTIGATION.md).
+A per-run window is proposed there, not silently added to production.
+
 ## STEP 7 S2-U01 failure and approved window/probe correction
 
 Operator log (read-only main checkout):

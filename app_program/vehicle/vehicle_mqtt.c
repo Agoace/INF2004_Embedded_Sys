@@ -104,13 +104,13 @@ void robot_network_state(rm_state_t *out)
     if (v && out->vehicle_age_ms <= VEHICLE_FRESH_MS) {
         out->flags |= 8u;
     }
-    if (!l && line_result != E_OBJ && line_result != E_NOEXS) {
+    if (line_result == E_TMOUT) {
         out->flags |= STATE_LINE_BUSY_FLAG;
     }
-    if (!m && motion_result != E_OBJ && motion_result != E_NOEXS) {
+    if (motion_result == E_TMOUT) {
         out->flags |= STATE_MOTION_BUSY_FLAG;
     }
-    if (!v && vehicle_result != E_OBJ && vehicle_result != E_NOEXS) {
+    if (vehicle_result == E_TMOUT) {
         out->flags |= STATE_VEHICLE_BUSY_FLAG;
     }
     if (vehicle.active) {
@@ -195,11 +195,10 @@ int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out)
     rm_obstacle_t report;
     const int result = vehicle_obstacle_try_read(&report);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (report.scan_id == *cursor) {
@@ -216,11 +215,10 @@ int robot_network_detour(uint32_t *cursor, rm_detour_t *out)
     rm_detour_t value;
     const int result = vehicle_detour_try_read(&value);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (value.sequence == *cursor) {
@@ -237,11 +235,10 @@ int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
     rm_summary_t value;
     const int result = vehicle_summary_try_read(&value);
 
-    if (result == E_NOEXS) {
-        return E_NOEXS;
+    if (result == E_TMOUT) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
     }
     if (result < E_OK) {
-        robot_network_busy(ROBOT_BOARD_VEHICLE);
         return result;
     }
     if (value.run_id == *cursor) {

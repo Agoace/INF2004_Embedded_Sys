@@ -11,6 +11,7 @@
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
+#include "../subsystem2/motion_diag.h"
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
@@ -250,7 +251,10 @@ static void telemetry_task(INT code, void *ctx)
         case TELEMETRY_DUMP:
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
+            motion_diag_dump(1);
+            motion_diag_print();
             dump();
+            motion_diag_dump(0);
             break;
         default:
             lose();

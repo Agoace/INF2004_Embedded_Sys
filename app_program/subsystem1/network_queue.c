@@ -173,7 +173,7 @@ void robot_network_board_result(unsigned int board, int result)
     } else if (result == E_OBJ || result == E_NOEXS) {
         ++unavailable;
         unavailable_mask = (uint8_t)(unavailable_mask | mask);
-    } else {
+    } else if (result == E_TMOUT) {
         ++busy[board];
     }
     EI(irq);

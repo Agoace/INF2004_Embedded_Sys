@@ -413,7 +413,7 @@ int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
     }
     const uint32_t guard = load_word(&history_guard);
     if ((guard & 1u) != 0u) {
-        return E_OBJ;
+        return E_TMOUT;
     }
     const uint32_t count = load_word(&history_count);
     const uint32_t distance = count - *cursor;
@@ -429,10 +429,10 @@ int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
             &copy.result);
     }
     if (load_word(&history_guard) != guard) {
-        return E_OBJ;
+        return E_TMOUT;
     }
     if (distance == 0u) {
-        return E_TMOUT;
+        return E_NOEXS;
     }
     *out = copy;
     *cursor = copy.sequence;

@@ -553,7 +553,7 @@ static void service(uint32_t now)
             const int er =
                 robot_network_sonar(&sonar_cursor, &pending_sonar, &missed);
             metrics.sonar_history_missed += missed;
-            if (er == E_OBJ) {
+            if (er == E_TMOUT) {
                 robot_network_busy(ROBOT_BOARD_SONAR);
             }
             have_sonar = er >= E_OK;
