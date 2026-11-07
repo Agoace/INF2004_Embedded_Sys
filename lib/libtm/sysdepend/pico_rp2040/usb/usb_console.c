@@ -31,7 +31,15 @@ IMPORT void	tm_tusb_write_char(char value);
 IMPORT void	tm_tusb_write_flush(void);
 IMPORT void	tm_tusb_discard_input(void);
 
-#define USB_TASK_PRIORITY	3
+/*
+ * Local robot deviation: the template used 3, above every application task.
+ * A long USB dump then delayed motion release dispatch by up to 4.5 ms
+ * (DIAG capture 2026-11-07). 21 is below motion/sensors/vehicle 10-13,
+ * Wi-Fi 20 and the TEST runner 20, but above telemetry 30 (the GP20 dump
+ * producer), health 31 and the always-ready CPU meter 32. The IRQ priority
+ * and interrupt wake are unchanged. See docs/TEMPLATE_CHANGES.md.
+ */
+#define USB_TASK_PRIORITY	21
 #if TK_SUPPORT_SMP
 #define USB_TASK_STACK		4096
 #else

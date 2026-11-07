@@ -102,6 +102,9 @@ if(TARGET test_vehicle_log)
     add_test(NAME test_robot_contract COMMAND "${Python3_EXECUTABLE}"
         "${REPO}/tests/test_robot_contract.py" "$<TARGET_FILE:test_vehicle_log>")
 endif()
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_task_priorities COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_task_priorities.py")
 # The two button owners are mutually exclusive build modes.
 host_test(test_motion_task_bench tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c

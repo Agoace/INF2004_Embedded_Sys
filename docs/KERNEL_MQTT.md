@@ -54,7 +54,8 @@ health31 <- bounded boards + stack scan; 1 s cyclic -> health board
 
 The template used Wi-Fi priority 4: below USB 3, above its qualification
 task. It now **creates Wi-Fi directly at 20**, below driving tasks 10–13
-and above RAM telemetry 30. USB remains 3. There is no priority-change
+and above RAM telemetry 30. The USB console is 21, below Wi-Fi (see the
+[template ledger](TEMPLATE_CHANGES.md)). There is no priority-change
 wrapper and no transient execution at priority 4.
 
 Under `TM_MQTT`, the template poll calls `cyw43_utk_app_poll()` after

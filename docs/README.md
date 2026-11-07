@@ -97,6 +97,7 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [MQTT dashboard runbook](MQTT_DASHBOARD.md) — live laptop dashboard: how to run it, panels, button rules, command result and local web security.
 
 - [STEP 8 reboot/timing follow-up](MTK3_STEP8_REBOOT_FOLLOWUP.md) — boot-scoped sessions, board accounting, diagnostic proof, validation and outstanding hardware.
+- [USB console priority](MTK3_USB_PRIORITY.md) — option A: USB 3 to 21, measured cause, priority order, output and enumeration consequences.
 - [STEP 8 hardware results](MTK3_STEP8_HARDWARE_RESULTS.md) — operator results from 2026-11-07, limits and new-image checks.
 - [Motion timing investigation](MOTION_TIMING_INVESTIGATION.md) — lifetime-gap confound, opt-in diagnostic capture and proposed per-run window.
 - [STEP 8 software validation](MTK3_STEP8_VALIDATION.md) — six profiles, strict ARM/host/link checks, bindings and memory limitations; no hardware acceptance.

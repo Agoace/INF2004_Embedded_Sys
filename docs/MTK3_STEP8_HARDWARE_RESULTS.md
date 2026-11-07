@@ -56,6 +56,42 @@ short-hostname Host/Origin rejection was intentional. HTTPS certificate
 provisioning failed on the hotspot and needs a normal-network retry.
 See [remote dashboard instructions](MQTT_DASHBOARD.md#remote-view-through-tailscale).
 
+## Boot/session image results — 2026-11-07
+
+Operator-supplied results for the accepted core image `5bda9ee`, MQTT TEST
+profile. Private logs: `build/mtk_logs/s8_reboot_test_20261107-171326.txt`
+in the main checkout.
+
+| Check | Operator evidence | Result and limit |
+| --- | --- | --- |
+| Boot label across S2-U05 reset | Boot IDs 2729381450 then 3017455292 (operator report) | PASS (operator report). The ignored `mqtt_20261107-171326.csv` is not this evidence: its DUMP of 142 rows/4 events matches the later DIAG session, with IDs 2819020132 (retained) and 1821749757 |
+| Two-boot history | S1-U02 accepted 34 rows on each boot; both 34-row sets kept | PASS for this two-boot case |
+| LWT/status across reset | OFFLINE with the old ID and ONLINE with the new ID in the same second | PASS |
+| Reset reason | Watchdog | PASS |
+| Absent TEST vehicle | `vehicle_busy` 0, unavailable mask 8 (vehicle bit) | PASS |
+| S0-U01 | TIMER 1009753 and 1010053 us per 1010 ms, error 0 | PASS on both boots |
+| S2-U01 | Window 9514..10484 us (boot 1), 9520..10255 us (boot 2); late 0, missed 0 | PASS. Separate windows |
+| S2-U05 | Watchdog reset after 99 ms; no repeat reset | PASS |
+
+## DIAG=1 motion timing capture — 2026-11-07
+
+Private logs: `build/mtk_logs/s8_diag_172602.txt` and
+`build/mtk_logs/s8_diag2_172730.txt` in the main checkout.
+
+| Step | Evidence |
+| --- | --- |
+| Run, MQTT ESTOP, first GP20 | Diagnostic observations 0; lifetime gap 9896..10085 us; dump `tm_usb_dropped` 0, delta 0 |
+| Second GP20, about 10 s later | 18 observations, all with phase `0x10000` (first USB dump active) |
+| Worst-gap snapshot | gap 14467 us, release_gap 9995 us, dispatch 4488 us, mutex wait 15 us, prior `motion_status` hold 46 us, queued 0 |
+| Latest snapshot | gap 12783 us, release_gap 9997 us, dispatch 2802 us, wait 11 us |
+| Lifetime gap after the dump | 5533..14467 us |
+
+**Measured cause:** post-release dispatch delay while the GP20 USB dump runs.
+The cyclic release interval stayed about 9995 us, and mutex wait was at most
+15 us. MQTT, ESTOP, SCAN and the motion mutex are not the cause. The USB
+console task at template priority 3 outranked motion 10 while it drained the
+dump. The approved fix is the USB console priority change in the [template ledger](TEMPLATE_CHANGES.md).
+
 ## New-image checks still required
 
 - Cold-power boot IDs across power cuts, watchdog resets and broker restarts.

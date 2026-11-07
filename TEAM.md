@@ -37,8 +37,8 @@ All application tasks run on physical core 0 (`TP_PRC1`).
 
 | Task | Priority | Release / responsibility | Stack bytes |
 | --- | ---: | --- | ---: |
-| Kernel USB service | 3 | Template console owner, no application TinyUSB calls | Template |
-| Kernel radio service | 20 | Sole radio/lwIP/MQTT owner; below driving tasks, USB stays 3 | 8192 with lwIP |
+| Kernel radio service | 20 | Sole radio/lwIP/MQTT owner; below driving tasks | 8192 with lwIP |
+| Kernel USB service | 21 | Template console owner, no application TinyUSB calls; below driving tasks and radio | Template |
 | motion_task | 10 | 10 ms cyclic, motor/servo PWM, stale stop and watchdog | 3072 |
 | line_task | 11 | Every 1 ms sample wake; raw queue, lp and calibration snapshot | 2048 |
 | sonar_task | 12 | Request/edge wakes plus 10 ms deadline cyclic | 2048 |

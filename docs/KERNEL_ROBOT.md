@@ -39,9 +39,10 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 TEST=1 -j4 # Wi-Fi timing TEST
 
 The following application tasks are pinned to physical core 0 (`TP_PRC1`)
 in both profiles; the SMP build does not move application work to core 1.
-Lower priority numbers run first. USB remains 3; Wi-Fi is created directly
-at 20, below driving tasks 10–13 and above telemetry 30. The original
-template used 4 to run below USB but above its qualification task. Driving
+Lower priority numbers run first. Wi-Fi is created directly at 20, below
+driving tasks 10–13 and above telemetry 30. The USB console is 21 (template
+3): a measured GP20 dump delayed motion dispatch by up to 4.5 ms at 3. The
+original template used Wi-Fi 4, below USB 3 but above its qualification task. Driving
 must not wait for network processing. Approved shared changes are recorded
 in [the template ledger](TEMPLATE_CHANGES.md). Vehicle activation requires
 an armed motion watchdog and successfully started line, sonar and telemetry
@@ -50,12 +51,12 @@ by the existing init/start CHECK path and does not permit a robot session.
 
 | Task/context | Priority | Release | Owns / kernel objects | Stack bytes |
 | --- | ---: | --- | --- | ---: |
-| USB service | 3 | Template console | USB, unchanged | Template |
 | Wi-Fi service | 20 | Existing poll task; requested sleep 2 ms | Sole CYW43/lwIP/MQTT owner; named application hook, no wrap | Template 8192 with lwIP |
 | motion_task | 10 | cyc_motion, 10 ms | Motor/servo PWM, encoders, stale stop; inherited mtx_motion; sole watchdog feed | 3072 |
 | line_task, S3 | 11 | Every 1 ms ADC ISR wake | Raw queue consumer, lp/filter/calibration data; inherited snapshot mutex | 2048 |
 | sonar_task, S5 | 12 | Request or echo wake; 10 ms deadline cyclic | Trigger/echo; request MBF 256 bytes, result mutex and event flag | 2048 |
 | vehicle_task | 13 | Motion after-tick notification, 10 ms | Spin behaviour, buttons, one active module, service requests, motion commands | 4096 |
+| USB service | 21 | USB IRQ wake or 10 ms fallback | Template console; local priority change only | Template |
 | telemetry_task, S1 | 30 | Receive mbf_telemetry, event-driven | RAM rows/events and paced dump; MBF 4096 bytes; producer-loss counters use DI/EI | 4096 |
 | health_task, MQTT only | 31 | 1 s cyclic wake | Bounded health board and preemptible app-stack scan | 2048 |
 | motion_bench, exclusive BENCH image | 11 | Motion after-tick notification | Earlier bench buttons/log; never runs with vehicle | 4096 |

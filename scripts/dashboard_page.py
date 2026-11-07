@@ -12,6 +12,7 @@ PAGE = r"""<!doctype html>
 <meta charset="utf-8">
 <title>Robot dashboard</title>
 <meta name="csrf" content="__CSRF__">
+<meta name="instance" content="__INSTANCE__">
 <style nonce="__NONCE__">
 :root { color-scheme: dark; --bg:#14171c; --card:#1e232b; --text:#e6e9ee; --dim:#8b95a3;
   --ok:#3fb950; --warn:#d29922; --bad:#f85149; --line:#2d333d; }
@@ -32,6 +33,9 @@ button.armed { background:var(--warn); color:#000; }
 #message { padding:6px 14px; min-height:20px; color:var(--dim); }
 #banner { padding:10px 14px; background:var(--bad); color:#fff; font-weight:700; font-size:16px; }
 #banner[hidden] { display:none; }
+#restart, #cmderror { padding:10px 14px; background:var(--bad); color:#fff; font-weight:700;
+  font-size:16px; border-top:2px solid #ff9087; }
+#restart[hidden], #cmderror[hidden] { display:none; }
 #grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:12px;
   padding:12px 14px; }
 .panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
@@ -66,15 +70,20 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
     <button id="estop" data-command="estop">ESTOP</button>
   </div>
 </header>
+<div id="restart" hidden></div>
+<div id="cmderror" hidden></div>
 <div id="banner" hidden></div>
 <div id="message"></div>
 <div id="grid"></div>
 <script nonce="__NONCE__">
 "use strict";
 const csrf = document.querySelector('meta[name="csrf"]').content;
+const instance = document.querySelector('meta[name="instance"]').content;
 const armed = {};
 let latest = null;
+let restarted = false;
 const ARM_MS = 4000;
+const RELOAD_GUARD_MS = 5000;
 
 function text(node, value) { node.textContent = String(value); }
 function pill(id, label, level) {
@@ -227,7 +236,7 @@ function renderButtons(buttons) {
   Object.keys(buttons).forEach(name => {
     const info = buttons[name], node = document.getElementById(name);
     if (!node) return;
-    node.disabled = !info.enabled;
+    node.disabled = restarted || !info.enabled;
     node.title = info.reason;
     if (!info.enabled) delete armed[name];
     const isArmed = armed[name] && armed[name] > Date.now();
@@ -235,7 +244,30 @@ function renderButtons(buttons) {
     text(node, isArmed ? "CONFIRM " + name.toUpperCase() : name.toUpperCase());
   });
 }
+// A different server instance means the dashboard process restarted, so this
+// page holds a stale CSRF token and every command would be refused.
+function checkInstance(snapshot) {
+  if (!snapshot.server_instance || snapshot.server_instance === instance) return false;
+  restarted = true;
+  Object.keys(armed).forEach(name => { delete armed[name]; });
+  document.querySelectorAll("#buttons button").forEach(node => { node.disabled = true; });
+  const node = document.getElementById("restart");
+  node.hidden = false;
+  let last = 0;
+  try { last = Number(sessionStorage.getItem("dashboard-reload-at")) || 0; } catch (e) { last = 0; }
+  if (Date.now() - last > RELOAD_GUARD_MS) {
+    try { sessionStorage.setItem("dashboard-reload-at", String(Date.now())); } catch (e) { /* none */ }
+    text(node, "DASHBOARD RESTARTED: reloading the page. Commands are disabled until it " +
+      "reloads. Use GP21 to stop the robot.");
+    location.reload();
+  } else {
+    text(node, "DASHBOARD RESTARTED: reload the page. Commands are disabled. " +
+      "Use GP21 to stop the robot.");
+  }
+  return true;
+}
 function render(snapshot) {
+  if (restarted || checkInstance(snapshot)) return;
   latest = snapshot;
   pill("broker", snapshot.broker.connected ? "broker connected" : "broker disconnected",
        snapshot.broker.connected ? "ok" : "bad");
@@ -265,19 +297,37 @@ function render(snapshot) {
   }
 }
 
+// Stays visible until a later command succeeds; render() never clears it.
+function showCommandError(name, detail, reload) {
+  const node = document.getElementById("cmderror");
+  text(node, name.toUpperCase() + " NOT SENT: " + detail + "." +
+    (reload ? " Reload the page." : "") + " Use GP21 to stop the robot.");
+  node.hidden = false;
+}
 async function sendCommand(name) {
+  if (restarted) { showCommandError(name, "dashboard server restarted", true); return; }
   const body = {command: name, confirm: Boolean(latest && latest.buttons[name].needs_confirm)};
+  let response;
   try {
-    const response = await fetch("/api/command", {method: "POST",
+    response = await fetch("/api/command", {method: "POST",
       headers: {"Content-Type": "application/json", "X-CSRF-Token": csrf},
       body: JSON.stringify(body)});
-    const result = await response.json();
-    text(document.getElementById("message"), result.ok ? name.toUpperCase() +
-      " sent (broker " + (result.puback ? "acknowledged" : "has not acknowledged yet") +
-      "). " + result.note : "Refused: " + result.error);
   } catch (error) {
-    text(document.getElementById("message"), "Command failed: dashboard server unreachable");
+    showCommandError(name, "dashboard server unreachable", true);
+    return;
   }
+  let result = null;
+  try { result = await response.json(); } catch (error) { result = null; }
+  if (!response.ok || !result || !result.ok) {
+    const reason = result && typeof result.error === "string" ? result.error : "no reply";
+    // 409 is a robot-state refusal (confirm or not idle); reloading does not change it.
+    showCommandError(name, reason + " (HTTP " + response.status + ")", response.status !== 409);
+    return;
+  }
+  document.getElementById("cmderror").hidden = true;
+  text(document.getElementById("message"), name.toUpperCase() +
+    " sent (broker " + (result.puback ? "acknowledged" : "has not acknowledged yet") +
+    "). " + result.note);
 }
 document.getElementById("buttons").addEventListener("click", event => {
   const node = event.target.closest("button");
