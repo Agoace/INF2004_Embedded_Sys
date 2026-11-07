@@ -16,7 +16,7 @@ typedef struct {
     uint8_t mac[6];
     /* Only meaningful on a NET=lwip build -- see cyw43_utk_task(). link_status
      * mirrors cyw43_tcpip_link_status()'s CYW43_LINK_* values (cyw43.h):
-     * negative = down/join failed, 1 = joined, 2 = joined + got an IP. */
+     * negative = failed, 0 = down, 1 = joining, 2 = no IP, 3 = UP. */
     volatile int32_t link_status;
     volatile uint32_t ip_addr;
 } T_CYW43_UTK_STATUS;
