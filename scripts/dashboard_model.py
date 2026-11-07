@@ -27,7 +27,7 @@ OBSTACLE_DECISION_TEXT = {0: "none (both sides blocked)", 1: "right", 2: "left"}
 
 STATE_NAMES = {0: "IDLE", 1: "RUNNING", 2: "FAULT"}
 MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle scan",
-                4: "obstacle detour"}
+                4: "obstacle detour", 5: "scan reverse"}
 EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
                5: "run end", 6: "command decision", 7: "junction (reserved)",
                8: "scan retry"}
@@ -122,6 +122,11 @@ class DashboardModel:
         self.ignored_reserved = 0
         self.sonar = None
         self.sonar_profile = {}  # angle -> {"mm", "text", "rx"}
+        self.sonar_recent = collections.deque(maxlen=128)
+        self.scan_samples = {}
+        self.completed_scan = None
+        self.scan_retry = 0
+        self.scan_reversing = False
         self.events = collections.deque(maxlen=EVENT_LIMIT)
         self.last_decision = None
         self.event_sequence = None
@@ -185,6 +190,11 @@ class DashboardModel:
         self.state = self.heartbeat = self.sonar = self.obstacle = None
         self.status = self.statuses.get(self.log.sessions.current)
         self.sonar_profile.clear()
+        self.sonar_recent.clear()
+        self.scan_samples.clear()
+        self.completed_scan = None
+        self.scan_retry = 0
+        self.scan_reversing = False
         self.trend.clear()
         self.events.clear()
         self.detours.clear()
@@ -220,6 +230,13 @@ class DashboardModel:
                 return  # do not replace a current summary with an older retained copy
             self.summary = {"fields": fields, "rx": now, "retained": retained}
         elif topic == "robot/state":
+            previous_module = None if self.state is None else self.state["fields"]["module"]
+            if fields["module"] == 3 and previous_module not in (3, 5):
+                self.scan_samples.clear()
+                self.scan_retry = 0
+                self.scan_reversing = False
+            if fields["state"] != 1:
+                self.scan_reversing = False
             self.state = {"fields": fields, "rx": now}
             self.trend.append(fields["kr1_position"])
         elif topic == "robot/heartbeat":
@@ -235,6 +252,9 @@ class DashboardModel:
             self.obstacle_missed += scan_id - self.obstacle_scan_id - 1
         self.obstacle_scan_id = scan_id  # a lower number means the robot restarted
         self.obstacle = {"fields": fields, "rx": now}
+        self.completed_scan = {"fields": dict(fields), "samples": dict(self.scan_samples), "rx": now}
+        self.scan_retry = fields.get("scan_attempt", 0)
+        self.scan_samples.clear()
 
     def _store_detour(self, fields, now):
         sequence = fields["sequence"]
@@ -250,6 +270,12 @@ class DashboardModel:
         valid = bool(fields["valid"]) and fields["echo_status"] == 0
         if len(self.sonar_profile) >= PROFILE_LIMIT and fields["angle"] not in self.sonar_profile:
             return
+        reading = {"angle": fields["angle"], "mm": fields["echo_mm"] if valid else None,
+                   "status": _sonar_distance(fields), "rx": now,
+                   "no_return": fields["status"] == 1 and fields["echo_status"] == 3}
+        self.sonar_recent.append(reading)
+        if fields["angle"] in range(-30, 31, 5):
+            self.scan_samples[fields["angle"]] = reading
         self.sonar_profile[fields["angle"]] = {
             "mm": fields["echo_mm"] if valid else None,
             "text": _name(ECHO_STATUS, fields["echo_status"]) if fields["status"] == 1
@@ -274,6 +300,10 @@ class DashboardModel:
                 pending["result"] = event
         elif kind == robot_wire.EVENT_SCAN_RETRY:
             attempt = fields["word"] & 0xFF
+            self.scan_retry = attempt
+            self.scan_reversing = fields["detail"] == 1
+            if fields["detail"] == 3:
+                self.scan_samples.clear()
             event["text"] = (f"SCAN retry {attempt}: {_name(SCAN_RETRY_TEXT, fields['detail'])}"
                              " (both sides blocked)")
         else:
@@ -471,6 +501,36 @@ class DashboardModel:
         return {"lost_rows": lost, "jumped_rows": jumped, "total": lost + jumped,
                 "event_gaps": self.event_gaps, "duplicates": self.log.duplicates}
 
+    def sonar_visual(self, now):
+        """Observed echo points, not inferred obstacle geometry or reconstructed scans."""
+        record = self.completed_scan
+        profile = None
+        if record is not None:
+            f = record["fields"]
+            samples = record["samples"]
+            profile = {"scan_id": f["scan_id"], "decision": f["decision"],
+                       "attempt": f.get("scan_attempt", 0) + 1,
+                       "age_ms": int(now - record["rx"]),
+                       "free_threshold_mm": (f["profile_word"] & 511) + 150,
+                       "points": [dict(samples[a], angle=a) if a in samples else
+                                  {"angle": a, "mm": None, "no_return": False,
+                                   "status": "not observed"} for a in range(-30, 31, 5)],
+                       "closest": {"angle": f["closest_angle_deg"], "mm": f["closest_mm"]}
+                       if f["closest_valid"] else None}
+        f = {} if self.state is None else self.state["fields"]
+        latest = None if self.sonar is None else self.sonar["fields"]
+        servo = f.get("kr1_servo_deg", 0)
+        if latest is not None and (self.state is None or self.sonar["rx"] > self.state["rx"]):
+            servo = latest["angle"]
+        return {"beam_deg": servo,
+                "latest_mm": None if latest is None or not latest["valid"] or
+                latest["echo_status"] != 0 else latest["echo_mm"],
+                "recent": [dict(p, age_ms=int(now - p["rx"])) for p in self.sonar_recent
+                           if now - p["rx"] <= 10000],
+                "profile": profile, "attempt": min(3, self.scan_retry + 1),
+                "reversing": bool(f.get("state") == 1 and
+                                  (self.scan_reversing or f.get("module") == 5))}
+
     def visual_state(self, now):
         """Numeric presentation fields; existing panel and command API stays intact."""
         f = {} if self.state is None else self.state["fields"]
@@ -478,6 +538,7 @@ class DashboardModel:
                 "module": f.get("module", 0),
                 "paused": self.telemetry_mode() == "idle",
                 "state": dict(f),
+                "sonar": self.sonar_visual(now),
                 "state_stale": self.state is None or
                 self.state_age(now) > self.limits()["state_stale_ms"]}
 

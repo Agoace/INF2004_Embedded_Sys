@@ -5,6 +5,7 @@
 "use strict";
 const vm = require("vm");
 
+const canvasCalls = [];
 function makeNode(id) {
   return {
     id, hidden: id === "restart" || id === "cmderror" || id === "banner",
@@ -22,7 +23,11 @@ function makeNode(id) {
     closest() { return this; },
     clientWidth: 300, clientHeight: 120,
     getContext() {
-      return new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}), set: (t, k, v) => { t[k] = v; return true; } });
+      return new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...args) => {
+        if (args.some(v => typeof v === "number" && !Number.isFinite(v)))
+          throw new Error("non-finite canvas coordinate in " + k);
+        canvasCalls.push([k, ...args]);
+      }), set: (t, k, v) => { t[k] = v; return true; } });
     },
     addEventListener(type, fn) { this.listener = fn; },
   };
@@ -99,6 +104,8 @@ async function main() {
   trace.message = view("message");
   trace.estop = view("estop");
   trace.session = session;
+  trace.canvasCalls = canvasCalls;
+  trace.values = (input.expressions || []).map(expression => vm.runInContext(expression, context));
   // Optional: {"views": [[id, selector or null], ...]} returns their text.
   trace.views = (input.views || []).map(([id, sel]) => {
     const base = nodes[id];

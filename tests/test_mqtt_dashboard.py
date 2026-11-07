@@ -2039,6 +2039,61 @@ class RedesignModelTests(ModelCase):
         self.clock.advance(3000)
         self.assertTrue(self.model.snapshot()["view"]["state_stale"])
 
+    def test_sonar_recent_and_frozen_profile_have_explicit_missing_slots(self):
+        self.feed("sonar_valid")
+        self.model.ingest("robot/obstacle", obstacle(decision=2))
+        v = self.model.snapshot()["view"]["sonar"]
+        self.assertEqual(len(v["profile"]["points"]), 13)
+        self.assertEqual(v["profile"]["decision"], 2)
+        self.assertIn("not observed", [p["status"] for p in v["profile"]["points"]])
+        frozen = v["profile"]["points"]
+        self.feed("sonar_valid")
+        self.assertEqual(self.model.snapshot()["view"]["sonar"]["profile"]["points"], frozen)
+        self.clock.advance(10001)
+        self.assertEqual(self.model.snapshot()["view"]["sonar"]["recent"], [])
+        self.assertEqual(self.model.snapshot()["view"]["sonar"]["profile"]["points"], frozen)
+        self.model._new_boot()
+        self.assertIsNone(self.model.snapshot()["view"]["sonar"]["profile"])
+
+    def test_reverse_events_and_state_are_visible(self):
+        self.feed("state_running")
+        fields = {"kind":8, "sequence":1, "uptime_ms":5000, "word":1, "detail":1}
+        self.model._store_event(fields, self.model.now_ms())
+        v = self.model.snapshot()["view"]["sonar"]
+        self.assertTrue(v["reversing"])
+        self.assertEqual(v["attempt"], 2)
+        self.model._store_event(dict(fields, sequence=2, detail=3), self.model.now_ms())
+        self.assertFalse(self.model.snapshot()["view"]["sonar"]["reversing"])
+
+
+@unittest.skipUnless(NODE, "node required for drawing checks")
+class RedesignPageTests(AppCase):
+    def trace(self, expressions=(), views=()):
+        page = self.request("GET", "/")[2].decode()
+        snap = json.loads(self.request("GET", "/api/state")[2])
+        result = subprocess.run([NODE, str(HARNESS)], text=True, capture_output=True,
+                                input=json.dumps({"page":page, "steps":[{"render":snap}],
+                                                  "expressions":expressions, "views":views}),
+                                timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_fan_coordinates_put_positive_angles_on_left(self):
+        v = self.trace(["sonarPoint(30, 100, 200, 200, 1)",
+                        "sonarPoint(-30, 100, 200, 200, 1)"])["values"]
+        self.assertAlmostEqual(v[0][0], 150)
+        self.assertAlmostEqual(v[1][0], 250)
+        self.assertLess(v[0][1], 200)
+
+    def test_fan_draws_and_names_left_decision(self):
+        self.model.ingest("robot/obstacle", obstacle(decision=2))
+        trace = self.trace(views=[["panel-ultrasonic", ".visual-summary"],
+                                 ["panel-ultrasonic", ".legend"]])
+        self.assertIn("← LEFT", trace["views"][0]["text"])
+        self.assertIn("observed 0/13", trace["views"][0]["text"])
+        self.assertIn("approximate, measured 2026-11-07", trace["views"][1]["text"])
+        self.assertTrue(any(c[0] == "arc" for c in trace["canvasCalls"]))
+
 
 class RedesignLayoutTests(unittest.TestCase):
     def test_offline_responsive_layout_and_health_section(self):

@@ -77,6 +77,10 @@ button.armed { background:var(--warn); color:#000; }
 .items { max-height:220px; overflow-y:auto; font-family:ui-monospace, monospace; font-size:12px; }
 .note { color:var(--dim); font-style:italic; }
 canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin-top:6px; }
+#panel-ultrasonic canvas { height:350px; }
+.visual-summary { font-size:17px; font-weight:700; margin:8px 0; }
+.legend { font-size:12px; color:var(--dim); margin-top:6px; }
+@media(max-width:800px) { #panel-ultrasonic canvas { height:300px; } }
 </style>
 </head>
 <body>
@@ -142,7 +146,74 @@ function drawBars(ctx, canvas, chart) {
   ctx.globalAlpha = 1;
   return x;
 }
+// Positive servo angles are LEFT. Dots are measurements, not an obstacle outline.
+function sonarPoint(angle, mm, cx, cy, scale) {
+  const a = angle * Math.PI / 180;
+  return [cx - Math.sin(a) * mm * scale, cy - Math.cos(a) * mm * scale];
+}
+function drawSonar(canvas, chart) {
+  const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+  const cx = w / 2, cy = h - 28, scale = Math.min((w - 80) / 2, h - 55) / 511;
+  const point = (a, mm) => sonarPoint(a, mm, cx, cy, scale);
+  const line = (a, mm) => { const p = point(a, mm); ctx.lineTo(p[0], p[1]); };
+  const arc = (radius, start, end) => {
+    ctx.beginPath();
+    for (let a = start; a <= end; a += 1) {
+      const p = point(a, radius); if (a === start) ctx.moveTo(...p); else ctx.lineTo(...p);
+    }
+    ctx.stroke();
+  };
+  const wedge = (start, end, colour) => {
+    ctx.fillStyle = colour; ctx.beginPath(); ctx.moveTo(cx, cy);
+    for (let a = start; a <= end; a += 1) line(a, 511);
+    ctx.closePath(); ctx.fill();
+  };
+  const profile = chart.profile;
+  if (profile && profile.decision) wedge(profile.decision === 2 ? 0 : -30,
+    profile.decision === 2 ? 30 : 0, "rgba(63,185,80,.16)");
+  wedge(-30, 30, "rgba(88,166,255,.05)");
+  ctx.strokeStyle = "#344151"; ctx.fillStyle = "#a3aebc";
+  [128,256,384,511].forEach(mm => { arc(mm, -70, 70);
+    const p = point(-65, mm); ctx.fillText(mm + " mm", p[0] + 4, p[1]); });
+  [-30,0,30].forEach(a => {
+    ctx.beginPath(); ctx.moveTo(cx,cy); line(a,511); ctx.stroke();
+    const p = point(a,511); ctx.fillText((a > 0 ? "+" : "") + a + "°",p[0]-12,p[1]-7);
+  });
+  ctx.strokeStyle = "#e6aa45"; arc(258,-60,60);
+  const stop = point(55,258); ctx.fillStyle = "#e6aa45";
+  ctx.fillText("STOP 258 mm", stop[0]-75,stop[1]-5);
+  wedge(chart.beam_deg - 20, chart.beam_deg + 20,"rgba(88,166,255,.09)");
+  const near = chart.latest_mm !== null && chart.latest_mm < 258;
+  ctx.strokeStyle = near ? "#ff625b" : "#70b9ff"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(cx,cy); line(chart.beam_deg,511); ctx.stroke(); ctx.lineWidth=1;
+  chart.recent.forEach(p => {
+    if (p.mm === null && !p.no_return) return;
+    const xy = point(p.angle, Math.min(511,p.mm === null ? 511 : p.mm));
+    ctx.globalAlpha = Math.max(.12, 1 - p.age_ms / 10000);
+    ctx.fillStyle = "#78c4ff"; ctx.strokeStyle = "#78c4ff";
+    if (p.no_return) { ctx.strokeRect(xy[0]-4,xy[1]-4,8,8); }
+    else { ctx.beginPath(); ctx.arc(...xy,3,0,Math.PI*2); ctx.fill(); }
+  });
+  ctx.globalAlpha=1;
+  if (profile) profile.points.forEach(p => {
+    const known = p.mm !== null || p.no_return;
+    const xy = point(p.angle, Math.min(511,p.mm === null ? 511 : p.mm));
+    ctx.strokeStyle = !known ? "#778391" : p.no_return || p.mm >= profile.free_threshold_mm ? "#59d878" : "#ff7066";
+    ctx.lineWidth=2; ctx.beginPath(); ctx.arc(...xy,5,0,Math.PI*2); ctx.stroke();
+    if (!known) { ctx.fillStyle="#a3aebc"; ctx.fillText("?",xy[0]-3,xy[1]-8); }
+    if (p.no_return) ctx.strokeRect(xy[0]-4,xy[1]-4,8,8);
+  });
+  if (profile && profile.closest) {
+    ctx.strokeStyle="#ffce67"; const p=point(profile.closest.angle,Math.min(511,profile.closest.mm));
+    ctx.beginPath(); ctx.arc(...p,10,0,Math.PI*2); ctx.stroke();
+    ctx.fillStyle="#ffce67"; ctx.fillText("nearest",p[0]+12,p[1]);
+  }
+  ctx.lineWidth=1; ctx.fillStyle="#d9e6f4"; ctx.fillRect(cx-10,cy-5,20,16);
+  ctx.fillText("LEFT (+)",10,h-10); ctx.fillText("ROBOT · 0 mm",cx-40,h-7);
+  ctx.fillText("RIGHT (−)",w-80,h-10);
+}
 const CHART_RENDERERS = {
+  fan: drawSonar,
   dial(canvas, chart) {
     // Heading dial: 0 is straight ahead at the top; left (anticlockwise) is positive.
     const ctx = setup(canvas), w = canvas.width, h = canvas.height;
@@ -218,7 +289,8 @@ function panelNode(panel) {
     node = document.createElement("div");
     node.id = "panel-" + panel.id; node.className = "panel";
     node.innerHTML = '<h2><span class="title"></span><span class="age"></span></h2>' +
-      '<div class="note"></div><table class="facts"></table><canvas hidden></canvas>' +
+      '<div class="note"></div><div class="visual-summary"></div>' +
+      '<canvas hidden></canvas><div class="legend"></div><table class="facts"></table>' +
       '<table class="rows" hidden></table><div class="items"></div>';
     const primary = ["ultrasonic", "line", "wheels", "summary"].includes(panel.id);
     document.getElementById(primary ? "grid" : "health-grid").appendChild(node);
@@ -334,7 +406,23 @@ function render(snapshot) {
     node.className = !view.state_stale && view.module === id ? "active" : "";
   });
   renderButtons(snapshot.buttons);
-  snapshot.panels.forEach(renderPanel);
+  snapshot.panels.forEach(panel => {
+    if (panel.id === "ultrasonic" && view.sonar) {
+      renderPanel({...panel, chart:{type:"fan", ...view.sonar}, paused:view.paused});
+      const sonar = view.sonar, profile = sonar.profile;
+      const decision = profile ? ({0:"NONE",1:"RIGHT →",2:"← LEFT"}[profile.decision]) : "awaiting scan";
+      const observed = profile ? profile.points.filter(p => p.mm !== null || p.no_return).length : 0;
+      text(document.getElementById("panel-ultrasonic").querySelector(".visual-summary"),
+        (sonar.reversing ? "REVERSING · " : "DECISION: " + decision + " · ") +
+        "attempt " + sonar.attempt + "/3" +
+        (profile ? " · observed " + observed + "/13 · profile " + fmtAge(profile.age_ms) + " ago" : ""));
+      text(document.getElementById("panel-ultrasonic").querySelector(".legend"),
+        "Solid dots: recent echoes (fade over 10 s) · □ NO_RETURN at range edge · " +
+        "rings: last profile samples, green free (NO_RETURN or ≥nearest+150 mm), red blocked, ? unknown · gold: nearest. " +
+        "Distances >511 mm clipped. Beam cone ≈ ±20° (approximate, measured 2026-11-07). " +
+        "Profile dots are received samples, not reconstructed geometry.");
+    } else renderPanel(panel);
+  });
   if (snapshot.last_command) {
     const c = snapshot.last_command;
     text(document.getElementById("message"), c.command + " #" + c.request_id + ": " + c.status);
