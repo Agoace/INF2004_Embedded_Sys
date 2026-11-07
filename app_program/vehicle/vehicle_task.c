@@ -1,4 +1,6 @@
 /* Kernel navigation only: snapshot inputs, asynchronous services, motion outputs. */
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
 #include "../app.h"
 #include "vehicle_task.h"
 #include "../subsystem2/motion.h"
@@ -10,6 +12,15 @@
 #include "vehicle_inputs.h"
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
+#include "vehicle_board.h"
+#if TM_MQTT
+#include "../subsystem1/robot_network.h"
+#include "../subsystem1/network_queue.h"
+#include "../platform/app_board.h"
+#endif
+#if TM_WIFI_CYW43
+#include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
+#endif
 #if !APP_TEST && !APP_BENCH
 #define START_DELAY_MS 1000u
 #define RUN_LIMIT_MS 90000u
@@ -23,6 +34,85 @@ static uint32_t wake_lost,overruns,response_max_us,release_us,release_tick;
 static uint32_t run_start,run_button_ms,generation,request_id;
 static drv_line_stats_t line_base;
 static const char *reason="no saved run";
+#if TM_MQTT
+static APP_BOARD(vehicle_snapshot_t) vehicle_board;
+static vehicle_snapshot_t vehicle;
+static uint8_t pending_action;
+static uint32_t event_sequence,seen_commands[8];
+static unsigned int seen_count,seen_next;
+static uint16_t last_network_fault;
+static void live_event(uint8_t kind,uint8_t from,uint8_t to,uint16_t word,uint8_t detail) {
+    if (kind==3u && word==last_network_fault) return;
+    if (kind==3u) last_network_fault=word;
+    const rm_event_t e={.kind=kind,.from=from,.to=to,.word=word,.detail=detail,
+        .uptime_ms=drv_time_ms(),.sequence=++event_sequence};
+    (void)robot_event_push(&e); /* Never affect driving on a network loss. */
+}
+static void publish_vehicle(void) {
+    vehicle.timestamp_us=drv_time_us();++vehicle.sequence;
+    vehicle.state=vsm.state;vehicle.module=vsm.running;vehicle.active=active;
+    vehicle.calibrated=lp_calibrated(&lp);vehicle.handoffs=vsm.handoffs;
+    vehicle.wake_lost=wake_lost;vehicle.overruns=overruns;vehicle.response_max_us=response_max_us;
+    app_board_publish(&vehicle_board.sequence,vehicle_board.words,&vehicle,sizeof(vehicle));
+}
+int vehicle_snapshot_try_read(vehicle_snapshot_t *out) {
+    if (!out) return E_PAR;
+    vehicle_snapshot_t v;
+    if (!app_board_try_read(&vehicle_board.sequence,vehicle_board.words,&v,sizeof(v))) return E_TMOUT;
+    *out=v;return E_OK;
+}
+static int vehicle_speed(int16_t l,int16_t r) {
+    const int er=motion_set_speed(l,r);
+    if (er>=E_OK) { vehicle.left_mm_s=l;vehicle.right_mm_s=r; }
+    return er;
+}
+static int vehicle_stop(void) { vehicle.left_mm_s=0;vehicle.right_mm_s=0;return motion_stop(); }
+static int vehicle_servo(int deg,int *accepted) {
+    int actual=0;const int er=motion_set_servo(deg,&actual);
+    if (er>=E_OK) vehicle.servo_deg=(int8_t)actual;
+    if (accepted) *accepted=actual;
+    return er;
+}
+static void discard_commands(void) {
+    robot_command_t old;
+    for (unsigned int i=0u;i<9u && robot_command_pop(&old)>0;++i) robot_command_lost();
+    pending_action=0u;
+}
+static int vehicle_estop(void) {
+    discard_commands();vehicle.left_mm_s=0;vehicle.right_mm_s=0;
+    live_event(3u,vsm.state,vsm.running,MC_FAULT_ESTOP,0u);return motion_estop();
+}
+static void handle_command(void) {
+    robot_command_t c;
+    if (robot_command_pop(&c)!=(int)sizeof(c)) return;
+    uint8_t result=0u;bool duplicate=false;
+    for (unsigned int i=0u;i<seen_count;++i) if (seen_commands[i]==c.request_id) duplicate=true;
+    if (c.opcode!=RM_CMD_ESTOP && duplicate) result=4u;
+    else {
+        seen_commands[seen_next]=c.request_id;seen_next=(seen_next+1u)%8u;
+        if (seen_count<8u) ++seen_count;
+        telemetry_stats_t log;telemetry_stats(&log);
+        result=vehicle_remote_policy(c.opcode,active,pending_action!=0u,log.busy,lp_calibrated(&lp));
+        if (result==0u) {
+            if (c.opcode==RM_CMD_ESTOP) {
+                (void)vehicle_estop();
+                if (active) { cancelled=true;reason="remote stop (best effort)"; }
+            } else if (c.opcode==RM_CMD_DUMP) {
+                if (robot_network_dump(c.request_id)<E_OK) result=3u;
+            } else pending_action=c.opcode;
+        }
+    }
+    vehicle.command_id=c.request_id;vehicle.command_opcode=c.opcode;vehicle.command_status=result;
+    live_event(6u,vsm.state,vsm.running,(uint16_t)((uint16_t)c.opcode|((uint16_t)result<<8u)),result);
+}
+#else
+#define vehicle_speed motion_set_speed
+#define vehicle_stop motion_stop
+#define vehicle_estop motion_estop
+#define vehicle_servo motion_set_servo
+#define publish_vehicle() ((void)0)
+#endif
+
 static bool pressed(unsigned int pin,bool *previous) {
     const bool down=drv_motor_hw_button_down(pin);
     const bool edge=down && !*previous;*previous=down;return edge;
@@ -32,6 +122,10 @@ static bool send(telemetry_message_t *message) {
     cancelled=true;reason="telemetry queue unavailable";return false;
 }
 static void event(uint8_t kind,uint8_t from,uint8_t to,uint16_t word) {
+#if TM_MQTT
+    live_event(kind==4u ? 5u : kind,from,to,word,0u);
+    if (kind==1u && from==VSM_MOD_SCAN) live_event(4u,from,to,word,0u);
+#endif
     if (!active) return;
     telemetry_message_t m={.kind=TELEMETRY_EVENT};
     m.data.event=(telemetry_event_t){.ms=drv_time_ms()-run_start,.word=word,.kind=kind,.from=from,.to=to};
@@ -39,12 +133,13 @@ static void event(uint8_t kind,uint8_t from,uint8_t to,uint16_t word) {
 }
 static void finish_step(void) {
     if (!step_open) return;
+    publish_vehicle();
     const uint32_t elapsed=drv_time_us()-release_us;
     if (elapsed>response_max_us) response_max_us=elapsed;
     motion_status_t s;
     if (elapsed>=10000u || (motion_status(&s)>=E_OK && s.ticks!=release_tick)) {
         ++overruns;
-        if (active) { cancelled=true;reason="vehicle deadline missed";(void)motion_stop(); }
+        if (active) { cancelled=true;reason="vehicle deadline missed";(void)vehicle_stop(); }
     }
     step_open=false;
 }
@@ -57,10 +152,10 @@ static void read_line(void) {
     for (unsigned int i=0u;i<3u;++i) raw[i]=sensor.raw[i];
     if (sensor.event!=VC_EVENT_NONE) line_event=sensor.event;
     if (active && (!sensor.valid || drv_time_us()-sensor.timestamp_us>10000u)) {
-        (void)motion_estop();cancelled=true;reason="line snapshot stale";
+        (void)vehicle_estop();cancelled=true;reason="line snapshot stale";
     }
     if (active && (sensor.acquisition.missed!=line_base.missed || sensor.acquisition.dropped!=line_base.dropped)) {
-        (void)motion_estop();cancelled=true;reason="line samples lost";
+        (void)vehicle_estop();cancelled=true;reason="line samples lost";
     }
 }
 static bool wait_tick(void) {
@@ -75,11 +170,14 @@ static bool wait_tick(void) {
     else { cancelled=true;reason="motion status failed"; }
     release_us=drv_time_us();step_open=true;
     read_line();
+#if TM_MQTT
+    handle_command();
+#endif
     telemetry_stats_t log;telemetry_stats(&log);
     if (active && log.storage_full) { cancelled=true;reason="telemetry storage full"; }
     if (active && drv_time_ms()-run_button_ms>=20u) {
         run_button_ms=drv_time_ms();
-        if (pressed(21u,&prev_run)) { (void)motion_estop();cancelled=true;reason="GP21 emergency stop"; }
+        if (pressed(21u,&prev_run)) { (void)vehicle_estop();cancelled=true;reason="GP21 emergency stop"; }
     }
     return er>=E_OK && !cancelled;
 }
@@ -100,18 +198,18 @@ static bool cal_spin(int direction,goal_t goal,const int32_t home[2],bool stop_o
     const int sign[2]={direction,-direction};bool running[2]={true,true};
     const uint32_t t0=drv_time_ms();(void)motion_clear_faults();
     while (running[0] || running[1]) {
-        if (!wait_tick()) { (void)motion_stop();return false; }
+        if (!wait_tick()) { (void)vehicle_stop();return false; }
         const uint32_t now=drv_time_ms();
         const uint16_t c=lp.norm[LP_CENTRE],peak=sensor.norm_peak;
         const bool on_line=stop_on_line && (c>=CAL_CENTRE_STOP || (peak>=CAL_CENTRE_MIN && c+CAL_PEAK_DROP<=peak));
         (void)motion_status(&s);
         for (unsigned int w=0u;w<2u;++w)
             if (running[w] && (on_line || wheel_done(goal,s.counts[w]-home[w],start[w]))) running[w]=false;
-        if ((s.faults&MC_FAULT_LATCHED)!=0u || now-t0>=CAL_STEP_TIMEOUT_MS) { (void)motion_stop();return false; }
-        (void)motion_set_speed((int16_t)(running[0] ? sign[0]*CAL_SPEED_MM_S : 0),
+        if ((s.faults&MC_FAULT_LATCHED)!=0u || now-t0>=CAL_STEP_TIMEOUT_MS) { (void)vehicle_stop();return false; }
+        (void)vehicle_speed((int16_t)(running[0] ? sign[0]*CAL_SPEED_MM_S : 0),
                                (int16_t)(running[1] ? sign[1]*CAL_SPEED_MM_S : 0));
     }
-    (void)motion_stop();return true;
+    (void)vehicle_stop();return true;
 }
 static void cal_pause(void) {
     const uint32_t end=drv_time_ms()+CAL_PAUSE_MS;
@@ -222,10 +320,10 @@ static void run_once(void) {
             pending_bits|=(uint8_t)((uint8_t)vsm_outcome_type(vsm.last.outcome)<<4u);
             generation+=vsm.handoffs-handoffs;mode=255u;outstanding=false;
         }
-        if (d.action==VSM_ACT_STOP) (void)motion_stop();
+        if (d.action==VSM_ACT_STOP) (void)vehicle_stop();
         else {
-            (void)motion_set_speed(d.left_mm_s,d.right_mm_s);
-            if (d.servo_deg!=last_servo) { (void)motion_set_servo(d.servo_deg,0);last_servo=d.servo_deg; }
+            (void)vehicle_speed(d.left_mm_s,d.right_mm_s);
+            if (d.servo_deg!=last_servo) { (void)vehicle_servo(d.servo_deg,0);last_servo=d.servo_deg; }
         }
         if (now-last_log>=20u) { save_row(now,&s,&d,echo,pending_bits);pending_bits=0u;last_log=now; }
         if (vsm.state!=VSM_RUNNING) { reason="shell left RUNNING";break; }
@@ -241,7 +339,7 @@ static void run_once(void) {
         if (now-run_start>=RUN_LIMIT_MS) { reason="90 s time limit";break; }
     }
     event(4u,vsm.state,vsm.running,vsm.fault_detail);
-    (void)motion_stop();(void)motion_set_servo(0,0);vsm_stop(&vsm);sonar_stop();
+    (void)vehicle_stop();(void)vehicle_servo(0,0);vsm_stop(&vsm);sonar_stop();
 }
 static void vehicle_task(INT code,void *ctx) {
     (void)code;(void)ctx;
@@ -252,6 +350,7 @@ static void vehicle_task(INT code,void *ctx) {
     drv_motor_hw_buttons_init();prev_run=drv_motor_hw_button_down(21u);prev_dump=drv_motor_hw_button_down(20u);
     tm_printf((UB*)"[robot] GP21 calibrate then run / ESTOP; GP20 telemetry dump. D85.\n");
     if (motion_notify_after_tick(tk_get_tid())<E_OK) { tm_printf((UB*)"ERROR robot: cannot register motion wake\n");tk_ext_tsk(); }
+    publish_vehicle();
     uint32_t button_ms=drv_time_ms();
     for (;;) {
         cancelled=false;(void)wait_tick();const uint32_t now=drv_time_ms();
@@ -262,22 +361,55 @@ static void vehicle_task(INT code,void *ctx) {
         if (dump_edge && !run_edge && !log.busy) {
             telemetry_message_t m={.kind=TELEMETRY_DUMP};info(&m.data.info);(void)telemetry_send(&m);
         }
+#if TM_MQTT
+        const uint8_t action=run_edge ? 0u : pending_action;
+        if ((!run_edge && action==0u) || log.busy) continue;
+        pending_action=0u;vehicle.phase=1u;last_network_fault=0u;
+#else
         if (!run_edge || log.busy) continue;
+#endif
         telemetry_message_t begin={.kind=TELEMETRY_BEGIN};if (!send(&begin)) continue;
         cancelled=false;wake_lost=0u;overruns=0u;response_max_us=0u;
         reason="calibration failed";line_base=sensor.acquisition;
         active=true;run_start=now;run_button_ms=now;
+#if TM_WIFI_CYW43
+        const bool wifi_window=cyw43_utk_timing_window_begin()>=E_OK;
+#endif
+#if TM_MQTT
+        const bool calibrated=action==RM_CMD_START ? lp_calibrated(&lp) : calibrate();
+        const bool run=action!=RM_CMD_CALIBRATE;
+        if (calibrated && run && !cancelled) {
+            vehicle.phase=2u;
+#else
         if (calibrate() && !cancelled) {
+#endif
             const uint32_t start=drv_time_ms();
             while (!cancelled && drv_time_ms()-start<START_DELAY_MS) (void)wait_tick();
-            if (!cancelled) run_once();
+            if (!cancelled) {
+#if TM_MQTT
+                vehicle.phase=3u;
+#endif
+                run_once();
+            }
         }
-        (void)motion_stop();(void)motion_set_servo(0,0);sonar_stop();
+        (void)vehicle_stop();(void)vehicle_servo(0,0);sonar_stop();
         motion_status_t end;
         if (motion_status(&end)>=E_OK && end.faults!=0u) event(3u,vsm.state,vsm.running,end.faults);
         event(5u,vsm.state,vsm.running,cancelled ? 1u : 0u);
         finish_step();telemetry_message_t m={.kind=TELEMETRY_INFO};info(&m.data.info);(void)send(&m);
         active=false;cancelled=false;vsm_reset(&vsm);
+#if TM_MQTT
+        vehicle.phase=0u;publish_vehicle();
+#endif
+#if TM_WIFI_CYW43
+        if (wifi_window) {
+            T_CYW43_TIMING w;
+            if (cyw43_utk_timing_window_end(&w)>=E_OK)
+                tm_printf((UB*)"[robot] WiFi window wall polls %lu gaps %lu max_gap_us %lu gaps_over_10000 %lu work_max_us %lu probe_max_us %lu\n",
+                    (unsigned long)w.polls,(unsigned long)w.gaps,(unsigned long)w.gap_max_us,
+                    (unsigned long)w.gaps_over_10000,(unsigned long)w.work_max_us,(unsigned long)w.probe_max_us);
+        }
+#endif
     }
 }
 int vehicle_task_start(void) {
@@ -292,4 +424,7 @@ int vehicle_task_start(void) {
 _Static_assert(VR_BYTES==TELEMETRY_BYTES && VR_ROWS==TELEMETRY_ROWS,"KR1 storage contract");
 #else
 int vehicle_task_start(void) { return E_OK; }
+#endif
+#if !TM_MQTT || APP_TEST || APP_BENCH
+int vehicle_snapshot_try_read(vehicle_snapshot_t *out) { return out ? E_OBJ : E_PAR; }
 #endif

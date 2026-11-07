@@ -4,6 +4,9 @@
 #include "../test_report.h"
 #include "../platform/drv_watchdog.h"
 #include "../platform/drv_time.h"
+#if TM_WIFI_CYW43
+#include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
+#endif
 #if APP_TEST
 static void timing_probe_report(void) {
     static const char *const names[MOTION_PROBE_COUNT] = {
@@ -28,8 +31,16 @@ EXPORT void subsystem2_test(void) {
     motion_timing_window_t window = {0};
     (void)motion_timing_probe_capture(MOTION_PROBE_S2_ENTRY);
     const int begin_ok = motion_timing_window_begin();
+#if TM_WIFI_CYW43
+    T_CYW43_TIMING wifi={0},wifi_lifetime={0};
+    const int wifi_begin=cyw43_utk_timing_window_begin();
+#endif
     (void)tk_dly_tsk(5000);
     const int end_ok = motion_timing_window_end(&window);
+#if TM_WIFI_CYW43
+    const int wifi_end=cyw43_utk_timing_window_end(&wifi);
+    (void)cyw43_utk_timing_read(&wifi_lifetime);
+#endif
     (void)motion_timing_probe_capture(MOTION_PROBE_S2_EXIT);
     TEST_CHECK("S2-U01", begin_ok >= E_OK && end_ok >= E_OK && window.ticks >= 499u && window.ticks <= 501u &&
                window.gap_max_us <= 11000u && window.missed_wakes == 0u,
@@ -46,6 +57,13 @@ EXPORT void subsystem2_test(void) {
             (unsigned long)lifetime.tick_max_us,(unsigned long)lifetime.late_wakes,(unsigned long)lifetime.missed_wakes);
     else tm_printf((UB*)"[TEST] S2-U01 INFO lifetime unavailable error %d\n",info_ok);
     timing_probe_report();
+#if TM_WIFI_CYW43
+    tm_printf((UB*)"[TEST] S2-U01 INFO WiFi wall window valid %u polls %lu gaps %lu max_gap_us %lu gaps_over_10000 %lu work_max_us %lu work_total_us %lu probe_max_us %lu; lifetime polls %lu max_gap_us %lu work_max_us %lu\n",
+        (unsigned int)(wifi_begin>=E_OK && wifi_end>=E_OK),(unsigned long)wifi.polls,(unsigned long)wifi.gaps,
+        (unsigned long)wifi.gap_max_us,(unsigned long)wifi.gaps_over_10000,(unsigned long)wifi.work_max_us,
+        (unsigned long)wifi.work_total_us,(unsigned long)wifi.probe_max_us,(unsigned long)wifi_lifetime.polls,
+        (unsigned long)wifi_lifetime.gap_max_us,(unsigned long)wifi_lifetime.work_max_us);
+#endif
     tm_printf((UB*)"[TEST] WARNING S2-U02: LIFT BOTH WHEELS before powering this TEST image.\n"
               "[TEST] In 2 s: brief 40 mm/s command, then no refresh; stale must stop PWM.\n");
     (void)tk_dly_tsk(2000);
