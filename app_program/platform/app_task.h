@@ -1,3 +1,4 @@
+/* app_task.h - static-stack application task creation and stack report. */
 #ifndef APP_TASK_H
 #define APP_TASK_H
 #include <tk/tkernel.h>
