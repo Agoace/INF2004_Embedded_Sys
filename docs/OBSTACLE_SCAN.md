@@ -262,6 +262,19 @@ Conclusions:
 - The readings increase toward both ends because the beam edge sees the
   object corners, which are farther away.
 
+## Decision: no beam-width correction (2026-11-07)
+
+The ultrasonic cone is wider than the scan step. In the M2 reattempt run
+the 12 cm box still gave an echo when its edge was about 20° from the
+sensor axis, so at 220 mm the 30° points can still see the box. See
+[VC_DETOUR_RUN.md](VC_DETOUR_RUN.md#result-m2-reattempt-2026-11-07-mqtt-image-48c69d3-pass).
+
+Do not correct the profile for the beam width. The echo strength also
+depends on the surface, the angle of the face and the shape of the
+obstacle, so one fixed angle is not correct for other obstacles. Use the
+SCAN reverse and reattempt: a larger distance makes every obstacle
+smaller in angle, with no assumption about its surface.
+
 ## Open items
 
 - Repeat run 1 with an object of known width and distance; calculate
