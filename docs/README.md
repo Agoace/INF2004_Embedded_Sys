@@ -85,3 +85,5 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [Application task stacks](APPLICATION_TASKS.md) — static stacks, margin and high-water reporting.
 
 - [Kernel telemetry](KERNEL_TELEMETRY.md) — message-buffer transport and RAM log owner.
+
+- [Local template changes](TEMPLATE_CHANGES.md) — approved deviations, early TIMER, Wi-Fi priority/hook/timing and update checks.

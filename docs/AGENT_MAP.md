@@ -205,3 +205,8 @@ vehicle task described below.
 
 - [`app_program/subsystem1/telemetry.c`](../app_program/subsystem1/telemetry.c) — priority-30 RAM log/dump owner; value messages via `mbf_telemetry`, `TMO_POL` producer sends.
 - [Kernel telemetry](KERNEL_TELEMETRY.md) — ownership, loss policy and future MQTT boundary.
+
+## Approved template deviations
+
+- [Template change ledger](TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.
+- [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`.

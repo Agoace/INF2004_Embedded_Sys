@@ -278,3 +278,10 @@ and pass the lifted-wheel checks before floor work. R5 has not run.
 
 The barcode work is not started. The ideas for it are in
 [Barcode reading ideas](docs/BARCODE_READING_IDEAS.md).
+
+## Local template changes
+
+See [the template change ledger](docs/TEMPLATE_CHANGES.md) for approved shared
+changes, their reasons, and the procedure after a lecturer update. Template
+source is not frozen. Run `python3 scripts/check-template-changes.py` to check
+the recorded file list. No SDK startup/runtime is added.
