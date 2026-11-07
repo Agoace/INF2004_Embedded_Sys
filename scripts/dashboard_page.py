@@ -1,8 +1,9 @@
 """Inline dashboard page: HTML, CSS and JavaScript in one string. No CDN, no files.
 
 The page draws whatever panels the server sends. A panel with rows gets a table,
-one with items gets a list, and a chart type with a renderer in CHART_RENDERERS
-gets a canvas. A new panel needs no change here.
+one with a table (columns and rows) gets a grid, one with items gets a list, and a
+chart type with a renderer in CHART_RENDERERS gets a canvas. A new panel needs no
+change here.
 """
 
 PAGE = r"""<!doctype html>
@@ -41,6 +42,10 @@ button.armed { background:var(--warn); color:#000; }
 .panel table { width:100%; border-collapse:collapse; }
 .panel td { padding:1px 0; vertical-align:top; }
 .panel td:first-child { color:var(--dim); width:55%; }
+.panel table.rows td:first-child { width:auto; }
+.panel table.rows th { text-align:left; color:var(--dim); font-weight:400; font-size:12px; }
+.panel table.rows { table-layout:fixed; margin-top:6px; }
+.panel table.rows td { padding:1px 4px 1px 0; font-size:12px; overflow-wrap:anywhere; }
 .items { max-height:220px; overflow-y:auto; font-family:ui-monospace, monospace; font-size:12px; }
 .note { color:var(--dim); font-style:italic; }
 canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin-top:6px; }
@@ -95,6 +100,22 @@ function drawBars(ctx, canvas, chart) {
   return x;
 }
 const CHART_RENDERERS = {
+  dial(canvas, chart) {
+    // Heading dial: 0 is straight ahead at the top; left (anticlockwise) is positive.
+    const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+    const cx = w / 2, cy = h / 2, radius = Math.min(w, h) / 2 - 14;
+    ctx.strokeStyle = "#2d333d"; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, 6.283);
+    ctx.stroke();
+    ctx.fillStyle = "#8b95a3";
+    ctx.fillText("0", cx - 3, cy - radius - 3); ctx.fillText("L90", cx - radius - 24, cy + 4);
+    ctx.fillText("180", cx - 9, cy + radius + 11); ctx.fillText("R90", cx + radius + 3, cy + 4);
+    const clockwise = -chart.heading_deg * Math.PI / 180;
+    ctx.strokeStyle = "#58a6ff"; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + radius * Math.sin(clockwise), cy - radius * Math.cos(clockwise));
+    ctx.stroke(); ctx.lineWidth = 1;
+    ctx.fillStyle = "#e6e9ee";
+    ctx.fillText(chart.turn_rate_dps.toFixed(1) + " deg/s", cx - 28, cy + 16);
+  },
   obstacle(canvas, chart) {
     const ctx = setup(canvas), w = canvas.width, h = canvas.height;
     const x = drawBars(ctx, canvas, chart);
@@ -154,10 +175,23 @@ function panelNode(panel) {
     node = document.createElement("div");
     node.id = "panel-" + panel.id; node.className = "panel";
     node.innerHTML = '<h2><span class="title"></span><span class="age"></span></h2>' +
-      '<div class="note"></div><table></table><canvas hidden></canvas><div class="items"></div>';
+      '<div class="note"></div><table class="facts"></table><canvas hidden></canvas>' +
+      '<table class="rows" hidden></table><div class="items"></div>';
     document.getElementById("grid").appendChild(node);
   }
   return node;
+}
+function renderGrid(grid, data) {
+  grid.hidden = !data;
+  grid.replaceChildren();
+  if (!data) return;
+  const head = grid.insertRow();
+  data.columns.forEach(name => { const th = document.createElement("th");
+    text(th, name); head.appendChild(th); });
+  data.rows.forEach(row => {
+    const tr = grid.insertRow();
+    row.forEach(value => text(tr.insertCell(), value));
+  });
 }
 function renderPanel(panel) {
   const node = panelNode(panel);
@@ -166,12 +200,13 @@ function renderPanel(panel) {
   text(node.querySelector(".age"), panel.placeholder ? "placeholder" : fmtAge(panel.age_ms) +
        (panel.stale && panel.age_ms !== null ? " - stale" : ""));
   text(node.querySelector(".note"), panel.note);
-  const table = node.querySelector("table");
+  const table = node.querySelector("table.facts");
   table.replaceChildren();
   panel.rows.forEach(row => {
     const tr = table.insertRow();
     text(tr.insertCell(), row.label); text(tr.insertCell(), row.value);
   });
+  renderGrid(node.querySelector("table.rows"), panel.table);
   const canvas = node.querySelector("canvas");
   const draw = panel.chart && CHART_RENDERERS[panel.chart.type];
   canvas.hidden = !draw;

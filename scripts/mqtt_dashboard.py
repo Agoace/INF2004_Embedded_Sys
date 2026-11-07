@@ -27,10 +27,11 @@ PUBACK_WAIT_S = 2.0
 NOTE = ("Broker PUBACK only means the broker has the command. "
         "The robot decision appears in the vehicle panel.")
 # A subscription caps delivery QoS: robot/log (DUMP refill), robot/status (retained last
-# will) and the reserved robot/barcode are QoS 1 on the robot side.
+# will), robot/summary (retained) and the reserved robot/barcode are QoS 1 on the robot side.
 SUBSCRIPTIONS = [("robot/state", 0), ("robot/sonar", 0), ("robot/event", 0),
                  ("robot/heartbeat", 0), ("robot/log", 1), ("robot/obstacle", 0),
-                 ("robot/status", 1), ("robot/barcode", 1), ("robot/imu", 0)]
+                 ("robot/status", 1), ("robot/barcode", 1), ("robot/imu", 0),
+                 ("robot/detour", 0), ("robot/summary", 1)]
 
 
 class Commander:

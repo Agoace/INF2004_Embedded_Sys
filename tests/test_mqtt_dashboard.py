@@ -66,7 +66,7 @@ def c_samples():
 SAMPLES = c_samples()
 TOPICS = {"state": "robot/state", "sonar": "robot/sonar", "event": "robot/event",
           "heartbeat": "robot/heartbeat", "obstacle": "robot/obstacle",
-          "status": "robot/status"}
+          "status": "robot/status", "detour": "robot/detour", "summary": "robot/summary"}
 
 
 def topic_for(name):
@@ -91,6 +91,52 @@ def control(kind, dump_id, generation, body):
 def state_v2(name="state_idle", left=1500, right=1700, average=1600):
     """Version 2 state: the first 48 bytes are the C-packed v1 layout, then three i32."""
     return b"\x02" + SAMPLES[name][1:48] + struct.pack("<iii", left, right, average)
+
+
+def state_v3(name="state_idle", duty=(-250, 1000), heading=-4500, rate=-123,
+             dist=(1500, 1700, 1600)):
+    """Version 3 state: the C-packed first 48 bytes, distances, duty, heading and turn rate."""
+    return (b"\x03" + SAMPLES[name][1:48] + struct.pack("<iii", *dist) +
+            struct.pack("<hhihH", duty[0], duty[1], heading, rate, 0))
+
+
+def heartbeat_v(version=2, cpu=123, name="heartbeat"):
+    frame = bytearray(SAMPLES[name])
+    frame[0] = version
+    struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
+    return bytes(frame)
+
+
+def detour(outcome=3, side=1, flags=1, sequence=4, start=1000, end=3500, duration=2500,
+           distance=1200, lateral=340, payload=0, scan=9):
+    return struct.pack("<BBBBIIIIIHHI", 1, outcome, side, flags, sequence, start, end, duration,
+                       distance, lateral, payload, scan)
+
+
+def summary(flags=0b010, source=1, reason=1, run=2, start=5000, duration=60000, distance=8000,
+            losses=3, obstacles=2, done=2, succeeded=1, detour_ms=7000, started=3,
+            speed_error=45, motion_faults=0x05, shell=2, shell_detail=6, barcode_ok=0,
+            barcode_failed=0, hump=0xFFFF):
+    return struct.pack("<BBBBIIIIHHHHIHHBBHBBH", 1, flags, source, reason, run, start, duration,
+                       distance, losses, obstacles, done, succeeded, detour_ms, started,
+                       speed_error, motion_faults, shell, shell_detail, barcode_ok,
+                       barcode_failed, hump)
+
+
+def barcode(flags=0b00111, code=5, votes=3, reads=4, direction=1, nav=9, result=-45,
+            sequence=12, uptime=777):
+    return struct.pack("<BBBBBBBBhHII", 1, 1, flags, code, votes, reads, direction, nav, result,
+                       0, sequence, uptime)
+
+
+def imu_snapshot(pitch=3, heading=200, rate=250, hump=2, collision=1, valid=1, height=7,
+                 peak=9, age=0xBEEF):
+    word1 = pitch | heading << 8 | rate << 16 | hump << 24 | collision << 26 | valid << 27
+    return struct.pack("<BBHII", 1, 1, 0, word1, height | peak << 8 | age << 16)
+
+
+def imu_event(event=6, sequence=77, uptime=4242):
+    return struct.pack("<BBBBII", 1, 2, event, 0, sequence, uptime)
 
 
 def obstacle(flags=0b0001, decision=1, angle=-15, scan=7, uptime=5000, closest=250, word=0x1234,
@@ -130,8 +176,9 @@ class PanelTests(ModelCase):
     def test_every_panel_exists_without_data(self):
         snapshot = self.model.snapshot()
         ids = [panel["id"] for panel in snapshot["panels"]]
-        self.assertEqual(ids, ["vehicle", "line", "wheels", "ultrasonic", "obstacle", "events",
-                               "health", "barcode", "imu", "log"])
+        self.assertEqual(ids, ["vehicle", "line", "wheels", "odometry", "ultrasonic",
+                               "obstacle", "events", "health", "barcode", "imu", "summary",
+                               "log"])
         for panel in snapshot["panels"]:
             self.assertTrue(panel["stale"])
         self.assertEqual(snapshot["robot"]["level"], "silent")  # status online, no state yet
@@ -208,7 +255,10 @@ class PanelTests(ModelCase):
     def test_imu_is_a_placeholder(self):
         panel = self.panel("imu")
         self.assertTrue(panel["placeholder"] and panel["stale"])
-        self.assertEqual(panel["rows"], [])
+        self.assertEqual(list(self.rows("imu")),
+                         ["Pitch", "Heading", "Turn rate", "Hump state", "Height", "Peak",
+                          "Collision", "Motion event"])
+        self.assertTrue(all(row["value"] == "not implemented yet" for row in panel["rows"]))
 
     def test_new_panel_needs_only_a_builder(self):
         @model_module.register_panel
@@ -466,7 +516,8 @@ class ObstacleTests(ModelCase):
 
     def test_before_any_scan(self):
         panel = self.panel("obstacle")
-        self.assertEqual((panel["age_ms"], panel["note"]), (None, "no completed scan yet"))
+        self.assertEqual((panel["age_ms"], panel["note"]),
+                         (None, "no completed scan or detour yet"))
 
     def test_summary_rows(self):
         self.feed_obstacle()
@@ -553,7 +604,7 @@ class CPackedNewTopicTests(ModelCase):
         self.assertTrue(self.button("estop")["enabled"])
 
     def test_c_packed_state_is_v2_with_distance_fields(self):
-        self.assertEqual((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]), (60, 2))
+        self.assertIn((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]), ((60, 2), (72, 3)))
         self.feed("state_idle")
         self.assertEqual(self.rows("wheels")["Distance left / right / average"], "0 / 0 / 0 mm")
         self.assertTrue(self.button("start")["enabled"])
@@ -563,32 +614,76 @@ class ReservedTopicTests(ModelCase):
     def test_not_implemented_until_data_arrives(self):
         self.assertEqual(self.panel("imu")["note"], "not implemented: no data on robot/imu yet")
         self.assertTrue(self.panel("imu")["placeholder"])
-        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+        for label in ("Decoded command", "Confidence", "Direction", "Navigation command",
+                      "Result", "Detected / decoded / unreadable", "Command issued / executed"):
+            self.assertEqual(self.rows("barcode")[label], "not implemented yet")
         self.feed("state_idle")
         self.assertEqual(self.rows("barcode")["Raw GP28 sample"], 777)
         self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
 
-    def test_data_is_acknowledged_but_not_decoded(self):
-        self.model.ingest("robot/barcode", bytes([1, 3, 9, 9]))
-        self.model.ingest("robot/imu", bytes([1, 1, 0, 0, 0, 0]))
-        self.assertEqual(self.rows("barcode")["Decoded command"],
-                         "data received (kind 3, 4 bytes); decoder not implemented")
-        imu = self.panel("imu")
-        self.assertFalse(imu["placeholder"])
-        self.assertEqual(imu["rows"][0]["value"],
-                         "data received (kind 1, 6 bytes); decoder not implemented")
-        self.assertFalse(imu["stale"])
+    def test_barcode_layout_once_data_arrives(self):
+        self.model.ingest("robot/barcode", barcode())
+        rows = self.rows("barcode")
+        self.assertEqual(rows["Detected / decoded / unreadable"], "yes / yes / yes")
+        self.assertEqual(rows["Decoded command"], "code 5 (raw)")
+        self.assertEqual(rows["Confidence"], "3 of 4 reads agree")
+        self.assertEqual((rows["Direction"], rows["Navigation command"], rows["Result"]),
+                         ("forward", "9 (raw)", "-45 (raw)"))
+        self.assertEqual(rows["Command issued / executed"], "no / no")
+        self.assertEqual(rows["Report"], "#12 at robot uptime 777 ms")
+        self.model.ingest("robot/barcode", barcode(flags=0b11011, direction=2))
+        rows = self.rows("barcode")
+        self.assertEqual((rows["Command issued / executed"], rows["Direction"]),
+                         ("yes / yes", "reverse"))
+
+    def test_barcode_age_comes_from_its_own_topic(self):
+        self.model.ingest("robot/barcode", barcode())
+        self.assertEqual(self.panel("barcode")["age_ms"], 0)
+        self.assertFalse(self.panel("barcode")["stale"])
+        self.clock.advance(1500)
+        self.feed("state_idle")
+        self.assertTrue(self.panel("barcode")["stale"])
+
+    def test_imu_layout_once_data_arrives(self):
+        self.model.ingest("robot/imu", imu_snapshot())
+        panel = self.panel("imu")
+        rows = self.rows("imu")
+        self.assertFalse(panel["placeholder"])
+        self.assertEqual((rows["Pitch (raw)"], rows["Heading (raw)"], rows["Turn rate (raw)"]),
+                         (3, 200, 250))
+        self.assertEqual((rows["Hump state (raw)"], rows["Height (raw)"], rows["Peak (raw)"]),
+                         (2, 7, 9))
+        self.assertEqual((rows["Collision"], rows["Sample valid"]), ("yes", "yes"))
+        self.assertEqual(rows["Sample age or sequence (raw)"], 0xBEEF)
+        self.assertEqual(rows["Motion event"], "not implemented yet")
+        self.assertIn("units are not fixed", panel["note"])
+        self.assertFalse(panel["stale"])
         self.clock.advance(1500)
         self.assertTrue(self.panel("imu")["stale"])
 
-    def test_unknown_versions_are_ignored_not_counted_as_errors(self):
+    def test_imu_motion_events_alone_and_with_a_snapshot(self):
+        self.model.ingest("robot/imu", imu_event(event=4, sequence=5, uptime=99))
+        rows = self.rows("imu")
+        self.assertEqual(rows["Motion event"], "climbing #5 at robot uptime 99 ms")
+        self.assertEqual(rows["Pitch"], "not implemented yet")
+        self.assertFalse(self.panel("imu")["placeholder"])
+        self.model.ingest("robot/imu", imu_snapshot())
+        self.model.ingest("robot/imu", imu_event(event=6, sequence=6, uptime=120))
+        rows = self.rows("imu")
+        self.assertEqual(rows["Motion event"], "impact #6 at robot uptime 120 ms")
+        self.assertEqual(rows["Pitch (raw)"], 3)  # the snapshot is kept
+
+    def test_unknown_versions_and_kinds_are_ignored_not_counted_as_errors(self):
         self.model.ingest("robot/barcode", bytes([2, 1, 5]))
         self.model.ingest("robot/imu", bytes([9, 1, 5]))
-        self.assertEqual((self.model.ignored_reserved, self.model.snapshot()["discarded"]), (2, 0))
+        self.model.ingest("robot/imu", bytes([1, 9, 5, 5]))
+        self.assertEqual((self.model.ignored_reserved, self.model.snapshot()["discarded"]), (3, 0))
         self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
         self.assertTrue(self.panel("imu")["placeholder"])
         self.model.ingest("robot/imu", b"\x01")  # too short to read a header
-        self.assertEqual(self.model.snapshot()["discarded"], 1)
+        self.model.ingest("robot/barcode", barcode()[:-1])  # known frame, wrong size
+        self.assertEqual(self.model.snapshot()["discarded"], 2)
+        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
 
 
 class RobotStatusTests(ModelCase):
@@ -672,6 +767,385 @@ class RobotStatusTests(ModelCase):
         self.assertEqual(link.sent, [])
         self.assertEqual(commander.send("estop", None)[0], 200)
         self.assertEqual(len(link.sent), 1)
+
+
+class DutyAndOdometryTests(ModelCase):
+    def test_wheels_panel_shows_duty_from_state_v3(self):
+        self.model.ingest("robot/state", state_v3(duty=(-250, 1000)))
+        self.assertEqual(self.rows("wheels")["PWM duty left / right"], "-25.0 % / +100.0 %")
+        self.model.ingest("robot/state", state_v3(duty=(5, -1)))
+        self.assertEqual(self.rows("wheels")["PWM duty left / right"], "+0.5 % / -0.1 %")
+        self.assertEqual(self.rows("wheels")["Distance left / right / average"],
+                         "1500 / 1700 / 1600 mm")
+
+    def test_older_states_say_that_duty_is_not_reported(self):
+        self.model.ingest("robot/state", state_v2())
+        self.assertEqual(self.rows("wheels")["PWM duty left / right"],
+                         "not reported (old state version)")
+
+    def test_odometry_before_data(self):
+        panel = self.panel("odometry")
+        self.assertEqual((panel["age_ms"], panel["note"]), (None, "waiting for robot/state"))
+
+    def test_odometry_heading_dial_turn_rate_and_distance(self):
+        self.model.ingest("robot/state", state_v3(heading=-4500, rate=-123, dist=(10, 30, 20)))
+        panel = self.panel("odometry")
+        rows = self.rows("odometry")
+        self.assertEqual(rows["Heading (left +, since boot)"], "-45.00 deg")
+        self.assertEqual(rows["Heading on the dial"], "315.00 deg")
+        self.assertEqual(rows["Turn rate (left +)"], "-12.3 deg/s")
+        self.assertEqual((rows["Distance average"], rows["Distance left / right"]),
+                         ("20 mm", "10 / 30 mm"))
+        self.assertIn("encoder-derived", rows["Source"])
+        self.assertIn("encoder-derived", panel["title"])
+        self.assertEqual(panel["chart"], {"type": "dial", "heading_deg": 315.0,
+                                          "turn_rate_dps": -12.3})
+        self.assertEqual(panel["age_ms"], 8)  # the motion board age in the C sample
+        self.assertEqual((rows["IMU heading (raw)"], rows["IMU turn rate (raw)"]),
+                         ("not implemented yet", "not implemented yet"))
+
+    def test_heading_wraps_both_ways(self):
+        cases = {0: 0.0, 36050: 0.5, -1: 359.99, 36000: 0.0, -36000: 0.0, 2 ** 31 - 1: 116.47,
+                 -2 ** 31: 243.52}
+        for cdeg, dial in cases.items():
+            self.model.ingest("robot/state", state_v3(heading=cdeg))
+            self.assertAlmostEqual(self.panel("odometry")["chart"]["heading_deg"], dial,
+                                   places=2, msg=str(cdeg))
+            self.assertTrue(0 <= self.panel("odometry")["chart"]["heading_deg"] < 360)
+
+    def test_imu_values_appear_beside_the_encoder_values_for_comparison(self):
+        self.model.ingest("robot/state", state_v3())
+        self.model.ingest("robot/imu", imu_snapshot(heading=77, rate=88))
+        rows = self.rows("odometry")
+        self.assertEqual((rows["IMU heading (raw)"], rows["IMU turn rate (raw)"]), (77, 88))
+        self.assertEqual(rows["Heading (left +, since boot)"], "-45.00 deg")
+
+    def test_old_state_has_no_heading(self):
+        self.model.ingest("robot/state", state_v2())
+        panel = self.panel("odometry")
+        rows = self.rows("odometry")
+        self.assertIsNone(panel["chart"])
+        self.assertEqual(rows["Heading and turn rate"], "not reported (old state version)")
+        self.assertEqual(rows["Distance average"], "1600 mm")
+        self.model.ingest("robot/state", b"\x01" + SAMPLES["state_idle"][1:48])
+        self.assertEqual(self.rows("odometry")["Distance"], "not reported (old state version)")
+
+    def test_odometry_goes_stale_with_the_state(self):
+        self.model.ingest("robot/state", state_v3())
+        self.assertFalse(self.panel("odometry")["stale"])
+        self.clock.advance(1100)
+        self.assertTrue(self.panel("odometry")["stale"])
+
+
+class DetourTests(ModelCase):
+    def rows_of_table(self):
+        return self.panel("obstacle")["table"]["rows"]
+
+    def test_table_columns_and_one_row_per_detour(self):
+        self.model.ingest("robot/detour", detour())
+        table = self.panel("obstacle")["table"]
+        self.assertEqual(table["columns"], ["Detour", "Side", "Outcome", "Duration", "Distance",
+                                            "Max offset", "Scan"])
+        self.assertEqual(table["rows"], [[4, "right", "done, line found", "2.50 s", "1200 mm",
+                                          "340 mm", 9]])
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 0)
+
+    def test_every_outcome_and_payload_meaning(self):
+        cases = ((3, 0, 0, "done, line found"),
+                 (4, 1, 1, "done, no line (search left)"),
+                 (4, 2, 2, "done, no line (search right)"),
+                 (4, 0, 0, "done, no line (search unknown)"),
+                 (7, 2, 1, "FAILED: both sides blocked"), (7, 1, 2, "FAILED: turn limit reached"),
+                 (7, 1, 3, "FAILED: took too long"), (7, 1, 4, "FAILED: ultrasonic fault"),
+                 (7, 1, 5, "FAILED: echo too near"), (7, 1, 6, "FAILED: no line found"),
+                 (7, 1, 0, "FAILED: none"), (7, 1, 99, "FAILED: unknown (99)"),
+                 (8, 1, 0, "aborted (run ended)"))
+        for sequence, (outcome, side, payload, text) in enumerate(cases, start=1):
+            self.model.ingest("robot/detour", detour(outcome=outcome, side=side, payload=payload,
+                                                     sequence=sequence))
+            self.assertEqual(self.rows_of_table()[0][2], text)
+        self.assertEqual(self.rows_of_table()[0][1], "right")
+
+    def test_side_texts(self):
+        for side, text in ((0, "none"), (1, "right"), (2, "left")):
+            self.model.ingest("robot/detour", detour(side=side, sequence=side + 1))
+            self.assertEqual(self.rows_of_table()[0][1], text)
+
+    def test_offset_not_measured_and_unknown_scan(self):
+        self.model.ingest("robot/detour", detour(flags=0, lateral=0, scan=0))
+        row = self.rows_of_table()[0]
+        self.assertEqual((row[5], row[6]), ("not measured", "unknown"))
+        self.model.ingest("robot/detour", detour(flags=0, lateral=500, sequence=5))
+        # A value sent while the valid flag is off must not show.
+        self.assertEqual(self.rows_of_table()[0][5], "not measured")
+
+    def test_newest_first_and_history_limit(self):
+        for sequence in range(1, 13):
+            self.model.ingest("robot/detour", detour(sequence=sequence))
+        rows = self.rows_of_table()
+        self.assertEqual([row[0] for row in rows], list(range(12, 4, -1)))
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 0)
+
+    def test_sequence_gaps_are_counted_and_a_restart_is_not_a_gap(self):
+        for sequence in (1, 2, 5, 9):
+            self.model.ingest("robot/detour", detour(sequence=sequence))
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 2 + 3)
+        self.model.ingest("robot/detour", detour(sequence=1))
+        self.model.ingest("robot/detour", detour(sequence=2))
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 5)
+        self.model.ingest("robot/detour", detour(sequence=2))  # a repeated sequence
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 5)
+        self.model.ingest("robot/detour", detour(sequence=3))
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 5)
+
+    def test_panel_works_with_detours_but_without_a_scan_and_with_both(self):
+        self.model.ingest("robot/detour", detour())
+        panel = self.panel("obstacle")
+        self.assertIsNone(panel["chart"])
+        self.assertEqual(panel["age_ms"], 0)
+        self.assertNotIn("Closest", self.rows("obstacle"))
+        self.model.ingest("robot/obstacle", obstacle(flags=0b0001 | 2 << 4))
+        panel = self.panel("obstacle")
+        self.assertEqual(panel["chart"]["type"], "obstacle")
+        self.assertEqual(self.rows("obstacle")["Scan stage"], "fine")
+        self.assertEqual(len(panel["table"]["rows"]), 1)
+
+    def test_obstacle_age_uses_the_newest_scan_or_detour(self):
+        self.model.ingest("robot/detour", detour())
+        self.clock.advance(2000)
+        self.model.ingest("robot/obstacle", obstacle())
+        self.assertEqual(self.panel("obstacle")["age_ms"], 0)
+        self.clock.advance(1000)
+        self.model.ingest("robot/detour", detour(sequence=5))
+        self.assertEqual(self.panel("obstacle")["age_ms"], 0)
+
+    def test_scan_stage_texts(self):
+        for stage, text in ((0, "not reported"), (1, "coarse"), (2, "fine")):
+            self.model.ingest("robot/obstacle", obstacle(flags=0b0001 | stage << 4, scan=stage))
+            self.assertEqual(self.rows("obstacle")["Scan stage"], text)
+
+    def test_no_table_before_a_detour_and_the_panel_never_goes_grey(self):
+        self.model.ingest("robot/obstacle", obstacle())
+        self.assertIsNone(self.panel("obstacle")["table"])
+        self.model.ingest("robot/detour", detour())
+        self.clock.advance(60000)
+        panel = self.panel("obstacle")
+        self.assertFalse(panel["stale"])
+        self.assertEqual(panel["age_ms"], 60000)
+
+    def test_bad_detour_is_discarded(self):
+        self.model.ingest("robot/detour", detour(outcome=5))
+        self.model.ingest("robot/detour", detour()[:-1])
+        self.assertEqual(self.model.snapshot()["discarded"], 2)
+        self.assertIsNone(self.panel("obstacle")["table"])
+
+
+class SummaryTests(ModelCase):
+    def test_before_any_run(self):
+        panel = self.panel("summary")
+        self.assertEqual((panel["age_ms"], panel["rows"]), (None, []))
+        self.assertIn("appears when a run ends", panel["note"])
+
+    def test_rows_of_a_finished_run(self):
+        self.model.ingest("robot/summary", summary(), retained=False)
+        rows = self.rows("summary")
+        self.assertEqual((rows["Run ID"], rows["Stop source"], rows["Stop reason"]),
+                         (2, "GP21 button", "GP21 button"))
+        self.assertEqual((rows["Started (robot uptime)"], rows["Duration"]),
+                         ("5.00 s", "60.00 s"))
+        self.assertEqual(rows["Distance (path length)"], "8000 mm")
+        self.assertEqual((rows["Line losses"], rows["Obstacles seen"]), (3, 2))
+        self.assertEqual(rows["Detours started / done / succeeded"], "3 / 2 / 1")
+        self.assertEqual(rows["Detour time in total"], "7.00 s")
+        self.assertEqual(rows["Max speed error"], "45 mm/s")
+        self.assertEqual(rows["Motion faults seen"], "stall left, ESTOP")
+        self.assertEqual(rows["Shell fault"], "module failed (detail 6)")
+        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]),
+                         ("not implemented yet", "not implemented yet"))
+        self.assertNotIn("Detour", rows)
+        self.assertNotIn("retained", self.panel("summary")["note"])
+
+    def test_stop_texts(self):
+        cases = ((0, 0, "none or unknown", "unknown"), (2, 2, "MQTT ESTOP", "MQTT ESTOP command"),
+                 (3, 5, "fault", "vehicle deadline missed"), (4, 3, "time limit", "90 s limit"),
+                 (3, 12, "fault", "other"), (3, 4, "fault", "shell left RUNNING"))
+        for run, (source, reason, source_text, reason_text) in enumerate(cases, start=1):
+            self.model.ingest("robot/summary", summary(source=source, reason=reason, run=run))
+            rows = self.rows("summary")
+            self.assertEqual((rows["Stop source"], rows["Stop reason"]),
+                             (source_text, reason_text))
+            self.assertEqual(rows["Run ID"], run)
+
+    def test_all_stop_reasons_have_a_name(self):
+        for reason in range(13):
+            self.model.ingest("robot/summary", summary(reason=reason))
+            self.assertNotIn("unknown (", self.rows("summary")["Stop reason"])
+
+    def test_speed_error_not_measured(self):
+        self.model.ingest("robot/summary", summary(flags=0, speed_error=45))  # flag off
+        self.assertEqual(self.rows("summary")["Max speed error"], "not measured")
+        self.model.ingest("robot/summary", summary(flags=0b010, speed_error=0xFFFF))
+        self.assertEqual(self.rows("summary")["Max speed error"], "not measured")
+        self.model.ingest("robot/summary", summary(flags=0b010, speed_error=0))
+        self.assertEqual(self.rows("summary")["Max speed error"], "0 mm/s")
+
+    def test_shell_and_motion_faults(self):
+        self.model.ingest("robot/summary", summary(shell=0, shell_detail=0, motion_faults=0))
+        rows = self.rows("summary")
+        self.assertEqual((rows["Shell fault"], rows["Motion faults seen"]), ("none", "none"))
+        self.model.ingest("robot/summary", summary(shell=1, shell_detail=3, motion_faults=0x0F))
+        rows = self.rows("summary")
+        self.assertEqual(rows["Shell fault"], "safety (motor fault bits) (detail 3)")
+        self.assertEqual(rows["Motion faults seen"], "stall left, stall right, ESTOP, "
+                                                     "stale command")
+        self.model.ingest("robot/summary", summary(motion_faults=0x30))
+        self.assertEqual(self.rows("summary")["Motion faults seen"], "unknown bits 0x30")
+
+    def test_aborted_detour_row(self):
+        self.model.ingest("robot/summary", summary(flags=0b110))
+        self.assertIn("Detour", self.rows("summary"))
+        self.assertIn("still running", self.rows("summary")["Detour"])
+
+    def test_reserved_barcode_and_hump_fields_when_implemented(self):
+        self.model.ingest("robot/summary", summary(flags=0b011, barcode_ok=3, barcode_failed=1,
+                                                   hump=12))
+        rows = self.rows("summary")
+        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]), ("3 / 1", 12))
+        self.model.ingest("robot/summary", summary(flags=0b011, hump=0xFFFF))
+        self.assertEqual(self.rows("summary")["Hump peak"], "none")
+        # Values sent while the flag is off must not show as results.
+        self.model.ingest("robot/summary", summary(flags=0b010, barcode_ok=3, hump=12))
+        rows = self.rows("summary")
+        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]),
+                         ("not implemented yet", "not implemented yet"))
+
+    def test_retained_copy_is_labelled(self):
+        self.model.ingest("robot/summary", summary(), retained=True)
+        self.assertIn("retained copy", self.panel("summary")["note"])
+
+    def test_new_run_in_progress_labels_the_old_summary(self):
+        self.model.ingest("robot/summary", summary())
+        self.feed("state_running")
+        self.assertIn("previous run", self.panel("summary")["note"])
+        self.feed("state_idle")
+        self.assertNotIn("previous run", self.panel("summary")["note"])
+        self.feed("state_running")
+        self.clock.advance(2000)  # state is stale: do not claim a run is in progress
+        self.assertNotIn("previous run", self.panel("summary")["note"])
+
+    def test_never_stale_and_survives_a_broker_drop(self):
+        self.model.ingest("robot/summary", summary())
+        self.clock.advance(600000)
+        panel = self.panel("summary")
+        self.assertFalse(panel["stale"])
+        self.assertEqual(panel["age_ms"], 65535)  # age is capped like every other age
+        self.model.set_broker_connected(False)
+        self.assertEqual(self.rows("summary")["Run ID"], 2)
+
+    def test_newest_summary_replaces_the_old_one_and_bad_ones_are_discarded(self):
+        self.model.ingest("robot/summary", summary(run=1))
+        self.model.ingest("robot/summary", summary(run=2))
+        self.assertEqual(self.rows("summary")["Run ID"], 2)
+        self.model.ingest("robot/summary", summary(run=3)[:-1])
+        self.model.ingest("robot/summary", summary(source=9, run=4))
+        self.assertEqual((self.model.snapshot()["discarded"], self.rows("summary")["Run ID"]),
+                         (2, 2))
+
+
+class CpuAndJunctionTests(ModelCase):
+    def cpu_text(self):
+        return self.rows("health")["CPU load"]
+
+    def test_cpu_load_texts(self):
+        self.model.ingest("robot/heartbeat", heartbeat_v(2, 123))
+        self.assertEqual(self.cpu_text(), "12.3 %")
+        self.model.ingest("robot/heartbeat", heartbeat_v(2, 0))
+        self.assertEqual(self.cpu_text(), "0.0 %")
+        self.model.ingest("robot/heartbeat", heartbeat_v(2, 1000))
+        self.assertEqual(self.cpu_text(), "100.0 %")
+        self.model.ingest("robot/heartbeat", heartbeat_v(2, 0xFFFF))
+        self.assertEqual(self.cpu_text(), "not available")
+
+    def test_old_heartbeat_has_no_cpu(self):
+        self.model.ingest("robot/heartbeat", heartbeat_v(1))
+        self.assertEqual(self.cpu_text(), "not reported (old heartbeat)")
+        self.assertEqual(self.rows("health")["Wi-Fi"], "up")  # the other rows still work
+
+    def test_bad_cpu_value_discards_the_heartbeat(self):
+        self.model.ingest("robot/heartbeat", heartbeat_v(2, 1001))
+        self.assertEqual(self.model.snapshot()["discarded"], 1)
+        self.assertIsNone(self.model.heartbeat)
+
+    def test_junction_event_is_listed_with_its_reserved_name(self):
+        frame = bytearray(SAMPLES["event_run_end"])
+        frame[1] = 7
+        self.model.ingest("robot/event", bytes(frame))
+        self.assertEqual(self.model.snapshot()["discarded"], 0)
+        items = self.panel("events")["items"]
+        self.assertEqual(len(items), 1)
+        self.assertIn("junction (reserved)", items[0]["text"])
+        frame[1] = 8
+        self.model.ingest("robot/event", bytes(frame))
+        self.assertEqual(self.model.snapshot()["discarded"], 1)
+        self.assertEqual(len(self.panel("events")["items"]), 1)
+
+    def test_junction_event_does_not_touch_command_decisions(self):
+        frame = bytearray(SAMPLES["event_start_ok"])
+        frame[1] = 7
+        self.model.ingest("robot/event", bytes(frame))
+        self.assertIsNone(self.model.last_decision)
+
+
+class BatchTwoCFixtureTests(ModelCase):
+    def test_c_state_v3_duty_and_odometry(self):
+        self.feed("state_v3")
+        rows = self.rows("wheels")
+        self.assertEqual(rows["PWM duty left / right"], "-80.0 % / +3276.7 %")
+        rows = self.rows("odometry")
+        self.assertEqual(rows["Heading (left +, since boot)"], "-12345.67 deg")
+        self.assertEqual(rows["Turn rate (left +)"], "-474.9 deg/s")
+        self.assertEqual(rows["Distance average"], "-7 mm")
+        self.assertAlmostEqual(self.panel("odometry")["chart"]["heading_deg"], 254.33)
+
+    def test_c_heartbeat_cpu(self):
+        self.feed("heartbeat_v2")
+        self.assertEqual(self.rows("health")["CPU load"], "29.1 %")
+        self.feed("heartbeat_v2_unknown")
+        self.assertEqual(self.rows("health")["CPU load"], "not available")
+
+    def test_c_detour_outcomes_and_opposite_side_enums(self):
+        cases = (("done_line", "done, line found", "4660 mm"),
+                 ("done_no_line", "done, no line (search left)", "4660 mm"),
+                 ("failed", "FAILED: took too long", "not measured"),
+                 ("aborted", "aborted (run ended)", "4660 mm"))
+        for suffix, outcome, offset in cases:
+            self.feed("detour_" + suffix)
+            row = self.panel("obstacle")["table"]["rows"][0]
+            self.assertEqual(row, [0x01020304, "left", outcome, "0.03 s",
+                                   f"{0xA1B2C3D4} mm", offset, 0x0A0B0C0D])
+
+    def test_c_run_summaries(self):
+        self.model.ingest("robot/summary", SAMPLES["summary_normal"], retained=True)
+        rows = self.rows("summary")
+        self.assertEqual((rows["Run ID"], rows["Duration"], rows["Distance (path length)"]),
+                         (0x01020304, "61.23 s", "4321 mm"))
+        self.assertEqual(rows["Max speed error"], "41 mm/s")
+        self.assertEqual(rows["Motion faults seen"], "stall left, stale command")
+        self.assertEqual(rows["Shell fault"], "no module (detail 258)")
+        self.assertEqual(rows["Barcode ok / failed"], "not implemented yet")
+        self.assertIn("retained copy", self.panel("summary")["note"])
+        self.feed("summary_aborted_detour")
+        self.assertEqual(self.rows("summary")["Stop source"], "MQTT ESTOP")
+        self.assertIn("still running", self.rows("summary")["Detour"])
+        self.feed("summary_no_speed_error")
+        rows = self.rows("summary")
+        self.assertEqual((rows["Stop source"], rows["Stop reason"], rows["Max speed error"]),
+                         ("time limit", "90 s limit", "not measured"))
+
+    def test_c_junction_event(self):
+        self.feed("event_junction")
+        self.assertIn("#20 junction (reserved)", self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
 
 
 class CommanderTests(unittest.TestCase):
@@ -948,6 +1422,8 @@ class PageTests(unittest.TestCase):
         self.assertEqual(script.count("innerHTML"), 1)  # one static template, no data in it
         self.assertIn('id="banner"', __import__("dashboard_page").PAGE)
         self.assertIn("obstacle(canvas, chart)", script)
+        self.assertIn("dial(canvas, chart)", script)
+        self.assertIn("renderGrid", script)
         for command in ("estop", "dump", "start", "calibrate"):
             self.assertIn(f'data-command="{command}"', __import__("dashboard_page").PAGE)
 
@@ -1011,7 +1487,8 @@ class PahoLinkTests(unittest.TestCase):
         self.assertEqual(dict(subscribe), {"robot/state": 0, "robot/sonar": 0, "robot/event": 0,
                                            "robot/heartbeat": 0, "robot/log": 1,
                                            "robot/obstacle": 0, "robot/status": 1,
-                                           "robot/barcode": 1, "robot/imu": 0})
+                                           "robot/barcode": 1, "robot/imu": 0,
+                                           "robot/detour": 0, "robot/summary": 1})
         self.assertTrue(link.publish(b"payload", 3))
         self.assertIn(("publish", "robot/cmd", b"payload", 1, False), calls)
         link._on_message(None, None, types.SimpleNamespace(topic="robot/state",
