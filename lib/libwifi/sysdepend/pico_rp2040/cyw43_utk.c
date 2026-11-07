@@ -279,6 +279,7 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #endif
 
     for(;;) {
+        cyw43_utk_poll_begin();
 #if TM_NET_LWIP
         cyw43_thread_enter();
         if(cyw43_poll != NULL) cyw43_poll();
@@ -341,6 +342,7 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         }
 #endif
 #endif
+        cyw43_utk_poll_end();
         (void)tk_dly_tsk(CYW43_POLL_MS);
     }
 }
