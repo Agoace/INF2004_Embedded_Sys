@@ -269,7 +269,7 @@ static void test_reverse_math(void) {
           "1240 counts each side is short: phase %u", ss.phase);
     in.counts[0] = 2000 - 1241;
     in.counts[1] = -2000 - 1241;
-    CHECK(step(&ss, ss_step, &in, 20u, &d) == 0u && ss.phase == SS_CENTRE_SETTLE &&
+    CHECK(step(&ss, ss_step, &in, 20u, &d) == 0u && ss.phase == SS_WAIT &&
               ss.notice == SS_NOTICE_REVERSE_END && d.left_mm_s == 0 && d.right_mm_s == 0,
           "1241 counts mean ends reverse: phase %u notice %u", ss.phase, ss.notice);
     ss.phase = SS_REVERSE;
@@ -278,12 +278,20 @@ static void test_reverse_math(void) {
     ss.reverse_origin[1] = 0;
     in.counts[0] = -2482;
     in.counts[1] = 0;
-    CHECK(step(&ss, ss_step, &in, 30u, &d) == 0u && ss.phase == SS_CENTRE_SETTLE,
+    CHECK(step(&ss, ss_step, &in, 30u, &d) == 0u && ss.phase == SS_WAIT,
           "mean of both wheels, not each wheel: phase %u", ss.phase);
+    CHECK(step(&ss, ss_step, &in, 329u, &d) == 0u && ss.phase == SS_WAIT &&
+              d.left_mm_s == 0 && d.servo_deg == 0 && ping == 0u,
+          "settle after reverse: phase %u", ss.phase);
+    ss.attempt = 1u;
+    CHECK(step(&ss, ss_step, &in, 330u, &d) == 0u && ss.phase == SS_SETTLE &&
+              ss.notice == SS_NOTICE_RESCAN_BEGIN && d.servo_deg == -30,
+          "rescan starts a full sweep: phase %u notice %u servo %d", ss.phase,
+          ss.notice, d.servo_deg);
 }
 
 static vsm_outcome_t run_reattempts(ss_t *ss, unsigned int free_after, int *bad,
-                                    unsigned int *notices, unsigned int *centre_pings) {
+                                    unsigned int *notices, unsigned int *wait_pings) {
     vsm_inputs_t in = {0, VC_EVENT_NONE, {0, 0}, false, 0u, &ping, false};
     vsm_drive_t d = {0};
     int32_t milli[2] = {0, 0};
@@ -292,7 +300,7 @@ static vsm_outcome_t run_reattempts(ss_t *ss, unsigned int free_after, int *bad,
     unsigned int completed = 0u;
     *bad = 0;
     *notices = 0u;
-    *centre_pings = 0u;
+    *wait_pings = 0u;
     ss_start(ss, 0u, 0u);
     for (uint32_t t = 0u; t < 30000u; t += 10u) {
         in.ping_sent = in_flight;
@@ -312,8 +320,9 @@ static vsm_outcome_t run_reattempts(ss_t *ss, unsigned int free_after, int *bad,
         if (o != 0u) {
             return o;
         }
-        if (before_phase == SS_CENTRE_MEASURE && in.ping_sent) {
-            ++*centre_pings;
+        /* After a reverse the robot settles before the sweep: no pings. */
+        if (before_phase == SS_WAIT && (in.ping_sent || ping != 0u)) {
+            ++*wait_pings;
         }
         if (ss->phase == SS_REVERSE) {
             if (d.left_mm_s != -SS_REVERSE_MM_S || d.right_mm_s != -SS_REVERSE_MM_S ||
@@ -324,8 +333,7 @@ static vsm_outcome_t run_reattempts(ss_t *ss, unsigned int free_after, int *bad,
             ++*bad;
         }
         reverse_wheels(in.counts, milli, &d);
-        at = (ss->phase == SS_CENTRE_MEASURE) ? OBSTACLE_SCAN_CENTRE_INDEX
-                                               : (unsigned int)((d.servo_deg + 30) / 5);
+        at = (unsigned int)((d.servo_deg + 30) / 5);
         in_flight = ping == VSM_PING_ASAP;
     }
     ++*bad;
@@ -337,20 +345,21 @@ static void test_reattempts(void) {
     ss_init(&ss, &SS);
     int bad;
     unsigned int notices;
-    unsigned int centre;
-    vsm_outcome_t o = run_reattempts(&ss, 1u, &bad, &notices, &centre);
+    unsigned int wait_pings;
+    vsm_outcome_t o = run_reattempts(&ss, 1u, &bad, &notices, &wait_pings);
     CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_LEFT, 200u)) && bad == 0 &&
               ss.completed_scans == 2u && ss.completed_attempt == 1u && ss.scans == 2u &&
-              notices == ((1u << 4u) | (2u << 2u) | 3u) && centre == 2u,
-          "blocked->reverse->free: out 0x%x bad %d scans %u attempt %u notices 0x%x centre %u",
-          o, bad, ss.completed_scans, ss.completed_attempt, notices, centre);
+              notices == ((1u << 4u) | (2u << 2u) | 3u) && wait_pings == 0u,
+          "blocked->reverse->free: out 0x%x bad %d scans %u attempt %u notices 0x%x "
+          "wait pings %u", o, bad, ss.completed_scans, ss.completed_attempt, notices,
+          wait_pings);
     ss_init(&ss, &SS);
-    o = run_reattempts(&ss, 9u, &bad, &notices, &centre);
+    o = run_reattempts(&ss, 9u, &bad, &notices, &wait_pings);
     CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_NONE, 200u)) && bad == 0 &&
               ss.completed_scans == 3u && ss.completed_attempt == SS_MAX_REATTEMPTS &&
-              ss.attempt == SS_MAX_REATTEMPTS && centre == 4u,
-          "three blocked: out 0x%x bad %d scans %u attempt %u centre %u", o, bad,
-          ss.completed_scans, ss.completed_attempt, centre);
+              ss.attempt == SS_MAX_REATTEMPTS && wait_pings == 0u && ss.scans == 3u,
+          "three blocked: out 0x%x bad %d scans %u attempt %u wait pings %u", o, bad,
+          ss.completed_scans, ss.completed_attempt, wait_pings);
 
     ss_start(&ss, 0u, 0u);
     ss.phase = SS_REVERSE;
@@ -372,7 +381,7 @@ static void test_reattempts(void) {
     in.counts[0] = -1241;
     in.counts[1] = -1241;
     o = step(&ss, ss_step, &in, SS_REVERSE_TIMEOUT_MS, &d);
-    CHECK(o == 0u && ss.phase == SS_CENTRE_SETTLE,
+    CHECK(o == 0u && ss.phase == SS_WAIT,
           "distance reached on timeout tick: 0x%x phase %u", o, ss.phase);
 }
 

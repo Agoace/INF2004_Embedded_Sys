@@ -168,7 +168,8 @@ static void publish_obstacle(const ss_t *scan)
     obstacle_report_make(&scan->profile, scan->word, side, obstacle_scans,
                          drv_time_ms(), &report);
     report.flags = (uint8_t)(report.flags |
-                             ((uint8_t)scan->completed_attempt << RM_OBSTACLE_ATTEMPT_SHIFT));
+                             ((uint8_t)scan->completed_attempt
+                              << RM_OBSTACLE_ATTEMPT_SHIFT));
     app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
                       sizeof(report));
 }
@@ -179,7 +180,8 @@ static void scan_retry_event(const ss_t *scan)
     const uint16_t word = (uint16_t)(scan->attempt |
                                      ((uint16_t)RM_SCAN_RETRY_NO_SIDE << 8u));
 
-    live_event(RM_EVENT_SCAN_RETRY, VSM_MOD_SCAN, VSM_MOD_SCAN, word, scan->notice);
+    live_event(RM_EVENT_SCAN_RETRY, VSM_MOD_SCAN, VSM_MOD_SCAN, word,
+               scan->notice);
     if (scan->notice == SS_NOTICE_REVERSE_BEGIN) {
         rs_scan_reattempt(&run_stats);
     }
@@ -727,6 +729,8 @@ static void save_row(uint32_t now, const motion_status_t *s,
                      const vsm_drive_t *d, ultrasonic_result_t echo,
                      uint8_t bits)
 {
+    const bool reversing =
+        (vsm.running == VSM_MOD_SCAN) && (ss.phase == SS_REVERSE);
     const vr_values_t v = {.elapsed_ms = now - run_start,
                            .raw = {raw[0], raw[1]},
                            .echo = echo,
@@ -735,9 +739,8 @@ static void save_row(uint32_t now, const motion_status_t *s,
                            .position = lp.position,
                            .servo = d->servo_deg,
                            .state = vsm.state,
-                           .module = (vsm.running == VSM_MOD_SCAN && ss.phase == SS_REVERSE)
-                                         ? VR_MODULE_SCAN_REVERSE
-                                         : vsm.running,
+                           .module = reversing ? VR_MODULE_SCAN_REVERSE
+                                               : vsm.running,
                            .events = bits};
     vr_row_t row;
     vr_pack(&row, &v);
@@ -960,9 +963,11 @@ static void run_once(void)
             last_log = now;
         }
         if (vsm.state != VSM_RUNNING) {
-            if (vsm.fault == VSM_FAULT_FAILED && module_before == VSM_MOD_SCAN &&
-                vsm.fault_detail == SS_FAIL_REVERSE_TIMEOUT) {
-                set_reason(RM_STOP_SCAN_REVERSE_TIMEOUT, "scan reverse timed out");
+            if ((vsm.fault == VSM_FAULT_FAILED) &&
+                (module_before == VSM_MOD_SCAN) &&
+                (vsm.fault_detail == SS_FAIL_REVERSE_TIMEOUT)) {
+                set_reason(RM_STOP_SCAN_REVERSE_TIMEOUT,
+                           "scan reverse timed out");
             } else {
                 set_reason(RM_STOP_SHELL, "shell left RUNNING");
             }

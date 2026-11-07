@@ -232,10 +232,12 @@ bool rs_run_end(rs_t *rs, uint32_t now_ms, uint8_t stop_reason,
         was_open = true;
     }
     memset(summary, 0, sizeof(*summary));
+    const uint32_t retries = (uint32_t)rs->scan_reattempts
+                             << RM_SUMMARY_SCAN_REATTEMPT_SHIFT;
+
     summary->flags =
         (uint8_t)((rs->speed_error_valid ? RM_SUMMARY_SPEED_ERROR_VALID : 0u) |
-                  (was_open ? RM_SUMMARY_DETOUR_ABORTED : 0u) |
-                  ((uint32_t)rs->scan_reattempts << RM_SUMMARY_SCAN_REATTEMPT_SHIFT));
+                  (was_open ? RM_SUMMARY_DETOUR_ABORTED : 0u) | retries);
     summary->stop_source = rs_stop_source(stop_reason);
     summary->stop_reason = stop_reason;
     summary->run_id = rs->runs;

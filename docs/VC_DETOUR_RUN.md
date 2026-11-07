@@ -36,7 +36,7 @@ These are the routes of `VSM_DEFAULT_ROUTES`; nothing new in the shell.
 
 | Module | Does | Outcomes |
 | --- | --- | --- |
-| SCAN | Wheels 0, servo centre for 300 ms. Then 13 points (30° right to 30° left, 5° steps), 2 readings per point, the settle times of the old scan (150 ms first, 60 ms per step, 150 ms back to the centre). Builds the PROFILE word. If the side is NONE and fewer than 2 reattempts ran: servo centre, reverse 100 mm at 100 mm/s, stop 300 ms, take 2 fresh centre readings, then scan again. Each completed profile is published | SIDE: payload bits 0–8 nearest distance, bits 9–10 `obstacle_side_t`; NONE only after 3 blocked profiles. FAILED 1: echo fault streak; FAILED 2: reverse leg timeout (3 s) |
+| SCAN | Wheels 0, servo centre for 300 ms. Then 13 points (30° right to 30° left, 5° steps), 2 readings per point, the settle times of the old scan (150 ms first, 60 ms per step, 150 ms back to the centre). Builds the PROFILE word. If the side is NONE and fewer than 2 reattempts ran: servo centre, reverse 100 mm at 100 mm/s, stop and settle 300 ms, then a new full sweep. Each completed profile is published | SIDE: payload bits 0–8 nearest distance, bits 9–10 `obstacle_side_t`; NONE only after 3 blocked profiles. FAILED 1: echo fault streak; FAILED 2: reverse leg timeout (3 s) |
 | DETOUR | Runs `obstacle_detour.c` unchanged. Command word → wheel speeds (table below). At DONE: resets the line memory, waits one step stopped, then decides | DONE_LINE; DONE_NO_LINE (payload: side to search, toward the obstacle); FAILED (payload `dt_fail_t`) |
 
 The old scan `src/obstacle_scan.c` calls `servo.c` itself and cannot
@@ -102,8 +102,10 @@ profile and side rules are unchanged. The added states are:
 | State | Drive | Exit |
 | --- | --- | --- |
 | REVERSE | Servo 0; both wheels `-SS_REVERSE_MM_S` (-100 mm/s), through `VSM_ACT_SPEED` | Mean encoder movement reaches 1241 counts back: 100 mm at 12414 counts/m. A 3 s timeout gives FAILED 2 and the shell stops the motors. |
-| CENTRE_SETTLE | Wheels 0, servo 0 for 300 ms | Settled |
-| CENTRE_MEASURE | Wheels 0, servo 0, two pings | Starts a new full 13-point sweep |
+| WAIT | Wheels 0, servo 0 for 300 ms (the same settle as the first scan) | Starts a new full 13-point sweep |
+
+No separate centre reading is taken. The full sweep measures 0 degrees, and
+the nearest point of the new profile is the distance that DETOUR receives.
 
 The attempt counter uses two logical bits: 0 initial, 1 first retry, 2 second
 retry. `SS_MAX_REATTEMPTS` is 2, so there are at most three complete profiles.
