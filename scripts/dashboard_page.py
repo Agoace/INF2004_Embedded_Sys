@@ -78,6 +78,7 @@ button.armed { background:var(--warn); color:#000; }
 .note { color:var(--dim); font-style:italic; }
 canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin-top:6px; }
 #panel-ultrasonic canvas { height:350px; }
+#panel-line canvas, #panel-wheels canvas { height:240px; }
 .visual-summary { font-size:17px; font-weight:700; margin:8px 0; }
 .legend { font-size:12px; color:var(--dim); margin-top:6px; }
 @media(max-width:800px) { #panel-ultrasonic canvas { height:300px; } }
@@ -212,7 +213,45 @@ function drawSonar(canvas, chart) {
   ctx.fillText("LEFT (+)",10,h-10); ctx.fillText("ROBOT · 0 mm",cx-40,h-7);
   ctx.fillText("RIGHT (−)",w-80,h-10);
 }
+function bounded(value, low, high) { return Math.max(low,Math.min(high,value)); }
+function drawLine(canvas, chart) {
+  const ctx=setup(canvas), w=canvas.width, h=canvas.height, f=chart.state;
+  ctx.fillStyle="#a3aebc"; ctx.fillText("0 floor → 1000 line",12,20);
+  [["L",f.norm_l],["C",f.norm_c]].forEach(([label,value],i) => {
+    const y=45+i*50; ctx.fillStyle="#dce4ee";
+    ctx.fillText(label + "  " + value,12,y);
+    ctx.fillStyle="#2d3847"; ctx.fillRect(12,y+8,w-24,15);
+    ctx.fillStyle="#7fc9ff"; ctx.fillRect(12,y+8,(w-24)*bounded(value,0,1000)/1000,15);
+  });
+  const y=h-57, x=18+(w-36)*(bounded(f.kr1_position,-100,100)+100)/200;
+  ctx.strokeStyle="#748494"; ctx.beginPath(); ctx.moveTo(18,y); ctx.lineTo(w-18,y); ctx.stroke();
+  ctx.fillStyle=f.line_valid ? "#59d878" : "#ff7066";
+  ctx.beginPath(); ctx.arc(x,y,7,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle="#dce4ee"; ctx.fillText("position " + f.kr1_position +
+    (f.line_valid ? " · valid" : " · NOT VALID"),12,h-23);
+  ctx.fillStyle="#a3aebc"; ctx.fillText("−100",12,y-13); ctx.fillText("0",w/2-3,y-13);
+  ctx.fillText("+100",w-45,y-13);
+}
+function drawDrive(canvas, chart) {
+  const ctx=setup(canvas), w=canvas.width, h=canvas.height, f=chart.state;
+  const scale=(w/2-24)/500;
+  ctx.fillStyle="#a3aebc"; ctx.fillText("signed mm/s · 0 at centre",12,20);
+  [["LEFT",f.kr1_asked_l,f.kr1_measured_l],["RIGHT",f.kr1_asked_r,f.kr1_measured_r]]
+    .forEach(([label,asked,measured],i) => {
+      const y=45+i*90; ctx.fillStyle="#dce4ee"; ctx.fillText(label,12,y);
+      ctx.fillStyle="#2d3847"; ctx.fillRect(12,y+10,w-24,42);
+      [[asked,"#7bbcff",y+13],[measured,"#59d878",y+33]].forEach(([value,colour,top]) => {
+        const length=bounded(value,-500,500)*scale;
+        ctx.fillStyle=colour; ctx.fillRect(Math.min(w/2,w/2+length),top,Math.abs(length),13);
+      });
+      ctx.strokeStyle="#91a1b4"; ctx.beginPath(); ctx.moveTo(w/2,y+8); ctx.lineTo(w/2,y+55);ctx.stroke();
+      ctx.fillStyle="#dce4ee";ctx.fillText("asked " + asked + " / measured " + measured,12,y+72);
+    });
+  ctx.fillStyle="#a3aebc";ctx.fillText("blue asked · green measured · bars capped ±500",12,h-8);
+}
 const CHART_RENDERERS = {
+  sensors: drawLine,
+  drive: drawDrive,
   fan: drawSonar,
   dial(canvas, chart) {
     // Heading dial: 0 is straight ahead at the top; left (anticlockwise) is positive.
@@ -421,6 +460,9 @@ function render(snapshot) {
         "rings: last profile samples, green free (NO_RETURN or ≥nearest+150 mm), red blocked, ? unknown · gold: nearest. " +
         "Distances >511 mm clipped. Beam cone ≈ ±20° (approximate, measured 2026-11-07). " +
         "Profile dots are received samples, not reconstructed geometry.");
+    } else if ((panel.id === "line" || panel.id === "wheels") && view.state &&
+               Object.keys(view.state).length) {
+      renderPanel({...panel, chart:{type:panel.id === "line" ? "sensors" : "drive", state:view.state}});
     } else renderPanel(panel);
   });
   if (snapshot.last_command) {

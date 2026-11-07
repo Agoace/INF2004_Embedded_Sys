@@ -2078,6 +2078,16 @@ class RedesignPageTests(AppCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
 
+    def test_line_and_drive_use_numeric_state_and_signed_speed(self):
+        self.model.ingest("robot/state", SAMPLES["state_running"])
+        trace = self.trace(views=[["panel-wheels", ".title"]])
+        self.assertEqual(trace["views"][0]["text"], "DRIVE")
+        labels = [c[1] for c in trace["canvasCalls"] if c[0] == "fillText"]
+        self.assertIn("0 floor → 1000 line", labels)
+        self.assertTrue(any(str(v).startswith("asked ") for v in labels))
+        self.assertIn("signed mm/s · 0 at centre", labels)
+        self.assertTrue(any("position " in str(v) for v in labels))
+
     def test_fan_coordinates_put_positive_angles_on_left(self):
         v = self.trace(["sonarPoint(30, 100, 200, 200, 1)",
                         "sonarPoint(-30, 100, 200, 200, 1)"])["values"]
