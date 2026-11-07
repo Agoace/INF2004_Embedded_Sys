@@ -13,7 +13,18 @@ typedef int err_t;
 typedef enum { MQTT_CONNECT_ACCEPTED=0,MQTT_CONNECT_REFUSED_SERVER=3,
     MQTT_CONNECT_DISCONNECTED=256,MQTT_CONNECT_TIMEOUT=257 } mqtt_connection_status_t;
 typedef struct { int connected; } mqtt_client_t;
-struct mqtt_connect_client_info_t { const char *client_id;u16_t keep_alive; };
+/* Same field order as the SDK lwIP mqtt.h (without the TLS member). */
+struct mqtt_connect_client_info_t {
+    const char *client_id;
+    const char *client_user;
+    const char *client_pass;
+    u16_t keep_alive;
+    const char *will_topic;
+    const char *will_msg;
+    u8_t will_msg_len;
+    u8_t will_qos;
+    u8_t will_retain;
+};
 typedef void (*mqtt_connection_cb_t)(mqtt_client_t *,void *,mqtt_connection_status_t);
 typedef void (*mqtt_request_cb_t)(void *,err_t);
 typedef void (*mqtt_incoming_publish_cb_t)(void *,const char *,u32_t);

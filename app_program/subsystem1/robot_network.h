@@ -36,6 +36,9 @@ void robot_network_metrics(rm_heartbeat_t *out);
  * No lwIP calls in any provider; no provider may wait for a sensor task. */
 void robot_network_state(rm_state_t *out);
 int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed);
+/* Newest obstacle report if its scan_id differs from *cursor. E_OK new,
+ * E_NOEXS nothing new, other negative values: board busy. */
+int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out);
 void robot_health_collect(rm_heartbeat_t *out);
 /* Vehicle posts a single pending dump request. No lwIP or logging waits. */
 int robot_network_dump(uint32_t request_id);

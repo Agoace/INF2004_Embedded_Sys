@@ -16,6 +16,20 @@
 #include "../platform/drv_time.h"
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define RETRY_MS 3000u
+
+/*
+ * Connection liveness. The broker drops a silent client after 1.5 times the
+ * keep-alive time, then publishes the will message (robot/status offline).
+ * lwIP checks the timer every 5 s, so the value is a multiple of 5.
+ * 5 s gives about 7.5 s detection. While the robot publishes, TCP
+ * acknowledgements reset the timer and no PINGREQ is sent.
+ */
+#define KEEPALIVE_S       5u
+#define STATUS_RETRY_MS   500u
+#define TOPIC_STATUS      "robot/status"
+#define TOPIC_OBSTACLE    "robot/obstacle"
+#define QOS_AT_LEAST_ONCE 1u
+#define RETAIN_ON         1u
 static mqtt_client_t *client;
 static ip_addr_t broker;
 static bool configured;
@@ -41,6 +55,12 @@ static rm_event_t pending_event;
 static bool have_event;
 static rm_sonar_t pending_sonar;
 static bool have_sonar;
+static uint32_t obstacle_cursor;
+static rm_obstacle_t pending_obstacle;
+static bool have_obstacle;
+static bool status_pending;
+static uint32_t status_retry_at;
+static uint8_t will_payload[RM_STATUS_SIZE];
 
 static void inc(uint32_t *value)
 {
@@ -104,6 +124,14 @@ int __attribute__((weak)) robot_network_sonar(uint32_t *cursor, rm_sonar_t *out,
     (void)out;
     *missed = 0u;
     return E_TMOUT;
+}
+
+int __attribute__((weak)) robot_network_obstacle(uint32_t *cursor,
+                                                 rm_obstacle_t *out)
+{
+    (void)cursor;
+    (void)out;
+    return E_NOEXS;
 }
 
 void robot_network_metrics(rm_heartbeat_t *out)
@@ -209,6 +237,8 @@ static void connection_done(mqtt_client_t *c, void *arg,
         metrics.mqtt_state = 2u;
         mqtt_set_inpub_callback(client, incoming_publish, incoming_data, NULL);
         subscribe_at = drv_time_ms();
+        status_pending = true;
+        status_retry_at = subscribe_at;
         state_at = subscribe_at;
         heartbeat_at = subscribe_at;
     } else {
@@ -218,6 +248,41 @@ static void connection_done(mqtt_client_t *c, void *arg,
         /* lwIP mqtt_close deletes pending requests WITHOUT callbacks: the log
          * streams rewind to their acknowledged cursors and live jumps. */
         log_stream_link_down();
+    }
+}
+
+/*
+ * Acknowledgement of the retained "online" status. A failure or timeout makes
+ * the service publish it again. A dropped link deletes the request without a
+ * callback, but every new connection publishes the status again.
+ */
+static void status_done(void *arg, err_t error)
+{
+    (void)arg;
+    if (error != ERR_OK) {
+        status_pending = true;
+        status_retry_at = drv_time_ms() + STATUS_RETRY_MS;
+        inc(&metrics.publish_failed);
+    }
+}
+
+/* Publish the retained "online" status once per connection (QoS 1). */
+static void service_status(uint32_t now)
+{
+    uint8_t bytes[RM_STATUS_SIZE];
+    err_t error;
+
+    if (!status_pending || !due(now, status_retry_at)) {
+        return;
+    }
+    rm_pack_status(bytes, RM_STATUS_ONLINE);
+    error = mqtt_publish(client, TOPIC_STATUS, bytes, RM_STATUS_SIZE,
+                         QOS_AT_LEAST_ONCE, RETAIN_ON, status_done, NULL);
+    inc(error == ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
+    if (error == ERR_OK) {
+        status_pending = false;
+    } else {
+        status_retry_at = now + STATUS_RETRY_MS;
     }
 }
 
@@ -260,6 +325,7 @@ static int log_publish(const uint8_t *data, size_t length, uint8_t qos,
 static void service(uint32_t now)
 {
     unsigned int budget = 4u;
+    service_status(now);
     if (!subscribed && !subscribe_pending && due(now, subscribe_at)) {
         subscribe_pending = true;
         if (mqtt_subscribe(client, "robot/cmd", 1u, subscription_done, NULL) !=
@@ -320,6 +386,18 @@ static void service(uint32_t now)
         }
         --budget;
     }
+    if (!have_obstacle && (budget > 0u)) {
+        have_obstacle =
+            robot_network_obstacle(&obstacle_cursor, &pending_obstacle) >= E_OK;
+    }
+    if (have_obstacle && (budget > 0u)) {
+        uint8_t bytes[RM_OBSTACLE_SIZE];
+        rm_pack_obstacle(bytes, &pending_obstacle);
+        if (publish(TOPIC_OBSTACLE, bytes, sizeof(bytes))) {
+            have_obstacle = false;
+        }
+        --budget;
+    }
     for (unsigned int n = 0u; n < 2u && budget > 0u; ++n) {
         if (!have_sonar) {
             uint32_t missed = 0u;
@@ -373,8 +451,15 @@ void cyw43_utk_app_poll(void)
                 client = mqtt_client_new();
             }
             if (client != NULL) {
+                rm_pack_status(will_payload, RM_STATUS_OFFLINE);
                 const struct mqtt_connect_client_info_t info = {
-                    .client_id = ROBOT_MQTT_CLIENT_ID, .keep_alive = 30u};
+                    .client_id = ROBOT_MQTT_CLIENT_ID,
+                    .keep_alive = KEEPALIVE_S,
+                    .will_topic = TOPIC_STATUS,
+                    .will_msg = (const char *)will_payload,
+                    .will_msg_len = RM_STATUS_SIZE,
+                    .will_qos = QOS_AT_LEAST_ONCE,
+                    .will_retain = RETAIN_ON};
                 connecting = true;
                 metrics.mqtt_state = 1u;
                 inc(&metrics.connect_attempts);

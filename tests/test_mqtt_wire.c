@@ -66,15 +66,60 @@ static void test_batch_packer(void) {
         .publish_ms=5u,.newest_ms=0xfffffff0u,.log_rows=6u};
     emit_batch("wrap",&header,records);
 }
+static int64_t reference_average(int32_t a, int32_t b)
+{
+    return ((int64_t)a + (int64_t)b) / 2; /* C99: truncates toward zero */
+}
+static void test_average(void)
+{
+    static const int32_t edge[] = {INT32_MIN, INT32_MIN + 1, -100001, -3, -2, -1, 0, 1, 2, 3,
+        100001, INT32_MAX - 1, INT32_MAX};
+    for (unsigned int i = 0u; i < sizeof(edge) / sizeof(edge[0]); ++i) {
+        for (unsigned int j = 0u; j < sizeof(edge) / sizeof(edge[0]); ++j) {
+            assert(rm_average_mm(edge[i], edge[j]) == (int32_t)reference_average(edge[i], edge[j]));
+        }
+    }
+    for (int32_t a = -40; a <= 40; ++a) {
+        for (int32_t b = -40; b <= 40; ++b) {
+            assert(rm_average_mm(a, b) == (int32_t)reference_average(a, b));
+        }
+    }
+}
+static void test_obstacle_status(void)
+{
+    uint8_t bytes[RM_OBSTACLE_SIZE];
+    const rm_obstacle_t value = {.flags = 0x0fu, .decision = 2u, .closest_angle_deg = -30,
+        .scan_id = 0x01020304u, .uptime_ms = 0xfffffff0u, .closest_mm = 0x01feu,
+        .profile_word = 0x5a5au, .right_free_step = 7u, .left_free_step = 3u,
+        .right_clear_deg = 255u, .left_clear_deg = 15u};
+    rm_pack_obstacle(bytes, &value);
+    assert(bytes[0] == 1u && bytes[1] == 0x0fu && bytes[2] == 2u && bytes[3] == 226u);
+    assert(bytes[4] == 4u && bytes[7] == 1u && bytes[8] == 0xf0u && bytes[11] == 0xffu);
+    assert(bytes[12] == 0xfeu && bytes[13] == 1u && bytes[14] == 0x5au && bytes[15] == 0x5au);
+    assert(bytes[16] == 7u && bytes[17] == 3u && bytes[18] == 255u && bytes[19] == 15u);
+    emit("obstacle", bytes, RM_OBSTACLE_SIZE);
+    uint8_t status[RM_STATUS_SIZE];
+    rm_pack_status(status, RM_STATUS_ONLINE);
+    assert(status[0] == 1u && status[1] == 1u);
+    emit("status_online", status, RM_STATUS_SIZE);
+    rm_pack_status(status, RM_STATUS_OFFLINE);
+    assert(status[0] == 1u && status[1] == 2u); /* neither byte is 0x00 */
+    emit("status_offline", status, RM_STATUS_SIZE);
+}
 int main(void) {
     test_batch_packer();
+    test_average();
+    test_obstacle_status();
     uint8_t bytes[RM_HEARTBEAT_SIZE];
     const rm_state_t state={.flags=0xffu,.state=0x13u,.module=0x25u,.motion_faults=0x81u,
         .uptime_ms=0x12345678u,.sequence=0xfedcba98u,.line_age_ms=10u,.motion_age_ms=20u,
         .vehicle_age_ms=65535u,.raw_bc=0xfabcu,.kr1={1u,2u,3u,4u},
-        .count_l=INT32_MIN,.count_r=-1234567,.norm_l=0xffffu,.norm_c=0x555u};
+        .count_l=INT32_MIN,.count_r=-1234567,.norm_l=0xffffu,.norm_c=0x555u,
+        .dist_left_mm=-123456,.dist_right_mm=INT32_MAX,.dist_avg_mm=-7};
     rm_pack_state(bytes,&state);
-    assert(bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
+    assert(bytes[0]==2u && bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
+    assert(bytes[48]==0xc0u && bytes[49]==0x1du && bytes[50]==0xfeu && bytes[51]==0xffu);
+    assert(bytes[52]==0xffu && bytes[55]==0x7fu && bytes[56]==0xf9u && bytes[59]==0xffu);
     emit("state",bytes,RM_STATE_SIZE);
     const rm_sonar_t sonar={.status=0xfdu,.valid=true,.pending=true,.angle=-30,.ping_angle=30,
         .history_sequence=0xffffffffu,.generation=0x12345678u,.request_id=33u,

@@ -59,6 +59,7 @@ void mock_ei(UINT irq);
 #define TWF_ORW 1u
 #define TWF_BITCLR 0x20u
 #define E_TMOUT (-50)
+#define E_NOEXS (-42)
 typedef int SZ;
 typedef struct { FP task; PRI itskpri; SZ stksz; UW tskatr; void *bufptr; UW assprc; } T_CTSK;
 typedef struct { UW mbfatr; SZ bufsz; INT maxmsz; void *bufptr; } T_CMBF;

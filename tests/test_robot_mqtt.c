@@ -63,7 +63,9 @@ u8_t mqtt_client_is_connected(mqtt_client_t *client) { assert(in_hook && client=
 err_t mqtt_client_connect(mqtt_client_t *client,const ip_addr_t *address,u16_t port,
     mqtt_connection_cb_t callback,void *arg,const struct mqtt_connect_client_info_t *info) {
     assert(in_hook && !irq_off && client==&mqtt_client && address->addr==0xc000020au && port==1883u);
-    assert(strcmp(info->client_id,"inf2004-robot")==0 && info->keep_alive==30u);
+    assert(strcmp(info->client_id,"inf2004-robot")==0 && info->keep_alive==5u);
+    assert(strcmp(info->will_topic,"robot/status")==0 && info->will_msg_len==2u && info->will_qos==1u && info->will_retain==1u);
+    assert((uint8_t)info->will_msg[0]==1u && (uint8_t)info->will_msg[1]==2u);
     ++connect_count;connection_callback=callback;connection_arg=arg;return connect_result;
 }
 void mqtt_set_inpub_callback(mqtt_client_t *client,mqtt_incoming_publish_cb_t publish,
@@ -74,9 +76,11 @@ err_t mqtt_subscribe(mqtt_client_t *client,const char *topic,u8_t qos,mqtt_reque
     assert(in_hook && !irq_off && client==&mqtt_client && strcmp(topic,"robot/cmd")==0 && qos==1u);
     ++subscribe_count;subscribe_callback=callback;subscribe_arg=arg;return subscribe_result;
 }
+static bool payload_is_online(const void *payload) { const uint8_t *b=payload;return b[0]==1u && b[1]==1u; }
 err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u16_t length,
     u8_t qos,u8_t retain,mqtt_request_cb_t callback,void *arg) {
-    assert(in_hook && !irq_off && client==&mqtt_client && length<=RM_LOG_BATCH_MAX_SIZE && retain==0u);
+    assert(in_hook && !irq_off && client==&mqtt_client && length<=RM_LOG_BATCH_MAX_SIZE);
+    assert((strcmp(topic,"robot/status")==0) == (retain==1u));
     assert(publication_count<256u);
     publication_t *record=&publications[publication_count++];
     *record=(publication_t){.topic=topic,.length=length,.qos=qos,.callback=callback,.arg=arg};
@@ -85,6 +89,8 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
     if (strcmp(topic,"robot/log")==0) {
         /* Live rows are QoS 0 without a callback; DUMP frames are QoS 1. */
         assert((qos==0u && callback==NULL) || (qos==1u && callback!=NULL));
+    } else if (strcmp(topic,"robot/status")==0) {
+        assert(qos==1u && length==RM_STATUS_SIZE && callback!=NULL && payload_is_online(payload));
     } else assert(qos==0u);
     return record->result;
 }
@@ -94,6 +100,14 @@ int robot_network_sonar(uint32_t *cursor,rm_sonar_t *value,uint32_t *missed) {
     if (sonar_busy) return E_OBJ;
     if (sonar_tail==sonar_head) return E_TMOUT;
     *value=sonar[sonar_tail++];*cursor=value->history_sequence;return E_OK;
+}
+static rm_obstacle_t obstacles[4];static unsigned int obstacle_head,obstacle_tail;
+static bool obstacle_busy;static unsigned int obstacle_reads;
+int robot_network_obstacle(uint32_t *cursor,rm_obstacle_t *value) {
+    assert(in_hook && !irq_off);++obstacle_reads;
+    if (obstacle_busy) return E_TMOUT;
+    if (obstacle_tail==obstacle_head) return E_NOEXS;
+    *value=obstacles[obstacle_tail++];*cursor=value->scan_id;return E_OK;
 }
 int robot_event_pop(rm_event_t *value) {
     assert(in_hook);++event_reads;
@@ -218,6 +232,61 @@ static void test_unconfigured_commands(void) {
     data[1]=5u;deliver("robot/cmd",data,RM_COMMAND_SIZE,3u,RM_COMMAND_SIZE);
     assert(commands_received==2u && command_lost==6u);
 }
+static void test_status(void) {
+    /* The will is checked in the connect mock. Online follows each CONNACK. */
+    poll_at(0u);assert(connect_count==1u && count_topic("robot/status")==0u);
+    connected(MQTT_CONNECT_ACCEPTED);
+    fail_topic="robot/status";failures_left=1u;
+    poll_at(0u);assert(count_topic("robot/status")==1u && last_topic("robot/status")->result==ERR_MEM);
+    poll_at(499u);assert(count_topic("robot/status")==1u);
+    poll_at(500u);assert(count_topic("robot/status")==2u && last_topic("robot/status")->result==ERR_OK);
+    poll_at(1000u);assert(count_topic("robot/status")==2u); /* accepted: no repeat */
+    /* An acknowledgement error publishes online again after 500 ms. */
+    publication_t *status=last_topic("robot/status");
+    status->callback(status->arg,ERR_ABRT);
+    poll_at(1000u);assert(count_topic("robot/status")==2u);
+    poll_at(1500u);assert(count_topic("robot/status")==3u);
+    status=last_topic("robot/status");status->callback(status->arg,ERR_OK);
+    poll_at(3000u);assert(count_topic("robot/status")==3u);
+    /* Reconnect: the link drop deleted pending requests without callbacks. */
+    connected(MQTT_CONNECT_DISCONNECTED);
+    poll_at(5999u);assert(connect_count==1u);
+    poll_at(6000u);assert(connect_count==2u);
+    connected(MQTT_CONNECT_ACCEPTED);poll_at(6000u);
+    assert(count_topic("robot/status")==4u && u32(last_topic("robot/status")->data)==0x0101u);
+    /* Status goes out before any other robot data on a connection. */
+    unsigned int first_status=0u,first_state=0u;
+    for (unsigned int i=publication_count;i>0u;--i) {
+        if (strcmp(publications[i-1u].topic,"robot/status")==0 && first_status==0u) first_status=i;
+        if (strcmp(publications[i-1u].topic,"robot/state")==0 && first_state==0u) first_state=i;
+    }
+    assert(first_status!=0u && first_status<first_state);
+    /* Detection time: broker drops a silent client at 1.5 x keep-alive. */
+    assert(5u*3u/2u==7u && 5u%5u==0u); /* lwIP cyclic timer is 5 s; 7.5 s truncates to 7 */
+}
+static void test_obstacle(void) {
+    start_connected();
+    assert(count_topic("robot/obstacle")==0u);
+    obstacles[obstacle_head++]=(rm_obstacle_t){.scan_id=1u,.uptime_ms=1234u,.closest_mm=222u,.decision=2u,.flags=RM_OBSTACLE_CLOSEST_VALID,.closest_angle_deg=-10};
+    poll_at(10u);
+    publication_t *report=last_topic("robot/obstacle");
+    assert(report && report->length==RM_OBSTACLE_SIZE && report->qos==0u);
+    assert(report->data[0]==1u && report->data[2]==2u && u32(report->data+4)==1u && u32(report->data+8)==1234u);
+    assert(count_topic("robot/obstacle")==1u);
+    poll_at(11u);assert(count_topic("robot/obstacle")==1u); /* once per report */
+    /* A failed publish keeps the report and retries on the next poll. */
+    obstacles[obstacle_head++]=(rm_obstacle_t){.scan_id=2u};
+    fail_topic="robot/obstacle";failures_left=1u;poll_at(12u);
+    assert(count_topic("robot/obstacle")==2u && last_topic("robot/obstacle")->result==ERR_MEM);
+    poll_at(13u);assert(count_topic("robot/obstacle")==3u && last_topic("robot/obstacle")->result==ERR_OK);
+    assert(u32(last_topic("robot/obstacle")->data+4)==2u);
+    poll_at(14u);assert(count_topic("robot/obstacle")==3u);
+    /* A busy board is retried; nothing is published or lost. */
+    obstacles[obstacle_head++]=(rm_obstacle_t){.scan_id=5u}; /* ids 3,4 were overwritten */
+    obstacle_busy=true;poll_at(15u);assert(count_topic("robot/obstacle")==3u);
+    obstacle_busy=false;poll_at(16u);assert(count_topic("robot/obstacle")==4u);
+    assert(u32(last_topic("robot/obstacle")->data+4)==5u);
+}
 static void test_schedule(void) {
     start_connected();
     assert(count_topic("robot/state")==1u && count_topic("robot/heartbeat")==1u);
@@ -292,6 +361,7 @@ static void test_retained(void) {
     assert(value.sonar_busy==1u && value.mqtt_hook_max_us>0u);
 }
 /* Acknowledge every unacknowledged QoS 1 log frame, oldest first. */
+static bool is_log_qos1(const publication_t *r) { return strcmp(r->topic,"robot/log")==0 && r->qos==1u; }
 static unsigned int acked_upto;
 static unsigned int acknowledge_all(err_t error) {
     unsigned int n=0u;
@@ -343,32 +413,32 @@ static void test_log_dump(bool fail_ack) {
     poll_at(150u);
     rm_heartbeat_t value={0};robot_network_metrics(&value);assert((value.flags&8u)!=0u);
     publication_t *begin=NULL;
-    for (unsigned int i=0u;i<publication_count;++i) if (publications[i].qos==1u) begin=&publications[i];
+    for (unsigned int i=0u;i<publication_count;++i) if (is_log_qos1(&publications[i])) begin=&publications[i];
     assert(begin && begin->length==RM_LOG_SIZE && begin->data[1]==RM_LOG_BEGIN);
     assert(u32(begin->data+4)==500u && u32(begin->data+8)==7u && u32(begin->data+16)==2u && u32(begin->data+20)==1u);
     ram_index.rows+=50u; /* appended after the snapshot: excluded */
     poll_at(200u);assert(count_topic("robot/log")>=1u);
     unsigned int qos1=0u;
-    for (unsigned int i=0u;i<publication_count;++i) if (publications[i].qos==1u) ++qos1;
+    for (unsigned int i=0u;i<publication_count;++i) if (is_log_qos1(&publications[i])) ++qos1;
     assert(qos1==1u); /* waits for the BEGIN acknowledgement */
     assert(acknowledge_all(fail_ack ? ERR_ABRT : ERR_OK)==1u);
     if (fail_ack) {
         poll_at(220u);poll_at(250u); /* retry delay 50 ms, then BEGIN again */
-        qos1=0u;for (unsigned int i=0u;i<publication_count;++i) if (publications[i].qos==1u) ++qos1;
+        qos1=0u;for (unsigned int i=0u;i<publication_count;++i) if (is_log_qos1(&publications[i])) ++qos1;
         assert(qos1==2u);assert(acknowledge_all(ERR_OK)==1u);
     }
     bool end_seen=false;
     for (unsigned int step=0u;step<20u && !end_seen;++step) {
         poll_at(300u+step*10u);
         for (unsigned int i=0u;i<publication_count;++i) {
-            if (publications[i].qos==1u && publications[i].data[1]==RM_LOG_END) end_seen=true;
+            if (is_log_qos1(&publications[i]) && publications[i].data[1]==RM_LOG_END) end_seen=true;
         }
         (void)acknowledge_all(ERR_OK);
     }
     assert(end_seen);
     publication_t *rows=NULL,*event_batch=NULL,*end=NULL;
     for (unsigned int i=0u;i<publication_count;++i) {
-        if (publications[i].qos!=1u) continue;
+        if (!is_log_qos1(&publications[i])) continue;
         if (publications[i].data[1]==RM_LOG_ROWS) rows=&publications[i];
         if (publications[i].data[1]==RM_LOG_EVENTS) event_batch=&publications[i];
         if (publications[i].data[1]==RM_LOG_END) end=&publications[i];
@@ -383,7 +453,7 @@ static void test_log_disconnect(void) {
     start_connected();
     assert(robot_network_dump(900u)==E_OK);poll_at(50u);
     unsigned int qos1=0u;
-    for (unsigned int i=0u;i<publication_count;++i) if (publications[i].qos==1u) ++qos1;
+    for (unsigned int i=0u;i<publication_count;++i) if (is_log_qos1(&publications[i])) ++qos1;
     assert(qos1==1u);
     /* Actual SDK mqtt_close frees pending requests WITHOUT their callbacks. */
     connected(MQTT_CONNECT_DISCONNECTED);
@@ -391,7 +461,7 @@ static void test_log_disconnect(void) {
     poll_at(3050u);assert(connect_count==2u);connected(MQTT_CONNECT_ACCEPTED);
     poll_at(3100u);subscribe_callback(subscribe_arg,ERR_OK);
     poll_at(3200u);
-    qos1=0u;for (unsigned int i=0u;i<publication_count;++i) if (publications[i].qos==1u) ++qos1;
+    qos1=0u;for (unsigned int i=0u;i<publication_count;++i) if (is_log_qos1(&publications[i])) ++qos1;
     assert(qos1==2u && last_topic("robot/log")!=NULL); /* BEGIN sent again */
     assert(acknowledge_all(ERR_OK)==2u || true);
 }
@@ -406,6 +476,8 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"health_stalled")) test_health_stalled();
     else if (!strcmp(argv[1],"health_missing")) test_health_missing();
                 else if (!strcmp(argv[1],"unconfigured")) test_unconfigured_commands();
+    else if (!strcmp(argv[1],"status")) test_status();
+    else if (!strcmp(argv[1],"obstacle")) test_obstacle();
     else if (!strcmp(argv[1],"log_live")) test_log_live();
     else if (!strcmp(argv[1],"log_dump")) test_log_dump(false);
     else if (!strcmp(argv[1],"log_dump_ack_error")) test_log_dump(true);

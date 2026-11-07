@@ -34,6 +34,8 @@ int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *mis
     ++reads[4];*missed=0u;if (history_error<0) return history_error;
     *out=history_value;*cursor=history_value.sequence;*missed=3u;return E_OK;
 }
+static rm_obstacle_t obstacle_value;static int obstacle_error=E_NOEXS;
+int vehicle_obstacle_try_read(rm_obstacle_t *out) { if (obstacle_error<0) return obstacle_error;*out=obstacle_value;return E_OK; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
 static uint16_t row_bits(const uint8_t *row,unsigned int offset,unsigned int width) {
     uint16_t value=0u;
@@ -49,7 +51,7 @@ int main(void) {
     now_ms=100u;now_us=100000u;motion_us=80000u;
     line_value=(line_snapshot_t){.valid=true,.sequence=1u,.timestamp_us=90000u,.raw_bc=4095u,.raw={123u,456u,0u}};
     line_value.line.norm[0]=789u;line_value.line.norm[1]=987u;line_value.line.position=-25;
-    motion_value=(motion_status_t){.ticks=1u,.counts={-123456,234567},.speed_mm_s={-20,30},.faults=3u,.late_wakes=7u,.missed_wakes=8u};
+    motion_value=(motion_status_t){.ticks=1u,.counts={-123456,234567},.travel_mm={-9,22},.speed_mm_s={-20,30},.faults=3u,.late_wakes=7u,.missed_wakes=8u};
     vehicle_value=(vehicle_snapshot_t){.sequence=1u,.timestamp_us=70000u,.active=true,.state=2u,.module=3u,.servo_deg=-15,
         .left_mm_s=-40,.right_mm_s=50,.overruns=9u};
     sonar_value=(sonar_snapshot_t){.status=SONAR_ECHO,.valid=true,.timestamp_ms=0u,.echo=123u};
@@ -58,6 +60,7 @@ int main(void) {
     assert(value.line_age_ms==10u && value.motion_age_ms==20u && value.vehicle_age_ms==30u);
     assert(value.flags==143u && value.raw_bc==4095u && value.norm_l==789u && value.norm_c==987u);
     assert(value.count_l==-123456 && value.count_r==234567 && value.motion_faults==3u && value.state==2u && value.module==3u);
+    assert(value.dist_left_mm==-9 && value.dist_right_mm==22 && value.dist_avg_mm==6); /* (-9+22)/2 */
     assert(row_bits(value.kr1,93u,16u)==123u); /* Sonar age 100ms is included. */
     const rm_state_t retained=value;
     now_ms=101u;now_us=101000u;line_error=motion_error=vehicle_error=sonar_error=E_TMOUT;
@@ -120,5 +123,18 @@ int main(void) {
     assert(now_ms==1002u && !advance_line && !advance_sonar);
     assert(value.line_age_ms==1u && value.motion_age_ms==2u && value.vehicle_age_ms==2u && (value.flags&14u)==14u);
     assert(row_bits(value.kr1,93u,16u)==321u);
+    /* Obstacle adapter: new report only, gaps visible in scan_id, busy counted. */
+    {
+        uint32_t scan_cursor=0u;rm_obstacle_t out;
+        const unsigned int busy_before=busy[ROBOT_BOARD_VEHICLE];
+        obstacle_error=E_NOEXS;assert(robot_network_obstacle(&scan_cursor,&out)==E_NOEXS && scan_cursor==0u);
+        obstacle_error=E_TMOUT;assert(robot_network_obstacle(&scan_cursor,&out)==E_TMOUT);
+        assert(busy[ROBOT_BOARD_VEHICLE]==busy_before+1u);
+        obstacle_error=E_OK;obstacle_value=(rm_obstacle_t){.scan_id=4u,.closest_mm=300u};
+        assert(robot_network_obstacle(&scan_cursor,&out)==E_OK && scan_cursor==4u && out.closest_mm==300u);
+        assert(robot_network_obstacle(&scan_cursor,&out)==E_NOEXS && scan_cursor==4u); /* same report */
+        obstacle_value.scan_id=7u;
+        assert(robot_network_obstacle(&scan_cursor,&out)==E_OK && scan_cursor==7u && out.scan_id==7u); /* 5,6 missed */
+    }
     return 0;
 }

@@ -21,10 +21,23 @@ static uint32_t get32(const uint8_t *p)
            ((uint32_t)p[3] << 24);
 }
 
+int32_t rm_average_mm(int32_t left_mm, int32_t right_mm)
+{
+    /* Floor of the mean without overflow (GCC shifts negative values
+     * arithmetically). Then move a negative, inexact result up by one so the
+     * mean truncates toward zero. */
+    int32_t mean = (left_mm >> 1) + (right_mm >> 1) + (left_mm & right_mm & 1);
+
+    if ((mean < 0) && (((left_mm ^ right_mm) & 1) != 0)) {
+        ++mean;
+    }
+    return mean;
+}
+
 void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
 {
     memset(out, 0, RM_STATE_SIZE);
-    out[0] = RM_VERSION;
+    out[0] = RM_STATE_VERSION;
     out[1] = v->flags;
     out[2] = (uint8_t)((v->state & 15u) | ((v->module & 15u) << 4));
     out[3] = v->motion_faults;
@@ -39,6 +52,32 @@ void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
     put32(out + 40, (uint32_t)v->count_r);
     put32(out + 44, ((uint32_t)v->norm_l & 1023u) |
                         (((uint32_t)v->norm_c & 1023u) << 10));
+    put32(out + 48, (uint32_t)v->dist_left_mm);
+    put32(out + 52, (uint32_t)v->dist_right_mm);
+    put32(out + 56, (uint32_t)v->dist_avg_mm);
+}
+
+void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
+{
+    memset(out, 0, RM_OBSTACLE_SIZE);
+    out[0] = RM_VERSION;
+    out[1] = v->flags;
+    out[2] = v->decision;
+    out[3] = (uint8_t)v->closest_angle_deg;
+    put32(out + 4, v->scan_id);
+    put32(out + 8, v->uptime_ms);
+    put16(out + 12, v->closest_mm);
+    put16(out + 14, v->profile_word);
+    out[16] = v->right_free_step;
+    out[17] = v->left_free_step;
+    out[18] = v->right_clear_deg;
+    out[19] = v->left_clear_deg;
+}
+
+void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state)
+{
+    out[0] = RM_VERSION;
+    out[1] = state;
 }
 
 void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *v)

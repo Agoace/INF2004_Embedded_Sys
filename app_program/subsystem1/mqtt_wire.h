@@ -4,8 +4,12 @@
 #include <stddef.h>
 #include <stdint.h>
 #define RM_VERSION        1u
-#define RM_STATE_SIZE     48u
+#define RM_STATE_SIZE     60u
+/* robot/state is version 2: 48-byte v1 layout plus three distances. */
+#define RM_STATE_VERSION  2u
 #define RM_SONAR_SIZE     32u
+#define RM_OBSTACLE_SIZE  20u
+#define RM_STATUS_SIZE    2u
 #define RM_EVENT_SIZE     16u
 #define RM_HEARTBEAT_SIZE 100u
 #define RM_COMMAND_SIZE   22u
@@ -47,7 +51,40 @@ typedef struct {
     int32_t count_r;
     uint16_t norm_l;
     uint16_t norm_c;
+    int32_t dist_left_mm;
+    int32_t dist_right_mm;
+    int32_t dist_avg_mm;
 } rm_state_t;
+
+/* robot/status payload byte 1. Both values are non-zero on purpose. */
+enum {
+    RM_STATUS_ONLINE = 1,
+    RM_STATUS_OFFLINE = 2
+};
+
+/* robot/obstacle flags (byte 1). */
+enum {
+    RM_OBSTACLE_CLOSEST_VALID = 0x01,
+    RM_OBSTACLE_TOO_NEAR = 0x02,
+    RM_OBSTACLE_LEFT_BLOCKED = 0x04,
+    RM_OBSTACLE_RIGHT_BLOCKED = 0x08
+};
+
+/* One completed obstacle scan. Decision is obstacle_side_t: 0 none, 1 right,
+ * 2 left. Angles: negative right, positive left. */
+typedef struct {
+    uint8_t flags;
+    uint8_t decision;
+    int8_t closest_angle_deg;
+    uint32_t scan_id;
+    uint32_t uptime_ms;
+    uint16_t closest_mm;
+    uint16_t profile_word;
+    uint8_t right_free_step;
+    uint8_t left_free_step;
+    uint8_t right_clear_deg;
+    uint8_t left_clear_deg;
+} rm_obstacle_t;
 
 typedef struct {
     uint8_t status;
@@ -152,6 +189,10 @@ typedef struct {
  * above RM_LOG_BATCH_MAX_COUNT, or capacity too small. out is then unchanged. */
 size_t rm_pack_log_batch(uint8_t *out, size_t capacity,
                          const rm_log_batch_t *header, const uint8_t *records);
+/* Mean of two signed distances, truncated toward zero, no overflow. */
+int32_t rm_average_mm(int32_t left_mm, int32_t right_mm);
+void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v);
+void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state);
 void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *value);
 void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *value);
 void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *value);

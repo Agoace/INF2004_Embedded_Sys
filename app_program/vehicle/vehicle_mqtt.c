@@ -5,6 +5,7 @@
 #include "../app.h"
 #include "vehicle_board.h"
 #include "vehicle_log.h"
+#include "obstacle_report.h"
 #include "../subsystem1/robot_network.h"
 #include "../subsystem2/motion.h"
 #include "../subsystem3/line_service.h"
@@ -99,6 +100,9 @@ void robot_network_state(rm_state_t *out)
     out->norm_c = line.line.norm[1];
     out->count_l = motion.counts[0];
     out->count_r = motion.counts[1];
+    out->dist_left_mm = motion.travel_mm[MC_LEFT];
+    out->dist_right_mm = motion.travel_mm[MC_RIGHT];
+    out->dist_avg_mm = rm_average_mm(out->dist_left_mm, out->dist_right_mm);
     ultrasonic_result_t echo = ULTRASONIC_RESULT_NONE;
     if (s) {
         if (sonar.valid && sonar.status == SONAR_ECHO &&
@@ -145,6 +149,32 @@ int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed)
                         .timestamp_ms = s->timestamp_ms,
                         .echo = s->echo,
                         .ping_sequence = s->ping_sequence};
+    return E_OK;
+}
+
+/*
+ * Pull the newest obstacle report if it is new. The vehicle board holds only
+ * the last report, so a gap in scan_id shows missed reports.
+ * Returns E_OK for a new report (cursor moves to its scan_id), E_NOEXS if
+ * nothing is new, or an error if the board was busy.
+ */
+int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out)
+{
+    rm_obstacle_t report;
+    const int result = vehicle_obstacle_try_read(&report);
+
+    if (result == E_NOEXS) {
+        return E_NOEXS;
+    }
+    if (result < E_OK) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
+        return result;
+    }
+    if (report.scan_id == *cursor) {
+        return E_NOEXS;
+    }
+    *out = report;
+    *cursor = report.scan_id;
     return E_OK;
 }
 

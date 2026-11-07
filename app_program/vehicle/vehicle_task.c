@@ -13,6 +13,7 @@
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
 #include "vehicle_board.h"
+#include "obstacle_report.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
 #include "../subsystem1/network_queue.h"
@@ -52,6 +53,8 @@ static const char *reason = "no saved run";
 #if TM_MQTT
 static APP_BOARD(vehicle_snapshot_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
+static APP_BOARD(rm_obstacle_t) obstacle_board;
+static uint32_t obstacle_scans;
 static uint8_t pending_action;
 static uint32_t event_sequence;
 static uint32_t seen_commands[8];
@@ -105,6 +108,54 @@ int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
         return E_TMOUT;
     }
     *out = v;
+    return E_OK;
+}
+
+/*
+ * Publish the profile of a scan that has just completed. Called from the
+ * SCAN module wrapper, so it runs in the vehicle task at the moment the SIDE
+ * outcome is produced.
+ */
+static void publish_obstacle(const ss_t *scan)
+{
+    rm_obstacle_t report;
+    const obstacle_side_t side =
+        obstacle_profile_side(scan->word, &scan->profile);
+
+    ++obstacle_scans;
+    obstacle_report_make(&scan->profile, scan->word, side, obstacle_scans,
+                         drv_time_ms(), &report);
+    app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
+                      sizeof(report));
+}
+
+/*
+ * SCAN module step. It runs the unchanged scan and only observes its outcome.
+ */
+static vsm_outcome_t scan_step_observed(void *ctx, const vsm_inputs_t *in,
+                                        uint32_t now_ms, vsm_drive_t *drive)
+{
+    const vsm_outcome_t outcome = ss_step(ctx, in, now_ms, drive);
+
+    if (vsm_outcome_type(outcome) == VSM_OUT_SIDE) {
+        publish_obstacle((const ss_t *)ctx);
+    }
+    return outcome;
+}
+
+/* Copy the newest obstacle report; see obstacle_report.h. */
+int vehicle_obstacle_try_read(rm_obstacle_t *out)
+{
+    rm_obstacle_t report;
+
+    if (!out) {
+        return E_PAR;
+    }
+    if (!app_board_try_read(&obstacle_board.sequence, obstacle_board.words,
+                            &report, sizeof(report))) {
+        return (obstacle_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
+    }
+    *out = report;
     return E_OK;
 }
 
@@ -741,7 +792,12 @@ static void vehicle_task(INT code, void *ctx)
     vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
     install(0u, VSM_MOD_LINE, lt_module(&lt));
     install(1u, VSM_MOD_SEARCH, ls_module(&ls));
+#if TM_MQTT
+    install(2u, VSM_MOD_SCAN,
+            (vsm_module_t){ss_start, scan_step_observed, &ss});
+#else
     install(2u, VSM_MOD_SCAN, ss_module(&ss));
+#endif
     install(3u, VSM_MOD_DETOUR, dr_module(&dr));
     drv_motor_hw_buttons_init();
     prev_run = drv_motor_hw_button_down(21u);
@@ -900,5 +956,10 @@ int vehicle_task_start(void)
 int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
 {
     return out ? E_OBJ : E_PAR;
+}
+
+int vehicle_obstacle_try_read(rm_obstacle_t *out)
+{
+    return out ? E_NOEXS : E_PAR;
 }
 #endif
