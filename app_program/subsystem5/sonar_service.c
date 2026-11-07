@@ -2,6 +2,35 @@
 #include "sonar_service.h"
 #include "drv_ultrasonic.h"
 #include "../platform/drv_time.h"
+/* Only aligned 32-bit atomic loads/stores: Cortex-M0+ needs no libatomic
+ * read-modify-write helper. A reader never waits for the lower-priority writer.
+ * All shared words are atomic, including the payload (no C data races). */
+#define SNAPSHOT_WORDS ((sizeof(sonar_snapshot_t)+sizeof(uint32_t)-1u)/sizeof(uint32_t))
+static uint32_t board_guard,board_words[SNAPSHOT_WORDS];
+static uint32_t history_count,history_guard;
+static uint32_t history_words[SONAR_HISTORY_CAPACITY][SNAPSHOT_WORDS];
+static uint32_t load_word(const uint32_t *p) { return __atomic_load_n(p,__ATOMIC_SEQ_CST); }
+static void store_word(uint32_t *p,uint32_t v) { __atomic_store_n(p,v,__ATOMIC_SEQ_CST); }
+static void store_snapshot(uint32_t *words,const sonar_snapshot_t *value) {
+    uint32_t copy[SNAPSHOT_WORDS]={0};
+    for (unsigned int i=0u;i<sizeof(*value);++i) ((unsigned char *)copy)[i]=((const unsigned char *)value)[i];
+    for (unsigned int i=0u;i<SNAPSHOT_WORDS;++i) store_word(&words[i],copy[i]);
+}
+static void load_snapshot(const uint32_t *words,sonar_snapshot_t *value) {
+    uint32_t copy[SNAPSHOT_WORDS];
+    for (unsigned int i=0u;i<SNAPSHOT_WORDS;++i) copy[i]=load_word(&words[i]);
+    for (unsigned int i=0u;i<sizeof(*value);++i) ((unsigned char *)value)[i]=((const unsigned char *)copy)[i];
+}
+static void board_publish(const sonar_snapshot_t *value,bool append) {
+    const uint32_t guard=load_word(&board_guard);store_word(&board_guard,guard+1u);
+    store_snapshot(board_words,value);store_word(&board_guard,guard+2u);
+    if (append) {
+        const uint32_t hguard=load_word(&history_guard);store_word(&history_guard,hguard+1u);
+        const uint32_t count=load_word(&history_count);
+        store_snapshot(history_words[count%SONAR_HISTORY_CAPACITY],value);
+        store_word(&history_count,count+1u);store_word(&history_guard,hguard+2u);
+    }
+}
 static ID mutex,requests,results,cyclic,task;
 static bool ready,physical,await_ack,have_generation,once_reserved,admission_ready,cyclic_running;
 static uint32_t admitted_generation;
@@ -18,6 +47,7 @@ static void publish(uint8_t status,ultrasonic_result_t echo,uint32_t now) {
     snapshot.valid=status==SONAR_ECHO && ultrasonic_result_status(echo)==ULTRASONIC_STATUS_VALID &&
         (int32_t)(snapshot.deadline_ms-now)>=0;
     ++snapshot.result_sequence;
+    board_publish(&snapshot,true);
     if (current.generation==admitted_generation && current.mode==SONAR_ONCE) once_reserved=false;
     (void)tk_unl_mtx(mutex);(void)tk_set_flg(results,1u);
 }
@@ -36,6 +66,7 @@ static void accept(const sonar_request_t *r,uint32_t now) {
     if (tk_loc_mtx(mutex,TMO_FEVR)>=E_OK) {
         snapshot.generation=r->generation;snapshot.id=r->id;snapshot.angle=r->angle;
         snapshot.valid=false;snapshot.pending=false;snapshot.status=SONAR_EMPTY;
+        board_publish(&snapshot,false);
         (void)tk_clr_flg(results,~1u);
         (void)tk_unl_mtx(mutex);
     }
@@ -70,6 +101,7 @@ static void sonar_task(INT code,void *ctx) {
         if (tk_loc_mtx(mutex,TMO_FEVR)>=E_OK) {
             snapshot.trigger_ms=now;snapshot.pending=true;++snapshot.ping_sequence;
             snapshot.ping_generation=current.generation;snapshot.ping_id=current.id;snapshot.ping_angle=current.angle;
+            board_publish(&snapshot,false);
             (void)tk_unl_mtx(mutex);
         }
         /* STUCK_HIGH is an immediate result, exactly as in the reference. */
@@ -117,6 +149,29 @@ int sonar_request(const sonar_request_t *r) {
     (void)tk_unl_mtx(mutex);
     if (er>=E_OK) (void)tk_wup_tsk(task);
     return (int)er;
+}
+int sonar_snapshot_try_read(sonar_snapshot_t *out) {
+    if (!out) return E_PAR;
+    if (!ready) return E_OBJ;
+    const uint32_t guard=load_word(&board_guard);if ((guard&1u)!=0u) return E_TMOUT;
+    sonar_snapshot_t copy;load_snapshot(board_words,&copy);
+    if (load_word(&board_guard)!=guard) return E_TMOUT;
+    *out=copy;return E_OK;
+}
+int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *missed) {
+    if (!cursor || !out || !missed) return E_PAR;
+    *missed=0u;if (!ready) return E_OBJ;
+    const uint32_t guard=load_word(&history_guard);if ((guard&1u)!=0u) return E_OBJ;
+    const uint32_t count=load_word(&history_count),distance=count-*cursor;
+    sonar_history_entry_t copy;uint32_t lost=0u;
+    if (distance!=0u) {
+        lost=distance>SONAR_HISTORY_CAPACITY ? distance-SONAR_HISTORY_CAPACITY : 0u;
+        copy.sequence=*cursor+lost+1u;
+        load_snapshot(history_words[(copy.sequence-1u)%SONAR_HISTORY_CAPACITY],&copy.result);
+    }
+    if (load_word(&history_guard)!=guard) return E_OBJ;
+    if (distance==0u) return E_TMOUT;
+    *out=copy;*cursor=copy.sequence;*missed=lost;return E_OK;
 }
 int sonar_result_read(sonar_snapshot_t *out,bool *is_new) {
     if (!ready) return E_OBJ;

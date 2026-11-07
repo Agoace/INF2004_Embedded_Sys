@@ -27,4 +27,13 @@ bool sonar_service_running(void);
 /* Copies by value through MBF, TMO_POL; callers must retry or stop on failure. */
 int sonar_request(const sonar_request_t *request);
 int sonar_result_read(sonar_snapshot_t *out,bool *new_result);
+/* Bounded, non-consuming read: E_TMOUT if a writer is active or changed. */
+int sonar_snapshot_try_read(sonar_snapshot_t *out);
+#define SONAR_HISTORY_CAPACITY 16u
+typedef struct { uint32_t sequence; sonar_snapshot_t result; } sonar_history_entry_t;
+/* One next publication. E_TMOUT: no new entry; E_OBJ: busy or not ready.
+ * Set cursor to zero initially. Overflow returns the oldest retained entry
+ * and reports the number of evicted entries. Busy leaves cursor/out intact.
+ * Readers must run at least once per 2^31 publications. No retry loop. */
+int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *missed);
 #endif
