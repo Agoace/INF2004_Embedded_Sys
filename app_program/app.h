@@ -21,9 +21,10 @@
  * --------------------------------------------------------------------- */
 
 /* ---------------------------------------------------------------------
- *  Task priorities: 1 is the highest; the kernel's USB console (3) and
- *  WiFi (4) tasks sit above every application task.  Motion uses priority 10, the highest application priority; the bench
- *  uses 11. See TEAM.md for ownership.
+ *  Task priorities: 1 is the highest. Motion 10 is the highest periodic
+ *  task; line 11, sonar 12 (or bench 11), vehicle 13, Wi-Fi and TEST 20,
+ *  kernel USB console 21, telemetry 30, health 31, CPU meter 32.
+ *  USB is below every driving task. See TEAM.md for ownership.
  * --------------------------------------------------------------------- */
 #define TASK_STACK_SIZE		2048	/* legacy default; app_task.c registers actual sizes */
 

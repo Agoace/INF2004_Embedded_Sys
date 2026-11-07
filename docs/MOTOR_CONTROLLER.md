@@ -287,8 +287,8 @@ The pure `motor_ctl.[ch]` and its tuning values are unchanged.
   claim a hard timing guarantee before hardware measurement.
 
 The kernel tick remains 10 ms. The `motion_task` priority is above every
-other application task, but below kernel USB (3), radio (4) and the initial
-test task (1). No print call or sleep is inside the controller mutex.
+other application task and above the kernel radio (20) and USB console
+(21). Only the initial task (1) during startup is higher. No print call or sleep is inside the controller mutex.
 `tick_max_us` includes mutex wait and work through the PWM writes.
 `gap_min_us` and `gap_max_us` measure successive task-start times;
 `late_wakes` counts gaps above 11000 us. `missed_wakes` counts queued
