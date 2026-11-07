@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Receive robot binary v1 telemetry as CSV; send token-guarded commands."""
+"""Receive robot binary v1 telemetry as CSV; send commands (ESTOP token optional)."""
 import argparse
 import csv
 import os
@@ -173,18 +173,19 @@ def main(argv=None):
     parser.add_argument("--port", type=int, default=1883)
     parser.add_argument("--csv", default="-", help="CSV destination; default stdout")
     parser.add_argument("--command", choices=COMMANDS)
-    parser.add_argument("--token-file", help="owner-only 0600 file with 32 hex digits")
+    parser.add_argument("--token-file", help="0600 file with 32 hex digits; optional only for ESTOP on an unconfigured robot")
     parser.add_argument("--request-id", type=lambda value: int(value, 0))
     args = parser.parse_args(argv)
-    if args.command and not args.token_file:
-        parser.error("--command requires --token-file")
+    if args.command and args.command != "estop" and not args.token_file:
+        parser.error("this command requires --token-file")
     if args.request_id is not None and not 0 <= args.request_id <= 0xFFFFFFFF:
         parser.error("--request-id must be an unsigned 32-bit integer")
     command = None
     request_id = args.request_id if args.request_id is not None else secrets.randbits(32)
     if args.command:
         try:
-            command = pack_command(COMMANDS[args.command], request_id, read_token(args.token_file))
+            token = read_token(args.token_file) if args.token_file else bytes(16)
+            command = pack_command(COMMANDS[args.command], request_id, token)
         except (OSError, ValueError):
             parser.error("cannot read valid private token file")
     # Pure decode/tests do not require Paho or a network connection.

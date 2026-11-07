@@ -55,6 +55,24 @@ int main(void) {
     assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,NULL,true,&decoded));
     assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,true,NULL));
     assert(decoded.opcode==RM_CMD_START); /* Rejections leave output unchanged. */
+    /* No configured token: only ESTOP, with any 16-byte token, is allowed. */
+    for (uint8_t op=0u;op<6u;++op) {
+        command.opcode=op;rm_pack_command(bytes,&command);bytes[6]^=0xffu;
+        assert(rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,false,&decoded)==(op==RM_CMD_ESTOP));
+    }
+    command.opcode=RM_CMD_ESTOP;rm_pack_command(bytes,&command);
+    for (size_t i=0u;i<RM_TOKEN_SIZE;++i) {
+        bytes[6u+i]^=1u;
+        assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,true,&decoded));
+        assert(rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,false,&decoded));
+        bytes[6u+i]^=1u;
+    }
+    for (size_t i=0u;i<RM_COMMAND_SIZE;++i) assert(!rm_command_decode(bytes,i,command.token,false,&decoded));
+    assert(!rm_command_decode(bytes,RM_COMMAND_SIZE+1u,command.token,false,&decoded));
+    bytes[0]=2u;assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,false,&decoded));bytes[0]=1u;
+    assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,NULL,false,&decoded));
+    assert(!rm_command_decode(NULL,RM_COMMAND_SIZE,command.token,false,&decoded));
+    assert(!rm_command_decode(bytes,RM_COMMAND_SIZE,command.token,false,NULL));
     for (uint8_t op=0u;op<6u;++op) {
         assert(rm_command_allowed(op,false)==(op==1u || op==2u));
         assert(rm_command_allowed(op,true)==(op>=1u && op<=4u));

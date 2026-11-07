@@ -76,6 +76,7 @@ endforeach()
 include("${CMAKE_CURRENT_LIST_DIR}/mqtt_protocol.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/template_checks.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/network_checks.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/mqtt_client_checks.cmake")
 
 # Kernel time checks use host doubles, never real kernel/SDK headers.
 host_test(test_drv_time tests/test_drv_time.c app_program/platform/drv_time.c)

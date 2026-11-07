@@ -55,10 +55,13 @@ bool rm_command_allowed(uint8_t opcode,bool idle) {
 }
 bool rm_command_decode(const uint8_t *data,size_t len,const uint8_t expected_token[RM_TOKEN_SIZE],bool enabled,rm_command_t *out) {
     if (!data || !expected_token || !out || len!=RM_COMMAND_SIZE || data[0]!=RM_VERSION ||
-        !rm_command_allowed(data[1],true) || !enabled) return false;
-    uint32_t difference=0u;
-    for (size_t i=0u;i<RM_TOKEN_SIZE;++i) difference|=(uint32_t)(data[6u+i]^expected_token[i]);
-    if (difference!=0u) return false;
+        !rm_command_allowed(data[1],true)) return false;
+    if (!enabled && data[1]!=RM_CMD_ESTOP) return false;
+    if (enabled) {
+        uint32_t difference=0u;
+        for (size_t i=0u;i<RM_TOKEN_SIZE;++i) difference|=(uint32_t)(data[6u+i]^expected_token[i]);
+        if (difference!=0u) return false;
+    }
     rm_command_t value;value.opcode=data[1];value.request_id=get32(data+2);
     memcpy(value.token,data+6,RM_TOKEN_SIZE);*out=value;return true;
 }
