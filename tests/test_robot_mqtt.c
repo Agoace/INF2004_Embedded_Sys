@@ -80,7 +80,7 @@ static bool payload_is_online(const void *payload) { const uint8_t *b=payload;re
 err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u16_t length,
     u8_t qos,u8_t retain,mqtt_request_cb_t callback,void *arg) {
     assert(in_hook && !irq_off && client==&mqtt_client && length<=RM_LOG_BATCH_MAX_SIZE);
-    assert((strcmp(topic,"robot/status")==0) == (retain==1u));
+    assert((strcmp(topic,"robot/status")==0 || strcmp(topic,"robot/summary")==0) == (retain==1u));
     assert(publication_count<256u);
     publication_t *record=&publications[publication_count++];
     *record=(publication_t){.topic=topic,.length=length,.qos=qos,.callback=callback,.arg=arg};
@@ -91,6 +91,8 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
         assert((qos==0u && callback==NULL) || (qos==1u && callback!=NULL));
     } else if (strcmp(topic,"robot/status")==0) {
         assert(qos==1u && length==RM_STATUS_SIZE && callback!=NULL && payload_is_online(payload));
+    } else if (strcmp(topic,"robot/summary")==0) {
+        assert(qos==1u && length==RM_SUMMARY_SIZE && callback!=NULL);
     } else assert(qos==0u);
     return record->result;
 }
@@ -108,6 +110,19 @@ int robot_network_obstacle(uint32_t *cursor,rm_obstacle_t *value) {
     if (obstacle_busy) return E_TMOUT;
     if (obstacle_tail==obstacle_head) return E_NOEXS;
     *value=obstacles[obstacle_tail++];*cursor=value->scan_id;return E_OK;
+}
+static rm_detour_t detours[4];static unsigned int detour_head,detour_tail;
+static rm_summary_t last_summary;static int summary_result=E_NOEXS;
+int robot_network_detour(uint32_t *cursor,rm_detour_t *value) {
+    assert(in_hook && !irq_off);
+    if (detour_tail==detour_head) return E_NOEXS;
+    *value=detours[detour_tail++];*cursor=value->sequence;return E_OK;
+}
+int robot_network_summary(uint32_t *cursor,rm_summary_t *value) {
+    assert(in_hook && !irq_off);
+    if (summary_result<0) return summary_result;
+    if (last_summary.run_id==*cursor) return E_NOEXS;
+    *value=last_summary;*cursor=value->run_id;return E_OK;
 }
 int robot_event_pop(rm_event_t *value) {
     assert(in_hook);++event_reads;
@@ -286,6 +301,52 @@ static void test_obstacle(void) {
     obstacle_busy=true;poll_at(15u);assert(count_topic("robot/obstacle")==3u);
     obstacle_busy=false;poll_at(16u);assert(count_topic("robot/obstacle")==4u);
     assert(u32(last_topic("robot/obstacle")->data+4)==5u);
+}
+static void test_detour(void) {
+    start_connected();
+    assert(count_topic("robot/detour")==0u);
+    detours[detour_head++]=(rm_detour_t){.sequence=1u,.outcome=RM_DETOUR_DONE_LINE,.distance_mm=500u};
+    poll_at(10u);
+    publication_t *d=last_topic("robot/detour");
+    assert(d && d->length==RM_DETOUR_SIZE && d->qos==0u && d->data[1]==3u && u32(d->data+4)==1u);
+    poll_at(11u);assert(count_topic("robot/detour")==1u);
+    detours[detour_head++]=(rm_detour_t){.sequence=2u,.outcome=RM_DETOUR_FAILED};
+    fail_topic="robot/detour";failures_left=1u;poll_at(12u);
+    assert(count_topic("robot/detour")==2u && last_topic("robot/detour")->result==ERR_MEM);
+    poll_at(13u);assert(count_topic("robot/detour")==3u && last_topic("robot/detour")->result==ERR_OK);
+    assert(u32(last_topic("robot/detour")->data+4)==2u);
+    poll_at(14u);assert(count_topic("robot/detour")==3u);
+}
+static void test_summary(void) {
+    start_connected();
+    poll_at(10u);assert(count_topic("robot/summary")==0u); /* no run yet */
+    last_summary=(rm_summary_t){.run_id=1u,.distance_mm=1234u,.stop_reason=RM_STOP_GP21};
+    summary_result=E_OK;poll_at(20u);
+    publication_t *r=last_topic("robot/summary");
+    assert(r && r->length==RM_SUMMARY_SIZE && r->qos==1u && r->callback && r->data[3]==1u);
+    assert(u32(r->data+4)==1u && u32(r->data+16)==1234u);
+    poll_at(21u);assert(count_topic("robot/summary")==1u); /* once per run */
+    /* A failed publish call retries after 500 ms. */
+    last_summary.run_id=2u;
+    fail_topic="robot/summary";failures_left=1u;poll_at(30u);
+    assert(count_topic("robot/summary")==2u && last_topic("robot/summary")->result==ERR_MEM);
+    poll_at(529u);assert(count_topic("robot/summary")==2u);
+    poll_at(530u);assert(count_topic("robot/summary")==3u && last_topic("robot/summary")->result==ERR_OK);
+    /* An acknowledgement error publishes the newest summary again. */
+    r=last_topic("robot/summary");r->callback(r->arg,ERR_ABRT);
+    poll_at(600u);assert(count_topic("robot/summary")==3u);
+    poll_at(1100u);assert(count_topic("robot/summary")==4u && u32(last_topic("robot/summary")->data+4)==2u);
+    r=last_topic("robot/summary");r->callback(r->arg,ERR_OK);
+    poll_at(1200u);assert(count_topic("robot/summary")==4u);
+    /* A board that is busy loses nothing: the summary comes when readable. */
+    last_summary.run_id=3u;summary_result=E_TMOUT;poll_at(1300u);assert(count_topic("robot/summary")==4u);
+    summary_result=E_OK;poll_at(1301u);assert(count_topic("robot/summary")==5u);
+    assert(u32(last_topic("robot/summary")->data+4)==3u);
+    /* A new connection publishes the last summary again (retained copy). */
+    connected(MQTT_CONNECT_DISCONNECTED);
+    poll_at(4300u);poll_at(7300u);assert(connect_count==2u);
+    connected(MQTT_CONNECT_ACCEPTED);poll_at(7300u);
+    assert(count_topic("robot/summary")==6u && u32(last_topic("robot/summary")->data+4)==3u);
 }
 static void test_schedule(void) {
     start_connected();
@@ -477,6 +538,8 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"health_missing")) test_health_missing();
                 else if (!strcmp(argv[1],"unconfigured")) test_unconfigured_commands();
     else if (!strcmp(argv[1],"status")) test_status();
+    else if (!strcmp(argv[1],"detour")) test_detour();
+    else if (!strcmp(argv[1],"summary")) test_summary();
     else if (!strcmp(argv[1],"obstacle")) test_obstacle();
     else if (!strcmp(argv[1],"log_live")) test_log_live();
     else if (!strcmp(argv[1],"log_dump")) test_log_dump(false);

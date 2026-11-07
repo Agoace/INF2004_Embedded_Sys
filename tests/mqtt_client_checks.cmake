@@ -7,7 +7,7 @@ if(TARGET test_robot_mqtt)
     target_compile_definitions(test_robot_mqtt PRIVATE TM_MQTT=1
         ROBOT_MQTT_BROKER_IP="192.0.2.10"
         ROBOT_MQTT_COMMAND_TOKEN_HEX="00112233445566778899aabbccddeeff")
-    foreach(scenario connection commands schedule retained status obstacle log_live log_dump
+    foreach(scenario connection commands schedule retained status obstacle detour summary log_live log_dump
             log_dump_ack_error log_disconnect health_stalled health_missing)
         add_test(NAME test_robot_mqtt_${scenario} COMMAND test_robot_mqtt ${scenario})
     endforeach()

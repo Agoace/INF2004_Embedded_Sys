@@ -55,6 +55,10 @@ void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
     put32(out + 48, (uint32_t)v->dist_left_mm);
     put32(out + 52, (uint32_t)v->dist_right_mm);
     put32(out + 56, (uint32_t)v->dist_avg_mm);
+    put16(out + 60, (uint16_t)v->duty_left_permille);
+    put16(out + 62, (uint16_t)v->duty_right_permille);
+    put32(out + 64, (uint32_t)v->heading_cdeg);
+    put16(out + 68, (uint16_t)v->turn_rate_ddps);
 }
 
 void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
@@ -72,6 +76,49 @@ void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
     out[17] = v->left_free_step;
     out[18] = v->right_clear_deg;
     out[19] = v->left_clear_deg;
+}
+
+void rm_pack_detour(uint8_t out[RM_DETOUR_SIZE], const rm_detour_t *v)
+{
+    memset(out, 0, RM_DETOUR_SIZE);
+    out[0] = RM_VERSION;
+    out[1] = v->outcome;
+    out[2] = v->side;
+    out[3] = (uint8_t)(v->flags & RM_DETOUR_LATERAL_VALID);
+    put32(out + 4, v->sequence);
+    put32(out + 8, v->start_ms);
+    put32(out + 12, v->end_ms);
+    put32(out + 16, v->duration_ms);
+    put32(out + 20, v->distance_mm);
+    put16(out + 24, v->max_lateral_mm);
+    put16(out + 26, v->payload);
+    put32(out + 28, v->scan_id);
+}
+
+void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v)
+{
+    memset(out, 0, RM_SUMMARY_SIZE);
+    out[0] = RM_VERSION;
+    out[1] = (uint8_t)(v->flags & 7u);
+    out[2] = v->stop_source;
+    out[3] = v->stop_reason;
+    put32(out + 4, v->run_id);
+    put32(out + 8, v->start_ms);
+    put32(out + 12, v->duration_ms);
+    put32(out + 16, v->distance_mm);
+    put16(out + 20, v->line_losses);
+    put16(out + 22, v->obstacles);
+    put16(out + 24, v->detours_done);
+    put16(out + 26, v->detours_succeeded);
+    put32(out + 28, v->detour_total_ms);
+    put16(out + 32, v->detours_started);
+    put16(out + 34, v->max_speed_error_mm_s);
+    out[36] = v->motion_fault_bits;
+    out[37] = v->shell_fault;
+    put16(out + 38, v->shell_fault_detail);
+    out[40] = v->barcode_ok;
+    out[41] = v->barcode_failed;
+    put16(out + 42, v->hump_peak);
 }
 
 void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state)
@@ -114,7 +161,7 @@ void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *v)
 void rm_pack_heartbeat(uint8_t out[RM_HEARTBEAT_SIZE], const rm_heartbeat_t *v)
 {
     memset(out, 0, RM_HEARTBEAT_SIZE);
-    out[0] = RM_VERSION;
+    out[0] = RM_HEARTBEAT_VERSION;
     out[1] = (uint8_t)(v->flags & 63u);
     out[2] = v->reset_reason;
     put32(out + 4, v->uptime_ms);
@@ -144,6 +191,7 @@ void rm_pack_heartbeat(uint8_t out[RM_HEARTBEAT_SIZE], const rm_heartbeat_t *v)
     put32(out + 92, (uint32_t)v->wifi_start_status);
     out[96] = v->wifi_requested_priority;
     out[97] = v->wifi_observed_priority;
+    put16(out + 98, v->cpu_load_permille);
 }
 
 void rm_pack_command(uint8_t out[RM_COMMAND_SIZE], const rm_command_t *v)
