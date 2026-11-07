@@ -140,6 +140,8 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 
 ## Application task stacks
 
+- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — optional MQTT-build CPU observer: 4 ms boot calibration, lowest priority 32, static 512-byte stack, pure arithmetic in [`test_cpu_load.c`](../tests/test_cpu_load.c). No target accuracy or idle-load range is established.
+
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
 
