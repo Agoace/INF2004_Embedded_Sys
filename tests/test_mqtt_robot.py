@@ -71,7 +71,7 @@ class WireTests(unittest.TestCase):
         for topic, data in self.samples.items():
             if topic.endswith("/cmd"):
                 continue
-            for bad in (b"", data[:-1], data + b"\0", b"\2" + data[1:]):
+            for bad in (b"", data[:-1], data + b"\0", b"\x09" + data[1:]):
                 with self.subTest(topic=topic, size=len(bad)):
                     with self.assertRaises(ValueError):
                         wire.decode(topic, bad)
@@ -527,11 +527,15 @@ class NewTopicTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.v1_state = None
+        cls.c_state = None
+        cls.dash = {}
         for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
             topic, encoded = line.split()
             if topic == "robot/state":
-                cls.v1_state = bytes.fromhex(encoded)
-        cls.v1_state = b"\x01" + cls.v1_state[1:48]  # first 48 bytes are the same in v1 and v2
+                cls.c_state = bytes.fromhex(encoded)
+            elif topic.startswith("dash/"):
+                cls.dash[topic.removeprefix("dash/")] = bytes.fromhex(encoded)
+        cls.v1_state = b"\x01" + cls.c_state[1:48]  # first 48 bytes are the same in v1 and v2
 
     def state_v2(self, left=-1500, right=2500, avg=500):
         return b"\x02" + self.v1_state[1:] + struct.pack("<iii", left, right, avg)
@@ -547,6 +551,35 @@ class NewTopicTests(unittest.TestCase):
                          {k: v for k, v in v1.items() if k != "version"})
         extreme = wire.decode("robot/state", self.state_v2(-2 ** 31, 2 ** 31 - 1, 0))
         self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
+
+    def test_c_packed_state_v2_and_old_version_bytes(self):
+        self.assertEqual((len(self.c_state), self.c_state[0]), (60, 2))
+        result = wire.decode("robot/state", self.c_state)
+        self.assertEqual((result["dist_left_mm"], result["dist_right_mm"], result["dist_avg_mm"]),
+                         (-123456, 2 ** 31 - 1, -7))
+        self.assertEqual((result["uptime_ms"], result["count_l"], result["raw_bc"]),
+                         (0x12345678, -2 ** 31, 0xABC))
+        for version in (0, 3, 9, 255):  # a version that is neither 1 nor 2 never decodes
+            for size in (48, 60):
+                with self.assertRaises(ValueError):
+                    wire.decode("robot/state", bytes([version]) + self.c_state[1:size])
+
+    def test_c_packed_obstacle_and_status(self):
+        result = wire.decode("robot/obstacle", self.dash["obstacle"])
+        self.assertEqual((result["closest_valid"], result["too_near"], result["left_blocked"],
+                          result["right_blocked"]), (1, 1, 1, 1))
+        self.assertEqual((result["decision"], result["closest_angle_deg"]), (2, -30))
+        self.assertEqual((result["scan_id"], result["uptime_ms"]), (0x01020304, 0xFFFFFFF0))
+        self.assertEqual((result["closest_mm"], result["profile_word"]), (510, 0x5A5A))
+        self.assertEqual((result["right_free_step"], result["left_free_step"]), (7, 3))
+        self.assertEqual((result["right_clear_deg"], result["left_clear_deg"]), (255, 15))
+        self.assertEqual(self.dash["obstacle"], obstacle_frame(
+            flags=0x0F, decision=2, angle=-30, scan=0x01020304, uptime=0xFFFFFFF0, closest=510,
+            word=0x5A5A, right_step=7, left_step=3, right_clear=255, left_clear=15))
+        self.assertEqual(wire.decode("robot/status", self.dash["status_online"])["robot_online"], 1)
+        self.assertEqual(wire.decode("robot/status", self.dash["status_offline"])["robot_online"], 0)
+        self.assertEqual((self.dash["status_online"], self.dash["status_offline"]),
+                         (bytes([1, 1]), bytes([1, 2])))
 
     def test_state_version_and_length_must_agree(self):
         good = self.state_v2()
