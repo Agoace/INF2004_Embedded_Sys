@@ -30,7 +30,7 @@ class WireTests(unittest.TestCase):
             topic, encoded = line.split()
             if topic.startswith("batch/"):
                 cls.batches[topic.removeprefix("batch/")] = bytes.fromhex(encoded)
-            else:
+            elif topic.startswith("robot/"):
                 cls.samples[topic] = bytes.fromhex(encoded)
 
     def test_c_samples(self):
