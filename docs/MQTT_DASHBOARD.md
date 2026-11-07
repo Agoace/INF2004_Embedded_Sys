@@ -26,7 +26,8 @@ the four robot commands (ESTOP, DUMP, START, CALIBRATE).
 | [`scripts/dashboard_page.py`](../scripts/dashboard_page.py) | The page (HTML, CSS and JavaScript in one string) |
 | [`scripts/robot_wire.py`](../scripts/robot_wire.py) | Shared decoder, log merge and gap store, command packer |
 | [`tests/test_mqtt_dashboard.py`](../tests/test_mqtt_dashboard.py) | Host tests (no broker, no Paho) |
-| [`tests/dashboard_page_harness.js`](../tests/dashboard_page_harness.js) | Runs the served page script in Node with a fake DOM for the command-error and restart tests |
+| [`tests/dashboard_page_harness.js`](../tests/dashboard_page_harness.js) | Runs the served page script in Node with a fake DOM for drawing, command-error and restart tests |
+| [`scripts/dashboard_replay.py`](../scripts/dashboard_replay.py) | Offline public-fixture replay pages and Firefox screenshots; no broker or private configuration |
 
 ## Run
 
@@ -106,7 +107,22 @@ if a device must not reach it. Stop the forward with
 
 ## Page layout
 
-The top bar shows four status labels and the buttons.
+The sticky top bar keeps ESTOP large and red, including on a phone. It shows
+the robot link, RUN/IDLE/FAULT mode and `LINE > SCAN > DETOUR > SEARCH`.
+The active module is blue; SCAN also covers module 5 (scan reverse). A stale
+state does not highlight a module. CAL, START and DUMP stay beside ESTOP.
+The command-error line and restart banner stay separate from live status.
+
+The main cards have this order. Below 800 px they stack in the same order:
+
+1. **ULTRASONIC** (largest), **LINE**, **DRIVE**.
+2. **RUN PATH**, **LAST RUN** (duration, distance, detours, line losses and
+   the stop reason as text).
+3. **HEALTH**, collapsed at first. Open it for connection labels, CPU,
+   Wi-Fi timing, counters, raw line/drive data, full run details, events,
+   detour history, odometry, reserved sensors and log status.
+
+The following labels are in HEALTH, except the robot link in the header.
 
 | Label | Meaning |
 | --- | --- |
@@ -123,11 +139,11 @@ age includes the age that the robot reports for that board.
 | Panel | Source | What it shows |
 | --- | --- | --- |
 | Vehicle | `robot/state`, `robot/event` | State, module, running flag, motion faults, vehicle board status, last command and the robot decision. |
-| Line sensor | `robot/state` | Position, raw and normalised left and centre values, and a short position trend. |
-| Wheels | `robot/state` | Requested and measured wheel speed, PWM duty of each wheel, distance travelled (left, right, average, in mm), encoder counts and servo angle. |
+| LINE | `robot/state` | L/C bars: 0 is floor, 1000 is line. A position slider spans -100 to +100; the text keeps the unclipped value and valid flag. Raw values are in HEALTH. |
+| DRIVE | `robot/state` | Blue requested and green measured L/R speed bars, signed mm/s. Zero is at the centre. Bars clip at ±500; text keeps the full value. Duty is below; distance, counts and servo data are in HEALTH. |
 | Odometry (encoder-derived) | `robot/state`, `robot/imu` | Heading dial, turn rate in degrees per second, and distance. Every value comes from the wheel counts. Two IMU rows (raw) show beside them for comparison when the IMU sends data. |
-| Ultrasonic | `robot/sonar` | Latest distance (or the sensor error) and a bar chart of the latest result for each angle. |
-| Obstacle profile and detours | `robot/obstacle`, `robot/sonar`, `robot/detour` | The result of each completed scan: closest distance and angle, right and left clearance, the decision, scan ID, scan stage and missed scans. The chart shows the latest sonar result for each angle. Green bands mark the clear sectors. A ring marks the closest point. Below the chart, one table row for each of the last 8 detours: side, outcome, duration, distance, maximum sideways offset and the scan that started it. |
+| ULTRASONIC | `robot/sonar`, `robot/obstacle`, `robot/event`, `robot/state` | Top-down echo fan, current beam direction, completed-profile observations and detour decision. See [Ultrasonic fan](#ultrasonic-fan). |
+| Obstacle profile and detours | `robot/obstacle`, `robot/sonar`, `robot/detour` | The result of each completed scan: closest distance and angle, right and left clearance, the decision, scan ID, scan stage and missed scans. The fan in ULTRASONIC shows the received profile samples. HEALTH keeps the clearance and report details. Below the chart, one table row for each of the last 8 detours: side, outcome, duration, distance, maximum sideways offset and the scan that started it. |
 | Events | `robot/event` | The last 50 events. Event gaps count missing event sequence numbers. This panel never turns grey. |
 | Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, CPU load, minimum free stack, reset reason. It turns grey after 2.5 s (12 s in idle telemetry). |
 | Barcode | `robot/state`, `robot/barcode` | Raw GP28 sample. Rows for detected, decoded, unreadable, decoded command, confidence (agreeing reads of all reads), direction, navigation command, result, and issued or executed. They show `not implemented yet` until data arrives on the reserved topic. |
@@ -142,8 +158,8 @@ says `not reported`.
 
 **Obstacle angles:** a negative angle is to the right. A positive angle is to the
 left. The decision is the side that the robot detours around. The decision
-`none` means that both sides are blocked. The robot cannot reverse, so the
-detour then fails. The robot does not send an obstacle width. The panel shows
+`none` means that both sides are blocked. The robot can reverse and rescan
+at most twice. A third blocked profile ends the scan without a side. The robot does not send an obstacle width. The panel shows
 only angular clearance. A gap in the scan ID means that a scan result was not
 received. The panel counts these gaps. The age is the time since the scan
 finished. This panel never turns grey, because a scan is one point in time.
@@ -186,8 +202,76 @@ fields. A message with another version or an unknown kind is ignored and
 counted. A known message with the wrong length or a reserved bit set is
 discarded as damaged.
 
-A new panel needs only one builder function in `dashboard_model.py`. The page
-draws any panel that the server sends.
+Existing panel and command API fields are unchanged. The snapshot adds `view`
+with numeric state, sonar presentation data and the optional path. The page
+still draws unrecognised panel IDs as generic cards in HEALTH.
+
+### Ultrasonic fan
+
+The robot is at the bottom, forward is up, LEFT is positive angle, RIGHT is
+negative. Range rings cover 0 to 511 mm. Lines at -30 and +30 degrees mark
+the scan sector. The beam uses the newest received servo direction from
+state or sonar; the faint cone is **approximately ±20 degrees**, measured
+2026-11-07. This is an approximate view of the sensor, not an obstacle shape.
+The beam turns red when the latest valid echo is below the 258 mm stop arc.
+
+- Solid blue dots are recent echoes, fading over 10 s. At most 128 are kept.
+- A square at the range edge means **NO_RETURN**, not a measured 511 mm echo.
+  Other failed or missing echoes do not become free-space dots.
+- Rings show the last completed profile's received samples. There are 13
+  slots, -30 to +30 degrees in 5 degree steps. `?` means not observed. The
+  label `observed x/13` states the coverage. Samples are frozen when the
+  obstacle report arrives and cleared for a new scan or retry.
+- The wire report does not contain all 13 ranges. Missed samples cannot be
+  recovered from it. The overlay is received evidence, not an exact copy of
+  the firmware's two-read combined profile. Late or missing telemetry can
+  reduce the coverage.
+- Green means NO_RETURN or range at least the reported nearest +150 mm
+  (the firmware clearance rule); red means nearer. Unknown is grey. The
+  gold ring marks the nearest point reported by the robot. These colours
+  do not replace the robot's own decision.
+- LEFT/RIGHT/NONE and a shaded chosen side show that decision. Attempt 1/3
+  is the first profile. Kind-8 events update the retry number and show
+  REVERSING; fresh module 5 also means reverse. The old profile remains
+  labelled as the last profile during the next attempt.
+- In idle telemetry mode the last fan is grey, labelled `idle (paused)`.
+  Its last echo window is held; the age label still increases. It does
+  not invent new readings. A new boot clears the observed points.
+
+### Run path
+
+The path is a separate, optional change. It integrates **live log rows only**,
+using measured L/R speeds and a 111 mm track. It is not an IMU or map view.
+The origin is the first received running row, not a known world position.
+Forward starts up; a faster right wheel turns left. Segment colours mark
+SCAN (gold), DETOUR (purple) and reverse (coral); other modules are blue.
+
+A new running transition or log generation resets it. DUMP/refill rows,
+duplicates and delayed old generations do not move it. Wheel slip, sampling
+and speed error cause drift. Missing indexes, repeated timestamps or a gap
+above 200 ms break the line: no travel is invented across that gap. Later
+segments are relative to the last known point, so the view is partial after
+loss. The gap count stays visible. The 16-bit, 20 ms log timer wraps safely.
+At most 4600 points are kept, with a visible note if older points are trimmed.
+A boot clears the path.
+
+### Offline visual replay
+
+Build the host fixtures, then run:
+
+```sh
+python3 scripts/dashboard_replay.py /tmp/robot-host-tests/test_mqtt_wire
+```
+
+This writes `/tmp/dash-shots/{scan-left,reattempt,idle,phone,health}.{html,png}`.
+The HEALTH replay opens the details to exercise the hidden-canvas redraw.
+It uses `firefox --headless --screenshot` with a temporary browser profile.
+Use `--output PATH` for another folder or `--html-only` without Firefox.
+The pages contain public C fixtures with explicit scene edits, not new
+hardware captures. They say `REPLAY · public fixtures`. No broker, token
+file, network resource, external font or library is used. The replay calls
+`render()` instead of opening a live connection. It does not change the
+production CSP, nonce, Origin, CSRF or server-instance restart rules.
 
 ## Robot link
 
@@ -428,6 +512,12 @@ The tests use messages that the C code packs. They check these items:
 - Requests with a bad Origin, Host, CSRF value or content type are refused.
 - The instance ID is on the page, in `/api/state` and `/events`, differs per
   process, and differs from the CSRF value.
+- Fan coordinates (positive is left), frozen 13-slot observations, unknown
+  and NO_RETURN samples, missing retry-end events, signed drive bars and
+  line values. Idle greys the fan, reverse events name the retry, and a
+  collapsed HEALTH section never draws a zero-size dial.
+- Run path: straight and reverse travel, a 111 mm track turn, timer wrap,
+  missing rows, generation/run/boot reset, DUMP exclusion and point bound.
 - Page script, run in Node: a 403, 502 or network error shows the
   persistent red line naming the command; a 409 omits the reload advice; a
   later success clears it; an instance change disables buttons and reloads

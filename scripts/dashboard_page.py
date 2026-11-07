@@ -44,9 +44,12 @@ button.armed { background:var(--warn); color:#000; }
 #panel-wheels { grid-column:3; grid-row:1; }
 #panel-path { grid-column:1; grid-row:2; }
 #panel-summary { grid-column:2 / 4; grid-row:2; }
-#health { grid-column:1 / -1; min-width:0; }
+#panel-ultrasonic { order:1; } #panel-line { order:2; } #panel-wheels { order:3; }
+#panel-path { order:4; } #panel-summary { order:5; }
+#health { grid-column:1 / -1; min-width:0; order:6; }
 #health summary { cursor:pointer; font-weight:700; padding:12px; }
 #health-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+#health-grid > .panel { order:2; } #health-grid > #panel-health { order:1; }
 #diagnostics { display:flex; flex-wrap:wrap; gap:8px; padding:12px; }
 #chain { display:flex; gap:6px; align-items:center; }
 #chain span { padding:4px 6px; border-radius:4px; color:var(--dim); }
@@ -60,6 +63,7 @@ button.armed { background:var(--warn); color:#000; }
   header { gap:6px; padding:8px; } #buttons { width:100%; margin:0; gap:6px; }
   #buttons button { padding:8px; } #buttons #estop { margin-left:auto; padding:10px 20px; }
   #chain { font-size:12px; } #chain span { padding:2px; }
+  #health-grid { grid-template-columns:minmax(0,1fr); }
 }
 
 .panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
@@ -82,7 +86,7 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
 #panel-path canvas { height:270px; }
 .visual-summary { font-size:17px; font-weight:700; margin:8px 0; }
 .legend { font-size:12px; color:var(--dim); margin-top:6px; }
-@media(max-width:800px) { #panel-ultrasonic canvas { height:300px; } }
+@media(max-width:800px) { #panel-ultrasonic canvas { height:240px; } }
 </style>
 </head>
 <body>
@@ -383,6 +387,15 @@ function renderGrid(grid, data) {
   });
 }
 function renderPanel(panel) {
+  // Keep all original facts in HEALTH, with short readouts on the driving cards.
+  const labels = {line:["Line valid", "Line board"], wheels:["PWM duty left / right"],
+    summary:["Run ID", "Duration", "Distance (path length)", "Detours started / done / succeeded",
+             "Line losses", "Stop reason"]};
+  if (labels[panel.id]) {
+    renderPanel({...panel, id:panel.id + "-details", title:panel.title + " · details", chart:null});
+    panel = {...panel, rows:panel.rows.filter(row => labels[panel.id].includes(row.label))};
+  }
+  if (panel.id === "obstacle") panel = {...panel, chart:null};
   const node = panelNode(panel);
   node.classList.toggle("stale", panel.stale);
   node.classList.toggle("paused", Boolean(panel.paused));
@@ -404,7 +417,8 @@ function renderPanel(panel) {
   const canvas = node.querySelector("canvas");
   const draw = panel.chart && CHART_RENDERERS[panel.chart.type];
   canvas.hidden = !draw;
-  if (draw) draw(canvas, panel.chart);
+  // A collapsed HEALTH section has zero-sized canvases (a dial radius would be negative).
+  if (draw && canvas.clientWidth > 0 && canvas.clientHeight > 0) draw(canvas, panel.chart);
   const list = node.querySelector(".items");
   list.replaceChildren();
   panel.items.forEach(item => {
@@ -473,11 +487,13 @@ function render(snapshot) {
        gaps.jumped_rows + ")", gaps.total ? "warn" : "ok");
   pill("server", "server live", "ok");
   const view = snapshot.view || {};
-  pill("mode", view.mode === "RUNNING" ? "RUN" : view.mode || "mode ?",
-       view.mode === "RUNNING" ? "ok" : "");
+  const mode = view.mode === "RUNNING" ? "RUN" : view.mode || "mode ?";
+  pill("mode", mode + (view.state_stale ? " · stale" : ""),
+       view.state_stale ? "warn" : view.mode === "RUNNING" ? "ok" : "");
   [1,3,4,2].forEach(id => {
     const node = document.getElementById("module-" + id);
-    node.className = !view.state_stale && view.module === id ? "active" : "";
+    node.className = !view.state_stale && (view.module === id || (id === 3 && view.module === 5))
+      ? "active" : "";
   });
   renderButtons(snapshot.buttons);
   if (view.path) renderPanel({id:"path", title:"RUN PATH", age_ms:null, stale:false,
@@ -493,7 +509,7 @@ function render(snapshot) {
       const decision = profile ? ({0:"NONE",1:"RIGHT →",2:"← LEFT"}[profile.decision]) : "awaiting scan";
       const observed = profile ? profile.points.filter(p => p.mm !== null || p.no_return).length : 0;
       text(document.getElementById("panel-ultrasonic").querySelector(".visual-summary"),
-        (sonar.reversing ? "REVERSING · " : "DECISION: " + decision + " · ") +
+        (sonar.reversing ? "REVERSING · " : "") + "DECISION: " + decision + " · " +
         "attempt " + sonar.attempt + "/3" +
         (profile ? " · observed " + observed + "/13 · profile " + fmtAge(profile.age_ms) + " ago" : ""));
       text(document.getElementById("panel-ultrasonic").querySelector(".legend"),
@@ -560,6 +576,8 @@ document.getElementById("buttons").addEventListener("click", event => {
   }
   sendCommand(name);
 });
+
+document.getElementById("health").addEventListener("toggle", () => { if (latest) render(latest); });
 
 function poll() {
   fetch("/api/state").then(r => r.json()).then(render).catch(() => {

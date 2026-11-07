@@ -7,7 +7,7 @@ const vm = require("vm");
 
 const canvasCalls = [];
 function makeNode(id) {
-  return {
+  const node = {
     id, hidden: id === "restart" || id === "cmderror" || id === "banner",
     disabled: false, title: "", className: "", textContent: "", dataset: {},
     classList: { toggle() {} },
@@ -26,11 +26,18 @@ function makeNode(id) {
       return new Proxy({}, { get: (t, k) => (k in t ? t[k] : (...args) => {
         if (args.some(v => typeof v === "number" && !Number.isFinite(v)))
           throw new Error("non-finite canvas coordinate in " + k);
+        if (k === "arc" && args[2] < 0) throw new Error("negative canvas arc radius");
         canvasCalls.push([k, ...args]);
-      }), set: (t, k, v) => { t[k] = v; return true; } });
+      }), set: (t, k, v) => { t[k] = v; canvasCalls.push(["set:" + k, v]); return true; } });
     },
     addEventListener(type, fn) { this.listener = fn; },
   };
+  node.classList.toggle = (name, enabled) => {
+    const classes = new Set(node.className.split(" ").filter(Boolean));
+    if (enabled) classes.add(name); else classes.delete(name);
+    node.className = Array.from(classes).join(" ");
+  };
+  return node;
 }
 
 async function main() {

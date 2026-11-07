@@ -244,8 +244,8 @@ class DashboardModel:
                 self.scan_samples.clear()
                 self.scan_retry = 0
                 self.scan_reversing = False
-            if fields["state"] != 1:
-                self.scan_reversing = False
+            # A newer state snapshot supersedes a retry event (including a lost end event).
+            self.scan_reversing = fields["state"] == 1 and fields["module"] == 5
             self.state = {"fields": fields, "rx": now}
             self.trend.append(fields["kr1_position"])
         elif topic == "robot/heartbeat":
@@ -583,11 +583,12 @@ class DashboardModel:
         servo = f.get("kr1_servo_deg", 0)
         if latest is not None and (self.state is None or self.sonar["rx"] > self.state["rx"]):
             servo = latest["angle"]
+        echo_now = self.sonar["rx"] if self.telemetry_mode() == "idle" and self.sonar else now
         return {"beam_deg": servo,
                 "latest_mm": None if latest is None or not latest["valid"] or
                 latest["echo_status"] != 0 else latest["echo_mm"],
-                "recent": [dict(p, age_ms=int(now - p["rx"])) for p in self.sonar_recent
-                           if now - p["rx"] <= 10000],
+                "recent": [dict(p, age_ms=int(echo_now - p["rx"])) for p in self.sonar_recent
+                           if echo_now - p["rx"] <= 10000],
                 "profile": profile, "attempt": min(3, self.scan_retry + 1),
                 "reversing": bool(f.get("state") == 1 and
                                   (self.scan_reversing or f.get("module") == 5))}
@@ -602,7 +603,7 @@ class DashboardModel:
                 "sonar": self.sonar_visual(now),
                 "path": self.path_visual(),
                 "state_stale": self.state is None or
-                self.state_age(now) > self.limits()["state_stale_ms"]}
+                self.state_age(now, "vehicle_age_ms") > self.limits()["state_stale_ms"]}
 
     def snapshot(self):
         """Return everything the page needs as one JSON-ready dict."""

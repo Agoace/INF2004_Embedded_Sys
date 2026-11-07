@@ -22,6 +22,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 import dashboard_model as model_module  # noqa: E402
 import dashboard_page  # noqa: E402
+import dashboard_replay  # noqa: E402
 import mqtt_dashboard as dashboard  # noqa: E402
 import robot_wire  # noqa: E402
 
@@ -2066,17 +2067,91 @@ class RedesignModelTests(ModelCase):
         self.assertFalse(self.model.snapshot()["view"]["sonar"]["reversing"])
 
 
+    def test_idle_retains_last_echo_window_without_claiming_fresh_data(self):
+        self.feed("state_idle_mode")
+        self.model._store_sonar(robot_wire.decode("robot/sonar",SAMPLES["sonar_valid"]),self.model.now_ms())
+        before=self.model.snapshot()["view"]["sonar"]["recent"]
+        self.assertEqual(len(before),1)
+        self.clock.advance(20000)
+        after=self.model.snapshot()
+        self.assertTrue(after["view"]["paused"])
+        self.assertEqual(after["view"]["sonar"]["recent"],before)
+        self.assertGreater(next(p for p in after["panels"] if p["id"] == "ultrasonic")["age_ms"],10000)
+
+    def test_new_state_clears_reverse_if_end_event_is_missing(self):
+        self.feed("state_running")
+        self.model._store_event({"kind":8,"sequence":1,"uptime_ms":0,"word":1,"detail":1},0)
+        self.assertTrue(self.model.snapshot()["view"]["sonar"]["reversing"])
+        self.feed("state_running")
+        self.assertFalse(self.model.snapshot()["view"]["sonar"]["reversing"])
+
+    def test_no_return_and_failed_echo_do_not_become_distance_samples(self):
+        fields = robot_wire.decode("robot/sonar", SAMPLES["sonar_valid"])
+        self.model._store_sonar(dict(fields, sequence=800, angle=0, echo_status=3, valid=0),0)
+        self.model._store_sonar(dict(fields, sequence=801, angle=5, echo_status=1, valid=0),0)
+        self.model._store_obstacle(robot_wire.decode("robot/obstacle",SAMPLES["obstacle"]),0)
+        points = self.model.snapshot()["view"]["sonar"]["profile"]["points"]
+        zero = next(p for p in points if p["angle"] == 0)
+        failed = next(p for p in points if p["angle"] == 5)
+        self.assertTrue(zero["no_return"])
+        self.assertIsNone(zero["mm"])
+        self.assertFalse(failed["no_return"])
+        self.assertIsNone(failed["mm"])
+
+
 @unittest.skipUnless(NODE, "node required for drawing checks")
 class RedesignPageTests(AppCase):
-    def trace(self, expressions=(), views=()):
+    def trace(self, expressions=(), views=(), snapshot=None):
         page = self.request("GET", "/")[2].decode()
-        snap = json.loads(self.request("GET", "/api/state")[2])
+        snap = snapshot or json.loads(self.request("GET", "/api/state")[2])
+        snap["server_instance"] = self.app.instance
         result = subprocess.run([NODE, str(HARNESS)], text=True, capture_output=True,
                                 input=json.dumps({"page":page, "steps":[{"render":snap}],
                                                   "expressions":expressions, "views":views}),
                                 timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr)
         return json.loads(result.stdout)
+
+    def test_reverse_and_paused_replay_preserve_command_header(self):
+        snap = dashboard_replay.scene(SAMPLES, "reattempt")
+        trace = self.trace(snapshot=snap, views=[["panel-ultrasonic", ".visual-summary"]])
+        self.assertIn("REVERSING",trace["views"][0]["text"])
+        self.assertIn("attempt 2/3",trace["views"][0]["text"])
+        self.assertFalse(trace["estop"]["disabled"])
+        idle = dashboard_replay.scene(SAMPLES, "idle")
+        trace = self.trace(snapshot=idle, views=[["panel-ultrasonic", None],
+                                                ["panel-ultrasonic", ".age"], ["mode",None]])
+        self.assertIn("paused",trace["views"][0]["className"])
+        self.assertIn("idle (paused)",trace["views"][1]["text"])
+        self.assertEqual(trace["views"][2]["text"],"IDLE")
+        self.assertFalse(trace["estop"]["disabled"])
+
+    def test_near_echo_red_beam_no_return_is_edge_square(self):
+        snap = dashboard_replay.scene(SAMPLES, "scan-left")
+        snap["view"]["sonar"]["latest_mm"] = 200
+        trace = self.trace(snapshot=snap)
+        self.assertIn(["set:strokeStyle", "#ff625b"],trace["canvasCalls"])
+        self.assertTrue(any(c[0] == "strokeRect" for c in trace["canvasCalls"]))
+
+    def test_health_retains_details_and_module_five_highlights_scan(self):
+        snap = dashboard_replay.scene(SAMPLES, "scan-left")
+        snap["view"]["module"] = 5
+        trace = self.trace(snapshot=snap, views=[["module-3",None],
+                                               ["panel-wheels-details",".title"],
+                                               ["panel-summary-details",".title"]])
+        self.assertEqual(trace["views"][0]["className"],"active")
+        self.assertIn("details",trace["views"][1]["text"])
+        self.assertIn("details",trace["views"][2]["text"])
+
+    def test_collapsed_health_does_not_draw_zero_size_dial(self):
+        expr = """(() => {
+          const node=document.getElementById('panel-odometry').querySelector('canvas');
+          node.clientWidth=0; node.clientHeight=0;
+          renderPanel({id:'odometry',title:'dial',age_ms:0,rows:[],items:[],note:'',
+            chart:{type:'dial',heading_deg:0,turn_rate_dps:0}});
+          return true;
+        })()"""
+        self.assertEqual(self.trace(expressions=[expr])["values"],[True])
 
     def test_line_and_drive_use_numeric_state_and_signed_speed(self):
         self.model.ingest("robot/state", SAMPLES["state_running"])
@@ -2182,6 +2257,19 @@ class RedesignLayoutTests(unittest.TestCase):
         self.assertIn('id="module-3">SCAN', page)
         self.assertIn('id="estop" data-command="estop"', page)
         self.assertNotIn('https://', page)
+
+
+
+class ReplayTests(unittest.TestCase):
+    def test_replay_is_public_offline_and_does_not_start_a_live_connection(self):
+        page = dashboard_replay.replay_page(dashboard_replay.scene(SAMPLES,"idle"))
+        self.assertNotIn("\nstart();\n",page)
+        self.assertIn("\nrender({",page)
+        self.assertIn("REPLAY · public fixtures",page)
+        self.assertNotIn("__CSRF__",page)
+        self.assertNotIn(TOKEN.hex(),page)
+        self.assertNotIn("https://",page)
+
 
 
 if __name__ == "__main__":
