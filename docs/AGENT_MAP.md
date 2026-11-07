@@ -136,3 +136,8 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
+
+## Approved template deviations
+
+- [Template change ledger](TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.
+- [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`.
