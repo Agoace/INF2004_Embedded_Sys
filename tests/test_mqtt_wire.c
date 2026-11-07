@@ -66,8 +66,59 @@ static void test_batch_packer(void) {
         .publish_ms=5u,.newest_ms=0xfffffff0u,.log_rows=6u};
     emit_batch("wrap",&header,records);
 }
+static void emit_named(const char *name,const uint8_t *data,size_t size) {
+    printf("dash/%s ",name);
+    for (size_t i=0u;i<size;++i) printf("%02x",(unsigned int)data[i]);
+    putchar('\n');
+}
+static void set_bits(uint8_t kr1[16],unsigned int offset,unsigned int width,uint32_t value) {
+    for (unsigned int bit=0u;bit<width;++bit) {
+        const unsigned int at=offset+bit;
+        kr1[at/8u]=(uint8_t)((kr1[at/8u] & ~(1u<<(at%8u))) | (((value>>bit)&1u)<<(at%8u)));
+    }
+}
+/* Dashboard fixtures: robot/state, sonar, event and heartbeat messages packed by C. */
+static void test_dashboard_fixtures(void) {
+    uint8_t bytes[RM_HEARTBEAT_SIZE];
+    rm_state_t state={.flags=0x0fu,.state=0u,.module=0u,.uptime_ms=10000u,.sequence=1u,
+        .line_age_ms=5u,.motion_age_ms=8u,.vehicle_age_ms=10u,.raw_bc=777u,
+        .count_l=1000,.count_r=-2000,.norm_l=500u,.norm_c=600u};
+    set_bits(state.kr1,21u,12u,1234u);set_bits(state.kr1,33u,12u,2345u);
+    set_bits(state.kr1,45u,8u,(uint32_t)(int32_t)-25 & 0xffu);
+    set_bits(state.kr1,53u,10u,100u);set_bits(state.kr1,63u,10u,(uint32_t)(int32_t)-100 & 0x3ffu);
+    set_bits(state.kr1,73u,10u,90u);set_bits(state.kr1,83u,10u,(uint32_t)(int32_t)-95 & 0x3ffu);
+    set_bits(state.kr1,109u,7u,(uint32_t)(int32_t)-15 & 0x7fu);
+    rm_pack_state(bytes,&state);emit_named("state_idle",bytes,RM_STATE_SIZE);
+    state.flags=0x8fu;state.state=1u;state.module=1u;state.sequence=2u;
+    rm_pack_state(bytes,&state);emit_named("state_running",bytes,RM_STATE_SIZE);
+    state.flags=0x07u;state.state=0u;state.module=0u;state.vehicle_age_ms=65535u;state.sequence=3u;
+    rm_pack_state(bytes,&state);emit_named("state_vehicle_stale",bytes,RM_STATE_SIZE);
+    rm_sonar_t sonar={.status=1u,.valid=true,.angle=-30,.ping_angle=-30,.history_sequence=5u,
+        .generation=1u,.request_id=2u,.trigger_ms=100u,.timestamp_ms=110u,.echo=345u,.ping_sequence=9u};
+    rm_pack_sonar(bytes,&sonar);emit_named("sonar_valid",bytes,RM_SONAR_SIZE);
+    sonar.history_sequence=6u;sonar.angle=30;sonar.valid=false;sonar.echo=(uint16_t)(1u<<9);
+    rm_pack_sonar(bytes,&sonar);emit_named("sonar_error",bytes,RM_SONAR_SIZE);
+    rm_event_t event={.kind=6u,.from=0u,.to=0u,.sequence=10u,.uptime_ms=11000u,
+        .word=RM_CMD_START,.detail=0u};
+    rm_pack_event(bytes,&event);emit_named("event_start_ok",bytes,RM_EVENT_SIZE);
+    event.sequence=11u;event.word=(uint16_t)(RM_CMD_START|(1u<<8));event.detail=1u;
+    rm_pack_event(bytes,&event);emit_named("event_start_not_idle",bytes,RM_EVENT_SIZE);
+    event.sequence=14u;event.word=RM_CMD_CALIBRATE;event.detail=0u;
+    rm_pack_event(bytes,&event);emit_named("event_calibrate_ok",bytes,RM_EVENT_SIZE);
+    event.sequence=15u;event.kind=5u;event.from=1u;event.to=0u;event.word=7u;event.detail=2u;
+    rm_pack_event(bytes,&event);emit_named("event_run_end",bytes,RM_EVENT_SIZE);
+    rm_heartbeat_t beat={.flags=0x37u,.reset_reason=1u,.uptime_ms=60000u,.connect_attempts=2u,
+        .telemetry_lost=3u,.event_lost=4u,.command_lost=5u,.stack_min_free=1234u,
+        .publish_ok=100u,.publish_failed=2u,.line_busy=6u,.sonar_busy=7u,.motion_busy=8u,
+        .vehicle_busy=9u,.health_busy=10u,.vehicle_overruns=11u,.motion_late=12u,.motion_missed=13u,
+        .health_age_ms=40u,.mqtt_state=3u,.wifi_poll_gap_max_us=25000u,.wifi_poll_gap_samples=600u};
+    rm_pack_heartbeat(bytes,&beat);emit_named("heartbeat",bytes,RM_HEARTBEAT_SIZE);
+    beat.flags=0x3fu;
+    rm_pack_heartbeat(bytes,&beat);emit_named("heartbeat_dump",bytes,RM_HEARTBEAT_SIZE);
+}
 int main(void) {
     test_batch_packer();
+    test_dashboard_fixtures();
     uint8_t bytes[RM_HEARTBEAT_SIZE];
     const rm_state_t state={.flags=0xffu,.state=0x13u,.module=0x25u,.motion_faults=0x81u,
         .uptime_ms=0x12345678u,.sequence=0xfedcba98u,.line_age_ms=10u,.motion_age_ms=20u,
