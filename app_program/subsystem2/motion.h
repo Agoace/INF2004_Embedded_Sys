@@ -32,7 +32,7 @@ int motion_clear_faults(void);
 /* Returns E_OK or a kernel error; optional output receives accepted angle. */
 int motion_set_servo(int deg, int *accepted_deg);
 int motion_status(motion_status_t *status);
-/* MQTT builds: bounded read-only last-tick copy. No inherited mutex/wait.
+/* Bounded read-only last-tick copy, independent of any transport. No inherited mutex/wait.
  * E_TMOUT busy/not yet published, E_OBJ not started; failed output unchanged. */
 int motion_snapshot_try_read(motion_status_t *status,uint32_t *timestamp_us);
 int motion_bench_start(void);

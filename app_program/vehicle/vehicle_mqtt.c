@@ -25,10 +25,14 @@ void robot_network_state(rm_state_t *out) {
     static vehicle_snapshot_t vehicle;
     static age_t la,ma,va;
     static uint32_t motion_us;
-    const uint32_t now=drv_time_ms(),us=drv_time_us();
     const bool l=line_snapshot_try_read(&line)>=E_OK;
     const bool m=motion_snapshot_try_read(&motion,&motion_us)>=E_OK;
     const bool v=vehicle_snapshot_try_read(&vehicle)>=E_OK;
+    sonar_snapshot_t sonar;
+    const bool s=sonar_snapshot_try_read(&sonar)>=E_OK;
+    /* Writers may preempt this reader. Observe time AFTER the copies, so a
+     * newly published timestamp cannot appear to be in our future. */
+    const uint32_t now=drv_time_ms(),us=drv_time_us();
     if (!l) robot_network_busy(ROBOT_BOARD_LINE);
     if (!m) robot_network_busy(ROBOT_BOARD_MOTION);
     if (!v) robot_network_busy(ROBOT_BOARD_VEHICLE);
@@ -47,9 +51,8 @@ void robot_network_state(rm_state_t *out) {
     out->state=vehicle.state;out->module=vehicle.module;out->motion_faults=motion.faults;
     out->raw_bc=line.raw_bc;out->norm_l=line.line.norm[0];out->norm_c=line.line.norm[1];
     out->count_l=motion.counts[0];out->count_r=motion.counts[1];
-    sonar_snapshot_t sonar;
     ultrasonic_result_t echo=ULTRASONIC_RESULT_NONE;
-    if (sonar_snapshot_try_read(&sonar)>=E_OK) {
+    if (s) {
         if (sonar.valid && sonar.status==SONAR_ECHO && now-sonar.timestamp_ms<=100u) echo=sonar.echo;
     } else robot_network_busy(ROBOT_BOARD_SONAR);
     const vr_values_t values={.elapsed_ms=now,.raw={line.raw[0],line.raw[1]},.echo=echo,
