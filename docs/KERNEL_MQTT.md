@@ -95,8 +95,15 @@ copy; health31 can also be interrupted by its Wi-Fi20 reader. All these
 boards and callers belong to core 0; this is not a cross-core API.
 
 Readers commit only a successful scratch copy. On failure, the network
-retains prior values, increments that board's busy/unavailable counter and
-clears its fresh flag. Ages saturate at 65535 ms. Fresh limits are line
+retains prior values, records `E_TMOUT` as genuine busy or `E_OBJ`/`E_NOEXS`
+as unavailable (with the v3 heartbeat mask/aggregate), and
+clears its fresh flag. Only the main-board read controls its unavailable
+mask. Empty secondary obstacle/detour/summary/history cursors are not absent
+main boards. Sonar history now returns `E_OBJ` for service-not-ready,
+`E_TMOUT` for a writer conflict, and `E_NOEXS` for no next entry, so an idle
+history cursor does not inflate busy. No sensor acquisition or driving
+caller changes; this API has one observation adapter and host tests.
+Ages saturate at 65535 ms. Fresh limits are line
 10 ms, motion 20 ms and vehicle 30 ms; line also requires valid data. A
 stalled source sequence never refreshes its cache age, even across a
 32-bit microsecond wrap. Time is observed **after** preemptible reads so

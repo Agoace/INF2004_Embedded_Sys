@@ -113,6 +113,9 @@ int main(int argc,char **argv) {
     robot_network_board_result(ROBOT_BOARD_COUNT,E_OBJ);
     robot_queue_metrics(&metrics);
     assert(metrics.board_unavailable_mask==0u && metrics.board_unavailable==233u);
+    robot_network_board_result(ROBOT_BOARD_VEHICLE,E_PAR);
+    robot_queue_metrics(&metrics);
+    assert(metrics.vehicle_busy==5u && metrics.board_unavailable==233u);
     assert(irq_off==0u && di_count==ei_count);
     return 0;
 }

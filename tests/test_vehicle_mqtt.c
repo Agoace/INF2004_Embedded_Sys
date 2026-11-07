@@ -42,7 +42,7 @@ static rm_obstacle_t obstacle_value;static int obstacle_error=E_NOEXS;
 int vehicle_obstacle_try_read(rm_obstacle_t *out) { if (obstacle_error<0) return obstacle_error;*out=obstacle_value;return E_OK; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
 static unsigned int unavailable_reads[5];
-void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result<0) ++busy[board]; }
+void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result==E_TMOUT) ++busy[board]; }
 static uint16_t row_bits(const uint8_t *row,unsigned int offset,unsigned int width) {
     uint16_t value=0u;
     for (unsigned int bit=0u;bit<width;++bit)

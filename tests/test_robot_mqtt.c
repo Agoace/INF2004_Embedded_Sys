@@ -101,8 +101,8 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
 void robot_network_state(rm_state_t *value) { assert(in_hook);*value=(rm_state_t){.flags=15u,.state=2u,.raw_bc=321u}; }
 int robot_network_sonar(uint32_t *cursor,rm_sonar_t *value,uint32_t *missed) {
     assert(in_hook);++sonar_reads;*missed=sonar_missed;sonar_missed=0u;
-    if (sonar_busy) return E_OBJ;
-    if (sonar_tail==sonar_head) return E_TMOUT;
+    if (sonar_busy) return E_TMOUT;
+    if (sonar_tail==sonar_head) return E_NOEXS;
     *value=sonar[sonar_tail++];*cursor=value->history_sequence;return E_OK;
 }
 static rm_obstacle_t obstacles[4];static unsigned int obstacle_head,obstacle_tail;
@@ -138,7 +138,7 @@ int robot_command_push(const robot_command_t *value) {
 void robot_command_lost(void) { ++command_lost; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
 static unsigned int unavailable_reads[5];
-void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result<0) ++busy[board]; }
+void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result==E_TMOUT) ++busy[board]; }
 void robot_queue_metrics(rm_heartbeat_t *value) {
     value->command_lost=command_lost;value->event_lost=event_lost;
     value->line_busy=busy[0];value->sonar_busy=busy[1];value->motion_busy=busy[2];
