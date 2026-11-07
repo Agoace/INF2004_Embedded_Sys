@@ -42,7 +42,8 @@ static robot_command_t last_command;
 static rm_event_t events[4];static unsigned int event_head,event_tail;
 static rm_sonar_t sonar[4];static unsigned int sonar_head,sonar_tail;
 static uint32_t sonar_missed;
-static bool sonar_busy,health_busy;
+static bool sonar_busy,health_busy,health_stalled;
+static uint32_t health_producer_ms;
 static unsigned int event_reads,sonar_reads;
 static telemetry_log_index_t ram_index={.generation=7u,.rows=2u,.events=1u,.lost=9u};
 static bool ram_busy;
@@ -114,8 +115,9 @@ void robot_queue_metrics(rm_heartbeat_t *value) {
 int robot_health_try_read(rm_heartbeat_t *value,uint32_t *timestamp_us) {
     assert(in_hook);
     if (health_busy) return E_TMOUT;
-    *value=(rm_heartbeat_t){.telemetry_lost=13u,.stack_min_free=222u};
-    *timestamp_us=now_ms*1000u;return E_OK;
+    const uint32_t produced_ms=health_stalled ? health_producer_ms : now_ms;
+    *value=(rm_heartbeat_t){.uptime_ms=produced_ms,.telemetry_lost=13u,.stack_min_free=222u};
+    *timestamp_us=produced_ms*1000u;return E_OK;
 }
 int telemetry_log_open(telemetry_log_index_t *value) { assert(in_hook);if (ram_busy) return E_TMOUT;*value=ram_index;return E_OK; }
 int telemetry_log_row(uint32_t generation,uint32_t index,uint8_t value[TELEMETRY_BYTES]) {
@@ -241,6 +243,36 @@ static void test_schedule(void) {
     assert(strcmp(publications[publication_count-1u].topic,"robot/sonar")==0);
     assert(count_topic("robot/log")==0u);
 }
+static uint16_t u16(const uint8_t *data) { return (uint16_t)((uint16_t)data[0]|((uint16_t)data[1]<<8)); }
+static void test_health_stalled(void) {
+    start_connected();publication_t *frame=last_topic("robot/heartbeat");
+    assert(frame && (frame->data[1]&32u)!=0u && u16(frame->data+80)==0u);
+    health_stalled=true;health_producer_ms=0u;
+    poll_at(2500u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)!=0u && u16(frame->data+80)==2500u);
+    poll_at(3500u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)==0u && u16(frame->data+80)==3500u);
+    /* The successful read returns the same producer sample after 2^32us.
+     * A us-only subtraction would make it look less than 1ms old again. */
+    poll_at(4294968u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)==0u && u16(frame->data+80)==65535u);
+    assert(u16(frame->data+40)==222u && u32(frame->data+12)==13u && u32(frame->data+4)==4294968u);
+    assert(busy[ROBOT_BOARD_HEALTH]==0u); /* Readable does not mean fresh. */
+    health_stalled=false;poll_at(4295968u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)!=0u && u16(frame->data+80)==0u);
+}
+static void test_health_missing(void) {
+    health_busy=true;start_connected();publication_t *frame=last_topic("robot/heartbeat");
+    assert(frame && (frame->data[1]&32u)==0u && u16(frame->data+80)==65535u && u16(frame->data+40)==65535u);
+    assert(u32(frame->data+12)==0u && busy[ROBOT_BOARD_HEALTH]==1u);
+    poll_at(1000u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)==0u && u16(frame->data+80)==65535u && u16(frame->data+40)==65535u);
+    health_busy=false;poll_at(2000u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)!=0u && u16(frame->data+80)==0u && u16(frame->data+40)==222u);
+    health_busy=true;poll_at(3000u);frame=last_topic("robot/heartbeat");
+    assert((frame->data[1]&32u)==0u && u16(frame->data+80)==1000u && u16(frame->data+40)==222u);
+    assert(u32(frame->data+12)==13u && busy[ROBOT_BOARD_HEALTH]==3u);
+}
 static void test_retained(void) {
     start_connected();events[event_head++]=(rm_event_t){.kind=2u,.sequence=55u};
     sonar[sonar_head++]=(rm_sonar_t){.status=1u,.history_sequence=42u};sonar_missed=3u;
@@ -342,6 +374,8 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"commands")) test_commands();
     else if (!strcmp(argv[1],"schedule")) test_schedule();
     else if (!strcmp(argv[1],"retained")) test_retained();
+    else if (!strcmp(argv[1],"health_stalled")) test_health_stalled();
+    else if (!strcmp(argv[1],"health_missing")) test_health_missing();
     else if (!strcmp(argv[1],"log")) test_log(false,false);
     else if (!strcmp(argv[1],"abort")) test_log(true,false);
     else if (!strcmp(argv[1],"begin_snapshot")) test_log(false,true);
