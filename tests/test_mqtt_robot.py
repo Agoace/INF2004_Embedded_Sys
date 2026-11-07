@@ -42,12 +42,12 @@ class WireTests(unittest.TestCase):
         self.assertEqual((state["count_l"], state["count_r"]), (-2147483648, -1234567))
         self.assertTrue(all(state[name] == 1 for name in wire.STATE_FLAGS))
         self.assertEqual(state["kr1_hex"], "01020304" + "00" * 12)
-        sonar = wire.decode("robot/sonar", self.samples["robot/sonar"])
+        sonar = wire.decode("robot/sonar", legacy_frame("sonar", self.samples["robot/sonar"]))
         self.assertEqual(sonar, dict(version=1, status=1, valid=1, pending=1, angle=-30, ping_angle=30,
                                     sequence=0xFFFFFFFF, generation=0x12345678, request_id=33,
                                     trigger_ms=1000, timestamp_ms=1010, echo=0x4567, ping_sequence=123,
                                     echo_status=2, echo_mm=""))
-        event = wire.decode("robot/event", self.samples["robot/event"])
+        event = wire.decode("robot/event", legacy_frame("event", self.samples["robot/event"]))
         self.assertEqual(event, dict(version=1, kind=6, sequence=0x12345678, uptime_ms=1234,
                                     word=0xABCD, detail=4, run_relative=1, **{"from": 2, "to": 3}))
         heart = wire.decode("robot/heartbeat", self.samples["robot/heartbeat"])
@@ -82,7 +82,9 @@ class WireTests(unittest.TestCase):
                                     ("heartbeat", 98, 1), ("log", 2, 1)):
             bad = bytearray(self.samples["robot/" + topic])
             bad[offset] |= mask
-            if topic == "heartbeat" and offset == 98 and bad[0] == 2:
+            if topic == "heartbeat" and offset == 3 and bad[0] >= 3:
+                bad[3] = 0x20  # unavailable mask bits 5..7 stay reserved
+            if topic == "heartbeat" and offset == 98 and bad[0] >= 2:
                 struct.pack_into("<H", bad, 98, 1001)  # version 2: CPU load above 100.0 %
             with self.assertRaises(ValueError):
                 wire.decode("robot/" + topic, bad)
@@ -262,7 +264,8 @@ class LogBatchTests(unittest.TestCase):
     def test_c_frames_match_python_layout(self):
         live = self.batches["live"]
         records = [bytes([(i * 7 + 3) & 255 for i in range(16 * k, 16 * k + 16)]) for k in range(10)]
-        self.assertEqual(live, build_batch(count=10, generation=7, first=100, publish=5000,
+        self.assertEqual(legacy_frame("log", live),
+                         build_batch(count=10, generation=7, first=100, publish=5000,
                                            newest=4950, rows=125, records=records))
         header, rows = wire.parse_log_batch(live)
         self.assertEqual((header["kind"], header["count"], header["flags"], header["stream_id"]),
@@ -280,7 +283,7 @@ class LogBatchTests(unittest.TestCase):
         refill = wire.parse_log_batch(self.batches["refill_rows"])
         self.assertEqual((refill[0]["refill"], refill[0]["stream_id"], len(refill[1]), refill[1][11]["index"]),
                          (1, 111, 12, 35))
-        self.assertEqual(len(self.batches["refill_rows"]), 224)
+        self.assertEqual(len(self.batches["refill_rows"]), 228)
         events = wire.parse_log_batch(self.batches["refill_events"])[1]
         self.assertEqual([(e["index"], e["event_kind"], e["event_word"], e["event_detail"],
                            e["event_run_relative"]) for e in events],
@@ -565,7 +568,7 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
 
     def test_c_packed_state_v2_and_old_version_bytes(self):
-        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3)))
+        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3), (76, 4)))
         result = wire.decode("robot/state", self.c_state)
         self.assertEqual((result["dist_left_mm"], result["dist_right_mm"], result["dist_avg_mm"]),
                          (-123456, 2 ** 31 - 1, -7))
@@ -577,7 +580,7 @@ class NewTopicTests(unittest.TestCase):
                     wire.decode("robot/state", bytes([version]) + self.c_state[1:size])
 
     def test_c_batch_two_frames_match_independent_builders(self):
-        self.assertEqual(self.dash["state_v3"], state_v3_frame(
+        self.assertEqual(legacy_frame("state", self.dash["state_v3"]), state_v3_frame(
             self.c_state, duty_left=-800, duty_right=32767, heading=-1234567, rate=-4749,
             dist=(-123456, 2 ** 31 - 1, -7)))
         for suffix, outcome, payload, flags in (("done_line", 3, 0x567, 1),
@@ -585,7 +588,7 @@ class NewTopicTests(unittest.TestCase):
                                                 ("failed", 7, 3, 0),
                                                 ("aborted", 8, 0, 1)):
             frame = self.dash["detour_" + suffix]
-            self.assertEqual(frame, detour_frame(
+            self.assertEqual(legacy_frame("detour", frame), detour_frame(
                 outcome=outcome, side=2, flags=flags, sequence=0x01020304, start=0xFFFFFFF0,
                 end=16, duration=32, distance=0xA1B2C3D4, lateral=0x1234, payload=payload,
                 scan=0x0A0B0C0D))
@@ -594,7 +597,7 @@ class NewTopicTests(unittest.TestCase):
                                                     ("aborted_detour", 6, 2, 2, 41),
                                                     ("no_speed_error", 0, 4, 3, 65535)):
             frame = self.dash["summary_" + suffix]
-            self.assertEqual(frame, summary_frame(
+            self.assertEqual(legacy_frame("summary", frame), summary_frame(
                 flags=flags, source=source, reason=reason, run=0x01020304, duration=61234,
                 distance=4321, speed_error=error, motion_faults=9, shell=4, shell_detail=258))
             self.assertEqual(wire.decode("robot/summary", frame)["stop_reason"], reason)
@@ -613,13 +616,14 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((result["closest_mm"], result["profile_word"]), (510, 0x5A5A))
         self.assertEqual((result["right_free_step"], result["left_free_step"]), (7, 3))
         self.assertEqual((result["right_clear_deg"], result["left_clear_deg"]), (255, 15))
-        self.assertEqual(self.dash["obstacle"], obstacle_frame(
+        self.assertEqual(legacy_frame("obstacle", self.dash["obstacle"]), obstacle_frame(
             flags=0x0F, decision=2, angle=-30, scan=0x01020304, uptime=0xFFFFFFF0, closest=510,
             word=0x5A5A, right_step=7, left_step=3, right_clear=255, left_clear=15))
         self.assertEqual(wire.decode("robot/status", self.dash["status_online"])["robot_online"], 1)
         self.assertEqual(wire.decode("robot/status", self.dash["status_offline"])["robot_online"], 0)
         self.assertEqual((self.dash["status_online"], self.dash["status_offline"]),
-                         (bytes([1, 1]), bytes([1, 2])))
+                         (struct.pack("<BBI", 2, 1, 0x11223344),
+                          struct.pack("<BBI", 2, 2, 0x11223344)))
 
     def test_state_version_and_length_must_agree(self):
         good = self.state_v2()
@@ -707,8 +711,8 @@ def state_v3_frame(base, duty_left=-250, duty_right=1000, heading=-4500, rate=-1
 
 
 def heartbeat_frame(base, version=2, cpu=0x123):
-    frame = bytearray(base)
-    frame[0] = version
+    frame = bytearray(base[:100])
+    frame[0], frame[3] = version, 0
     struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
     return bytes(frame)
 
@@ -941,6 +945,16 @@ class BatchTwoTests(unittest.TestCase):
         self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1, "barcode": 1})
 
 
+def legacy_frame(name, frame):
+    """Check old prefix fields separately; reboot tests check every new ID/size."""
+    if name == "state":
+        return b"\x03" + frame[1:72]
+    if name == "log" and frame[0] == 2:
+        return b"\x01" + frame[1:32] + frame[36:]
+    size = {"sonar": 32, "event": 16, "obstacle": 20, "detour": 32, "summary": 44}[name]
+    return b"\x01" + frame[1:size]
+
+
 def with_boot(frame, boot=0xAABBCCDD, version=2):
     """Independent builder: the old fixed layout, new version byte, trailing ID."""
     return bytes([version]) + frame[1:] + struct.pack("<I", boot)
@@ -1037,6 +1051,43 @@ class RebootWireTests(unittest.TestCase):
 class RebootLogTests(unittest.TestCase):
     def setUp(self):
         self.log = wire.LogStream(report=lambda message: None)
+
+    def test_c_boot_fixtures_decode_exact_values(self):
+        outputs = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            outputs[topic] = bytes.fromhex(encoded)
+        ids = {"a": 0x11223344, "b": 0xAABBCCDD}
+        for suffix, boot in ids.items():
+            batch = outputs[f"batch/boot_{suffix}"]
+            head, records = wire.parse_log_batch(batch)
+            self.assertEqual((head["version"], head["boot_id"], head["generation"],
+                              head["first_index"], head["publish_ms"], head["newest_ms"]),
+                             (2, boot, 2, 0, 5000, 4990))
+            self.assertEqual(records[0]["kr1_hex"][:2], f"{10 + (suffix == 'b'):02x}")
+            begin = wire.decode("robot/log", outputs[f"dash/log_begin_boot_{suffix}"])
+            self.assertEqual((begin["boot_id"], begin["dump_id"], begin["generation"],
+                              begin["rows_total"]), (boot, 7, 2, 1))
+            expected = {"state": 76, "heartbeat": 108, "status": 6,
+                        "status_offline": 6, "summary": 48, "detour": 36,
+                        "event": 20, "sonar": 36, "obstacle": 24}
+            for name, size in expected.items():
+                topic = "robot/status" if name.startswith("status") else "robot/" + name
+                frame = outputs[f"dash/{name}_boot_{suffix}"]
+                decoded = wire.decode(topic, frame)
+                self.assertEqual((len(frame), decoded["boot_id"]), (size, boot))
+            beat = wire.decode("robot/heartbeat", outputs[f"dash/heartbeat_boot_{suffix}"])
+            self.assertEqual((beat["board_unavailable_mask"], beat["board_unavailable"],
+                              beat["vehicle_busy"], beat["cpu_load_permille"]),
+                             (8, 233, 0, 117))
+            self.assertEqual(wire.decode("robot/status",
+                                         outputs[f"dash/status_offline_boot_{suffix}"])
+                             ["robot_online"], 0)
+        log = wire.LogStream(report=lambda message: None)
+        rows = log.handle(outputs["batch/boot_a"]) + log.handle(outputs["batch/boot_b"])
+        self.assertEqual([(r["boot_id"], r["generation"], r["index"]) for r in rows],
+                         [(0x11223344, 2, 0), (0xAABBCCDD, 2, 0)])
+        self.assertEqual(log.handle(outputs["batch/boot_a"]), [])  # duplicate within its boot
 
     def test_exact_generation_two_collision_across_two_boots(self):
         a, b = boot_batch(100), boot_batch(200)

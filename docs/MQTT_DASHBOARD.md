@@ -59,6 +59,22 @@ without the other. The dashboard does not write files.
 
 ## Remote view through Tailscale
 
+Verified on 2026-11-07 by the operator:
+
+```sh
+tailscale serve --bg --http=8080 http://127.0.0.1:8765
+```
+
+From `fedora-desk`, the browser opened
+`http://fedora-laptop.taild62d21.ts.net:8080/`. Live data and all buttons
+worked. The browser marks the page **Not secure** because the page uses
+plain HTTP. Tailscale still carries the connection over WireGuard. The short
+name `http://fedora-laptop:8080` returns HTTP 403 by design, because the
+dashboard checks the exact Host and Origin.
+
+HTTPS on port 8443 did not work on the hotspot. The Let's Encrypt
+certificate fetch or `SetDNS` step timed out. Retry HTTPS on normal Wi-Fi.
+
 The dashboard always binds `127.0.0.1`. To use it from another device on
 your tailnet, let Tailscale Serve forward one HTTPS port to it. Do not
 change the bind address.

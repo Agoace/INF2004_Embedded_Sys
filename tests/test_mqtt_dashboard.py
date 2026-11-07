@@ -154,7 +154,7 @@ class ModelCase(unittest.TestCase):
         self.clock = FakeClock()
         self.model = model_module.DashboardModel(clock=self.clock, token_configured=True)
         self.model.set_broker_connected(True)
-        self.model.ingest("robot/status", ONLINE)
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 1, 0))
 
     def feed(self, name):
         self.model.ingest(topic_for(name), SAMPLES[name])
@@ -387,7 +387,7 @@ class GapTests(ModelCase):
         self.model.ingest("robot/log", batch(count=10, first=0, flags=1, stream=5, newest=0))
         self.model.ingest("robot/log", control(3, 5, 1, struct.pack("<IIII", 10, 0, 0, 0)))
         self.assertEqual(self.panel("log")["items"][0]["text"],
-                         "dump 5: missing rows [10-11] events []")
+                         "[boot:00000000:0] dump 5: missing rows [10-11] events []")
 
 
 class ButtonTests(ModelCase):
@@ -594,7 +594,7 @@ class CPackedNewTopicTests(ModelCase):
 
     def test_c_packed_status_drives_the_robot_link(self):
         self.model.status = None
-        self.feed("state_idle")
+        self.feed("state_boot_a")
         self.assertEqual(self.model.snapshot()["robot"]["level"], "unknown")
         self.feed("status_online")
         self.assertEqual(self.model.snapshot()["robot"]["level"], "online")
@@ -604,7 +604,8 @@ class CPackedNewTopicTests(ModelCase):
         self.assertTrue(self.button("estop")["enabled"])
 
     def test_c_packed_state_is_v2_with_distance_fields(self):
-        self.assertIn((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]), ((60, 2), (72, 3)))
+        self.assertIn((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]),
+                      ((60, 2), (72, 3), (76, 4)))
         self.feed("state_idle")
         self.assertEqual(self.rows("wheels")["Distance left / right / average"], "0 / 0 / 0 mm")
         self.assertTrue(self.button("start")["enabled"])
@@ -1633,7 +1634,7 @@ class DashboardRebootTests(ModelCase):
 
     def test_retained_summary_does_not_select_live_boot(self):
         self.model.ingest("robot/summary", boot_frame(summary(), 99), retained=True)
-        self.assertIsNone(self.model.snapshot()["boot"]["boot_id"])
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 0)
         self.online(200)
         self.assertIn("previous boot/session", self.panel("summary")["note"])
         self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 200)
@@ -1681,6 +1682,8 @@ class DashboardRebootTests(ModelCase):
         self.assertEqual(self.model.log.sessions.boot_id, 200)
 
     def test_legacy_uptime_rollback_clears_live_panels_and_labels_inference(self):
+        self.model = model_module.DashboardModel(clock=self.clock, token_configured=True)
+        self.model.set_broker_connected(True)
         a = bytearray(state_v3())
         struct.pack_into("<I", a, 4, 5000)
         self.model.ingest("robot/state", a)
@@ -1714,6 +1717,26 @@ class DashboardRebootTests(ModelCase):
         self.online(200)
         self.model.ingest("robot/status", struct.pack("<BBI", 2, 2, 100), retained=True)
         self.assertTrue(self.button("start")["enabled"])
+
+    def test_c_boot_fixtures_keep_dashboard_state_and_logs_separate(self):
+        self.model = model_module.DashboardModel(clock=self.clock, token_configured=True)
+        self.model.set_broker_connected(True)
+        self.model.ingest("robot/status", SAMPLES["status_boot_a"])
+        self.model.ingest("robot/state", SAMPLES["state_boot_a"])
+        self.model.ingest("robot/summary", SAMPLES["summary_boot_a"])
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 0x11223344)
+        self.model.ingest("robot/heartbeat", SAMPLES["heartbeat_boot_b"])
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 0xAABBCCDD)
+        self.assertIsNone(self.model.state)
+        self.assertEqual(self.rows("health")["Unavailable boards (last explicit read)"],
+                         "vehicle")
+        self.assertEqual(self.rows("health")["Unavailable observations (total)"], 233)
+        self.assertIn("previous boot/session", self.panel("summary")["note"])
+        self.model.ingest("robot/state", SAMPLES["state_boot_a"])
+        self.assertIsNone(self.model.state)
+        self.model.ingest("robot/log", SAMPLES["log_begin_boot_a"])
+        self.model.ingest("robot/log", SAMPLES["log_begin_boot_b"])
+        self.assertEqual(len(self.model.log.dumps), 2)
 
     def test_absent_and_busy_are_separate_health_rows(self):
         self.model.ingest("robot/heartbeat", reboot_heartbeat(100, mask=8, unavailable=42))
