@@ -13,6 +13,7 @@ import secrets
 import sys
 import threading
 import time
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import robot_wire  # noqa: E402
@@ -69,16 +70,32 @@ class Commander:
 class DashboardApp:
     """Request rules, separate from sockets so tests can call them directly."""
 
-    def __init__(self, model, commander, port, csrf=None):
+    def __init__(self, model, commander, port, csrf=None, extra_origins=()):
         self.model = model
         self.commander = commander
         self.csrf = csrf or secrets.token_urlsafe(32)
+        self.extra_hosts = set()
+        self.extra_origins = set()
+        for origin in extra_origins:
+            self.add_origin(origin)
         self.set_port(port)
+
+    def add_origin(self, origin):
+        """Also accept one exact reverse-proxy origin, for example a Tailscale Serve URL."""
+        parts = urllib.parse.urlsplit(origin)
+        if (parts.scheme not in ("http", "https") or not parts.netloc
+                or parts.path not in ("", "/") or parts.query or parts.fragment
+                or "@" in parts.netloc):
+            raise ValueError(f"origin must be scheme://host[:port]: {origin!r}")
+        netloc = parts.netloc.lower()
+        self.extra_hosts.add(netloc)
+        self.extra_origins.add(f"{parts.scheme}://{netloc}")
 
     def set_port(self, port):
         """Set the port the browser uses; call again if the server picked a free port."""
-        self.allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        self.allowed_origins = {f"http://{host}" for host in self.allowed_hosts}
+        local_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+        self.allowed_hosts = local_hosts | self.extra_hosts
+        self.allowed_origins = {f"http://{host}" for host in local_hosts} | self.extra_origins
 
     def host_ok(self, headers):
         return headers.get("Host", "").lower() in self.allowed_hosts
@@ -275,6 +292,9 @@ def main(argv=None):
                         help="dashboard port on 127.0.0.1")
     parser.add_argument("--token-file", help="0600 file with 32 hex digits; "
                         "without it only ESTOP (zero token) is available")
+    parser.add_argument("--allow-origin", action="append", default=[], metavar="URL",
+                        help="also accept this exact proxy origin, e.g. "
+                        "https://<name>.ts.net:8443 for Tailscale Serve; repeatable")
     args = parser.parse_args(argv)
     token = None
     if args.token_file:
@@ -284,11 +304,17 @@ def main(argv=None):
             parser.error("cannot read valid private token file")
     model = DashboardModel(token_configured=token is not None)
     link = PahoLink(args.host, args.port, model)
-    app = DashboardApp(model, Commander(link, model, token), args.http_port)
+    try:
+        app = DashboardApp(model, Commander(link, model, token), args.http_port,
+                           extra_origins=args.allow_origin)
+    except ValueError as error:
+        parser.error(str(error))
     server = DashboardServer(app, args.http_port)
     link.start()
     print(f"dashboard: http://127.0.0.1:{args.http_port}/  broker: {args.host}:{args.port}",
           file=sys.stderr)
+    for origin in sorted(app.extra_origins):
+        print(f"dashboard: also accepting proxy origin {origin}", file=sys.stderr)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

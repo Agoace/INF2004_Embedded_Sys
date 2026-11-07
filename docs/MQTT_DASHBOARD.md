@@ -52,9 +52,40 @@ Use Python 3 and `paho-mqtt` 2.x. Nothing else is needed.
 | `--host`, `--port` | MQTT broker. Default `127.0.0.1` and `1883`. |
 | `--http-port` | Dashboard port on `127.0.0.1`. Default `8765`. |
 | `--token-file` | Private token file (mode `0600`, 32 hex digits). Without it, only ESTOP works, with a zero token. |
+| `--allow-origin URL` | Also accept one exact proxy origin, for example a Tailscale Serve URL. Repeatable. See [Remote view through Tailscale](#remote-view-through-tailscale). |
 
 The recorder and the dashboard are two separate subscribers. You can run one
 without the other. The dashboard does not write files.
+
+## Remote view through Tailscale
+
+The dashboard always binds `127.0.0.1`. To use it from another device on
+your tailnet, let Tailscale Serve forward one HTTPS port to it. Do not
+change the bind address.
+
+1. Start the forward. This keeps other Serve entries unchanged:
+
+   ```sh
+   tailscale serve --bg --https=8443 http://127.0.0.1:8765
+   ```
+
+2. Start the dashboard with the same public URL as an allowed origin:
+
+   ```sh
+   python3 scripts/mqtt_dashboard.py --host <LAPTOP_ROBOT_IP> \
+       --token-file "$HOME/.config/robot-mqtt.token" \
+       --allow-origin https://<laptop-name>.<tailnet>.ts.net:8443
+   ```
+
+3. Open `https://<laptop-name>.<tailnet>.ts.net:8443/` on the other device.
+
+Without `--allow-origin`, the remote page shows data but the server refuses
+every button with `bad Host header` or `bad or missing Origin`. The option
+accepts only the exact scheme, host and port. The CSRF value and the
+content-type check still apply. Every device on the tailnet can reach the
+page and use **all** buttons, including START. Use Tailscale access rules
+if a device must not reach it. Stop the forward with
+`tailscale serve --https=8443 off`.
 
 ## Page layout
 
