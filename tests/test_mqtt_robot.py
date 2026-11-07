@@ -82,6 +82,8 @@ class WireTests(unittest.TestCase):
                                     ("heartbeat", 98, 1), ("log", 2, 1)):
             bad = bytearray(self.samples["robot/" + topic])
             bad[offset] |= mask
+            if topic == "heartbeat" and offset == 98 and bad[0] == 2:
+                struct.pack_into("<H", bad, 98, 1001)  # version 2: CPU load above 100.0 %
             with self.assertRaises(ValueError):
                 wire.decode("robot/" + topic, bad)
         for topic in ("state", "robot/cmd", "bad/state"):
@@ -168,7 +170,7 @@ class WireTests(unittest.TestCase):
             self.assertEqual(cli.main(["--host", "test.invalid"]), 0)
         self.assertEqual(calls[0], ("api", version2))
         self.assertEqual(len(list(csv.DictReader(io.StringIO(output.getvalue())))), 1)
-        self.assertEqual(calls[2][1], [("robot/" + name, 1 if name in ("log", "status") else 0)
+        self.assertEqual(calls[2][1], [("robot/" + name, 1 if name in ("log", "status", "summary") else 0)
                                        for name in wire.SIZES])
         with tempfile.TemporaryDirectory() as folder:
             token = Path(folder) / "private-token"
@@ -553,7 +555,7 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
 
     def test_c_packed_state_v2_and_old_version_bytes(self):
-        self.assertEqual((len(self.c_state), self.c_state[0]), (60, 2))
+        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3)))
         result = wire.decode("robot/state", self.c_state)
         self.assertEqual((result["dist_left_mm"], result["dist_right_mm"], result["dist_avg_mm"]),
                          (-123456, 2 ** 31 - 1, -7))
@@ -617,7 +619,7 @@ class NewTopicTests(unittest.TestCase):
         for bad in (b"", good[:-1], good + b"\0", b"\x02" + good[1:], b"\x00" + good[1:]):
             with self.assertRaises(ValueError):
                 wire.decode("robot/obstacle", bad)
-        for kwargs in (dict(flags=0x10), dict(flags=0x80), dict(decision=3), dict(closest=512),
+        for kwargs in (dict(flags=0x40), dict(flags=0x80), dict(flags=0x30), dict(decision=3), dict(closest=512),
                        dict(right_step=8), dict(left_step=8), dict(right_clear=36),
                        dict(left_clear=254)):
             with self.subTest(**kwargs), self.assertRaises(ValueError):
@@ -633,12 +635,12 @@ class NewTopicTests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(ValueError):
                 wire.decode("robot/status", bad)
 
-    def test_reserved_topics_are_header_only(self):
+    def test_reserved_topics_ignore_unknown_versions_and_kinds(self):
         for topic in ("robot/barcode", "robot/imu"):
-            known = wire.decode(topic, bytes([1, 9, 7, 7, 7]))
-            self.assertEqual((known["version"], known["kind"], known["length"], known["known"]),
-                             (1, 9, 5, 1))
-            self.assertEqual(wire.decode(topic, bytes([2, 1]))["known"], 0)  # unknown version
+            for frame in (bytes([2, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
+                result = wire.decode(topic, frame)
+                self.assertEqual((result["known"], result["length"]), (0, len(frame)))
+                self.assertEqual((result["version"], result["kind"]), (frame[0], frame[1]))
             for bad in (b"", b"\x01"):
                 with self.assertRaises(ValueError):
                     wire.decode(topic, bad)
@@ -657,6 +659,246 @@ class NewTopicTests(unittest.TestCase):
                             ("robot/obstacle", obstacle_frame()),
                             ("robot/status", bytes([1, 1]))):
             writer.writerow(wire.decode(topic, data))
+
+
+def state_v3_frame(base, duty_left=-250, duty_right=1000, heading=-4500, rate=-123,
+                   dist=(10, 20, 15)):
+    """Version 3 state: the first 48 bytes of the C sample, distances, duty and heading."""
+    return (b"\x03" + base[1:48] + struct.pack("<iii", *dist) +
+            struct.pack("<hhihH", duty_left, duty_right, heading, rate, 0))
+
+
+def heartbeat_frame(base, version=2, cpu=0x123):
+    frame = bytearray(base)
+    frame[0] = version
+    struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
+    return bytes(frame)
+
+
+def detour_frame(outcome=3, side=1, flags=1, sequence=4, start=1000, end=3500, duration=2500,
+                 distance=1200, lateral=340, payload=0, scan=9):
+    return struct.pack("<BBBBIIIIIHHI", 1, outcome, side, flags, sequence, start, end, duration,
+                       distance, lateral, payload, scan)
+
+
+def summary_frame(flags=0b010, source=1, reason=1, run=2, start=5000, duration=60000,
+                  distance=8000, losses=3, obstacles=2, done=2, succeeded=1, detour_ms=7000,
+                  started=3, speed_error=45, motion_faults=0x05, shell=2, shell_detail=6,
+                  barcode_ok=0, barcode_failed=0, hump=0xFFFF):
+    return struct.pack("<BBBBIIIIHHHHIHHBBHBBH", 1, flags, source, reason, run, start, duration,
+                       distance, losses, obstacles, done, succeeded, detour_ms, started,
+                       speed_error, motion_faults, shell, shell_detail, barcode_ok,
+                       barcode_failed, hump)
+
+
+def barcode_frame(flags=0b00111, code=5, votes=3, reads=4, direction=1, nav=9, result=-45,
+                  sequence=12, uptime=777):
+    return struct.pack("<BBBBBBBBhHII", 1, 1, flags, code, votes, reads, direction, nav, result,
+                       0, sequence, uptime)
+
+
+def imu_snapshot(pitch=3, heading=200, rate=250, hump=2, collision=1, valid=1, height=7,
+                 peak=9, age=0xBEEF):
+    word1 = pitch | heading << 8 | rate << 16 | hump << 24 | collision << 26 | valid << 27
+    word2 = height | peak << 8 | age << 16
+    return struct.pack("<BBHII", 1, 1, 0, word1, word2)
+
+
+def imu_event(event=6, sequence=77, uptime=4242):
+    return struct.pack("<BBBBII", 1, 2, event, 0, sequence, uptime)
+
+
+class BatchTwoTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.samples = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            if topic in ("robot/state", "robot/heartbeat", "robot/event"):
+                cls.samples[topic] = bytes.fromhex(encoded)
+
+    def test_state_v3_fields_and_signs(self):
+        frame = state_v3_frame(self.samples["robot/state"])
+        result = wire.decode("robot/state", frame)
+        self.assertEqual(result["version"], 3)
+        self.assertEqual((result["duty_left_permille"], result["duty_right_permille"]),
+                         (-250, 1000))
+        self.assertEqual((result["heading_cdeg"], result["turn_rate_ddps"]), (-4500, -123))
+        self.assertEqual((result["dist_left_mm"], result["dist_right_mm"],
+                          result["dist_avg_mm"]), (10, 20, 15))
+        v2 = wire.decode("robot/state", b"\x02" + frame[1:60])
+        self.assertEqual({k: v for k, v in result.items() if k in v2 and k != "version"},
+                         {k: v for k, v in v2.items() if k != "version"})
+        self.assertNotIn("heading_cdeg", v2)
+        extreme = wire.decode("robot/state", state_v3_frame(
+            self.samples["robot/state"], -32768, 32767, -2 ** 31, 32767))
+        self.assertEqual((extreme["duty_left_permille"], extreme["duty_right_permille"],
+                          extreme["heading_cdeg"], extreme["turn_rate_ddps"]),
+                         (-32768, 32767, -2 ** 31, 32767))
+
+    def test_state_v3_rejects_bad_frames(self):
+        good = state_v3_frame(self.samples["robot/state"])
+        for bad in (good[:-1], good + b"\0", b"\x03" + good[1:60], b"\x04" + good[1:],
+                    b"\x02" + good[1:], good[:70] + b"\x01\x00", good[:71] + b"\x01"):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/state", bad)
+
+    def test_heartbeat_cpu_load(self):
+        base = self.samples["robot/heartbeat"]
+        for cpu in (0, 1, 0x123, 1000, 0xFFFF):
+            result = wire.decode("robot/heartbeat", heartbeat_frame(base, 2, cpu))
+            self.assertEqual((result["version"], result["cpu_load_permille"]), (2, cpu))
+        for cpu in (1001, 0xFFFE):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/heartbeat", heartbeat_frame(base, 2, cpu))
+        old = wire.decode("robot/heartbeat", heartbeat_frame(base, 1))
+        self.assertNotIn("cpu_load_permille", old)
+        bad = bytearray(heartbeat_frame(base, 1))
+        bad[99] = 1  # version 1 keeps the bytes reserved
+        with self.assertRaises(ValueError):
+            wire.decode("robot/heartbeat", bad)
+        with self.assertRaises(ValueError):
+            wire.decode("robot/heartbeat", heartbeat_frame(base, 3))
+
+    def test_detour_decode(self):
+        result = wire.decode("robot/detour", detour_frame())
+        self.assertEqual((result["outcome"], result["side"], result["lateral_valid"]), (3, 1, 1))
+        self.assertEqual((result["sequence"], result["start_ms"], result["end_ms"]), (4, 1000, 3500))
+        self.assertEqual((result["duration_ms"], result["distance_mm"]), (2500, 1200))
+        self.assertEqual((result["max_lateral_mm"], result["payload"], result["scan_id"]),
+                         (340, 0, 9))
+        for outcome in (3, 4, 7, 8):
+            self.assertEqual(wire.decode("robot/detour", detour_frame(outcome))["outcome"],
+                             outcome)
+        wrap = wire.decode("robot/detour", detour_frame(start=0xFFFFFFF0, end=5, sequence=2 ** 32 - 1,
+                                                        duration=21, distance=2 ** 32 - 1,
+                                                        lateral=65535, scan=0))
+        self.assertEqual((wrap["start_ms"], wrap["distance_mm"], wrap["max_lateral_mm"]),
+                         (0xFFFFFFF0, 2 ** 32 - 1, 65535))
+
+    def test_detour_rejects_bad_frames(self):
+        good = detour_frame()
+        for bad in (b"", good[:-1], good + b"\0", b"\x02" + good[1:]):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/detour", bad)
+        for kwargs in (dict(outcome=0), dict(outcome=1), dict(outcome=5), dict(outcome=6),
+                       dict(outcome=9), dict(side=3), dict(flags=2), dict(flags=0x80)):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                wire.decode("robot/detour", detour_frame(**kwargs))
+
+    def test_summary_decode(self):
+        result = wire.decode("robot/summary", summary_frame())
+        expected = dict(version=1, barcode_hump_implemented=0, speed_error_valid=1,
+                        detour_aborted=0, stop_source=1, stop_reason=1, run_id=2, start_ms=5000,
+                        duration_ms=60000, distance_mm=8000, line_losses=3, obstacles=2,
+                        detours_done=2, detours_succeeded=1, detour_total_ms=7000,
+                        detours_started=3, max_speed_error_mm_s=45, motion_fault_bits=5,
+                        shell_fault=2, shell_fault_detail=6, barcode_ok=0, barcode_failed=0,
+                        hump_peak=0xFFFF)
+        self.assertEqual(result, expected)
+        high = wire.decode("robot/summary", summary_frame(flags=0b101, source=4, reason=12,
+                                                          run=2 ** 32 - 1, distance=2 ** 32 - 1,
+                                                          speed_error=0xFFFF, barcode_ok=3,
+                                                          barcode_failed=1, hump=15))
+        self.assertEqual((high["barcode_hump_implemented"], high["speed_error_valid"],
+                          high["detour_aborted"]), (1, 0, 1))
+        self.assertEqual((high["stop_source"], high["stop_reason"], high["run_id"],
+                          high["max_speed_error_mm_s"], high["hump_peak"]),
+                         (4, 12, 2 ** 32 - 1, 0xFFFF, 15))
+
+    def test_summary_rejects_bad_frames(self):
+        good = summary_frame()
+        for bad in (b"", good[:-1], good + b"\0", b"\x02" + good[1:]):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/summary", bad)
+        for kwargs in (dict(flags=0x08), dict(flags=0x80), dict(source=5), dict(reason=13)):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                wire.decode("robot/summary", summary_frame(**kwargs))
+
+    def test_obstacle_scan_stage(self):
+        for stage in (0, 1, 2):
+            flags = 0b0101 | stage << 4
+            result = wire.decode("robot/obstacle", obstacle_frame(flags=flags))
+            self.assertEqual(result["scan_stage"], stage)
+            self.assertEqual((result["closest_valid"], result["too_near"], result["left_blocked"],
+                              result["right_blocked"]), (1, 0, 1, 0))
+        with self.assertRaises(ValueError):
+            wire.decode("robot/obstacle", obstacle_frame(flags=0x30))
+        with self.assertRaises(ValueError):
+            wire.decode("robot/obstacle", obstacle_frame(flags=0x40 | 0x10))
+
+    def test_event_junction_is_accepted_and_kind_8_is_not(self):
+        frame = bytearray(self.samples["robot/event"])
+        frame[1] = 7
+        self.assertEqual(wire.decode("robot/event", frame)["kind"], 7)
+        for kind in (0, 8):
+            frame[1] = kind
+            with self.assertRaises(ValueError):
+                wire.decode("robot/event", frame)
+
+    def test_barcode_decode_and_rejects(self):
+        result = wire.decode("robot/barcode", barcode_frame())
+        self.assertEqual((result["known"], result["detected"], result["decoded"],
+                          result["unreadable"], result["command_issued"], result["executed"]),
+                         (1, 1, 1, 1, 0, 0))
+        self.assertEqual((result["code"], result["votes"], result["reads"], result["direction"],
+                          result["nav_command"], result["result"]), (5, 3, 4, 1, 9, -45))
+        self.assertEqual((result["sequence"], result["uptime_ms"]), (12, 777))
+        done = wire.decode("robot/barcode", barcode_frame(flags=0b11011, result=32767))
+        self.assertEqual((done["command_issued"], done["executed"], done["result"]), (1, 1, 32767))
+        good = barcode_frame()
+        for bad in (good[:-1], good + b"\0"):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/barcode", bad)
+        for kwargs in (dict(flags=0x20), dict(code=8), dict(direction=3)):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                wire.decode("robot/barcode", barcode_frame(**kwargs))
+        with self.assertRaises(ValueError):
+            wire.decode("robot/barcode", good[:10] + b"\x01\x00" + good[12:])  # reserved u16
+
+    def test_imu_decode_and_rejects(self):
+        result = wire.decode("robot/imu", imu_snapshot())
+        self.assertEqual((result["known"], result["kind"]), (1, 1))
+        self.assertEqual((result["pitch_raw"], result["heading_raw"], result["turn_rate_raw"]),
+                         (3, 200, 250))
+        self.assertEqual((result["hump_state"], result["collision"], result["valid"]), (2, 1, 1))
+        self.assertEqual((result["height_raw"], result["peak_raw"], result["age_or_seq"]),
+                         (7, 9, 0xBEEF))
+        edge = wire.decode("robot/imu", imu_snapshot(255, 255, 255, 3, 0, 0, 255, 255, 0xFFFF))
+        self.assertEqual((edge["pitch_raw"], edge["hump_state"], edge["age_or_seq"]),
+                         (255, 3, 0xFFFF))
+        event = wire.decode("robot/imu", imu_event())
+        self.assertEqual((event["known"], event["kind"], event["event"], event["sequence"],
+                          event["uptime_ms"]), (1, 2, 6, 77, 4242))
+        for bad in (imu_snapshot()[:-1], imu_snapshot() + b"\0", imu_event()[:-1],
+                    imu_snapshot()[:2] + b"\x01\x00" + imu_snapshot()[4:],  # reserved bytes
+                    imu_snapshot()[:7] + b"\x10" + imu_snapshot()[8:],  # spare bits
+                    imu_event(event=0), imu_event(event=7),
+                    imu_event()[:3] + b"\x01" + imu_event()[4:]):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/imu", bad)
+
+    def test_csv_has_every_new_field_and_accepts_every_new_row(self):
+        fields = set(wire.csv_fields())
+        for name in ("duty_left_permille", "duty_right_permille", "heading_cdeg",
+                     "turn_rate_ddps", "cpu_load_permille", "scan_stage", "outcome", "side",
+                     "lateral_valid", "max_lateral_mm", "payload", "duration_ms", "stop_source",
+                     "stop_reason", "run_id", "detours_succeeded", "max_speed_error_mm_s",
+                     "shell_fault_detail", "hump_peak", "barcode_hump_implemented"):
+            self.assertIn(name, fields)
+        base = self.samples["robot/state"]
+        stream = io.StringIO()
+        writer = csv.DictWriter(stream, fieldnames=wire.csv_fields())
+        for topic, data in (("robot/state", state_v3_frame(base)),
+                            ("robot/heartbeat", heartbeat_frame(self.samples["robot/heartbeat"])),
+                            ("robot/detour", detour_frame()), ("robot/summary", summary_frame()),
+                            ("robot/obstacle", obstacle_frame(flags=0x11))):
+            writer.writerow(wire.decode(topic, data))
+
+    def test_recorder_subscribes_to_the_new_topics_with_qos(self):
+        self.assertEqual(wire.SIZES["state"], 72)
+        self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (32, 44))
+        self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1})
 
 
 if __name__ == "__main__":

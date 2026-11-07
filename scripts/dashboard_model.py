@@ -26,7 +26,28 @@ STATE_NAMES = {0: "IDLE", 1: "RUNNING", 2: "FAULT"}
 MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle scan",
                 4: "obstacle detour"}
 EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
-               5: "run end", 6: "command decision"}
+               5: "run end", 6: "command decision", 7: "junction (reserved)"}
+DETOUR_LIMIT = 8
+SCAN_STAGES = {0: "not reported", 1: "coarse", 2: "fine"}
+SIDE_TEXT = {0: "none", 1: "right", 2: "left"}  # obstacle and detour side bytes
+LINE_SIDE_TEXT = {0: "unknown", 1: "left", 2: "right"}  # vc_line_side_t, used in payloads
+DETOUR_FAIL_TEXT = {0: "none", 1: "both sides blocked", 2: "turn limit reached",
+                    3: "took too long", 4: "ultrasonic fault", 5: "echo too near",
+                    6: "no line found"}
+STOP_SOURCES = {0: "none or unknown", 1: "GP21 button", 2: "MQTT ESTOP", 3: "fault",
+                4: "time limit"}
+STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "90 s limit",
+                4: "shell left RUNNING", 5: "vehicle deadline missed", 6: "motion wake lost",
+                7: "motion status failed", 8: "line snapshot stale", 9: "line samples lost",
+                10: "sonar failure", 11: "telemetry failure", 12: "other"}
+SHELL_FAULTS = {0: "none", 1: "safety (motor fault bits)", 2: "module failed",
+                3: "no route", 4: "no module", 5: "handoff loop"}
+MOTION_FAULT_BITS = ((0x01, "stall left"), (0x02, "stall right"), (0x04, "ESTOP"),
+                     (0x08, "stale command"))
+BARCODE_DIRECTIONS = {0: "unknown", 1: "forward", 2: "reverse"}
+IMU_EVENTS = {1: "stationary", 2: "accelerating", 3: "turning", 4: "climbing",
+              5: "descending", 6: "impact"}
+NOT_IMPLEMENTED = "not implemented yet"
 OPCODE_NAMES = {code: name.upper() for name, code in robot_wire.COMMANDS.items()}
 DECISIONS = {0: "accepted", 1: "refused: robot not idle", 2: "refused: not calibrated",
              3: "refused: log busy", 4: "duplicate request",
@@ -46,7 +67,7 @@ def register_panel(builder):
 
 
 def make_panel(panel_id, title, age_ms, stale_ms=STALE_MS, rows=None, chart=None,
-               items=None, note="", placeholder=False):
+               items=None, note="", placeholder=False, table=None):
     """Build one panel. age_ms None means no data yet; stale_ms None means never stale."""
     if placeholder:
         stale = True
@@ -56,7 +77,8 @@ def make_panel(panel_id, title, age_ms, stale_ms=STALE_MS, rows=None, chart=None
         stale = stale_ms is not None and age_ms > stale_ms
     return {"id": panel_id, "title": title, "age_ms": age_ms, "stale": stale,
             "rows": [{"label": label, "value": value} for label, value in (rows or [])],
-            "chart": chart, "items": items or [], "note": note, "placeholder": placeholder}
+            "chart": chart, "items": items or [], "note": note, "placeholder": placeholder,
+            "table": table}
 
 
 def _name(table, value):
@@ -79,7 +101,11 @@ class DashboardModel:
         self.obstacle = None
         self.obstacle_scan_id = None
         self.obstacle_missed = 0
-        self.reserved = {"barcode": None, "imu": None}
+        self.detours = collections.deque(maxlen=DETOUR_LIMIT)
+        self.detour_sequence = None
+        self.detour_missed = 0
+        self.summary = None  # {"fields": dict, "rx": ms, "retained": bool}
+        self.reserved = {"barcode": None, "imu": None, "imu_event": None}
         self.ignored_reserved = 0
         self.sonar = None
         self.sonar_profile = {}  # angle -> {"mm", "text", "rx"}
@@ -129,10 +155,16 @@ class DashboardModel:
             self._store_obstacle(fields, now)
         elif topic in ("robot/barcode", "robot/imu"):
             name = topic.removeprefix("robot/")
+            if name == "imu" and fields["kind"] == 2:
+                name = "imu_event"
             if fields["known"]:
                 self.reserved[name] = {"fields": fields, "rx": now}
             else:
                 self.ignored_reserved += 1
+        elif topic == "robot/detour":
+            self._store_detour(fields, now)
+        elif topic == "robot/summary":
+            self.summary = {"fields": fields, "rx": now, "retained": retained}
         elif topic == "robot/state":
             self.state = {"fields": fields, "rx": now}
             self.trend.append(fields["kr1_position"])
@@ -149,6 +181,13 @@ class DashboardModel:
             self.obstacle_missed += scan_id - self.obstacle_scan_id - 1
         self.obstacle_scan_id = scan_id  # a lower number means the robot restarted
         self.obstacle = {"fields": fields, "rx": now}
+
+    def _store_detour(self, fields, now):
+        sequence = fields["sequence"]
+        if self.detour_sequence is not None and sequence > self.detour_sequence + 1:
+            self.detour_missed += sequence - self.detour_sequence - 1
+        self.detour_sequence = sequence  # a lower number means the robot restarted
+        self.detours.append({"fields": fields, "rx": now})
 
     def _store_sonar(self, fields, now):
         if self.sonar is not None and self.sonar["fields"]["sequence"] == fields["sequence"]:
@@ -370,6 +409,13 @@ def _sonar_distance(fields):
         else _name(SONAR_STATUS, fields["status"])
 
 
+def _cpu_text(fields):
+    if "cpu_load_permille" not in fields:
+        return "not reported (old heartbeat)"
+    value = fields["cpu_load_permille"]
+    return "not available" if value == robot_wire.CPU_UNKNOWN else f"{value / 10:.1f} %"
+
+
 def _stack_text(value):
     return "unknown" if value == MISSING_AGE_MS else f"{value} bytes"
 
@@ -413,6 +459,10 @@ def line_panel(model, now):
                       rows=rows, chart=chart)
 
 
+def _signed(value, scale, unit, digits=1):
+    return f"{value / scale:+.{digits}f} {unit}"
+
+
 @register_panel
 def wheels_panel(model, now):
     if model.state is None:
@@ -420,17 +470,61 @@ def wheels_panel(model, now):
     fields = model.state["fields"]
     rows = [("Requested left / right", f"{fields['kr1_asked_l']} / {fields['kr1_asked_r']} mm/s"),
             ("Measured left / right",
-             f"{fields['kr1_measured_l']} / {fields['kr1_measured_r']} mm/s"),
-            ("Encoder counts left / right", f"{fields['count_l']} / {fields['count_r']}"),
-            ("Servo", f"{fields['kr1_servo_deg']} deg")]
-    if "dist_avg_mm" in fields:
-        rows.insert(3, ("Distance left / right / average",
-                        f"{fields['dist_left_mm']} / {fields['dist_right_mm']} / "
-                        f"{fields['dist_avg_mm']} mm"))
+             f"{fields['kr1_measured_l']} / {fields['kr1_measured_r']} mm/s")]
+    if "duty_left_permille" in fields:
+        rows.append(("PWM duty left / right",
+                     f"{_signed(fields['duty_left_permille'], 10, '%')} / "
+                     f"{_signed(fields['duty_right_permille'], 10, '%')}"))
     else:
-        rows.insert(3, ("Distance left / right / average", "not reported (old state v1)"))
+        rows.append(("PWM duty left / right", "not reported (old state version)"))
+    if "dist_avg_mm" in fields:
+        rows.append(("Distance left / right / average",
+                     f"{fields['dist_left_mm']} / {fields['dist_right_mm']} / "
+                     f"{fields['dist_avg_mm']} mm"))
+    else:
+        rows.append(("Distance left / right / average", "not reported (old state v1)"))
+    rows += [("Encoder counts left / right", f"{fields['count_l']} / {fields['count_r']}"),
+             ("Servo", f"{fields['kr1_servo_deg']} deg")]
     return make_panel("wheels", "Wheels", model.state_age(now, "motion_age_ms"), rows=rows,
-                      note="distance: signed mm since robot boot, forward is positive")
+                      note="distance: signed mm since robot boot, forward is positive. "
+                      "duty: forward is positive")
+
+
+@register_panel
+def odometry_panel(model, now):
+    if model.state is None:
+        return make_panel("odometry", "Odometry (encoder-derived)", None,
+                          note="waiting for robot/state")
+    fields = model.state["fields"]
+    age = model.state_age(now, "motion_age_ms")
+    imu = model.reserved["imu"]
+    imu_fields = None if imu is None else imu["fields"]
+    rows = []
+    chart = None
+    if "heading_cdeg" in fields:
+        heading = fields["heading_cdeg"]
+        rate = fields["turn_rate_ddps"]
+        wrapped = (heading % 36000) / 100
+        rows += [("Heading (left +, since boot)", _signed(heading, 100, "deg", 2)),
+                 ("Heading on the dial", f"{wrapped:.2f} deg"),
+                 ("Turn rate (left +)", _signed(rate, 10, "deg/s"))]
+        chart = {"type": "dial", "heading_deg": wrapped, "turn_rate_dps": rate / 10}
+    else:
+        rows.append(("Heading and turn rate", "not reported (old state version)"))
+    if "dist_avg_mm" in fields:
+        rows.append(("Distance average", f"{fields['dist_avg_mm']} mm"))
+        rows.append(("Distance left / right",
+                     f"{fields['dist_left_mm']} / {fields['dist_right_mm']} mm"))
+    else:
+        rows.append(("Distance", "not reported (old state version)"))
+    rows.append(("Source", "encoder-derived (wheel counts), drifts when a wheel slips"))
+    rows.append(("IMU heading (raw)", NOT_IMPLEMENTED if imu_fields is None
+                 else imu_fields["heading_raw"]))
+    rows.append(("IMU turn rate (raw)", NOT_IMPLEMENTED if imu_fields is None
+                 else imu_fields["turn_rate_raw"]))
+    return make_panel("odometry", "Odometry (encoder-derived)", age, rows=rows, chart=chart,
+                      note="heading = (right - left counts) / 24.05 counts per degree; "
+                      "origin is robot boot. IMU rows are for comparison later")
 
 
 @register_panel
@@ -460,30 +554,69 @@ def _closest_text(fields):
     return f"{fields['closest_mm']} mm at {angle} deg ({side})"
 
 
+def _seconds(ms):
+    return f"{ms / 1000:.2f} s"
+
+
+def _detour_outcome(fields):
+    outcome, payload = fields["outcome"], fields["payload"]
+    if outcome == 3:
+        return "done, line found"
+    if outcome == 4:
+        return f"done, no line (search {_name(LINE_SIDE_TEXT, payload)})"
+    if outcome == 7:
+        return f"FAILED: {_name(DETOUR_FAIL_TEXT, payload)}"
+    return "aborted (run ended)"
+
+
+def _detour_table(model):
+    rows = []
+    for entry in reversed(model.detours):
+        f = entry["fields"]
+        offset = f"{f['max_lateral_mm']} mm" if f["lateral_valid"] else "not measured"
+        rows.append([f["sequence"], _name(SIDE_TEXT, f["side"]), _detour_outcome(f),
+                     _seconds(f["duration_ms"]), f"{f['distance_mm']} mm", offset,
+                     f["scan_id"] if f["scan_id"] else "unknown"])
+    return {"columns": ["Detour", "Side", "Outcome", "Duration", "Distance", "Max offset",
+                        "Scan"], "rows": rows}
+
+
 @register_panel
 def obstacle_panel(model, now):
-    if model.obstacle is None:
-        return make_panel("obstacle", "Obstacle profile", None, stale_ms=None,
-                          note="no completed scan yet")
-    fields = model.obstacle["fields"]
-    rows = [("Closest", _closest_text(fields)),
-            ("Right clearance", _clear_text(fields["right_clear_deg"],
-                                            fields["right_free_step"])),
-            ("Left clearance", _clear_text(fields["left_clear_deg"], fields["left_free_step"])),
-            ("Detour decision", _name(OBSTACLE_DECISION_TEXT, fields["decision"])),
-            ("Scan ID", fields["scan_id"]),
-            ("Scans missed (ID gaps)", model.obstacle_missed),
-            ("Profile word", f"0x{fields['profile_word']:04x}")]
-    points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
-              for angle, entry in sorted(model.sonar_profile.items())]
-    chart = {"type": "obstacle", "points": points, "max_mm": 511,
-             "closest": None if not fields["closest_valid"] else
-             {"angle": fields["closest_angle_deg"], "mm": fields["closest_mm"]},
-             "right_clear_deg": fields["right_clear_deg"],
-             "left_clear_deg": fields["left_clear_deg"], "decision": fields["decision"]}
-    return make_panel("obstacle", "Obstacle profile", model.record_age(now, model.obstacle),
-                      stale_ms=None, rows=rows, chart=chart,
-                      note="age = time since the scan finished; angle: right is negative")
+    if model.obstacle is None and not model.detours:
+        return make_panel("obstacle", "Obstacle profile and detours", None, stale_ms=None,
+                          note="no completed scan or detour yet")
+    rows = []
+    chart = None
+    age = None
+    if model.obstacle is not None:
+        fields = model.obstacle["fields"]
+        age = model.record_age(now, model.obstacle)
+        rows = [("Closest", _closest_text(fields)),
+                ("Right clearance", _clear_text(fields["right_clear_deg"],
+                                                fields["right_free_step"])),
+                ("Left clearance", _clear_text(fields["left_clear_deg"],
+                                               fields["left_free_step"])),
+                ("Detour decision", _name(OBSTACLE_DECISION_TEXT, fields["decision"])),
+                ("Scan ID", fields["scan_id"]),
+                ("Scan stage", _name(SCAN_STAGES, fields["scan_stage"])),
+                ("Scans missed (ID gaps)", model.obstacle_missed),
+                ("Profile word", f"0x{fields['profile_word']:04x}")]
+        points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
+                  for angle, entry in sorted(model.sonar_profile.items())]
+        chart = {"type": "obstacle", "points": points, "max_mm": 511,
+                 "closest": None if not fields["closest_valid"] else
+                 {"angle": fields["closest_angle_deg"], "mm": fields["closest_mm"]},
+                 "right_clear_deg": fields["right_clear_deg"],
+                 "left_clear_deg": fields["left_clear_deg"], "decision": fields["decision"]}
+    if model.detours:
+        age = model.record_age(now, model.detours[-1])
+        rows.append(("Detours missed (sequence gaps)", model.detour_missed))
+    return make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None, rows=rows,
+                      chart=chart, table=_detour_table(model) if model.detours else None,
+                      note="age = time since the newest scan or detour finished; "
+                      "angle: right is negative. Max offset is the sideways distance from "
+                      "the heading at detour start")
 
 
 @register_panel
@@ -516,6 +649,7 @@ def health_panel(model, now):
              f"{f['vehicle_busy']} / {f['health_busy']}"),
             ("Vehicle overruns", f["vehicle_overruns"]),
             ("Motion late / missed", f"{f['motion_late']} / {f['motion_missed']}"),
+            ("CPU load", _cpu_text(f)),
             ("Stack minimum free", _stack_text(f["stack_min_free"])),
             ("Restricted commands", "configured" if f["commands_enabled"] else "not configured"),
             ("Robot health age", f"{f['health_age_ms']} ms")]
@@ -523,13 +657,8 @@ def health_panel(model, now):
                       stale_ms=HEARTBEAT_STALE_MS, rows=rows)
 
 
-def _reserved_text(model, name):
-    record = model.reserved[name]
-    if record is None:
-        return "not implemented yet"
-    fields = record["fields"]
-    return (f"data received (kind {fields['kind']}, {fields['length']} bytes); "
-            "decoder not implemented")
+def _yes_no(value):
+    return "yes" if value else "no"
 
 
 @register_panel
@@ -539,19 +668,107 @@ def barcode_panel(model, now):
     if model.state is not None:
         rows.append(("Raw GP28 sample", model.state["fields"]["raw_bc"]))
         age = model.state_age(now)
-    rows.append(("Decoded command", _reserved_text(model, "barcode")))
+    record = model.reserved["barcode"]
+    if record is None:
+        rows += [(label, NOT_IMPLEMENTED) for label in
+                 ("Detected / decoded / unreadable", "Decoded command", "Confidence",
+                  "Direction", "Navigation command", "Result", "Command issued / executed")]
+    else:
+        f = record["fields"]
+        rows += [("Detected / decoded / unreadable",
+                  f"{_yes_no(f['detected'])} / {_yes_no(f['decoded'])} / "
+                  f"{_yes_no(f['unreadable'])}"),
+                 ("Decoded command", f"code {f['code']} (raw)"),
+                 ("Confidence", f"{f['votes']} of {f['reads']} reads agree"),
+                 ("Direction", _name(BARCODE_DIRECTIONS, f["direction"])),
+                 ("Navigation command", f"{f['nav_command']} (raw)"),
+                 ("Result", f"{f['result']} (raw)"),
+                 ("Command issued / executed",
+                  f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
+                 ("Report", f"#{f['sequence']} at robot uptime {f['uptime_ms']} ms")]
     return make_panel("barcode", "Barcode", age, rows=rows,
                       note="" if model.state else "waiting for robot/state")
 
 
 @register_panel
 def imu_panel(model, now):
-    record = model.reserved["imu"]
-    if record is None:
+    snapshot, event = model.reserved["imu"], model.reserved["imu_event"]
+    if snapshot is None and event is None:
         return make_panel("imu", "IMU", None, placeholder=True,
                           note="not implemented: no data on robot/imu yet")
-    return make_panel("imu", "IMU", model.record_age(now, record),
-                      rows=[("Data", _reserved_text(model, "imu"))])
+    rows = []
+    if snapshot is None:
+        rows += [(label, NOT_IMPLEMENTED) for label in
+                 ("Pitch", "Heading", "Turn rate", "Hump state", "Height", "Peak",
+                  "Collision")]
+    else:
+        f = snapshot["fields"]
+        rows += [("Pitch (raw)", f["pitch_raw"]), ("Heading (raw)", f["heading_raw"]),
+                 ("Turn rate (raw)", f["turn_rate_raw"]),
+                 ("Hump state (raw)", f["hump_state"]), ("Height (raw)", f["height_raw"]),
+                 ("Peak (raw)", f["peak_raw"]), ("Collision", _yes_no(f["collision"])),
+                 ("Sample valid", _yes_no(f["valid"])),
+                 ("Sample age or sequence (raw)", f["age_or_seq"])]
+    if event is None:
+        rows.append(("Motion event", NOT_IMPLEMENTED))
+    else:
+        f = event["fields"]
+        rows.append(("Motion event", f"{_name(IMU_EVENTS, f['event'])} #{f['sequence']} at "
+                     f"robot uptime {f['uptime_ms']} ms"))
+    newest = max((r for r in (snapshot, event) if r is not None), key=lambda r: r["rx"])
+    return make_panel("imu", "IMU", model.record_age(now, newest), rows=rows,
+                      note="raw values: units are not fixed yet")
+
+
+def _fault_text(bits):
+    names = [name for mask, name in MOTION_FAULT_BITS if bits & mask]
+    unknown = bits & ~sum(mask for mask, _ in MOTION_FAULT_BITS)
+    if unknown:
+        names.append(f"unknown bits 0x{unknown:02x}")
+    return ", ".join(names) if names else "none"
+
+
+@register_panel
+def summary_panel(model, now):
+    record = model.summary
+    if record is None:
+        return make_panel("summary", "Run summary", None, stale_ms=None,
+                          note="no run summary yet: it appears when a run ends")
+    f = record["fields"]
+    implemented = f["barcode_hump_implemented"]
+    shell = _name(SHELL_FAULTS, f["shell_fault"])
+    if f["shell_fault"]:
+        shell += f" (detail {f['shell_fault_detail']})"
+    unknown_speed = (not f["speed_error_valid"]
+                     or f["max_speed_error_mm_s"] == robot_wire.SPEED_ERROR_NONE)
+    rows = [("Run ID", f["run_id"]),
+            ("Stop source", _name(STOP_SOURCES, f["stop_source"])),
+            ("Stop reason", _name(STOP_REASONS, f["stop_reason"])),
+            ("Started (robot uptime)", _seconds(f["start_ms"])),
+            ("Duration", _seconds(f["duration_ms"])),
+            ("Distance (path length)", f"{f['distance_mm']} mm"),
+            ("Line losses", f["line_losses"]), ("Obstacles seen", f["obstacles"]),
+            ("Detours started / done / succeeded",
+             f"{f['detours_started']} / {f['detours_done']} / {f['detours_succeeded']}"),
+            ("Detour time in total", _seconds(f["detour_total_ms"])),
+            ("Max speed error", "not measured" if unknown_speed
+             else f"{f['max_speed_error_mm_s']} mm/s"),
+            ("Motion faults seen", _fault_text(f["motion_fault_bits"])),
+            ("Shell fault", shell),
+            ("Barcode ok / failed", f"{f['barcode_ok']} / {f['barcode_failed']}" if implemented
+             else NOT_IMPLEMENTED),
+            ("Hump peak", NOT_IMPLEMENTED if not implemented else
+             ("none" if f["hump_peak"] == robot_wire.HUMP_PEAK_NONE else f["hump_peak"]))]
+    if f["detour_aborted"]:
+        rows.append(("Detour", "a detour was still running when the run ended"))
+    notes = ["age = time since this summary arrived"]
+    if record["retained"]:
+        notes.append("this is the broker's retained copy: it may be from an earlier run")
+    state = model.state
+    if state is not None and now - state["rx"] <= STALE_MS and state["fields"]["active"]:
+        notes.append("a new run is in progress: this summary is the previous run")
+    return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
+                      rows=rows, note="; ".join(notes))
 
 
 @register_panel

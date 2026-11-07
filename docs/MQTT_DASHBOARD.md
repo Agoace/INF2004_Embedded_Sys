@@ -75,13 +75,15 @@ the robot reports for that board.
 | --- | --- | --- |
 | Vehicle | `robot/state`, `robot/event` | State, module, running flag, motion faults, vehicle board status, last command and the robot decision. |
 | Line sensor | `robot/state` | Position, raw and normalised left and centre values, and a short position trend. |
-| Wheels | `robot/state` | Requested and measured wheel speed, distance travelled (left, right, average, in mm), encoder counts and servo angle. |
+| Wheels | `robot/state` | Requested and measured wheel speed, PWM duty of each wheel, distance travelled (left, right, average, in mm), encoder counts and servo angle. |
+| Odometry (encoder-derived) | `robot/state`, `robot/imu` | Heading dial, turn rate in degrees per second, and distance. Every value comes from the wheel counts. Two IMU rows (raw) show beside them for comparison when the IMU sends data. |
 | Ultrasonic | `robot/sonar` | Latest distance (or the sensor error) and a bar chart of the latest result for each angle. |
-| Obstacle profile | `robot/obstacle`, `robot/sonar` | The result of each completed scan: closest distance and angle, right and left clearance, the detour decision, scan ID and missed scans. The chart shows the latest sonar result for each angle. Green bands mark the clear sectors. A ring marks the closest point. |
+| Obstacle profile and detours | `robot/obstacle`, `robot/sonar`, `robot/detour` | The result of each completed scan: closest distance and angle, right and left clearance, the decision, scan ID, scan stage and missed scans. The chart shows the latest sonar result for each angle. Green bands mark the clear sectors. A ring marks the closest point. Below the chart, one table row for each of the last 8 detours: side, outcome, duration, distance, maximum sideways offset and the scan that started it. |
 | Events | `robot/event` | The last 50 events. Event gaps count missing event sequence numbers. This panel never turns grey. |
-| Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, minimum free stack, reset reason. It turns grey after 2.5 s. |
-| Barcode | `robot/state`, `robot/barcode` | Raw GP28 sample. The decoded command shows `not implemented yet` until data arrives on the reserved topic. |
-| IMU | `robot/imu` | Placeholder that shows `not implemented` until data arrives on the reserved topic. |
+| Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, CPU load, minimum free stack, reset reason. It turns grey after 2.5 s. |
+| Barcode | `robot/state`, `robot/barcode` | Raw GP28 sample. Rows for detected, decoded, unreadable, decoded command, confidence (agreeing reads of all reads), direction, navigation command, result, and issued or executed. They show `not implemented yet` until data arrives on the reserved topic. |
+| IMU | `robot/imu` | Pitch, heading, turn rate, hump state, height, peak, collision, validity and the latest motion event. It is a placeholder until data arrives on the reserved topic. Values are raw: the units are not fixed yet. |
+| Run summary | `robot/summary` | The totals of the last finished run: stop source and reason, duration, distance, line losses, obstacles, detours, speed error, faults. Barcode and hump fields show `not implemented yet` until the robot sets the implemented flag. This panel never turns grey. |
 | RAM log stream | `robot/log` | Live rows, merged DUMP rows, lost and skipped rows, data age, rows behind. |
 
 **Wheel distance** is signed millimetres since the robot booted. Forward is
@@ -97,10 +99,40 @@ only angular clearance. A gap in the scan ID means that a scan result was not
 received. The panel counts these gaps. The age is the time since the scan
 finished. This panel never turns grey, because a scan is one point in time.
 
+**PWM duty** is in permille on the wire. The page shows percent. Forward is
+positive. It comes from `robot/state` version 3.
+
+**Odometry:** the heading is in 0.01 degree units, left (anticlockwise) is
+positive, and zero is the robot at boot. The dial shows it in the range 0 to
+360 degrees, with zero straight up. The robot computes heading and turn rate
+from the wheel counts, so a slipping wheel gives a wrong value. All three
+values (heading, turn rate, distance) come from the motion board and can be
+a stale last copy. The panel age is the age of the motion board data.
+
+**Detours:** the robot sends one `robot/detour` message for each finished
+detour, with a sequence number. A gap in the sequence means that the panel
+missed a detour, and the panel counts these gaps. The side is the obstacle side
+(right or left). The outcome texts are `done, line found`, `done, no line`
+(with the side to search, left or right), `FAILED` (with the reason) and
+`aborted` (the run ended in the detour). The maximum offset shows only when
+the robot sets the valid flag.
+
+**Run summary:** the robot publishes `robot/summary` as a retained message at
+the end of each run. After a broker reconnect, the panel can show the retained
+copy of an earlier run, and the note says so. While a new run is in progress,
+the note says that the summary is for the previous run.
+
+**CPU load:** `robot/heartbeat` version 2 reports it in permille. The panel
+shows percent. `not available` means that the robot cannot measure it.
+
+The event `junction` is reserved. The decoder accepts it and the event list
+names it. The robot does not send it yet.
+
 The barcode and IMU topics are reserved. The robot firmware does not publish
-them yet. When a message with version 1 arrives, the panel shows its kind and
-length and says that the decoder is not implemented. A message with another
-version is ignored.
+them yet. When a message with version 1 and a known kind arrives, the panel shows its
+fields. A message with another version or an unknown kind is ignored and
+counted. A known message with the wrong length or a reserved bit set is
+discarded as damaged.
 
 A new panel needs only one builder function in `dashboard_model.py`. The page
 draws any panel that the server sends.
@@ -191,9 +223,13 @@ ESTOP is never blocked.
 
 - The dashboard subscribes to `robot/state`, `robot/sonar`, `robot/event`,
   `robot/heartbeat`, `robot/log`, `robot/obstacle`, `robot/status`,
-  `robot/barcode` and `robot/imu`. It subscribes to `robot/log`, `robot/status`
-  and `robot/barcode` with QoS 1. A subscription limits the delivery QoS, and a
-  DUMP refill batch and the status message are QoS 1.
+  `robot/detour`, `robot/summary`, `robot/barcode` and `robot/imu`. It
+  subscribes to `robot/log`, `robot/status`, `robot/summary` and `robot/barcode`
+  with QoS 1. A subscription limits the delivery QoS, and a DUMP refill batch,
+  the status message and the summary are QoS 1.
+- The decoder accepts `robot/state` versions 1, 2 and 3 (48, 60 and 72 bytes)
+  and `robot/heartbeat` versions 1 and 2, so old captures still decode. The
+  firmware sends only the newest version.
 - The dashboard subscribes again after every broker reconnect.
 - A message with a wrong length, version or reserved bit is discarded. It
   does not change the panels. The count shows in the page data.
@@ -219,7 +255,7 @@ The tests use messages that the C code packs. They check these items:
 - Stale data turns grey at the 1 s limit.
 - The row gap counter.
 - The button rules (idle, fresh, broker, token, waiting, dump active, robot offline or silent).
-- The wheel distance, the obstacle panel and its scan ID gaps, the reserved topics and the robot link levels.
+- The wheel distance and duty, the odometry dial, the obstacle panel and its scan ID gaps, the detour table and its sequence gaps, the run summary, CPU load, the reserved topics and the robot link levels.
 - The command bytes, and the confirm and gate checks.
 - The token never appears in a page, response, stream or log line.
 - Requests with a bad Origin, Host, CSRF value or content type are refused.
