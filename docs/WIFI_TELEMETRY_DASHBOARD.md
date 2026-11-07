@@ -2,6 +2,11 @@
 
 Status: Implemented (read-only dashboard)
 
+> **Bench tool only.** This UDP dashboard (`scripts/telemetry_dashboard.py`)
+> belongs to the older UDP bench path. The MQTT robot uses the live dashboard in
+> [MQTT_DASHBOARD.md](MQTT_DASHBOARD.md) (`scripts/mqtt_dashboard.py`). Do not
+> use this page for MQTT commands or the MQTT log stream.
+
 Date: 2026-09-20
 
 ## Purpose
