@@ -55,8 +55,11 @@ three successive readings, deadline counters and stack margin. Compare the
 reported value with an independent target timing measurement before stating
 an accuracy bound.
 
-**Target load: Not run. Expected idle-board range: not established.**
-No device was flashed or exercised for this change.
+**Operator target observation, 2026-11-07:** idle 117 permille; heartbeat
+under traffic 139 permille; calibrated peak 4026729 iterations/s. These are
+observed values, not an independent absolute-accuracy proof or an approved
+acceptance range. See [hardware evidence](MTK3_STEP8_HARDWARE_RESULTS.md).
+No device was flashed for the later boot/session diagnostic follow-up.
 
 See [wire contract](MQTT_WIRE.md#heartbeat),
 [test rows](../testing/subsystem1/TEST_LOG.md), and

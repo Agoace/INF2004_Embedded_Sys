@@ -20,6 +20,7 @@
 #include "../app.h"
 #include "vehicle_task.h"
 #include "../subsystem2/motion.h"
+#include "../subsystem2/motion_diag.h"
 #include "../subsystem2/drv_motor_hw.h"
 #include "../subsystem3/line_service.h"
 #include "../subsystem5/sonar_service.h"
@@ -618,6 +619,7 @@ static void cal_pause(void)
  */
 static bool calibrate(void)
 {
+    motion_diag_phase(MOTION_DIAG_CALIBRATE);
     motion_status_t s;
     (void)motion_status(&s);
     const int32_t home[2] = {s.counts[0], s.counts[1]};
@@ -905,6 +907,7 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        motion_diag_phase(MOTION_DIAG_RUN | ((uint32_t)vsm.running << 8u));
         if (vsm.state != state_before || vsm.running != module_before) {
             event(
                 2u, module_before, vsm.running,
@@ -975,6 +978,7 @@ static void run_once(void)
     (void)vehicle_stop();
     (void)vehicle_servo(0, 0);
     vsm_stop(&vsm);
+    motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
 }
 
@@ -1020,6 +1024,7 @@ static void vehicle_task(INT code, void *ctx)
     publish_vehicle();
     uint32_t button_ms = drv_time_ms();
     for (;;) {
+        motion_diag_phase(MOTION_DIAG_IDLE);
         cancelled = false;
         (void)wait_tick();
         const uint32_t now = drv_time_ms();
@@ -1077,6 +1082,7 @@ static void vehicle_task(INT code, void *ctx)
 #else
         if (calibrate() && !cancelled) {
 #endif
+            motion_diag_phase(MOTION_DIAG_START_DELAY);
             const uint32_t start = drv_time_ms();
             while (!cancelled && drv_time_ms() - start < START_DELAY_MS) {
                 (void)wait_tick();

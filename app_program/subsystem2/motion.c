@@ -9,6 +9,11 @@
 #define WATCHDOG_TIMEOUT_MS  100u
 
 #include "motion.h"
+#include "motion_diag.h"
+#if APP_DIAG
+#include "motion_diag_capture.h"
+static md_capture_t s_diag;
+#endif
 #include "motor_ctl_robot.h"
 #include "drv_motor_hw.h"
 #include "../platform/drv_gpio_irq.h"
@@ -101,6 +106,69 @@ static ER lock_motion(void)
     return mtx_motion > 0 ? tk_loc_mtx(mtx_motion, TMO_FEVR) : E_OBJ;
 }
 
+#if APP_DIAG
+static ER diag_lock_motion(const char *owner)
+{
+    const ER result = lock_motion();
+    if (result >= E_OK) {
+        s_diag.locked_at = drv_time_us();
+        s_diag.owner = owner;
+    }
+    return result;
+}
+
+static ER diag_unlock_motion(void)
+{
+    s_diag.prior_hold = drv_time_us() - s_diag.locked_at;
+    s_diag.prior_owner = s_diag.owner;
+    return tk_unl_mtx(mtx_motion);
+}
+#define lock_motion() diag_lock_motion(__func__)
+#define unlock_motion() diag_unlock_motion()
+
+void motion_diag_phase(uint32_t phase)
+{
+    s_diag.phase = phase;
+}
+
+void motion_diag_dump(int active)
+{
+    s_diag.dumping = active ? MD_DUMP_FLAG : 0u;
+}
+
+static void diag_print_point(const char *label, const md_point_t *p)
+{
+    tm_printf((UB *)"[MOTION-DIAG] %s entry=%lu gap=%lu release=%lu release_gap=%lu "
+        "dispatch=%lu acquired=%lu wait=%lu phase=0x%lx prior=%s hold=%lu queued=%ld\n",
+        label, (unsigned long)p->entry, (unsigned long)p->gap,
+        (unsigned long)p->release, (unsigned long)p->release_gap,
+        (unsigned long)(p->entry - p->release), (unsigned long)p->acquired,
+        (unsigned long)(p->acquired - p->entry), (unsigned long)p->phase,
+        p->prior_owner ? p->prior_owner : "none", (unsigned long)p->prior_hold,
+        (long)p->queued);
+}
+
+void motion_diag_print(void)
+{
+    md_point_t latest, worst;
+    uint32_t observations;
+    UINT irq;
+    DI(irq); /* GP20 only: bounded copy, no print while interrupts are masked. */
+    latest = s_diag.latest;
+    worst = s_diag.worst;
+    observations = s_diag.observations;
+    EI(irq);
+    tm_printf((UB *)"[MOTION-DIAG] lifetime observations=%lu; DIAG=1 changes timing\n",
+        (unsigned long)observations);
+    if (observations != 0u) {
+        diag_print_point("latest", &latest);
+        diag_print_point("worst-gap", &worst);
+    }
+}
+#else
+#define unlock_motion() tk_unl_mtx(mtx_motion)
+#endif
+
 /*
  * Run the controller tick and feed the motion-only watchdog policy.
  */
@@ -114,9 +182,21 @@ static void motion_task(INT stacd, void *exinf)
         }
         const INT queued = tk_can_wup(TSK_SELF);
         const uint32_t started = drv_time_us();
+#if APP_DIAG
+        md_point_t point = {.entry = started,
+            .gap = ticks != 0u ? started - last_run_us : 0u,
+            .release = s_diag.release, .release_gap = s_diag.release_gap,
+            .phase = s_diag.phase | s_diag.dumping, .queued = queued};
+#endif
         if (lock_motion() < E_OK) {
             continue;
         }
+#if APP_DIAG
+        point.acquired = s_diag.locked_at;
+        point.prior_owner = s_diag.prior_owner;
+        point.prior_hold = s_diag.prior_hold;
+        md_observe(&s_diag, &point);
+#endif
         if (ticks != 0u) {
             const uint32_t gap = started - last_run_us;
             if (gap_min_us == 0u || gap < gap_min_us) {
@@ -167,7 +247,7 @@ static void motion_task(INT stacd, void *exinf)
         }
 #endif
         const ID notify = tid_after_tick;
-        (void)tk_unl_mtx(mtx_motion);
+        (void)unlock_motion();
         /* Only completed control work feeds; never the cyclic handler or dump. */
         if (watchdog_armed) {
 #if APP_TEST
@@ -193,6 +273,9 @@ static void motion_task(INT stacd, void *exinf)
 static void motion_cyclic(void *exinf)
 {
     (void)exinf;
+#if APP_DIAG
+    md_release(&s_diag, drv_time_us());
+#endif
     (void)tk_wup_tsk(tid_motion);
 }
 
@@ -305,7 +388,7 @@ int motion_timing_window_begin(void)
         window_active = true;
         result = E_OK;
     }
-    (void)tk_unl_mtx(mtx_motion);
+    (void)unlock_motion();
     return result;
 }
 
@@ -328,7 +411,7 @@ int motion_timing_window_end(motion_timing_window_t *out)
         window_active = false;
         result = E_OK;
     }
-    (void)tk_unl_mtx(mtx_motion);
+    (void)unlock_motion();
     return result;
 }
 
@@ -348,7 +431,7 @@ int motion_timing_probe_capture(motion_probe_stage_t stage)
         drv_time_us(), ticks,      gap_min_us,  gap_max_us,
         tick_max_us,   late_wakes, missed_wakes};
     probe_present |= 1u << (unsigned int)stage;
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -400,7 +483,7 @@ int motion_notify_after_tick(ID tid)
         return (int)er;
     }
     tid_after_tick = tid;
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -416,7 +499,7 @@ int motion_set_speed(int16_t left, int16_t right)
         return (int)er;
     }
     mc_set_speed(&mc, left, right, drv_time_ms());
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -430,7 +513,7 @@ int motion_stop(void)
     }
     mc_stop(&mc);
     drv_motor_hw_stop();
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -438,13 +521,14 @@ int motion_stop(void)
  */
 int motion_estop(void)
 {
+    motion_diag_phase(MOTION_DIAG_STOP);
     const ER er = lock_motion();
     if (er < E_OK) {
         return (int)er;
     }
     mc_estop(&mc);
     drv_motor_hw_stop();
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -458,7 +542,7 @@ int motion_clear_faults(void)
     }
     mc_clear_faults(&mc);
     drv_motor_hw_stop();
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -474,7 +558,7 @@ int motion_set_servo(int deg, int *accepted_deg)
     if (accepted_deg) {
         *accepted_deg = accepted;
     }
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*
@@ -515,7 +599,7 @@ int motion_status(motion_status_t *s)
         return (int)er;
     }
     motion_status_locked(s);
-    return (int)tk_unl_mtx(mtx_motion);
+    return (int)unlock_motion();
 }
 
 /*

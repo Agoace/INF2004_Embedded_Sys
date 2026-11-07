@@ -238,13 +238,17 @@ Full Wi-Fi poll metrics cover ALL polls, including link-down, not only MQTT
 hooks. Independent window metrics support S2's 5 s and a complete vehicle
 session (calibration/delay/run). They measure wall time with preemption, not
 CPU utilization. Gap counts use strictly >10000 us; the requested delay is
-2 ms but the kernel tick is 10 ms. The probe's own max is also reported,
+2 ms, but the 10 ms kernel tick and `tk_dly_tsk` extra-tick semantics make
+the actual cadence about 20 ms (roughly 50 polls/s), as observed on hardware.
+This known port property is documented, not changed by this fix. The probe's
+own max is also reported,
 excluding its final stores. Health heartbeat carries lifetime gap max/sample
 count; TEST and post-session USB lines show work/threshold/window details.
 A no-poll or stale-health interval is not a performance pass.
 
 Static sizes, strict ARM/SDK proofs and host tests are recorded in
-[Kernel robot](KERNEL_ROBOT.md). Hardware must still establish cold-power
-clock rate, motion gaps under Wi-Fi traffic, network loss/decode/reconnect,
-command policy, stack margins and independent M1/M2. No push or flash is
+[Kernel robot](KERNEL_ROBOT.md). Earlier-image [operator results](MTK3_STEP8_HARDWARE_RESULTS.md) include
+cold-power TIMER, timing, MQTT/reconnect, commands and basic M1/M2. They do not
+validate later boot/session/diagnostic or SCAN-retry changes. New-image
+hardware still needs its own acceptance. No push or flash is
 part of this implementation.

@@ -46,17 +46,19 @@ the normal image after a cold VIN power-on.
 | S1-U02 | TEST: bounded producer burst at priority 1 fills MBF; sends return without waiting, lost count increases; after allowing consumer to run, accepted rows are retained | PASS 2026-11-06 (445084c and 3f889a1): accepted 34, lost 66, no blocking. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S1-U03 | GP20 dump after a full robot session: valid KR1/VE CSV, telemetry loss 0, dump `tm_usb_dropped` delta 0, control deadlines remain within limits, per-task stack free margin >=256 bytes | PASS 2026-11-06 (M1-S7, M2-S7): telemetry loss 0, USB dump delta 0, overruns 0, stack free >= 1672 B. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
-## STEP 8 MQTT image — hardware Not run
+## STEP 8 MQTT image — operator results 2026-11-07
 
-STEP 7 outcomes above remain historical; they do not validate the new image.
+STEP 7 outcomes above remain historical. Earlier STEP 8 operator results
+are summarized below and in [the hardware record](../../docs/MTK3_STEP8_HARDWARE_RESULTS.md).
+They do not validate later boot/session, diagnostics or SCAN-retry changes.
 Follow [the broker runbook](../../docs/MQTT_RUNBOOK.md).
 
 | ID | Check | Result |
 | --- | --- | --- |
-| S1-U04 | MQTT connect, AP loss and broker restart/reconnect; retained OFFLINE will and ONLINE after CONNACK, keepalive 5 s (broker silence threshold about 7.5 s plus delivery/timer delay); no effect on boot, RAM log or driving | Not run |
-| S1-U05 | Live robot/log stream (QoS 0, 10-row batches about every 100 ms, data age, jump/skip report, reconnect), DUMP QoS 1 refill time and merge by index, Wi-Fi hook max wall time with streaming on; nominal state5Hz/heartbeat1Hz, signed distance/duty and encoder heading/rate, completed obstacle profiles (width unavailable), detour records and retained run summary, CPU field, sonar history/event loss and signed binary CSV; Wi-Fi20 poll/work/gap and stack data during driving/dump | Not run |
-| S1-U06 | NORMAL robot: fallback ESTOP-only, configured-token matching all opcodes, idle START/CALIBRATE, duplicate/full queue, dedicated ESTOP, live DUMP/ABORT | Not run |
-| S1-U07 | MQTT TEST, idle board, wheels lifted: print calibrated CPU reference and load; establish expected range and independent target accuracy; verify deadlines and >=256 B stack margin | Not run; expected range not established. [Method](../../docs/CPU_LOAD.md) |
+| S1-U04 | MQTT connect, AP loss and broker restart/reconnect; retained OFFLINE will and ONLINE after CONNACK, keepalive 5 s (broker silence threshold about 7.5 s plus delivery/timer delay); no effect on boot, RAM log or driving | PASS for watchdog LWT, broker restart (~2 s reconnect), power cut (~7 s OFFLINE); AP-loss case not separately recorded |
+| S1-U05 | Live robot/log stream (QoS 0, 10-row batches about every 100 ms, data age, jump/skip report, reconnect), DUMP QoS 1 refill time and merge by index, Wi-Fi hook max wall time with streaming on; nominal state5Hz/heartbeat1Hz, signed distance/duty and encoder heading/rate, completed obstacle profiles (width unavailable), detour records and retained run summary, CPU field, sonar history/event loss and signed binary CSV; Wi-Fi20 poll/work/gap and stack data during driving/dump | PASS for M1: live 216/216 rows byte-identical to USB, median age 20 ms, DUMP ~1 s; full rate/loss/stack checklist not separately recorded |
+| S1-U06 | NORMAL robot: fallback ESTOP-only, configured-token matching all opcodes, idle START/CALIBRATE, duplicate/full queue, dedicated ESTOP, live DUMP/ABORT | PASS for uncalibrated START refusal, CALIBRATE/START/DUMP/ESTOP and wrong-token refusal (`command_lost +2`); other queue/duplicate cases not separately recorded |
+| S1-U07 | MQTT TEST, idle board, wheels lifted: print calibrated CPU reference and load; establish expected range and independent target accuracy; verify deadlines and >=256 B stack margin | Target values observed: idle 117, traffic 139 permille; peak 4026729 iterations/s. Independent accuracy/range not established. [Method](../../docs/CPU_LOAD.md) |
 
 Commands are not consumed by TEST/BENCH because those profiles do not start
 vehicle. A broker PUBACK is not vehicle acceptance. GP21 remains the real

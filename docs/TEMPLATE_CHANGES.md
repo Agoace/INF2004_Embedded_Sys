@@ -36,6 +36,12 @@ output returns `E_PAR`. Readers and updates use short core-0 interrupt masks,
 not a mutex or retry loop. The largest timing copy is 28 bytes. No driver,
 network call or wait runs inside these masks.
 
+The 2 ms requested Wi-Fi delay is not a 2 ms poll contract. A 10 ms kernel
+tick plus `tk_dly_tsk` extra-tick semantics yields about 20 ms between polls
+(roughly 50 polls/s), confirmed by the operator. The follow-up documents this
+property without changing it. Boot identity and opt-in motion diagnostics
+add no template-source deviation; this ledger remains seven paths.
+
 Metrics are **wall time, not CPU load**: polls, complete start-to-start gaps,
 maximum gap, gaps strictly above 10000 us, maximum and accumulated work
 interval, and maximum probe bookkeeping interval. All include interruption
