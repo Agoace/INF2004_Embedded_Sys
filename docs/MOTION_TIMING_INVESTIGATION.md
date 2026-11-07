@@ -55,8 +55,11 @@ Bit 16 marks the USB-dump producer, including its diagnostic print. It does
 not prove when the priority-3 USB task actually drained the output ring;
 USB activity can continue after the producer returns. Phase changes and
 release reads are best-effort core-0 observations, not an atomic trace of
-all tasks. Queued wakes or a release coincident with the entry snapshot
-make release-to-entry attribution less exact; preserve those fields.
+all tasks. Bit 17 marks a changed release during the snapshot, or a release
+timestamp later than the recorded entry; do not interpret dispatch delay
+from that point. This prevents an entry/release boundary race from appearing
+as a huge unsigned delay. Queued wakes also make attribution less exact;
+preserve those fields.
 
 | Snapshot values | What they can distinguish |
 | --- | --- |
@@ -109,7 +112,8 @@ silently add that behavior.
   1086 us mutex wait from a 10000 us entry gap, and late cyclic dispatch from
   post-release delay; wrap, phases, queued wakes and default macro side
   effects are checked. These are synthetic tests, not hardware measurements.
-- Six existing DIAG=0 profiles were built before/after this instrumentation:
+- Six existing DIAG=0 profiles were built at `50d2e52` before and `164f616`
+  after the instrumentation (before independent observation-accounting changes):
   923 object/ELF records, zero allocated code/data, relocation, symbol or
   storage-size differences. DWARF/debug/comment attributes and their `.group`
   section-index metadata are excluded; BSS is compared by symbol/size, not

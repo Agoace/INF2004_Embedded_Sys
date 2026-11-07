@@ -3,9 +3,10 @@
 #define MOTION_DIAG_CAPTURE_H
 #include <stdint.h>
 #include <stdbool.h>
-#define MD_DUMP_FLAG     0x10000u
-#define MD_GAP_LIMIT_US  11000u
-#define MD_WAIT_LIMIT_US 1000u
+#define MD_DUMP_FLAG         0x10000u
+#define MD_RELEASE_RACE_FLAG 0x20000u
+#define MD_GAP_LIMIT_US      11000u
+#define MD_WAIT_LIMIT_US     1000u
 
 typedef struct {
     uint32_t entry;
@@ -33,6 +34,12 @@ typedef struct {
     md_point_t latest;
     md_point_t worst;
 } md_capture_t;
+
+static inline bool md_release_raced(uint32_t entry, uint32_t release,
+                                    uint32_t latest_release)
+{
+    return release != latest_release || entry - release > 0x7fffffffu;
+}
 
 static inline void md_release(md_capture_t *s, uint32_t now)
 {

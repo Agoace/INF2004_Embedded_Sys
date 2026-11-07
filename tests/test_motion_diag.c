@@ -12,6 +12,10 @@ int main(void)
     motion_diag_print();
     assert(side_effect ==
            0); /* default diagnostic calls disappear completely */
+    assert(!md_release_raced(20001u, 20000u, 20000u));
+    assert(md_release_raced(19999u, 20000u, 20000u));
+    assert(md_release_raced(20001u, 20000u, 30000u));
+    assert(!md_release_raced(0u, UINT32_MAX - 9u, UINT32_MAX - 9u));
     md_release(&capture, 10000u);
     md_release(&capture, 20000u);
     assert(capture.release == 20000u && capture.release_gap == 10000u);

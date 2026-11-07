@@ -187,6 +187,9 @@ static void motion_task(INT stacd, void *exinf)
             .gap = ticks != 0u ? started - last_run_us : 0u,
             .release = s_diag.release, .release_gap = s_diag.release_gap,
             .phase = s_diag.phase | s_diag.dumping, .queued = queued};
+        if (md_release_raced(started, point.release, s_diag.release)) {
+            point.phase |= MD_RELEASE_RACE_FLAG;
+        }
 #endif
         if (lock_motion() < E_OK) {
             continue;
