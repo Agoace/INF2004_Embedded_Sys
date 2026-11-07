@@ -93,7 +93,10 @@ enum {
     RM_OBSTACLE_LEFT_BLOCKED = 0x04,
     RM_OBSTACLE_RIGHT_BLOCKED = 0x08,
     RM_OBSTACLE_STAGE_SHIFT = 4,
-    RM_OBSTACLE_STAGE_MASK = 0x30
+    RM_OBSTACLE_STAGE_MASK = 0x30,
+    RM_OBSTACLE_ATTEMPT_SHIFT = 6,
+    RM_OBSTACLE_ATTEMPT_MASK = 0xc0,
+    RM_OBSTACLE_ATTEMPT_MAX = 2
 };
 
 /* One completed obstacle scan. Decision is obstacle_side_t: 0 none, 1 right,
@@ -165,14 +168,27 @@ enum {
     RM_STOP_LINE_LOST_SAMPLES = 9,
     RM_STOP_SONAR = 10,
     RM_STOP_TELEMETRY = 11,
-    RM_STOP_OTHER = 12
+    RM_STOP_OTHER = 12,
+    RM_STOP_SCAN_REVERSE_TIMEOUT = 13
 };
 
 /* robot/summary flags (byte 1). */
 enum {
     RM_SUMMARY_BARCODE_IMPLEMENTED = 0x01,
     RM_SUMMARY_SPEED_ERROR_VALID = 0x02,
-    RM_SUMMARY_DETOUR_ABORTED = 0x04
+    RM_SUMMARY_DETOUR_ABORTED = 0x04,
+    RM_SUMMARY_SCAN_REATTEMPT_SHIFT = 3,
+    RM_SUMMARY_SCAN_REATTEMPT_MAX = 31,
+    RM_SUMMARY_SCAN_REATTEMPT_MASK = 0xf8
+};
+
+/* robot/event kind 8 (SCAN_RETRY). Word: low byte attempt, high byte reason. */
+enum {
+    RM_EVENT_SCAN_RETRY = 8,
+    RM_SCAN_RETRY_NO_SIDE = 1,
+    RM_SCAN_RETRY_REVERSE_BEGIN = 1,
+    RM_SCAN_RETRY_REVERSE_END = 2,
+    RM_SCAN_RETRY_RESCAN_BEGIN = 3
 };
 
 /* End-of-run totals. Retained on the broker. */

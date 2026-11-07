@@ -26,7 +26,9 @@ STATE_NAMES = {0: "IDLE", 1: "RUNNING", 2: "FAULT"}
 MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle scan",
                 4: "obstacle detour"}
 EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
-               5: "run end", 6: "command decision", 7: "junction (reserved)"}
+               5: "run end", 6: "command decision", 7: "junction (reserved)",
+               8: "scan retry"}
+SCAN_RETRY_TEXT = {1: "reverse begins", 2: "reverse ends", 3: "rescan begins"}
 DETOUR_LIMIT = 8
 SCAN_STAGES = {0: "not reported", 1: "coarse", 2: "fine"}
 SIDE_TEXT = {0: "none", 1: "right", 2: "left"}  # obstacle and detour side bytes
@@ -39,7 +41,8 @@ STOP_SOURCES = {0: "none or unknown", 1: "GP21 button", 2: "MQTT ESTOP", 3: "fau
 STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "90 s limit",
                 4: "shell left RUNNING", 5: "vehicle deadline missed", 6: "motion wake lost",
                 7: "motion status failed", 8: "line snapshot stale", 9: "line samples lost",
-                10: "sonar failure", 11: "telemetry failure", 12: "other"}
+                10: "sonar failure", 11: "telemetry failure", 12: "other",
+                13: "scan reverse timed out"}
 SHELL_FAULTS = {0: "none", 1: "safety (motor fault bits)", 2: "module failed",
                 3: "no route", 4: "no module", 5: "handoff loop"}
 MOTION_FAULT_BITS = ((0x01, "stall left"), (0x02, "stall right"), (0x04, "ESTOP"),
@@ -260,6 +263,10 @@ class DashboardModel:
             if (pending is not None and pending["result"] is None
                     and pending["opcode"] == opcode and now >= pending["sent"]):
                 pending["result"] = event
+        elif kind == robot_wire.EVENT_SCAN_RETRY:
+            attempt = fields["word"] & 0xFF
+            event["text"] = (f"SCAN retry {attempt}: {_name(SCAN_RETRY_TEXT, fields['detail'])}"
+                             " (both sides blocked)")
         else:
             event["text"] = (f"{_name(EVENT_KINDS, kind)}: {_name(MODULE_NAMES, fields['from'])}"
                              f" to {_name(MODULE_NAMES, fields['to'])},"
@@ -656,6 +663,8 @@ def obstacle_panel(model, now):
                 ("Detour decision", _name(OBSTACLE_DECISION_TEXT, fields["decision"])),
                 ("Scan ID", fields["scan_id"]),
                 ("Scan stage", _name(SCAN_STAGES, fields["scan_stage"])),
+                ("Scan attempt", "initial" if fields.get("scan_attempt", 0) == 0
+                 else f"retry {fields['scan_attempt']}"),
                 ("Scans missed (ID gaps)", model.obstacle_missed),
                 ("Profile word", f"0x{fields['profile_word']:04x}")]
         points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
@@ -814,6 +823,7 @@ def summary_panel(model, now):
             ("Detours started / done / succeeded",
              f"{f['detours_started']} / {f['detours_done']} / {f['detours_succeeded']}"),
             ("Detour time in total", _seconds(f["detour_total_ms"])),
+            ("SCAN reverse-and-rescan attempts", f.get("scan_reattempts", "not reported")),
             ("Max speed error", "not measured" if unknown_speed
              else f"{f['max_speed_error_mm_s']} mm/s"),
             ("Motion faults seen", _fault_text(f["motion_fault_bits"])),

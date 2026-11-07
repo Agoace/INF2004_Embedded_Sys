@@ -99,6 +99,12 @@ static void test_obstacle_status(void)
     assert(bytes[12] == 0xfeu && bytes[13] == 1u && bytes[14] == 0x5au && bytes[15] == 0x5au);
     assert(bytes[16] == 7u && bytes[17] == 3u && bytes[18] == 255u && bytes[19] == 15u);
     emit_named("obstacle", bytes, RM_OBSTACLE_SIZE);
+    rm_obstacle_t retry = value;
+    retry.flags = (uint8_t)(retry.flags | (2u << RM_OBSTACLE_ATTEMPT_SHIFT));
+    retry.scan_id = 0x01020306u;
+    rm_pack_obstacle(bytes, &retry);
+    assert(bytes[1] == 0x8fu && bytes[4] == 6u);
+    emit_named("obstacle_retry2", bytes, RM_OBSTACLE_SIZE);
     uint8_t status[RM_STATUS_SIZE];
     rm_pack_status(status, RM_STATUS_ONLINE, 0x11223344u);
     assert(status[0] == RM_STATUS_VERSION && status[1] == 1u);
@@ -192,7 +198,7 @@ static void test_detour_summary(void)
         .hump_peak = 0x0a0bu};
     uint8_t summary_bytes[RM_SUMMARY_SIZE];
     rm_pack_summary(summary_bytes, &summary);
-    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 7u); /* upper flags remain reserved */
+    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 0xffu); /* 31 retries */
     assert(summary_bytes[2] == 1u && summary_bytes[3] == 1u && summary_bytes[4] == 4u);
     assert(summary_bytes[8] == 0x88u && summary_bytes[9] == 0x13u);
     assert(summary_bytes[12] == 0x32u && summary_bytes[13] == 0xefu);
@@ -215,6 +221,29 @@ static void test_detour_summary(void)
     rm_pack_summary(summary_bytes, &summary);
     assert(summary_bytes[34] == 0xffu && summary_bytes[35] == 0xffu && summary_bytes[1] == 0u);
     emit_named("summary_no_speed_error", summary_bytes, RM_SUMMARY_SIZE);
+    summary.flags = (uint8_t)(2u << RM_SUMMARY_SCAN_REATTEMPT_SHIFT);
+    summary.stop_source = RM_STOP_SOURCE_FAULT;
+    summary.stop_reason = RM_STOP_SCAN_REVERSE_TIMEOUT;
+    summary.shell_fault = 2u;
+    summary.shell_fault_detail = 2u;
+    rm_pack_summary(summary_bytes, &summary);
+    assert(summary_bytes[1] == 0x10u && summary_bytes[3] == 13u);
+    emit_named("summary_scan_reverse_timeout", summary_bytes, RM_SUMMARY_SIZE);
+    const rm_event_t retry_events[3] = {
+        {.kind = RM_EVENT_SCAN_RETRY, .from = 3u, .to = 3u, .sequence = 30u,
+         .uptime_ms = 10000u, .word = 0x0101u, .detail = RM_SCAN_RETRY_REVERSE_BEGIN},
+        {.kind = RM_EVENT_SCAN_RETRY, .from = 3u, .to = 3u, .sequence = 31u,
+         .uptime_ms = 11000u, .word = 0x0101u, .detail = RM_SCAN_RETRY_REVERSE_END},
+        {.kind = RM_EVENT_SCAN_RETRY, .from = 3u, .to = 3u, .sequence = 32u,
+         .uptime_ms = 11500u, .word = 0x0101u, .detail = RM_SCAN_RETRY_RESCAN_BEGIN}};
+    const char *retry_names[3] = {"event_scan_reverse_begin", "event_scan_reverse_end",
+                                  "event_scan_rescan_begin"};
+    for (unsigned int i = 0u; i < 3u; ++i) {
+        uint8_t retry_bytes[RM_EVENT_SIZE];
+        rm_pack_event(retry_bytes, &retry_events[i]);
+        assert(retry_bytes[1] == 8u && retry_bytes[12] == 1u && retry_bytes[13] == 1u);
+        emit_named(retry_names[i], retry_bytes, RM_EVENT_SIZE);
+    }
 
     uint8_t heartbeat_bytes[RM_HEARTBEAT_SIZE];
     rm_heartbeat_t beat = {.flags = 0x37u, .uptime_ms = 60000u,

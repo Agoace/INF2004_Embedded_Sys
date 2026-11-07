@@ -197,7 +197,10 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 | 16 | u32 | Boot ID (live event v2; embedded log event v1 stays 16 bytes) |
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
-6 command decision; 7 JUNCTION (reserved, not emitted). For kind 6, detail is 0 accepted, 1 not idle,
+6 command decision; 7 JUNCTION (reserved, not emitted); 8 SCAN_RETRY. For
+kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
+or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
+reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, detail is 0 accepted, 1 not idle,
 2 uncalibrated, 3 log busy, 4 duplicate, or 5 backend unavailable. The word
 contains opcode in bits 0–7 and detail in bits 8–15. Only validated, queued
 commands reach the vehicle and produce these events. Bad tokens, malformed
@@ -278,7 +281,9 @@ not reset these lifetime counters.
 sequence-numbered board, not the event queue: an unavailable network cannot
 fill the event queue with profile data. Only the last profile is retained in
 RAM; a gap in scan ID shows missed scans. One bounded read never waits for
-the writer. SCAN, side selection and detour control are unchanged.
+the writer. Side selection and detour control are unchanged. A blocked
+profile may start the SCAN reverse-and-rescan retry described in the vehicle
+record; each completed profile is published.
 
 | Offset | Type | Field |
 | --- | --- | --- |
@@ -295,7 +300,8 @@ the writer. SCAN, side selection and detour control are unchanged.
 | 20 | u32 | Boot ID (obstacle v2; v1 has 20 bytes) |
 
 Flag bits 4–5 reserve scan stage: 0 not reported (current firmware), 1 coarse,
-2 fine, 3 reserved. Bits 6–7 are zero. Equal closest distances prefer the
+2 fine, 3 reserved. In obstacle v2, bits 6–7 are scan attempt: 0 initial,
+1 first retry, 2 second retry, 3 reserved. In v1, bits 6–7 are zero. Equal closest distances prefer the
 point nearest straight ahead, then the right point. PROFILE does not measure
 obstacle width. Width is **unavailable**, not zero or an estimated size.
 
@@ -340,7 +346,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | Offset | Type | Field |
 | --- | --- | --- |
 | 0 | u8 | Version 2 |
-| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; bits 3–7 reserved zero |
+| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; v2 bits 3–7 saturating SCAN reattempts 0–31 |
 | 2 | u8 | Stop source: unknown 0, GP21 1, MQTT 2, fault 3, limit 4 |
 | 3 | u8 | Stop reason, below |
 | 4 | u32 | Run ID since boot |
@@ -360,7 +366,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
 line snapshot failure/stale 8; line samples lost 9; sonar failure 10;
-telemetry failure 11; other 12. Sources describe the run-ending condition,
+telemetry failure 11; other 12; SCAN reverse timeout 13. Sources describe the run-ending condition,
 not a unified fault mask. Motion faults preserve existing `MC_FAULT_*` bits.
 
 Speed error compares commanded versus measured wheel speed only after the

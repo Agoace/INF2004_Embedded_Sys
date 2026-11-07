@@ -11,13 +11,18 @@ def bits(word, offset, width, signed=False):
     return value - (1 << width) if signed and value & (1 << (width - 1)) else value
 
 
+MODULE_NAMES = {0: "none", 1: "line", 2: "search", 3: "scan", 4: "detour",
+                5: "scan_reverse"}
+
+
 def decode(payload):
     if len(payload) != 32:
         raise ValueError("KR1 requires exactly 16 bytes")
     w = int.from_bytes(bytes.fromhex(payload), "little")
     echo = bits(w, 93, 16)
     status = (echo >> 9) & 3
-    return [bits(w, 0, 16) * 20, bits(w, 16, 2), bits(w, 18, 3),
+    module = bits(w, 18, 3)
+    return [bits(w, 0, 16) * 20, bits(w, 16, 2), module, MODULE_NAMES.get(module, "unknown"),
             bits(w, 21, 12), bits(w, 33, 12), bits(w, 45, 8, True),
             bits(w, 53, 10, True), bits(w, 63, 10, True),
             bits(w, 73, 10, True), bits(w, 83, 10, True), echo, status,
@@ -35,7 +40,7 @@ def main():
     if args.events:
         writer.writerow(["time_ms", "kind", "from", "to", "word"])
     else:
-        writer.writerow(["row", "time_ms", "state", "module", "raw_L", "raw_C", "position",
+        writer.writerow(["row", "time_ms", "state", "module", "module_name", "raw_L", "raw_C", "position",
                          "asked_L", "asked_R", "measured_L", "measured_R", "echo_word",
                          "echo_status", "echo_mm", "echo_streak", "servo_deg", "events", "flags"])
     try:

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #define VR_BYTES 16u
 #define VR_ROWS 4501u /* >= 90 seconds at 20 ms */
+#define VR_MODULE_SCAN_REVERSE 5u /* KR1 only: SCAN is in its reverse leg */
 typedef struct { uint8_t bytes[VR_BYTES]; } vr_row_t;
 typedef struct {
     uint32_t elapsed_ms;
