@@ -1326,6 +1326,34 @@ class SecurityTests(AppCase):
                                     host=f"localhost:{self.port}")
         self.assertEqual(status, 200)
 
+    def test_allowed_proxy_origin_is_accepted_exactly(self):
+        proxy = "https://robot.example.ts.net:8443"
+        self.app.add_origin(proxy)
+        self.app.set_port(self.port)
+        body = json.dumps({"command": "estop"})
+        headers = self.good_headers(Origin=proxy)
+        status, _, _ = self.request("POST", "/api/command", body, headers,
+                                    host="robot.example.ts.net:8443")
+        self.assertEqual(status, 200)
+        for origin, host in (("http://robot.example.ts.net:8443", "robot.example.ts.net:8443"),
+                             ("https://robot.example.ts.net", "robot.example.ts.net"),
+                             ("https://evil.ts.net:8443", "robot.example.ts.net:8443"),
+                             (proxy, "evil.ts.net:8443")):
+            status, _, _ = self.request("POST", "/api/command", body,
+                                        self.good_headers(Origin=origin), host=host)
+            self.assertEqual(status, 403, (origin, host))
+        status, _, _ = self.request("POST", "/api/command", body,
+                                    self.good_headers(Origin=proxy, **{"X-CSRF-Token": "guess"}),
+                                    host="robot.example.ts.net:8443")
+        self.assertEqual(status, 403)
+        self.assertEqual(len(self.link.sent), 1)
+
+    def test_bad_proxy_origin_is_refused(self):
+        for origin in ("robot.ts.net", "ftp://robot.ts.net", "https://robot.ts.net/path",
+                       "https://user@robot.ts.net", "https://robot.ts.net?x=1"):
+            with self.assertRaises(ValueError, msg=origin):
+                self.app.add_origin(origin)
+
     def test_bad_bodies(self):
         for body in ("", "not json", "[]", "{}", '{"command": 5}', '{"command": "reboot"}'):
             status, _, _ = self.request("POST", "/api/command", body, self.good_headers())
