@@ -131,7 +131,9 @@ obstacle:
   NO_RETURN is not an edge. The 30° point may be free alone.
 - Obstacle distance = the nearest VALID point (511 when there is none).
 - Clearer side = the smaller free step. On a tie, the side with more room at
-  30°. On a full tie, LEFT. Both sides blocked = NONE: reverse and rescan.
+  30°. On a full tie, LEFT. Both sides blocked = NONE. In the vehicle SCAN
+  module, NONE triggers at most two reverse-and-rescan attempts. See
+  [SCAN reverse and reattempt](VC_DETOUR_RUN.md#scan-reverse-and-reattempt).
 
 NO_RETURN counts as free here, but it never releases a STOP in the
 [forward watch](OBSTACLE_MONITOR.md). Without this, the robot could not

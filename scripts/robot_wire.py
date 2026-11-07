@@ -35,6 +35,8 @@ SUMMARY_FLAGS = ("barcode_hump_implemented", "speed_error_valid", "detour_aborte
 SPEED_ERROR_NONE = 0xFFFF
 HUMP_PEAK_NONE = 0xFFFF
 EVENT_JUNCTION = 7  # reserved, not emitted yet
+EVENT_SCAN_RETRY = 8
+SCAN_RETRY_PHASES = {1: "reverse_begin", 2: "reverse_end", 3: "rescan_begin"}
 OBSTACLE_DECISIONS = ("none", "right", "left")
 OBSTACLE_FLAGS = ("closest_valid", "too_near", "left_blocked", "right_blocked")
 NO_CLOSEST_MM = 511
@@ -153,8 +155,12 @@ def decode(topic, data):
         result.update(echo_status=(result["echo"] >> 9) & 3,
                       echo_mm=(result["echo"] & 511) if ((result["echo"] >> 9) & 3) == 0 else "")
     elif name == "event":
-        _require(1 <= data[1] <= EVENT_JUNCTION and (data[15] & 0xFE) == 0,
+        _require(1 <= data[1] <= EVENT_SCAN_RETRY and (data[15] & 0xFE) == 0,
                  "event kind or reserved flags")
+        if data[1] == EVENT_SCAN_RETRY:
+            _require(data[0] >= 2 and data[2] == data[3] == 3 and
+                     data[14] in SCAN_RETRY_PHASES and data[12] in (1, 2) and data[13] == 1,
+                     "scan retry event")
         result.update(kind=data[1], **{"from": data[2], "to": data[3]},
                       sequence=_u32(data, 4), uptime_ms=_u32(data, 8), word=_u16(data, 12),
                       detail=data[14], run_relative=data[15] & 1)
@@ -207,9 +213,11 @@ def decode(topic, data):
 
 def _decode_obstacle(data):
     """Decode the 20-byte obstacle profile summary of one completed scan."""
-    _require(data[1] & 0xC0 == 0, "obstacle reserved flag bits")
+    _require(data[1] & (0xC0 if data[0] == 1 else 0) == 0, "obstacle reserved flag bits")
     scan_stage = (data[1] >> 4) & 3
     _require(scan_stage != 3, "obstacle scan stage")
+    scan_attempt = data[1] >> 6
+    _require(scan_attempt != 3, "obstacle scan attempt")
     _require(data[2] <= 2, "obstacle decision")
     closest_mm, right_step, left_step = _u16(data, 12), data[16], data[17]
     _require(closest_mm <= NO_CLOSEST_MM and right_step <= 7 and left_step <= 7,
@@ -217,7 +225,7 @@ def _decode_obstacle(data):
     for clear in (data[18], data[19]):
         _require(clear <= 35 or clear == BLOCKED_CLEAR_DEG, "obstacle clearance")
     result = _flags(data[1] & 15, OBSTACLE_FLAGS)
-    result.update(scan_stage=scan_stage, decision=data[2], closest_angle_deg=_i8(data, 3),
+    result.update(scan_stage=scan_stage, scan_attempt=scan_attempt, decision=data[2], closest_angle_deg=_i8(data, 3),
                   scan_id=_u32(data, 4), uptime_ms=_u32(data, 8), closest_mm=closest_mm,
                   profile_word=_u16(data, 14),
                   right_free_step=right_step, left_free_step=left_step,
@@ -239,10 +247,13 @@ def _decode_detour(data):
 
 def _decode_summary(data):
     """Decode the 44-byte summary of one finished run."""
-    _require(data[1] & ~7 == 0, "summary reserved flags")
+    if data[0] == 1:
+        _require(data[1] & ~7 == 0, "summary reserved flags")
     _require(data[2] <= 4, "summary stop source")
-    _require(data[3] <= 12, "summary stop reason")
-    result = _flags(data[1], SUMMARY_FLAGS)
+    _require(data[3] <= (12 if data[0] == 1 else 13), "summary stop reason")
+    result = _flags(data[1] & 7, SUMMARY_FLAGS)
+    if data[0] >= 2:
+        result["scan_reattempts"] = data[1] >> 3
     result.update(stop_source=data[2], stop_reason=data[3], run_id=_u32(data, 4),
                   start_ms=_u32(data, 8), duration_ms=_u32(data, 12),
                   distance_mm=_u32(data, 16), line_losses=_u16(data, 20),

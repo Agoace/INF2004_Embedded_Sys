@@ -12,6 +12,7 @@
  */
 #include <stdio.h>
 
+#include "../app_program/subsystem2/motor_ctl.h"
 #include "../app_program/subsystem5/detour_run.h"
 #include "../app_program/subsystem3/line_search.h"
 #include "../app_program/subsystem3/line_trace.h"
@@ -60,6 +61,22 @@ static const dr_config_t DR = {
 };
 static const ss_config_t SS = {300u};
 
+/* Sensor geometry for full reattempt tests: one free side is visible after a reverse. */
+static ultrasonic_result_t scan_view(unsigned int index, unsigned int attempt,
+                                     unsigned int free_after) {
+    return attempt >= free_after && index >= 9u ? echo_none() : echo_mm(200u);
+}
+
+/* Wheel counts follow commanded straight speed: 10 ms x 12.414 counts/mm. */
+static void reverse_wheels(int32_t counts[2], int32_t milli[2], const vsm_drive_t *d) {
+    const int16_t v[2] = {d->left_mm_s, d->right_mm_s};
+    for (unsigned int w = 0u; w < 2u; ++w) {
+        milli[w] += (int32_t)v[w] * 124;
+        counts[w] += milli[w] / 1000;
+        milli[w] %= 1000;
+    }
+}
+
 /* One step of a module. The drive starts with junk wheel speeds: the
  * modules set every field themselves (the shell gives 0, servo last). */
 static uint16_t ping;
@@ -102,7 +119,7 @@ static vsm_outcome_t run_scan(ss_t *ss, unsigned int lo, unsigned int hi, uint32
         in.echo_new = in_flight;
         in.echo = view(at, lo, hi);
         const vsm_outcome_t o = step(ss, ss_step, &in, t, &d);
-        if (o != 0u) {
+        if (o != 0u || ss->phase == SS_REVERSE) {
             *t_end = t;
             return o;
         }
@@ -204,7 +221,8 @@ static void test_scan(void) {
     o = step(&ss, ss_step, &in, 1149u, &d);
     CHECK(o == 0u && d.servo_deg == 0, "return 149 ms: out 0x%x", o);
     o = step(&ss, ss_step, &in, 1150u, &d);
-    CHECK(vsm_outcome_type(o) == VSM_OUT_SIDE, "return 150 ms: out 0x%x", o);
+    CHECK(o == 0u && ss.phase == SS_REVERSE && ss.notice == SS_NOTICE_REVERSE_BEGIN,
+          "blocked synthetic profile reverses: out 0x%x phase %u", o, ss.phase);
     /* A new start clears the readings of a stopped scan. */
     ss.readings = 1u;
     ss_start(&ss, 0u, 0u);
@@ -230,7 +248,161 @@ static void test_scan(void) {
     CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_RIGHT, 200u)) && ss.scans == scans + 1u,
           "box 4..10: out 0x%x", o);
     o = run_scan(&ss, 0u, 12u, &t_end, &bad);
-    CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_NONE, 200u)), "blocked: out 0x%x", o);
+    CHECK(o == 0u && ss.phase == SS_REVERSE && bad == 0,
+          "blocked first scan must reattempt: out 0x%x phase %u bad %d", o, ss.phase, bad);
+}
+
+static void test_reverse_math(void) {
+    CHECK(SS_REVERSE_COUNTS == 1241u, "100 mm at 12414 counts/m: %u", SS_REVERSE_COUNTS);
+    ss_t ss;
+    ss_init(&ss, &SS);
+    ss_start(&ss, 0u, 0u);
+    ss.phase = SS_REVERSE;
+    ss.wait_ms = SS_REVERSE_TIMEOUT_MS;
+    ss.reverse_origin[0] = 2000;
+    ss.reverse_origin[1] = -2000;
+    vsm_inputs_t in = {0, VC_EVENT_NONE, {2000 - 1240, -2000 - 1240}, false,
+                       0u, &ping, false};
+    vsm_drive_t d;
+    CHECK(step(&ss, ss_step, &in, 10u, &d) == 0u && ss.phase == SS_REVERSE &&
+              d.left_mm_s == -SS_REVERSE_MM_S && d.right_mm_s == -SS_REVERSE_MM_S,
+          "1240 counts each side is short: phase %u", ss.phase);
+    in.counts[0] = 2000 - 1241;
+    in.counts[1] = -2000 - 1241;
+    CHECK(step(&ss, ss_step, &in, 20u, &d) == 0u && ss.phase == SS_CENTRE_SETTLE &&
+              ss.notice == SS_NOTICE_REVERSE_END && d.left_mm_s == 0 && d.right_mm_s == 0,
+          "1241 counts mean ends reverse: phase %u notice %u", ss.phase, ss.notice);
+    ss.phase = SS_REVERSE;
+    ss.since_ms = 0u;
+    ss.reverse_origin[0] = 0;
+    ss.reverse_origin[1] = 0;
+    in.counts[0] = -2482;
+    in.counts[1] = 0;
+    CHECK(step(&ss, ss_step, &in, 30u, &d) == 0u && ss.phase == SS_CENTRE_SETTLE,
+          "mean of both wheels, not each wheel: phase %u", ss.phase);
+}
+
+static vsm_outcome_t run_reattempts(ss_t *ss, unsigned int free_after, int *bad,
+                                    unsigned int *notices, unsigned int *centre_pings) {
+    vsm_inputs_t in = {0, VC_EVENT_NONE, {0, 0}, false, 0u, &ping, false};
+    vsm_drive_t d = {0};
+    int32_t milli[2] = {0, 0};
+    bool in_flight = false;
+    unsigned int at = 0u;
+    unsigned int completed = 0u;
+    *bad = 0;
+    *notices = 0u;
+    *centre_pings = 0u;
+    ss_start(ss, 0u, 0u);
+    for (uint32_t t = 0u; t < 30000u; t += 10u) {
+        in.ping_sent = in_flight;
+        in.echo_new = in_flight;
+        in.echo = scan_view(at, ss->attempt, free_after);
+        const uint8_t before_phase = ss->phase;
+        const vsm_outcome_t o = step(ss, ss_step, &in, t, &d);
+        if (ss->notice != SS_NOTICE_NONE) {
+            *notices = (*notices << 2u) | ss->notice;
+        }
+        if (ss->completed_scans != completed) {
+            completed = ss->completed_scans;
+            if (ss->completed_attempt + 1u != completed) {
+                ++*bad;
+            }
+        }
+        if (o != 0u) {
+            return o;
+        }
+        if (before_phase == SS_CENTRE_MEASURE && in.ping_sent) {
+            ++*centre_pings;
+        }
+        if (ss->phase == SS_REVERSE) {
+            if (d.left_mm_s != -SS_REVERSE_MM_S || d.right_mm_s != -SS_REVERSE_MM_S ||
+                d.servo_deg != 0 || ping != 0u) {
+                ++*bad;
+            }
+        } else if (d.left_mm_s != 0 || d.right_mm_s != 0) {
+            ++*bad;
+        }
+        reverse_wheels(in.counts, milli, &d);
+        at = (ss->phase == SS_CENTRE_MEASURE) ? OBSTACLE_SCAN_CENTRE_INDEX
+                                               : (unsigned int)((d.servo_deg + 30) / 5);
+        in_flight = ping == VSM_PING_ASAP;
+    }
+    ++*bad;
+    return 0u;
+}
+
+static void test_reattempts(void) {
+    ss_t ss;
+    ss_init(&ss, &SS);
+    int bad;
+    unsigned int notices;
+    unsigned int centre;
+    vsm_outcome_t o = run_reattempts(&ss, 1u, &bad, &notices, &centre);
+    CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_LEFT, 200u)) && bad == 0 &&
+              ss.completed_scans == 2u && ss.completed_attempt == 1u && ss.scans == 2u &&
+              notices == ((1u << 4u) | (2u << 2u) | 3u) && centre == 2u,
+          "blocked->reverse->free: out 0x%x bad %d scans %u attempt %u notices 0x%x centre %u",
+          o, bad, ss.completed_scans, ss.completed_attempt, notices, centre);
+    ss_init(&ss, &SS);
+    o = run_reattempts(&ss, 9u, &bad, &notices, &centre);
+    CHECK(o == vsm_outcome(VSM_OUT_SIDE, ss_payload(OBSTACLE_SIDE_NONE, 200u)) && bad == 0 &&
+              ss.completed_scans == 3u && ss.completed_attempt == SS_MAX_REATTEMPTS &&
+              ss.attempt == SS_MAX_REATTEMPTS && centre == 4u,
+          "three blocked: out 0x%x bad %d scans %u attempt %u centre %u", o, bad,
+          ss.completed_scans, ss.completed_attempt, centre);
+
+    ss_start(&ss, 0u, 0u);
+    ss.phase = SS_REVERSE;
+    ss.since_ms = 100u;
+    ss.wait_ms = SS_REVERSE_TIMEOUT_MS;
+    vsm_inputs_t in = {0, VC_EVENT_NONE, {0, 0}, false, 0u, &ping, false};
+    vsm_drive_t d;
+    o = step(&ss, ss_step, &in, 100u + SS_REVERSE_TIMEOUT_MS - 1u, &d);
+    CHECK(o == 0u && d.left_mm_s == -SS_REVERSE_MM_S, "before timeout: out 0x%x", o);
+    o = step(&ss, ss_step, &in, 100u + SS_REVERSE_TIMEOUT_MS, &d);
+    CHECK(o == vsm_outcome(VSM_OUT_FAILED, SS_FAIL_REVERSE_TIMEOUT) && d.left_mm_s == 0 &&
+              d.right_mm_s == 0 && d.servo_deg == 0 && ping == 0u,
+          "timeout fail-safe: out 0x%x drive %d/%d", o, d.left_mm_s, d.right_mm_s);
+    ss_init(&ss, &SS);
+    ss_start(&ss, 0u, 0u);
+    ss.phase = SS_REVERSE;
+    ss.since_ms = 0u;
+    ss.wait_ms = SS_REVERSE_TIMEOUT_MS;
+    in.counts[0] = -1241;
+    in.counts[1] = -1241;
+    o = step(&ss, ss_step, &in, SS_REVERSE_TIMEOUT_MS, &d);
+    CHECK(o == 0u && ss.phase == SS_CENTRE_SETTLE,
+          "distance reached on timeout tick: 0x%x phase %u", o, ss.phase);
+}
+
+static void test_reverse_safety(void) {
+    ss_t ss;
+    ss_init(&ss, &SS);
+    vsm_t vsm;
+    vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
+    (void)vsm_set_module(&vsm, VSM_MOD_SCAN, ss_module(&ss));
+    CHECK(vsm_start(&vsm, VSM_MOD_SCAN, 0u, 0u), "scan start");
+    ss.phase = SS_REVERSE;
+    ss.since_ms = 0u;
+    ss.wait_ms = SS_REVERSE_TIMEOUT_MS;
+    vsm_inputs_t in = {0, VC_EVENT_NONE, {0, 0}, false, 0u, &ping, false};
+    vsm_drive_t d = vsm_step(&vsm, &in, 0u, 10u);
+    CHECK(d.left_mm_s == -SS_REVERSE_MM_S && d.action == VSM_ACT_SPEED, "reverse drive");
+    d = vsm_step(&vsm, &in, MC_FAULT_ESTOP, 20u);
+    CHECK(vsm.state == VSM_FAULT && vsm.fault == VSM_FAULT_SAFETY && vsm.fault_detail == MC_FAULT_ESTOP &&
+              d.action == VSM_ACT_STOP && d.left_mm_s == 0,
+          "ESTOP mid-reverse: state %u fault %u action %u", vsm.state, vsm.fault, d.action);
+    vsm_reset(&vsm);
+    CHECK(vsm_start(&vsm, VSM_MOD_SCAN, 0u, 30u), "restart");
+    ss.phase = SS_REVERSE;
+    ss.since_ms = 30u;
+    ss.wait_ms = SS_REVERSE_TIMEOUT_MS;
+    d = vsm_step(&vsm, &in, 0u, 40u);
+    vsm_stop(&vsm);
+    d = vsm_step(&vsm, &in, 0u, 50u);
+    CHECK(vsm.state == VSM_IDLE && d.action == VSM_ACT_STOP && d.left_mm_s == 0,
+          "operator stop mid-reverse: state %u action %u", vsm.state, d.action);
 }
 
 /* -------------------------------------------------------------- DETOUR */
@@ -491,6 +663,9 @@ static void test_shell(void) {
 int main(void) {
     test_payload();
     test_scan();
+    test_reverse_math();
+    test_reattempts();
+    test_reverse_safety();
     test_turn_speed();
     test_detour();
     test_back();

@@ -979,13 +979,50 @@ class RebootWireTests(unittest.TestCase):
                 self.assertEqual(decoded["boot_id"], boot)
                 self.assertEqual(decoded["version"], version)
                 self.assertEqual({k: v for k, v in decoded.items()
-                                  if k not in ("version", "boot_id")},
+                                  if k not in ("version", "boot_id", "scan_reattempts")},
                                  {k: v for k, v in wire.decode("robot/" + name, old).items()
                                   if k != "version"})
                 for bad in (frame[:-1], frame + b"\0", old[:1] + frame[1:],
                             bytes([9]) + frame[1:]):
                     with self.subTest(topic=name), self.assertRaises(ValueError):
                         wire.decode("robot/" + name, bad)
+
+    def test_scan_retry_fields_and_c_fixtures(self):
+        outputs = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            outputs[topic] = bytes.fromhex(encoded)
+        obstacle = wire.decode("robot/obstacle", outputs["dash/obstacle_retry2"])
+        self.assertEqual((obstacle["scan_attempt"], obstacle["scan_id"]), (2, 0x01020306))
+        summary = wire.decode("robot/summary", outputs["dash/summary_scan_reverse_timeout"])
+        self.assertEqual((summary["scan_reattempts"], summary["stop_reason"],
+                          summary["shell_fault_detail"]), (2, 13, 2))
+        for name, phase in (("begin", 1), ("end", 2), ("rescan_begin", 3)):
+            key = "scan_" + ("rescan_begin" if name == "rescan_begin" else "reverse_" + name)
+            event = wire.decode("robot/event", outputs["dash/event_" + key])
+            self.assertEqual((event["kind"], event["from"], event["to"], event["word"],
+                              event["detail"]), (8, 3, 3, 0x0101, phase))
+        old_obstacle = bytearray(obstacle_frame())
+        old_obstacle[1] |= 0x40
+        with self.assertRaises(ValueError):
+            wire.decode("robot/obstacle", old_obstacle)  # v1 bits 6..7 stay reserved
+        bad = bytearray(outputs["dash/obstacle_retry2"])
+        bad[1] |= 0xC0
+        with self.assertRaises(ValueError):
+            wire.decode("robot/obstacle", bad)
+        bad = bytearray(outputs["dash/event_scan_reverse_begin"])
+        for offset, value in ((12, 3), (13, 2), (14, 4), (2, 1)):
+            changed = bytearray(bad)
+            changed[offset] = value
+            with self.assertRaises(ValueError):
+                wire.decode("robot/event", changed)
+        old_summary = bytearray(summary_frame())
+        old_summary[1] = 8
+        with self.assertRaises(ValueError):
+            wire.decode("robot/summary", old_summary)
+        old_summary[1], old_summary[3] = 0, 13
+        with self.assertRaises(ValueError):
+            wire.decode("robot/summary", old_summary)
 
     def test_heartbeat_v3_unavailable_mask_and_total(self):
         frame = bytearray(108)

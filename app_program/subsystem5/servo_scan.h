@@ -11,12 +11,18 @@
  *            right to 30 degrees left); settle (first point, then one
  *            step); take OBSTACLE_SCAN_READINGS readings (pings as fast
  *            as the driver allows) and combine them
- *   RETURN   servo centre; settle
+ *   RETURN   servo centre; settle; publish the full profile
+ *   REVERSE  if both sides are blocked, drive back 100 mm at 100 mm/s,
+ *            measured by the mean wheel encoder delta; at most two retries
+ *   CENTRE   stop, settle, take two fresh centre readings, then a full sweep
+ *
+ * No obstacle decision rule changes. After three blocked profiles, SIDE NONE
+ * reaches DETOUR as before. The shell still owns ESTOP and motion faults.
  *
  * Outcomes:
  *   SIDE    payload: bits 0-8 obstacle distance (PROFILE word), bits 9-10
  *           obstacle_side_t (the clearer side; NONE when both are blocked)
- *   FAILED  ultrasonic fault streak; payload SS_FAIL_ECHO
+ *   FAILED  SS_FAIL_ECHO, or SS_FAIL_REVERSE_TIMEOUT after a 3 s reverse leg
  *
  * The start payload (the obstacle distance) is not used.
  *
@@ -33,7 +39,14 @@
 #include "../vehicle/vehicle_inputs.h"
 #include "../vehicle/vehicle_sm.h"
 
-#define SS_FAIL_ECHO 1u
+#define SS_FAIL_ECHO             1u
+#define SS_FAIL_REVERSE_TIMEOUT  2u
+#define SS_REVERSE_MM            100u
+#define SS_REVERSE_MM_S          100
+#define SS_MAX_REATTEMPTS        2u
+#define SS_REVERSE_TIMEOUT_MS    3000u
+#define SS_COUNTS_PER_M          12414u
+#define SS_REVERSE_COUNTS        ((SS_REVERSE_MM * SS_COUNTS_PER_M + 500u) / 1000u)
 
 /* SIDE payload: 11 of the 12 payload bits. */
 #define SS_DISTANCE_MASK 0x01FFu
@@ -59,7 +72,19 @@ typedef enum {
     SS_SETTLE = 1,
     SS_MEASURE = 2,
     SS_RETURN = 3,
+    SS_REVERSE = 4,
+    SS_CENTRE_SETTLE = 5,
+    SS_CENTRE_MEASURE = 6,
+    SS_FAILED = 7,
 } ss_phase_t;
+
+/* Edge notices for observers only. These never change the module route. */
+typedef enum {
+    SS_NOTICE_NONE = 0,
+    SS_NOTICE_REVERSE_BEGIN = 1,
+    SS_NOTICE_REVERSE_END = 2,
+    SS_NOTICE_RESCAN_BEGIN = 3,
+} ss_notice_t;
 
 typedef struct {
     ss_config_t cfg;
@@ -71,7 +96,14 @@ typedef struct {
     uint32_t wait_ms;  /* length of the phase */
     obstacle_profile_t profile;
     obstacle_profile_word_t word; /* after the scan */
-    uint16_t scans;               /* since ss_init() */
+    uint16_t scans;               /* full sweeps started since ss_init() */
+    uint16_t completed_scans;     /* full profiles finished since ss_init() */
+    uint8_t attempt;              /* 2 logical bits: reverses begun, 0..2 */
+    uint8_t completed_attempt;    /* 2 logical bits: attempt of the finished profile */
+    uint8_t notice;               /* ss_notice_t, one step only, 2 logical bits */
+    uint8_t failure;              /* SS_FAIL_*; latched until ss_start() */
+    int32_t reverse_origin[2];
+    obstacle_scan_point_t centre; /* fresh centre check before each retry sweep */
 } ss_t;
 
 void ss_init(ss_t *ss, const ss_config_t *cfg);

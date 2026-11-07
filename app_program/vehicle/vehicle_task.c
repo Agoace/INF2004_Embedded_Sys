@@ -167,20 +167,39 @@ static void publish_obstacle(const ss_t *scan)
     ++obstacle_scans;
     obstacle_report_make(&scan->profile, scan->word, side, obstacle_scans,
                          drv_time_ms(), &report);
+    report.flags = (uint8_t)(report.flags |
+                             ((uint8_t)scan->completed_attempt << RM_OBSTACLE_ATTEMPT_SHIFT));
     app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
                       sizeof(report));
 }
 
+/* Report one scan retry edge. It is an observation only. */
+static void scan_retry_event(const ss_t *scan)
+{
+    const uint16_t word = (uint16_t)(scan->attempt |
+                                     ((uint16_t)RM_SCAN_RETRY_NO_SIDE << 8u));
+
+    live_event(RM_EVENT_SCAN_RETRY, VSM_MOD_SCAN, VSM_MOD_SCAN, word, scan->notice);
+    if (scan->notice == SS_NOTICE_REVERSE_BEGIN) {
+        rs_scan_reattempt(&run_stats);
+    }
+}
+
 /*
- * SCAN module step. It runs the unchanged scan and only observes its outcome.
+ * SCAN module step. It publishes every completed profile and every retry edge.
  */
 static vsm_outcome_t scan_step_observed(void *ctx, const vsm_inputs_t *in,
                                         uint32_t now_ms, vsm_drive_t *drive)
 {
+    ss_t *scan = ctx;
+    const uint16_t completed = scan->completed_scans;
     const vsm_outcome_t outcome = ss_step(ctx, in, now_ms, drive);
 
-    if (vsm_outcome_type(outcome) == VSM_OUT_SIDE) {
-        publish_obstacle((const ss_t *)ctx);
+    if (scan->completed_scans != completed) {
+        publish_obstacle(scan);
+    }
+    if (scan->notice != SS_NOTICE_NONE) {
+        scan_retry_event(scan);
     }
     return outcome;
 }
@@ -716,7 +735,9 @@ static void save_row(uint32_t now, const motion_status_t *s,
                            .position = lp.position,
                            .servo = d->servo_deg,
                            .state = vsm.state,
-                           .module = vsm.running,
+                           .module = (vsm.running == VSM_MOD_SCAN && ss.phase == SS_REVERSE)
+                                         ? VR_MODULE_SCAN_REVERSE
+                                         : vsm.running,
                            .events = bits};
     vr_row_t row;
     vr_pack(&row, &v);
@@ -939,7 +960,12 @@ static void run_once(void)
             last_log = now;
         }
         if (vsm.state != VSM_RUNNING) {
-            set_reason(RM_STOP_SHELL, "shell left RUNNING");
+            if (vsm.fault == VSM_FAULT_FAILED && module_before == VSM_MOD_SCAN &&
+                vsm.fault_detail == SS_FAIL_REVERSE_TIMEOUT) {
+                set_reason(RM_STOP_SCAN_REVERSE_TIMEOUT, "scan reverse timed out");
+            } else {
+                set_reason(RM_STOP_SHELL, "shell left RUNNING");
+            }
             break;
         }
         const uint8_t desired =

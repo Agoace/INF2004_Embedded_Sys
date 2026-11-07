@@ -236,11 +236,30 @@ static void test_faults_and_sources(void)
     rs_step(&rs, now + 20u, counts, measured, command, 0x08u);
     rs_run_end(&rs, now, RM_STOP_DEADLINE, 0u, 0u, &summary, &detour);
     assert(summary.motion_fault_bits == 0x09u);
-    for (unsigned int reason = RM_STOP_DEADLINE; reason <= RM_STOP_OTHER; ++reason) {
+    for (unsigned int reason = RM_STOP_DEADLINE; reason <= RM_STOP_SCAN_REVERSE_TIMEOUT; ++reason) {
         assert(rs_stop_source((uint8_t)reason) == RM_STOP_SOURCE_FAULT);
     }
     assert(rs_stop_source(RM_STOP_SHELL) == RM_STOP_SOURCE_FAULT);
     assert(rs_stop_source(RM_STOP_TIME_LIMIT) == RM_STOP_SOURCE_LIMIT);
+}
+
+static void test_scan_reattempt_count(void)
+{
+    rm_summary_t summary;
+    rm_detour_t detour;
+
+    setup();
+    for (unsigned int i = 0u; i < 40u; ++i) {
+        rs_scan_reattempt(&rs);
+    }
+    rs_run_end(&rs, now, RM_STOP_SCAN_REVERSE_TIMEOUT, 2u, 2u, &summary, &detour);
+    assert(((summary.flags & RM_SUMMARY_SCAN_REATTEMPT_MASK) >>
+            RM_SUMMARY_SCAN_REATTEMPT_SHIFT) == RM_SUMMARY_SCAN_REATTEMPT_MAX);
+    assert(summary.stop_source == RM_STOP_SOURCE_FAULT);
+    rs_scan_reattempt(&rs); /* after run end */
+    rs_run_begin(&rs, now + 10u);
+    rs_run_end(&rs, now + 20u, RM_STOP_GP21, 0u, 0u, &summary, &detour);
+    assert((summary.flags & RM_SUMMARY_SCAN_REATTEMPT_MASK) == 0u);
 }
 
 int main(void)
@@ -252,5 +271,6 @@ int main(void)
     test_counters_and_outcomes();
     test_speed_error();
     test_faults_and_sources();
+    test_scan_reattempt_count();
     return 0;
 }

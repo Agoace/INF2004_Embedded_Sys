@@ -46,7 +46,7 @@ Pass: DONE, back on the line, no contact, no stall.
 | Stall | `sweep_min_duty`, or `sweep_deg_s` |
 | TIME (failed: TIME) | `total_max_ms` |
 | Turn overshoot | `sweep_deg_s` (lower) |
-| NO_SIDE (wide box) | Not fixed in v1.6 |
+| NO_SIDE (wide box) | Not fixed in v1.6. The vehicle SCAN option C reattempt is a separate check in [VC detour run](VC_DETOUR_RUN.md#track-test-plan) |
 
 ## e. Measurements still owed to the simulator
 

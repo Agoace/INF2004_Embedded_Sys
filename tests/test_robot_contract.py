@@ -9,8 +9,12 @@ spec = importlib.util.spec_from_file_location("decoder", root / "scripts/robot_l
 decoder = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(decoder)
 payload = subprocess.check_output([sys.argv[1]], text=True).strip()
-assert decoder.decode(payload) == [89980, 2, 4, 4095, 1234, -100, -378, 378,
+assert decoder.decode(payload) == [89980, 2, 4, "detour", 4095, 1234, -100, -378, 378,
                                    -511, 511, 400, 0, 400, 0, -36, 165, 0]
+reverse_word = int.from_bytes(bytes.fromhex(payload), "little")
+reverse_word = (reverse_word & ~(7 << 18)) | (5 << 18)
+reverse_payload = reverse_word.to_bytes(16, "little").hex()
+assert decoder.decode(reverse_payload)[2:4] == [5, "scan_reverse"]
 # Descriptive reset metadata must not alter either CSV stream.
 for reason in ("power/RUN", "watchdog", "other"):
     capture = f"[robot] KR1 reset {reason}; idle rows 1 events 1\nKR 0 {payload}\nVE 10 1 0 2 4\n"
