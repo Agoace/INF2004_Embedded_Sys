@@ -151,3 +151,6 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 
 - [`app_program/platform/app_board.h`](../app_program/platform/app_board.h) — single-writer atomic word publication and one-attempt core-0 reads; unavailable never spins.
 - [`tests/test_template_tick.c`](../tests/test_template_tick.c) and [`tests/test_template_wifi.c`](../tests/test_template_wifi.c) — startup register/idempotence/bounded-failure and Wi-Fi priority/lifetime/window/ABI doubles; [`tests/template_checks.cmake`](../tests/template_checks.cmake).
+
+- [`app_program/subsystem5/sonar_service.h`](../app_program/subsystem5/sonar_service.h) — bounded latest read and 16-result history; ECHO/DEADLINE/CANCELLED publications, independent sequence cursor and eviction count; generation/ownership unchanged, stale physical echoes discarded.
+- [`tests/test_sonar_history.c`](../tests/test_sonar_history.c) — latest-read failure preservation, history cursor/no-new/overflow/busy/wrap cases.
