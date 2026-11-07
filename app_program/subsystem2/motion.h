@@ -1,3 +1,6 @@
+/*
+ * motion.h - Motion owner API, coherent status and bounded public-board access.
+ */
 #ifndef MOTION_H
 #define MOTION_H
 #include <tk/tkernel.h>

@@ -44,6 +44,9 @@ EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
     return tid;
 }
 
+/*
+ * Initialize platform time, create objects, then start application tasks.
+ */
 EXPORT INT usermain(void)
 {
     T_RVER ver;

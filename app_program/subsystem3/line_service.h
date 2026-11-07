@@ -1,3 +1,6 @@
+/*
+ * line_service.h - Line acquisition owner, detector snapshots and calibration API.
+ */
 #ifndef LINE_SERVICE_H
 #define LINE_SERVICE_H
 #include "line_position.h"

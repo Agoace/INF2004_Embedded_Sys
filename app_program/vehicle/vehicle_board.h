@@ -1,3 +1,6 @@
+/*
+ * vehicle_board.h - Vehicle public-board snapshot and pure remote-command policy.
+ */
 #ifndef VEHICLE_BOARD_H
 #define VEHICLE_BOARD_H
 #include <stdbool.h>

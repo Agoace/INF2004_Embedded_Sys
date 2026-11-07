@@ -2,6 +2,19 @@
 #if TM_MQTT
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
+
+/* Task timing and resource limits. */
+#define OBSERVATION_US_PER_MS   1000u
+#define LINE_FRESH_MS           10u
+#define MOTION_FRESH_MS         20u
+#define VEHICLE_FRESH_MS        30u
+#define SONAR_FRESH_MS          100u
+#define STATE_LINE_BUSY_FLAG    16u
+#define STATE_MOTION_BUSY_FLAG  32u
+#define STATE_VEHICLE_BUSY_FLAG 64u
+#define STATE_ACTIVE_FLAG       128u
+#define KR1_BYTES               16u
+
 #include "../app.h"
 #include "vehicle_board.h"
 #include "vehicle_log.h"
@@ -25,6 +38,9 @@ typedef struct {
     uint32_t base_age;
 } age_t;
 
+/*
+ * Maintain sample age across retained reads and timestamp wrap.
+ */
 static uint16_t age(age_t *a, uint32_t sequence, uint32_t timestamp_us,
                     uint32_t now, uint32_t us, bool success)
 {
@@ -32,16 +48,19 @@ static uint16_t age(age_t *a, uint32_t sequence, uint32_t timestamp_us,
         a->have = true;
         a->sequence = sequence;
         a->observed_ms = now;
-        a->base_age = (us - timestamp_us) / 1000u;
+        a->base_age = (us - timestamp_us) / OBSERVATION_US_PER_MS;
     }
     if (!a->have) {
-        return 65535u;
+        return RM_NO_DATA_U16;
     }
     const uint64_t elapsed =
         (uint64_t)a->base_age + (uint32_t)(now - a->observed_ms);
-    return elapsed > 65535u ? 65535u : (uint16_t)elapsed;
+    return elapsed > RM_NO_DATA_U16 ? RM_NO_DATA_U16 : (uint16_t)elapsed;
 }
 
+/*
+ * Provide current state, using unavailable values when no provider exists.
+ */
 void robot_network_state(rm_state_t *out)
 {
     static line_snapshot_t line;
@@ -77,26 +96,26 @@ void robot_network_state(rm_state_t *out)
     if (line.valid) {
         out->flags |= 1u;
     }
-    if (l && line.valid && out->line_age_ms <= 10u) {
+    if (l && line.valid && out->line_age_ms <= LINE_FRESH_MS) {
         out->flags |= 2u;
     }
-    if (m && motion.ticks > 0u && out->motion_age_ms <= 20u) {
+    if (m && motion.ticks > 0u && out->motion_age_ms <= MOTION_FRESH_MS) {
         out->flags |= 4u;
     }
-    if (v && out->vehicle_age_ms <= 30u) {
+    if (v && out->vehicle_age_ms <= VEHICLE_FRESH_MS) {
         out->flags |= 8u;
     }
     if (!l) {
-        out->flags |= 16u;
+        out->flags |= STATE_LINE_BUSY_FLAG;
     }
     if (!m) {
-        out->flags |= 32u;
+        out->flags |= STATE_MOTION_BUSY_FLAG;
     }
     if (!v) {
-        out->flags |= 64u;
+        out->flags |= STATE_VEHICLE_BUSY_FLAG;
     }
     if (vehicle.active) {
-        out->flags |= 128u;
+        out->flags |= STATE_ACTIVE_FLAG;
     }
     out->state = vehicle.state;
     out->module = vehicle.module;
@@ -114,13 +133,12 @@ void robot_network_state(rm_state_t *out)
     out->duty_left_permille = motion.duty_permille[MC_LEFT];
     out->duty_right_permille = motion.duty_permille[MC_RIGHT];
     out->heading_cdeg = motion.heading_cdeg;
-    out->turn_rate_ddps =
-        odo_turn_rate_ddps(&odometry, motion.speed_mm_s[MC_LEFT],
-                           motion.speed_mm_s[MC_RIGHT]);
+    out->turn_rate_ddps = odo_turn_rate_ddps(
+        &odometry, motion.speed_mm_s[MC_LEFT], motion.speed_mm_s[MC_RIGHT]);
     ultrasonic_result_t echo = ULTRASONIC_RESULT_NONE;
     if (s) {
         if (sonar.valid && sonar.status == SONAR_ECHO &&
-            now - sonar.timestamp_ms <= 100u) {
+            now - sonar.timestamp_ms <= SONAR_FRESH_MS) {
             echo = sonar.echo;
         }
     } else {
@@ -138,11 +156,14 @@ void robot_network_state(rm_state_t *out)
         .module = vehicle.module};
     vr_row_t row;
     vr_pack(&row, &values);
-    for (unsigned int i = 0u; i < 16u; ++i) {
+    for (unsigned int i = 0u; i < KR1_BYTES; ++i) {
         out->kr1[i] = row.bytes[i];
     }
 }
 
+/*
+ * Provide one sonar history entry, or report no available provider.
+ */
 int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed)
 {
     sonar_history_entry_t entry;
@@ -234,6 +255,9 @@ int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
     return E_OK;
 }
 
+/*
+ * Collect motion and vehicle health from bounded public-board reads.
+ */
 void robot_health_collect(rm_heartbeat_t *out)
 {
     static motion_status_t motion;

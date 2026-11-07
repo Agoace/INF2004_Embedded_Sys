@@ -1,3 +1,6 @@
+/*
+ * sonar_service.h - Sonar request service, snapshots and sequence-numbered history.
+ */
 #ifndef SONAR_SERVICE_H
 #define SONAR_SERVICE_H
 #include <stdbool.h>

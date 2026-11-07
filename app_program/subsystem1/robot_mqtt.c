@@ -2,6 +2,15 @@
 #if TM_MQTT
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
+
+/* Task timing and resource limits. */
+#define STATE_PERIOD_MS      200u
+#define HEARTBEAT_PERIOD_MS  1000u
+#define HEALTH_FRESH_MS      2500u
+#define WIFI_TASK_PRIORITY   20u
+#define ROUTINE_FRAME_BUDGET 4u
+#define SONAR_FRAME_BUDGET   2u
+
 #include <string.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
@@ -51,9 +60,8 @@ static uint32_t heartbeat_at;
 static uint32_t state_sequence;
 static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
-static rm_heartbeat_t health_cache = {.stack_min_free = 65535u,
-                                      .cpu_load_permille =
-                                          RM_CPU_LOAD_UNKNOWN};
+static rm_heartbeat_t health_cache = {.stack_min_free = RM_NO_DATA_U16,
+                                      .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
 static bool health_present;
 static rm_event_t pending_event;
 static bool have_event;
@@ -71,6 +79,9 @@ static bool status_pending;
 static uint32_t status_retry_at;
 static uint8_t will_payload[RM_STATUS_SIZE];
 
+/*
+ * Increment a diagnostic counter without racing another context.
+ */
 static void inc(uint32_t *value)
 {
     UINT irq;
@@ -79,11 +90,17 @@ static void inc(uint32_t *value)
     EI(irq);
 }
 
+/*
+ * Test a wrapping millisecond deadline.
+ */
 static bool due(uint32_t now, uint32_t at)
 {
     return (int32_t)(now - at) >= 0;
 }
 
+/*
+ * Decode one hexadecimal digit for private-token configuration.
+ */
 static int hex(char c)
 {
     if (c >= '0' && c <= '9') {
@@ -98,6 +115,9 @@ static int hex(char c)
     return -1;
 }
 
+/*
+ * Load the broker address and validate the optional command token.
+ */
 static void configure(void)
 {
     const char *s = ROBOT_MQTT_COMMAND_TOKEN_HEX;
@@ -119,13 +139,19 @@ static void configure(void)
     configured = true;
 }
 
+/*
+ * Provide current state, using unavailable values when no provider exists.
+ */
 void __attribute__((weak)) robot_network_state(rm_state_t *out)
 {
-    *out = (rm_state_t){.line_age_ms = 65535u,
-                        .motion_age_ms = 65535u,
-                        .vehicle_age_ms = 65535u};
+    *out = (rm_state_t){.line_age_ms = RM_NO_DATA_U16,
+                        .motion_age_ms = RM_NO_DATA_U16,
+                        .vehicle_age_ms = RM_NO_DATA_U16};
 }
 
+/*
+ * Provide one sonar history entry, or report no available provider.
+ */
 int __attribute__((weak)) robot_network_sonar(uint32_t *cursor, rm_sonar_t *out,
                                               uint32_t *missed)
 {
@@ -135,6 +161,9 @@ int __attribute__((weak)) robot_network_sonar(uint32_t *cursor, rm_sonar_t *out,
     return E_TMOUT;
 }
 
+/*
+ * Provide the newest scan report, or report no available provider.
+ */
 int __attribute__((weak)) robot_network_obstacle(uint32_t *cursor,
                                                  rm_obstacle_t *out)
 {
@@ -143,6 +172,9 @@ int __attribute__((weak)) robot_network_obstacle(uint32_t *cursor,
     return E_NOEXS;
 }
 
+/*
+ * Provide the newest detour report, or report no available provider.
+ */
 int __attribute__((weak)) robot_network_detour(uint32_t *cursor,
                                                rm_detour_t *out)
 {
@@ -151,6 +183,9 @@ int __attribute__((weak)) robot_network_detour(uint32_t *cursor,
     return E_NOEXS;
 }
 
+/*
+ * Provide the newest run summary, or report no available provider.
+ */
 int __attribute__((weak)) robot_network_summary(uint32_t *cursor,
                                                 rm_summary_t *out)
 {
@@ -159,6 +194,9 @@ int __attribute__((weak)) robot_network_summary(uint32_t *cursor,
     return E_NOEXS;
 }
 
+/*
+ * Collect link and queue counters without waiting on sensor tasks.
+ */
 void robot_network_metrics(rm_heartbeat_t *out)
 {
     UINT irq;
@@ -196,15 +234,21 @@ void robot_network_metrics(rm_heartbeat_t *out)
     out->wifi_poll_gap_max_us = timing.gap_max_us;
     out->wifi_poll_gap_samples = timing.gaps;
     out->wifi_start_status = cyw43_utk_start_status();
-    out->wifi_requested_priority = 20u;
+    out->wifi_requested_priority = WIFI_TASK_PRIORITY;
     robot_queue_metrics(out);
 }
 
+/*
+ * Forward a DUMP request to the bounded stream state machine.
+ */
 int robot_network_dump(uint32_t request_id)
 {
     return log_stream_dump_request(request_id);
 }
 
+/*
+ * Bound the command payload before accepting incoming fragments.
+ */
 static void incoming_publish(void *arg, const char *topic, u32_t length)
 {
     (void)arg;
@@ -213,6 +257,9 @@ static void incoming_publish(void *arg, const char *topic, u32_t length)
     rx_valid = strcmp(topic, "robot/cmd") == 0 && length == RM_COMMAND_SIZE;
 }
 
+/*
+ * Assemble and validate a command, then queue it without waiting.
+ */
 static void incoming_data(void *arg, const u8_t *data, u16_t length, u8_t flags)
 {
     (void)arg;
@@ -238,6 +285,9 @@ static void incoming_data(void *arg, const u8_t *data, u16_t length, u8_t flags)
     }
 }
 
+/*
+ * Record subscription completion and schedule retries on failure.
+ */
 static void subscription_done(void *arg, err_t error)
 {
     (void)arg;
@@ -250,6 +300,9 @@ static void subscription_done(void *arg, err_t error)
     }
 }
 
+/*
+ * Reset connection-local state and rewind streams after link loss.
+ */
 static void connection_done(mqtt_client_t *c, void *arg,
                             mqtt_connection_status_t status)
 {
@@ -352,6 +405,9 @@ static void service_summary(uint32_t now)
     }
 }
 
+/*
+ * Count an asynchronous publish failure without affecting driving.
+ */
 static void published(void *arg, err_t error)
 {
     (void)arg;
@@ -360,6 +416,9 @@ static void published(void *arg, err_t error)
     }
 }
 
+/*
+ * Send one non-retained observation; failure does not affect driving.
+ */
 static bool publish(const char *topic, const uint8_t *data, unsigned int length)
 {
     const err_t error = mqtt_publish(client, topic, data, (u16_t)length, 0u, 0u,
@@ -388,9 +447,12 @@ static int log_publish(const uint8_t *data, size_t length, uint8_t qos,
     return error == ERR_OK ? 0 : 1;
 }
 
+/*
+ * Service due publications with bounded per-poll work.
+ */
 static void service(uint32_t now)
 {
-    unsigned int budget = 4u;
+    unsigned int budget = ROUTINE_FRAME_BUDGET;
     service_status(now);
     service_summary(now);
     if (!subscribed && !subscribe_pending && due(now, subscribe_at)) {
@@ -410,7 +472,7 @@ static void service(uint32_t now)
         uint8_t bytes[RM_STATE_SIZE];
         rm_pack_state(bytes, &v);
         (void)publish("robot/state", bytes, sizeof(bytes));
-        state_at = now + 200u;
+        state_at = now + STATE_PERIOD_MS;
         --budget;
     }
     if (due(now, heartbeat_at)) {
@@ -426,19 +488,20 @@ static void service(uint32_t now)
         /* Producer uptime is in milliseconds: a stalled health board must
          * not become fresh again at the 71-minute microsecond wrap. */
         v = health_cache;
-        const uint32_t age =
-            health_present ? drv_time_ms() - health_cache.uptime_ms : 65535u;
+        const uint32_t age = health_present
+                                 ? drv_time_ms() - health_cache.uptime_ms
+                                 : RM_NO_DATA_U16;
         v.flags = 0u;
         v.uptime_ms = drv_time_ms();
-        v.health_age_ms = age > 65535u ? 65535u : (uint16_t)age;
-        if (er >= E_OK && age <= 2500u) {
+        v.health_age_ms = age > RM_NO_DATA_U16 ? RM_NO_DATA_U16 : (uint16_t)age;
+        if (er >= E_OK && age <= HEALTH_FRESH_MS) {
             v.flags |= 32u;
         }
         robot_network_metrics(&v);
         uint8_t bytes[RM_HEARTBEAT_SIZE];
         rm_pack_heartbeat(bytes, &v);
         (void)publish("robot/heartbeat", bytes, sizeof(bytes));
-        heartbeat_at = now + 1000u;
+        heartbeat_at = now + HEARTBEAT_PERIOD_MS;
         --budget;
     }
     if (!have_event) {
@@ -477,7 +540,7 @@ static void service(uint32_t now)
         }
         --budget;
     }
-    for (unsigned int n = 0u; n < 2u && budget > 0u; ++n) {
+    for (unsigned int n = 0u; n < SONAR_FRAME_BUDGET && budget > 0u; ++n) {
         if (!have_sonar) {
             uint32_t missed = 0u;
             const int er =

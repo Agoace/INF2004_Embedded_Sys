@@ -1,4 +1,11 @@
+/*
+ * telemetry.c - application telemetry and service interface.
+ */
 #include "subsystem1.h"
+
+/* Task timing and resource limits. */
+#define DUMP_YIELD_MS 20u
+
 #include <tk/syslib.h>
 #include "telemetry.h"
 #include "../platform/drv_watchdog.h"
@@ -17,6 +24,9 @@ static uint32_t log_generation;
 static uint32_t newest_row_ms;
 static APP_BOARD(telemetry_log_index_t) log_index;
 
+/*
+ * Publish the current RAM-log extent to the bounded-reader board.
+ */
 static void publish_index(void)
 {
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
@@ -24,6 +34,9 @@ static void publish_index(void)
     app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
 }
 
+/*
+ * Read a bounded snapshot of the current RAM-log index.
+ */
 int telemetry_log_open(telemetry_log_index_t *out)
 {
     if (!out) {
@@ -38,6 +51,9 @@ int telemetry_log_open(telemetry_log_index_t *out)
     return E_OK;
 }
 
+/*
+ * Copy one RAM row only when its generation and index remain valid.
+ */
 int telemetry_log_row(uint32_t generation, uint32_t index,
                       uint8_t out[TELEMETRY_BYTES])
 {
@@ -61,6 +77,9 @@ int telemetry_log_row(uint32_t generation, uint32_t index,
     return E_OK;
 }
 
+/*
+ * Copy one RAM event only when its generation and index remain valid.
+ */
 int telemetry_log_event(uint32_t generation, uint32_t index,
                         telemetry_event_t *out)
 {
@@ -85,16 +104,25 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
 #if TM_CONSOLE_USB_CDC
 IMPORT volatile UW tm_usb_dropped;
 
+/*
+ * Read the USB drop counter, or return zero without USB support.
+ */
 static UW dropped(void)
 {
     return tm_usb_dropped;
 }
 #else
+/*
+ * Read the USB drop counter, or return zero without USB support.
+ */
 static UW dropped(void)
 {
     return 0u;
 }
 #endif
+/*
+ * Copy the telemetry counters under short interrupt protection.
+ */
 void telemetry_stats(telemetry_stats_t *out)
 {
     UINT irq;
@@ -103,6 +131,9 @@ void telemetry_stats(telemetry_stats_t *out)
     EI(irq);
 }
 
+/*
+ * Account for a telemetry message that could not be stored.
+ */
 static void lose(void)
 {
     UINT irq;
@@ -111,6 +142,9 @@ static void lose(void)
     EI(irq);
 }
 
+/*
+ * Write a bounded RAM-log snapshot to the local USB console.
+ */
 static void dump(void)
 {
     const UW before = dropped();
@@ -141,7 +175,7 @@ static void dump(void)
         }
         tm_printf((UB *)"\n");
         if ((i + 1u) % 8u == 0u) {
-            (void)tk_dly_tsk(20u);
+            (void)tk_dly_tsk(DUMP_YIELD_MS);
         }
     }
     for (uint32_t i = 0u; i < st.events; ++i) {
@@ -150,11 +184,11 @@ static void dump(void)
                   (unsigned int)e->kind, (unsigned int)e->from,
                   (unsigned int)e->to, (unsigned int)e->word);
         if ((i + 1u) % 8u == 0u) {
-            (void)tk_dly_tsk(20u);
+            (void)tk_dly_tsk(DUMP_YIELD_MS);
         }
     }
     app_task_report(); /* Include the earlier report/formatting path in high water. */
-    (void)tk_dly_tsk(20u);
+    (void)tk_dly_tsk(DUMP_YIELD_MS);
     const UW after = dropped();
     tm_printf((UB *)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
               (unsigned long)after, (unsigned long)(after - before));
@@ -164,6 +198,9 @@ static void dump(void)
     EI(irq);
 }
 
+/*
+ * Own RAM-log storage and service the existing local USB dump.
+ */
 static void telemetry_task(INT code, void *ctx)
 {
     (void)code;
@@ -225,6 +262,9 @@ static void telemetry_task(INT code, void *ctx)
     }
 }
 
+/*
+ * Create the bounded telemetry message buffer.
+ */
 int telemetry_init(void)
 {
     if (mbf_telemetry > 0) {
@@ -242,6 +282,9 @@ int telemetry_init(void)
     return mbf_telemetry < 0 ? (int)mbf_telemetry : E_OK;
 }
 
+/*
+ * Start the RAM-log owner on its registered static stack.
+ */
 int telemetry_start(void)
 {
     if (mbf_telemetry <= 0 || task > 0) {
@@ -251,11 +294,17 @@ int telemetry_start(void)
     return task < 0 ? (int)task : E_OK;
 }
 
+/*
+ * Report whether the telemetry task has started.
+ */
 bool telemetry_running(void)
 {
     return mbf_telemetry > 0 && task > 0;
 }
 
+/*
+ * Submit a value message without waiting for the consumer.
+ */
 int telemetry_send(const telemetry_message_t *message)
 {
     if (mbf_telemetry <= 0 || task <= 0) {

@@ -1,4 +1,17 @@
+/*
+ * sonar_service.c - application telemetry and service interface.
+ */
 #include "subsystem5.h"
+
+/* Task timing and resource limits. */
+#define SONAR_WATCH_SLACK_MS       20u
+#define SONAR_REQUEST_BUFFER_BYTES 256
+#define SONAR_RELEASE_MS           10u
+#define SONAR_TASK_PRIORITY        12
+#define SONAR_MIN_ANGLE_DEG        (-30)
+#define SONAR_MAX_ANGLE_DEG        30
+#define SONAR_MIN_INTERVAL_MS      60u
+
 #include "sonar_service.h"
 #include "drv_ultrasonic.h"
 #include "../platform/drv_time.h"
@@ -13,16 +26,25 @@ static uint32_t history_count;
 static uint32_t history_guard;
 static uint32_t history_words[SONAR_HISTORY_CAPACITY][SNAPSHOT_WORDS];
 
+/*
+ * Read one aligned board word with the required compiler ordering.
+ */
 static uint32_t load_word(const uint32_t *p)
 {
     return __atomic_load_n(p, __ATOMIC_SEQ_CST);
 }
 
+/*
+ * Store one aligned board word with the required compiler ordering.
+ */
 static void store_word(uint32_t *p, uint32_t v)
 {
     __atomic_store_n(p, v, __ATOMIC_SEQ_CST);
 }
 
+/*
+ * Copy a sonar snapshot into its aligned-word board storage.
+ */
 static void store_snapshot(uint32_t *words, const sonar_snapshot_t *value)
 {
     uint32_t copy[SNAPSHOT_WORDS] = {0};
@@ -34,6 +56,9 @@ static void store_snapshot(uint32_t *words, const sonar_snapshot_t *value)
     }
 }
 
+/*
+ * Copy aligned board words into the caller-owned snapshot.
+ */
 static void load_snapshot(const uint32_t *words, sonar_snapshot_t *value)
 {
     uint32_t copy[SNAPSHOT_WORDS];
@@ -45,6 +70,9 @@ static void load_snapshot(const uint32_t *words, sonar_snapshot_t *value)
     }
 }
 
+/*
+ * Publish a sonar snapshot and append completed results to history.
+ */
 static void board_publish(const sonar_snapshot_t *value, bool append)
 {
     const uint32_t guard = load_word(&board_guard);
@@ -79,6 +107,9 @@ static sonar_request_t inflight;
 static sonar_snapshot_t snapshot;
 static uint32_t next_ms;
 
+/*
+ * Send one non-retained observation; failure does not affect driving.
+ */
 static void publish(uint8_t status, ultrasonic_result_t echo, uint32_t now)
 {
     if (tk_loc_mtx(mutex, TMO_FEVR) < E_OK) {
@@ -92,10 +123,11 @@ static void publish(uint8_t status, ultrasonic_result_t echo, uint32_t now)
     snapshot.pending = false;
     /* A delayed service must not relabel an old echo as a fresh observation. */
     snapshot.timestamp_ms = status == SONAR_ECHO ? snapshot.trigger_ms : now;
-    snapshot.deadline_ms =
-        current.mode == SONAR_WATCH
-            ? snapshot.timestamp_ms + (uint32_t)current.interval_ms * 2u + 20u
-            : current.deadline_ms;
+    snapshot.deadline_ms = current.mode == SONAR_WATCH
+                               ? snapshot.timestamp_ms +
+                                     (uint32_t)current.interval_ms * 2u +
+                                     SONAR_WATCH_SLACK_MS
+                               : current.deadline_ms;
     snapshot.valid =
         status == SONAR_ECHO &&
         ultrasonic_result_status(echo) == ULTRASONIC_STATUS_VALID &&
@@ -110,6 +142,9 @@ static void publish(uint8_t status, ultrasonic_result_t echo, uint32_t now)
     (void)tk_set_flg(results, 1u);
 }
 
+/*
+ * Apply a service request without blocking the vehicle task.
+ */
 static void accept(const sonar_request_t *r, uint32_t now)
 {
     if (have_generation && (int32_t)(r->generation - current.generation) < 0) {
@@ -150,6 +185,9 @@ static void accept(const sonar_request_t *r, uint32_t now)
                   : now + (r->mode == SONAR_WATCH ? r->interval_ms : 0u);
 }
 
+/*
+ * Own sonar requests, result collection and service deadlines.
+ */
 static void sonar_task(INT code, void *ctx)
 {
     (void)code;
@@ -217,6 +255,9 @@ static void sonar_task(INT code, void *ctx)
     }
 }
 
+/*
+ * Wake the sonar service from its periodic cyclic handler.
+ */
 static void release(void *ctx)
 {
     (void)ctx;
@@ -225,6 +266,9 @@ static void release(void *ctx)
     }
 }
 
+/*
+ * Create sonar request, result and periodic-release kernel objects.
+ */
 int sonar_service_init(void)
 {
     if (ready) {
@@ -236,7 +280,7 @@ int sonar_service_init(void)
         return (int)mutex;
     }
     const T_CMBF b = {.mbfatr = TA_TFIFO,
-                      .bufsz = 256,
+                      .bufsz = SONAR_REQUEST_BUFFER_BYTES,
                       .maxmsz = (INT)sizeof(sonar_request_t)};
     requests = tk_cre_mbf(&b);
     if (requests < 0) {
@@ -247,8 +291,10 @@ int sonar_service_init(void)
     if (results < 0) {
         return (int)results;
     }
-    T_CCYC c = {
-        .cycatr = TA_HLNG, .cychdr = (FP)release, .cyctim = 10u, .cycphs = 10u};
+    T_CCYC c = {.cycatr = TA_HLNG,
+                .cychdr = (FP)release,
+                .cyctim = SONAR_RELEASE_MS,
+                .cycphs = SONAR_RELEASE_MS};
 #if TK_SUPPORT_SMP
     c.cycatr |= TA_ASSPRC;
     c.assprc = TP_PRC1;
@@ -264,12 +310,16 @@ int sonar_service_init(void)
     return er;
 }
 
+/*
+ * Start the sonar task and periodic release source.
+ */
 int sonar_service_start(void)
 {
     if (!ready || task > 0) {
         return E_OBJ;
     }
-    task = app_start_task((FP)sonar_task, 12, TP_PRC1, "sonar_task");
+    task = app_start_task((FP)sonar_task, SONAR_TASK_PRIORITY, TP_PRC1,
+                          "sonar_task");
     if (task < 0) {
         return (int)task;
     }
@@ -279,18 +329,25 @@ int sonar_service_start(void)
     return (int)er;
 }
 
+/*
+ * Report whether the sonar task has started.
+ */
 bool sonar_service_running(void)
 {
     return ready && task > 0 && cyclic_running;
 }
 
+/*
+ * Validate and queue a sonar request without waiting for the owner.
+ */
 int sonar_request(const sonar_request_t *r)
 {
     if (!sonar_service_running()) {
         return E_OBJ;
     }
-    if (!r || r->mode > SONAR_ACK || r->angle < -30 || r->angle > 30 ||
-        (r->mode == SONAR_WATCH && r->interval_ms < 60u)) {
+    if (!r || r->mode > SONAR_ACK || r->angle < SONAR_MIN_ANGLE_DEG ||
+        r->angle > SONAR_MAX_ANGLE_DEG ||
+        (r->mode == SONAR_WATCH && r->interval_ms < SONAR_MIN_INTERVAL_MS)) {
         return E_PAR;
     }
     const ER lock = tk_loc_mtx(mutex, TMO_POL);
@@ -317,6 +374,9 @@ int sonar_request(const sonar_request_t *r)
     return (int)er;
 }
 
+/*
+ * Attempt one read of the public sonar board without waiting.
+ */
 int sonar_snapshot_try_read(sonar_snapshot_t *out)
 {
     if (!out) {
@@ -338,6 +398,9 @@ int sonar_snapshot_try_read(sonar_snapshot_t *out)
     return E_OK;
 }
 
+/*
+ * Read the next retained result and report any evicted history entries.
+ */
 int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
                        uint32_t *missed)
 {
@@ -377,6 +440,9 @@ int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
     return E_OK;
 }
 
+/*
+ * Copy the current vehicle-facing sonar result and freshness flag.
+ */
 int sonar_result_read(sonar_snapshot_t *out, bool *is_new)
 {
     if (!ready) {

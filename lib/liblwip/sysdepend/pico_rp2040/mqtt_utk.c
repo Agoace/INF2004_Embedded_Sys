@@ -49,7 +49,7 @@ static void heartbeat_timeout(void *arg);
  * template demo available when no application provides a strong definition. */
 void __attribute__((weak)) cyw43_utk_app_poll(void)
 {
-	mqtt_utk_start();
+    mqtt_utk_start();
 }
 
 /* mqtt.c NUL-terminates the topic before handing it over, but it is only

@@ -1,5 +1,13 @@
 /* Kernel side only. SDK register access is isolated in drv_motor_hw.c. */
 #include "subsystem2.h"
+
+/* Task timing and resource limits. */
+#define ENCODER_LEFT_A_PIN   16u
+#define ENCODER_LEFT_B_PIN   17u
+#define MOTION_LATE_GAP_US   11000u
+#define MOTION_TASK_PRIORITY 10
+#define WATCHDOG_TIMEOUT_MS  100u
+
 #include "motion.h"
 #include "motor_ctl_robot.h"
 #include "drv_motor_hw.h"
@@ -37,6 +45,9 @@ typedef struct {
 
 static APP_BOARD(motion_board_t) board;
 
+/*
+ * Publish a coherent motion snapshot after a completed tick.
+ */
 static void publish_motion(uint32_t us)
 {
     motion_board_t v = {0};
@@ -55,16 +66,24 @@ static motion_timing_probe_t probes[MOTION_PROBE_COUNT];
 static UINT probe_present;
 #endif
 
+/*
+ * Process an encoder edge through the kernel-owned GPIO dispatcher.
+ */
 static void encoder_irq(unsigned int pin, uint32_t events, void *ctx)
 {
     (void)events;
     (void)ctx;
-    const unsigned int wheel = pin == 16u || pin == 17u ? MC_LEFT : MC_RIGHT;
+    const unsigned int wheel =
+        pin == ENCODER_LEFT_A_PIN || pin == ENCODER_LEFT_B_PIN ? MC_LEFT
+                                                               : MC_RIGHT;
     const uint8_t ab = drv_motor_hw_ab(wheel);
     raw_count[wheel] += QUADRATURE[(previous_ab[wheel] << 2u) | ab];
     previous_ab[wheel] = ab;
 }
 
+/*
+ * Copy both encoder counts with interrupt protection.
+ */
 static void copy_counts(int32_t counts[MC_WHEELS])
 {
     UINT irq;
@@ -74,11 +93,17 @@ static void copy_counts(int32_t counts[MC_WHEELS])
     EI(irq);
 }
 
+/*
+ * Enter the motion API mutex and preserve kernel error results.
+ */
 static ER lock_motion(void)
 {
     return mtx_motion > 0 ? tk_loc_mtx(mtx_motion, TMO_FEVR) : E_OBJ;
 }
 
+/*
+ * Run the controller tick and feed the motion-only watchdog policy.
+ */
 static void motion_task(INT stacd, void *exinf)
 {
     (void)stacd;
@@ -100,7 +125,7 @@ static void motion_task(INT stacd, void *exinf)
             if (gap > gap_max_us) {
                 gap_max_us = gap;
             }
-            if (gap > 11000u) {
+            if (gap > MOTION_LATE_GAP_US) {
                 ++late_wakes;
             }
         }
@@ -129,7 +154,7 @@ static void motion_task(INT stacd, void *exinf)
                 if (gap > window.gap_max_us) {
                     window.gap_max_us = gap;
                 }
-                if (gap > 11000u) {
+                if (gap > MOTION_LATE_GAP_US) {
                     ++window.late_wakes;
                 }
                 ++window.gaps;
@@ -162,12 +187,18 @@ static void motion_task(INT stacd, void *exinf)
     }
 }
 
+/*
+ * Wake the motion task for its next controller tick.
+ */
 static void motion_cyclic(void *exinf)
 {
     (void)exinf;
     (void)tk_wup_tsk(tid_motion);
 }
 
+/*
+ * Initialize the controller and create its mutex and release objects.
+ */
 int motion_init(void)
 {
 #if TK_SUPPORT_SMP
@@ -227,12 +258,16 @@ int motion_init(void)
     return (int)E_OK;
 }
 
+/*
+ * Start the motion task and its periodic release; retain watchdog policy.
+ */
 int motion_start(void)
 {
     if (mtx_motion <= 0 || cyc_motion <= 0 || tid_motion > 0) {
         return (int)E_OBJ;
     }
-    tid_motion = app_start_task((FP)motion_task, 10, TP_PRC1, "motion_task");
+    tid_motion = app_start_task((FP)motion_task, MOTION_TASK_PRIORITY, TP_PRC1,
+                                "motion_task");
     if (tid_motion < E_OK) {
         return (int)tid_motion;
     }
@@ -240,7 +275,7 @@ int motion_start(void)
     if (cyclic < E_OK) {
         return (int)cyclic;
     }
-    const int er = drv_watchdog_start(100u);
+    const int er = drv_watchdog_start(WATCHDOG_TIMEOUT_MS);
     if (er < E_OK) {
         tm_printf((UB *)"ERROR motion: watchdog start failed (%d); speed "
                         "commands disabled.\n",
@@ -251,6 +286,9 @@ int motion_start(void)
     return (int)E_OK;
 }
 #if APP_TEST
+/*
+ * Start a TEST timing window without resetting lifetime counters.
+ */
 int motion_timing_window_begin(void)
 {
     if (!watchdog_armed) {
@@ -271,6 +309,9 @@ int motion_timing_window_begin(void)
     return result;
 }
 
+/*
+ * Close the TEST timing window and return its observations.
+ */
 int motion_timing_window_end(motion_timing_window_t *out)
 {
     if (!out) {
@@ -291,6 +332,9 @@ int motion_timing_window_end(motion_timing_window_t *out)
     return result;
 }
 
+/*
+ * Store one TEST timing probe without printing on the critical path.
+ */
 int motion_timing_probe_capture(motion_probe_stage_t stage)
 {
     if ((unsigned int)stage >= MOTION_PROBE_COUNT) {
@@ -307,6 +351,9 @@ int motion_timing_probe_capture(motion_probe_stage_t stage)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Copy a saved TEST probe for deferred reporting.
+ */
 int motion_timing_probe_read(motion_probe_stage_t stage,
                              motion_timing_probe_t *out)
 {
@@ -320,6 +367,9 @@ int motion_timing_probe_read(motion_probe_stage_t stage,
     return E_OK;
 }
 
+/*
+ * Enable the deliberate TEST-only watchdog feed suppression.
+ */
 int motion_watchdog_test_suppress_feed(void)
 {
     if (!watchdog_armed) {
@@ -329,11 +379,17 @@ int motion_watchdog_test_suppress_feed(void)
     return (int)E_OK;
 }
 
+/*
+ * Report whether the TEST-only feed suppression has taken effect.
+ */
 bool motion_watchdog_test_feed_stopped(void)
 {
     return test_suppressed;
 }
 #endif
+/*
+ * Register the task to wake after each completed controller tick.
+ */
 int motion_notify_after_tick(ID tid)
 {
     if (tid < 0) {
@@ -347,6 +403,9 @@ int motion_notify_after_tick(ID tid)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Set wheel speed through the inherited motion mutex.
+ */
 int motion_set_speed(int16_t left, int16_t right)
 {
     if (!watchdog_armed) {
@@ -360,6 +419,9 @@ int motion_set_speed(int16_t left, int16_t right)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Stop the controller through the inherited motion mutex.
+ */
 int motion_stop(void)
 {
     const ER er = lock_motion();
@@ -371,6 +433,9 @@ int motion_stop(void)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Latch the controller emergency stop through its mutex.
+ */
 int motion_estop(void)
 {
     const ER er = lock_motion();
@@ -382,6 +447,9 @@ int motion_estop(void)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Clear motion faults under the controller mutex.
+ */
 int motion_clear_faults(void)
 {
     const ER er = lock_motion();
@@ -393,6 +461,9 @@ int motion_clear_faults(void)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Set the servo goal and return the accepted angle under the mutex.
+ */
 int motion_set_servo(int deg, int *accepted_deg)
 {
     const ER er = lock_motion();
@@ -406,6 +477,9 @@ int motion_set_servo(int deg, int *accepted_deg)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Copy the controller state while the motion mutex is held.
+ */
 static void motion_status_locked(motion_status_t *s)
 {
     for (unsigned int i = 0u; i < MC_WHEELS; ++i) {
@@ -428,6 +502,9 @@ static void motion_status_locked(motion_status_t *s)
     s->watchdog_armed = watchdog_armed;
 }
 
+/*
+ * Copy a coherent controller status under the inherited mutex.
+ */
 int motion_status(motion_status_t *s)
 {
     if (!s) {
@@ -441,6 +518,9 @@ int motion_status(motion_status_t *s)
     return (int)tk_unl_mtx(mtx_motion);
 }
 
+/*
+ * Attempt one read of the public motion board without waiting.
+ */
 int motion_snapshot_try_read(motion_status_t *out, uint32_t *timestamp_us)
 {
     if (!out || !timestamp_us) {

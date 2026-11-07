@@ -1,6 +1,22 @@
 /* Kernel navigation only: snapshot inputs, asynchronous services, motion outputs. */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
+
+/* Task timing and resource limits. */
+#define VEHICLE_RESPONSE_LIMIT_US 10000u
+#define LINE_MAX_AGE_US           10000u
+#define VEHICLE_WAKE_TIMEOUT_MS   20
+#define BUTTON_INTERVAL_MS        20u
+#define RUN_BUTTON_PIN            21u
+#define DUMP_BUTTON_PIN           20u
+#define LOG_PERIOD_MS             20u
+#define SONAR_MODE_UNSET          255u
+#define SONAR_PING_MIN_MS         60u
+#define SONAR_REQUEST_DEADLINE_MS 100u
+#define SONAR_WATCH_SLACK_MS      20u
+#define VEHICLE_TASK_PRIORITY     13
+#define ROW_FAULT_FLAG            128u
+
 #include "../app.h"
 #include "vehicle_task.h"
 #include "../subsystem2/motion.h"
@@ -55,10 +71,10 @@ static const char *reason = "no saved run";
 #if TM_MQTT
 /* Why the run ended, as a robot/summary stop reason (RM_STOP_*). */
 static uint8_t stop_code;
-#define set_reason(code, text) \
-    do {                       \
-        reason = (text);       \
-        stop_code = (code);    \
+#define set_reason(code, text)                                                 \
+    do {                                                                       \
+        reason = (text);                                                       \
+        stop_code = (code);                                                    \
     } while (0)
 #else
 #define set_reason(code, text) (reason = (text))
@@ -78,6 +94,9 @@ static unsigned int seen_count;
 static unsigned int seen_next;
 static uint16_t last_network_fault;
 
+/*
+ * Queue a rare vehicle event without waiting for the network.
+ */
 static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
                        uint8_t detail)
 {
@@ -97,6 +116,9 @@ static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
     (void)robot_event_push(&e); /* Never affect driving on a network loss. */
 }
 
+/*
+ * Publish the last vehicle state and command for bounded readers.
+ */
 static void publish_vehicle(void)
 {
     vehicle.timestamp_us = drv_time_us();
@@ -113,6 +135,9 @@ static void publish_vehicle(void)
                       sizeof(vehicle));
 }
 
+/*
+ * Attempt one read of the vehicle public board without waiting.
+ */
 int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
 {
     if (!out) {
@@ -228,6 +253,9 @@ int vehicle_summary_try_read(rm_summary_t *out)
     return E_OK;
 }
 
+/*
+ * Record the commanded wheel speeds, then call the motion owner.
+ */
 static int vehicle_speed(int16_t l, int16_t r)
 {
     const int er = motion_set_speed(l, r);
@@ -238,6 +266,9 @@ static int vehicle_speed(int16_t l, int16_t r)
     return er;
 }
 
+/*
+ * Clear the observed wheel command and stop through the motion owner.
+ */
 static int vehicle_stop(void)
 {
     vehicle.left_mm_s = 0;
@@ -245,6 +276,9 @@ static int vehicle_stop(void)
     return motion_stop();
 }
 
+/*
+ * Record the accepted servo command from the motion owner.
+ */
 static int vehicle_servo(int deg, int *accepted)
 {
     int actual = 0;
@@ -258,6 +292,9 @@ static int vehicle_servo(int deg, int *accepted)
     return er;
 }
 
+/*
+ * Discard queued remote commands when an emergency stop is handled.
+ */
 static void discard_commands(void)
 {
     robot_command_t old;
@@ -267,6 +304,9 @@ static void discard_commands(void)
     pending_action = 0u;
 }
 
+/*
+ * Clear pending commands and request the motion-owned emergency stop.
+ */
 static int vehicle_estop(void)
 {
     discard_commands();
@@ -276,6 +316,9 @@ static int vehicle_estop(void)
     return motion_estop();
 }
 
+/*
+ * Apply remote-command policy in vehicle context, never in Wi-Fi.
+ */
 static void handle_command(void)
 {
     robot_command_t c;
@@ -332,6 +375,9 @@ static void handle_command(void)
 #define publish_vehicle() ((void)0)
 #endif
 
+/*
+ * Detect one falling button edge from the active-low input.
+ */
 static bool pressed(unsigned int pin, bool *previous)
 {
     const bool down = drv_motor_hw_button_down(pin);
@@ -340,6 +386,9 @@ static bool pressed(unsigned int pin, bool *previous)
     return edge;
 }
 
+/*
+ * Send a nonblocking log message and preserve the local failure policy.
+ */
 static bool send(telemetry_message_t *message)
 {
     if (telemetry_send(message) >= E_OK) {
@@ -350,6 +399,9 @@ static bool send(telemetry_message_t *message)
     return false;
 }
 
+/*
+ * Store a run-relative event and optionally queue a live observation.
+ */
 static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
 {
 #if TM_MQTT
@@ -370,6 +422,9 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
     (void)send(&m);
 }
 
+/*
+ * Measure the previous vehicle response and enforce its deadline.
+ */
 static void finish_step(void)
 {
     if (!step_open) {
@@ -381,7 +436,7 @@ static void finish_step(void)
         response_max_us = elapsed;
     }
     motion_status_t s;
-    if (elapsed >= 10000u ||
+    if (elapsed >= VEHICLE_RESPONSE_LIMIT_US ||
         (motion_status(&s) >= E_OK && s.ticks != release_tick)) {
         ++overruns;
         if (active) {
@@ -393,6 +448,9 @@ static void finish_step(void)
     step_open = false;
 }
 
+/*
+ * Copy line inputs and enforce the existing acquisition freshness rules.
+ */
 static void read_line(void)
 {
     if (line_snapshot_read(&sensor, true) < E_OK) {
@@ -409,8 +467,8 @@ static void read_line(void)
     if (sensor.event != VC_EVENT_NONE) {
         line_event = sensor.event;
     }
-    if (active &&
-        (!sensor.valid || drv_time_us() - sensor.timestamp_us > 10000u)) {
+    if (active && (!sensor.valid ||
+                   drv_time_us() - sensor.timestamp_us > LINE_MAX_AGE_US)) {
         (void)vehicle_estop();
         cancelled = true;
         set_reason(RM_STOP_LINE_STALE, "line snapshot stale");
@@ -423,13 +481,16 @@ static void read_line(void)
     }
 }
 
+/*
+ * Wait for the motion release and collect the next vehicle inputs.
+ */
 static bool wait_tick(void)
 {
     finish_step();
     if (active && cancelled) {
         return false;
     }
-    const ER er = tk_slp_tsk(20);
+    const ER er = tk_slp_tsk(VEHICLE_WAKE_TIMEOUT_MS);
     const INT extra = tk_can_wup(TSK_SELF);
     if (extra > 0) {
         wake_lost += (uint32_t)extra;
@@ -457,9 +518,9 @@ static bool wait_tick(void)
         cancelled = true;
         set_reason(RM_STOP_TELEMETRY, "telemetry storage full");
     }
-    if (active && drv_time_ms() - run_button_ms >= 20u) {
+    if (active && drv_time_ms() - run_button_ms >= BUTTON_INTERVAL_MS) {
         run_button_ms = drv_time_ms();
-        if (pressed(21u, &prev_run)) {
+        if (pressed(RUN_BUTTON_PIN, &prev_run)) {
             (void)vehicle_estop();
             cancelled = true;
             set_reason(RM_STOP_GP21, "GP21 emergency stop");
@@ -473,11 +534,17 @@ typedef enum {
     GOAL_HOME
 } goal_t;
 
+/*
+ * Return the magnitude of an in-range signed navigation value.
+ */
 static int32_t abs32(int32_t v)
 {
     return v < 0 ? -v : v;
 }
 
+/*
+ * Test whether a calibration wheel has reached its count goal.
+ */
 static bool wheel_done(goal_t goal, int32_t from_home, int32_t at_start)
 {
     if (goal == GOAL_OUT) {
@@ -533,6 +600,9 @@ static bool cal_spin(int direction, goal_t goal, const int32_t home[2],
     return true;
 }
 
+/*
+ * Wait through the existing calibration pause without bypassing checks.
+ */
 static void cal_pause(void)
 {
     const uint32_t end = drv_time_ms() + CAL_PAUSE_MS;
@@ -543,6 +613,9 @@ static void cal_pause(void)
     }
 }
 
+/*
+ * Run the existing line calibration and retain its failure policy.
+ */
 static bool calibrate(void)
 {
     motion_status_t s;
@@ -578,6 +651,9 @@ typedef struct {
 
 static watched_t watched[4];
 
+/*
+ * Start a navigation module and observe detour entry when enabled.
+ */
 static void watched_start(void *ctx, uint16_t payload, uint32_t now)
 {
     watched_t *w = ctx;
@@ -590,6 +666,9 @@ static void watched_start(void *ctx, uint16_t payload, uint32_t now)
     w->module.start(w->module.ctx, payload, now);
 }
 
+/*
+ * Run an unchanged module and record its completed outcome.
+ */
 static vsm_outcome_t watched_step(void *ctx, const vsm_inputs_t *in,
                                   uint32_t now, vsm_drive_t *drive)
 {
@@ -609,6 +688,9 @@ static vsm_outcome_t watched_step(void *ctx, const vsm_inputs_t *in,
     return out;
 }
 
+/*
+ * Register an outcome-observing wrapper around a navigation module.
+ */
 static void install(unsigned int index, uint8_t id, vsm_module_t module)
 {
     watched[index] = (watched_t){module, id};
@@ -617,6 +699,9 @@ static void install(unsigned int index, uint8_t id, vsm_module_t module)
         (vsm_module_t){watched_start, watched_step, &watched[index]});
 }
 
+/*
+ * Pack the current vehicle step into the existing KR1 RAM-log row.
+ */
 static void save_row(uint32_t now, const motion_status_t *s,
                      const vsm_drive_t *d, ultrasonic_result_t echo,
                      uint8_t bits)
@@ -640,6 +725,9 @@ static void save_row(uint32_t now, const motion_status_t *s,
     (void)send(&m);
 }
 
+/*
+ * Collect the existing run configuration for the local log header.
+ */
 static void info(telemetry_info_t *i)
 {
     *i = (telemetry_info_t){0};
@@ -667,6 +755,9 @@ static void info(telemetry_info_t *i)
     i->line_max_us = sensor.sample_max_us;
 }
 
+/*
+ * Request sonar cancellation without waiting for the service.
+ */
 static void sonar_stop(void)
 {
     const sonar_request_t r = {
@@ -677,6 +768,9 @@ static void sonar_stop(void)
     }
 }
 
+/*
+ * Submit a sonar request and preserve the existing local failure policy.
+ */
 static bool request(sonar_request_t *r)
 {
     if (sonar_request(r) >= E_OK) {
@@ -687,6 +781,9 @@ static bool request(sonar_request_t *r)
     return false;
 }
 
+/*
+ * Run the existing navigation session with read-only summary observers.
+ */
 static void run_once(void)
 {
     (void)motion_clear_faults();
@@ -701,14 +798,14 @@ static void run_once(void)
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
     ++generation;
-    uint8_t mode = 255u;
+    uint8_t mode = SONAR_MODE_UNSET;
     uint16_t interval = 0u;
     bool outstanding = false;
     ultrasonic_result_t echo = ULTRASONIC_RESULT_NONE;
     uint32_t seen_ping = 0u;
     uint32_t seen_result = 0u;
     uint32_t last_ping = run_start;
-    uint32_t last_log = run_start - 20u;
+    uint32_t last_log = run_start - LOG_PERIOD_MS;
     uint32_t request_deadline = 0u;
     uint32_t watch_deadline = 0u;
     int8_t last_servo = 0;
@@ -791,7 +888,8 @@ static void run_once(void)
         }
 #if TM_MQTT
         {
-            const int16_t commanded[2] = {vehicle.left_mm_s, vehicle.right_mm_s};
+            const int16_t commanded[2] = {vehicle.left_mm_s,
+                                          vehicle.right_mm_s};
             const int16_t measured[2] = {s.speed_mm_s[0], s.speed_mm_s[1]};
 
             rs_step(&run_stats, now, s.counts, measured, commanded, s.faults);
@@ -813,14 +911,14 @@ static void run_once(void)
                 (uint16_t)((uint16_t)vsm.state | ((uint16_t)vsm.fault << 8u)));
         }
         if (s.faults != 0u) {
-            pending_bits |= 128u;
+            pending_bits |= ROW_FAULT_FLAG;
             event(3u, vsm.state, vsm.running, s.faults);
         }
         if (vsm.handoffs != handoffs) {
             pending_bits |=
                 (uint8_t)((uint8_t)vsm_outcome_type(vsm.last.outcome) << 4u);
             generation += vsm.handoffs - handoffs;
-            mode = 255u;
+            mode = SONAR_MODE_UNSET;
             outstanding = false;
         }
         if (d.action == VSM_ACT_STOP) {
@@ -832,7 +930,7 @@ static void run_once(void)
                 last_servo = d.servo_deg;
             }
         }
-        if (now - last_log >= 20u) {
+        if (now - last_log >= LOG_PERIOD_MS) {
             save_row(now, &s, &d, echo, pending_bits);
             pending_bits = 0u;
             last_log = now;
@@ -845,14 +943,15 @@ static void run_once(void)
             ping_ms == 0u
                 ? SONAR_STOP
                 : (vsm.running == VSM_MOD_SCAN ? SONAR_ONCE : SONAR_WATCH);
-        const uint16_t rate = ping_ms < 60u ? 60u : ping_ms;
+        const uint16_t rate =
+            ping_ms < SONAR_PING_MIN_MS ? SONAR_PING_MIN_MS : ping_ms;
         if (desired != mode || (desired == SONAR_WATCH && rate != interval) ||
             (desired == SONAR_ONCE && !outstanding)) {
             sonar_request_t r = {.generation = generation,
                                  .id = ++request_id,
                                  .mode = desired,
                                  .interval_ms = rate,
-                                 .deadline_ms = now + 100u,
+                                 .deadline_ms = now + SONAR_REQUEST_DEADLINE_MS,
                                  .not_before_ms = last_ping + ping_ms,
                                  .angle = last_servo};
             if (!request(&r)) {
@@ -862,7 +961,7 @@ static void run_once(void)
             interval = rate;
             outstanding = desired == SONAR_ONCE;
             request_deadline = r.deadline_ms;
-            watch_deadline = now + (uint32_t)rate * 2u + 20u;
+            watch_deadline = now + (uint32_t)rate * 2u + SONAR_WATCH_SLACK_MS;
         }
         if (now - run_start >= RUN_LIMIT_MS) {
             set_reason(RM_STOP_TIME_LIMIT, "90 s time limit");
@@ -879,6 +978,9 @@ static void run_once(void)
     sonar_stop();
 }
 
+/*
+ * Own navigation, calibration, local buttons and actuator requests.
+ */
 static void vehicle_task(INT code, void *ctx)
 {
     (void)code;
@@ -907,8 +1009,8 @@ static void vehicle_task(INT code, void *ctx)
 #endif
     install(3u, VSM_MOD_DETOUR, dr_module(&dr));
     drv_motor_hw_buttons_init();
-    prev_run = drv_motor_hw_button_down(21u);
-    prev_dump = drv_motor_hw_button_down(20u);
+    prev_run = drv_motor_hw_button_down(RUN_BUTTON_PIN);
+    prev_dump = drv_motor_hw_button_down(DUMP_BUTTON_PIN);
     tm_printf((UB *)"[robot] GP21 calibrate then run / ESTOP; GP20 telemetry "
                     "dump. D85.\n");
     if (motion_notify_after_tick(tk_get_tid()) < E_OK) {
@@ -921,12 +1023,12 @@ static void vehicle_task(INT code, void *ctx)
         cancelled = false;
         (void)wait_tick();
         const uint32_t now = drv_time_ms();
-        if (now - button_ms < 20u) {
+        if (now - button_ms < BUTTON_INTERVAL_MS) {
             continue;
         }
         button_ms = now;
-        const bool run_edge = pressed(21u, &prev_run);
-        const bool dump_edge = pressed(20u, &prev_dump);
+        const bool run_edge = pressed(RUN_BUTTON_PIN, &prev_run);
+        const bool dump_edge = pressed(DUMP_BUTTON_PIN, &prev_dump);
         telemetry_stats_t log;
         telemetry_stats(&log);
         if (dump_edge && !run_edge && !log.busy) {
@@ -1046,8 +1148,8 @@ int vehicle_task_start(void)
     if (er < E_OK) {
         return er;
     }
-    const ID tid =
-        app_start_task((FP)vehicle_task, 13, TP_PRC1, "vehicle_task");
+    const ID tid = app_start_task((FP)vehicle_task, VEHICLE_TASK_PRIORITY,
+                                  TP_PRC1, "vehicle_task");
     return tid < 0 ? (int)tid : E_OK;
 }
 

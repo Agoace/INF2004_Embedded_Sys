@@ -1,10 +1,13 @@
+/*
+ * mqtt_wire.h - Binary MQTT frame sizes, value types and pure codec API.
+ */
 #ifndef MQTT_WIRE_H
 #define MQTT_WIRE_H
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#define RM_VERSION        1u
-#define RM_STATE_SIZE     72u
+#define RM_VERSION    1u
+#define RM_STATE_SIZE 72u
 /* robot/state is version 3: v1 (48 B), v2 distances, v3 duty and odometry. */
 #define RM_STATE_VERSION  3u
 #define RM_STATE_V1_SIZE  48u
@@ -17,13 +20,13 @@
 /* robot/heartbeat is version 2: bytes 98-99 are the CPU load. */
 #define RM_HEARTBEAT_VERSION 2u
 #define RM_CPU_LOAD_UNKNOWN  65535u
-#define RM_DETOUR_SIZE    32u
-#define RM_SUMMARY_SIZE   44u
+#define RM_DETOUR_SIZE       32u
+#define RM_SUMMARY_SIZE      44u
 /* Value of an unavailable 16-bit measurement in robot/summary. */
 #define RM_SUMMARY_NONE_U16 65535u
-#define RM_COMMAND_SIZE   22u
-#define RM_LOG_SIZE       32u
-#define RM_TOKEN_SIZE     16u
+#define RM_COMMAND_SIZE     22u
+#define RM_LOG_SIZE         32u
+#define RM_TOKEN_SIZE       16u
 /* Saturated age, or "not available" for 16-bit stack/age fields. */
 #define RM_NO_DATA_U16 65535u
 
@@ -108,8 +111,11 @@ enum {
     RM_DETOUR_FAILED = 7,
     RM_DETOUR_ABORTED = 8
 };
+
 /* robot/detour flags (byte 3). */
-enum { RM_DETOUR_LATERAL_VALID = 0x01 };
+enum {
+    RM_DETOUR_LATERAL_VALID = 0x01
+};
 
 /* One finished detour. Distances are millimetres from encoder odometry. */
 typedef struct {
@@ -134,6 +140,7 @@ enum {
     RM_STOP_SOURCE_FAULT = 3,
     RM_STOP_SOURCE_LIMIT = 4
 };
+
 /* robot/summary stop reason (byte 3). */
 enum {
     RM_STOP_UNKNOWN = 0,
@@ -150,6 +157,7 @@ enum {
     RM_STOP_TELEMETRY = 11,
     RM_STOP_OTHER = 12
 };
+
 /* robot/summary flags (byte 1). */
 enum {
     RM_SUMMARY_BARCODE_IMPLEMENTED = 0x01,

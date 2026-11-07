@@ -503,6 +503,9 @@ static void dump_service(log_stream_publish_fn publish)
     }
 }
 
+/*
+ * Reset live and DUMP stream state before network service starts.
+ */
 void log_stream_init(void)
 {
     (void)memset(&s_live, 0, sizeof(s_live));
@@ -510,12 +513,18 @@ void log_stream_init(void)
     (void)memset(&s_stats, 0, sizeof(s_stats));
 }
 
+/*
+ * Rewind DUMP state and require a freshness jump after link recovery.
+ */
 void log_stream_link_down(void)
 {
     s_live.jump_pending = true;
     dump_rewind();
 }
 
+/*
+ * Accept one bounded DUMP request without doing any network work.
+ */
 int log_stream_dump_request(uint32_t request_id)
 {
     int result = E_OBJ;
@@ -531,11 +540,17 @@ int log_stream_dump_request(uint32_t request_id)
     return result;
 }
 
+/*
+ * Report whether a DUMP request or transfer is active.
+ */
 bool log_stream_dump_active(void)
 {
     return s_dump.requested || (s_dump.stage != DUMP_IDLE);
 }
 
+/*
+ * Service bounded live and refill batches through the supplied sink.
+ */
 void log_stream_service(log_stream_publish_fn publish)
 {
     live_service(publish);
@@ -558,6 +573,9 @@ static void dump_apply(const slot_t *slot)
     }
 }
 
+/*
+ * Apply one matching DUMP acknowledgement or rewind on failure.
+ */
 void log_stream_complete(uint32_t token, bool success)
 {
     uint32_t i;
@@ -585,6 +603,9 @@ void log_stream_complete(uint32_t token, bool success)
     }
 }
 
+/*
+ * Copy stream counters without exposing mutable stream state.
+ */
 void log_stream_stats(log_stream_stats_t *out)
 {
     if (out != NULL) {

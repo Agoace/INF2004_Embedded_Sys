@@ -1,3 +1,6 @@
+/*
+ * telemetry.h - Bounded telemetry messages, RAM-log readers and diagnostic counters.
+ */
 #ifndef KERNEL_TELEMETRY_H
 #define KERNEL_TELEMETRY_H
 #include <stdbool.h>

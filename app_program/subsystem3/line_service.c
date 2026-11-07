@@ -1,4 +1,12 @@
+/*
+ * line_service.c - application telemetry and service interface.
+ */
 #include "subsystem3.h"
+
+/* Task timing and resource limits. */
+#define LINE_US_PER_MS     1000u
+#define LINE_TASK_PRIORITY 11
+
 #include "line_service.h"
 #include "../platform/drv_time.h"
 static ID mutex;
@@ -9,12 +17,18 @@ static line_snapshot_t snapshot;
 #include "../platform/app_board.h"
 static APP_BOARD(line_snapshot_t) board;
 
+/*
+ * Publish the latest line result for bounded network reads.
+ */
 static void publish_line(void)
 {
     app_board_publish(&board.sequence, board.words, &snapshot,
                       sizeof(snapshot));
 }
 
+/*
+ * Attempt one read of the public line board without waiting.
+ */
 int line_snapshot_try_read(line_snapshot_t *out)
 {
     if (!out) {
@@ -31,6 +45,9 @@ int line_snapshot_try_read(line_snapshot_t *out)
     return E_OK;
 }
 
+/*
+ * Process queued line samples and publish the current detector state.
+ */
 static void line_task(INT code, void *ctx)
 {
     (void)code;
@@ -54,7 +71,8 @@ static void line_task(INT code, void *ctx)
                 lp_calib_add(&snapshot.line, snapshot.raw);
             } else {
                 const uint32_t ms =
-                    drv_time_ms() - (drv_time_us() - sample.us) / 1000u;
+                    drv_time_ms() -
+                    (drv_time_us() - sample.us) / LINE_US_PER_MS;
                 const vc_event_t event =
                     lp_update(&snapshot.line, snapshot.raw, ms);
                 if (vc_event_type(event) == VC_EVENT_LINE_LOST ||
@@ -81,6 +99,9 @@ static void line_task(INT code, void *ctx)
     }
 }
 
+/*
+ * Create the line service objects and initialize detector state.
+ */
 int line_service_init(void)
 {
     if (ready) {
@@ -103,6 +124,9 @@ int line_service_init(void)
     return er;
 }
 
+/*
+ * Start the line task and its acquisition source.
+ */
 int line_service_start(void)
 {
     if (!ready) {
@@ -111,7 +135,8 @@ int line_service_start(void)
     if (task_id > 0) {
         return E_OBJ;
     }
-    task_id = app_start_task((FP)line_task, 11, TP_PRC1, "line_task");
+    task_id =
+        app_start_task((FP)line_task, LINE_TASK_PRIORITY, TP_PRC1, "line_task");
     if (task_id < 0) {
         return (int)task_id;
     }
@@ -119,11 +144,17 @@ int line_service_start(void)
     return E_OK;
 }
 
+/*
+ * Report whether the line task has started.
+ */
 bool line_service_running(void)
 {
     return ready && task_id > 0;
 }
 
+/*
+ * Copy detector state under the line service mutex.
+ */
 int line_snapshot_read(line_snapshot_t *out, bool consume)
 {
     if (!out) {
@@ -144,6 +175,9 @@ int line_snapshot_read(line_snapshot_t *out, bool consume)
     return (int)tk_unl_mtx(mutex);
 }
 
+/*
+ * Ask the line owner to begin collecting calibration extrema.
+ */
 int line_calibration_begin(void)
 {
     if (!ready) {
@@ -163,6 +197,9 @@ int line_calibration_begin(void)
     return (int)tk_unl_mtx(mutex);
 }
 
+/*
+ * Finish calibration through the line owner and copy its result.
+ */
 lp_calib_result_t line_calibration_end(void)
 {
     if (!ready || tk_loc_mtx(mutex, TMO_FEVR) < 0) {
@@ -177,6 +214,9 @@ lp_calib_result_t line_calibration_end(void)
     return result;
 }
 
+/*
+ * Abort calibration without replacing retained calibration values.
+ */
 int line_calibration_abort(void)
 {
     if (!ready) {
@@ -193,6 +233,9 @@ int line_calibration_abort(void)
     return (int)tk_unl_mtx(mutex);
 }
 
+/*
+ * Reset detector tracking memory under the service mutex.
+ */
 int line_tracking_reset(void)
 {
     if (!ready) {
