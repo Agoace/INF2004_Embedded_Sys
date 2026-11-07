@@ -147,3 +147,5 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
+
+- Motion public `motion_snapshot_try_read` is a transport-independent last-tick board, not the inherited control mutex. Tests in [`tests/test_motion_task.c`](../tests/test_motion_task.c) cover null/unready/no-first-tick and coherent counts/time.
