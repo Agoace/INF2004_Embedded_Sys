@@ -31,6 +31,9 @@ int robot_event_push(const rm_event_t *event);
 int robot_command_push(const robot_command_t *command);
 int robot_command_pop(robot_command_t *out);
 void robot_network_busy(unsigned int board);
+/* Main-board result: E_OBJ/E_NOEXS unavailable, other errors busy; success
+ * clears that board's unavailable mask bit. Not for an empty history cursor. */
+void robot_network_board_result(unsigned int board, int result);
 void robot_network_metrics(rm_heartbeat_t *out);
 /* Integration providers. Weak safe defaults allow standalone branch builds.
  * No lwIP calls in any provider; no provider may wait for a sensor task. */

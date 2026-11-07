@@ -49,6 +49,8 @@ static bool ram_busy;
 static unsigned int row_reads,event_log_reads;
 void mock_di(UINT *irq) { assert(!irq_off);*irq=33u;irq_off=1u;++di_count; }
 void mock_ei(UINT irq) { assert(irq==33u && irq_off);irq_off=0u;++ei_count; }
+static uint32_t boot_identity=0x11223344u;
+uint32_t boot_id_get(void) { return boot_identity; }
 uint32_t drv_time_ms(void) { return now_ms; }
 uint32_t drv_time_us(void) { return now_ms*1000u+clock_calls++; }
 ER tk_ref_tsk(ID id,T_RTSK *status) { assert(id==TSK_SELF && !irq_off);++priority_reads;status->tskpri=20;return E_OK; }
@@ -64,8 +66,8 @@ err_t mqtt_client_connect(mqtt_client_t *client,const ip_addr_t *address,u16_t p
     mqtt_connection_cb_t callback,void *arg,const struct mqtt_connect_client_info_t *info) {
     assert(in_hook && !irq_off && client==&mqtt_client && address->addr==0xc000020au && port==1883u);
     assert(strcmp(info->client_id,"inf2004-robot")==0 && info->keep_alive==5u);
-    assert(strcmp(info->will_topic,"robot/status")==0 && info->will_msg_len==2u && info->will_qos==1u && info->will_retain==1u);
-    assert((uint8_t)info->will_msg[0]==1u && (uint8_t)info->will_msg[1]==2u);
+    assert(strcmp(info->will_topic,"robot/status")==0 && info->will_msg_len==RM_STATUS_SIZE && info->will_qos==1u && info->will_retain==1u);
+    assert((uint8_t)info->will_msg[0]==RM_STATUS_VERSION && (uint8_t)info->will_msg[1]==2u);
     ++connect_count;connection_callback=callback;connection_arg=arg;return connect_result;
 }
 void mqtt_set_inpub_callback(mqtt_client_t *client,mqtt_incoming_publish_cb_t publish,
@@ -76,7 +78,7 @@ err_t mqtt_subscribe(mqtt_client_t *client,const char *topic,u8_t qos,mqtt_reque
     assert(in_hook && !irq_off && client==&mqtt_client && strcmp(topic,"robot/cmd")==0 && qos==1u);
     ++subscribe_count;subscribe_callback=callback;subscribe_arg=arg;return subscribe_result;
 }
-static bool payload_is_online(const void *payload) { const uint8_t *b=payload;return b[0]==1u && b[1]==1u; }
+static bool payload_is_online(const void *payload) { const uint8_t *b=payload;return b[0]==RM_STATUS_VERSION && b[1]==1u; }
 err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u16_t length,
     u8_t qos,u8_t retain,mqtt_request_cb_t callback,void *arg) {
     assert(in_hook && !irq_off && client==&mqtt_client && length<=RM_LOG_BATCH_MAX_SIZE);
@@ -135,6 +137,8 @@ int robot_command_push(const robot_command_t *value) {
 }
 void robot_command_lost(void) { ++command_lost; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
+static unsigned int unavailable_reads[5];
+void robot_network_board_result(unsigned int board,int result) { assert(board<5u);if(result==E_OBJ || result==E_NOEXS) ++unavailable_reads[board];else if(result<0) ++busy[board]; }
 void robot_queue_metrics(rm_heartbeat_t *value) {
     value->command_lost=command_lost;value->event_lost=event_lost;
     value->line_busy=busy[0];value->sonar_busy=busy[1];value->motion_busy=busy[2];
@@ -176,6 +180,12 @@ static unsigned int count_topic(const char *topic) {
 static void start_connected(void) {
     poll_at(0u);assert(connect_count==1u);connected(MQTT_CONNECT_ACCEPTED);poll_at(0u);
     assert(subscribe_count==1u && subscribe_callback);subscribe_callback(subscribe_arg,ERR_OK);
+}
+static void test_no_boot_id(void) {
+    boot_identity=0u;poll_at(0u);poll_at(10000u);
+    assert(new_count==0u && connect_count==0u && publication_count==0u);
+    boot_identity=0x11223344u;poll_at(10001u);
+    assert(connect_count==1u); /* observer only; driving is not gated */
 }
 static void test_connection(void) {
     fail_new=true;poll_at(0u);assert(new_count==1u && connect_count==0u);
@@ -268,7 +278,7 @@ static void test_status(void) {
     poll_at(5999u);assert(connect_count==1u);
     poll_at(6000u);assert(connect_count==2u);
     connected(MQTT_CONNECT_ACCEPTED);poll_at(6000u);
-    assert(count_topic("robot/status")==4u && u32(last_topic("robot/status")->data)==0x0101u);
+    assert(count_topic("robot/status")==4u && last_topic("robot/status")->data[1]==RM_STATUS_ONLINE);
     /* Status goes out before any other robot data on a connection. */
     unsigned int first_status=0u,first_state=0u;
     for (unsigned int i=publication_count;i>0u;--i) {
@@ -286,7 +296,7 @@ static void test_obstacle(void) {
     poll_at(10u);
     publication_t *report=last_topic("robot/obstacle");
     assert(report && report->length==RM_OBSTACLE_SIZE && report->qos==0u);
-    assert(report->data[0]==1u && report->data[2]==2u && u32(report->data+4)==1u && u32(report->data+8)==1234u);
+    assert(report->data[0]==RM_OBSTACLE_VERSION && report->data[2]==2u && u32(report->data+4)==1u && u32(report->data+8)==1234u);
     assert(count_topic("robot/obstacle")==1u);
     poll_at(11u);assert(count_topic("robot/obstacle")==1u); /* once per report */
     /* A failed publish keeps the report and retries on the next poll. */
@@ -440,7 +450,7 @@ static void test_log_live(void) {
     assert(frame && frame->qos==0u && frame->length==RM_LOG_BATCH_HEADER_SIZE+10u*RM_LOG_RECORD_SIZE);
     assert(frame->data[1]==RM_LOG_ROWS && frame->data[2]==10u && u32(frame->data+12)==0u);
     assert(u32(frame->data+16)==100u && u32(frame->data+20)==90u && u32(frame->data+24)==25u);
-    assert(frame->data[32]==1u && frame->data[32+9u*16u]==10u); /* mock row content = index+1 */
+    assert(frame->data[RM_LOG_BATCH_HEADER_SIZE]==1u && frame->data[RM_LOG_BATCH_HEADER_SIZE+9u*16u]==10u); /* mock row content = index+1 */
     poll_at(101u);frame=last_topic("robot/log");assert(u32(frame->data+12)==10u);
     poll_at(102u);assert(count_topic("robot/log")==2u); /* 5 rows wait for the period */
     poll_at(201u);frame=last_topic("robot/log");
@@ -505,7 +515,7 @@ static void test_log_dump(bool fail_ack) {
         if (publications[i].data[1]==RM_LOG_END) end=&publications[i];
     }
     assert(rows && rows->data[2]==2u && rows->data[3]==RM_LOG_FLAG_REFILL && u32(rows->data+4)==500u);
-    assert(event_batch && event_batch->data[2]==1u && u32(event_batch->data+32+8)==444u);
+    assert(event_batch && event_batch->data[2]==1u && u32(event_batch->data+RM_LOG_BATCH_HEADER_SIZE+8)==444u);
     assert(u32(end->data+16)==2u && u32(end->data+20)==1u && u32(end->data+24)==9u);
     value=(rm_heartbeat_t){0};robot_network_metrics(&value);assert((value.flags&8u)==0u);
     assert(robot_network_dump(502u)==E_OK);
@@ -537,6 +547,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"health_stalled")) test_health_stalled();
     else if (!strcmp(argv[1],"health_missing")) test_health_missing();
                 else if (!strcmp(argv[1],"unconfigured")) test_unconfigured_commands();
+    else if (!strcmp(argv[1],"no_boot_id")) test_no_boot_id();
     else if (!strcmp(argv[1],"status")) test_status();
     else if (!strcmp(argv[1],"detour")) test_detour();
     else if (!strcmp(argv[1],"summary")) test_summary();

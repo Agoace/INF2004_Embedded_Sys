@@ -70,7 +70,7 @@ typedef struct {
 } log_stream_stats_t;
 
 /** Reset both streams to their initial state. */
-void log_stream_init(void);
+void log_stream_init(uint32_t boot_id);
 
 /** Tell the streams that the MQTT link went down. */
 void log_stream_link_down(void);

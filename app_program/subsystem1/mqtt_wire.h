@@ -6,26 +6,33 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#define RM_VERSION    1u
-#define RM_STATE_SIZE 72u
-/* robot/state is version 3: v1 (48 B), v2 distances, v3 duty and odometry. */
-#define RM_STATE_VERSION  3u
-#define RM_STATE_V1_SIZE  48u
-#define RM_STATE_V2_SIZE  60u
-#define RM_SONAR_SIZE     32u
-#define RM_OBSTACLE_SIZE  20u
-#define RM_STATUS_SIZE    2u
-#define RM_EVENT_SIZE     16u
-#define RM_HEARTBEAT_SIZE 100u
-/* robot/heartbeat is version 2: bytes 98-99 are the CPU load. */
-#define RM_HEARTBEAT_VERSION 2u
+#define RM_VERSION 1u
+/* Each observation topic has its own version; commands stay version 1. */
+#define RM_STATE_SIZE        76u
+#define RM_STATE_VERSION     4u
+#define RM_STATE_V1_SIZE     48u
+#define RM_STATE_V2_SIZE     60u
+#define RM_SONAR_SIZE        36u
+#define RM_SONAR_VERSION     2u
+#define RM_OBSTACLE_SIZE     24u
+#define RM_OBSTACLE_VERSION  2u
+#define RM_STATUS_SIZE       6u
+#define RM_STATUS_VERSION    2u
+#define RM_EVENT_SIZE        20u
+#define RM_EVENT_VERSION     2u
+#define RM_EVENT_RECORD_SIZE 16u
+#define RM_HEARTBEAT_SIZE    108u
+#define RM_HEARTBEAT_VERSION 3u
 #define RM_CPU_LOAD_UNKNOWN  65535u
-#define RM_DETOUR_SIZE       32u
-#define RM_SUMMARY_SIZE      44u
+#define RM_DETOUR_SIZE       36u
+#define RM_DETOUR_VERSION    2u
+#define RM_SUMMARY_SIZE      48u
+#define RM_SUMMARY_VERSION   2u
 /* Value of an unavailable 16-bit measurement in robot/summary. */
 #define RM_SUMMARY_NONE_U16 65535u
 #define RM_COMMAND_SIZE     22u
-#define RM_LOG_SIZE         32u
+#define RM_LOG_SIZE         36u
+#define RM_LOG_VERSION      2u
 #define RM_TOKEN_SIZE       16u
 /* Saturated age, or "not available" for 16-bit stack/age fields. */
 #define RM_NO_DATA_U16 65535u
@@ -70,6 +77,7 @@ typedef struct {
     int16_t duty_right_permille;
     int32_t heading_cdeg;
     int16_t turn_rate_ddps;
+    uint32_t boot_id;
 } rm_state_t;
 
 /* robot/status payload byte 1. Both values are non-zero on purpose. */
@@ -102,6 +110,7 @@ typedef struct {
     uint8_t left_free_step;
     uint8_t right_clear_deg;
     uint8_t left_clear_deg;
+    uint32_t boot_id;
 } rm_obstacle_t;
 
 /* robot/detour outcome (byte 1): the shell outcome numbers, plus ABORTED. */
@@ -130,6 +139,7 @@ typedef struct {
     uint16_t max_lateral_mm;
     uint16_t payload;
     uint32_t scan_id;
+    uint32_t boot_id;
 } rm_detour_t;
 
 /* robot/summary stop source (byte 2). */
@@ -162,7 +172,10 @@ enum {
 enum {
     RM_SUMMARY_BARCODE_IMPLEMENTED = 0x01,
     RM_SUMMARY_SPEED_ERROR_VALID = 0x02,
-    RM_SUMMARY_DETOUR_ABORTED = 0x04
+    RM_SUMMARY_DETOUR_ABORTED = 0x04,
+    RM_SUMMARY_REATTEMPT_SHIFT = 3,
+    RM_SUMMARY_REATTEMPT_MAX = 31,
+    RM_SUMMARY_REATTEMPT_MASK = 0xf8
 };
 
 /* End-of-run totals. Retained on the broker. */
@@ -187,6 +200,7 @@ typedef struct {
     uint8_t barcode_ok;
     uint8_t barcode_failed;
     uint16_t hump_peak;
+    uint32_t boot_id;
 } rm_summary_t;
 
 typedef struct {
@@ -202,6 +216,7 @@ typedef struct {
     uint32_t timestamp_ms;
     uint16_t echo;
     uint32_t ping_sequence;
+    uint32_t boot_id;
 } rm_sonar_t;
 
 typedef struct {
@@ -213,6 +228,7 @@ typedef struct {
     uint16_t word;
     uint8_t detail;
     uint8_t flags;
+    uint32_t boot_id;
 } rm_event_t;
 
 typedef struct {
@@ -246,6 +262,9 @@ typedef struct {
     uint8_t wifi_requested_priority;
     uint8_t wifi_observed_priority;
     uint16_t cpu_load_permille; /* RM_CPU_LOAD_UNKNOWN if not measured */
+    uint32_t boot_id;
+    uint32_t board_unavailable;
+    uint8_t board_unavailable_mask;
 } rm_heartbeat_t;
 
 typedef struct {
@@ -261,12 +280,13 @@ typedef struct {
     uint32_t generation;
     uint32_t index;
     uint8_t body[16];
+    uint32_t boot_id;
 } rm_log_t;
 
-/* Batched log frames (kinds RM_LOG_ROWS and RM_LOG_EVENTS): a 32-byte header
+/* Batched log frames (kinds RM_LOG_ROWS and RM_LOG_EVENTS): a 36-byte header
  * followed by count records of 16 bytes. Record i has index first_index+i.
  * Kinds RM_LOG_ROW and RM_LOG_EVENT (one record per frame) are retired. */
-#define RM_LOG_BATCH_HEADER_SIZE 32u
+#define RM_LOG_BATCH_HEADER_SIZE 36u
 #define RM_LOG_RECORD_SIZE       16u
 #define RM_LOG_BATCH_MAX_COUNT   12u
 #define RM_LOG_BATCH_MAX_SIZE                                                  \
@@ -287,6 +307,7 @@ typedef struct {
     uint32_t newest_ms;      /* robot uptime when the newest row was logged */
     uint32_t log_rows;       /* rows in the RAM log when built */
     uint32_t skipped_before; /* rows skipped just before first_index */
+    uint32_t boot_id;
 } rm_log_batch_t;
 
 /* Returns the frame length, or 0 for a null pointer, bad kind, count 0 or
@@ -298,10 +319,14 @@ int32_t rm_average_mm(int32_t left_mm, int32_t right_mm);
 void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v);
 void rm_pack_detour(uint8_t out[RM_DETOUR_SIZE], const rm_detour_t *v);
 void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v);
-void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state);
+void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state,
+                    uint32_t boot_id);
 void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *value);
 void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *value);
 void rm_pack_event(uint8_t out[RM_EVENT_SIZE], const rm_event_t *value);
+/* RAM/DUMP event records retain the v1 16-byte layout; outer frame owns ID. */
+void rm_pack_log_event(uint8_t out[RM_EVENT_RECORD_SIZE],
+                       const rm_event_t *value);
 void rm_pack_heartbeat(uint8_t out[RM_HEARTBEAT_SIZE],
                        const rm_heartbeat_t *value);
 void rm_pack_command(uint8_t out[RM_COMMAND_SIZE], const rm_command_t *value);

@@ -139,7 +139,7 @@ static uint32_t u32(const uint8_t *p)
 
 static void reset(void)
 {
-    log_stream_init();
+    log_stream_init(0x11223344u);
     memset(&ram, 0, sizeof(ram));
     ram.generation = 5u;
     now_ms = 1000u;
@@ -184,10 +184,26 @@ static void assert_batch(const frame_t *f, uint8_t kind, uint8_t count,
 {
     assert(f->length == RM_LOG_BATCH_HEADER_SIZE +
         ((size_t)count * RM_LOG_RECORD_SIZE));
-    assert(f->data[0] == RM_VERSION && f->data[1] == kind);
+    assert(f->data[0] == RM_LOG_VERSION && f->data[1] == kind);
     assert(f->data[2] == count && f->data[3] == flags);
     assert(u32(f->data + 4) == stream && u32(f->data + 8) == generation);
     assert(u32(f->data + 12) == first && u32(f->data + 28) == skipped);
+}
+
+static void test_two_boot_ids(void)
+{
+    reset();
+    ram.generation = 2u;
+    ram.rows = 10u;
+    poll();
+    assert(frame_count == 1u);
+    log_stream_init(0xaabbccddu);
+    poll();
+    assert(frame_count == 2u);
+    assert(u32(frames[0].data + 8u) == 2u && u32(frames[1].data + 8u) == 2u);
+    assert(u32(frames[0].data + 12u) == 0u && u32(frames[1].data + 12u) == 0u);
+    assert(u32(frames[0].data + 32u) == 0x11223344u);
+    assert(u32(frames[1].data + 32u) == 0xaabbccddu);
 }
 
 static void test_live_batches(void)
@@ -205,8 +221,8 @@ static void test_live_batches(void)
     assert(u32(frames[0].data + 16) == 1000u); /* publish_ms */
     assert(u32(frames[0].data + 20) == 990u);  /* newest_ms */
     assert(u32(frames[0].data + 24) == 25u);   /* log_rows */
-    assert(frames[0].data[32] == 0u && frames[0].data[32 + 16 * 9] == 9u);
-    assert(frames[1].data[32] == 10u);
+    assert(frames[0].data[RM_LOG_BATCH_HEADER_SIZE] == 0u && frames[0].data[RM_LOG_BATCH_HEADER_SIZE + 16 * 9] == 9u);
+    assert(frames[1].data[RM_LOG_BATCH_HEADER_SIZE] == 10u);
     now_ms = 1099u;
     poll();
     assert(frame_count == 2u); /* partial batch waits for the period */
@@ -270,7 +286,7 @@ static void test_live_jump_lag(void)
     poll();
     assert_batch(&frames[0], RM_LOG_ROWS, 10u, RM_LOG_FLAG_JUMPED, 0u, 5u,
         91u, 91u);
-    assert(frames[0].data[32] == 91u);
+    assert(frames[0].data[RM_LOG_BATCH_HEADER_SIZE] == 91u);
     poll(); /* skipped is reported once */
     assert(frame_count == 1u);
     ram.rows = 120u; /* 19 behind: no jump */
@@ -481,8 +497,8 @@ static void test_dump_complete(void)
                 rows += f->data[2];
             } else if (f->data[1] == RM_LOG_EVENTS) {
                 assert(rows == 30u && u32(f->data + 12) == events);
-                assert(f->data[32] == RM_VERSION && f->data[33] == 2u && f->data[35] == 3u);
-                assert(u32(f->data + 32 + 8) == 1000u + events);
+                assert(f->data[RM_LOG_BATCH_HEADER_SIZE] == RM_VERSION && f->data[RM_LOG_BATCH_HEADER_SIZE+1u] == 2u && f->data[RM_LOG_BATCH_HEADER_SIZE+3u] == 3u);
+                assert(u32(f->data + RM_LOG_BATCH_HEADER_SIZE + 8) == 1000u + events);
                 events += f->data[2];
             } else if (f->data[1] == RM_LOG_END) {
                 assert(rows == 30u && events == 14u);
@@ -710,6 +726,7 @@ int main(int argc, char **argv)
     const char *name = (argc == 2) ? argv[1] : "all";
     bool all = (strcmp(name, "all") == 0);
 
+    if (all || !strcmp(name, "two_boot_ids")) test_two_boot_ids();
     if (all || !strcmp(name, "live_batches")) test_live_batches();
     if (all || !strcmp(name, "live_steady")) test_live_steady();
     if (all || !strcmp(name, "live_jump_lag")) test_live_jump_lag();
