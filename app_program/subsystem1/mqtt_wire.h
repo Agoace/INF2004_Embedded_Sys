@@ -30,45 +30,79 @@ enum {
 };
 
 typedef struct {
-    uint8_t flags, state, module, motion_faults;
-    uint32_t uptime_ms, sequence;
-    uint16_t line_age_ms, motion_age_ms, vehicle_age_ms, raw_bc;
+    uint8_t flags;
+    uint8_t state;
+    uint8_t module;
+    uint8_t motion_faults;
+    uint32_t uptime_ms;
+    uint32_t sequence;
+    uint16_t line_age_ms;
+    uint16_t motion_age_ms;
+    uint16_t vehicle_age_ms;
+    uint16_t raw_bc;
     uint8_t kr1[16];
-    int32_t count_l, count_r;
-    uint16_t norm_l, norm_c;
+    int32_t count_l;
+    int32_t count_r;
+    uint16_t norm_l;
+    uint16_t norm_c;
 } rm_state_t;
 
 typedef struct {
     uint8_t status;
-    bool valid, pending;
-    int8_t angle, ping_angle;
-    uint32_t history_sequence, generation, request_id, trigger_ms, timestamp_ms;
+    bool valid;
+    bool pending;
+    int8_t angle;
+    int8_t ping_angle;
+    uint32_t history_sequence;
+    uint32_t generation;
+    uint32_t request_id;
+    uint32_t trigger_ms;
+    uint32_t timestamp_ms;
     uint16_t echo;
     uint32_t ping_sequence;
 } rm_sonar_t;
 
 typedef struct {
-    uint8_t kind, from, to;
-    uint32_t sequence, uptime_ms;
+    uint8_t kind;
+    uint8_t from;
+    uint8_t to;
+    uint32_t sequence;
+    uint32_t uptime_ms;
     uint16_t word;
-    uint8_t detail, flags;
+    uint8_t detail;
+    uint8_t flags;
 } rm_event_t;
 
 typedef struct {
-    uint8_t flags, reset_reason;
-    uint32_t uptime_ms, connect_attempts, telemetry_lost, event_lost,
-        command_lost;
-    uint32_t sonar_history_missed, vehicle_overruns, motion_late, motion_missed;
+    uint8_t flags;
+    uint8_t reset_reason;
+    uint32_t uptime_ms;
+    uint32_t connect_attempts;
+    uint32_t telemetry_lost;
+    uint32_t event_lost;
+    uint32_t command_lost;
+    uint32_t sonar_history_missed;
+    uint32_t vehicle_overruns;
+    uint32_t motion_late;
+    uint32_t motion_missed;
     uint16_t stack_min_free;
-    uint32_t mqtt_hook_max_us, publish_ok, publish_failed;
-    uint32_t line_busy, sonar_busy, motion_busy, vehicle_busy, health_busy;
+    uint32_t mqtt_hook_max_us;
+    uint32_t publish_ok;
+    uint32_t publish_failed;
+    uint32_t line_busy;
+    uint32_t sonar_busy;
+    uint32_t motion_busy;
+    uint32_t vehicle_busy;
+    uint32_t health_busy;
     uint32_t latest_sonar_history_sequence;
     uint16_t health_age_ms;
     int8_t wifi_link_status;
     uint8_t mqtt_state;
-    uint32_t wifi_poll_gap_max_us, wifi_poll_gap_samples;
+    uint32_t wifi_poll_gap_max_us;
+    uint32_t wifi_poll_gap_samples;
     int32_t wifi_start_status;
-    uint8_t wifi_requested_priority, wifi_observed_priority;
+    uint8_t wifi_requested_priority;
+    uint8_t wifi_observed_priority;
 } rm_heartbeat_t;
 
 typedef struct {
@@ -80,7 +114,9 @@ typedef struct {
 /* Body is already a 16-byte wire record, or four LE u32 values. */
 typedef struct {
     uint8_t kind;
-    uint32_t dump_id, generation, index;
+    uint32_t dump_id;
+    uint32_t generation;
+    uint32_t index;
     uint8_t body[16];
 } rm_log_t;
 

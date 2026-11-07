@@ -5,11 +5,16 @@
 
 typedef struct {
     lp_t line;
-    uint16_t raw[3], raw_bc,
-        norm_peak; /* raw[2] stays zero for pure line logic */
+    uint16_t raw[3];
+    uint16_t raw_bc;
+    uint16_t norm_peak; /* raw[2] stays zero for pure line logic */
     vc_event_t event;
     bool valid;
-    uint32_t timestamp_us, sequence, processed, cpu_us, sample_max_us;
+    uint32_t timestamp_us;
+    uint32_t sequence;
+    uint32_t processed;
+    uint32_t cpu_us;
+    uint32_t sample_max_us;
     drv_line_stats_t acquisition;
 } line_snapshot_t;
 

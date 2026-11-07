@@ -7,8 +7,10 @@
  * All shared words are atomic, including the payload (no C data races). */
 #define SNAPSHOT_WORDS                                                         \
     ((sizeof(sonar_snapshot_t) + sizeof(uint32_t) - 1u) / sizeof(uint32_t))
-static uint32_t board_guard, board_words[SNAPSHOT_WORDS];
-static uint32_t history_count, history_guard;
+static uint32_t board_guard;
+static uint32_t board_words[SNAPSHOT_WORDS];
+static uint32_t history_count;
+static uint32_t history_guard;
 static uint32_t history_words[SONAR_HISTORY_CAPACITY][SNAPSHOT_WORDS];
 
 static uint32_t load_word(const uint32_t *p)
@@ -59,11 +61,21 @@ static void board_publish(const sonar_snapshot_t *value, bool append)
     }
 }
 
-static ID mutex, requests, results, cyclic, task;
-static bool ready, physical, await_ack, have_generation, once_reserved,
-    admission_ready, cyclic_running;
+static ID mutex;
+static ID requests;
+static ID results;
+static ID cyclic;
+static ID task;
+static bool ready;
+static bool physical;
+static bool await_ack;
+static bool have_generation;
+static bool once_reserved;
+static bool admission_ready;
+static bool cyclic_running;
 static uint32_t admitted_generation;
-static sonar_request_t current, inflight;
+static sonar_request_t current;
+static sonar_request_t inflight;
 static sonar_snapshot_t snapshot;
 static uint32_t next_ms;
 
@@ -340,8 +352,8 @@ int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
     if ((guard & 1u) != 0u) {
         return E_OBJ;
     }
-    const uint32_t count = load_word(&history_count),
-                   distance = count - *cursor;
+    const uint32_t count = load_word(&history_count);
+    const uint32_t distance = count - *cursor;
     sonar_history_entry_t copy;
     uint32_t lost = 0u;
     if (distance != 0u) {

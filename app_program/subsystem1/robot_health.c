@@ -15,7 +15,8 @@ void __attribute__((weak)) robot_health_collect(rm_heartbeat_t *out)
     (void)out;
 }
 
-static ID health_task, health_cyclic;
+static ID health_task;
+static ID health_cyclic;
 
 typedef struct {
     rm_heartbeat_t value;

@@ -4,7 +4,8 @@
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
-static ID mbf_telemetry, task;
+static ID mbf_telemetry;
+static ID task;
 static telemetry_stats_t stats;
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];

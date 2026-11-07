@@ -14,10 +14,18 @@ static const int8_t QUADRATURE[16] = {
 static volatile int32_t raw_count[MC_WHEELS];
 static uint8_t previous_ab[MC_WHEELS];
 static mc_t mc;
-static ID mtx_motion, tid_motion, cyc_motion, tid_after_tick;
+static ID mtx_motion;
+static ID tid_motion;
+static ID cyc_motion;
+static ID tid_after_tick;
 static int32_t sampled_counts[MC_WHEELS];
-static uint32_t ticks, tick_max_us, last_run_us, gap_min_us, gap_max_us;
-static uint32_t late_wakes, missed_wakes;
+static uint32_t ticks;
+static uint32_t tick_max_us;
+static uint32_t last_run_us;
+static uint32_t gap_min_us;
+static uint32_t gap_max_us;
+static uint32_t late_wakes;
+static uint32_t missed_wakes;
 static bool watchdog_armed;
 static void motion_status_locked(motion_status_t *s);
 #include "../platform/app_board.h"
@@ -37,10 +45,12 @@ static void publish_motion(uint32_t us)
     app_board_publish(&board.sequence, board.words, &v, sizeof(v));
 }
 #if APP_TEST
-static volatile bool test_requested, test_suppressed;
+static volatile bool test_requested;
+static volatile bool test_suppressed;
 static bool window_active;
 static motion_timing_window_t window;
-static uint32_t window_last_us, window_missed_base;
+static uint32_t window_last_us;
+static uint32_t window_missed_base;
 static motion_timing_probe_t probes[MOTION_PROBE_COUNT];
 static UINT probe_present;
 #endif

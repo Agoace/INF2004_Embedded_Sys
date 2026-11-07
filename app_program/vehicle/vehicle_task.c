@@ -33,17 +33,30 @@ static dr_t dr;
 static vsm_t vsm;
 static uint16_t raw[3];
 static vc_event_t line_event;
-static bool active, cancelled, prev_run, prev_dump, step_open;
-static uint32_t wake_lost, overruns, response_max_us, release_us, release_tick;
-static uint32_t run_start, run_button_ms, generation, request_id;
+static bool active;
+static bool cancelled;
+static bool prev_run;
+static bool prev_dump;
+static bool step_open;
+static uint32_t wake_lost;
+static uint32_t overruns;
+static uint32_t response_max_us;
+static uint32_t release_us;
+static uint32_t release_tick;
+static uint32_t run_start;
+static uint32_t run_button_ms;
+static uint32_t generation;
+static uint32_t request_id;
 static drv_line_stats_t line_base;
 static const char *reason = "no saved run";
 #if TM_MQTT
 static APP_BOARD(vehicle_snapshot_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
 static uint8_t pending_action;
-static uint32_t event_sequence, seen_commands[8];
-static unsigned int seen_count, seen_next;
+static uint32_t event_sequence;
+static uint32_t seen_commands[8];
+static unsigned int seen_count;
+static unsigned int seen_next;
 static uint16_t last_network_fault;
 
 static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
@@ -373,7 +386,8 @@ static bool cal_spin(int direction, goal_t goal, const int32_t home[2],
             return false;
         }
         const uint32_t now = drv_time_ms();
-        const uint16_t c = lp.norm[LP_CENTRE], peak = sensor.norm_peak;
+        const uint16_t c = lp.norm[LP_CENTRE];
+        const uint16_t peak = sensor.norm_peak;
         const bool on_line =
             stop_on_line &&
             (c >= CAL_CENTRE_STOP ||
@@ -553,9 +567,12 @@ static void run_once(void)
     uint16_t interval = 0u;
     bool outstanding = false;
     ultrasonic_result_t echo = ULTRASONIC_RESULT_NONE;
-    uint32_t seen_ping = 0u, seen_result = 0u, last_ping = run_start,
-             last_log = run_start - 20u;
-    uint32_t request_deadline = 0u, watch_deadline = 0u;
+    uint32_t seen_ping = 0u;
+    uint32_t seen_result = 0u;
+    uint32_t last_ping = run_start;
+    uint32_t last_log = run_start - 20u;
+    uint32_t request_deadline = 0u;
+    uint32_t watch_deadline = 0u;
     int8_t last_servo = 0;
     uint8_t pending_bits = 0u;
     while (!cancelled) {
@@ -634,7 +651,8 @@ static void run_once(void)
         if (ping_sent) {
             pending_bits |= 8u;
         }
-        const uint8_t state_before = vsm.state, module_before = vsm.running;
+        const uint8_t state_before = vsm.state;
+        const uint8_t module_before = vsm.running;
         const uint32_t handoffs = vsm.handoffs;
         uint16_t ping_ms = VSM_PING_DEFAULT_MS;
         const vsm_inputs_t in = {
@@ -744,8 +762,8 @@ static void vehicle_task(INT code, void *ctx)
             continue;
         }
         button_ms = now;
-        const bool run_edge = pressed(21u, &prev_run),
-                   dump_edge = pressed(20u, &prev_dump);
+        const bool run_edge = pressed(21u, &prev_run);
+        const bool dump_edge = pressed(20u, &prev_dump);
         telemetry_stats_t log;
         telemetry_stats(&log);
         if (dump_edge && !run_edge && !log.busy) {

@@ -1,8 +1,10 @@
 #include "subsystem3.h"
 #include "line_service.h"
 #include "../platform/drv_time.h"
-static ID mutex, task_id;
-static bool ready, calibrating;
+static ID mutex;
+static ID task_id;
+static bool ready;
+static bool calibrating;
 static line_snapshot_t snapshot;
 #include "../platform/app_board.h"
 static APP_BOARD(line_snapshot_t) board;

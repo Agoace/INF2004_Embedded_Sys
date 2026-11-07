@@ -15,8 +15,10 @@ typedef struct {
     int8_t servo_deg;
     bool servo_settled;
     uint8_t faults;
-    uint32_t ticks, tick_max_us;
-    uint32_t gap_min_us, gap_max_us;
+    uint32_t ticks;
+    uint32_t tick_max_us;
+    uint32_t gap_min_us;
+    uint32_t gap_max_us;
     uint32_t late_wakes;   /* gaps greater than 11 ms */
     uint32_t missed_wakes; /* queued wake requests discarded by tk_can_wup */
     bool
@@ -43,8 +45,13 @@ int motion_bench_start(void);
 /* Only complete gaps between starts inside the window are scored. Lifetime
  * counters are never reset. missed_wakes is the end-minus-begin delta. */
 typedef struct {
-    uint32_t ticks, gaps, gap_min_us, gap_max_us, tick_max_us;
-    uint32_t late_wakes, missed_wakes;
+    uint32_t ticks;
+    uint32_t gaps;
+    uint32_t gap_min_us;
+    uint32_t gap_max_us;
+    uint32_t tick_max_us;
+    uint32_t late_wakes;
+    uint32_t missed_wakes;
 } motion_timing_window_t;
 
 int motion_timing_window_begin(void);
@@ -63,8 +70,13 @@ typedef enum {
 } motion_probe_stage_t;
 
 typedef struct {
-    uint32_t us, ticks, gap_min_us, gap_max_us, tick_max_us, late_wakes,
-        missed_wakes;
+    uint32_t us;
+    uint32_t ticks;
+    uint32_t gap_min_us;
+    uint32_t gap_max_us;
+    uint32_t tick_max_us;
+    uint32_t late_wakes;
+    uint32_t missed_wakes;
 } motion_timing_probe_t;
 
 /* One TEST runner captures under mtx_motion, then reads immutable copies

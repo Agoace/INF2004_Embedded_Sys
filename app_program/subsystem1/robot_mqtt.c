@@ -18,13 +18,22 @@
 #define RETRY_MS 3000u
 static mqtt_client_t *client;
 static ip_addr_t broker;
-static bool configured, connecting, subscribed, subscribe_pending,
-    commands_enabled;
-static uint8_t token[RM_TOKEN_SIZE], rx[RM_COMMAND_SIZE];
-static uint32_t rx_length, rx_expected;
+static bool configured;
+static bool connecting;
+static bool subscribed;
+static bool subscribe_pending;
+static bool commands_enabled;
+static uint8_t token[RM_TOKEN_SIZE];
+static uint8_t rx[RM_COMMAND_SIZE];
+static uint32_t rx_length;
+static uint32_t rx_expected;
 static bool rx_valid;
-static uint32_t retry_at, subscribe_at, state_at, heartbeat_at, state_sequence,
-    sonar_cursor;
+static uint32_t retry_at;
+static uint32_t subscribe_at;
+static uint32_t state_at;
+static uint32_t heartbeat_at;
+static uint32_t state_sequence;
+static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
 static rm_heartbeat_t health_cache = {.stack_min_free = 65535u};
 static bool health_present;
@@ -66,7 +75,8 @@ static void configure(void)
     bool good = strlen(s) == 32u;
     uint8_t any = 0u;
     for (unsigned int i = 0u; good && i < RM_TOKEN_SIZE; ++i) {
-        const int a = hex(s[i * 2u]), b = hex(s[i * 2u + 1u]);
+        const int a = hex(s[i * 2u]);
+        const int b = hex(s[i * 2u + 1u]);
         if (a < 0 || b < 0) {
             good = false;
             break;
@@ -341,7 +351,8 @@ static void service(uint32_t now)
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */
 void cyw43_utk_app_poll(void)
 {
-    const uint32_t started = drv_time_us(), now = drv_time_ms();
+    const uint32_t started = drv_time_us();
+    const uint32_t now = drv_time_ms();
     if (!configured) {
         configure();
     }

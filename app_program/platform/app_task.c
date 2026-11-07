@@ -3,15 +3,20 @@
 #include <tm/tmonitor.h>
 #include <tk/syslib.h>
 #define FILL 0xa5u
-static uint64_t motion_stack[384], line_stack[256], sonar_stack[256];
-static uint64_t vehicle_stack[512], telemetry_stack[512], bench_stack[512];
+static uint64_t motion_stack[384];
+static uint64_t line_stack[256];
+static uint64_t sonar_stack[256];
+static uint64_t vehicle_stack[512];
+static uint64_t telemetry_stack[512];
+static uint64_t bench_stack[512];
 #if TM_MQTT
 static uint64_t health_stack[256];
 #endif
 typedef struct {
     const char *name;
     uint64_t *stack;
-    uint32_t size, high;
+    uint32_t size;
+    uint32_t high;
     ID id;
 } slot_t;
 

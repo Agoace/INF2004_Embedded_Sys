@@ -3,8 +3,12 @@
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
 #include "robot_network.h"
-static ID event_queue, command_queue, estop_queue;
-static uint32_t event_lost, command_lost, busy[5];
+static ID event_queue;
+static ID command_queue;
+static ID estop_queue;
+static uint32_t event_lost;
+static uint32_t command_lost;
+static uint32_t busy[5];
 
 static void lost(uint32_t *counter)
 {

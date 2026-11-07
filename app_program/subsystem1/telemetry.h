@@ -9,15 +9,28 @@
 typedef struct {
     uint32_t ms;
     uint16_t word;
-    uint8_t kind, from, to, detail;
+    uint8_t kind;
+    uint8_t from;
+    uint8_t to;
+    uint8_t detail;
 } telemetry_event_t;
 
 typedef struct {
     char reason[48];
-    uint32_t wake_lost, overruns, response_max_us, gap_min_us, gap_max_us;
-    uint32_t sampled, missed, dropped, isr_max_us, line_max_us;
+    uint32_t wake_lost;
+    uint32_t overruns;
+    uint32_t response_max_us;
+    uint32_t gap_min_us;
+    uint32_t gap_max_us;
+    uint32_t sampled;
+    uint32_t missed;
+    uint32_t dropped;
+    uint32_t isr_max_us;
+    uint32_t line_max_us;
     int32_t counts[2];
-    uint16_t floor[2], line[2], raw_bc;
+    uint16_t floor[2];
+    uint16_t line[2];
+    uint16_t raw_bc;
     uint8_t faults;
 } telemetry_info_t;
 
@@ -30,7 +43,8 @@ typedef enum {
 } telemetry_kind_t;
 
 typedef struct {
-    uint32_t kind, loss_base;
+    uint32_t kind;
+    uint32_t loss_base;
 
     union {
         uint8_t row[TELEMETRY_BYTES];
@@ -40,8 +54,11 @@ typedef struct {
 } telemetry_message_t;
 
 typedef struct {
-    uint32_t lost, rows, events;
-    bool busy, storage_full;
+    uint32_t lost;
+    uint32_t rows;
+    uint32_t events;
+    bool busy;
+    bool storage_full;
 } telemetry_stats_t;
 
 int telemetry_init(void);

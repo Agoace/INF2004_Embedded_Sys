@@ -4,12 +4,23 @@
 #include <stdint.h>
 
 typedef struct {
-    uint32_t timestamp_us, sequence, wake_lost, overruns, response_max_us,
-        handoffs, command_id;
-    int16_t left_mm_s, right_mm_s;
+    uint32_t timestamp_us;
+    uint32_t sequence;
+    uint32_t wake_lost;
+    uint32_t overruns;
+    uint32_t response_max_us;
+    uint32_t handoffs;
+    uint32_t command_id;
+    int16_t left_mm_s;
+    int16_t right_mm_s;
     int8_t servo_deg;
-    uint8_t state, module, phase, command_opcode, command_status;
-    bool active, calibrated;
+    uint8_t state;
+    uint8_t module;
+    uint8_t phase;
+    uint8_t command_opcode;
+    uint8_t command_status;
+    bool active;
+    bool calibrated;
 } vehicle_snapshot_t;
 
 /* Bounded read-only last vehicle step; E_TMOUT busy, E_OBJ no vehicle role. */

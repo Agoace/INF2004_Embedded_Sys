@@ -13,7 +13,9 @@
 
 typedef struct {
     bool have;
-    uint32_t sequence, observed_ms, base_age;
+    uint32_t sequence;
+    uint32_t observed_ms;
+    uint32_t base_age;
 } age_t;
 
 static uint16_t age(age_t *a, uint32_t sequence, uint32_t timestamp_us,
@@ -38,7 +40,9 @@ void robot_network_state(rm_state_t *out)
     static line_snapshot_t line;
     static motion_status_t motion;
     static vehicle_snapshot_t vehicle;
-    static age_t la, ma, va;
+    static age_t la;
+    static age_t ma;
+    static age_t va;
     static uint32_t motion_us;
     const bool l = line_snapshot_try_read(&line) >= E_OK;
     const bool m = motion_snapshot_try_read(&motion, &motion_us) >= E_OK;
@@ -47,7 +51,8 @@ void robot_network_state(rm_state_t *out)
     const bool s = sonar_snapshot_try_read(&sonar) >= E_OK;
     /* Writers may preempt this reader. Observe time AFTER the copies, so a
      * newly published timestamp cannot appear to be in our future. */
-    const uint32_t now = drv_time_ms(), us = drv_time_us();
+    const uint32_t now = drv_time_ms();
+    const uint32_t us = drv_time_us();
     if (!l) {
         robot_network_busy(ROBOT_BOARD_LINE);
     }

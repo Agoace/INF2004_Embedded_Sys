@@ -12,7 +12,10 @@ typedef enum {
 } sonar_mode_t;
 
 typedef struct {
-    uint32_t generation, id, deadline_ms, not_before_ms;
+    uint32_t generation;
+    uint32_t id;
+    uint32_t deadline_ms;
+    uint32_t not_before_ms;
     uint16_t interval_ms;
     int8_t angle;
     uint8_t mode;
@@ -27,14 +30,21 @@ typedef enum {
 
 /* ECHO timestamp is actual trigger time, not the later service publication. */
 typedef struct {
-    uint32_t generation, id, ping_sequence, result_sequence, trigger_ms,
-        timestamp_ms, deadline_ms;
-    uint32_t ping_generation, ping_id;
+    uint32_t generation;
+    uint32_t id;
+    uint32_t ping_sequence;
+    uint32_t result_sequence;
+    uint32_t trigger_ms;
+    uint32_t timestamp_ms;
+    uint32_t deadline_ms;
+    uint32_t ping_generation;
+    uint32_t ping_id;
     int8_t ping_angle;
     ultrasonic_result_t echo;
     int8_t angle;
     uint8_t status;
-    bool pending, valid;
+    bool pending;
+    bool valid;
 } sonar_snapshot_t;
 
 int sonar_service_init(void);
