@@ -453,9 +453,12 @@ But two 32-bit words are:
 
 **8 B**
 
-So the final Tribunal/documentation should not claim both 6 B and 8 B.
+Decision: use **8 B** for the two-word IMU snapshot. The earlier 6 B
+claim is superseded; no 6 B layout is specified.
 
-If 6 B is intended, a different layout must be defined.
+The reserved MQTT frame adds a 4 B version/kind header to this 8 B snapshot,
+for 12 B total. This is a format reservation only, not an implemented IMU
+publisher. See [the IMU wire layout](MQTT_WIRE.md#imu).
 
 ---
 

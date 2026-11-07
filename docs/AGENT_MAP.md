@@ -214,6 +214,8 @@ vehicle task described below.
 
 ## STEP 8 MQTT navigation
 
+- [Follow-up handoff](MTK3_FOLLOWUP_HANDOFF.md) — final owner tips, commit sequence, helper cleanup/recovery and hardware limits.
+
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
 - [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load record](CPU_LOAD.md).

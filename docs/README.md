@@ -14,6 +14,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 ## Records
 
 - [CPU load observation](CPU_LOAD.md) — calibrated lowest-priority meter, host checks, target measurement limits.
+- [STEP 8 follow-up handoff](MTK3_FOLLOWUP_HANDOFF.md) — feature/style commits, owner tips, recoverable helper cleanup and pending hardware work.
 
 - [Agent Navigation Map](AGENT_MAP.md) — repository paths, entry points, and boundaries.
 - [Pico W development environment](DEVELOPMENT.md) — tool installation, build, flash, and serial instructions.

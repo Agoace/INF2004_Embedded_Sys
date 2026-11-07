@@ -1,140 +1,144 @@
 # STEP 8 software validation
 
-## Scope
+## Scope and evidence
 
-Production inputs were validated at `c6f3228`, with later owner/base merges
-changing documentation only. Compiler: GNU Arm Embedded 14.3.1; local Pico
-SDK revision `98a542c1`; host x86_64. Builds use `-j4`. No push, flash,
-network connection, broker installation or physical test was performed.
-The main checkout remains separate. New-image hardware results are
-**Not run**; previous STEP 7 passes remain historical.
+Production code was checked at `ed21052`. Owner merges through `b1ae9f6`
+change no candidate file content. A repeated six-profile object/ELF comparison
+at that merge tip also passes. Compiler: GNU Arm Embedded 14.3.1; local Pico
+SDK revision `98a542c1`; host x86_64. Builds use `-j4`.
 
-Private evidence is outside Git in `/tmp/step8-results/` (mode 0700).
-ELF/UF2 files can contain private settings. Do not publish them or flash
-SDK proof images. Public protocol fixtures use only synthetic data.
+No push, flash, broker connection or physical test was performed. The main
+checkout remains at `mtk3-staging` `8ec3523`. All new hardware rows are **Not
+run**; STEP 7 passes are historical, not validation of these images.
 
-## Clean builds and strict ARM compilation
+Private evidence is in `/tmp/step8-results/` (0700 directory, private files).
+ELF/UF2 files can contain private settings. Do not publish them or flash SDK
+proof images. Public protocol fixtures contain synthetic data only.
 
-Each profile ran `make clean`, then a complete build. Every build had
-**zero warnings**. Sizes are GNU `size` bytes, not runtime free memory.
+## Clean builds and strict ARM checks
 
-| Profile | text | data | bss | Strict touched units |
+Each profile ran a complete clean build with **zero warnings**. Sizes are GNU
+`size` bytes, not measured free memory.
+
+| Profile | text | data | bss | Strict changed units |
 | --- | ---: | ---: | ---: | ---: |
-| Default SMP1 / CYW43 / NET none | 310004 | 220 | 126380 | 19 |
-| SMP0 / no radio / NORMAL robot | 63132 | 152 | 119848 | 17 |
-| SMP0 / no radio / TEST | 54100 | 152 | 119276 | 17 |
-| SMP0 / no radio / BENCH | 41966 | 148 | 95460 | 17 |
-| SMP0 / CYW43 / lwIP / MQTT / NORMAL | 365880 | 336 | 182888 | 20 |
-| SMP0 / CYW43 / lwIP / MQTT / TEST | 356152 | 336 | 182188 | 20 |
+| Default SMP1 / CYW43 / NET none | 310004 | 220 | 126380 | 26 |
+| SMP0 / no radio / NORMAL | 63132 | 152 | 119848 | 24 |
+| SMP0 / no radio / TEST | 54100 | 152 | 119276 | 24 |
+| SMP0 / no radio / BENCH | 41966 | 148 | 95460 | 24 |
+| SMP0 / CYW43 / lwIP / MQTT / NORMAL | 373236 | 356 | 184320 | 27 |
+| SMP0 / CYW43 / lwIP / MQTT / TEST | 360444 | 356 | 183360 | 27 |
 
-**110/110** actual ARM compiler invocations passed
-`-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror` for changed
-production C units that the profile compiles. SDK headers use system-header
-paths for these own-code checks; no warning is suppressed in owned sources.
-Some app units are conditionally inactive in a profile. Wi-Fi/LwIP template
-units are checked only where the profile builds them. No `__atomic_*`
-runtime symbol is linked in any of the six production ELFs.
+**152/152** ARM compiler invocations passed
+`-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`, with stack-usage
+output, for changed production C units compiled by each profile. SDK headers
+are system headers for this own-code check. Some listed units are inactive
+under a profile's conditional compilation. No `__atomic_*` runtime helper
+is linked in the production ELFs.
 
-## Host and retained SDK link checks
+Retained SDK link-only probes pass **6/6**. They force-link the selected GPIO,
+PWM, ADC, alarm, TIMER, ultrasonic, watchdog and reset references without SDK
+startup/runtime. They are not hardware tests and must never be flashed.
+The template checker reports **7 paths** against `c3b0954`; this checks file
+membership, not the correctness of the code.
 
-- Combined strict host suite: **92/92**, zero build warnings.
-- Final independently built owner suites: base **26/26**, motion **33/33**,
-  line **30/30**, scan **32/32**, telemetry **54/54**. These overlap the
-  combined suite; do not add them as independent coverage totals.
-- Retained SDK link-only probes: **6/6**. Each force-links PWM/GPIO/ADC,
-  alarm, ultrasonic, timer/tick, watchdog and reset references in a separate
-  ELF. They have no unresolved symbols and preserve the no-SDK-startup/
-  runtime boundary. This is not a hardware result. Never flash them.
-- Template ledger: **7 recorded paths** against `c3b0954`. The checker
-  verifies the file set, not the correctness of each edit.
+## Host checks
 
-Host coverage includes atomic-word odd/change/wrap reads; bounded queue
-full/error cleanup; generation/highwater live logs; signed C-packed/Python
-frames; malformed lengths/version/reserved bits; default/configured token
-policy for all opcodes; no-token laptop ESTOP; reconnect/ERR_MEM/pending
-QoS1/PUBACK/ABORT; and producer-stale/missing health across microsecond
-wrap. The earlier health implementation fails both new regressions.
+Combined strict suite: **111/111**, with zero compiler warnings. Owner suites:
+base **27/27**, motion **34/34**, line **31/31**, scan **33/33**, telemetry
+**69/69**. These overlap; do not add them into an independent coverage total.
+Dashboard worker reports 121 dashboard cases and 46 decoder cases inside the
+Python test executables, plus an offline headless-browser rendering check.
 
-Vehicle tests include 4096 policy combinations, source-age saturation and
-microsecond/millisecond wrap, preemption during board collection and the
-real vehicle implementation with transport doubles. They show that failed
-live-event enqueue and rejected DUMP do not cancel driving, uncalibrated
-START does not start, and ESTOP consumes first and drains queued START.
-The clock/priority tests use register/kernel doubles. No host test measures
-physical motor motion, Wi-Fi timing or actual interrupt behavior.
+Coverage includes bounded odd/change/wrap board reads, queue saturation and
+cleanup, retained/stale sample ages, token policy, dedicated ESTOP, command
+policy combinations, C-packed/Python-decoded binary frames, unknown and
+malformed versions, reconnect, ERR_MEM, PUBACK failure, DUMP abort, live-log
+gaps and generation changes. DUMP throughput simulation for 4501 rows and
+512 events gives 2.8 s at 20 ms RTT, 14.2 s at 100 ms, and 28.4 s at 200 ms.
+The 20-second target does not hold at 200 ms RTT.
 
-## Final MQTT ELF ownership and boot proof
+Added checks cover signed mean overflow edges, obstacle nearest-point ties,
+all 32768 PROFILE words, LWT CONNECT settings and retained ONLINE retries,
+duty/heading/rate packing, integer sine accuracy, forward/reverse path length,
+detour outcomes/abort/lateral maximum, run counters, steady-command speed
+error, summary retry/reconnect, and CPU-load arithmetic including wrap and
+unknown values. The sine-table absolute error is below 0.0001; CPU synthetic
+one-second arithmetic error is at most 1 permille. Neither is target sensor
+accuracy or a measurement of target CPU load.
 
-The NORMAL MQTT map/nm/disassembly establish:
+## Style-only code identity
 
-- `cyw43_utk_app_poll` is strong `T` at `0x10016394`, owned by
-  `app_program/subsystem1/robot_mqtt.o`. The template weak default at
-  `mqtt_utk.o` is discarded. No linker wrap is used.
-- Existing Wi-Fi task calls `sys_check_timeouts` at `0x10006b40`, the
-  named application hook at `0x10006b4a`, then full-poll end at
-  `0x10006b4e`. Only that task owns lwIP/MQTT calls.
-- `cyw43_utk_start` loads literal priority **20** at `0x10006ed8` before
-  `tk_cre_tsk` at `0x10006ee2`. It is direct creation, not later demotion.
-  USB remains priority3; motion/line/sonar/vehicle are10/11/12/13.
-- `Reset_Handler` calls `knl_startup_hw` at `0x10014bee` before data/BSS
-  and kernel startup. `knl_startup_hw` calls `startup_clock` at
-  `0x10014940`, then checks/writes WATCHDOG_TICK (`0x4005802c`) with
-  `0x20c` (ENABLE plus 12 cycles), checks RUNNING and bounds the wait to
-  100000 reads. Its failure branch loops closed at `0x1001498a`, before
-  devices/tasks. The helper uses no SDK header or uninitialized global.
+Feature and style commits are separate. The original style batches
+`95c56de`, `aac9c01`, `4614012` each matched their pre-style baseline across
+six profiles (875 object/ELF records per comparison).
 
-The application TIMER setup remains idempotent verification; the 2% rate
-check remains a driving prerequisite. Cold-power S0-U01 is still required.
+After the approved feature additions, style commit `ed21052` matches the
+post-feature baseline `e183d35` across **905 object/ELF records, zero
+differences**. Repeating after owner merges gives the same result. Comparisons
+include object disassembly, relocations, section data, symbols and sizes,
+plus linked ELF code/data/symbols. Debug/comment/attribute sections and
+compiler-generated `wm4.*` identifier spelling are normalized. This is a
+code/data comparison, not raw debug-bearing object-byte identity.
 
-### ARM C declaration issue
+A deliberate mutation changed the state period from 200 to 201 ms. The
+comparator reported differences and exited with status 1. The mutation was
+restored before the style proof. Missing files and an empty comparison also
+fail the checker. No intended production code/data difference exists in the
+style-only batch.
 
-On this actual ARM newlib toolchain, `int32_t` is `long`, whereas kernel
-`INT`/`ER` are `int`. Both are 32 bits, but are not compatible C declaration
-types. Host `int32_t == int` hid the issue. Shared code now defines the
-Wi-Fi task/start exactly as the public fixed-width header declares,
-removes the duplicate incompatible task declaration, and includes that
-same SDK-free header at the device-init caller rather than redeclaring
-start as `ER`. Real ARM compilation validates all three boundaries.
+Scope includes the STEP 7–8 task/board/transport files, `app_main.c`, the new
+observers, and changed ranges of the seven recorded template files. It does
+not include the earlier large `subsystem2_test.c` image or unchanged pure
+navigation algorithms. Existing public names were not renamed. Deferred
+naming observations: unprefixed file statics, `s_` statics in log_stream,
+mixed public prefixes (`rm_`, `robot_`, `telemetry_`, `mc_`, `drv_`, `vc_`), and
+mixed legacy typedef naming. This is a scoped BARR-C-style cleanup, not a
+claim of complete formal coding-standard compliance for the repository.
 
-## Memory and measurement limits
+## Runtime ownership and limits
 
-NORMAL MQTT static `data+bss` is **183224 bytes**. The kernel uses 256 KiB
-main SRAM, leaving **78920 bytes** before dynamic allocations. The 2048-byte
-exception-stack reservation reduces the initial kernel allocation area to
-about **76872 bytes** (`__bss_end=0x2002cbb8`, before allocator setup).
+The strong `cyw43_utk_app_poll` is application-owned; the weak template demo
+is discarded. Only the existing Wi-Fi task calls lwIP/MQTT. Wi-Fi is created
+directly at priority 20. Application priorities remain motion 10, line 11,
+sonar 12, vehicle 13, telemetry 30 and health 31. The CPU meter is priority
+32 (this configuration's lowest priority), not the initially proposed 139.
+USB remains priority 3.
 
-Known dynamic stack requests are initial1152, USB2176 and Wi-Fi8320 bytes
-(including each 128-byte kernel context addition). Five MBF requests total
-4780 bytes: RAM4096, sonar256, live events320, normal commands96, ESTOP12.
-Subtracting these requests leaves about **60444 bytes before allocator
-metadata and any later allocation**. This is a link/configuration budget,
-not a measured free-heap claim. lwIP's heap/pools are already in bss; app
-stacks are static. MQTT reserves 21504 app-stack bytes, including the
-inactive bench region; the NORMAL active regions total17408.
+Early kernel TIMER initialization still follows clock startup and precedes
+devices/tasks. The bounded WATCHDOG_TICK setup uses no SDK headers or
+uninitialized globals. Application TIMER setup remains idempotent verification;
+cold-power S0-U01 is still required. No controller settings, routes, SCAN,
+detour or line logic changed. Summary observers cannot return drive commands.
+The idle meter never feeds the watchdog.
 
-Flash `text+data` is366216 bytes, about17.5% of nominal2MiB. Largest strict
-own-function frames include vehicle768, hook304, vehicle-start288 and
-health/telemetry264 bytes. These are individual frames, not maximum call
-chains or interrupt nesting. The 8192-byte Wi-Fi stack is template-owned
-and outside the app fill-pattern helper. Loaded physical margins of at
-least256 untouched bytes per app task, and adequate template-stack margin,
-remain **Not run**.
+Static NORMAL MQTT data+bss is **184676 bytes**. This is a link result, not a
+free-heap or runtime margin measurement. Registered application stacks now
+include the 512-byte CPU meter. Strict individual function frames include
+vehicle task 776 B, MQTT hook 272 B, log-stream service 144 B, telemetry task
+264 B and idle-meter loop 16 B. Individual frames are not complete call-chain
+or interrupt-nesting budgets. Wi-Fi's 8192-byte stack is outside app stack
+painting. Loaded stack margin >=256 B remains **Not run**.
 
-Motion and line publication are always present, independent of MQTT.
-Motion cost is included before watchdog feed and in reported work; line
-sample cost includes publication and its published cost can lag one sample.
-Full Wi-Fi poll wall/work and start-gap counters include preemption; they
-are not CPU percentages. Probe-max excludes its final stores and is not a
-calibrated subtraction from measured work. Changing task priority does not
-bound interrupt-off time or IRQ interference. Physical loaded checks must
-measure that cost, not infer it from the clean build.
+Wi-Fi hook execution time is not measured on hardware. The hook makes bounded
+board attempts and bounded publish attempts, but lwIP and preemption determine
+actual wall time. Routine traffic, retained status/summary, live log and DUMP
+share the unchanged 256-byte MQTT output ring. ERR_MEM is retried without
+blocking driving. Frame-size/host simulations are not a timing certificate.
 
-## Remaining acceptance
+The CPU meter uses the same non-inlined, non-cloned loop for the 4 ms
+interrupts-disabled boot calibration and its lowest-priority task. Symbol
+inspection confirms one `idle_meter_loop`. It replaces WFI sleep, increases
+power use, and measures core 0 only. With SMP=0, that includes Wi-Fi and
+interrupt time. Target accuracy and idle-board expected range remain
+**not established**; [CPU record](CPU_LOAD.md) gives the procedure.
 
-Use [the operator runbook](MQTT_RUNBOOK.md). All of these are **Not run**:
-S0-U01 cold power on NORMAL/TEST/BENCH/MQTT, S1-U04 reconnect, S1-U05
-rates/loss/CSV and polling/stack data under load, S1-U06 NORMAL-robot
-commands, S2-U01 independent motion/Wi-Fi windows, and independent M1/M2
-with MQTT. No network result gates local driving acceptance. Link loss is
-not ESTOP; GP21 is the real ESTOP in NORMAL. TEST/BENCH do not consume
-vehicle command queues; lift wheels for TEST.
+## Remaining hardware acceptance
+
+Use [the runbook](MQTT_RUNBOOK.md). All are **Not run**: S0-U01 cold power;
+S1-U04 reconnect/will timing; S1-U05 stream age/loss/rates, distance/duty/
+odometry, profile/detour/summary decode and loaded hook/stack timing; S1-U06
+commands; S1-U07 idle-board CPU measurement; S2-U01 independent motion/Wi-Fi
+windows; independent M1/M2 with MQTT. No MQTT result gates local driving
+acceptance. Link loss is not ESTOP. **GP21 is the real ESTOP** in NORMAL;
+TEST/BENCH do not consume vehicle command queues. Lift wheels for TEST.
