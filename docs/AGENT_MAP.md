@@ -176,6 +176,8 @@ vehicle task described below.
 ## TEST-only IMU acquisition
 
 - [GY-511 bring-up](IMU_BRINGUP.md) — steps 0/1, existing UART-off build settings, units, source credit and pending operator tilt/timing checks.
+- [Scale investigation](IMU_SCALE_INVESTIGATION.md) — partial hardware evidence, nominal datasheet units and pending six-face measurements.
+- [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM; default TEST is unchanged.
 - [IMU step 1 validation](IMU_STEP1_VALIDATION.md) — strict host/ARM, six-profile sizes, startup/UART disassembly proof, no hardware result.
 - [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
 - [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.

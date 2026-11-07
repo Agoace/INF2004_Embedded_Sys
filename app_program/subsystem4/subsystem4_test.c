@@ -6,6 +6,7 @@
 #if APP_TEST
 #include "imu_probe.h"
 #include "imu_hw.h"
+#include "imu_mark.h"
 #include "../platform/drv_time.h"
 
 static ID runner;
@@ -24,6 +25,10 @@ EXPORT void subsystem4_test(void)
     uint32_t gap_max = 0u;
     uint32_t missed = 0u;
     ID cyclic;
+#if APP_IMU_STREAM
+    imu_mark_t marker = {0};
+    uint32_t marks = 0u;
+#endif
     T_CCYC config = {.cycatr = TA_HLNG, .cychdr = (FP)release,
                      .cyctim = 10u, .cycphs = 10u};
 
@@ -31,7 +36,12 @@ EXPORT void subsystem4_test(void)
     config.cycatr |= TA_ASSPRC;
     config.assprc = TP_PRC1;
 #endif
-    tm_printf((UB *)"[TEST] S4-U01 operator tilt check: GY-511 for 30 s. "
+#if APP_IMU_STREAM
+    imu_hw_mark_init();
+    tm_printf((UB *)"[TEST] IMU_STREAM until power-off; GP20 prints MARK. "
+              "Other tests and destructive watchdog reset are skipped.\n");
+#endif
+    tm_printf((UB *)"[TEST] S4-U01 operator tilt check: GY-511. "
               "I2C0 GP0/1, 400 kHz, accel 100 Hz HR 2g, mag 75 Hz.\n");
     tm_printf((UB *)"[TEST] S4 no gyro; uncalibrated +X right +Y forward "
               "+Z up. Lift wheels; GP0/1 must not have a UART adapter.\n");
@@ -46,7 +56,13 @@ EXPORT void subsystem4_test(void)
         return;
     }
     previous = drv_time_us();
-    for (unsigned int cycle = 0u; cycle < 3000u; ++cycle) {
+    for (unsigned int cycle = 0u;
+#if APP_IMU_STREAM
+         ;
+#else
+         cycle < 3000u;
+#endif
+         ++cycle) {
         uint32_t now;
         uint32_t gap;
         bool valid;
@@ -66,6 +82,12 @@ EXPORT void subsystem4_test(void)
         if (gap > gap_max) {
             gap_max = gap;
         }
+#if APP_IMU_STREAM
+        if (imu_mark_update(&marker, imu_hw_mark_down(), drv_time_ms())) {
+            ++marks;
+            tm_printf((UB *)"[S4] MARK %lu\n", (unsigned long)marks);
+        }
+#endif
         valid = imu_probe_read(&probe, drv_time_ms(), &units);
         if ((cycle % 10u) == 9u) {
             float gravity;
@@ -77,7 +99,8 @@ EXPORT void subsystem4_test(void)
                       "m_mgauss %ld %ld %ld g_mg %ld pitch_ddeg %ld "
                       "roll_ddeg %ld read_us %lu max_us %lu "
                       "reads %lu faults %lu nack %lu timeout %lu "
-                      "id %lu cfg %lu gap_max_us %lu missed %lu\n",
+                      "id %lu cfg %lu gap_max_us %lu missed %lu "
+                      "ctrl1 %02x ctrl4 %02x\n",
                       (unsigned int)(valid && tilt),
                       (unsigned int)units.mag_valid,
                       (long)units.accel_mg[0], (long)units.accel_mg[1],
@@ -90,7 +113,8 @@ EXPORT void subsystem4_test(void)
                       (unsigned long)probe.timeouts,
                       (unsigned long)probe.identity_errors,
                       (unsigned long)probe.config_errors,
-                      (unsigned long)gap_max, (unsigned long)missed);
+                      (unsigned long)gap_max, (unsigned long)missed,
+                      (unsigned int)probe.ctrl1, (unsigned int)probe.ctrl4);
         }
     }
     (void)tk_stp_cyc(cyclic);

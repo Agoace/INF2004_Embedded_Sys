@@ -82,7 +82,8 @@ Robot uses five application tasks, three inherited mutexes, two cyclic
 handlers, two message buffers (256/4096 bytes) and one result event flag.
 TEST starts four service/motion tasks, neither button task; BENCH starts
 only motion/bench. S4 TEST creates one temporary 10 ms cyclic for its 30 s
-raw IMU check, then deletes it; no robot task or object is added.
+raw IMU check, then deletes it; IMU_STREAM=1 keeps it until power-off and
+uses GP20 for debounced MARK lines. No robot task or object is added.
 Existing kernel limits suffice. See [IMU bring-up](docs/IMU_BRINGUP.md).
 MQTT adds a health task/cyclic and three bounded event/command MBFs.
 Approved shared template changes are listed in [the ledger](docs/TEMPLATE_CHANGES.md).

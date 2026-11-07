@@ -78,6 +78,7 @@ int main(void)
     assert(!imu_probe_read(&probe, 0u, &value)); /* setup, no sample yet */
     setup_calls = calls;
     assert(probe.ready && !probe.faults);
+    assert(probe.ctrl1 == 0x57u && probe.ctrl4 == 0x88u);
     assert(registers[0][0x20] == 0x57u && registers[0][0x23] == 0x88u);
     assert(registers[1][0] == 0x18u && registers[1][1] == 0x20u);
     assert(registers[1][2] == 0u);

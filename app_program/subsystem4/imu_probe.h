@@ -15,6 +15,9 @@ typedef struct {
     uint32_t total_us;
     uint32_t retry_at;
     bool ready;
+    /* Last successful setup readbacks, not live register reads. */
+    uint8_t ctrl1;
+    uint8_t ctrl4;
 } imu_probe_t;
 
 void imu_probe_init(imu_probe_t *probe);

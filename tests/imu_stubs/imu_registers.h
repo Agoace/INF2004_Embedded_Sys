@@ -29,6 +29,10 @@ extern fake_timer_t fake_timer;
 #define I2C_IC_DATA_CMD_RESTART_BITS (1u << 10)
 #define I2C_IC_DATA_CMD_CMD_BITS (1u << 8)
 #define GPIO_FUNC_I2C 3u
+#define GPIO_IN 0u
+void gpio_init(unsigned int pin);
+void gpio_set_dir(unsigned int pin, unsigned int direction);
+bool gpio_get(unsigned int pin);
 static inline void hw_set_bits(volatile uint32_t *p, uint32_t value)
 { *p |= value; }
 static inline void hw_clear_bits(volatile uint32_t *p, uint32_t value)

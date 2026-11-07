@@ -194,6 +194,12 @@ the next plain `make` goes back to the defaults.
 | `TEST` | **`0`**, `1` | `1` compiles every `subsystemN_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
 
+For the operator-only GY-511 tilt check, use `TEST=1 IMU_STREAM=1` with
+`SMP=0 WIFI=none NET=none`. It skips other tests and streams S4 until power-off;
+GP20 adds position markers. The IMU requires USB only and `CRASH_REPORT=0`.
+See [IMU bring-up](docs/IMU_BRINGUP.md#continuous-operator-stream). Default
+TEST without this option is unchanged.
+
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
 `tm_printf`: it waits in a buffer until the kernel's USB task sends it. If the
 program crashes, no task runs again, so the last messages and the kernel's

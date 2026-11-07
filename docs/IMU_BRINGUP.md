@@ -92,11 +92,14 @@ first-cycle `read_us`, is not included in the maximum/total, and is not a
 sample. Retry-wait cycles report zero. Faulting read/setup work is included
 in the maximum/total. `reads` counts complete successful raw read pairs.
 
-**Hardware I2C read time: Not run.** Two six-byte register reads need about
-162 I2C clock periods, or 405 us of ideal wire time at 400 kHz, before software,
-START/STOP and preemption costs. This is an estimate, not a measurement. Record
-actual `read_us`, `max_us`, the cycle gaps and error counts in S4-U01. An absent
-device must show counted errors without stopping USB or the motion task.
+**Measured on 02f7c37:** read wall time 529–542 us, maximum 624 us per
+nominal 10 ms cycle; maximum cycle gap 18975 us, missed wakes zero. Two S4
+windows each gave 2999 successful reads and no bus/config faults. This
+measurement is not a result for the later continuous-stream build. Mag is
+still read each cycle; no cadence or scale change was made. An absent-device
+hardware check remains pending. See the
+[scale investigation](IMU_SCALE_INVESTIGATION.md) for the unexpected 1.375 g
+static magnitude and the incomplete operator tilt evidence.
 
 ## Operator tilt check (Not run)
 
@@ -120,6 +123,35 @@ device must show counted errors without stopping USB or the motion task.
    Reconnect only with power off and repeat the normal test.
 7. Record the result in [S4 test log](../testing/subsystem4/TEST_LOG.md).
    Host success does not replace this procedure or a cold-power boot check.
+
+## Continuous operator stream
+
+Build from `build_make` with:
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 IMU_STREAM=1 -j4 --output-sync=target
+```
+
+`IMU_STREAM=1` requires TEST and rejects BENCH. The image name ends in
+`_test_imu_stream`; the option is also in the rebuild profile, so changing it
+rebuilds all objects. It starts the normal TEST subsystem services but calls
+only S4's check, indefinitely. It skips all other subsystem tests, including
+the short S2 motor command and the intentional watchdog reset. The normal
+motion watchdog remains active; this option does not disable safety logic.
+Do not use it to drive. Default `TEST=1` without this option stays unchanged:
+all tests, 30 s S4 window, then the existing destructive watchdog check.
+
+During the stream, press and release GP20 after each position settles. A
+30 ms debounced press prints `[S4] MARK n`; holding the button does not repeat.
+GP20 is active-low with a pull-up, is polled once per cycle and has no IRQ.
+The stream prints an S4 line every nominal 100 ms until power-off. The saved
+setup readbacks `ctrl1` and `ctrl4` should be 57 and 88 (hex); they are not
+additional live register reads. Counter wrap during a very long run is normal.
+
+The new stream/marker hardware procedure is **Not run**. Repeat level and
+nose-up/down, side tilts and six static faces as described in the
+[scale investigation](IMU_SCALE_INVESTIGATION.md#next-measurements-not-run).
+Do not tune a scale factor from the first run's single resting pose.
 
 ## Later work: not implemented
 

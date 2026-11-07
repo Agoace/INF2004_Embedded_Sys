@@ -14,6 +14,7 @@ For repository structure and implementation entry points, see the [Agent Navigat
 ## Records
 
 - [GY-511 IMU bring-up](IMU_BRINGUP.md) — TEST-only LSM303DLHC, I2C0 GP0/GP1, raw units, axis map, bounded reads and pending operator tilt/timing check.
+- [IMU scale investigation](IMU_SCALE_INVESTIGATION.md) — datasheet/config/decode audit, partial hardware timing and unexplained static magnitude; six-face procedure.
 - [IMU step 1 validation](IMU_STEP1_VALIDATION.md) — host tests, six clean profiles, strict ARM, startup/UART proof and hardware limits.
 
 - [CPU load observation](CPU_LOAD.md) — calibrated lowest-priority meter, host checks, target measurement limits.

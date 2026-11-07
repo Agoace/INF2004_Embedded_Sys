@@ -1,6 +1,7 @@
 /* TEST-only I2C0 adapter. Register ideas: Jaison, b2a6bb6. */
 #ifndef IMU_HW_H
 #define IMU_HW_H
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 #define IMU_ACCEL_ADDR 0x19u
@@ -14,4 +15,7 @@ int imu_hw_init(void);
 int imu_hw_read(uint8_t address, uint8_t reg, uint8_t *out, size_t length);
 int imu_hw_write(uint8_t address, uint8_t reg, uint8_t value);
 uint32_t imu_hw_time_us(void);
+/* STREAM-only GP20 input, active low, internal pull-up. */
+void imu_hw_mark_init(void);
+bool imu_hw_mark_down(void);
 #endif

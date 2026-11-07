@@ -30,7 +30,7 @@ void imu_probe_init(imu_probe_t *probe)
     memset(probe, 0, sizeof(*probe));
 }
 
-static int configure(void)
+static int configure(imu_probe_t *probe)
 {
     uint8_t id[3];
     int result = imu_hw_init();
@@ -70,6 +70,12 @@ static int configure(void)
         if (id[0] != s->value) {
             return PROBE_CONFIG_ERROR;
         }
+        if ((s->address == IMU_ACCEL_ADDR) && (s->reg == 0x20u)) {
+            probe->ctrl1 = id[0];
+        }
+        if ((s->address == IMU_ACCEL_ADDR) && (s->reg == 0x23u)) {
+            probe->ctrl4 = id[0];
+        }
     }
     return IMU_IO_OK;
 }
@@ -98,7 +104,7 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now_ms, imu_units_t *out)
             probe->last_us = 0u;
             return false;
         }
-        result = configure();
+        result = configure(probe);
         probe->ready = result == IMU_IO_OK;
         /* Wait for actual conversions on the next cycle. */
         if (probe->ready) {

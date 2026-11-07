@@ -17,11 +17,20 @@ void gpio_set_function(unsigned int pin, unsigned int function)
     assert((pin < 2u) && (function == GPIO_FUNC_I2C));
     pins |= 1u << pin;
 }
-void gpio_pull_up(unsigned int pin) { assert(pin < 2u); }
+void gpio_pull_up(unsigned int pin) { assert(pin < 2u || pin == 20u); }
+void gpio_init(unsigned int pin) { assert(pin == 20u); }
+void gpio_set_dir(unsigned int pin, unsigned int direction)
+{
+    assert(pin == 20u && direction == GPIO_IN);
+}
+bool gpio_get(unsigned int pin) { assert(pin == 20u); return false; }
 
 int main(void)
 {
     uint8_t bytes[6];
+
+    imu_hw_mark_init();
+    assert(imu_hw_mark_down());
 
     assert(imu_hw_init() == IMU_IO_TIMEOUT); /* reset never completes */
     fake_reset.reset_done = RESETS_RESET_I2C0_BITS;

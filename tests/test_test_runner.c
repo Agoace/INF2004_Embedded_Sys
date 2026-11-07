@@ -15,10 +15,15 @@ INT tk_get_prc(void) { return 1; }
 ID app_task_start(FP entry,PRI pri,UW core,const char *name) {
     (void)entry;(void)pri;(void)core;(void)name;assert(0);return E_SYS;
 }
+#if APP_IMU_STREAM
+#define EXPECT_SUBSYSTEM(n) assert(priority == 20 && n == 4 && tests == 0u)
+#else
+#define EXPECT_SUBSYSTEM(n) assert(priority == 20 && tests == n - 1u)
+#endif
 #define SUBSYSTEM(n) \
 ER subsystem##n##_init(void) { assert(priority==1 && inits==n-1u && starts==0u);++inits;return E_OK; } \
 ER subsystem##n##_start(void) { assert(priority==1 && inits==5u && starts==n-1u);++starts;return E_OK; } \
-void subsystem##n##_test(void) { assert(priority==20 && tests==n-1u);++tests; }
+void subsystem##n##_test(void) { EXPECT_SUBSYSTEM(n); ++tests; }
 SUBSYSTEM(1)
 SUBSYSTEM(2)
 SUBSYSTEM(3)
@@ -41,7 +46,17 @@ int main(int argc,char **argv) {
 #if APP_TEST
     assert(priority_calls==1u);
     if (fail_priority) assert(priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==1u);
-    else assert(priority==20 && tests==5u && reports==1u && watchdog_tests==1u && aborts==0u);
+#if APP_IMU_STREAM
+    else {
+        assert(priority == 20 && tests == 1u && reports == 0u);
+        assert(watchdog_tests == 0u && aborts == 0u);
+    }
+#else
+    else {
+        assert(priority == 20 && tests == 5u && reports == 1u);
+        assert(watchdog_tests == 1u && aborts == 0u);
+    }
+#endif
 #else
     assert(priority_calls==0u && priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==0u);
 #endif

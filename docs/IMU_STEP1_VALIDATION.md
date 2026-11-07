@@ -2,8 +2,10 @@
 
 ## Scope
 
-Local helper `mtk3-imu`, based on `mtk3-staging` `7034501`. No push, flash,
-network connection or hardware measurement was used. The TEST-only design
+Original software checks for `02f7c37`, helper `mtk3-imu`, based on
+`mtk3-staging` `7034501`. The worker did not push, flash or connect to a
+network. Later operator evidence and stream checks are recorded below.
+The TEST-only design
 and pending procedures are in [IMU bring-up](IMU_BRINGUP.md).
 
 Step 0 needs no template deviation: existing make defaults already disable
@@ -71,7 +73,33 @@ Recompiling the TEST hardware adapter with UART enabled and GP0/GP1 not
 free fails at the explicit compile-time `#error`, as required. This is a
 compile-only rejection check, not an alternate UART firmware build.
 
-## Limits
+## Continuous-stream follow-up
+
+After the operator's two hardware windows, the helper adds `IMU_STREAM=1`,
+saved setup-register output and a debounced GP20 marker. The decoder, scales,
+mag cadence and default TEST sequence are unchanged. See the
+[scale audit](IMU_SCALE_INVESTIGATION.md) for the hardware evidence and limits.
+
+- 130/130 host tests pass. Added marker tests cover bounce, a held button,
+  release/rearm and timestamp wrap. The stream-runner test proves only S4
+  is called and the report/destructive watchdog test is skipped; priority
+  failure also aborts without calling S4.
+- All six clean profiles plus the new SMP0 USB/radio-off stream profile have
+  zero warnings; strict ARM checks of six changed units and retained SDK link
+  proofs pass in all seven. No atomic runtime or unresolved symbols.
+- Updated sizes: TEST 63124/672/119604, MQTT-TEST 370592/888/183756;
+  IMU stream 56468/672/119372 (text/data/bss bytes). Other sizes are unchanged.
+- Stream ELF retains `subsystem4_test`, `imu_hw_mark_init/down` and
+  `imu_mark_update`, but none of the other subsystem test functions or
+  `subsystem2_watchdog_test`. Normal motion watchdog safety is unchanged.
+- Startup/UART proof and compile rejection still pass in all seven profiles.
+  The build-profile checker now includes the IMU stream option so objects
+  cannot be reused under the wrong mode. Private build copies and generated
+  SDK proof ELFs were deleted after validation.
+- Actual continuous-stream timing/markers are Not run; mag still uses one
+  read each cycle. The earlier 529–542 us/max 624 us is not a new measurement.
+
+## Original hardware limits at 02f7c37 handoff
 
 S4-U01 tilt, axis orientation, absent-sensor responsiveness and measured
 per-read wall time are **Not run**. S4-U02 cold-power checks are **Not run**.

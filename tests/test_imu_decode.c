@@ -57,6 +57,10 @@ int main(void)
         assert(units.mag_mgauss[1] == (32767 * 1000) / 1100);
         assert(units.mag_mgauss[2] == (-32768 * 1000) / 980);
     }
+    /* Reported 1375 mg is 0x55f0 left-aligned, not a hidden 1.375 gain. */
+    assert(imu_decode((uint8_t[6]){0u, 0u, 0u, 0u, 0xf0u, 0x55u},
+                      m, &imu_robot_axes, &units));
+    assert(units.accel_mg[2] == 1375);
     assert(imu_tilt((int32_t[3]){0, 0, 1000}, &g, &pitch, &roll));
     near(g, 1000.0f);
     near(pitch, 0.0f);

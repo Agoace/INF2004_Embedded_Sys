@@ -19,6 +19,18 @@
 #define SDA_PIN 0u
 #define SCL_PIN 1u
 
+void imu_hw_mark_init(void)
+{
+    gpio_init(20u);
+    gpio_set_dir(20u, GPIO_IN);
+    gpio_pull_up(20u);
+}
+
+bool imu_hw_mark_down(void)
+{
+    return !gpio_get(20u);
+}
+
 static uint32_t started;
 static uint32_t spins;
 
