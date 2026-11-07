@@ -90,6 +90,21 @@ ifeq ($(BENCH),1)
 BENCH_SUFFIX := _bench
 endif
 
+# IMU_STREAM=1: TEST-only S4 diagnostics until power-off; no other tests.
+IMU_STREAM ?= 0
+ifneq ($(filter $(IMU_STREAM),0 1),$(IMU_STREAM))
+$(error Unknown IMU_STREAM '$(IMU_STREAM)'; use 0 or 1)
+endif
+ifeq ($(IMU_STREAM),1)
+ifneq ($(TEST),1)
+$(error IMU_STREAM=1 requires TEST=1)
+endif
+ifeq ($(BENCH),1)
+$(error IMU_STREAM=1 cannot use BENCH=1)
+endif
+IMU_STREAM_SUFFIX := _imu_stream
+endif
+
 # DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
 # It changes timing. Default 0 compiles the diagnostic paths out.
 DIAG ?= 0
@@ -135,7 +150,7 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -196,6 +211,7 @@ CFLAGS  += -DCNF_SMP=1
 ASFLAGS += -DCNF_SMP=1
 endif
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
+CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -228,7 +244,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

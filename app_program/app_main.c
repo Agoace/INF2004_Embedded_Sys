@@ -96,6 +96,10 @@ EXPORT INT usermain(void)
     CHECK(test_priority, "TEST runner priority 20");
     if (test_priority >= E_OK) {
         tm_printf((UB *)"[TEST] === test run start (runner priority 20) ===\n");
+#if APP_IMU_STREAM
+        /* Operator-only S4 stream: no S2 command or destructive reset test. */
+        subsystem4_test();
+#else
         subsystem1_test();
         subsystem2_test();
         subsystem3_test();
@@ -105,6 +109,7 @@ EXPORT INT usermain(void)
         /* Destructive reset check follows every other subsystem test. */
         subsystem2_watchdog_test();
         tm_printf((UB *)"[TEST] === test run end ===\n");
+#endif /* APP_IMU_STREAM */
     } else {
         tm_printf((UB *)"[TEST] ABORT: cannot set runner priority 20; tests "
                         "not run\n");
