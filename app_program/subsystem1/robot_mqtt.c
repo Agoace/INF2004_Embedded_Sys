@@ -47,7 +47,9 @@ static void configure(void) {
         if (a<0 || b<0) { good=false;break; }
         token[i]=(uint8_t)((unsigned int)a*16u+(unsigned int)b);any|=token[i];
     }
-    commands_enabled=ROBOT_MQTT_COMMANDS_ENABLED!=0 && good && any!=0u;
+    /* Absent/empty/all-zero example token: ESTOP-only fallback in decoder.
+     * A valid configured token restricts EVERY command, including ESTOP. */
+    commands_enabled=good && any!=0u;
     configured=true;
 }
 void __attribute__((weak)) robot_network_state(rm_state_t *out) {
