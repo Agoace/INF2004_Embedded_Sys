@@ -16,6 +16,6 @@ void robot_network_metrics(rm_heartbeat_t *out);
 void robot_network_state(rm_state_t *out);
 int robot_network_sonar(uint32_t *cursor,rm_sonar_t *out,uint32_t *missed);
 void robot_health_collect(rm_heartbeat_t *out);
-/* MQTT log request, Wi-Fi task context. Does not halt RAM logging. */
-void robot_network_dump(uint32_t request_id);
+/* Vehicle posts a single pending dump request. No lwIP or logging waits. */
+int robot_network_dump(uint32_t request_id);
 #endif
