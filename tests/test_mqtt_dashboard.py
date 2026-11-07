@@ -101,7 +101,7 @@ def state_v3(name="state_idle", duty=(-250, 1000), heading=-4500, rate=-123,
 
 
 def heartbeat_v(version=2, cpu=123, name="heartbeat"):
-    frame = bytearray(SAMPLES[name])
+    frame = bytearray(SAMPLES[name][:100])
     frame[0] = version
     struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
     return bytes(frame)
@@ -716,6 +716,7 @@ class RobotStatusTests(ModelCase):
         self.assertIn("delivery is unlikely", estop["reason"])
         self.assertIn("GP21", estop["reason"])
         self.model.ingest("robot/status", ONLINE)
+        self.fresh_idle()  # a session boundary invalidates the previous idle state
         self.assertEqual(self.button("estop")["reason"], "")
 
     def test_robot_comes_back_online(self):
@@ -1576,6 +1577,168 @@ class CliTests(unittest.TestCase):
         code, started, error = self.run_main(["--http-port", "0", "--host", "192.0.2.10"])
         self.assertEqual((code, started), (0, [("192.0.2.10", 1883, False)]))
         self.assertIn("http://127.0.0.1:0/", error)
+
+
+def boot_frame(frame, boot, version=2):
+    return bytes([version]) + frame[1:] + struct.pack("<I", boot)
+
+
+def reboot_state(boot, uptime=1000, name="state_idle"):
+    frame = bytearray(state_v3(name))
+    struct.pack_into("<I", frame, 4, uptime)
+    return boot_frame(frame, boot, 4)
+
+
+def reboot_heartbeat(boot, uptime=1000, mask=8, unavailable=7):
+    frame = bytearray(heartbeat_v(2))
+    frame[0], frame[3] = 3, mask
+    struct.pack_into("<I", frame, 4, uptime)
+    return bytes(frame) + struct.pack("<II", boot, unavailable)
+
+
+def reboot_batch(boot, **kwargs):
+    frame = batch(**kwargs)
+    return b"\x02" + frame[1:32] + struct.pack("<I", boot) + frame[32:]
+
+
+class DashboardRebootTests(ModelCase):
+    def online(self, boot, uptime=1000):
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 1, boot))
+        self.model.ingest("robot/state", reboot_state(boot, uptime))
+
+    def test_boot_change_invalidates_idle_state_and_old_state_cannot_reenable_start(self):
+        self.online(100)
+        self.assertTrue(self.button("start")["enabled"])
+        self.model.ingest("robot/heartbeat", reboot_heartbeat(200))
+        self.assertIsNone(self.model.state)
+        self.assertFalse(self.button("start")["enabled"])
+        self.model.ingest("robot/state", reboot_state(100))  # queued old idle
+        self.assertIsNone(self.model.state)
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 1, 100), retained=True)
+        self.assertIsNone(self.model.status)  # old retained status cannot override boot B
+        self.online(200, uptime=2000)
+        self.assertTrue(self.button("start")["enabled"])
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 200)
+
+    def test_summary_is_labelled_previous_boot_and_cannot_replace_current_summary(self):
+        self.online(100)
+        self.model.ingest("robot/summary", boot_frame(summary(run=8), 100))
+        self.online(200)
+        self.assertIn("previous boot/session", self.panel("summary")["note"])
+        self.assertEqual(self.rows("summary")["Run ID"], 8)
+        self.model.ingest("robot/summary", boot_frame(summary(run=1), 200))
+        self.model.ingest("robot/summary", boot_frame(summary(run=8), 100), retained=True)
+        self.assertEqual(self.rows("summary")["Run ID"], 1)
+        self.assertNotIn("previous boot/session", self.panel("summary")["note"])
+
+    def test_retained_summary_does_not_select_live_boot(self):
+        self.model.ingest("robot/summary", boot_frame(summary(), 99), retained=True)
+        self.assertIsNone(self.model.snapshot()["boot"]["boot_id"])
+        self.online(200)
+        self.assertIn("previous boot/session", self.panel("summary")["note"])
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 200)
+
+    def test_detours_events_scan_and_pending_command_do_not_cross_boots(self):
+        self.online(100)
+        self.model.ingest("robot/detour", boot_frame(detour(sequence=10), 100))
+        self.model.ingest("robot/obstacle", boot_frame(obstacle(scan=10), 100))
+        self.model.ingest("robot/event", boot_frame(SAMPLES["event_start_ok"][:16], 100))
+        self.model.note_command("start", 9, True)
+        self.online(200)
+        self.assertIsNone(self.model.pending)
+        self.assertIsNone(self.model.last_decision)
+        self.assertEqual(len(self.model.events), 0)
+        self.assertEqual(len(self.model.detours), 0)
+        self.assertIsNone(self.model.obstacle)
+        self.model.ingest("robot/detour", boot_frame(detour(sequence=1), 200))
+        self.model.ingest("robot/detour", boot_frame(detour(sequence=11), 100))
+        self.assertEqual(len(self.model.detours), 1)
+        self.assertEqual(self.rows("obstacle")["Detours missed (sequence gaps)"], 0)
+        self.model.ingest("robot/obstacle", boot_frame(obstacle(scan=1), 200))
+        self.assertEqual(self.rows("obstacle")["Scans missed (ID gaps)"], 0)
+
+    def test_sonar_sequence_reuse_and_imu_placeholders_reset(self):
+        self.online(100)
+        self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_valid"][:32], 100))
+        self.model.ingest("robot/imu", imu_snapshot())
+        self.assertTrue(self.model.sonar_profile)
+        self.online(200)
+        self.assertFalse(self.model.sonar_profile)
+        self.assertTrue(self.panel("imu")["placeholder"])
+        self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_valid"][:32], 200))
+        self.assertTrue(self.model.sonar_profile)
+        self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_error"][:32], 100))
+        self.assertEqual(self.model.sonar["fields"]["boot_id"], 200)
+
+    def test_two_boots_both_generation_two_rows_survive_in_dashboard_log(self):
+        self.model.ingest("robot/log", reboot_batch(100, generation=2, count=2))
+        self.model.ingest("robot/log", reboot_batch(200, generation=2, count=2))
+        self.assertIn("4 rows", self.model.log.summary()[0])
+        self.assertEqual(self.rows("log")["Live rows received"], 2)  # current boot only
+        self.assertEqual(self.model.log.sessions.boot_id, 200)
+        self.model.ingest("robot/log", reboot_batch(100, generation=2, count=2, first=2))
+        self.assertEqual(self.rows("log")["Live rows received"], 2)
+        self.assertEqual(self.model.log.sessions.boot_id, 200)
+
+    def test_legacy_uptime_rollback_clears_live_panels_and_labels_inference(self):
+        a = bytearray(state_v3())
+        struct.pack_into("<I", a, 4, 5000)
+        self.model.ingest("robot/state", a)
+        self.model.ingest("robot/detour", detour())
+        self.model.ingest("robot/summary", summary())
+        struct.pack_into("<I", a, 4, 100)
+        self.model.ingest("robot/state", a)
+        self.assertEqual(len(self.model.detours), 0)
+        self.assertIn("previous boot/session", self.panel("summary")["note"])
+        self.assertTrue(self.model.snapshot()["boot"]["inferred"])
+        self.assertIn("inferred legacy session", self.rows("vehicle")["Boot / session"])
+
+    def test_broker_disconnect_alone_does_not_invent_boot(self):
+        self.online(100)
+        before = self.model.snapshot()["boot"]
+        self.model.set_broker_connected(False)
+        self.model.set_broker_connected(True)
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 1, 100), retained=True)
+        self.assertEqual(self.model.snapshot()["boot"], before)
+
+    def test_new_retained_status_before_live_boot_is_cached_not_applied_early(self):
+        self.online(100)
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 1, 200), retained=True)
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 100)
+        self.model.ingest("robot/state", reboot_state(200))
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "online")
+        self.assertEqual(self.model.snapshot()["boot"]["boot_id"], 200)
+
+    def test_foreign_offline_does_not_block_current_boot(self):
+        self.online(100)
+        self.online(200)
+        self.model.ingest("robot/status", struct.pack("<BBI", 2, 2, 100), retained=True)
+        self.assertTrue(self.button("start")["enabled"])
+
+    def test_absent_and_busy_are_separate_health_rows(self):
+        self.model.ingest("robot/heartbeat", reboot_heartbeat(100, mask=8, unavailable=42))
+        rows = self.rows("health")
+        self.assertEqual(rows["Unavailable boards (last explicit read)"], "vehicle")
+        self.assertEqual(rows["Unavailable observations (total)"], 42)
+        self.assertEqual(rows["Busy reads: line / sonar / motion / vehicle / health"],
+                         "6 / 7 / 8 / 9 / 10")
+        self.model.ingest("robot/heartbeat", reboot_heartbeat(100, mask=31))
+        self.assertEqual(self.rows("health")["Unavailable boards (last explicit read)"],
+                         "line, sonar, motion, vehicle, health")
+        self.model.ingest("robot/heartbeat", reboot_heartbeat(100, mask=0))
+        self.assertEqual(self.rows("health")["Unavailable boards (last explicit read)"], "none")
+
+    def test_retained_old_summary_is_not_live_presence_for_dump(self):
+        self.model.status = None
+        self.model.last_message_ms = None
+        self.model.ingest("robot/summary", boot_frame(summary(), 99), retained=True)
+        self.assertFalse(self.button("dump")["enabled"])
+        self.assertIsNone(self.model.last_message_ms)
+
+    def test_old_heartbeat_does_not_invent_absence(self):
+        self.model.ingest("robot/heartbeat", heartbeat_v(2))
+        self.assertEqual(self.rows("health")["Unavailable boards (last explicit read)"],
+                         "not reported (old heartbeat)")
 
 
 if __name__ == "__main__":
