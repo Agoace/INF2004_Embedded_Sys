@@ -217,7 +217,7 @@ vehicle task described below.
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and paced QoS1 log stream.
 - [`robot_network.h`](../app_program/subsystem1/robot_network.h), [`network_queue.c`](../app_program/subsystem1/network_queue.c) — bounded live events and ordinary/ESTOP command queues, losses and provider contract.
 - [`robot_health.c`](../app_program/subsystem1/robot_health.c) — priority31 cyclic producer, app-stack scan and bounded health board.
-- [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`scripts/mqtt_robot.py`](../scripts/mqtt_robot.py) — explicit binary codec and Paho2 VERSION2 receiver/CSV/commands.
+- [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`scripts/robot_wire.py`](../scripts/robot_wire.py), [`scripts/mqtt_robot.py`](../scripts/mqtt_robot.py) — explicit binary codec, pure Python decoder with log merge/gap store (no Paho), and Paho2 VERSION2 receiver/CSV/commands.
 - [`robot_mqtt_secrets.h.example`](../app_program/subsystem1/robot_mqtt_secrets.h.example) — app-owned private-header example; do not edit the template config example.
 - [`vehicle_board.h`](../app_program/vehicle/vehicle_board.h), [`vehicle_mqtt.c`](../app_program/vehicle/vehicle_mqtt.c), [`vehicle_network_policy.c`](../app_program/vehicle/vehicle_network_policy.c) — vehicle read board, bounded cross-board adapters and idle/command policy.
 - [`tests/mqtt_protocol.cmake`](../tests/mqtt_protocol.cmake), [`network_checks.cmake`](../tests/network_checks.cmake), [`mqtt_client_checks.cmake`](../tests/mqtt_client_checks.cmake) — C/Python packing, board/queue/log and mocked transport regression tests.
