@@ -65,7 +65,8 @@ def c_samples():
 
 SAMPLES = c_samples()
 TOPICS = {"state": "robot/state", "sonar": "robot/sonar", "event": "robot/event",
-          "heartbeat": "robot/heartbeat"}
+          "heartbeat": "robot/heartbeat", "obstacle": "robot/obstacle",
+          "status": "robot/status"}
 
 
 def topic_for(name):
@@ -281,7 +282,7 @@ class StaleTests(ModelCase):
     def test_malformed_messages_are_counted_and_change_nothing(self):
         self.feed("state_idle")
         good = SAMPLES["state_idle"]
-        for bad in (b"", good[:-1], b"\x02" + good[1:]):
+        for bad in (b"", good[:-1], b"\x09" + good[1:]):
             self.model.ingest("robot/state", bad)
         self.model.ingest("robot/other", good)
         self.model.ingest("robot/log", b"\x01\x05\x00")
@@ -526,6 +527,36 @@ class ObstacleTests(ModelCase):
         self.model.ingest("robot/obstacle", obstacle()[:-1])
         self.assertEqual(self.model.snapshot()["discarded"], 2)
         self.assertEqual(self.rows("obstacle")["Scan ID"], 7)
+
+
+class CPackedNewTopicTests(ModelCase):
+    def test_c_packed_obstacle_drives_the_panel(self):
+        self.feed("obstacle")
+        rows = self.rows("obstacle")
+        self.assertEqual(rows["Closest"], "too near (below sensor range)")
+        self.assertEqual(rows["Right clearance"], "blocked")
+        self.assertEqual(rows["Left clearance"], "15 deg (3 steps free)")
+        self.assertEqual(rows["Detour decision"], "left")
+        self.assertEqual((rows["Scan ID"], rows["Profile word"]), (0x01020304, "0x5a5a"))
+        chart = self.panel("obstacle")["chart"]
+        self.assertEqual(chart["closest"], {"angle": -30, "mm": 510})
+
+    def test_c_packed_status_drives_the_robot_link(self):
+        self.model.status = None
+        self.feed("state_idle")
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "unknown")
+        self.feed("status_online")
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "online")
+        self.feed("status_offline")
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "offline")
+        self.assertFalse(self.button("start")["enabled"])
+        self.assertTrue(self.button("estop")["enabled"])
+
+    def test_c_packed_state_is_v2_with_distance_fields(self):
+        self.assertEqual((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]), (60, 2))
+        self.feed("state_idle")
+        self.assertEqual(self.rows("wheels")["Distance left / right / average"], "0 / 0 / 0 mm")
+        self.assertTrue(self.button("start")["enabled"])
 
 
 class ReservedTopicTests(ModelCase):
