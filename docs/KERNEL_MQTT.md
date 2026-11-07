@@ -147,19 +147,63 @@ events give opcode/status, not a request-ID acknowledgment. Broker PUBACK
 is not robot acceptance. Policy rejections and all network queue problems
 never become vehicle or motor faults.
 
-## RAM dump and delivery limits
+## Live log stream and DUMP refill
 
-`robot/log` uses one QoS1 frame at a time, no faster than 50 ms. Other topics
-have priority. The first successful bounded log-index read fixes generation
-and committed row/event highwater. Pending local MBF writes are not flushed
-or waited for. Rows continue to append. BEGIN, KR1 rows, VE events and END
-are explicit records. If a new session resets generation, emit ABORT instead
-of mixing runs. The snapshot stays fixed across failed BEGIN attempts.
+`robot/log` carries two streams from [`log_stream.c`](../app_program/subsystem1/log_stream.c).
+Both read the RAM log through bounded readers and never wait for the logger.
+Wire layouts are in [MQTT_WIRE.md](MQTT_WIRE.md#ram-log), the dashboard contract.
 
-Advance a log cursor only after PUBACK. In this SDK's lwIP, disconnect
-**deletes pending requests without calling their callbacks**; the connection
-handler explicitly clears the pending-log marker and retries the same frame
-on reconnect. QoS1 can duplicate a frame; use dump ID/generation/index.
+**Live stream (QoS 0, freshness first).** A cursor follows the newest KR1
+rows. It publishes 10 rows when 10 are waiting, or fewer when the oldest has
+waited 100 ms: about one 192-byte batch every 100 ms at 100 rows/s. Each batch
+holds the robot uptime when it was built and when the newest row was stored,
+so a dashboard can show data age. If the cursor lags by more than 100 rows
+(about 1 s) or the link was lost, it jumps to the newest 10 rows and reports
+the skipped count. It never replays a backlog. A new run generation restarts
+at index 0 and reports old rows that were never published. QoS 0 means no
+head-of-line blocking: a slow or stalled broker cannot delay newer rows, and
+no ACK is awaited. A failed publish retries after 50 ms with the same cursor.
+At most one live batch is published per poll.
+
+The newest-row time comes from the telemetry task. It stores the uptime when it
+commits each row (`MQTT` builds only, one 32-bit store). Age is the time since
+the row entered the RAM log. It does not include the sensor sample time or
+network delay.
+
+**DUMP refill (QoS 1, completeness).** The `DUMP` command freezes the run
+generation and the row/event counts. The robot sends BEGIN, then batches of
+12 rows and 12 events, then END. Up to three QoS 1 batches are in flight (the
+lwIP request table holds four). The refill cursor advances only on PUBACK,
+in send order. A failed acknowledgement or a reconnect resends from the
+acknowledged cursor, so duplicates are possible: drop them by
+(generation, index). A new run generation sends ABORT. At most two DUMP
+frames are published per poll.
+
+**How the streams share the link.** Live frames use no QoS 1 request slot, so
+a DUMP cannot delay them. Each poll serves live first (one batch), then DUMP
+(two frames). The Wi-Fi poll, the lwIP send buffer and the network are the
+shared resources. Per poll the hook publishes up to 4 routine frames, 1 live
+batch and 2 DUMP frames.
+
+**Throughput.** The host simulation in `test_log_stream_dump_throughput`
+gives a full 4501-row, 512-event DUMP in 2.8 s at 20 ms round-trip time,
+14.2 s at 100 ms and 28.4 s at 200 ms (three batches per round trip, polls
+every 10 ms). The previous design needed at least 251 s. The 20 s target holds
+for round trips up to about 140 ms. These are simulations, not hotspot
+measurements.
+
+**Frame size.** The lwIP output ring is 256 bytes (`MQTT_OUTPUT_RINGBUF_SIZE`
+default; not changed). The largest frame (a 12-record QoS 1 batch) needs
+1 + 2 + 2 + 9 + 2 + 224 = 240 of its 255 usable bytes. A live batch of 10 rows
+needs 206. No template change was needed.
+
+**Memory.** The streams use 560 bytes of static RAM (frame and record buffers
+and cursors), not task stack.
+
+In this SDK's lwIP, disconnect **deletes pending requests without calling
+their callbacks**; the connection handler rewinds the DUMP to its acknowledged
+cursor and makes the live stream jump. QoS1 can duplicate a frame; use
+generation and index.
 There is no promise of a complete dump under continued disconnect, reset,
 new runs or storage loss. State/sonar/events/heartbeat use QoS0, not retained;
 sequence gaps and health counters expose known losses. `publish_ok` means

@@ -133,7 +133,7 @@ python3 scripts/mqtt_robot.py --host <LAPTOP_ROBOT_IP> --command estop
 ```
 
 CALIBRATE and START are idle-only; START requires successful calibration.
-CALIBRATE returns idle without starting navigation. DUMP is paced and can
+CALIBRATE returns idle without starting navigation. DUMP is batched and can
 run during driving. Commands use QoS1, `retain=False`, and a random uint32
 request ID (optional `--request-id`). Broker PUBACK is not robot acceptance;
 watch vehicle command-result events/state. Request IDs only suppress the
@@ -150,7 +150,7 @@ private-setting presence (not values), power source, profile and duration.
 | --- | --- |
 | S0-U01 cold power, normal/TEST/BENCH/MQTT | Correct 1 us source and unchanged 2% TIMER/kernel check; no dependency on Wi-Fi startup order |
 | S1-U04 connect/reconnect | Connect/subscription; broker restart and AP outage; robot/RAM log unaffected; reconnect without accumulating timeout chains |
-| S1-U05 rate/loss/decode | Nominal 5 Hz state, all retained service sonar results, rare vehicle events, 1 Hz heartbeat; CSV signs/flags; sequence gaps/history misses/event losses under traffic |
+| S1-U05 rate/loss/decode | Live log stream about 100 rows/s in 10-row batches, data age, gaps/jumps after reconnect, DUMP refill merge and Wi-Fi hook wall time with streaming on; nominal 5 Hz state, all retained service sonar results, rare vehicle events, 1 Hz heartbeat; CSV signs/flags; sequence gaps/history misses/event losses under traffic |
 | S1-U06 commands | Unconfigured ESTOP-only; configured wrong token refused for every opcode; idle rules; calibration then START; DUMP while driving; queue-full/duplicate policy; GP21 still works |
 | S2-U01 Wi-Fi20 | Unchanged 499–501 ticks / <=11000 us gap / zero missed; window and lifetime Wi-Fi wall counters, >10000 us gaps and probe cost |
 | M1/M2 with MQTT | Same local motor/navigation acceptance; separate network acceptance, lost broker never stops motion |
@@ -165,9 +165,14 @@ or stale health do not establish performance. Work/probe intervals include
 preemption and are not CPU percentages. Full stack margins under sustained
 traffic/dump remain a hardware gate; app minimum excludes template stacks.
 
-DUMP attempts at most one frame per 50 ms. A full 4501-row/512-event
-snapshot takes at least about 251 seconds, plus delay/ACK retries; this is
-intentional pacing, not a frozen vehicle/logger.
+The live stream publishes rows on `robot/log` without any command. Check
+that the receiver CSV grows about 100 rows/s while the vehicle logs, that each
+row's data age is small (the robot reports it), and that `skipped_before`
+and index gaps appear only after a reconnect or a stall. Live frames are QoS 0:
+a laptop that is slow or disconnected misses rows, and a dashboard prefers
+that to showing old data. A DUMP refills the CSV by (generation, index).
+A full 4501-row/512-event DUMP takes about 14 s at 100 ms round-trip time
+(host simulation; not measured on hardware). Live frames continue during it.
 
 For DUMP, verify BEGIN totals, each generation/index, and END counts. QoS1
 may duplicate frames; deduplicate by dump ID/generation/kind/index. A new
