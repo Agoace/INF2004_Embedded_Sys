@@ -41,7 +41,7 @@ EXPORT INT usermain(void)
 {
 	T_RVER	ver;
 
-	/* Cold boot does not set the TIMER 1 us source; do this before any user. */
+	/* Kernel hardware startup sets 1 us TIMER ticks; verify idempotently. */
 	CHECK(drv_time_init(), "drv_time_init");
 
 	/* tk_ref_ver: ask the kernel who it is */

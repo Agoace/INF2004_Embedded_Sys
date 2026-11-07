@@ -149,3 +149,10 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
 
 - Motion public `motion_snapshot_try_read` is a transport-independent last-tick board, not the inherited control mutex. Tests in [`tests/test_motion_task.c`](../tests/test_motion_task.c) cover null/unready/no-first-tick and coherent counts/time.
+## Approved template deviations
+
+- [Template change ledger](TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.
+- [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`.
+
+- [`app_program/platform/app_board.h`](../app_program/platform/app_board.h) — single-writer atomic word publication and one-attempt core-0 reads; unavailable never spins.
+- [`tests/test_template_tick.c`](../tests/test_template_tick.c) and [`tests/test_template_wifi.c`](../tests/test_template_wifi.c) — startup register/idempotence/bounded-failure and Wi-Fi priority/lifetime/window/ABI doubles; [`tests/template_checks.cmake`](../tests/template_checks.cmake).
