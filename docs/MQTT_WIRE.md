@@ -79,7 +79,7 @@ adds a 32-bit unavailable counter and reuses its reserved byte for the mask.
 | `robot/heartbeat` | 100 / v2 | 108 / v3 | Establish live identity and distinguish absent boards from contention |
 | `robot/sonar` | 32 / v1 | 36 / v2 | History/ping sequence restarts must not mix scan charts across boots |
 | `robot/event` live | 16 / v1 | 20 / v2 | Event sequences and pending-command decisions can restart |
-| `robot/obstacle` | 20 / v1 | 24 / v2 | Scan IDs and attempt records can repeat |
+| `robot/obstacle` | 20 / v1 | 24 / v2 | Scan IDs can repeat |
 | `robot/detour` | 32 / v1 | 36 / v2 | Detour sequence resets must not mix table entries |
 | `robot/summary` | 44 / v1 | 48 / v2 | Retained prior-boot run 1 must not look like current run 1 |
 | `robot/status` | 2 / v1 | 6 / v2 | Associate retained ONLINE/OFFLINE with the correct boot |
@@ -340,7 +340,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | Offset | Type | Field |
 | --- | --- | --- |
 | 0 | u8 | Version 2 |
-| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; v2 bits 3–7 scan reattempt count (saturates at 31) |
+| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; bits 3–7 reserved zero |
 | 2 | u8 | Stop source: unknown 0, GP21 1, MQTT 2, fault 3, limit 4 |
 | 3 | u8 | Stop reason, below |
 | 4 | u32 | Run ID since boot |

@@ -192,7 +192,7 @@ static void test_detour_summary(void)
         .hump_peak = 0x0a0bu};
     uint8_t summary_bytes[RM_SUMMARY_SIZE];
     rm_pack_summary(summary_bytes, &summary);
-    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 255u); /* v2 packs 5-bit reattempt count */
+    assert(summary_bytes[0] == RM_SUMMARY_VERSION && summary_bytes[1] == 7u); /* upper flags remain reserved */
     assert(summary_bytes[2] == 1u && summary_bytes[3] == 1u && summary_bytes[4] == 4u);
     assert(summary_bytes[8] == 0x88u && summary_bytes[9] == 0x13u);
     assert(summary_bytes[12] == 0x32u && summary_bytes[13] == 0xefu);
