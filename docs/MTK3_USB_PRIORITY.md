@@ -61,3 +61,23 @@ It fails on the old value 3.
 4. Cold-power the MQTT TEST image; check enumeration and the full TEST log.
 
 The per-run gap window remains a proposal only.
+
+## Software validation
+
+Candidate `mtk3-staging-next`, worktree `/tmp/mtk3-usbprio`. Base `5bda9ee`;
+`831c9c0` (package 2, SCAN reverse and reattempt) merged with `--no-ff`.
+Local only: no push or flash.
+
+| Check | Result |
+| --- | --- |
+| Host CTest | 117/117 PASS, including the new priority-order check |
+| Python decoder/log and dashboard suites | 63 and 138 PASS against the C fixture emitter |
+| Priority-order check on old value 3 | Correctly fails (USB above driving, Wi-Fi and TEST) |
+| Firmware profiles, warning-free with `-j4` | 7/7: default, robot, TEST, BENCH, MQTT, MQTT TEST, MQTT DIAG |
+| Strict ARM invocations on changed C units since `5bda9ee` | 39/39 PASS |
+| SDK link proof | 7/7 PASS |
+| Binary check | `tm_usb_console_start` stores 21 into `T_CTSK.itskpri` (offset 12) in TEST, MQTT DIAG and SMP default images |
+| Docs, template ledger, `git diff --check` | PASS; template ledger 8 paths |
+
+Hardware is **Not run** for this change. The hardware checks above are the
+acceptance gate.
