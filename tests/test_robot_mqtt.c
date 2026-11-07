@@ -115,8 +115,38 @@ int robot_network_vehicle_phase(uint8_t *phase, bool *active)
     *active = vehicle_active;
     return E_OK;
 }
+/* Optional ring model with the sonar_service.c overwrite rule: ring_count
+ * results were published; a read past 16 entries reports the evicted ones. */
+static bool ring_model;
+static uint32_t ring_count;
+static unsigned int sonar_skips;
+static int ring_read(uint32_t *cursor, rm_sonar_t *value, uint32_t *missed)
+{
+    const uint32_t distance = ring_count - *cursor;
+    const uint32_t lost = (distance > 16u) ? (distance - 16u) : 0u;
+
+    if (distance == 0u) {
+        return E_NOEXS;
+    }
+    *cursor += lost + 1u;
+    *missed = lost;
+    *value = (rm_sonar_t){.history_sequence = *cursor, .status = 1u,
+                          .timestamp_ms = *cursor};
+    return E_OK;
+}
+int robot_network_sonar_skip(uint32_t *cursor)
+{
+    assert(in_hook);
+    ++sonar_skips;
+    if (ring_model) {
+        *cursor = ring_count;
+    }
+    return E_OK;
+}
 int robot_network_sonar(uint32_t *cursor,rm_sonar_t *value,uint32_t *missed) {
-    assert(in_hook);++sonar_reads;*missed=sonar_missed;sonar_missed=0u;
+    assert(in_hook);++sonar_reads;*missed=0u;
+    if (ring_model) return ring_read(cursor,value,missed);
+    *missed=sonar_missed;sonar_missed=0u;
     if (sonar_busy) return E_TMOUT;
     if (sonar_tail==sonar_head) return E_NOEXS;
     *value=sonar[sonar_tail++];*cursor=value->history_sequence;return E_OK;
@@ -617,7 +647,7 @@ static void test_idle_rates(void)
     assert(count_since("robot/heartbeat", first) == 2u);
     assert(count_since("robot/log", first) == 0u);
     assert(count_since("robot/sonar", first) == 0u);
-    assert((sonar_reads == sonar_before) && (sonar_tail == 0u));
+    assert((sonar_reads == sonar_before) && (sonar_skips >= 1000u));
     assert(count_since("robot/event", first) == 1u);
     assert(count_since("robot/summary", first) == 1u);
     /* CALIBRATE: RUN at once; state and heartbeat are not delayed. */
@@ -630,7 +660,6 @@ static void test_idle_rates(void)
     assert((count_since("robot/state", first) == 1u) && (mode_word(s) == 0u));
     assert((count_since("robot/heartbeat", first) == 1u) &&
            !heartbeat_idle(h));
-    assert(count_since("robot/sonar", first) == 2u); /* ring entries */
     log = last_topic("robot/log");
     assert(log && (log->data[3] == RM_LOG_FLAG_JUMPED));
     assert(u32(log->data + 12) == 30u); /* jump to the newest 10 rows */
@@ -656,6 +685,51 @@ static void test_idle_rates(void)
     assert(count_since("robot/heartbeat", first) <= 3u);
     assert(count_since("robot/log", first) == 0u);
     assert(count_since("robot/sonar", first) == 0u);
+}
+
+/* IDLE with more than 16 pings, then RUN: the pause is a deliberate skip.
+ * No missed count, and no stale idle entry is published. */
+static void test_idle_sonar_resume(void)
+{
+    publication_t *p;
+    unsigned int first;
+    rm_heartbeat_t value = {0};
+
+    ring_model = true;
+    vehicle_result = E_OK;
+    start_connected();
+    ring_count = 5u; /* RUN results from before the first IDLE poll */
+    for (uint32_t t = 10u; t <= 10000u; t += 10u) {
+        if ((t % 100u) == 0u) {
+            ++ring_count; /* the sonar keeps pinging: 100 more results */
+        }
+        poll_at(t);
+    }
+    assert(ring_count == 105u);
+    first = publication_count;
+    vehicle_phase = 1u;
+    vehicle_active = true;
+    poll_at(10005u);
+    assert(count_since("robot/sonar", first) == 0u); /* nothing stale */
+    ++ring_count;
+    ++ring_count;
+    poll_at(10010u);
+    assert(count_since("robot/sonar", first) == 2u);
+    for (unsigned int i = first; i < publication_count; ++i) {
+        p = &publications[i];
+        if (strcmp(p->topic, "robot/sonar") == 0) {
+            const uint32_t seq = u32(p->data + 4);
+            assert((seq == 106u) || (seq == 107u)); /* after resume only */
+        }
+    }
+    robot_network_metrics(&value);
+    assert(value.sonar_history_missed == 0u);
+    /* A real RUN overflow is still counted. */
+    ring_count += 20u;
+    poll_range(10015u, 10200u, 5u);
+    robot_network_metrics(&value);
+    assert(value.sonar_history_missed == 4u);
+    ring_model = false;
 }
 
 /* A DUMP refill works while idle; the live stream stays paused. */
@@ -739,6 +813,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"log_disconnect")) test_log_disconnect();
     else if (!strcmp(argv[1], "idle_rates")) test_idle_rates();
     else if (!strcmp(argv[1], "idle_dump")) test_idle_dump();
+    else if (!strcmp(argv[1], "idle_sonar_resume")) test_idle_sonar_resume();
     else if (!strcmp(argv[1], "idle_no_vehicle")) test_idle_no_vehicle();
     else if (!strcmp(argv[1], "idle_busy")) test_idle_busy();
     else assert(0);

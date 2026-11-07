@@ -402,10 +402,14 @@ their rates in both modes; only MQTT publication changes. The pure rule is
   which is RUN.
 - On IDLE to RUN, state and heartbeat go out in the same poll. Then the RUN
   periods apply.
-- In IDLE the sonar history ring keeps its last 16 entries. The robot does
-  not read them, so `sonar_history_missed` does not increase. In RUN it
-  publishes the entries that remain in the ring. The live log resumes with a
-  jump to the newest 10 rows and reports the skipped rows.
+- In IDLE the sonar service keeps its 16-entry history ring, but each poll
+  moves the publisher cursor to the newest entry (`sonar_history_skip`). This
+  is a deliberate skip, like the live-log jump. It does not increase
+  `sonar_history_missed`, and RUN publishes only results taken after it
+  resumes, so no old idle results arrive at run start. The skip has no wire
+  counter; a `robot/sonar` history-sequence gap across an IDLE period is
+  expected. `sonar_history_missed` counts only RUN overflows. The live log
+  resumes with a jump to the newest 10 rows and reports the skipped rows.
 - Events, the run summary, status, obstacle, detour and commands do not
   change. DUMP refill runs in both modes.
 - State v5 bit 0 and heartbeat v4 flags bit 6 tell the dashboard which

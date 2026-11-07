@@ -34,6 +34,16 @@ int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *mis
     ++reads[4];*missed=0u;if (history_error<0) return history_error;
     *out=history_value;*cursor=history_value.sequence;*missed=3u;return E_OK;
 }
+static uint32_t skip_to = 77u;
+static int skip_error = E_OK;
+int sonar_history_skip(uint32_t *cursor)
+{
+    if (skip_error < 0) {
+        return skip_error;
+    }
+    *cursor = skip_to;
+    return E_OK;
+}
 static rm_detour_t detour_value;static int detour_error=E_NOEXS;
 static rm_summary_t summary_value;static int summary_error=E_NOEXS;
 int vehicle_detour_try_read(rm_detour_t *out) { if (detour_error<0) return detour_error;*out=detour_value;return E_OK; }
@@ -174,6 +184,18 @@ int main(void) {
         robot_health_collect(&health);
         assert(busy[ROBOT_BOARD_VEHICLE]==before_busy);
         assert(unavailable_reads[ROBOT_BOARD_VEHICLE]==before_absent+2u);
+    }
+    /* IDLE sonar skip: passes the cursor and result through, no accounting. */
+    {
+        const unsigned int before_busy = busy[ROBOT_BOARD_SONAR];
+        uint32_t skip_cursor = 3u;
+
+        assert(robot_network_sonar_skip(&skip_cursor) == E_OK);
+        assert(skip_cursor == 77u);
+        skip_error = E_OBJ;
+        assert(robot_network_sonar_skip(&skip_cursor) == E_OBJ);
+        assert(skip_cursor == 77u);
+        assert(busy[ROBOT_BOARD_SONAR] == before_busy);
     }
     /* Publication-mode provider: one read, no busy or unavailable counts. */
     {

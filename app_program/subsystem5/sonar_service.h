@@ -72,4 +72,7 @@ typedef struct {
  * Readers must run at least once per 2^31 publications. No retry loop. */
 int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
                        uint32_t *missed);
+/* Move cursor to the newest entry without reading it: a deliberate skip, not
+ * a loss. E_OBJ: service not ready (cursor unchanged). One word load. */
+int sonar_history_skip(uint32_t *cursor);
 #endif

@@ -441,6 +441,23 @@ int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
 }
 
 /*
+ * Skip the history cursor to the newest entry. The next read returns only
+ * later entries and reports no missed entries for the skipped ones.
+ */
+int sonar_history_skip(uint32_t *cursor)
+{
+    if (!cursor) {
+        return E_PAR;
+    }
+    if (!ready) {
+        return E_OBJ;
+    }
+    /* history_count is one word; a concurrent append only moves it later. */
+    *cursor = load_word(&history_count);
+    return E_OK;
+}
+
+/*
  * Copy the current vehicle-facing sonar result and freshness flag.
  */
 int sonar_result_read(sonar_snapshot_t *out, bool *is_new)

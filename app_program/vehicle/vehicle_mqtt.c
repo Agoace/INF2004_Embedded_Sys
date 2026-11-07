@@ -185,6 +185,14 @@ int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed)
 }
 
 /*
+ * Skip the sonar history cursor to the newest entry (IDLE publication mode).
+ */
+int robot_network_sonar_skip(uint32_t *cursor)
+{
+    return sonar_history_skip(cursor);
+}
+
+/*
  * Pull the newest obstacle report if it is new. The vehicle board holds only
  * the last report, so a gap in scan_id shows missed reports.
  * Returns E_OK for a new report (cursor moves to its scan_id), E_NOEXS if

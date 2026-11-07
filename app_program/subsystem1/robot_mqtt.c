@@ -206,6 +206,15 @@ int __attribute__((weak)) robot_network_sonar(uint32_t *cursor, rm_sonar_t *out,
 }
 
 /*
+ * Skip the sonar cursor to the newest entry, or report no provider.
+ */
+int __attribute__((weak)) robot_network_sonar_skip(uint32_t *cursor)
+{
+    (void)cursor;
+    return E_OBJ;
+}
+
+/*
  * Provide the newest scan report, or report no available provider.
  */
 int __attribute__((weak)) robot_network_obstacle(uint32_t *cursor,
@@ -594,7 +603,13 @@ static void service(uint32_t now)
         }
         --budget;
     }
-    /* IDLE: the sonar history ring keeps its entries; nothing is read. */
+    if (!pm_streams_live(mode)) {
+        /* IDLE: a deliberate pause, like the live-log jump. Keep the cursor
+         * at the newest entry, so RUN publishes only later results and the
+         * pause is not counted in sonar_history_missed. Drop a held entry. */
+        (void)robot_network_sonar_skip(&sonar_cursor);
+        have_sonar = false;
+    }
     for (unsigned int n = 0u;
          pm_streams_live(mode) && (n < SONAR_FRAME_BUDGET) && (budget > 0u);
          ++n) {

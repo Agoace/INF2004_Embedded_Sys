@@ -75,7 +75,8 @@ Each hook makes at most four publish attempts, at most two sonar records,
 and at most one log attempt. In RUN, state is due every 200 ms and the
 heartbeat every 1000 ms. In IDLE, state is due every 1000 ms and the heartbeat
 every 5000 ms, and the hook publishes no live log batches and no sonar
-records. RUN covers vehicle work plus a 2 s grace; TEST and BENCH images
+records. It moves the sonar history cursor to the newest entry instead
+(a skip, not counted as missed), so RUN does not publish old idle results. RUN covers vehicle work plus a 2 s grace; TEST and BENCH images
 always use RUN. The mode rule is pure
 ([telemetry_mode.c](../app_program/subsystem1/telemetry_mode.c)); the hook
 reads it from one bounded vehicle-board read
