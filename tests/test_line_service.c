@@ -28,6 +28,7 @@ static void sample(uint16_t v) {
     assert(!held);
 }
 int main(void) {
+    line_snapshot_t view;assert(line_snapshot_try_read(0)==E_PAR && line_snapshot_try_read(&view)==E_OBJ);
     line_snapshot_t s;assert(line_snapshot_read(&s,false)==E_OBJ && !line_service_running());
     assert(line_service_init()==E_OK && line_service_start()==E_OK && listens==1u && line_service_running());
     assert(line_service_start()==E_OBJ);
@@ -38,6 +39,10 @@ int main(void) {
     assert(line_snapshot_read(&s,false)==E_OK && lp_calibrated(&s.line));
     assert(s.processed==16u && s.raw_bc==4095u && s.raw[2]==0u && s.line.cal_max[2]==0u);
     sample(3500u);
+    assert(line_snapshot_read(&s,false)==E_OK);
+    const vc_event_t retained_event=s.event;
+    assert(line_snapshot_try_read(&view)==E_OK && !held && view.sequence==17u && view.raw_bc==4095u);
+    assert(view.event==retained_event && line_snapshot_read(&s,false)==E_OK && s.event==retained_event);
     assert(line_snapshot_read(&s,true)==E_OK && s.valid && s.sequence==17u && s.cpu_us>0u && s.sample_max_us>0u);
     assert(s.acquisition.samples==42u && s.line.pair);
     const uint16_t floor=lp_floor(&s.line,0u);

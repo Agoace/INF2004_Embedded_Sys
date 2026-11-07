@@ -227,3 +227,6 @@ vehicle task described below.
 - [`tests/test_template_tick.c`](../tests/test_template_tick.c) and [`tests/test_template_wifi.c`](../tests/test_template_wifi.c) — startup register/idempotence/bounded-failure and Wi-Fi priority/lifetime/window/ABI doubles; [`tests/template_checks.cmake`](../tests/template_checks.cmake).
 
 - Motion public `motion_snapshot_try_read` is a transport-independent last-tick board, not the inherited control mutex. Tests in [`tests/test_motion_task.c`](../tests/test_motion_task.c) cover null/unready/no-first-tick and coherent counts/time.
+
+
+- Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
