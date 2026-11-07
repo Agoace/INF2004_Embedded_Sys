@@ -184,7 +184,7 @@ static void service(uint32_t now) {
         }
     }
     if (due(now,state_at)) {
-        rm_state_t v={0};robot_network_state(&v);v.uptime_ms=now;v.sequence=++state_sequence;
+        rm_state_t v={0};robot_network_state(&v);v.uptime_ms=drv_time_ms();v.sequence=++state_sequence;
         uint8_t bytes[RM_STATE_SIZE];rm_pack_state(bytes,&v);(void)publish("robot/state",bytes,sizeof(bytes));
         state_at=now+200u;--budget;
     }
@@ -193,7 +193,7 @@ static void service(uint32_t now) {
         if (er>=E_OK) { health_cache=v;health_us=us; }
         else robot_network_busy(ROBOT_BOARD_HEALTH);
         v=health_cache;const uint32_t age=(drv_time_us()-health_us)/1000u;
-        v.flags=0u;v.uptime_ms=now;v.health_age_ms=age>65535u ? 65535u : (uint16_t)age;
+        v.flags=0u;v.uptime_ms=drv_time_ms();v.health_age_ms=age>65535u ? 65535u : (uint16_t)age;
         if (er>=E_OK && age<=2500u) v.flags|=32u;
         robot_network_metrics(&v);
         uint8_t bytes[RM_HEARTBEAT_SIZE];rm_pack_heartbeat(bytes,&v);(void)publish("robot/heartbeat",bytes,sizeof(bytes));
