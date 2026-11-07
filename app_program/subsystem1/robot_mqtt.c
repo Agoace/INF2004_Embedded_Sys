@@ -31,7 +31,7 @@ static rm_sonar_t pending_sonar;
 static bool have_sonar;
 static bool dump_requested,dump_active,log_inflight;
 static uint32_t dump_request_id;
-static struct { uint32_t id,row,event;uint8_t stage;telemetry_log_index_t index; } dump;
+static struct { uint32_t id,row,event;uint8_t stage;bool opened;telemetry_log_index_t index; } dump;
 static void inc(uint32_t *value) { UINT irq;DI(irq);++*value;EI(irq); }
 static bool due(uint32_t now,uint32_t at) { return (int32_t)(now-at)>=0; }
 static int hex(char c) {
@@ -47,7 +47,9 @@ static void configure(void) {
         if (a<0 || b<0) { good=false;break; }
         token[i]=(uint8_t)((unsigned int)a*16u+(unsigned int)b);any|=token[i];
     }
-    commands_enabled=ROBOT_MQTT_COMMANDS_ENABLED!=0 && good && any!=0u;
+    /* Absent/empty/all-zero example token: ESTOP-only fallback in decoder.
+     * A valid configured token restricts EVERY command, including ESTOP. */
+    commands_enabled=good && any!=0u;
     configured=true;
 }
 void __attribute__((weak)) robot_network_state(rm_state_t *out) {
@@ -111,7 +113,10 @@ static void connection_done(mqtt_client_t *c,void *arg,mqtt_connection_status_t 
         subscribe_at=drv_time_ms();state_at=subscribe_at;heartbeat_at=subscribe_at;
     } else {
         metrics.mqtt_state=0u;retry_at=drv_time_ms()+RETRY_MS;
-        /* QoS1 callbacks clear log_inflight on a disconnect; cursor stays put. */
+        inc(&metrics.publish_failed); /* asynchronous refusal/timeout/drop */
+        /* lwIP mqtt_close deletes pending requests WITHOUT callbacks. Retry
+         * the unacknowledged frame after reconnect, with the same cursor. */
+        if (log_inflight) { log_inflight=false;inc(&metrics.publish_failed); }
     }
 }
 static void published(void *arg,err_t error) {
@@ -137,10 +142,12 @@ static bool log_frame(void) {
         UINT irq;DI(irq);
         if (!dump_requested) { EI(irq);return false; }
         dump.id=dump_request_id;dump_requested=false;dump_active=true;EI(irq);
-        dump.stage=RM_LOG_BEGIN;dump.row=0u;dump.event=0u;dump.index=(telemetry_log_index_t){0};
+        dump.stage=RM_LOG_BEGIN;dump.row=0u;dump.event=0u;dump.opened=false;
+        dump.index=(telemetry_log_index_t){0};
     }
-    if (dump.stage==RM_LOG_BEGIN) {
+    if (!dump.opened) {
         if (telemetry_log_open(&dump.index)<E_OK) return false;
+        dump.opened=true;
     }
     telemetry_log_index_t current;
     if (telemetry_log_open(&current)<E_OK) return false;
