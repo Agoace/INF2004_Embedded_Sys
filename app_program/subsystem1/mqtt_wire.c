@@ -49,6 +49,48 @@ void rm_pack_log(uint8_t out[RM_LOG_SIZE],const rm_log_t *v) {
     memset(out,0,RM_LOG_SIZE);out[0]=RM_VERSION;out[1]=v->kind;
     put32(out+4,v->dump_id);put32(out+8,v->generation);put32(out+12,v->index);memcpy(out+16,v->body,16u);
 }
+/*
+ * Pack a batched log frame. Layout (little-endian): 0 version, 1 kind,
+ * 2 count, 3 flags, 4 stream id, 8 generation, 12 first index,
+ * 16 publish ms, 20 newest-row ms, 24 log rows, 28 skipped rows,
+ * then count 16-byte records.
+ */
+size_t rm_pack_log_batch(uint8_t *out,size_t capacity,
+    const rm_log_batch_t *header,const uint8_t *records)
+{
+    size_t length = 0u;
+    bool valid = (out != NULL) && (header != NULL) && (records != NULL);
+
+    if (valid) {
+        valid = ((header->kind == RM_LOG_ROWS) ||
+            (header->kind == RM_LOG_EVENTS)) &&
+            (header->count != 0u) &&
+            (header->count <= RM_LOG_BATCH_MAX_COUNT);
+    }
+    if (valid) {
+        length = RM_LOG_BATCH_HEADER_SIZE +
+            ((size_t)header->count * RM_LOG_RECORD_SIZE);
+        valid = (capacity >= length);
+    }
+    if (!valid) {
+        return 0u;
+    }
+    (void)memset(out, 0, RM_LOG_BATCH_HEADER_SIZE);
+    out[0] = RM_VERSION;
+    out[1] = header->kind;
+    out[2] = header->count;
+    out[3] = header->flags;
+    put32(out + 4, header->stream_id);
+    put32(out + 8, header->generation);
+    put32(out + 12, header->first_index);
+    put32(out + 16, header->publish_ms);
+    put32(out + 20, header->newest_ms);
+    put32(out + 24, header->log_rows);
+    put32(out + 28, header->skipped_before);
+    (void)memcpy(out + RM_LOG_BATCH_HEADER_SIZE, records,
+        (size_t)header->count * RM_LOG_RECORD_SIZE);
+    return length;
+}
 bool rm_command_allowed(uint8_t opcode,bool idle) {
     return opcode==RM_CMD_ESTOP || opcode==RM_CMD_DUMP ||
         (idle && (opcode==RM_CMD_CALIBRATE || opcode==RM_CMD_START));

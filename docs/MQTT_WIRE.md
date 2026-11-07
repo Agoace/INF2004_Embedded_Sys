@@ -20,7 +20,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/sonar` | 32 | One completed sonar history result |
 | `robot/event` | 16 | Vehicle event, including command decisions |
 | `robot/heartbeat` | 100 | Link state, health and loss counters |
-| `robot/log` | 32 | One paced RAM dump frame |
+| `robot/log` | 32, or 32 + 16 x count | Live RAM-log rows (QoS 0) and DUMP refill (QoS 1) |
 | `robot/cmd` | 22 | Command, QoS 1, not retained; token policy below |
 
 ## State
@@ -202,29 +202,97 @@ fault or stop. Boot does not wait for a radio, link, or broker.
 
 ## RAM log
 
+`robot/log` carries two things. The **live stream** (QoS 0) follows the newest
+KR1 rows for a dashboard. A **DUMP** (QoS 1) refills the whole run later.
+Both use the same batch frame. The live stream prefers fresh data over
+complete data. Completeness comes from DUMP, merged by index.
+
+### Batch frame (kinds ROWS 5 and EVENTS 6)
+
+Length is 32 + 16 x count bytes; count is 1 to 12. Record i has index
+`first_index + i`. There is no per-record index byte.
+
 | Offset | Type | Field |
 | --- | --- | --- |
 | 0 | u8 | Version |
-| 1 | u8 | Kind: BEGIN 0, ROW 1, EVENT 2, END 3, ABORT 4 |
+| 1 | u8 | Kind: ROWS 5 (KR1 rows) or EVENTS 6 (event records) |
+| 2 | u8 | Count of records, 1 to 12 |
+| 3 | u8 | Flags, below |
+| 4 | u32 | Stream ID: 0 for the live stream; the DUMP ID for a refill |
+| 8 | u32 | RAM run generation |
+| 12 | u32 | Index of the first record |
+| 16 | u32 | Publish time: robot uptime, ms, when the frame was built |
+| 20 | u32 | Newest-row time: robot uptime, ms, when the newest row in the RAM log was logged. Zero for a refill |
+| 24 | u32 | Rows in the RAM log when the frame was built |
+| 28 | u32 | Skipped rows just before `first_index` (live only; zero in a refill) |
+| 32+ | bytes | Count records of 16 bytes: literal KR1 rows, or event records (event flag bit 0 set: run-relative time) |
+
+Flags: bit 0 REFILL (DUMP frame, QoS 1); bit 1 NEW_GENERATION (first live
+frame after a new run generation began); bit 2 JUMPED (live cursor jumped to
+the newest rows). Other bits are zero.
+
+**Data age.** For a live frame, `publish - newest` is the age in ms of the
+newest row in the RAM log at publish time. `log_rows - (first_index + count)`
+is how many newer rows exist but are not yet published. A dashboard shows both.
+Both times use the robot clock, so no clock sync is needed. They exclude the
+network and broker delay and the laptop receive delay. The newest-row time is
+the time the telemetry task stored the row, not the time of the sensor sample.
+Times are 32-bit ms and wrap after 49.7 days; subtract with wraparound.
+
+**Live stream rules.**
+- The Wi-Fi task reads rows from the RAM log with its own cursor. Driving and
+  telemetry tasks do not know about it.
+- It publishes when 10 rows are waiting, or when at least one row has waited
+  100 ms. At 100 rows/s this is about 10 rows every 100 ms.
+- If the cursor lags more than 100 rows (about 1 s), or after an MQTT
+  reconnect, it jumps to the newest rows. It skips the older rows without
+  replay. The next frame has JUMPED set and `skipped_before` equal to the
+  number skipped.
+- On a new run generation, the cursor restarts at index 0. The first frame has
+  NEW_GENERATION set. `skipped_before` is the number of old-generation rows
+  observed but never published (a lower bound).
+- QoS 0 gives no delivery confirmation. A lost frame leaves an index gap that
+  the client must report. A failed publish is retried later with the same
+  cursor.
+- Each frame is at most 224 bytes of payload (10 rows: 192 bytes).
+
+### Control frames (kinds BEGIN 0, END 3, ABORT 4)
+
+These 32-byte frames are QoS 1. Kinds ROW 1 and EVENT 2 (one record per frame)
+are retired and never sent.
+
+| Offset | Type | Field |
+| --- | --- | --- |
+| 0 | u8 | Version |
+| 1 | u8 | Kind: BEGIN 0, END 3, ABORT 4 |
 | 2 | u16 | Reserved zero |
 | 4 | u32 | Dump ID, equal to command request ID |
 | 8 | u32 | RAM run generation |
-| 12 | u32 | Frame index |
+| 12 | u32 | Frame index (zero) |
 | 16–31 | bytes | Body, below |
 
 | Kind | Body |
 | --- | --- |
 | BEGIN | u32 rows total, events total, loss total, zero |
-| ROW | Literal 16-byte KR1 row |
-| EVENT | Literal 16-byte event record, with run-relative flag |
 | END | u32 rows sent, events sent, loss total at begin, zero |
 | ABORT | u32 reason, rows sent, events sent, zero; reason 1 means new run generation |
 
-The producer captures generation and high-water counts when a dump starts.
-New rows can still append; the buffer is not frozen. A generation change
-aborts the dump rather than mixing runs. The limit is one log frame per 50 ms;
-state, event, and sonar traffic have priority. A dump does not exclude driving.
-Use dump ID, generation, and index to group frames and detect gaps.
+### DUMP
+
+A DUMP command (`DUMP` opcode) starts one refill. The robot freezes the
+generation and the row and event counts when the dump opens. Rows appended
+later are not part of it, and the live stream shows them. The frames are:
+BEGIN (wait for PUBACK); batches of up to 12 rows, then up to 12 events, with
+REFILL set and the dump ID as stream ID; END after every batch is acknowledged.
+Up to three QoS 1 batches are in flight. The robot advances its refill cursor
+only on PUBACK. After an MQTT reconnect it resends the unacknowledged batches
+from RAM, so a client must drop duplicates by (generation, kind, index). A new
+run generation sends ABORT and ends the dump. One dump runs at a time; a
+second request while one is active is refused. A dump needs about 14 s for a
+full log at 100 ms round-trip time (about 28 s at 200 ms). Live frames have
+priority for each poll, and use no QoS 1 request slot, so a dump does not
+delay them. Merge refill records into the live CSV by (generation, index),
+and report any index missing after END. A dump never stops driving or logging.
 
 ## Client
 
