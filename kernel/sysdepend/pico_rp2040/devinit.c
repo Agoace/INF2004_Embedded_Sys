@@ -47,7 +47,8 @@ IMPORT ER tm_usb_console_start(void);
 #endif
 
 #if TM_WIFI_CYW43
-IMPORT ER cyw43_utk_start(void);
+/* Use the public fixed-width ABI; this header has no SDK dependencies. */
+#include "../../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #endif
 
 #if TK_SUPPORT_SMP
