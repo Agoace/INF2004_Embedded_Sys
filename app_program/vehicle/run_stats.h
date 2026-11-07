@@ -44,6 +44,7 @@ typedef struct {
     uint16_t detours_succeeded;
     uint32_t detour_total_ms;
     uint8_t motion_fault_bits;
+    uint8_t scan_reattempts; /* saturating, summary flags bits 3..7 */
     int16_t command[2];
     uint32_t command_since_ms;
     uint16_t speed_error_max;
@@ -79,6 +80,9 @@ void rs_step(rs_t *rs, uint32_t now_ms, const int32_t counts[2],
  * open is ignored.
  */
 void rs_detour_begin(rs_t *rs, uint32_t now_ms, uint8_t side, uint32_t scan_id);
+
+/* SCAN began one reverse-and-rescan attempt. Saturates at 31. */
+void rs_scan_reattempt(rs_t *rs);
 
 /*
  * A module made an outcome (not VSM_OUT_RUNNING). Counts line losses and

@@ -27,7 +27,7 @@ fixed; the test also shows whether E (the low-duty sweep stall) is gone.
   ▲                                                                   │
   ├────────────────────── DONE_LINE ──────────────────────────────────┤
   └── FOUND ── SEARCH ◀── DONE_NO_LINE (search toward the obstacle) ──┘
- FAILED (scan: echo fault; detour: dt_fail_t) ─▶ FAULT, the robot stops
+ FAILED (scan: echo fault or reverse timeout; detour: dt_fail_t) ─▶ FAULT, the robot stops
 ```
 
 These are the routes of `VSM_DEFAULT_ROUTES`; nothing new in the shell.
@@ -36,7 +36,7 @@ These are the routes of `VSM_DEFAULT_ROUTES`; nothing new in the shell.
 
 | Module | Does | Outcomes |
 | --- | --- | --- |
-| SCAN | Wheels 0, servo centre for 300 ms. Then 13 points (30° right to 30° left, 5° steps), 2 readings per point, the settle times of the old scan (150 ms first, 60 ms per step, 150 ms back to the centre). Builds the PROFILE word | SIDE: payload bits 0–8 nearest distance, bits 9–10 `obstacle_side_t`. FAILED 1: echo fault streak |
+| SCAN | Wheels 0, servo centre for 300 ms. Then 13 points (30° right to 30° left, 5° steps), 2 readings per point, the settle times of the old scan (150 ms first, 60 ms per step, 150 ms back to the centre). Builds the PROFILE word. If the side is NONE and fewer than 2 reattempts ran: servo centre, reverse 100 mm at 100 mm/s, stop and settle 300 ms, then a new full sweep. Each completed profile is published | SIDE: payload bits 0–8 nearest distance, bits 9–10 `obstacle_side_t`; NONE only after 3 blocked profiles. FAILED 1: echo fault streak; FAILED 2: reverse leg timeout (3 s) |
 | DETOUR | Runs `obstacle_detour.c` unchanged. Command word → wheel speeds (table below). At DONE: resets the line memory, waits one step stopped, then decides | DONE_LINE; DONE_NO_LINE (payload: side to search, toward the obstacle); FAILED (payload `dt_fail_t`) |
 
 The old scan `src/obstacle_scan.c` calls `servo.c` itself and cannot
@@ -94,13 +94,36 @@ start up to 10 ms later than in `detour_test`.
   (SCAN) or the detour step (DETOUR).
 - Summary: scans, detours started and done, detour speeds.
 
+## SCAN reverse and reattempt
+
+Approved option C is in the SCAN module only. DETOUR is unchanged. The
+profile and side rules are unchanged. The added states are:
+
+| State | Drive | Exit |
+| --- | --- | --- |
+| REVERSE | Servo 0; both wheels `-SS_REVERSE_MM_S` (-100 mm/s), through `VSM_ACT_SPEED` | Mean encoder movement reaches 1241 counts back: 100 mm at 12414 counts/m. A 3 s timeout gives FAILED 2 and the shell stops the motors. |
+| WAIT | Wheels 0, servo 0 for 300 ms (the same settle as the first scan) | Starts a new full 13-point sweep |
+
+No separate centre reading is taken. The full sweep measures 0 degrees, and
+the nearest point of the new profile is the distance that DETOUR receives.
+
+The attempt counter uses two logical bits: 0 initial, 1 first retry, 2 second
+retry. `SS_MAX_REATTEMPTS` is 2, so there are at most three complete profiles.
+The last NONE goes to DETOUR, which fails with `DT_FAIL_NO_SIDE` as before.
+ESTOP and motion faults use the normal shell safety path.
+
+The GP20 KR1 row stays 16 bytes. Its 3-bit module field shows 5 while SCAN
+is in REVERSE. Module 5 is a log value only; the shell still runs SCAN. The
+asked wheel fields show -100 mm/s and the servo field shows 0.
+
 ## Tests
 
 Host test `tests/test_obstacle_modules.c`:
 
 - SCAN: wait, settle times, pings only in MEASURE, stray echoes ignored,
-  nearer reading kept, RETURN, fault, restart, three whole scans (left,
-  right, blocked), payload fields.
+  nearer reading kept, RETURN, fault, restart, whole scans, payload fields,
+  blocked → reverse → free, three blocked profiles → NONE, reverse timeout,
+  ESTOP and operator stop during reverse, and encoder distance math.
 - DETOUR: sweep speed 19 mm/s, servo toward the obstacle, settle then
   ping, the pause, a whole TURN_AWAY with seen then lost readings, the
   straight with no heading hold, back off speed and direction, a look
@@ -118,6 +141,14 @@ them). ARM sizes: `servo_scan` 392 B, `detour_run`
 540 B.
 
 ## Track test plan
+
+For option C, add a no-push, no-flash checklist before the next approved
+hardware run: put a 17 cm box at about 212 mm, start one MQTT-observed run,
+and record each `robot/obstacle` scan ID and attempt, each event kind 8, the
+KR1 module 5 rows, and the final route. Pass: a reverse is 100 ± 10 mm,
+the robot does not contact the box, and a free side reaches DETOUR, or
+three blocked profiles stop with `DT_FAIL_NO_SIDE`. A reverse timeout must
+stop with summary reason 13. This check is **Not run**.
 
 1. Box on the track. Same procedure as the line runs (VIN, GP21).
 2. Look for: the scan side, the sweeps at 20 °/s without a stall, the
