@@ -66,7 +66,7 @@ def c_samples():
 SAMPLES = c_samples()
 TOPICS = {"state": "robot/state", "sonar": "robot/sonar", "event": "robot/event",
           "heartbeat": "robot/heartbeat", "obstacle": "robot/obstacle",
-          "status": "robot/status"}
+          "status": "robot/status", "detour": "robot/detour", "summary": "robot/summary"}
 
 
 def topic_for(name):
@@ -255,7 +255,10 @@ class PanelTests(ModelCase):
     def test_imu_is_a_placeholder(self):
         panel = self.panel("imu")
         self.assertTrue(panel["placeholder"] and panel["stale"])
-        self.assertEqual(panel["rows"], [])
+        self.assertEqual(list(self.rows("imu")),
+                         ["Pitch", "Heading", "Turn rate", "Hump state", "Height", "Peak",
+                          "Collision", "Motion event"])
+        self.assertTrue(all(row["value"] == "not implemented yet" for row in panel["rows"]))
 
     def test_new_panel_needs_only_a_builder(self):
         @model_module.register_panel
@@ -633,6 +636,14 @@ class ReservedTopicTests(ModelCase):
         self.assertEqual((rows["Command issued / executed"], rows["Direction"]),
                          ("yes / yes", "reverse"))
 
+    def test_barcode_age_comes_from_its_own_topic(self):
+        self.model.ingest("robot/barcode", barcode())
+        self.assertEqual(self.panel("barcode")["age_ms"], 0)
+        self.assertFalse(self.panel("barcode")["stale"])
+        self.clock.advance(1500)
+        self.feed("state_idle")
+        self.assertTrue(self.panel("barcode")["stale"])
+
     def test_imu_layout_once_data_arrives(self):
         self.model.ingest("robot/imu", imu_snapshot())
         panel = self.panel("imu")
@@ -899,6 +910,15 @@ class DetourTests(ModelCase):
         self.assertEqual(self.rows("obstacle")["Scan stage"], "fine")
         self.assertEqual(len(panel["table"]["rows"]), 1)
 
+    def test_obstacle_age_uses_the_newest_scan_or_detour(self):
+        self.model.ingest("robot/detour", detour())
+        self.clock.advance(2000)
+        self.model.ingest("robot/obstacle", obstacle())
+        self.assertEqual(self.panel("obstacle")["age_ms"], 0)
+        self.clock.advance(1000)
+        self.model.ingest("robot/detour", detour(sequence=5))
+        self.assertEqual(self.panel("obstacle")["age_ms"], 0)
+
     def test_scan_stage_texts(self):
         for stage, text in ((0, "not reported"), (1, "coarse"), (2, "fine")):
             self.model.ingest("robot/obstacle", obstacle(flags=0b0001 | stage << 4, scan=stage))
@@ -1074,6 +1094,58 @@ class CpuAndJunctionTests(ModelCase):
         frame[1] = 7
         self.model.ingest("robot/event", bytes(frame))
         self.assertIsNone(self.model.last_decision)
+
+
+class BatchTwoCFixtureTests(ModelCase):
+    def test_c_state_v3_duty_and_odometry(self):
+        self.feed("state_v3")
+        rows = self.rows("wheels")
+        self.assertEqual(rows["PWM duty left / right"], "-80.0 % / +3276.7 %")
+        rows = self.rows("odometry")
+        self.assertEqual(rows["Heading (left +, since boot)"], "-12345.67 deg")
+        self.assertEqual(rows["Turn rate (left +)"], "-474.9 deg/s")
+        self.assertEqual(rows["Distance average"], "-7 mm")
+        self.assertAlmostEqual(self.panel("odometry")["chart"]["heading_deg"], 254.33)
+
+    def test_c_heartbeat_cpu(self):
+        self.feed("heartbeat_v2")
+        self.assertEqual(self.rows("health")["CPU load"], "29.1 %")
+        self.feed("heartbeat_v2_unknown")
+        self.assertEqual(self.rows("health")["CPU load"], "not available")
+
+    def test_c_detour_outcomes_and_opposite_side_enums(self):
+        cases = (("done_line", "done, line found", "4660 mm"),
+                 ("done_no_line", "done, no line (search left)", "4660 mm"),
+                 ("failed", "FAILED: took too long", "not measured"),
+                 ("aborted", "aborted (run ended)", "4660 mm"))
+        for suffix, outcome, offset in cases:
+            self.feed("detour_" + suffix)
+            row = self.panel("obstacle")["table"]["rows"][0]
+            self.assertEqual(row, [0x01020304, "left", outcome, "0.03 s",
+                                   f"{0xA1B2C3D4} mm", offset, 0x0A0B0C0D])
+
+    def test_c_run_summaries(self):
+        self.model.ingest("robot/summary", SAMPLES["summary_normal"], retained=True)
+        rows = self.rows("summary")
+        self.assertEqual((rows["Run ID"], rows["Duration"], rows["Distance (path length)"]),
+                         (0x01020304, "61.23 s", "4321 mm"))
+        self.assertEqual(rows["Max speed error"], "41 mm/s")
+        self.assertEqual(rows["Motion faults seen"], "stall left, stale command")
+        self.assertEqual(rows["Shell fault"], "no module (detail 258)")
+        self.assertEqual(rows["Barcode ok / failed"], "not implemented yet")
+        self.assertIn("retained copy", self.panel("summary")["note"])
+        self.feed("summary_aborted_detour")
+        self.assertEqual(self.rows("summary")["Stop source"], "MQTT ESTOP")
+        self.assertIn("still running", self.rows("summary")["Detour"])
+        self.feed("summary_no_speed_error")
+        rows = self.rows("summary")
+        self.assertEqual((rows["Stop source"], rows["Stop reason"], rows["Max speed error"]),
+                         ("time limit", "90 s limit", "not measured"))
+
+    def test_c_junction_event(self):
+        self.feed("event_junction")
+        self.assertIn("#20 junction (reserved)", self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
 
 
 class CommanderTests(unittest.TestCase):

@@ -13,7 +13,7 @@ from robot_wire import (COMMANDS, SIZES, LogStream, csv_fields, decode,  # noqa:
                         pack_command, read_token)
 
 CSV_FLUSH_SECONDS = 1.0
-SUBSCRIBE_QOS = {"log": 1, "status": 1, "summary": 1}
+SUBSCRIBE_QOS = {"log": 1, "status": 1, "summary": 1, "barcode": 1}
 
 
 class CsvSink:
@@ -71,8 +71,7 @@ def main(argv=None):
         if reason_code.is_failure:
             print("broker connection rejected", file=sys.stderr)
             return
-        # A subscription caps delivery QoS: robot/log (DUMP refill), robot/status and
-        # robot/summary are QoS 1.
+        # A subscription caps delivery QoS: log, status, summary and barcode use QoS 1.
         mqtt_client.subscribe([("robot/" + name, SUBSCRIBE_QOS.get(name, 0)) for name in SIZES])
         connected.set()
 
@@ -82,7 +81,8 @@ def main(argv=None):
             if message.topic == "robot/log":
                 rows = log_stream.handle(message.payload)
             else:
-                rows = [decode(message.topic, message.payload)]
+                fields = decode(message.topic, message.payload)
+                rows = [] if fields.get("known") == 0 else [fields]
         except ValueError as error:
             print(f"discarded {message.topic}: {error}", file=sys.stderr)
             return

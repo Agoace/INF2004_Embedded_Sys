@@ -610,7 +610,8 @@ def obstacle_panel(model, now):
                  "right_clear_deg": fields["right_clear_deg"],
                  "left_clear_deg": fields["left_clear_deg"], "decision": fields["decision"]}
     if model.detours:
-        age = model.record_age(now, model.detours[-1])
+        detour_age = model.record_age(now, model.detours[-1])
+        age = detour_age if age is None else min(age, detour_age)
         rows.append(("Detours missed (sequence gaps)", model.detour_missed))
     return make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None, rows=rows,
                       chart=chart, table=_detour_table(model) if model.detours else None,
@@ -674,6 +675,7 @@ def barcode_panel(model, now):
                  ("Detected / decoded / unreadable", "Decoded command", "Confidence",
                   "Direction", "Navigation command", "Result", "Command issued / executed")]
     else:
+        age = model.record_age(now, record)
         f = record["fields"]
         rows += [("Detected / decoded / unreadable",
                   f"{_yes_no(f['detected'])} / {_yes_no(f['decoded'])} / "
@@ -694,7 +696,10 @@ def barcode_panel(model, now):
 def imu_panel(model, now):
     snapshot, event = model.reserved["imu"], model.reserved["imu_event"]
     if snapshot is None and event is None:
-        return make_panel("imu", "IMU", None, placeholder=True,
+        rows = [(label, NOT_IMPLEMENTED) for label in
+                ("Pitch", "Heading", "Turn rate", "Hump state", "Height", "Peak",
+                 "Collision", "Motion event")]
+        return make_panel("imu", "IMU", None, placeholder=True, rows=rows,
                           note="not implemented: no data on robot/imu yet")
     rows = []
     if snapshot is None:

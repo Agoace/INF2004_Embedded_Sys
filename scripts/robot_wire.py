@@ -12,7 +12,8 @@ import sys
 VERSION = 1
 # Recorded topics and their newest payload size. The log has variable batch sizes.
 SIZES = {"state": 72, "sonar": 32, "event": 16, "heartbeat": 100, "log": 32,
-         "obstacle": 20, "status": 2, "detour": 32, "summary": 44}
+         "obstacle": 20, "status": 2, "detour": 32, "summary": 44,
+         "barcode": 20, "imu": 12}
 # State version -> payload size. Version 2 adds distances, version 3 adds duty and heading.
 STATE_SIZES = {1: 48, 2: 60, 3: 72}
 HEARTBEAT_VERSIONS = (1, 2)  # version 2 adds the CPU load in the last two bytes
@@ -505,11 +506,15 @@ def csv_fields():
         for version in versions:
             sample = bytearray(STATE_SIZES[version] if name == "state" else size)
             sample[0] = version
-            if name in ("event", "status"):
+            if name in ("event", "status", "barcode", "imu"):
                 sample[1] = 1
             elif name == "detour":
                 sample[1] = 3
             fields.update(decode("robot/" + name, sample))
+    # IMU motion events have different fields from snapshots.
+    sample = bytearray(12)
+    sample[0], sample[1], sample[2] = 1, 2, 1
+    fields.update(decode("robot/imu", sample))
     for kind in (1, 2, 3, 4):
         sample = bytearray(32)
         sample[0], sample[1] = VERSION, kind

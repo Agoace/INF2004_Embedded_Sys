@@ -230,6 +230,10 @@ ESTOP is never blocked.
 - The decoder accepts `robot/state` versions 1, 2 and 3 (48, 60 and 72 bytes)
   and `robot/heartbeat` versions 1 and 2, so old captures still decode. The
   firmware sends only the newest version.
+- The recorder (`scripts/mqtt_robot.py`) also subscribes to all these topics.
+  Its CSV includes state, CPU load, detours, run summaries, barcode results,
+  IMU snapshots and IMU motion events. It ignores unknown reserved versions
+  and kinds without writing a row.
 - The dashboard subscribes again after every broker reconnect.
 - A message with a wrong length, version or reserved bit is discarded. It
   does not change the panels. The count shows in the page data.

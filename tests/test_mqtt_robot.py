@@ -149,7 +149,12 @@ class WireTests(unittest.TestCase):
                 pass
 
             def loop_forever(self):
-                self.on_message(self, None, types.SimpleNamespace(topic="robot/state", payload=sample))
+                frames = (("state", sample), ("barcode", barcode_frame()),
+                          ("imu", imu_snapshot()), ("imu", imu_event()),
+                          ("barcode", bytes([9, 1])), ("imu", bytes([1, 9])))
+                for name, data in frames:
+                    self.on_message(self, None, types.SimpleNamespace(
+                        topic="robot/" + name, payload=data))
 
             def publish(self, topic, payload, qos, retain):
                 calls.append(("publish", topic, payload, qos, retain))
@@ -169,8 +174,13 @@ class WireTests(unittest.TestCase):
         with mock.patch.dict(sys.modules, modules), contextlib.redirect_stdout(io.StringIO()) as output:
             self.assertEqual(cli.main(["--host", "test.invalid"]), 0)
         self.assertEqual(calls[0], ("api", version2))
-        self.assertEqual(len(list(csv.DictReader(io.StringIO(output.getvalue())))), 1)
-        self.assertEqual(calls[2][1], [("robot/" + name, 1 if name in ("log", "status", "summary") else 0)
+        rows = list(csv.DictReader(io.StringIO(output.getvalue())))
+        self.assertEqual([row["topic"] for row in rows],
+                         ["robot/state", "robot/barcode", "robot/imu", "robot/imu"])
+        self.assertEqual((rows[1]["code"], rows[2]["pitch_raw"], rows[3]["event"]),
+                         ("5", "3", "6"))
+        qos_one = ("log", "status", "summary", "barcode")
+        self.assertEqual(calls[2][1], [("robot/" + name, int(name in qos_one))
                                        for name in wire.SIZES])
         with tempfile.TemporaryDirectory() as folder:
             token = Path(folder) / "private-token"
@@ -566,6 +576,34 @@ class NewTopicTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     wire.decode("robot/state", bytes([version]) + self.c_state[1:size])
 
+    def test_c_batch_two_frames_match_independent_builders(self):
+        self.assertEqual(self.dash["state_v3"], state_v3_frame(
+            self.c_state, duty_left=-800, duty_right=32767, heading=-1234567, rate=-4749,
+            dist=(-123456, 2 ** 31 - 1, -7)))
+        for suffix, outcome, payload, flags in (("done_line", 3, 0x567, 1),
+                                                ("done_no_line", 4, 1, 1),
+                                                ("failed", 7, 3, 0),
+                                                ("aborted", 8, 0, 1)):
+            frame = self.dash["detour_" + suffix]
+            self.assertEqual(frame, detour_frame(
+                outcome=outcome, side=2, flags=flags, sequence=0x01020304, start=0xFFFFFFF0,
+                end=16, duration=32, distance=0xA1B2C3D4, lateral=0x1234, payload=payload,
+                scan=0x0A0B0C0D))
+            self.assertEqual(wire.decode("robot/detour", frame)["outcome"], outcome)
+        for suffix, flags, source, reason, error in (("normal", 2, 1, 1, 41),
+                                                    ("aborted_detour", 6, 2, 2, 41),
+                                                    ("no_speed_error", 0, 4, 3, 65535)):
+            frame = self.dash["summary_" + suffix]
+            self.assertEqual(frame, summary_frame(
+                flags=flags, source=source, reason=reason, run=0x01020304, duration=61234,
+                distance=4321, speed_error=error, motion_faults=9, shell=4, shell_detail=258))
+            self.assertEqual(wire.decode("robot/summary", frame)["stop_reason"], reason)
+        for suffix, cpu in (("", 0x123), ("_unknown", 65535)):
+            frame = self.dash["heartbeat_v2" + suffix]
+            self.assertEqual(wire.decode("robot/heartbeat", frame)["cpu_load_permille"], cpu)
+        junction = wire.decode("robot/event", self.dash["event_junction"])
+        self.assertEqual((junction["kind"], junction["sequence"], junction["word"]), (7, 20, 2))
+
     def test_c_packed_obstacle_and_status(self):
         result = wire.decode("robot/obstacle", self.dash["obstacle"])
         self.assertEqual((result["closest_valid"], result["too_near"], result["left_blocked"],
@@ -892,13 +930,15 @@ class BatchTwoTests(unittest.TestCase):
         for topic, data in (("robot/state", state_v3_frame(base)),
                             ("robot/heartbeat", heartbeat_frame(self.samples["robot/heartbeat"])),
                             ("robot/detour", detour_frame()), ("robot/summary", summary_frame()),
-                            ("robot/obstacle", obstacle_frame(flags=0x11))):
+                            ("robot/obstacle", obstacle_frame(flags=0x11)),
+                            ("robot/barcode", barcode_frame()),
+                            ("robot/imu", imu_snapshot()), ("robot/imu", imu_event())):
             writer.writerow(wire.decode(topic, data))
 
     def test_recorder_subscribes_to_the_new_topics_with_qos(self):
         self.assertEqual(wire.SIZES["state"], 72)
         self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (32, 44))
-        self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1})
+        self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1, "barcode": 1})
 
 
 if __name__ == "__main__":
