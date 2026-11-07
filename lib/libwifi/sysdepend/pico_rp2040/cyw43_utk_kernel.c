@@ -2,13 +2,88 @@
  * ISO C size_t does not collide with the inherited T-Kernel syslib typedef. */
 
 #include <tk/tkernel.h>
+#include <tk/syslib.h>
+#include "cyw43_utk.h"
+
+extern uint64_t time_us_64(void);
+static T_CYW43_TIMING timing, window;
+static UW started, previous, window_previous, window_id, poll_window_id;
+static UW probe_begin_us;
+static BOOL have_previous, window_previous_valid, window_active;
+static ER start_status = E_OBJ;
+static void timing_add(T_CYW43_TIMING *t, UW work, UW gap, BOOL has_gap)
+{
+    ++t->polls;
+    t->work_total_us += work;
+    if (work > t->work_max_us) t->work_max_us = work;
+    if (has_gap) {
+        ++t->gaps;
+        if (gap > t->gap_max_us) t->gap_max_us = gap;
+        if (gap > 10000u) ++t->gaps_over_10000;
+    }
+}
+void cyw43_utk_poll_begin(void)
+{
+    const UW entered = (UW)time_us_64();
+    UINT irq; DI(irq);
+    started = (UW)time_us_64();
+    poll_window_id = window_active ? window_id : 0u;
+    EI(irq);
+    probe_begin_us = (UW)time_us_64() - entered;
+}
+void cyw43_utk_poll_end(void)
+{
+    const UW end = (UW)time_us_64();
+    const UW work = end - started;
+    UINT irq; DI(irq);
+    timing_add(&timing, work, started - previous, have_previous);
+    previous = started; have_previous = TRUE;
+    const BOOL in_window = window_active && poll_window_id == window_id;
+    if (in_window) {
+        timing_add(&window, work, started - window_previous, window_previous_valid);
+        window_previous = started; window_previous_valid = TRUE;
+    }
+    EI(irq);
+    /* Probe wall cost excludes its own final two max stores. */
+    const UW cost = probe_begin_us + ((UW)time_us_64() - end);
+    DI(irq);
+    if (cost > timing.probe_max_us) timing.probe_max_us = cost;
+    if (in_window && window_active && poll_window_id == window_id && cost > window.probe_max_us)
+        window.probe_max_us = cost;
+    EI(irq);
+}
+int32_t cyw43_utk_timing_read(T_CYW43_TIMING *out)
+{
+    if (!out) return E_PAR;
+    UINT irq; DI(irq); *out = timing; EI(irq); return E_OK;
+}
+int32_t cyw43_utk_timing_window_begin(void)
+{
+    UINT irq; DI(irq);
+    if (window_active) { EI(irq); return E_OBJ; }
+    window = (T_CYW43_TIMING){0}; window_previous_valid = FALSE;
+    if (++window_id == 0u) ++window_id;
+    window_active = TRUE; EI(irq); return E_OK;
+}
+int32_t cyw43_utk_timing_window_end(T_CYW43_TIMING *out)
+{
+    if (!out) return E_PAR;
+    UINT irq; DI(irq);
+    if (!window_active) { EI(irq); return E_OBJ; }
+    window_active = FALSE; *out = window; EI(irq); return E_OK;
+}
+int32_t cyw43_utk_start_status(void)
+{
+    UINT irq; DI(irq); const ER result = start_status; EI(irq); return result;
+}
 
 IMPORT void cyw43_utk_task(INT stacd, void *exinf);
 
-/* USB CDC drains at priority 3 on the same physical core.  Keep radio polling
- * below it so firmware download and the 2 ms poll cadence cannot overflow the
- * console ring, while remaining well above the qualification task. */
-#define CYW43_TASK_PRIORITY  4
+/* The template used priority 4: below USB 3, above its qualification task.
+ * Driving tasks 10-13 must not wait for network processing. Create the radio
+ * at priority 20 directly; USB stays at 3 and telemetry stays at 30.
+ * See docs/TEMPLATE_CHANGES.md for the local deviation and update procedure. */
+#define CYW43_TASK_PRIORITY  20
 #if TM_NET_LWIP
 /* lwIP's own call chains (tcp_input/dhcp/etharp) run on this same task and
  * go deeper than the bare radio poll loop did. */
@@ -42,6 +117,8 @@ EXPORT ER cyw43_utk_start(void)
 #endif
 
     task = tk_cre_tsk(&ctsk);
-    if(task < E_OK) return task;
-    return tk_sta_tsk(task, 0);
+    if(task < E_OK) { start_status = task; return task; }
+    start_status = tk_sta_tsk(task, 0);
+    if (start_status < E_OK) (void)tk_del_tsk(task);
+    return start_status;
 }
