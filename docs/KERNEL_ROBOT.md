@@ -246,7 +246,7 @@ RAM logs are lost on reset. Check row indices and USB dump delta.
 
 ## Stack and hardware acceptance
 
-[Static application stacks](APPLICATION_TASKS.md) reserve 19456 bytes for
+[Static application stacks](APPLICATION_TASKS.md) reserve 19456 bytes without MQTT (21504 with health) for
 all six registered task regions, including the mutually exclusive bench.
 The robot uses 15360 of these bytes for its five active stacks. Pattern
 high-water reports cover application tasks including motion, not template
@@ -454,3 +454,5 @@ New-image S0-U01 cold-power (including MQTT), S1-U04/U05/U06, S2-U01 with
 Wi-Fi20, full-load stack/timing, and independent M1/M2 with MQTT are
 **Not run**. Exact [wire layouts](MQTT_WIRE.md) and [broker procedure](MQTT_RUNBOOK.md)
 are separate records. Final software results are recorded below.
+
+[STEP 8 software validation](MTK3_STEP8_VALIDATION.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.

@@ -262,3 +262,13 @@ wheels lifted, USB and VIN connected. Logs (ignored, not committed):
 The bench stops its RAM log at ESTOP, so the log has no rows after the
 stop. The duty 0 and "no later tick restores an old duty" result comes from
 the operator observation. Possible improvement: log about 1 s after ESTOP.
+
+## STEP 8 Wi-Fi20 coexistence — Not run
+
+Repeat S2-U01 on the new MQTT TEST image: 499–501 complete tick gaps over
+the independent five-second window, max <=11000 us and zero missed.
+Capture its independent full Wi-Fi poll wall/work/gap/>10000us window
+and lifetime totals after measurement; observed task priority must be20.
+No diagnostic print runs inside S2. New board-publication cost is included
+in motion tick work, but full loaded physical timing is **Not run**.
+The prior STEP 7 PASS does not establish this result.

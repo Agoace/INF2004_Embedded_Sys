@@ -106,3 +106,11 @@ the TEST runner at priority 20 the delay is below 0.25 ms.
 | --- | --- |
 | M1-S7 | LINE 0–3.29 s with three short line losses (found again in 20–110 ms; start position off the line), SEARCH at the tile end, GP21 ESTOP at 4.30 s. Gap 9952..10050 us, overruns 0, response max 740 us, telemetry loss 0, lost wakes 0, faults 0, 32019 samples with 0 missed / 0 dropped, ISR max 110 us, USB dump loss 0 |
 | M2-S7 | STOP at 239 mm, SCAN −30° to +30° (box 218..255 mm to +20°, no echo at +25°/+30°), DETOUR 2.8–20.2 s (the robot left the tiles and was stuck about 0.6 s, then free), DONE_NO_LINE → SEARCH at 20.23 s, GP21 ESTOP at 21.55 s. Gap 9946..10056 us, overruns 0, response max 998 us, telemetry loss 0, faults 0, 101929 samples with 0 missed / 0 dropped, USB dump loss 0 |
+
+## STEP 8 MQTT acceptance addition
+
+Repeat cold-power S0-U01 on all four role families and S2-U01 with Wi-Fi20.
+M1/M2 remain independent local-drive criteria: loss of AP/broker must not
+stop or degrade driving. Network S1-U04/U05/U06 separately cover reconnect,
+rates/loss/decode and NORMAL-robot command policy. All are **Not run** on
+the STEP 8 image. Use [the runbook](../../docs/MQTT_RUNBOOK.md).

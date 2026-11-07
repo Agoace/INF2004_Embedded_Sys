@@ -230,3 +230,6 @@ vehicle task described below.
 
 
 - Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
+
+- [`tests/vehicle_network_checks.cmake`](../tests/vehicle_network_checks.cmake) — adapter age/wrap/busy, exhaustive command policy, and real vehicle task non-critical queue/DUMP/ESTOP tests.
+- [STEP 8 validation](MTK3_STEP8_VALIDATION.md) — clean build/strict/link/host results, ELF bindings, memory limits and pending physical acceptance.

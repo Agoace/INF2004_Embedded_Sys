@@ -88,6 +88,9 @@ stalled source sequence never refreshes its cache age, even across a
 newer writer timestamps cannot underflow into a false ancient age.
 The explicit age/fresh bits, not the retained value alone, describe it.
 Health is fresh only after a successful read with age at most 2500 ms.
+Age uses producer uptime milliseconds, so a stopped producer cannot look
+young at the 71-minute microsecond wrap. Before a first sample, age and
+stack minimum are unknown (65535), never zero/free.
 Its component lifetime counters can lag if a source read was unavailable.
 
 MC and line public boards are transport-independent and also exist in
@@ -130,7 +133,7 @@ Every command has version, opcode, request ID and a 16-byte token field:
 
 Empty, malformed or all-zero example token is unconfigured. There is no
 separate enable switch that could accidentally leave a configured ESTOP
-unguarded. Token comparison visits every byte. Header and laptop token file
+unguarded. Configured-token comparison visits every byte. Header and laptop token file
 are private and untracked. This is not TLS or replay-proof authentication;
 use a trusted, isolated robot network. Never retain commands at the broker.
 

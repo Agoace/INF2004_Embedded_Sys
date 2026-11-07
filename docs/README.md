@@ -91,3 +91,5 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [Kernel MQTT design](KERNEL_MQTT.md) — non-critical network policy, pull boards, queues, ownership and measured timing limits.
 - [MQTT binary wire protocol](MQTT_WIRE.md) — version1 topic layouts, masks/LE and decoder contract.
 - [MQTT operator runbook](MQTT_RUNBOOK.md) — scoped Mosquitto/firewall, private settings, laptop CSV/commands and pending hardware checks.
+
+- [STEP 8 software validation](MTK3_STEP8_VALIDATION.md) — six profiles, strict ARM/host/link checks, bindings and memory limitations; no hardware acceptance.

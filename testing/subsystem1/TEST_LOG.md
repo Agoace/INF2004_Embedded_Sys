@@ -45,3 +45,18 @@ the normal image after a cold VIN power-on.
 | --- | --- | --- |
 | S1-U02 | TEST: bounded producer burst at priority 1 fills MBF; sends return without waiting, lost count increases; after allowing consumer to run, accepted rows are retained | PASS 2026-11-06 (445084c and 3f889a1): accepted 34, lost 66, no blocking. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S1-U03 | GP20 dump after a full robot session: valid KR1/VE CSV, telemetry loss 0, dump `tm_usb_dropped` delta 0, control deadlines remain within limits, per-task stack free margin >=256 bytes | PASS 2026-11-06 (M1-S7, M2-S7): telemetry loss 0, USB dump delta 0, overruns 0, stack free >= 1672 B. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
+
+## STEP 8 MQTT image — hardware Not run
+
+STEP 7 outcomes above remain historical; they do not validate the new image.
+Follow [the broker runbook](../../docs/MQTT_RUNBOOK.md).
+
+| ID | Check | Result |
+| --- | --- | --- |
+| S1-U04 | MQTT connect, AP loss and broker restart/reconnect; no effect on boot, RAM log or driving | Not run |
+| S1-U05 | Nominal state5Hz/heartbeat1Hz, sonar history/event loss and signed binary CSV; Wi-Fi20 poll/work/gap and stack data during driving/dump | Not run |
+| S1-U06 | NORMAL robot: fallback ESTOP-only, configured-token matching all opcodes, idle START/CALIBRATE, duplicate/full queue, dedicated ESTOP, live DUMP/ABORT | Not run |
+
+Commands are not consumed by TEST/BENCH because those profiles do not start
+vehicle. A broker PUBACK is not vehicle acceptance. GP21 remains the real
+ESTOP in NORMAL; lift wheels for TEST. Network failures are not faults.

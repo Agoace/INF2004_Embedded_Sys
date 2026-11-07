@@ -4,7 +4,7 @@
 
 | Subsystem | Responsibility | Code |
 | --- | --- | --- |
-| 1 | Telemetry RAM log and USB dump; future Wi-Fi publication boundary | `app_program/subsystem1/` |
+| 1 | Telemetry RAM log, MQTT Wi-Fi-task publication, health31 and laptop protocol | `app_program/subsystem1/` |
 | 2 | Motion: motors, servo, encoders and exclusive floor bench | `app_program/subsystem2/` |
 | 3 | Line acquisition/filter/calibration snapshot and sampled-only barcode raw | `app_program/subsystem3/` |
 | 4 | IMU, not yet ported | `app_program/subsystem4/` |

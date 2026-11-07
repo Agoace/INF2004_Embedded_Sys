@@ -118,6 +118,9 @@ length/reserved fields, and decodes signed values to a flat CSV. It does
 not subscribe to `robot/cmd` or record tokens. It subscribes again after a
 broker reconnect. See [wire fields](MQTT_WIRE.md) for units and flags.
 
+Commands apply only to the NORMAL robot. TEST/BENCH deliberately do not
+start vehicle and do not consume these queues; broker ACK never proves a
+vehicle acted. In TEST, neither MQTT nor GP21 is a stop control: lift wheels.
 Use a second terminal for commands; every command has a token field:
 
 ```sh
@@ -157,7 +160,7 @@ vehicle session prints its independent Wi-Fi window after motion stops.
 Lifetime poll-gap maximum and sample count also appear in heartbeat.
 `wifi_observed_priority` comes from the running task; 0 means not observed,
 not priority 0. `wifi_start_status` reports task creation/start failure;
-radio status reports subsequent initialization failure. Poll counts of 0
+template USB startup messages report subsequent radio initialization failure. Poll counts of 0
 or stale health do not establish performance. Work/probe intervals include
 preemption and are not CPU percentages. Full stack margins under sustained
 traffic/dump remain a hardware gate; app minimum excludes template stacks.
