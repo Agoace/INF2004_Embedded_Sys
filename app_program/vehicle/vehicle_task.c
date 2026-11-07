@@ -14,10 +14,12 @@
 #include "vehicle_log.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
+#include "run_stats.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
 #include "../subsystem1/network_queue.h"
 #include "../platform/app_board.h"
+#include "../subsystem2/motor_ctl_robot.h"
 #endif
 #if TM_WIFI_CYW43
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
@@ -51,10 +53,24 @@ static uint32_t request_id;
 static drv_line_stats_t line_base;
 static const char *reason = "no saved run";
 #if TM_MQTT
+/* Why the run ended, as a robot/summary stop reason (RM_STOP_*). */
+static uint8_t stop_code;
+#define set_reason(code, text) \
+    do {                       \
+        reason = (text);       \
+        stop_code = (code);    \
+    } while (0)
+#else
+#define set_reason(code, text) (reason = (text))
+#endif
+#if TM_MQTT
 static APP_BOARD(vehicle_snapshot_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
 static APP_BOARD(rm_obstacle_t) obstacle_board;
 static uint32_t obstacle_scans;
+static APP_BOARD(rm_detour_t) detour_board;
+static APP_BOARD(rm_summary_t) summary_board;
+static rs_t run_stats;
 static uint8_t pending_action;
 static uint32_t event_sequence;
 static uint32_t seen_commands[8];
@@ -143,6 +159,27 @@ static vsm_outcome_t scan_step_observed(void *ctx, const vsm_inputs_t *in,
     return outcome;
 }
 
+/* Publish a finished detour summary (observer output only). */
+static void publish_detour(const rm_detour_t *detour)
+{
+    app_board_publish(&detour_board.sequence, detour_board.words, detour,
+                      sizeof(*detour));
+}
+
+/* Publish the summary of the run that has just ended. */
+static void publish_run_summary(void)
+{
+    rm_summary_t summary;
+    rm_detour_t aborted;
+
+    if (rs_run_end(&run_stats, drv_time_ms(), stop_code, vsm.fault,
+                   vsm.fault_detail, &summary, &aborted)) {
+        publish_detour(&aborted);
+    }
+    app_board_publish(&summary_board.sequence, summary_board.words, &summary,
+                      sizeof(summary));
+}
+
 /* Copy the newest obstacle report; see obstacle_report.h. */
 int vehicle_obstacle_try_read(rm_obstacle_t *out)
 {
@@ -156,6 +193,38 @@ int vehicle_obstacle_try_read(rm_obstacle_t *out)
         return (obstacle_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
     }
     *out = report;
+    return E_OK;
+}
+
+/* Copy the newest detour summary; see run_stats.h. */
+int vehicle_detour_try_read(rm_detour_t *out)
+{
+    rm_detour_t value;
+
+    if (!out) {
+        return E_PAR;
+    }
+    if (!app_board_try_read(&detour_board.sequence, detour_board.words, &value,
+                            sizeof(value))) {
+        return (detour_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+}
+
+/* Copy the newest run summary; see run_stats.h. */
+int vehicle_summary_try_read(rm_summary_t *out)
+{
+    rm_summary_t value;
+
+    if (!out) {
+        return E_PAR;
+    }
+    if (!app_board_try_read(&summary_board.sequence, summary_board.words,
+                            &value, sizeof(value))) {
+        return (summary_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
     return E_OK;
 }
 
@@ -237,7 +306,7 @@ static void handle_command(void)
                 (void)vehicle_estop();
                 if (active) {
                     cancelled = true;
-                    reason = "remote stop (best effort)";
+                    set_reason(RM_STOP_MQTT_ESTOP, "remote stop (best effort)");
                 }
             } else if (c.opcode == RM_CMD_DUMP) {
                 if (robot_network_dump(c.request_id) < E_OK) {
@@ -277,7 +346,7 @@ static bool send(telemetry_message_t *message)
         return true;
     }
     cancelled = true;
-    reason = "telemetry queue unavailable";
+    set_reason(RM_STOP_TELEMETRY, "telemetry queue unavailable");
     return false;
 }
 
@@ -317,7 +386,7 @@ static void finish_step(void)
         ++overruns;
         if (active) {
             cancelled = true;
-            reason = "vehicle deadline missed";
+            set_reason(RM_STOP_DEADLINE, "vehicle deadline missed");
             (void)vehicle_stop();
         }
     }
@@ -329,7 +398,7 @@ static void read_line(void)
     if (line_snapshot_read(&sensor, true) < E_OK) {
         if (active) {
             cancelled = true;
-            reason = "line snapshot failed";
+            set_reason(RM_STOP_LINE_STALE, "line snapshot failed");
         }
         return;
     }
@@ -344,13 +413,13 @@ static void read_line(void)
         (!sensor.valid || drv_time_us() - sensor.timestamp_us > 10000u)) {
         (void)vehicle_estop();
         cancelled = true;
-        reason = "line snapshot stale";
+        set_reason(RM_STOP_LINE_STALE, "line snapshot stale");
     }
     if (active && (sensor.acquisition.missed != line_base.missed ||
                    sensor.acquisition.dropped != line_base.dropped)) {
         (void)vehicle_estop();
         cancelled = true;
-        reason = "line samples lost";
+        set_reason(RM_STOP_LINE_LOST_SAMPLES, "line samples lost");
     }
 }
 
@@ -367,14 +436,14 @@ static bool wait_tick(void)
     }
     if (er < E_OK || (active && extra > 0)) {
         cancelled = true;
-        reason = "lost motion wake";
+        set_reason(RM_STOP_MOTION_WAKE, "lost motion wake");
     }
     motion_status_t s;
     if (motion_status(&s) >= E_OK) {
         release_tick = s.ticks;
     } else {
         cancelled = true;
-        reason = "motion status failed";
+        set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
     }
     release_us = drv_time_us();
     step_open = true;
@@ -386,14 +455,14 @@ static bool wait_tick(void)
     telemetry_stats(&log);
     if (active && log.storage_full) {
         cancelled = true;
-        reason = "telemetry storage full";
+        set_reason(RM_STOP_TELEMETRY, "telemetry storage full");
     }
     if (active && drv_time_ms() - run_button_ms >= 20u) {
         run_button_ms = drv_time_ms();
         if (pressed(21u, &prev_run)) {
             (void)vehicle_estop();
             cancelled = true;
-            reason = "GP21 emergency stop";
+            set_reason(RM_STOP_GP21, "GP21 emergency stop");
         }
     }
     return er >= E_OK && !cancelled;
@@ -512,6 +581,12 @@ static watched_t watched[4];
 static void watched_start(void *ctx, uint16_t payload, uint32_t now)
 {
     watched_t *w = ctx;
+#if TM_MQTT
+    if (w->id == VSM_MOD_DETOUR) {
+        rs_detour_begin(&run_stats, now, (uint8_t)ss_payload_side(payload),
+                        obstacle_scans);
+    }
+#endif
     w->module.start(w->module.ctx, payload, now);
 }
 
@@ -522,6 +597,14 @@ static vsm_outcome_t watched_step(void *ctx, const vsm_inputs_t *in,
     const vsm_outcome_t out = w->module.step(w->module.ctx, in, now, drive);
     if (vsm_outcome_type(out) != VSM_OUT_RUNNING) {
         event(1u, w->id, 0u, out);
+#if TM_MQTT
+        rm_detour_t detour;
+
+        if (rs_outcome(&run_stats, w->id, vsm_outcome_type(out),
+                       vsm_outcome_payload(out), now, &detour)) {
+            publish_detour(&detour);
+        }
+#endif
     }
     return out;
 }
@@ -590,7 +673,7 @@ static void sonar_stop(void)
         .generation = ++generation, .id = ++request_id, .mode = SONAR_STOP};
     if (sonar_request(&r) < E_OK && active) {
         cancelled = true;
-        reason = "sonar cancel unavailable";
+        set_reason(RM_STOP_SONAR, "sonar cancel unavailable");
     }
 }
 
@@ -600,7 +683,7 @@ static bool request(sonar_request_t *r)
         return true;
     }
     cancelled = true;
-    reason = "sonar request unavailable";
+    set_reason(RM_STOP_SONAR, "sonar request unavailable");
     return false;
 }
 
@@ -611,6 +694,10 @@ static void run_once(void)
     read_line();
     line_event = VC_EVENT_NONE;
     run_start = drv_time_ms();
+#if TM_MQTT
+    stop_code = RM_STOP_UNKNOWN;
+    rs_run_begin(&run_stats, run_start);
+#endif
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
     ++generation;
@@ -634,7 +721,7 @@ static void run_once(void)
         sonar_snapshot_t sonar = {0};
         bool fresh = false;
         if (sonar_result_read(&sonar, &fresh) < E_OK) {
-            reason = "sonar snapshot failed";
+            set_reason(RM_STOP_SONAR, "sonar snapshot failed");
             break;
         }
         const bool matching = sonar.generation == generation &&
@@ -652,11 +739,11 @@ static void run_once(void)
                         sonar.result_sequence != seen_result &&
                         sonar.status == SONAR_ECHO;
         if (matching && fresh && sonar.status == SONAR_DEADLINE) {
-            reason = "sonar request deadline";
+            set_reason(RM_STOP_SONAR, "sonar request deadline");
             break;
         }
         if (echo_new && (int32_t)(now - sonar.deadline_ms) > 0) {
-            reason = "stale sonar result";
+            set_reason(RM_STOP_SONAR, "stale sonar result");
             break;
         }
         if (echo_new) {
@@ -675,19 +762,19 @@ static void run_once(void)
             }
         }
         if (mode == SONAR_WATCH && (int32_t)(now - watch_deadline) > 0) {
-            reason = "sonar watch stale";
+            set_reason(RM_STOP_SONAR, "sonar watch stale");
             break;
         }
         if (mode == SONAR_ONCE && outstanding &&
             (int32_t)(now - request_deadline) > 0) {
-            reason = "sonar request deadline";
+            set_reason(RM_STOP_SONAR, "sonar request deadline");
             break;
         }
         seen_ping = sonar.ping_sequence;
         seen_result = sonar.result_sequence;
         motion_status_t s;
         if (motion_status(&s) < E_OK) {
-            reason = "motion status failed";
+            set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
             break;
         }
         if (vc_event_type(line_event) == VC_EVENT_LINE_LOST) {
@@ -702,6 +789,14 @@ static void run_once(void)
         if (ping_sent) {
             pending_bits |= 8u;
         }
+#if TM_MQTT
+        {
+            const int16_t commanded[2] = {vehicle.left_mm_s, vehicle.right_mm_s};
+            const int16_t measured[2] = {s.speed_mm_s[0], s.speed_mm_s[1]};
+
+            rs_step(&run_stats, now, s.counts, measured, commanded, s.faults);
+        }
+#endif
         const uint8_t state_before = vsm.state;
         const uint8_t module_before = vsm.running;
         const uint32_t handoffs = vsm.handoffs;
@@ -743,7 +838,7 @@ static void run_once(void)
             last_log = now;
         }
         if (vsm.state != VSM_RUNNING) {
-            reason = "shell left RUNNING";
+            set_reason(RM_STOP_SHELL, "shell left RUNNING");
             break;
         }
         const uint8_t desired =
@@ -770,11 +865,14 @@ static void run_once(void)
             watch_deadline = now + (uint32_t)rate * 2u + 20u;
         }
         if (now - run_start >= RUN_LIMIT_MS) {
-            reason = "90 s time limit";
+            set_reason(RM_STOP_TIME_LIMIT, "90 s time limit");
             break;
         }
     }
     event(4u, vsm.state, vsm.running, vsm.fault_detail);
+#if TM_MQTT
+    publish_run_summary();
+#endif
     (void)vehicle_stop();
     (void)vehicle_servo(0, 0);
     vsm_stop(&vsm);
@@ -789,6 +887,15 @@ static void vehicle_task(INT code, void *ctx)
     ls_init(&ls, &SEARCH_CFG);
     ss_init(&ss, &SCAN_CFG);
     dr_init(&dr, &DETOUR_CFG);
+#if TM_MQTT
+    {
+        static const mc_config_t motion_config = MC_ROBOT_CONFIG;
+        const rs_config_t stats_config = {
+            {motion_config.counts_per_m, motion_config.counts_per_deg_x100}};
+
+        rs_init(&run_stats, &stats_config);
+    }
+#endif
     vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
     install(0u, VSM_MOD_LINE, lt_module(&lt));
     install(1u, VSM_MOD_SEARCH, ls_module(&ls));
@@ -959,6 +1066,16 @@ int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
 }
 
 int vehicle_obstacle_try_read(rm_obstacle_t *out)
+{
+    return out ? E_NOEXS : E_PAR;
+}
+
+int vehicle_detour_try_read(rm_detour_t *out)
+{
+    return out ? E_NOEXS : E_PAR;
+}
+
+int vehicle_summary_try_read(rm_summary_t *out)
 {
     return out ? E_NOEXS : E_PAR;
 }

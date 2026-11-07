@@ -6,11 +6,17 @@
 #include "vehicle_board.h"
 #include "vehicle_log.h"
 #include "obstacle_report.h"
+#include "odometry.h"
+#include "run_stats.h"
 #include "../subsystem1/robot_network.h"
 #include "../subsystem2/motion.h"
+#include "../subsystem2/motor_ctl_robot.h"
 #include "../subsystem3/line_service.h"
 #include "../subsystem5/sonar_service.h"
 #include "../platform/drv_time.h"
+
+/* Motor controller settings: counts per metre and per degree of turn. */
+static const mc_config_t motion_config = MC_ROBOT_CONFIG;
 
 typedef struct {
     bool have;
@@ -103,6 +109,14 @@ void robot_network_state(rm_state_t *out)
     out->dist_left_mm = motion.travel_mm[MC_LEFT];
     out->dist_right_mm = motion.travel_mm[MC_RIGHT];
     out->dist_avg_mm = rm_average_mm(out->dist_left_mm, out->dist_right_mm);
+    const odo_config_t odometry = {motion_config.counts_per_m,
+                                   motion_config.counts_per_deg_x100};
+    out->duty_left_permille = motion.duty_permille[MC_LEFT];
+    out->duty_right_permille = motion.duty_permille[MC_RIGHT];
+    out->heading_cdeg = motion.heading_cdeg;
+    out->turn_rate_ddps =
+        odo_turn_rate_ddps(&odometry, motion.speed_mm_s[MC_LEFT],
+                           motion.speed_mm_s[MC_RIGHT]);
     ultrasonic_result_t echo = ULTRASONIC_RESULT_NONE;
     if (s) {
         if (sonar.valid && sonar.status == SONAR_ECHO &&
@@ -175,6 +189,48 @@ int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out)
     }
     *out = report;
     *cursor = report.scan_id;
+    return E_OK;
+}
+
+/* Pull the newest detour summary if it is new; see robot_network.h. */
+int robot_network_detour(uint32_t *cursor, rm_detour_t *out)
+{
+    rm_detour_t value;
+    const int result = vehicle_detour_try_read(&value);
+
+    if (result == E_NOEXS) {
+        return E_NOEXS;
+    }
+    if (result < E_OK) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
+        return result;
+    }
+    if (value.sequence == *cursor) {
+        return E_NOEXS;
+    }
+    *out = value;
+    *cursor = value.sequence;
+    return E_OK;
+}
+
+/* Pull the newest run summary if it is new; see robot_network.h. */
+int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
+{
+    rm_summary_t value;
+    const int result = vehicle_summary_try_read(&value);
+
+    if (result == E_NOEXS) {
+        return E_NOEXS;
+    }
+    if (result < E_OK) {
+        robot_network_busy(ROBOT_BOARD_VEHICLE);
+        return result;
+    }
+    if (value.run_id == *cursor) {
+        return E_NOEXS;
+    }
+    *out = value;
+    *cursor = value.run_id;
     return E_OK;
 }
 

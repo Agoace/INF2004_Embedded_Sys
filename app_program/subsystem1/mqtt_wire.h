@@ -4,14 +4,23 @@
 #include <stddef.h>
 #include <stdint.h>
 #define RM_VERSION        1u
-#define RM_STATE_SIZE     60u
-/* robot/state is version 2: 48-byte v1 layout plus three distances. */
-#define RM_STATE_VERSION  2u
+#define RM_STATE_SIZE     72u
+/* robot/state is version 3: v1 (48 B), v2 distances, v3 duty and odometry. */
+#define RM_STATE_VERSION  3u
+#define RM_STATE_V1_SIZE  48u
+#define RM_STATE_V2_SIZE  60u
 #define RM_SONAR_SIZE     32u
 #define RM_OBSTACLE_SIZE  20u
 #define RM_STATUS_SIZE    2u
 #define RM_EVENT_SIZE     16u
 #define RM_HEARTBEAT_SIZE 100u
+/* robot/heartbeat is version 2: bytes 98-99 are the CPU load. */
+#define RM_HEARTBEAT_VERSION 2u
+#define RM_CPU_LOAD_UNKNOWN  65535u
+#define RM_DETOUR_SIZE    32u
+#define RM_SUMMARY_SIZE   44u
+/* Value of an unavailable 16-bit measurement in robot/summary. */
+#define RM_SUMMARY_NONE_U16 65535u
 #define RM_COMMAND_SIZE   22u
 #define RM_LOG_SIZE       32u
 #define RM_TOKEN_SIZE     16u
@@ -54,6 +63,10 @@ typedef struct {
     int32_t dist_left_mm;
     int32_t dist_right_mm;
     int32_t dist_avg_mm;
+    int16_t duty_left_permille;
+    int16_t duty_right_permille;
+    int32_t heading_cdeg;
+    int16_t turn_rate_ddps;
 } rm_state_t;
 
 /* robot/status payload byte 1. Both values are non-zero on purpose. */
@@ -67,7 +80,9 @@ enum {
     RM_OBSTACLE_CLOSEST_VALID = 0x01,
     RM_OBSTACLE_TOO_NEAR = 0x02,
     RM_OBSTACLE_LEFT_BLOCKED = 0x04,
-    RM_OBSTACLE_RIGHT_BLOCKED = 0x08
+    RM_OBSTACLE_RIGHT_BLOCKED = 0x08,
+    RM_OBSTACLE_STAGE_SHIFT = 4,
+    RM_OBSTACLE_STAGE_MASK = 0x30
 };
 
 /* One completed obstacle scan. Decision is obstacle_side_t: 0 none, 1 right,
@@ -85,6 +100,86 @@ typedef struct {
     uint8_t right_clear_deg;
     uint8_t left_clear_deg;
 } rm_obstacle_t;
+
+/* robot/detour outcome (byte 1): the shell outcome numbers, plus ABORTED. */
+enum {
+    RM_DETOUR_DONE_LINE = 3,
+    RM_DETOUR_DONE_NO_LINE = 4,
+    RM_DETOUR_FAILED = 7,
+    RM_DETOUR_ABORTED = 8
+};
+/* robot/detour flags (byte 3). */
+enum { RM_DETOUR_LATERAL_VALID = 0x01 };
+
+/* One finished detour. Distances are millimetres from encoder odometry. */
+typedef struct {
+    uint8_t outcome;
+    uint8_t side; /* 0 none, 1 right, 2 left */
+    uint8_t flags;
+    uint32_t sequence;
+    uint32_t start_ms;
+    uint32_t end_ms;
+    uint32_t duration_ms;
+    uint32_t distance_mm;
+    uint16_t max_lateral_mm;
+    uint16_t payload;
+    uint32_t scan_id;
+} rm_detour_t;
+
+/* robot/summary stop source (byte 2). */
+enum {
+    RM_STOP_SOURCE_NONE = 0,
+    RM_STOP_SOURCE_GP21 = 1,
+    RM_STOP_SOURCE_MQTT = 2,
+    RM_STOP_SOURCE_FAULT = 3,
+    RM_STOP_SOURCE_LIMIT = 4
+};
+/* robot/summary stop reason (byte 3). */
+enum {
+    RM_STOP_UNKNOWN = 0,
+    RM_STOP_GP21 = 1,
+    RM_STOP_MQTT_ESTOP = 2,
+    RM_STOP_TIME_LIMIT = 3,
+    RM_STOP_SHELL = 4,
+    RM_STOP_DEADLINE = 5,
+    RM_STOP_MOTION_WAKE = 6,
+    RM_STOP_MOTION_STATUS = 7,
+    RM_STOP_LINE_STALE = 8,
+    RM_STOP_LINE_LOST_SAMPLES = 9,
+    RM_STOP_SONAR = 10,
+    RM_STOP_TELEMETRY = 11,
+    RM_STOP_OTHER = 12
+};
+/* robot/summary flags (byte 1). */
+enum {
+    RM_SUMMARY_BARCODE_IMPLEMENTED = 0x01,
+    RM_SUMMARY_SPEED_ERROR_VALID = 0x02,
+    RM_SUMMARY_DETOUR_ABORTED = 0x04
+};
+
+/* End-of-run totals. Retained on the broker. */
+typedef struct {
+    uint8_t flags;
+    uint8_t stop_source;
+    uint8_t stop_reason;
+    uint32_t run_id;
+    uint32_t start_ms;
+    uint32_t duration_ms;
+    uint32_t distance_mm;
+    uint16_t line_losses;
+    uint16_t obstacles;
+    uint16_t detours_done;
+    uint16_t detours_succeeded;
+    uint32_t detour_total_ms;
+    uint16_t detours_started;
+    uint16_t max_speed_error_mm_s;
+    uint8_t motion_fault_bits;
+    uint8_t shell_fault;
+    uint16_t shell_fault_detail;
+    uint8_t barcode_ok;
+    uint8_t barcode_failed;
+    uint16_t hump_peak;
+} rm_summary_t;
 
 typedef struct {
     uint8_t status;
@@ -142,6 +237,7 @@ typedef struct {
     int32_t wifi_start_status;
     uint8_t wifi_requested_priority;
     uint8_t wifi_observed_priority;
+    uint16_t cpu_load_permille; /* RM_CPU_LOAD_UNKNOWN if not measured */
 } rm_heartbeat_t;
 
 typedef struct {
@@ -192,6 +288,8 @@ size_t rm_pack_log_batch(uint8_t *out, size_t capacity,
 /* Mean of two signed distances, truncated toward zero, no overflow. */
 int32_t rm_average_mm(int32_t left_mm, int32_t right_mm);
 void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v);
+void rm_pack_detour(uint8_t out[RM_DETOUR_SIZE], const rm_detour_t *v);
+void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v);
 void rm_pack_status(uint8_t out[RM_STATUS_SIZE], uint8_t state);
 void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *value);
 void rm_pack_sonar(uint8_t out[RM_SONAR_SIZE], const rm_sonar_t *value);

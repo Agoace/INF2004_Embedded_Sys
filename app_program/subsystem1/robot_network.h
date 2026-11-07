@@ -39,6 +39,10 @@ int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed);
 /* Newest obstacle report if its scan_id differs from *cursor. E_OK new,
  * E_NOEXS nothing new, other negative values: board busy. */
 int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out);
+/* Newest detour summary if its sequence differs from *cursor, same results. */
+int robot_network_detour(uint32_t *cursor, rm_detour_t *out);
+/* Newest run summary if its run_id differs from *cursor, same results. */
+int robot_network_summary(uint32_t *cursor, rm_summary_t *out);
 void robot_health_collect(rm_heartbeat_t *out);
 /* Vehicle posts a single pending dump request. No lwIP or logging waits. */
 int robot_network_dump(uint32_t request_id);

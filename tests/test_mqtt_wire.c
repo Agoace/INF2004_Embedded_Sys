@@ -157,8 +157,85 @@ static void test_dashboard_fixtures(void) {
     beat.flags=0x3fu;
     rm_pack_heartbeat(bytes,&beat);emit_named("heartbeat_dump",bytes,RM_HEARTBEAT_SIZE);
 }
+static void test_detour_summary(void)
+{
+    uint8_t bytes[RM_SUMMARY_SIZE];
+    rm_detour_t detour = {.outcome = RM_DETOUR_DONE_LINE, .side = 2u,
+        .flags = 0xffu, .sequence = 0x01020304u, .start_ms = 0xfffffff0u,
+        .end_ms = 0x00000010u, .duration_ms = 32u, .distance_mm = 0xa1b2c3d4u,
+        .max_lateral_mm = 0x1234u, .payload = 0x0567u, .scan_id = 0x0a0b0c0du};
+    rm_pack_detour(bytes, &detour);
+    assert(bytes[0] == 1u && bytes[1] == 3u && bytes[2] == 2u && bytes[3] == 1u);
+    assert(bytes[4] == 4u && bytes[7] == 1u && bytes[8] == 0xf0u && bytes[11] == 0xffu);
+    assert(bytes[12] == 0x10u && bytes[15] == 0u && bytes[16] == 32u);
+    assert(bytes[20] == 0xd4u && bytes[23] == 0xa1u && bytes[24] == 0x34u && bytes[25] == 0x12u);
+    assert(bytes[26] == 0x67u && bytes[27] == 5u && bytes[28] == 0x0du && bytes[31] == 0x0au);
+    emit_named("detour_done_line", bytes, RM_DETOUR_SIZE);
+    detour.outcome = RM_DETOUR_DONE_NO_LINE; detour.payload = 1u;
+    rm_pack_detour(bytes, &detour);
+    emit_named("detour_done_no_line", bytes, RM_DETOUR_SIZE);
+    detour.outcome = RM_DETOUR_FAILED; detour.payload = 3u; detour.flags = 0u;
+    rm_pack_detour(bytes, &detour);
+    assert(bytes[3] == 0u);
+    emit_named("detour_failed", bytes, RM_DETOUR_SIZE);
+    detour.outcome = RM_DETOUR_ABORTED; detour.payload = 0u; detour.flags = 1u;
+    rm_pack_detour(bytes, &detour);
+    emit_named("detour_aborted", bytes, RM_DETOUR_SIZE);
+
+    rm_summary_t summary = {.flags = 0xffu, .stop_source = RM_STOP_SOURCE_GP21,
+        .stop_reason = RM_STOP_GP21, .run_id = 0x01020304u, .start_ms = 5000u,
+        .duration_ms = 61234u, .distance_mm = 4321u, .line_losses = 3u,
+        .obstacles = 2u, .detours_done = 2u, .detours_succeeded = 1u,
+        .detour_total_ms = 7000u, .detours_started = 3u,
+        .max_speed_error_mm_s = 41u, .motion_fault_bits = 9u, .shell_fault = 4u,
+        .shell_fault_detail = 0x0102u, .barcode_ok = 7u, .barcode_failed = 8u,
+        .hump_peak = 0x0a0bu};
+    uint8_t summary_bytes[RM_SUMMARY_SIZE];
+    rm_pack_summary(summary_bytes, &summary);
+    assert(summary_bytes[0] == 1u && summary_bytes[1] == 7u); /* flags masked */
+    assert(summary_bytes[2] == 1u && summary_bytes[3] == 1u && summary_bytes[4] == 4u);
+    assert(summary_bytes[8] == 0x88u && summary_bytes[9] == 0x13u);
+    assert(summary_bytes[12] == 0x32u && summary_bytes[13] == 0xefu);
+    assert(summary_bytes[16] == 0xe1u && summary_bytes[17] == 0x10u);
+    assert(summary_bytes[20] == 3u && summary_bytes[22] == 2u && summary_bytes[24] == 2u && summary_bytes[26] == 1u);
+    assert(summary_bytes[28] == 0x58u && summary_bytes[29] == 0x1bu && summary_bytes[32] == 3u);
+    assert(summary_bytes[34] == 41u && summary_bytes[36] == 9u && summary_bytes[37] == 4u);
+    assert(summary_bytes[38] == 2u && summary_bytes[39] == 1u);
+    assert(summary_bytes[40] == 7u && summary_bytes[41] == 8u && summary_bytes[42] == 0x0bu && summary_bytes[43] == 0x0au);
+    summary.flags = RM_SUMMARY_SPEED_ERROR_VALID;
+    summary.barcode_ok = 0u; summary.barcode_failed = 0u; summary.hump_peak = RM_SUMMARY_NONE_U16;
+    rm_pack_summary(summary_bytes, &summary);
+    emit_named("summary_normal", summary_bytes, RM_SUMMARY_SIZE);
+    summary.flags = RM_SUMMARY_SPEED_ERROR_VALID | RM_SUMMARY_DETOUR_ABORTED;
+    summary.stop_source = RM_STOP_SOURCE_MQTT; summary.stop_reason = RM_STOP_MQTT_ESTOP;
+    rm_pack_summary(summary_bytes, &summary);
+    emit_named("summary_aborted_detour", summary_bytes, RM_SUMMARY_SIZE);
+    summary.flags = 0u; summary.max_speed_error_mm_s = RM_SUMMARY_NONE_U16;
+    summary.stop_source = RM_STOP_SOURCE_LIMIT; summary.stop_reason = RM_STOP_TIME_LIMIT;
+    rm_pack_summary(summary_bytes, &summary);
+    assert(summary_bytes[34] == 0xffu && summary_bytes[35] == 0xffu && summary_bytes[1] == 0u);
+    emit_named("summary_no_speed_error", summary_bytes, RM_SUMMARY_SIZE);
+
+    uint8_t heartbeat_bytes[RM_HEARTBEAT_SIZE];
+    rm_heartbeat_t beat = {.flags = 0x37u, .uptime_ms = 60000u,
+        .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
+    rm_pack_heartbeat(heartbeat_bytes, &beat);
+    assert(heartbeat_bytes[0] == 2u && heartbeat_bytes[98] == 0xffu && heartbeat_bytes[99] == 0xffu);
+    emit_named("heartbeat_v2_unknown", heartbeat_bytes, RM_HEARTBEAT_SIZE);
+    beat.cpu_load_permille = 0x0123u;
+    rm_pack_heartbeat(heartbeat_bytes, &beat);
+    emit_named("heartbeat_v2", heartbeat_bytes, RM_HEARTBEAT_SIZE);
+    /* Event kind 7 (JUNCTION) is reserved: the packer carries any kind. */
+    const rm_event_t junction = {.kind = 7u, .from = 1u, .to = 1u, .sequence = 20u,
+        .uptime_ms = 12000u, .word = 2u, .detail = 0u};
+    uint8_t event_bytes[RM_EVENT_SIZE];
+    rm_pack_event(event_bytes, &junction);
+    assert(event_bytes[1] == 7u);
+    emit_named("event_junction", event_bytes, RM_EVENT_SIZE);
+}
 int main(void) {
     test_batch_packer();
+    test_detour_summary();
     test_dashboard_fixtures();
     test_average();
     test_obstacle_status();
@@ -167,12 +244,17 @@ int main(void) {
         .uptime_ms=0x12345678u,.sequence=0xfedcba98u,.line_age_ms=10u,.motion_age_ms=20u,
         .vehicle_age_ms=65535u,.raw_bc=0xfabcu,.kr1={1u,2u,3u,4u},
         .count_l=INT32_MIN,.count_r=-1234567,.norm_l=0xffffu,.norm_c=0x555u,
-        .dist_left_mm=-123456,.dist_right_mm=INT32_MAX,.dist_avg_mm=-7};
+        .dist_left_mm=-123456,.dist_right_mm=INT32_MAX,.dist_avg_mm=-7,
+        .duty_left_permille=-800,.duty_right_permille=INT16_MAX,.heading_cdeg=-1234567,.turn_rate_ddps=-4749};
     rm_pack_state(bytes,&state);
-    assert(bytes[0]==2u && bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
+    assert(bytes[60]==0xe0u && bytes[61]==0xfcu && bytes[62]==0xffu && bytes[63]==0x7fu);
+    assert(bytes[64]==0x79u && bytes[65]==0x29u && bytes[66]==0xedu && bytes[67]==0xffu);
+    assert(bytes[68]==0x73u && bytes[69]==0xedu && bytes[70]==0u && bytes[71]==0u);
+    assert(bytes[0]==3u && bytes[2]==0x53u && bytes[4]==0x78u && bytes[7]==0x12u && bytes[19]==0x0au && bytes[47]==0u);
     assert(bytes[48]==0xc0u && bytes[49]==0x1du && bytes[50]==0xfeu && bytes[51]==0xffu);
     assert(bytes[52]==0xffu && bytes[55]==0x7fu && bytes[56]==0xf9u && bytes[59]==0xffu);
     emit("state",bytes,RM_STATE_SIZE);
+    emit_named("state_v3",bytes,RM_STATE_SIZE);
     const rm_sonar_t sonar={.status=0xfdu,.valid=true,.pending=true,.angle=-30,.ping_angle=30,
         .history_sequence=0xffffffffu,.generation=0x12345678u,.request_id=33u,
         .trigger_ms=1000u,.timestamp_ms=1010u,.echo=0x4567u,.ping_sequence=123u};
@@ -188,8 +270,8 @@ int main(void) {
         .mqtt_hook_max_us=10u,.publish_ok=11u,.publish_failed=12u,.line_busy=13u,.sonar_busy=14u,
         .motion_busy=15u,.vehicle_busy=16u,.health_busy=17u,.latest_sonar_history_sequence=18u,
         .health_age_ms=65535u,.wifi_link_status=-3,.mqtt_state=3u,.wifi_poll_gap_max_us=19u,
-        .wifi_poll_gap_samples=20u,.wifi_start_status=-50,.wifi_requested_priority=20u,.wifi_observed_priority=20u};
-    rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0u && bytes[99]==0u);
+        .wifi_poll_gap_samples=20u,.wifi_start_status=-50,.wifi_requested_priority=20u,.wifi_observed_priority=20u,.cpu_load_permille=0x0123u};
+    rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[0]==2u && bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0x23u && bytes[99]==0x01u);
     emit("heartbeat",bytes,RM_HEARTBEAT_SIZE);
     rm_log_t log={.kind=RM_LOG_EVENT,.dump_id=111u,.generation=222u,.index=333u};
     memcpy(log.body,event_bytes,16u);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);

@@ -28,6 +28,8 @@
 #define STATUS_RETRY_MS   500u
 #define TOPIC_STATUS      "robot/status"
 #define TOPIC_OBSTACLE    "robot/obstacle"
+#define TOPIC_DETOUR      "robot/detour"
+#define TOPIC_SUMMARY     "robot/summary"
 #define QOS_AT_LEAST_ONCE 1u
 #define RETAIN_ON         1u
 static mqtt_client_t *client;
@@ -49,7 +51,9 @@ static uint32_t heartbeat_at;
 static uint32_t state_sequence;
 static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
-static rm_heartbeat_t health_cache = {.stack_min_free = 65535u};
+static rm_heartbeat_t health_cache = {.stack_min_free = 65535u,
+                                      .cpu_load_permille =
+                                          RM_CPU_LOAD_UNKNOWN};
 static bool health_present;
 static rm_event_t pending_event;
 static bool have_event;
@@ -58,6 +62,11 @@ static bool have_sonar;
 static uint32_t obstacle_cursor;
 static rm_obstacle_t pending_obstacle;
 static bool have_obstacle;
+static uint32_t detour_cursor;
+static rm_detour_t pending_detour;
+static bool have_detour;
+static uint32_t summary_cursor;
+static uint32_t summary_retry_at;
 static bool status_pending;
 static uint32_t status_retry_at;
 static uint8_t will_payload[RM_STATUS_SIZE];
@@ -128,6 +137,22 @@ int __attribute__((weak)) robot_network_sonar(uint32_t *cursor, rm_sonar_t *out,
 
 int __attribute__((weak)) robot_network_obstacle(uint32_t *cursor,
                                                  rm_obstacle_t *out)
+{
+    (void)cursor;
+    (void)out;
+    return E_NOEXS;
+}
+
+int __attribute__((weak)) robot_network_detour(uint32_t *cursor,
+                                               rm_detour_t *out)
+{
+    (void)cursor;
+    (void)out;
+    return E_NOEXS;
+}
+
+int __attribute__((weak)) robot_network_summary(uint32_t *cursor,
+                                                rm_summary_t *out)
 {
     (void)cursor;
     (void)out;
@@ -239,6 +264,8 @@ static void connection_done(mqtt_client_t *c, void *arg,
         subscribe_at = drv_time_ms();
         status_pending = true;
         status_retry_at = subscribe_at;
+        summary_cursor = 0u; /* publish the last run summary again */
+        summary_retry_at = subscribe_at;
         state_at = subscribe_at;
         heartbeat_at = subscribe_at;
     } else {
@@ -286,6 +313,45 @@ static void service_status(uint32_t now)
     }
 }
 
+/* Acknowledgement of a run summary. A failure makes the service read the
+ * newest summary and publish it again. */
+static void summary_done(void *arg, err_t error)
+{
+    (void)arg;
+    if (error != ERR_OK) {
+        summary_cursor = 0u;
+        summary_retry_at = drv_time_ms() + STATUS_RETRY_MS;
+        inc(&metrics.publish_failed);
+    }
+}
+
+/*
+ * Publish the newest run summary (QoS 1, retained) when it is new. The
+ * cursor is the run id. Every new connection and every failure clears it, so
+ * the last summary is published again.
+ */
+static void service_summary(uint32_t now)
+{
+    rm_summary_t value;
+    uint8_t bytes[RM_SUMMARY_SIZE];
+    uint32_t cursor = summary_cursor;
+    err_t error;
+
+    if (!due(now, summary_retry_at) ||
+        robot_network_summary(&cursor, &value) < E_OK) {
+        return;
+    }
+    rm_pack_summary(bytes, &value);
+    error = mqtt_publish(client, TOPIC_SUMMARY, bytes, RM_SUMMARY_SIZE,
+                         QOS_AT_LEAST_ONCE, RETAIN_ON, summary_done, NULL);
+    inc(error == ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
+    if (error == ERR_OK) {
+        summary_cursor = cursor;
+    } else {
+        summary_retry_at = now + STATUS_RETRY_MS;
+    }
+}
+
 static void published(void *arg, err_t error)
 {
     (void)arg;
@@ -326,6 +392,7 @@ static void service(uint32_t now)
 {
     unsigned int budget = 4u;
     service_status(now);
+    service_summary(now);
     if (!subscribed && !subscribe_pending && due(now, subscribe_at)) {
         subscribe_pending = true;
         if (mqtt_subscribe(client, "robot/cmd", 1u, subscription_done, NULL) !=
@@ -395,6 +462,18 @@ static void service(uint32_t now)
         rm_pack_obstacle(bytes, &pending_obstacle);
         if (publish(TOPIC_OBSTACLE, bytes, sizeof(bytes))) {
             have_obstacle = false;
+        }
+        --budget;
+    }
+    if (!have_detour && (budget > 0u)) {
+        have_detour =
+            robot_network_detour(&detour_cursor, &pending_detour) >= E_OK;
+    }
+    if (have_detour && (budget > 0u)) {
+        uint8_t bytes[RM_DETOUR_SIZE];
+        rm_pack_detour(bytes, &pending_detour);
+        if (publish(TOPIC_DETOUR, bytes, sizeof(bytes))) {
+            have_detour = false;
         }
         --budget;
     }

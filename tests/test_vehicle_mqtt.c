@@ -34,6 +34,10 @@ int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *mis
     ++reads[4];*missed=0u;if (history_error<0) return history_error;
     *out=history_value;*cursor=history_value.sequence;*missed=3u;return E_OK;
 }
+static rm_detour_t detour_value;static int detour_error=E_NOEXS;
+static rm_summary_t summary_value;static int summary_error=E_NOEXS;
+int vehicle_detour_try_read(rm_detour_t *out) { if (detour_error<0) return detour_error;*out=detour_value;return E_OK; }
+int vehicle_summary_try_read(rm_summary_t *out) { if (summary_error<0) return summary_error;*out=summary_value;return E_OK; }
 static rm_obstacle_t obstacle_value;static int obstacle_error=E_NOEXS;
 int vehicle_obstacle_try_read(rm_obstacle_t *out) { if (obstacle_error<0) return obstacle_error;*out=obstacle_value;return E_OK; }
 void robot_network_busy(unsigned int board) { assert(board<5u);++busy[board]; }
@@ -51,7 +55,7 @@ int main(void) {
     now_ms=100u;now_us=100000u;motion_us=80000u;
     line_value=(line_snapshot_t){.valid=true,.sequence=1u,.timestamp_us=90000u,.raw_bc=4095u,.raw={123u,456u,0u}};
     line_value.line.norm[0]=789u;line_value.line.norm[1]=987u;line_value.line.position=-25;
-    motion_value=(motion_status_t){.ticks=1u,.counts={-123456,234567},.travel_mm={-9,22},.speed_mm_s={-20,30},.faults=3u,.late_wakes=7u,.missed_wakes=8u};
+    motion_value=(motion_status_t){.ticks=1u,.counts={-123456,234567},.travel_mm={-9,22},.speed_mm_s={-20,30},.duty_permille={-345,678},.heading_cdeg=-1234567,.faults=3u,.late_wakes=7u,.missed_wakes=8u};
     vehicle_value=(vehicle_snapshot_t){.sequence=1u,.timestamp_us=70000u,.active=true,.state=2u,.module=3u,.servo_deg=-15,
         .left_mm_s=-40,.right_mm_s=50,.overruns=9u};
     sonar_value=(sonar_snapshot_t){.status=SONAR_ECHO,.valid=true,.timestamp_ms=0u,.echo=123u};
@@ -60,6 +64,9 @@ int main(void) {
     assert(value.line_age_ms==10u && value.motion_age_ms==20u && value.vehicle_age_ms==30u);
     assert(value.flags==143u && value.raw_bc==4095u && value.norm_l==789u && value.norm_c==987u);
     assert(value.count_l==-123456 && value.count_r==234567 && value.motion_faults==3u && value.state==2u && value.module==3u);
+    assert(value.duty_left_permille==-345 && value.duty_right_permille==678);
+    assert(value.heading_cdeg==-1234567);
+    assert(value.turn_rate_ddps==258); /* (30 - -20) mm/s * 12414 / 2405 = 258.1 */
     assert(value.dist_left_mm==-9 && value.dist_right_mm==22 && value.dist_avg_mm==6); /* (-9+22)/2 */
     assert(row_bits(value.kr1,93u,16u)==123u); /* Sonar age 100ms is included. */
     const rm_state_t retained=value;
@@ -135,6 +142,25 @@ int main(void) {
         assert(robot_network_obstacle(&scan_cursor,&out)==E_NOEXS && scan_cursor==4u); /* same report */
         obstacle_value.scan_id=7u;
         assert(robot_network_obstacle(&scan_cursor,&out)==E_OK && scan_cursor==7u && out.scan_id==7u); /* 5,6 missed */
+    }
+    /* Detour and summary adapters use their own cursors (sequence, run_id). */
+    {
+        uint32_t detour_cursor=0u,summary_cursor=0u;rm_detour_t d;rm_summary_t r;
+        detour_error=E_NOEXS;summary_error=E_NOEXS;
+        assert(robot_network_detour(&detour_cursor,&d)==E_NOEXS && robot_network_summary(&summary_cursor,&r)==E_NOEXS);
+        detour_error=E_TMOUT;summary_error=E_TMOUT;
+        const unsigned int busy_now=busy[ROBOT_BOARD_VEHICLE];
+        assert(robot_network_detour(&detour_cursor,&d)==E_TMOUT && robot_network_summary(&summary_cursor,&r)==E_TMOUT);
+        assert(busy[ROBOT_BOARD_VEHICLE]==busy_now+2u);
+        detour_error=E_OK;summary_error=E_OK;
+        detour_value=(rm_detour_t){.sequence=3u,.outcome=RM_DETOUR_DONE_LINE};
+        summary_value=(rm_summary_t){.run_id=2u,.distance_mm=77u};
+        assert(robot_network_detour(&detour_cursor,&d)==E_OK && detour_cursor==3u && d.outcome==RM_DETOUR_DONE_LINE);
+        assert(robot_network_detour(&detour_cursor,&d)==E_NOEXS);
+        assert(robot_network_summary(&summary_cursor,&r)==E_OK && summary_cursor==2u && r.distance_mm==77u);
+        assert(robot_network_summary(&summary_cursor,&r)==E_NOEXS);
+        summary_cursor=0u; /* a new connection asks for the last summary again */
+        assert(robot_network_summary(&summary_cursor,&r)==E_OK && r.run_id==2u);
     }
     return 0;
 }
