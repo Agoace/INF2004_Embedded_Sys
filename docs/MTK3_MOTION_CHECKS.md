@@ -178,3 +178,17 @@ blocked until the fixed image passes cold-power S0-U01.
 If task-gap jitter exceeds 1 ms, stop floor testing and review Option H;
 it is not implemented. Do not treat compile/link success as approval of
 hardware timing, electrical behaviour or the full RTOS vehicle plan.
+
+## STEP 8 early kernel TIMER source
+
+This supersedes the old boot-order dependency, not its historical results.
+[Template changes](TEMPLATE_CHANGES.md) now permit reviewed shared edits.
+`Reset_Handler` calls `knl_startup_hw` before data/BSS/kernel initialization;
+that function selects clk_ref/XOSC then performs bounded register-only
+WATCHDOG_TICK setup (12 cycles, ENABLE, RUNNING), before any device/task.
+`drv_time_init` remains idempotent verification and the 2% rate check is
+unchanged. Motion alone still feeds the watchdog. New-image cold-power
+S0-U01 on robot/TEST/BENCH and MQTT is **Not run**. No warm reboot or build
+substitutes for that check. Current build/strict/link results are in
+[Kernel robot](KERNEL_ROBOT.md); the old unchanged-template table applies
+only to its original STEP 1 revision.

@@ -87,3 +87,7 @@ Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hard
 - [Kernel telemetry](KERNEL_TELEMETRY.md) — message-buffer transport and RAM log owner.
 
 - [Local template changes](TEMPLATE_CHANGES.md) — approved deviations, early TIMER, Wi-Fi priority/hook/timing and update checks.
+
+- [Kernel MQTT design](KERNEL_MQTT.md) — non-critical network policy, pull boards, queues, ownership and measured timing limits.
+- [MQTT binary wire protocol](MQTT_WIRE.md) — version1 topic layouts, masks/LE and decoder contract.
+- [MQTT operator runbook](MQTT_RUNBOOK.md) — scoped Mosquitto/firewall, private settings, laptop CSV/commands and pending hardware checks.

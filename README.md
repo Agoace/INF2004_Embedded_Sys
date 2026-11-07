@@ -248,7 +248,8 @@ Each option goes through the same steps:
 
 The makefile also has `NET=lwip` and `MQTT=1` (TCP/IP and MQTT over WiFi).
 They need the SDK's `lib/lwip` submodule and a `config/wifi_secrets.h`
-(copy `config/wifi_secrets.example.h`). This guide does not cover them.
+(copy `config/wifi_secrets.example.h`). The robot uses its own MQTT settings;
+see [the operator runbook](docs/MQTT_RUNBOOK.md), not the template demo.
 
 ---
 
@@ -285,3 +286,12 @@ See [the template change ledger](docs/TEMPLATE_CHANGES.md) for approved shared
 changes, their reasons, and the procedure after a lecturer update. Template
 source is not frozen. Run `python3 scripts/check-template-changes.py` to check
 the recorded file list. No SDK startup/runtime is added.
+
+### Optional MQTT telemetry
+
+`make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 -j4` adds non-critical MQTT on the
+existing Wi-Fi task at priority20 and health31. Driving never requires a
+link/broker; GP21 remains the real ESTOP. [Design](docs/KERNEL_MQTT.md),
+[wire layouts](docs/MQTT_WIRE.md), and [broker/private-settings runbook](docs/MQTT_RUNBOOK.md)
+explain ownership, binary CSV decoding and token-bearing commands. New-image
+network, cold-power and loaded motion/M1/M2 checks remain **Not run**.

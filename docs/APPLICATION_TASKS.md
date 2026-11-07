@@ -4,7 +4,8 @@
 registered core-0 application tasks, using `TA_USERBUF`, static 8-byte
 aligned storage, and a 0xa5 fill pattern before `tk_cre_tsk()`. Failed create
 or start returns the error; failed start deletes the dormant task. No
-kernel/template source is changed. Startup runs on core 0 before the
+kernel source is needed for this helper; approved shared changes are in
+[the template ledger](TEMPLATE_CHANGES.md). Startup runs on core 0 before the
 application tasks can run, so no allocation lock is needed.
 
 | Task | Stack bytes |
@@ -15,9 +16,12 @@ application tasks can run, so no allocation lock is needed.
 | vehicle_task | 4096 |
 | telemetry_task | 4096 |
 | motion_bench | 4096 |
+| health_task, MQTT only | 2048 |
 
 All six regions reserve 19456 bytes of static RAM even when a profile does
-not start all six tasks. These are initial conservative budgets, not
+not start all six tasks. MQTT adds the health region, for 21504 bytes total;
+the NORMAL MQTT robot uses 17408 bytes of these regions (bench is inactive).
+These are initial conservative budgets, not
 measured hardware needs. Sensor tasks do no formatting. Vehicle has extra
 margin for nested module calls; telemetry and bench have extra margin for
 `tm_printf()` (about 1 KB) and the stack-report copy. The motion region
@@ -35,7 +39,9 @@ claim is made that this measures them. A fill-pattern scan is an estimate,
 not an overflow detector or a proof of worst-case stack depth.
 
 TEST output and the robot GP20 dump call the report. Hardware high-water
-measurements are **Not run** for the task-split image. Before accepting the
+measurements passed for STEP 7, but remain **Not run** for the changed STEP 8
+boards/network image. Health31 scans once per second outside driving tasks
+and publishes the minimum free value; it does not measure template stacks. Before accepting the
 budgets, run calibration, LINE/SEARCH/SCAN/DETOUR, saturation and a full USB
 dump, then record each high-water mark with at least 256 bytes remaining.
 Increase a budget if needed; do not infer runtime margin from link size.

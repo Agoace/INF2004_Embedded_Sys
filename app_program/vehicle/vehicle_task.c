@@ -378,6 +378,7 @@ static void vehicle_task(INT code,void *ctx) {
 #if TM_MQTT
         const bool calibrated=action==RM_CMD_START ? lp_calibrated(&lp) : calibrate();
         const bool run=action!=RM_CMD_CALIBRATE;
+        if (calibrated && !run && !cancelled) reason="calibration complete";
         if (calibrated && run && !cancelled) {
             vehicle.phase=2u;
 #else

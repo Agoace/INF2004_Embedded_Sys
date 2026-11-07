@@ -3,6 +3,11 @@
 ## Scope and safety
 
 STEP 7 separates acquisition, navigation and telemetry into core-0 tasks.
+STEP 8 adds optional, non-critical MQTT telemetry through the existing
+Wi-Fi/lwIP task. Its new hardware checks are **Not run**; STEP 7 passes
+below do not validate the new startup, boards or network load. See
+[MQTT design](KERNEL_MQTT.md), [runbook](MQTT_RUNBOOK.md) and
+[template ledger](TEMPLATE_CHANGES.md).
 Pure LINE/SEARCH/SCAN/DETOUR modules, routes, motor tuning and
 [`vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h)
 are unchanged. The configuration contract compares the reference block
@@ -28,31 +33,45 @@ make SMP=0 WIFI=none -j4            # robot
 make SMP=0 WIFI=none BENCH=1 -j4    # motion bench only
 make SMP=0 WIFI=none TEST=1 -j4     # subsystem tests, wheels lifted
 make -j4                           # robot, default SMP/radio profile
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 -j4 # robot with MQTT
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 TEST=1 -j4 # Wi-Fi timing TEST
 ```
 
 The following application tasks are pinned to physical core 0 (`TP_PRC1`)
 in both profiles; the SMP build does not move application work to core 1.
-Lower priority numbers run first. USB/radio template tasks remain above
-application tasks. No template file is changed. Vehicle activation requires
+Lower priority numbers run first. USB remains 3; Wi-Fi is created directly
+at 20, below driving tasks 10–13 and above telemetry 30. The original
+template used 4 to run below USB but above its qualification task. Driving
+must not wait for network processing. Approved shared changes are recorded
+in [the template ledger](TEMPLATE_CHANGES.md). Vehicle activation requires
 an armed motion watchdog and successfully started line, sonar and telemetry
 services (including the sonar deadline cyclic). Failed startup is reported
 by the existing init/start CHECK path and does not permit a robot session.
 
 | Task/context | Priority | Release | Owns / kernel objects | Stack bytes |
 | --- | ---: | --- | --- | ---: |
+| USB service | 3 | Template console | USB, unchanged | Template |
+| Wi-Fi service | 20 | Existing poll task; requested sleep 2 ms | Sole CYW43/lwIP/MQTT owner; named application hook, no wrap | Template 8192 with lwIP |
 | motion_task | 10 | cyc_motion, 10 ms | Motor/servo PWM, encoders, stale stop; inherited mtx_motion; sole watchdog feed | 3072 |
 | line_task, S3 | 11 | Every 1 ms ADC ISR wake | Raw queue consumer, lp/filter/calibration data; inherited snapshot mutex | 2048 |
 | sonar_task, S5 | 12 | Request or echo wake; 10 ms deadline cyclic | Trigger/echo; request MBF 256 bytes, result mutex and event flag | 2048 |
 | vehicle_task | 13 | Motion after-tick notification, 10 ms | Spin behaviour, buttons, one active module, service requests, motion commands | 4096 |
 | telemetry_task, S1 | 30 | Receive mbf_telemetry, event-driven | RAM rows/events and paced dump; MBF 4096 bytes; producer-loss counters use DI/EI | 4096 |
+| health_task, MQTT only | 31 | 1 s cyclic wake | Bounded health board and preemptible app-stack scan | 2048 |
 | motion_bench, exclusive BENCH image | 11 | Motion after-tick notification | Earlier bench buttons/log; never runs with vehicle | 4096 |
 | ADC TIMER alarm0 / IRQ0 | IRQ level 2 | Absolute 1 ms targets | Eight conversions/channel, timestamped 128-slot queue, loss/ISR timing counters | Interrupt stack |
 | Encoder/echo GPIO13 | IRQ level 1 | Edges | Shared dispatcher, counts and rise/fall timestamps; echo service wake | Interrupt stack |
 
 Robot totals: **5 application tasks, 3 mutexes, 2 cyclic handlers, 2 message
-buffers and 1 result event flag**. TEST starts the four service/motion tasks,
+buffers and 1 result event flag** without MQTT. MQTT adds one health task,
+one 1 s cyclic and three MBFs: 16 live events, eight normal commands, one
+ESTOP. Thus MQTT robot totals are **6 app tasks, 3 mutexes, 3 cyclics,
+5 MBFs and 1 flag** (plus template USB/Wi-Fi/initial tasks). None of these
+network objects or their readiness gates driving. TEST starts the four service/motion tasks,
 not vehicle or bench. BENCH starts only motion/bench and leaves ADC/sonar
-and telemetry idle. The one motion notification slot remains exclusive to
+and telemetry idle in the radio-off BENCH profile. MQTT adds health even
+in TEST; vehicle command consumption remains NORMAL-robot only. The one
+motion notification slot remains exclusive to
 vehicle or bench. All task functions loop forever or use `tk_ext_tsk()`;
 none returns. Existing kernel limits suffice; no template limits change.
 
@@ -289,8 +308,10 @@ They do not replace physical margin checks. The largest static RAM use is
 RAM region before dynamic kernel/message-buffer/template-stack use. The
 19456-byte application-stack reserve is already included in bss.
 
-No pure module/configuration, `src/`, `sim/`, Ziven source or template/
-kernel/lib/device/include/config file changed relative to current staging.
+At STEP 7, no pure module/configuration, `src/`, `sim/`, Ziven source or
+template/kernel/lib/device/include/config file changed. STEP 8 keeps pure
+references unchanged but permits listed shared template deviations; see
+[the current ledger](TEMPLATE_CHANGES.md).
 Bare-metal/simulator checks were therefore not repeated. Documentation,
 map links/anchors, diff whitespace, local secret checks and tracked-tree
 clean checks pass. Logs and retained probe/compiler evidence are under
@@ -392,3 +413,44 @@ Documentation/map, whitespace, secret-pattern/credential-config and clean
 checks pass. Logs, compiler frame reports, link maps and validation commands
 are retained under `/tmp/step7-fix1-results/`. **No push or flash.**
 S2-U01 and PROBE A passed on hardware on 2026-11-06.
+
+## STEP 8 pull boards and non-critical MQTT
+
+Sensor boards are transport-independent. Motion and line add bounded
+non-consuming last-tick/sample reads; sonar adds a latest board plus the
+last 16 ECHO/DEADLINE/CANCELLED service publications with sequence cursors
+and eviction counts. Stale/orphan physical echoes remain discarded.
+Vehicle publishes state/module/phase, active/calibrated, commands and
+counters. Health31 publishes uptime/reset, losses, overruns, app-stack
+minimum and network status. One-attempt atomic-word reads never spin.
+Busy/unavailable reads count per board; retained values have fresh flags
+cleared and explicit saturated ages. History/events do not depend on a
+latest-board read. See [board details](KERNEL_MQTT.md#pull-boards).
+
+Only vehicle pushes bounded rare events. Token-bearing commands queue to
+vehicle, never directly to motion. ESTOP has a dedicated queue slot and
+flushes older start intentions. CALIBRATE/START are idle-only; START needs
+learned calibration; DUMP streams committed RAM data without freezing it.
+Absent/invalid/example token permits only shape-valid ESTOP, token unchecked;
+a valid configured token must match every command, including ESTOP. GP21
+remains the real ESTOP; MQTT ESTOP has no latency guarantee. Network failures
+never become motor/vehicle faults, never feed watchdog and never gate boot.
+M1/M2 acceptance is independent of MQTT; S1-U04..06 are separate.
+
+Kernel reset startup now establishes the 1 us TIMER source immediately
+after clk_ref selection and before vectors/data/BSS/kernel/devices/tasks.
+It uses only register/stack state, no SDK headers or uninitialized globals.
+The app call remains idempotent verification; the 2% rate gate is unchanged.
+The previous initial1-before-Wi-Fi boot-order dependency is gone.
+
+Wi-Fi full-poll wall metrics include preemption, not CPU utilization.
+Independent begin/end windows preserve lifetime data and count gaps >10000
+us. TEST prints its Wi-Fi window after S2 closes; NORMAL prints a complete
+vehicle-session window only after motion stops. The MQTT heartbeat reports
+lifetime gap max/samples and actual observed priority. Zero polls or stale
+health is not a performance pass. No picotool reset interface is added.
+
+New-image S0-U01 cold-power (including MQTT), S1-U04/U05/U06, S2-U01 with
+Wi-Fi20, full-load stack/timing, and independent M1/M2 with MQTT are
+**Not run**. Exact [wire layouts](MQTT_WIRE.md) and [broker procedure](MQTT_RUNBOOK.md)
+are separate records. Final software results are recorded below.

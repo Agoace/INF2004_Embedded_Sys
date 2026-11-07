@@ -24,14 +24,16 @@ end; these are USB pacing waits, not periodic work. DUMP reserves busy
 before enqueue, and BEGIN/new messages are rejected while the dump is
 pending or active. The vehicle does not start a new session until busy
 clears. RAM logs do not survive reset. Normal record formatting is absent
-from the vehicle task; only error/start notices remain there.
+from the vehicle task; only error/start notices and an idle post-session
+Wi-Fi timing summary remain there.
 
 This is event-driven, rather than the plan's illustrative 110 ms telemetry
 period: drain immediately when scheduled, otherwise block on the MBF.
 It reduces backlog and does not introduce drift or a periodic timer. No
-MQTT or network runtime is added. This queue is the later publication
-plug-in point; future network integration must still execute CYW43/lwIP
-operations in the existing Wi-Fi owner, not this task or control tasks.
+MQTT operation runs in this task. STEP 8 adds the separate named hook on
+the existing Wi-Fi owner; it pulls committed RAM entries and boards, not
+this producer queue. No control or logger task calls lwIP. See
+[MQTT design](KERNEL_MQTT.md) and [wire layout](MQTT_WIRE.md).
 
 The transport does not change KR1 bit fields or VE text. Decoders continue
 to ignore descriptive headers. The 4 spare KR1 flag bits contain only the
@@ -40,4 +42,7 @@ for barcode ADC, so the row is unchanged. GP20 metadata can show raw_bc.
 
 Host doubles check value copying, TMO_POL, full-buffer losses, row capacity,
 storage reset, dump exclusion, pacing, row/event output and stack report.
-S1-U02/U03 on hardware remain **Not run** for this task-split image.
+The prior STEP 7 results remain historical. S1 network checks on the new
+STEP 8 image are **Not run**. MQTT reads fixed committed highwater/generation
+without setting local USB-dump busy; append logging continues. A generation
+change aborts the network dump rather than mixing sessions.

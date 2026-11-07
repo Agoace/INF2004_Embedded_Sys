@@ -190,3 +190,23 @@ Use fresh worktrees, commit in the owning branch, then merge `--no-ff`
 into the candidate; never rebase or merge another student's reference
 branch. [Kernel robot](KERNEL_ROBOT.md) has the task/object and plan-vs-port
 tables. No MQTT or barcode algorithm is added in this step.
+
+## STEP 8 MQTT and shared template changes
+
+`mtk3` owns shared early TIMER startup, direct Wi-Fi priority20, named
+application hook, lifetime/window poll timing and the bounded publication
+helper. Template code is not frozen: [TEMPLATE_CHANGES.md](TEMPLATE_CHANGES.md)
+is the complete allowed file ledger against `c3b0954`. Shared fixes use
+small separate commits and `--no-ff` merges; no branch is rebased.
+
+`mtk3-motion` and `mtk3-line` own transport-independent status/sample boards.
+`mtk3-scan` owns the bounded 16-result history and non-consuming latest read.
+`mtk3-telemetry` owns MQTT, health31, queues, app-only settings, codec and
+laptop client. Staging owns vehicle board/events/command policy, cross-board
+adapters and integration/timing acceptance. Protocol and test-only
+`mtk3-*` topic branches merge into their owner with `--no-ff`; they are
+not additional runtime modules. Only `mtk3-staging-next` combines all work.
+
+[MQTT design](KERNEL_MQTT.md) and [runbook](MQTT_RUNBOOK.md) describe the
+non-critical network policy. New-image hardware rows remain **Not run**;
+software validation never grants push or flash permission.
