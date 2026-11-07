@@ -60,7 +60,27 @@ It fails on the old value 3.
 3. Check `tm_usb_dropped` 0 and dump delta 0 on both dumps.
 4. Cold-power the MQTT TEST image; check enumeration and the full TEST log.
 
-The per-run gap window remains a proposal only.
+## Hardware result (2026-11-07): PASS
+
+MQTT DIAG image built on `94015fd` with the local secrets, flashed with
+`picotool load -f` and `picotool verify`.
+
+| Check | Result |
+| --- | --- |
+| U1: cold power, USB only | `ttyACM0` enumerates; the boot log starts at the Wi-Fi join, as before the change; MQTT connects |
+| U2: robot run, then GP20 dump 1 | 206 rows, 7 events; `tm_usb_dropped` 0, dump delta 0 |
+| U2: GP20 dump 2 (reports dump 1) | `[MOTION-DIAG] lifetime observations=0`; gap 9963..10041 us |
+| Before the change (same procedure) | 18 observations during the first dump; worst gap 14467 us |
+| Dashboard DUMP after the run | Complete, 206 rows, 7 events |
+
+The run stop used GP21. The MQTT ESTOP was not tested in this run: the
+browser page held the CSRF token of an earlier dashboard process, and the
+dashboard refused the commands with 403. This is a dashboard issue, not a
+firmware issue. The full MQTT TEST image log under the new priority is
+**Not run**; the largest TEST burst (about 1.5 KB) fits the 4096 B ring.
+
+The per-run gap window (option B) is dropped: the dump delay is gone, so
+the lifetime gap is no longer skewed by dumps.
 
 ## Software validation
 
@@ -79,5 +99,4 @@ Local only: no push or flash.
 | Binary check | `tm_usb_console_start` stores 21 into `T_CTSK.itskpri` (offset 12) in TEST, MQTT DIAG and SMP default images |
 | Docs, template ledger, `git diff --check` | PASS; template ledger 8 paths |
 
-Hardware is **Not run** for this change. The hardware checks above are the
-acceptance gate.
+The hardware result is in the section above.
