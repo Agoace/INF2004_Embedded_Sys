@@ -5,6 +5,7 @@ Add a panel by writing one builder function and decorating it with
 register_panel; the page draws any panel that appears in the snapshot.
 """
 import collections
+import math
 import threading
 import time
 
@@ -132,6 +133,9 @@ class DashboardModel:
         self.event_sequence = None
         self.event_gaps = 0
         self.trend = collections.deque(maxlen=TREND_LIMIT)
+        self.path = self._empty_path()
+        self.path_previous = None
+        self.path_reset_pending = False
         self.pending = None
         self.last_message_ms = None
         self.log_messages = collections.deque(maxlen=LOG_MESSAGE_LIMIT)
@@ -201,6 +205,9 @@ class DashboardModel:
         self.obstacle_scan_id = self.detour_sequence = self.event_sequence = None
         self.obstacle_missed = self.detour_missed = self.event_gaps = 0
         self.pending = self.last_decision = self.last_message_ms = None
+        self.path = self._empty_path()
+        self.path_previous = None
+        self.path_reset_pending = False
         self.reserved = {"barcode": None, "imu": None, "imu_event": None}
         self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
 
@@ -230,6 +237,8 @@ class DashboardModel:
                 return  # do not replace a current summary with an older retained copy
             self.summary = {"fields": fields, "rx": now, "retained": retained}
         elif topic == "robot/state":
+            if fields["state"] == 1 and (self.state is None or self.state["fields"]["state"] != 1):
+                self.path_reset_pending = True
             previous_module = None if self.state is None else self.state["fields"]["module"]
             if fields["module"] == 3 and previous_module not in (3, 5):
                 self.scan_samples.clear()
@@ -318,12 +327,64 @@ class DashboardModel:
         self.log_info["live_rows"] += len(live)
         self.log_info["refill_rows"] += len(refill)
         if live:
+            for row in live:
+                self._path_row(row)
             last = live[-1]
             self.log_info["last"] = {"rx": now, "data_age_ms": last["data_age_ms"],
                                      "rows_behind": last["rows_behind"],
                                      "generation": last["generation"], "index": last["index"]}
             if any(row["jumped"] for row in live):
                 self.log_info["jumped_frames"] += 1
+
+    @staticmethod
+    def _empty_path():
+        return {"points": collections.deque(maxlen=4600), "generation": None,
+                "x": 0.0, "y": 0.0, "heading": 0.0, "gaps": 0, "trimmed": 0}
+
+    def _path_row(self, row):
+        """Integrate live measured speeds only; never bridge missing rows or DUMP history."""
+        generation = row["generation"]
+        old = self.path["generation"]
+        if old is not None and generation != old and ((generation - old) & 0xFFFFFFFF) >= 0x80000000:
+            return  # a delayed old generation must not reset the displayed run
+        previous = self.path_previous
+        if row["kr1_state"] != 1:
+            self.path_previous = None
+            self.path_reset_pending = True
+            return
+        if self.path_reset_pending or generation != old:
+            self.path = self._empty_path()
+            self.path["generation"] = generation
+            self.path_reset_pending = False
+            previous = None
+        elif previous is not None and row["index"] <= previous["index"]:
+            return
+        path = self.path
+        connected = False
+        if previous is not None:
+            dt_ms = (row["kr1_time_ms"] - previous["kr1_time_ms"]) % (65536 * 20)
+            if row["index"] == previous["index"] + 1 and 0 < dt_ms <= 200:
+                dt = dt_ms / 1000.0
+                left, right = previous["kr1_measured_l"], previous["kr1_measured_r"]
+                distance = (left + right) / 2.0 * dt
+                turn = (right - left) * dt / 111.0
+                half = turn / 2.0
+                chord = distance if abs(half) < 1e-9 else distance * math.sin(half) / half
+                path["x"] -= chord * math.sin(path["heading"] + half)
+                path["y"] += chord * math.cos(path["heading"] + half)
+                path["heading"] += turn
+                connected = True
+            else:
+                path["gaps"] += 1  # position beyond a gap is not known; do not fabricate travel
+        if len(path["points"]) == path["points"].maxlen:
+            path["trimmed"] += 1
+        path["points"].append({"x": path["x"], "y": path["y"], "module": row["kr1_module"],
+                               "connected": connected})
+        self.path_previous = row
+
+    def path_visual(self):
+        return {"points": list(self.path["points"]), "gaps": self.path["gaps"],
+                "trimmed": self.path["trimmed"], "generation": self.path["generation"]}
 
     def note_command(self, command, request_id, puback):
         """Record a command the dashboard just published."""
@@ -539,6 +600,7 @@ class DashboardModel:
                 "paused": self.telemetry_mode() == "idle",
                 "state": dict(f),
                 "sonar": self.sonar_visual(now),
+                "path": self.path_visual(),
                 "state_stale": self.state is None or
                 self.state_age(now) > self.limits()["state_stale_ms"]}
 

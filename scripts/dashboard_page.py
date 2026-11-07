@@ -79,6 +79,7 @@ button.armed { background:var(--warn); color:#000; }
 canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin-top:6px; }
 #panel-ultrasonic canvas { height:350px; }
 #panel-line canvas, #panel-wheels canvas { height:240px; }
+#panel-path canvas { height:270px; }
 .visual-summary { font-size:17px; font-weight:700; margin:8px 0; }
 .legend { font-size:12px; color:var(--dim); margin-top:6px; }
 @media(max-width:800px) { #panel-ultrasonic canvas { height:300px; } }
@@ -105,7 +106,10 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
 <div id="banner" hidden></div>
 <div id="message"></div>
 <main id="grid">
-  <section id="panel-path" class="panel"><h2>RUN PATH</h2><p class="note">Waiting for live run rows.</p></section>
+  <section id="panel-path" class="panel"><h2><span class="title">RUN PATH</span><span class="age"></span></h2>
+    <div class="note">Waiting for live run rows.</div><div class="visual-summary"></div>
+    <canvas hidden></canvas><div class="legend"></div><table class="facts"></table>
+    <table class="rows" hidden></table><div class="items"></div></section>
   <details id="health" class="panel"><summary>HEALTH · connection, timing and counters</summary>
     <div id="diagnostics"><span id="broker" class="pill">broker ?</span>
       <span id="telemetry" class="pill">telemetry ?</span>
@@ -249,7 +253,37 @@ function drawDrive(canvas, chart) {
     });
   ctx.fillStyle="#a3aebc";ctx.fillText("blue asked · green measured · bars capped ±500",12,h-8);
 }
+function drawPath(canvas, chart) {
+  const ctx=setup(canvas), w=canvas.width, h=canvas.height, points=chart.points;
+  if (!points.length) { ctx.fillStyle="#a3aebc";ctx.fillText("Waiting for live run rows",12,24);return; }
+  const xs=points.map(p=>p.x), ys=points.map(p=>p.y);
+  const minX=Math.min(0,...xs), maxX=Math.max(0,...xs), minY=Math.min(0,...ys), maxY=Math.max(0,...ys);
+  const scale=Math.min((w-60)/Math.max(200,maxX-minX),(h-65)/Math.max(200,maxY-minY));
+  const centreX=(minX+maxX)/2, centreY=(minY+maxY)/2;
+  const xy=p=>[w/2+(p.x-centreX)*scale,h/2-(p.y-centreY)*scale];
+  ctx.fillStyle="#899bad";ctx.fillText("dead reckoning · forward ↑ · mm",12,18);
+  ctx.strokeStyle="#354254";ctx.beginPath();ctx.moveTo(...xy({x:0,y:0}));
+  const origin=xy({x:0,y:0});ctx.arc(...origin,4,0,Math.PI*2);ctx.stroke();
+  for (let i=1;i<points.length;i++) {
+    if (!points[i].connected) continue;
+    const module=points[i-1].module;
+    ctx.strokeStyle=({3:"#f5c55e",4:"#c49aff",5:"#ff8b79"})[module] || "#69c1ff";
+    ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...xy(points[i-1]));ctx.lineTo(...xy(points[i]));ctx.stroke();
+  }
+  points.forEach((p,i) => {
+    if (![3,4,5].includes(p.module) || (i && points[i-1].module === p.module)) return;
+    const at=xy(p); ctx.fillStyle=({3:"#f5c55e",4:"#c49aff",5:"#ff8b79"})[p.module];
+    ctx.beginPath();ctx.arc(...at,p.module === 3 ? 7 : 4,0,Math.PI*2);ctx.fill();
+    ctx.fillText(({3:"SCAN",4:"DETOUR",5:"REVERSE"})[p.module],
+      at[0] + (p.module === 3 ? -40 : 8),at[1]-5);
+  });
+  const end=xy(points[points.length-1]);ctx.fillStyle="#ffffff";
+  ctx.beginPath();ctx.arc(...end,4,0,Math.PI*2);ctx.fill();ctx.lineWidth=1;
+  ctx.strokeStyle="#a3aebc";ctx.beginPath();ctx.moveTo(15,h-20);ctx.lineTo(15+100*scale,h-20);ctx.stroke();
+  ctx.fillStyle="#a3aebc";ctx.fillText("100 mm",15,h-27);
+}
 const CHART_RENDERERS = {
+  path: drawPath,
   sensors: drawLine,
   drive: drawDrive,
   fan: drawSonar,
@@ -354,7 +388,8 @@ function renderPanel(panel) {
   node.classList.toggle("paused", Boolean(panel.paused));
   const titles = {ultrasonic:"ULTRASONIC", line:"LINE", wheels:"DRIVE", summary:"LAST RUN"};
   text(node.querySelector(".title"), titles[panel.id] || panel.title);
-  text(node.querySelector(".age"), panel.placeholder ? "placeholder"
+  text(node.querySelector(".age"), panel.id === "path" ? (panel.paused ? "idle (paused)" : "live rows")
+       : panel.placeholder ? "placeholder"
        : panel.paused ? "idle (paused)" + (panel.age_ms === null ? "" : ", data " +
                                            fmtAge(panel.age_ms))
        : fmtAge(panel.age_ms) + (panel.stale && panel.age_ms !== null ? " - stale" : ""));
@@ -445,6 +480,12 @@ function render(snapshot) {
     node.className = !view.state_stale && view.module === id ? "active" : "";
   });
   renderButtons(snapshot.buttons);
+  if (view.path) renderPanel({id:"path", title:"RUN PATH", age_ms:null, stale:false,
+    paused:view.paused, rows:[], items:[], table:null, chart:{type:"path", ...view.path},
+    note:"Measured wheel speeds · track 111 mm · resets each run · drifts with slip. " +
+      "Blue LINE/SEARCH, gold SCAN, purple DETOUR, coral REVERSE. " +
+      view.path.gaps + " gaps (travel unknown; no connecting line)" +
+      (view.path.trimmed ? " · older points trimmed" : "")});
   snapshot.panels.forEach(panel => {
     if (panel.id === "ultrasonic" && view.sonar) {
       renderPanel({...panel, chart:{type:"fan", ...view.sonar}, paused:view.paused});

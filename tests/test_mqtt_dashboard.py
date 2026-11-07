@@ -2105,6 +2105,74 @@ class RedesignPageTests(AppCase):
         self.assertTrue(any(c[0] == "arc" for c in trace["canvasCalls"]))
 
 
+class RunPathTests(ModelCase):
+    @staticmethod
+    def path_row(index=0, time=0, left=100, right=100, generation=1, module=1, state=1):
+        return {"generation":generation, "index":index, "kr1_time_ms":time,
+                "kr1_measured_l":left, "kr1_measured_r":right, "kr1_state":state,
+                "kr1_module":module, "source":"live", "kind":5, "data_age_ms":0,
+                "rows_behind":0, "jumped":False}
+
+    def add(self, **kwargs):
+        self.model._log_rows([self.path_row(**kwargs)], self.model.now_ms())
+        return self.model.path_visual()
+
+    def test_straight_distance_and_reverse(self):
+        self.add()
+        self.add(index=1, time=100, left=-100, right=-100)
+        p=self.add(index=2, time=200)
+        self.assertAlmostEqual(p["points"][1]["y"],10)
+        self.assertAlmostEqual(p["points"][-1]["y"],0)
+        self.assertAlmostEqual(p["points"][-1]["x"],0)
+
+    def test_turn_track_and_positive_left_heading(self):
+        self.add(left=0,right=111)
+        p=self.add(index=1,time=100,left=0,right=111)
+        self.assertAlmostEqual(self.model.path["heading"],.1)
+        self.assertLess(p["points"][-1]["x"],0)
+        self.assertGreater(p["points"][-1]["y"],0)
+
+    def test_gap_and_long_dt_are_not_connected(self):
+        self.add()
+        p=self.add(index=3,time=100)
+        self.assertEqual(p["gaps"],1)
+        self.assertFalse(p["points"][-1]["connected"])
+        self.assertEqual(p["points"][-1]["y"],0)
+        self.assertEqual(self.add(index=4,time=1000)["gaps"],2)
+
+    def test_resets_per_generation_and_stopped_run(self):
+        self.add()
+        self.add(index=1,time=100)
+        p=self.add(index=0,time=200,generation=2)
+        self.assertEqual(len(p["points"]),1)
+        self.add(index=1,time=220,generation=2,state=0)
+        p=self.add(index=2,time=240,generation=2)
+        self.assertEqual((len(p["points"]),p["points"][0]["y"]),(1,0))
+
+    def test_refill_duplicate_and_delayed_generation_cannot_move_path(self):
+        self.add(generation=2)
+        self.model._log_rows([dict(self.path_row(index=1,time=100,generation=2),source="refill")],0)
+        self.add(generation=2)
+        self.add(generation=1)
+        self.assertEqual(len(self.model.path_visual()["points"]),1)
+
+    def test_quantized_timer_wrap_and_boot_reset(self):
+        self.add(time=65535*20)
+        p=self.add(index=1,time=0)
+        self.assertAlmostEqual(p["points"][-1]["y"],2)
+        self.model._new_boot()
+        self.assertEqual(self.model.path_visual()["points"],[])
+
+    def test_module_segments_and_point_bound(self):
+        self.add(module=3)
+        self.add(index=1,time=20,module=4)
+        self.assertEqual([p["module"] for p in self.model.path_visual()["points"]],[3,4])
+        for i in range(2,4602):
+            self.add(index=i,time=i*20)
+        self.assertEqual(len(self.model.path_visual()["points"]),4600)
+        self.assertEqual(self.model.path_visual()["trimmed"],2)
+
+
 class RedesignLayoutTests(unittest.TestCase):
     def test_offline_responsive_layout_and_health_section(self):
         page = dashboard_page.PAGE
