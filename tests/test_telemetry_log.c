@@ -5,6 +5,8 @@
 #include "test_telemetry.c"
 #undef bytes
 #undef main
+static uint32_t fake_clock_ms;
+uint32_t drv_time_ms(void) { return fake_clock_ms; }
 static bool change_log_guard;
 static void log_read_hook(const uint32_t *sequence,unsigned int index) {
     if (change_log_guard && index==0u) {
@@ -46,9 +48,11 @@ int main(void) {
     telemetry_log_index_t highwater;
     assert(telemetry_log_open(&highwater)==E_OK && highwater.rows==3u && highwater.events==2u);
     telemetry_message_t message={.kind=TELEMETRY_ROW,.data.row={0xcdu}};
+    fake_clock_ms=4321u;
     send_message(&message); /* Open readers do not set busy or stop appending. */
     telemetry_log_index_t current_index;
     assert(telemetry_log_open(&current_index)==E_OK && current_index.rows==4u && highwater.rows==3u);
+    assert(current_index.newest_ms==4321u && highwater.newest_ms!=4321u);
     assert(telemetry_log_row(highwater.generation,3u,row)==E_OK && row[0]==0xcdu);
     const uint32_t guard=log_index.sequence;
     log_index.sequence=guard+1u;

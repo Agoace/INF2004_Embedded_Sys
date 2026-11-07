@@ -11,6 +11,7 @@
 #include "network_queue.h"
 #include "robot_health.h"
 #include "telemetry.h"
+#include "log_stream.h"
 #include "robot_mqtt_config.h"
 #include "../platform/drv_time.h"
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
@@ -21,7 +22,7 @@ static bool configured,connecting,subscribed,subscribe_pending,commands_enabled;
 static uint8_t token[RM_TOKEN_SIZE],rx[RM_COMMAND_SIZE];
 static uint32_t rx_length,rx_expected;
 static bool rx_valid;
-static uint32_t retry_at,subscribe_at,state_at,heartbeat_at,log_at,state_sequence,sonar_cursor;
+static uint32_t retry_at,subscribe_at,state_at,heartbeat_at,state_sequence,sonar_cursor;
 static rm_heartbeat_t metrics;
 static rm_heartbeat_t health_cache={.stack_min_free=65535u};
 static bool health_present;
@@ -29,9 +30,6 @@ static rm_event_t pending_event;
 static bool have_event;
 static rm_sonar_t pending_sonar;
 static bool have_sonar;
-static bool dump_requested,dump_active,log_inflight;
-static uint32_t dump_request_id;
-static struct { uint32_t id,row,event;uint8_t stage;bool opened;telemetry_log_index_t index; } dump;
 static void inc(uint32_t *value) { UINT irq;DI(irq);++*value;EI(irq); }
 static bool due(uint32_t now,uint32_t at) { return (int32_t)(now-at)>=0; }
 static int hex(char c) {
@@ -67,7 +65,7 @@ void robot_network_metrics(rm_heartbeat_t *out) {
     const bool connected=metrics.mqtt_state>=2u;
     if (connected) out->flags|=2u;
     if (subscribed) out->flags|=4u;
-    if (dump_active || dump_requested) out->flags|=8u;
+    if (log_stream_dump_active()) out->flags|=8u;
     if (commands_enabled) out->flags|=16u;
     T_CYW43_UTK_STATUS status;cyw43_utk_get_status(&status);
     out->wifi_link_status=(int8_t)status.link_status;
@@ -78,11 +76,7 @@ void robot_network_metrics(rm_heartbeat_t *out) {
     out->wifi_start_status=cyw43_utk_start_status();out->wifi_requested_priority=20u;
     robot_queue_metrics(out);
 }
-int robot_network_dump(uint32_t request_id) {
-    UINT irq;DI(irq);
-    if (dump_active || dump_requested) { EI(irq);return E_OBJ; }
-    dump_request_id=request_id;dump_requested=true;EI(irq);return E_OK;
-}
+int robot_network_dump(uint32_t request_id) { return log_stream_dump_request(request_id); }
 static void incoming_publish(void *arg,const char *topic,u32_t length) {
     (void)arg;rx_length=0u;rx_expected=length;
     rx_valid=strcmp(topic,"robot/cmd")==0 && length==RM_COMMAND_SIZE;
@@ -114,9 +108,9 @@ static void connection_done(mqtt_client_t *c,void *arg,mqtt_connection_status_t 
     } else {
         metrics.mqtt_state=0u;retry_at=drv_time_ms()+RETRY_MS;
         inc(&metrics.publish_failed); /* asynchronous refusal/timeout/drop */
-        /* lwIP mqtt_close deletes pending requests WITHOUT callbacks. Retry
-         * the unacknowledged frame after reconnect, with the same cursor. */
-        if (log_inflight) { log_inflight=false;inc(&metrics.publish_failed); }
+        /* lwIP mqtt_close deletes pending requests WITHOUT callbacks: the log
+         * streams rewind to their acknowledged cursors and live jumps. */
+        log_stream_link_down();
     }
 }
 static void published(void *arg,err_t error) {
@@ -127,53 +121,17 @@ static bool publish(const char *topic,const uint8_t *data,unsigned int length) {
     inc(error==ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
     return error==ERR_OK;
 }
+/* QoS 1 acknowledgement (DUMP only; the live stream is QoS 0). */
 static void log_done(void *arg,err_t error) {
-    (void)arg;log_inflight=false;
-    if (error!=ERR_OK) { inc(&metrics.publish_failed);return; }
-    if (dump.stage==RM_LOG_BEGIN) dump.stage=RM_LOG_ROW;
-    else if (dump.stage==RM_LOG_ROW) ++dump.row;
-    else if (dump.stage==RM_LOG_EVENT) ++dump.event;
-    else dump_active=false;
+    log_stream_complete((uint32_t)(uintptr_t)arg,error==ERR_OK);
+    if (error!=ERR_OK) inc(&metrics.publish_failed);
 }
-static void put32(uint8_t *out,uint32_t v) { for (unsigned int i=0u;i<4u;++i) out[i]=(uint8_t)(v>>(8u*i)); }
-static bool log_frame(void) {
-    if (log_inflight) return false;
-    if (!dump_active) {
-        UINT irq;DI(irq);
-        if (!dump_requested) { EI(irq);return false; }
-        dump.id=dump_request_id;dump_requested=false;dump_active=true;EI(irq);
-        dump.stage=RM_LOG_BEGIN;dump.row=0u;dump.event=0u;dump.opened=false;
-        dump.index=(telemetry_log_index_t){0};
-    }
-    if (!dump.opened) {
-        if (telemetry_log_open(&dump.index)<E_OK) return false;
-        dump.opened=true;
-    }
-    telemetry_log_index_t current;
-    if (telemetry_log_open(&current)<E_OK) return false;
-    if (current.generation!=dump.index.generation) dump.stage=RM_LOG_ABORT;
-    if (dump.stage==RM_LOG_ROW && dump.row==dump.index.rows) dump.stage=RM_LOG_EVENT;
-    if (dump.stage==RM_LOG_EVENT && dump.event==dump.index.events) dump.stage=RM_LOG_END;
-    rm_log_t v={.kind=dump.stage,.dump_id=dump.id,.generation=dump.index.generation};
-    if (dump.stage==RM_LOG_ROW) {
-        v.index=dump.row;
-        if (telemetry_log_row(dump.index.generation,dump.row,v.body)<E_OK) return false;
-    } else if (dump.stage==RM_LOG_EVENT) {
-        telemetry_event_t e;
-        if (telemetry_log_event(dump.index.generation,dump.event,&e)<E_OK) return false;
-        const rm_event_t ev={.kind=e.kind,.from=e.from,.to=e.to,.sequence=dump.event,
-            .uptime_ms=e.ms,.word=e.word,.detail=e.detail,.flags=1u};
-        v.index=dump.event;rm_pack_event(v.body,&ev);
-    } else {
-        put32(&v.body[0],dump.stage==RM_LOG_BEGIN ? dump.index.rows : dump.stage==RM_LOG_ABORT ? 1u : dump.row);
-        put32(&v.body[4],dump.stage==RM_LOG_BEGIN ? dump.index.events : dump.stage==RM_LOG_ABORT ? dump.row : dump.event);
-        put32(&v.body[8],dump.stage==RM_LOG_ABORT ? dump.event : dump.index.lost);
-    }
-    uint8_t bytes[RM_LOG_SIZE];rm_pack_log(bytes,&v);log_inflight=true;
-    const err_t error=mqtt_publish(client,"robot/log",bytes,RM_LOG_SIZE,1u,0u,log_done,NULL);
-    if (error!=ERR_OK) log_inflight=false;
+/* Publish sink for log_stream: one frame on robot/log. */
+static int log_publish(const uint8_t *data,size_t length,uint8_t qos,uint32_t serial) {
+    const err_t error=mqtt_publish(client,"robot/log",data,(u16_t)length,qos,0u,
+        qos!=0u ? log_done : NULL,(void *)(uintptr_t)serial);
     inc(error==ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
-    return error==ERR_OK;
+    return error==ERR_OK ? 0 : 1;
 }
 static void service(uint32_t now) {
     unsigned int budget=4u;
@@ -219,7 +177,8 @@ static void service(uint32_t now) {
         if (!publish("robot/sonar",bytes,sizeof(bytes))) { --budget;break; }
         metrics.latest_sonar_history_sequence=pending_sonar.history_sequence;have_sonar=false;--budget;
     }
-    if (budget>0u && due(now,log_at)) { (void)log_frame();log_at=now+50u; }
+    /* Own bounded budget: at most 1 live batch + 2 DUMP frames per poll. */
+    log_stream_service(log_publish);
 }
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */
 void cyw43_utk_app_poll(void) {

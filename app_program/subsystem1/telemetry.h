@@ -27,7 +27,13 @@ bool telemetry_running(void);
 int telemetry_send(const telemetry_message_t *message);
 void telemetry_stats(telemetry_stats_t *out);
 #if TM_MQTT
-typedef struct { uint32_t generation,rows,events,lost; } telemetry_log_index_t;
+typedef struct {
+    uint32_t generation;
+    uint32_t rows;
+    uint32_t events;
+    uint32_t lost;
+    uint32_t newest_ms; /* robot uptime, ms, when the newest row was stored */
+} telemetry_log_index_t;
 /* Wi-Fi/core0 bounded readers: committed highwater only; never stall logging.
  * E_OBJ generation changed, E_TMOUT publication busy, E_PAR bad index. */
 int telemetry_log_open(telemetry_log_index_t *out);

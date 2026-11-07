@@ -3,6 +3,7 @@
 #include "telemetry.h"
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
+#include "../platform/drv_time.h"
 static ID mbf_telemetry,task;
 static telemetry_stats_t stats;
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
@@ -12,9 +13,10 @@ static uint32_t loss_base;
 #if TM_MQTT
 #include "../platform/app_board.h"
 static uint32_t log_generation;
+static uint32_t newest_row_ms;
 static APP_BOARD(telemetry_log_index_t) log_index;
 static void publish_index(void) {
-    const telemetry_log_index_t v={log_generation,stats.rows,stats.events,stats.lost};
+    const telemetry_log_index_t v={log_generation,stats.rows,stats.events,stats.lost,newest_row_ms};
     app_board_publish(&log_index.sequence,log_index.words,&v,sizeof(v));
 }
 int telemetry_log_open(telemetry_log_index_t *out) {
@@ -92,12 +94,17 @@ static void telemetry_task(INT code,void *ctx) {
             stats.rows=0u;stats.events=0u;stats.storage_full=false;loss_base=m.loss_base;
 #if TM_MQTT
             ++log_generation;
+            newest_row_ms=0u;
 #endif
             break;
         case TELEMETRY_ROW:
             if (stats.rows==TELEMETRY_ROWS) { stats.storage_full=true;lose();break; }
             for (unsigned int i=0u;i<TELEMETRY_BYTES;++i) rows[stats.rows][i]=m.data.row[i];
-            ++stats.rows;break;
+            ++stats.rows;
+#if TM_MQTT
+            newest_row_ms=drv_time_ms();
+#endif
+            break;
         case TELEMETRY_EVENT:
             if (stats.events==TELEMETRY_EVENTS) { stats.storage_full=true;lose();break; }
             events[stats.events++]=m.data.event;break;
