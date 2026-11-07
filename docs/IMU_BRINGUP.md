@@ -53,9 +53,10 @@ is an overflow: `mag_valid` is false, and that vector must not be used.
 Polling at 100 Hz can repeat a 75 Hz magnetic conversion; this is expected.
 
 The **single mounting table** is `imu_robot_axes` in `imu_decode.c`:
-+X right, +Y forward, +Z up. It currently assumes identity axis maps for both
-sensors, matching Jaison's default. The operator must confirm these maps on
-the mounted module; this is not a measured mounting calibration. Each map
++X right, +Y forward, +Z up. It uses identity axis maps for both sensors, matching Jaison's default.
+The 6ed89ad operator stream confirms the accelerometer signs: nose up +Y,
+right side up +X and top up +Z. Magnetic orientation/calibration is not
+established by the accel tilt check. Each map
 must be a signed permutation (three distinct axes, signs +1 or -1).
 
 Pitch is `atan2(Y, sqrt(X*X + Z*Z))`. Roll is `atan2(X, Z)`. Both use the raw
@@ -98,8 +99,9 @@ windows each gave 2999 successful reads and no bus/config faults. This
 measurement is not a result for the later continuous-stream build. Mag is
 still read each cycle; no cadence or scale change was made. An absent-device
 hardware check remains pending. See the
-[scale investigation](IMU_SCALE_INVESTIGATION.md) for the unexpected 1.375 g
-static magnitude and the incomplete operator tilt evidence.
+[scale investigation](IMU_SCALE_INVESTIGATION.md) for the later 6ed89ad
+stream timing (about 530–566 us, max 592 us), confirmed accel axis signs and
+Z-offset explanation of the 1.375 g static magnitude.
 
 ## Operator tilt check (Not run)
 
@@ -148,10 +150,12 @@ The stream prints an S4 line every nominal 100 ms until power-off. The saved
 setup readbacks `ctrl1` and `ctrl4` should be 57 and 88 (hex); they are not
 additional live register reads. Counter wrap during a very long run is normal.
 
-The new stream/marker hardware procedure is **Not run**. Repeat level and
-nose-up/down, side tilts and six static faces as described in the
-[scale investigation](IMU_SCALE_INVESTIGATION.md#next-measurements-not-run).
-Do not tune a scale factor from the first run's single resting pose.
+The stream/marker hardware procedure **passed on 6ed89ad**, including six
+marked faces and confirmed accel signs. The high level magnitude is a Z
+offset, not uniform gain. Per-axis bias removal is later work; do not change
+scales or install constants from these hand-held means. A level yaw-flip
+check and absent-device/cold-power checks remain pending; see the
+[scale investigation](IMU_SCALE_INVESTIGATION.md#remaining-measurements-not-run).
 
 ## Later work: not implemented
 

@@ -96,8 +96,11 @@ mag cadence and default TEST sequence are unchanged. See the
   The build-profile checker now includes the IMU stream option so objects
   cannot be reused under the wrong mode. Private build copies and generated
   SDK proof ELFs were deleted after validation.
-- Actual continuous-stream timing/markers are Not run; mag still uses one
-  read each cycle. The earlier 529–542 us/max 624 us is not a new measurement.
+- Subsequent operator hardware run: S4-U03 PASS on 6ed89ad, 16129 reads,
+  faults zero, about 530–566 us/max 592 us, gap max 17946 us, no missed wakes,
+  six debounced markers. Mag still uses one read each cycle. Accel axis signs
+  pass; six-face evidence explains the high static magnitude as Z offset.
+  See [scale investigation](IMU_SCALE_INVESTIGATION.md). No code was tuned.
 
 ## Original hardware limits at 02f7c37 handoff
 
