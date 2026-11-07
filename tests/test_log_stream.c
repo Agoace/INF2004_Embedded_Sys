@@ -167,7 +167,7 @@ static void dump_mode(void)
 
 static void poll(void)
 {
-    log_stream_service(publish_sink);
+    log_stream_service(publish_sink, true);
     assert(irq_off == 0u);
 }
 
@@ -659,7 +659,7 @@ static uint32_t simulate(uint32_t rtt_ms, bool with_live, uint32_t *max_per_poll
             }
         }
         frame_count = 0u;
-        log_stream_service(publish_sink);
+        log_stream_service(publish_sink, true);
         if (frame_count > most) {
             most = frame_count;
         }
@@ -721,6 +721,42 @@ static void test_shared_budget(void)
     assert(live <= LOG_LIVE_SENDS_PER_POLL);
 }
 
+/* IDLE: the live stream pauses, a DUMP still completes, and RUN resumes
+ * with a jump to the newest rows (the skip is reported). */
+static void test_live_paused(void)
+{
+    unsigned int acked = 0u;
+    bool end_seen = false;
+
+    reset();
+    ram.rows = 15u;
+    poll();
+    assert(frame_count == 1u && frames[0].qos == 0u);
+    frame_count = 0u;
+    ram.rows = 300u;
+    for (unsigned int i = 0u; i < 50u; ++i) {
+        now_ms += 100u;
+        log_stream_service(publish_sink, false);
+    }
+    assert(frame_count == 0u); /* no live frames while paused */
+    assert(log_stream_dump_request(9u) == E_OK);
+    for (unsigned int i = 0u; (i < 400u) && !end_seen; ++i) {
+        now_ms += 10u;
+        log_stream_service(publish_sink, false);
+        for (; acked < frame_count; ++acked) {
+            assert(frames[acked].qos == 1u); /* only DUMP frames */
+            end_seen = end_seen || (frames[acked].data[1] == RM_LOG_END);
+            log_stream_complete(frames[acked].token, true);
+        }
+    }
+    assert(end_seen && !log_stream_dump_active());
+    frame_count = 0u;
+    poll();
+    assert(frame_count == 1u);
+    assert_batch(&frames[0], RM_LOG_ROWS, 10u, RM_LOG_FLAG_JUMPED, 0u, 5u,
+                 290u, 280u);
+}
+
 int main(int argc, char **argv)
 {
     const char *name = (argc == 2) ? argv[1] : "all";
@@ -740,5 +776,6 @@ int main(int argc, char **argv)
     if (all || !strcmp(name, "dump_abort")) test_dump_abort();
     if (all || !strcmp(name, "dump_throughput")) test_dump_throughput();
     if (all || !strcmp(name, "shared_budget")) test_shared_budget();
+    if (all || !strcmp(name, "live_paused")) test_live_paused();
     return 0;
 }

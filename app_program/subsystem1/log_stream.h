@@ -84,8 +84,9 @@ int log_stream_dump_request(uint32_t request_id);
 /** True while a DUMP is requested or running. */
 bool log_stream_dump_active(void);
 
-/** Run both streams once. Call only on the Wi-Fi task, link up. */
-void log_stream_service(log_stream_publish_fn publish);
+/** Run both streams once. Call only on the Wi-Fi task, link up. live false
+ *  pauses only the live stream (IDLE mode); DUMP refill always runs. */
+void log_stream_service(log_stream_publish_fn publish, bool live);
 
 /**
  * Report the outcome of a QoS 1 frame.

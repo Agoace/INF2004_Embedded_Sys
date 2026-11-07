@@ -14,7 +14,11 @@ function makeNode(id) {
     appendChild(child) { this.children.push(child); return child; },
     replaceChildren() { this.children = []; },
     insertRow() { return { insertCell: () => makeNode(""), appendChild() {} }; },
-    querySelector() { return makeNode(""); },
+    // One child per selector, so a test can read text the page wrote there.
+    querySelector(sel) {
+      this.found = this.found || {};
+      return (this.found[sel] = this.found[sel] || makeNode(""));
+    },
     closest() { return this; },
     clientWidth: 300, clientHeight: 120,
     getContext() {
@@ -95,6 +99,13 @@ async function main() {
   trace.message = view("message");
   trace.estop = view("estop");
   trace.session = session;
+  // Optional: {"views": [[id, selector or null], ...]} returns their text.
+  trace.views = (input.views || []).map(([id, sel]) => {
+    const base = nodes[id];
+    const target = base && sel ? (base.found || {})[sel] : base;
+    return { id, sel, text: target ? target.textContent : null,
+             className: target ? target.className : null };
+  });
   process.stdout.write(JSON.stringify(trace));
 }
 main().catch(error => { process.stderr.write(String(error.stack || error)); process.exit(1); });

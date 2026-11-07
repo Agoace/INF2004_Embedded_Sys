@@ -263,6 +263,33 @@ static void test_detour_summary(void)
     emit_named("event_junction", event_bytes, RM_EVENT_SIZE);
 }
 #include "mqtt_boot_fixtures.h"
+/* Idle publication mode: state v5 mode word and heartbeat v4 flag bit 6.
+ * Reserved bits are packed as zero; RUN frames keep the mode bits clear. */
+static void test_idle_mode_fixtures(void)
+{
+    uint8_t bytes[RM_HEARTBEAT_SIZE];
+    rm_state_t state = {.flags = 0x0fu, .uptime_ms = 5000u, .sequence = 9u,
+                        .boot_id = 0x11223344u, .mode = 0xffffu};
+    rm_pack_state(bytes, &state);
+    assert((bytes[0] == 5u) && (bytes[70] == RM_STATE_MODE_IDLE));
+    assert(bytes[71] == 0u);
+    assert(bytes[72] == 0x44u && bytes[75] == 0x11u);
+    emit_named("state_idle_mode", bytes, RM_STATE_SIZE);
+    state.mode = 0xfffeu; /* only reserved bits: packed as RUN */
+    rm_pack_state(bytes, &state);
+    assert(bytes[70] == 0u && bytes[71] == 0u);
+    emit_named("state_run_mode", bytes, RM_STATE_SIZE);
+    rm_heartbeat_t beat = {.flags = 0xffu, .uptime_ms = 5000u,
+                           .boot_id = 0x11223344u,
+                           .cpu_load_permille = 117u};
+    rm_pack_heartbeat(bytes, &beat);
+    assert(bytes[0] == 4u && bytes[1] == 0x7fu); /* bit 7 reserved */
+    emit_named("heartbeat_idle_mode", bytes, RM_HEARTBEAT_SIZE);
+    beat.flags = 0x3fu;
+    rm_pack_heartbeat(bytes, &beat);
+    assert(bytes[1] == 0x3fu);
+    emit_named("heartbeat_run_mode", bytes, RM_HEARTBEAT_SIZE);
+}
 int main(void) {
     test_boot_fixtures();
     test_batch_packer();
@@ -302,8 +329,12 @@ int main(void) {
         .motion_busy=15u,.vehicle_busy=16u,.health_busy=17u,.latest_sonar_history_sequence=18u,
         .health_age_ms=65535u,.wifi_link_status=-3,.mqtt_state=3u,.wifi_poll_gap_max_us=19u,
         .wifi_poll_gap_samples=20u,.wifi_start_status=-50,.wifi_requested_priority=20u,.wifi_observed_priority=20u,.cpu_load_permille=0x0123u};
-    rm_pack_heartbeat(bytes,&heartbeat);assert(bytes[0]==RM_HEARTBEAT_VERSION && bytes[1]==63u && bytes[3]==0u && bytes[42]==0u && bytes[98]==0x23u && bytes[99]==0x01u);
+    rm_pack_heartbeat(bytes, &heartbeat);
+    assert((bytes[0] == RM_HEARTBEAT_VERSION) && (bytes[1] == 127u));
+    assert((bytes[3] == 0u) && (bytes[42] == 0u));
+    assert((bytes[98] == 0x23u) && (bytes[99] == 0x01u));
     emit("heartbeat",bytes,RM_HEARTBEAT_SIZE);
+    test_idle_mode_fixtures();
     rm_log_t log={.kind=RM_LOG_EVENT,.dump_id=111u,.generation=222u,.index=333u};
     rm_pack_log_event(log.body,&event);rm_pack_log(bytes,&log);assert(bytes[2]==0u && bytes[3]==0u);
     emit("log",bytes,RM_LOG_SIZE);

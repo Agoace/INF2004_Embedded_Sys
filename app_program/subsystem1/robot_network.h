@@ -38,7 +38,13 @@ void robot_network_metrics(rm_heartbeat_t *out);
 /* Integration providers. Weak safe defaults allow standalone branch builds.
  * No lwIP calls in any provider; no provider may wait for a sensor task. */
 void robot_network_state(rm_state_t *out);
+/* Vehicle run phase (0 idle, 1 calibrating, 2 start delay, 3 running) and
+ * run flag for the publication mode. E_OBJ: no vehicle consumer. */
+int robot_network_vehicle_phase(uint8_t *phase, bool *active);
 int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed);
+/* IDLE publication mode: move the sonar cursor to the newest entry. Skipped
+ * entries are a deliberate pause and are not counted as missed. */
+int robot_network_sonar_skip(uint32_t *cursor);
 /* Newest obstacle report if its scan_id differs from *cursor. E_OK new,
  * E_NOEXS nothing new, other negative values: board busy. */
 int robot_network_obstacle(uint32_t *cursor, rm_obstacle_t *out);

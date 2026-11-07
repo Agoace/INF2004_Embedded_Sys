@@ -185,6 +185,14 @@ int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed)
 }
 
 /*
+ * Skip the sonar history cursor to the newest entry (IDLE publication mode).
+ */
+int robot_network_sonar_skip(uint32_t *cursor)
+{
+    return sonar_history_skip(cursor);
+}
+
+/*
  * Pull the newest obstacle report if it is new. The vehicle board holds only
  * the last report, so a gap in scan_id shows missed reports.
  * Returns E_OK for a new report (cursor moves to its scan_id), E_NOEXS if
@@ -246,6 +254,23 @@ int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
     }
     *out = value;
     *cursor = value.run_id;
+    return E_OK;
+}
+
+/*
+ * Report the vehicle run phase for the MQTT publication mode. One bounded
+ * board read: E_TMOUT busy, E_OBJ no vehicle consumer (TEST, BENCH).
+ */
+int robot_network_vehicle_phase(uint8_t *phase, bool *active)
+{
+    vehicle_snapshot_t vehicle;
+    const int result = vehicle_snapshot_try_read(&vehicle);
+
+    if (result < E_OK) {
+        return result;
+    }
+    *phase = vehicle.phase;
+    *active = vehicle.active;
     return E_OK;
 }
 

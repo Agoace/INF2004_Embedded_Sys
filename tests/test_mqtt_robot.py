@@ -568,7 +568,7 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
 
     def test_c_packed_state_v2_and_old_version_bytes(self):
-        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3), (76, 4)))
+        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3), (76, 4), (76, 5)))
         result = wire.decode("robot/state", self.c_state)
         self.assertEqual((result["dist_left_mm"], result["dist_right_mm"], result["dist_avg_mm"]),
                          (-123456, 2 ** 31 - 1, -7))
@@ -713,6 +713,7 @@ def state_v3_frame(base, duty_left=-250, duty_right=1000, heading=-4500, rate=-1
 def heartbeat_frame(base, version=2, cpu=0x123):
     frame = bytearray(base[:100])
     frame[0], frame[3] = version, 0
+    frame[1] &= 0x3F  # bit 6 telemetry_idle exists from v4
     struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
     return bytes(frame)
 
@@ -1272,6 +1273,62 @@ class RebootLogTests(unittest.TestCase):
         self.assertEqual(len(rows), 2)
         self.assertNotEqual(rows[0]["boot_session"], "boot:0000002a:0")
         self.assertIn("4 rows", self.log.summary()[0])
+
+
+class TelemetryModeWireTests(unittest.TestCase):
+    """State v5 mode word and heartbeat v4 flag bit 6, cross-checked with C bytes."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dash = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            if topic.startswith("dash/"):
+                cls.dash[topic.removeprefix("dash/")] = bytes.fromhex(encoded)
+
+    def test_c_packed_idle_and_run_frames(self):
+        idle = wire.decode("robot/state", self.dash["state_idle_mode"])
+        run = wire.decode("robot/state", self.dash["state_run_mode"])
+        self.assertEqual((idle["version"], idle["telemetry_idle"], idle["boot_id"]),
+                         (5, 1, 0x11223344))
+        self.assertEqual(run["telemetry_idle"], 0)
+        beat = wire.decode("robot/heartbeat", self.dash["heartbeat_idle_mode"])
+        self.assertEqual((beat["version"], beat["telemetry_idle"], beat["health_fresh"]),
+                         (4, 1, 1))
+        self.assertEqual(wire.decode("robot/heartbeat",
+                                     self.dash["heartbeat_run_mode"])["telemetry_idle"], 0)
+
+    def test_reserved_bits_still_rejected(self):
+        state = bytearray(self.dash["state_idle_mode"])
+        for value in (0x0002, 0x8000, 0x0101):
+            bad = bytearray(state)
+            struct.pack_into("<H", bad, 70, value)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                wire.decode("robot/state", bytes(bad))
+        beat = bytearray(self.dash["heartbeat_idle_mode"])
+        beat[1] |= 0x80
+        with self.assertRaises(ValueError):
+            wire.decode("robot/heartbeat", bytes(beat))
+
+    def test_old_versions_decode_and_reject_the_new_bit(self):
+        for version, size in ((3, 72), (4, 76)):
+            frame = bytearray(self.dash["state_run_mode"][:size])
+            frame[0] = version
+            self.assertEqual(wire.decode("robot/state", bytes(frame))["telemetry_idle"], 0)
+            frame[70] = 1
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                wire.decode("robot/state", bytes(frame))
+        frame = bytearray(self.dash["heartbeat_run_mode"])
+        frame[0] = 3
+        self.assertEqual(wire.decode("robot/heartbeat", bytes(frame))["telemetry_idle"], 0)
+        frame[1] |= 0x40
+        with self.assertRaises(ValueError):
+            wire.decode("robot/heartbeat", bytes(frame))
+        v1 = wire.decode("robot/state", bytes([1]) + bytes(47))
+        self.assertEqual(v1["telemetry_idle"], 0)
+
+    def test_csv_has_the_mode_field(self):
+        self.assertIn("telemetry_idle", wire.csv_fields())
 
 
 if __name__ == "__main__":

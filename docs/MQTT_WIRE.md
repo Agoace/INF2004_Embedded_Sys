@@ -7,7 +7,7 @@ The pure C codec is [mqtt_wire.h](../app_program/subsystem1/mqtt_wire.h) and
 client is [mqtt_robot.py](../scripts/mqtt_robot.py). No codec function uses
 kernel, radio, or TCP/IP headers. The sonar service has no MQTT dependency.
 
-Each message starts with its topic version: state `4`, heartbeat `3`, other
+Each message starts with its topic version: state `5`, heartbeat `4`, other
 implemented observations `2`, and commands `1`. Integers use little-endian byte order.
 Signed fields use two's-complement representation. Offsets below are in bytes,
 from zero. Wire messages do not use C structure layout or C bit-fields.
@@ -17,7 +17,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 
 | Topic | Bytes | Purpose |
 | --- | ---: | --- |
-| `robot/state` | 76 | State v3, ages, distance, duty and encoder odometry |
+| `robot/state` | 76 | State v5, ages, distance, duty, encoder odometry and telemetry mode |
 | `robot/sonar` | 36 | One completed sonar history result |
 | `robot/event` | 20 | Vehicle event, including command decisions |
 | `robot/heartbeat` | 108 | Link state, health and loss counters |
@@ -114,12 +114,15 @@ current. Topic names remain unprefixed; this protocol assumes one robot.
 | 60, 62 | i16 each | Left, right signed PWM duty, permille |
 | 64 | i32 | Encoder heading, 0.01 degree, positive left, since motion init |
 | 68 | i16 | Encoder turn rate, 0.1 degree/s, positive left |
-| 70 | u16 | Reserved zero |
+| 70 | u16 | v5 telemetry mode: bit 0 idle rates (`telemetry_idle`); bits 1–15 reserved zero |
 | 72 | u32 | Boot ID |
 
 State v1 has 48 bytes; v2 has 60 bytes (the three distance fields).
-V3 has 72 bytes; v4 appends the boot ID. Clients accept v1 through v4;
-firmware sends v4 at the unchanged 5 Hz rate.
+V3 has 72 bytes; v4 appends the boot ID. V5 has the same 76 bytes and uses
+bit 0 of the reserved word at offset 70; see
+[Publication modes](#publication-modes). Clients accept v1 through v5. In v3
+and v4 the word at offset 70 must be zero, so an old decoder rejects an idle
+v5 frame instead of reading it wrongly. Firmware sends v5.
 Mean distance truncates toward zero. All added values inherit motion age and
 freshness. A busy motion read is not a new measurement.
 
@@ -243,7 +246,7 @@ flag bit 0 set, and the RAM event index as their sequence.
 | 100 | u32 | Boot ID (v3) |
 | 104 | u32 | Total unavailable-board observations since boot (v3) |
 
-Heartbeat v1/v2 has 100 bytes; v3 has 108. Main-board `E_OBJ`/`E_NOEXS`
+Heartbeat v1/v2 has 100 bytes; v3 and v4 have 108. V4 adds only flags bit 6. Main-board `E_OBJ`/`E_NOEXS`
 reads increment unavailable, not busy. A successful read clears its mask bit;
 a busy read leaves the mask unchanged. Empty history cursors do not mean an
 absent board. TEST has no vehicle role, so its vehicle bit can be set without
@@ -262,7 +265,8 @@ No target measurement is claimed.
 
 Flags: bit 0 Wi-Fi up; 1 MQTT connected; 2 subscribed; 3 RAM dump active;
 4 restricted commands configured (the wire/CSV name remains `commands_enabled`);
-5 health fresh. Upper bits are zero. A retained/busy
+5 health fresh; 6 (v4) idle publication rates (`telemetry_idle`). Bit 7 is
+zero, and bit 6 is zero in v1 to v3. A retained/busy
 health sample must have bit 5 clear. Busy counters count bounded-read failures;
 they do not mean that a consumer waited for a lock.
 
@@ -374,6 +378,67 @@ command has stayed unchanged for at least 300 ms. This excludes early ramp
 samples; it is not an independent motor-accuracy measurement. The observer
 never changes commands, detector inputs, SCAN or navigation state.
 
+## Publication modes
+
+The robot publishes at full rates only while the vehicle works. Sensors keep
+their rates in both modes; only MQTT publication changes. The pure rule is
+[telemetry_mode.c](../app_program/subsystem1/telemetry_mode.c).
+
+| Mode | When | `robot/state` | `robot/heartbeat` | Live `robot/log` | `robot/sonar` |
+| --- | --- | --- | --- | --- | --- |
+| RUN | Vehicle calibrating, start delay, running or stopping, plus 2 s after it stops | 5 Hz | 1 Hz | Yes | Yes |
+| IDLE | Vehicle idle for 2 s or more | 1 Hz | Every 5 s | No | No |
+
+- The vehicle is busy when its phase is not 0 or its run flag is set. An
+  ESTOP clears both, so the 2 s grace also follows an ESTOP.
+- The 2 s grace lets the last rows, the run-end event and the retained summary
+  go out at full rate. The live log needs about 1 s for a 100-row lag, and a
+  failed summary retries after 500 ms.
+- Boot starts in RUN. The first readable idle vehicle sample selects IDLE.
+  A busy vehicle-board read keeps the current mode.
+- TEST and BENCH images have no vehicle consumer (`E_OBJ`), so they always use
+  RUN. The S1-U02 and S1-U05 rate checks therefore measure the same rates as
+  before. S1-U05 on a production image measures while the vehicle drives,
+  which is RUN.
+- On IDLE to RUN, state and heartbeat go out in the same poll. Then the RUN
+  periods apply.
+- In IDLE the sonar service keeps its 16-entry history ring, but each poll
+  moves the publisher cursor to the newest entry (`sonar_history_skip`). This
+  is a deliberate skip, like the live-log jump. It does not increase
+  `sonar_history_missed`, and RUN publishes only results taken after it
+  resumes, so no old idle results arrive at run start. The skip has no wire
+  counter; a `robot/sonar` history-sequence gap across an IDLE period is
+  expected. `sonar_history_missed` counts only RUN overflows. The live log
+  resumes with a jump to the newest 10 rows and reports the skipped rows.
+- Events, the run summary, status, obstacle, detour and commands do not
+  change. DUMP refill runs in both modes.
+- State v5 bit 0 and heartbeat v4 flags bit 6 tell the dashboard which
+  freshness limits apply.
+
+### CR1 cost per mode
+
+Change Requirement 1 (minimum-bit data) cost, in bytes per second. "Payload"
+counts only message bytes. "With MQTT" adds the PUBLISH fixed header (2), the
+topic length (2) and the topic name (9 to 15 bytes) for each QoS 0 message. The
+values do not include TCP/IP or Wi-Fi framing.
+
+| Mode | Stream | Payload | With MQTT |
+| --- | --- | ---: | ---: |
+| RUN (before and after) | state 5 x 76 | 380 | 455 |
+| | heartbeat 1 x 108 | 108 | 127 |
+| | live log, 50 rows/s in 192-byte batches, plus events | about 980 | about 1050 |
+| | sonar about 10 x 36 | about 360 | about 510 |
+| | total | about 1828 | about 2142 |
+| IDLE before | state 5 x 76 + heartbeat 1 x 108 | 488 | 582 |
+| IDLE after | state 1 x 76 + heartbeat 0.2 x 108 | 97.6 | 116.4 |
+
+IDLE uses 80% fewer bytes. Before this change, the live log and sonar were
+already near zero while idle, because the vehicle writes log rows and
+requests sonar results only while it runs. The change therefore guarantees
+that idle traffic is zero. It does not save a large measured amount.
+The mode costs no extra bytes: it uses one reserved state bit and one spare
+heartbeat flag bit.
+
 ## Link status and last will
 
 `robot/status` v2 is six bytes: version 2, then ONLINE 1 or OFFLINE 2, then
@@ -388,8 +453,8 @@ interval (about 7.5 seconds after the last control packet, plus broker timer
 and network delivery delay). This is not a guaranteed wall-clock deadline.
 The lwIP cyclic timer runs every 5 seconds; an idle connection sends at most
 one 2-byte MQTT PINGREQ per 5 seconds, plus a 2-byte PINGRESP and TCP/IP/link
-overhead. Normal 5 Hz telemetry keeps the connection active, so idle pings
-are normally unnecessary. Reconnect replaces retained OFFLINE with ONLINE.
+overhead. Telemetry at 5 Hz (RUN) or 1 Hz (IDLE) keeps the connection
+active, so idle pings are normally unnecessary. Reconnect replaces retained OFFLINE with ONLINE.
 Retained ONLINE alone does not prove a current connection: require recent
 state messages too. Broker restart and stale retained data can mean unknown
 or silent status. MQTT ESTOP remains best effort; GP21 is the real ESTOP.

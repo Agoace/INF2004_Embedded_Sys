@@ -227,7 +227,8 @@ vehicle task described below.
 
 - [Design](KERNEL_MQTT.md), [wire layout](MQTT_WIRE.md), [operator runbook](MQTT_RUNBOOK.md).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.
-- [`log_stream.c`](../app_program/subsystem1/log_stream.c) — live RAM-log stream (QoS 0, jump-to-newest, data age) and batched QoS 1 DUMP refill with ACK cursor; no lwIP dependency.
+- [`log_stream.c`](../app_program/subsystem1/log_stream.c) — live RAM-log stream (QoS 0, jump-to-newest, data age) and batched QoS 1 DUMP refill with ACK cursor; live pause in IDLE; no lwIP dependency.
+- [`telemetry_mode.c`](../app_program/subsystem1/telemetry_mode.c) — pure RUN/IDLE publication-mode rule (2 s grace, TEST/BENCH always RUN) and the per-mode periods.
 - [`robot_network.h`](../app_program/subsystem1/robot_network.h), [`network_queue.c`](../app_program/subsystem1/network_queue.c) — bounded live events and ordinary/ESTOP command queues, losses and provider contract.
 - [`robot_health.c`](../app_program/subsystem1/robot_health.c) — priority31 cyclic producer, app-stack scan and bounded health board.
 - [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`scripts/robot_wire.py`](../scripts/robot_wire.py), [`scripts/mqtt_robot.py`](../scripts/mqtt_robot.py) — explicit binary codec, pure Python decoder with log merge/gap store (no Paho), and Paho2 VERSION2 receiver/CSV/commands.
@@ -247,4 +248,5 @@ vehicle task described below.
 
 - [`tests/vehicle_network_checks.cmake`](../tests/vehicle_network_checks.cmake) — adapter age/wrap/busy, exhaustive command policy, and real vehicle task non-critical queue/DUMP/ESTOP tests.
 - [STEP 8 validation](MTK3_STEP8_VALIDATION.md) — clean build/strict/link/host results, ELF bindings, memory limits and pending physical acceptance.
-- [`tests/test_log_stream.c`](../tests/test_log_stream.c) — live batching/jump/generation/failure and DUMP window/ACK/rewind/abort/throughput tests.
+- [`tests/test_log_stream.c`](../tests/test_log_stream.c) — live batching/jump/generation/failure and DUMP window/ACK/rewind/abort/throughput and live-pause tests.
+- [`tests/test_telemetry_mode.c`](../tests/test_telemetry_mode.c) — publication-mode transitions: run cycle, ESTOP, busy and absent vehicle board, time wrap.

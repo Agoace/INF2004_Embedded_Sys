@@ -20,6 +20,8 @@ int main(void) {
     sonar_history_entry_t item;uint32_t cursor=0u,missed=55u;
     sonar_snapshot_t board;
     assert(sonar_history_read(&cursor,&item,&missed)==E_OBJ && missed==0u);
+    assert(sonar_history_skip(&cursor)==E_OBJ && cursor==0u);
+    assert(sonar_history_skip(NULL)==E_PAR);
     assert(sonar_snapshot_try_read(&board)==E_OBJ);
     assert(sonar_history_read(NULL,&item,&missed)==E_PAR);
     assert(sonar_snapshot_try_read(NULL)==E_PAR);
@@ -48,6 +50,21 @@ int main(void) {
     store_word(&board_guard,2u);change_on_load=&board_guard;change_countdown=1u;
     assert(sonar_snapshot_try_read(&board)==E_TMOUT);
     assert(sonar_snapshot_try_read(&board)==E_OK && board.id==119u);
+    /* IDLE skip: 40 results overwrite the ring; skip reports no loss and the
+     * next read returns only a result published after the skip. */
+    for (uint32_t i = 0u; i < 40u; ++i) {
+        sonar_snapshot_t value = {.id = 200u + i, .status = SONAR_CANCELLED};
+        board_publish(&value, true);
+    }
+    assert(sonar_history_skip(&cursor) == E_OK);
+    assert(cursor == load_word(&history_count));
+    assert(sonar_history_read(&cursor, &item, &missed) == E_NOEXS);
+    {
+        sonar_snapshot_t value = {.id = 300u, .status = SONAR_CANCELLED};
+        board_publish(&value, true);
+    }
+    assert(sonar_history_read(&cursor, &item, &missed) == E_OK);
+    assert((missed == 0u) && (item.result.id == 300u));
     /* Sequence zero is a valid publication after unsigned wrap. */
     store_word(&history_count,UINT32_MAX-1u);cursor=UINT32_MAX-1u;
     board_publish(&board,true);board_publish(&board,true);board_publish(&board,true);
