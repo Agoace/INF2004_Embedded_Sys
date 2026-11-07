@@ -20,7 +20,6 @@ static uint32_t ticks, tick_max_us, last_run_us, gap_min_us, gap_max_us;
 static uint32_t late_wakes, missed_wakes;
 static bool watchdog_armed;
 static void motion_status_locked(motion_status_t *s);
-#if TM_MQTT
 #include "../platform/app_board.h"
 typedef struct { motion_status_t status;uint32_t us; } motion_board_t;
 static APP_BOARD(motion_board_t) board;
@@ -28,7 +27,6 @@ static void publish_motion(uint32_t us) {
     motion_board_t v={0};v.us=us;motion_status_locked(&v.status);
     app_board_publish(&board.sequence,board.words,&v,sizeof(v));
 }
-#endif
 #if APP_TEST
 static volatile bool test_requested, test_suppressed;
 #endif
@@ -71,9 +69,7 @@ static void motion_task(INT stacd, void *exinf) {
         /* Same mutex as stop/estop: no old computed output can overwrite stop. */
         drv_motor_hw_write(out.duty_permille, out.servo_us);
         ++ticks;
-#if TM_MQTT
         publish_motion(started);
-#endif
         const uint32_t took = drv_time_us() - started;
         if (took > tick_max_us) tick_max_us = took;
         const ID notify = tid_after_tick;
@@ -223,12 +219,8 @@ int motion_status(motion_status_t *s) {
 }
 int motion_snapshot_try_read(motion_status_t *out,uint32_t *timestamp_us) {
     if (!out || !timestamp_us) return E_PAR;
-#if TM_MQTT
     if (mtx_motion<=0 || tid_motion<=0) return E_OBJ;
     motion_board_t v;
     if (!app_board_try_read(&board.sequence,board.words,&v,sizeof(v))) return E_TMOUT;
     *out=v.status;*timestamp_us=v.us;return E_OK;
-#else
-    return E_OBJ;
-#endif
 }
