@@ -55,7 +55,7 @@
  * @return Zero if the frame was accepted, nonzero if it was not.
  */
 typedef int (*log_stream_publish_fn)(const uint8_t *data, size_t length,
-    uint8_t qos, uint32_t token);
+                                     uint8_t qos, uint32_t token);
 
 /** Counters for tests and diagnostics. All wrap modulo 2^32. */
 typedef struct {

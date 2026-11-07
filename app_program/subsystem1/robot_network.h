@@ -1,8 +1,20 @@
 #ifndef ROBOT_NETWORK_H
 #define ROBOT_NETWORK_H
 #include "mqtt_wire.h"
-enum { ROBOT_BOARD_LINE,ROBOT_BOARD_SONAR,ROBOT_BOARD_MOTION,ROBOT_BOARD_VEHICLE,ROBOT_BOARD_HEALTH };
-typedef struct { uint8_t opcode; uint32_t request_id; } robot_command_t;
+
+enum {
+    ROBOT_BOARD_LINE,
+    ROBOT_BOARD_SONAR,
+    ROBOT_BOARD_MOTION,
+    ROBOT_BOARD_VEHICLE,
+    ROBOT_BOARD_HEALTH
+};
+
+typedef struct {
+    uint8_t opcode;
+    uint32_t request_id;
+} robot_command_t;
+
 int robot_network_init(void);
 /* Vehicle task is the ONLY event producer. Nonblocking, lost counted. */
 int robot_event_push(const rm_event_t *event);
@@ -14,7 +26,7 @@ void robot_network_metrics(rm_heartbeat_t *out);
 /* Integration providers. Weak safe defaults allow standalone branch builds.
  * No lwIP calls in any provider; no provider may wait for a sensor task. */
 void robot_network_state(rm_state_t *out);
-int robot_network_sonar(uint32_t *cursor,rm_sonar_t *out,uint32_t *missed);
+int robot_network_sonar(uint32_t *cursor, rm_sonar_t *out, uint32_t *missed);
 void robot_health_collect(rm_heartbeat_t *out);
 /* Vehicle posts a single pending dump request. No lwIP or logging waits. */
 int robot_network_dump(uint32_t request_id);

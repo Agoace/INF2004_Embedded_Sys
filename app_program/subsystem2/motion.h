@@ -2,6 +2,7 @@
 #define MOTION_H
 #include <tk/tkernel.h>
 #include "motor_ctl.h"
+
 /* Task-context API only. Control/status calls take inherited mtx_motion.
  * TEST-only buffered readers and watchdog handshakes are described below. */
 typedef struct {
@@ -16,10 +17,12 @@ typedef struct {
     uint8_t faults;
     uint32_t ticks, tick_max_us;
     uint32_t gap_min_us, gap_max_us;
-    uint32_t late_wakes; /* gaps greater than 11 ms */
+    uint32_t late_wakes;   /* gaps greater than 11 ms */
     uint32_t missed_wakes; /* queued wake requests discarded by tk_can_wup */
-    bool watchdog_armed; /* hardware enabled; TEST may deliberately suppress feeds */
+    bool
+        watchdog_armed; /* hardware enabled; TEST may deliberately suppress feeds */
 } motion_status_t;
+
 int motion_init(void);
 int motion_start(void);
 /* One client: positive task ID to wake after each tick, or 0 to disable.
@@ -34,7 +37,7 @@ int motion_set_servo(int deg, int *accepted_deg);
 int motion_status(motion_status_t *status);
 /* Bounded read-only last-tick copy, independent of any transport. No inherited mutex/wait.
  * E_TMOUT busy/not yet published, E_OBJ not started; failed output unchanged. */
-int motion_snapshot_try_read(motion_status_t *status,uint32_t *timestamp_us);
+int motion_snapshot_try_read(motion_status_t *status, uint32_t *timestamp_us);
 int motion_bench_start(void);
 #if APP_TEST
 /* Only complete gaps between starts inside the window are scored. Lifetime
@@ -43,21 +46,32 @@ typedef struct {
     uint32_t ticks, gaps, gap_min_us, gap_max_us, tick_max_us;
     uint32_t late_wakes, missed_wakes;
 } motion_timing_window_t;
+
 int motion_timing_window_begin(void);
 int motion_timing_window_end(motion_timing_window_t *out);
+
 typedef enum {
-    MOTION_PROBE_BEFORE_S0_PRINT, MOTION_PROBE_AFTER_S0_PRINT,
-    MOTION_PROBE_S1_BURST_BEGIN, MOTION_PROBE_S1_BURST_END,
-    MOTION_PROBE_AFTER_S1_YIELD, MOTION_PROBE_AFTER_S1_PRINT,
-    MOTION_PROBE_S2_ENTRY, MOTION_PROBE_S2_EXIT, MOTION_PROBE_COUNT
+    MOTION_PROBE_BEFORE_S0_PRINT,
+    MOTION_PROBE_AFTER_S0_PRINT,
+    MOTION_PROBE_S1_BURST_BEGIN,
+    MOTION_PROBE_S1_BURST_END,
+    MOTION_PROBE_AFTER_S1_YIELD,
+    MOTION_PROBE_AFTER_S1_PRINT,
+    MOTION_PROBE_S2_ENTRY,
+    MOTION_PROBE_S2_EXIT,
+    MOTION_PROBE_COUNT
 } motion_probe_stage_t;
+
 typedef struct {
-    uint32_t us, ticks, gap_min_us, gap_max_us, tick_max_us, late_wakes, missed_wakes;
+    uint32_t us, ticks, gap_min_us, gap_max_us, tick_max_us, late_wakes,
+        missed_wakes;
 } motion_timing_probe_t;
+
 /* One TEST runner captures under mtx_motion, then reads immutable copies
  * after the window. Neither function prints or resets lifetime counters. */
 int motion_timing_probe_capture(motion_probe_stage_t stage);
-int motion_timing_probe_read(motion_probe_stage_t stage,motion_timing_probe_t *out);
+int motion_timing_probe_read(motion_probe_stage_t stage,
+                             motion_timing_probe_t *out);
 /* TEST-only: motion acknowledges just after its final feed. */
 int motion_watchdog_test_suppress_feed(void);
 bool motion_watchdog_test_feed_stopped(void);

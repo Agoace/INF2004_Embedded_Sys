@@ -33,68 +33,70 @@
  */
 EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
 {
-	const ID tid = app_task_start(entry, pri, prc, name);
-	CHECK(tid, name);
-	return tid;
+    const ID tid = app_task_start(entry, pri, prc, name);
+    CHECK(tid, name);
+    return tid;
 }
 
 EXPORT INT usermain(void)
 {
-	T_RVER	ver;
+    T_RVER ver;
 
-	/* Kernel hardware startup sets 1 us TIMER ticks; verify idempotently. */
-	CHECK(drv_time_init(), "drv_time_init");
+    /* Kernel hardware startup sets 1 us TIMER ticks; verify idempotently. */
+    CHECK(drv_time_init(), "drv_time_init");
 
-	/* tk_ref_ver: ask the kernel who it is */
-	tk_ref_ver(&ver);
-	tm_printf((UB*)"\n=== micro T-Kernel on Raspberry Pi Pico W"
-		  " (spec 0x%04x, product 0x%04x) ===\n", ver.spver, ver.prver);
+    /* tk_ref_ver: ask the kernel who it is */
+    tk_ref_ver(&ver);
+    tm_printf((UB *)"\n=== micro T-Kernel on Raspberry Pi Pico W"
+                    " (spec 0x%04x, product 0x%04x) ===\n",
+              ver.spver, ver.prver);
 #if TK_SUPPORT_SMP
-	tm_printf((UB*)"dual-core (SMP) build, usermain on core %d\n",
-		  tk_get_prc() - 1);	/* tk_get_prc() counts from 1 */
+    tm_printf((UB *)"dual-core (SMP) build, usermain on core %d\n",
+              tk_get_prc() - 1); /* tk_get_prc() counts from 1 */
 #else
-	tm_printf((UB*)"single-core build\n");
+    tm_printf((UB *)"single-core build\n");
 #endif
 
-	/* Phase 1: every subsystem creates its kernel objects */
-	CHECK(subsystem1_init(), "subsystem1_init");
-	CHECK(subsystem2_init(), "subsystem2_init");
-	CHECK(subsystem3_init(), "subsystem3_init");
-	CHECK(subsystem4_init(), "subsystem4_init");
-	CHECK(subsystem5_init(), "subsystem5_init");
+    /* Phase 1: every subsystem creates its kernel objects */
+    CHECK(subsystem1_init(), "subsystem1_init");
+    CHECK(subsystem2_init(), "subsystem2_init");
+    CHECK(subsystem3_init(), "subsystem3_init");
+    CHECK(subsystem4_init(), "subsystem4_init");
+    CHECK(subsystem5_init(), "subsystem5_init");
 
-	/* Phase 2: every subsystem starts its tasks */
-	CHECK(subsystem1_start(), "subsystem1_start");
-	CHECK(subsystem2_start(), "subsystem2_start");
-	CHECK(subsystem3_start(), "subsystem3_start");
-	CHECK(subsystem4_start(), "subsystem4_start");
-	CHECK(subsystem5_start(), "subsystem5_start");
-	CHECK(vehicle_task_start(), "vehicle_task_start");
+    /* Phase 2: every subsystem starts its tasks */
+    CHECK(subsystem1_start(), "subsystem1_start");
+    CHECK(subsystem2_start(), "subsystem2_start");
+    CHECK(subsystem3_start(), "subsystem3_start");
+    CHECK(subsystem4_start(), "subsystem4_start");
+    CHECK(subsystem5_start(), "subsystem5_start");
+    CHECK(vehicle_task_start(), "vehicle_task_start");
 
-	tm_printf((UB*)"all subsystems started\n\n");
+    tm_printf((UB *)"all subsystems started\n\n");
 
 #if APP_TEST
-	/* Startup stays at priority 1. TEST work must be below motion/sensors,
+    /* Startup stays at priority 1. TEST work must be below motion/sensors,
 	   but above telemetry30 so its nonblocking saturation test still fills. */
-	const ER test_priority = tk_chg_pri(TSK_SELF, 20);
-	CHECK(test_priority, "TEST runner priority 20");
-	if (test_priority >= E_OK) {
-		tm_printf((UB*)"[TEST] === test run start (runner priority 20) ===\n");
-		subsystem1_test();
-		subsystem2_test();
-		subsystem3_test();
-		subsystem4_test();
-		subsystem5_test();
-		app_task_report();
-		/* Destructive reset check follows every other subsystem test. */
-		subsystem2_watchdog_test();
-		tm_printf((UB*)"[TEST] === test run end ===\n");
-	} else {
-		tm_printf((UB*)"[TEST] ABORT: cannot set runner priority 20; tests not run\n");
-	}
+    const ER test_priority = tk_chg_pri(TSK_SELF, 20);
+    CHECK(test_priority, "TEST runner priority 20");
+    if (test_priority >= E_OK) {
+        tm_printf((UB *)"[TEST] === test run start (runner priority 20) ===\n");
+        subsystem1_test();
+        subsystem2_test();
+        subsystem3_test();
+        subsystem4_test();
+        subsystem5_test();
+        app_task_report();
+        /* Destructive reset check follows every other subsystem test. */
+        subsystem2_watchdog_test();
+        tm_printf((UB *)"[TEST] === test run end ===\n");
+    } else {
+        tm_printf((UB *)"[TEST] ABORT: cannot set runner priority 20; tests "
+                        "not run\n");
+    }
 #endif
 
-	/* Sleep forever.  Returning from usermain() would shut down. */
-	tk_slp_tsk(TMO_FEVR);
-	return 0;
+    /* Sleep forever.  Returning from usermain() would shut down. */
+    tk_slp_tsk(TMO_FEVR);
+    return 0;
 }

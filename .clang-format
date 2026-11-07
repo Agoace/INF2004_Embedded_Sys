@@ -1,0 +1,27 @@
+# BARR-C:2018 oriented layout for the robot application files.
+# Applied to app_program files from steps 7 and 8; template files keep their style.
+BasedOnStyle: LLVM
+Language: Cpp
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 80
+BreakBeforeBraces: Linux
+InsertBraces: true
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+BinPackArguments: true
+BinPackParameters: true
+AlignAfterOpenBracket: Align
+PointerAlignment: Right
+SpaceBeforeParens: ControlStatements
+IndentCaseLabels: false
+SortIncludes: Never
+ReflowComments: false
+BreakAfterReturnType: None
+AlignConsecutiveMacros: Consecutive
+SeparateDefinitionBlocks: Always

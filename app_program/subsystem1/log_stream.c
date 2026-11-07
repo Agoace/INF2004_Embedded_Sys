@@ -130,8 +130,9 @@ static uint32_t copy_rows(uint32_t generation, uint32_t first, uint32_t count)
     bool ok = true;
 
     while ((copied < count) && ok) {
-        const int er = telemetry_log_row(generation, first + copied,
-            &s_records[copied * RM_LOG_RECORD_SIZE]);
+        const int er =
+            telemetry_log_row(generation, first + copied,
+                              &s_records[copied * RM_LOG_RECORD_SIZE]);
 
         if (er < E_OK) {
             ok = false;
@@ -147,8 +148,7 @@ static uint32_t copy_rows(uint32_t generation, uint32_t first, uint32_t count)
  * wire form.
  * @return Number of events copied (0 if none could be read).
  */
-static uint32_t copy_events(uint32_t generation, uint32_t first,
-    uint32_t count)
+static uint32_t copy_events(uint32_t generation, uint32_t first, uint32_t count)
 {
     uint32_t copied = 0u;
     bool ok = true;
@@ -203,8 +203,9 @@ static void live_service(log_stream_publish_fn publish)
         s_live.have_generation = true;
         s_live.generation = index.generation;
     } else if (index.generation != s_live.generation) {
-        s_live.skipped_pending = (s_live.rows_seen > s_live.next) ?
-            (s_live.rows_seen - s_live.next) : 0u;
+        s_live.skipped_pending = (s_live.rows_seen > s_live.next)
+                                     ? (s_live.rows_seen - s_live.next)
+                                     : 0u;
         s_live.flags_pending = RM_LOG_FLAG_NEW_GENERATION;
         s_live.generation = index.generation;
         s_live.next = 0u;
@@ -301,7 +302,7 @@ static void dump_rewind(void)
  * @return True if the frame was accepted.
  */
 static bool dump_submit(log_stream_publish_fn publish, frame_type_t type,
-    uint32_t first, uint32_t count, size_t length)
+                        uint32_t first, uint32_t count, size_t length)
 {
     const uint32_t tail = (s_dump.head + s_dump.count) % SLOT_COUNT;
     uint32_t serial = s_dump.next_serial + 1u;
@@ -370,14 +371,13 @@ static bool dump_control(log_stream_publish_fn publish, frame_type_t type)
 static bool dump_data(log_stream_publish_fn publish)
 {
     const bool rows = (s_dump.rows_sent < s_dump.rows_total);
-    const uint32_t left = rows ? (s_dump.rows_total - s_dump.rows_sent) :
-        (s_dump.events_total - s_dump.events_sent);
+    const uint32_t left = rows ? (s_dump.rows_total - s_dump.rows_sent)
+                               : (s_dump.events_total - s_dump.events_sent);
     const uint32_t first = rows ? s_dump.rows_sent : s_dump.events_sent;
-    const uint32_t want = (left < LOG_DUMP_BATCH_RECORDS) ?
-        left : LOG_DUMP_BATCH_RECORDS;
-    const uint32_t copied = rows ?
-        copy_rows(s_dump.generation, first, want) :
-        copy_events(s_dump.generation, first, want);
+    const uint32_t want =
+        (left < LOG_DUMP_BATCH_RECORDS) ? left : LOG_DUMP_BATCH_RECORDS;
+    const uint32_t copied = rows ? copy_rows(s_dump.generation, first, want)
+                                 : copy_events(s_dump.generation, first, want);
     rm_log_batch_t header;
     size_t length;
     bool accepted = false;
@@ -392,10 +392,11 @@ static bool dump_data(log_stream_publish_fn publish)
         header.first_index = first;
         header.publish_ms = drv_time_ms();
         header.log_rows = s_dump.rows_total;
-        length = rm_pack_log_batch(s_frame, sizeof(s_frame), &header,
-            s_records);
-        accepted = (length != 0u) && dump_submit(publish,
-            rows ? FRAME_ROWS : FRAME_EVENTS, first, copied, length);
+        length =
+            rm_pack_log_batch(s_frame, sizeof(s_frame), &header, s_records);
+        accepted = (length != 0u) &&
+                   dump_submit(publish, rows ? FRAME_ROWS : FRAME_EVENTS, first,
+                               copied, length);
     }
     if (accepted) {
         if (rows) {
@@ -438,9 +439,9 @@ static bool dump_open(void)
 static void dump_check_generation(void)
 {
     telemetry_log_index_t index;
-    const bool active = (s_dump.stage != DUMP_IDLE) &&
-        (s_dump.stage != DUMP_OPEN) && (s_dump.stage != DUMP_ABORT) &&
-        (s_dump.stage != DUMP_ABORT_WAIT);
+    const bool active =
+        (s_dump.stage != DUMP_IDLE) && (s_dump.stage != DUMP_OPEN) &&
+        (s_dump.stage != DUMP_ABORT) && (s_dump.stage != DUMP_ABORT_WAIT);
 
     if (active && (telemetry_log_open(&index) >= E_OK) &&
         (index.generation != s_dump.generation)) {
@@ -481,10 +482,10 @@ static void dump_service(log_stream_publish_fn publish)
         s_dump.stage = DUMP_BEGIN_WAIT;
     }
     while ((s_dump.stage == DUMP_DATA) && (sends < LOG_DUMP_SENDS_PER_POLL) &&
-        (s_dump.count < LOG_DUMP_WINDOW) &&
-        ((s_dump.rows_sent < s_dump.rows_total) ||
-         (s_dump.events_sent < s_dump.events_total)) &&
-        dump_data(publish)) {
+           (s_dump.count < LOG_DUMP_WINDOW) &&
+           ((s_dump.rows_sent < s_dump.rows_total) ||
+            (s_dump.events_sent < s_dump.events_total)) &&
+           dump_data(publish)) {
         ++sends;
     }
     if ((s_dump.stage == DUMP_DATA) && (s_dump.count == 0u) &&
@@ -577,7 +578,7 @@ void log_stream_complete(uint32_t token, bool success)
         ++s_stats.dump_failed;
     }
     while (found && success && (s_dump.count != 0u) &&
-        s_dump.slots[s_dump.head].acked) {
+           s_dump.slots[s_dump.head].acked) {
         dump_apply(&s_dump.slots[s_dump.head]);
         s_dump.head = (s_dump.head + 1u) % SLOT_COUNT;
         --s_dump.count;

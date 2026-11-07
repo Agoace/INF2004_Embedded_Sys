@@ -3,37 +3,59 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "ultrasonic.h"
-typedef enum { SONAR_STOP,SONAR_WATCH,SONAR_ONCE,SONAR_ACK } sonar_mode_t;
+
+typedef enum {
+    SONAR_STOP,
+    SONAR_WATCH,
+    SONAR_ONCE,
+    SONAR_ACK
+} sonar_mode_t;
+
 typedef struct {
-    uint32_t generation,id,deadline_ms,not_before_ms;
+    uint32_t generation, id, deadline_ms, not_before_ms;
     uint16_t interval_ms;
     int8_t angle;
     uint8_t mode;
 } sonar_request_t;
-typedef enum { SONAR_EMPTY,SONAR_ECHO,SONAR_DEADLINE,SONAR_CANCELLED } sonar_status_t;
+
+typedef enum {
+    SONAR_EMPTY,
+    SONAR_ECHO,
+    SONAR_DEADLINE,
+    SONAR_CANCELLED
+} sonar_status_t;
+
 /* ECHO timestamp is actual trigger time, not the later service publication. */
 typedef struct {
-    uint32_t generation,id,ping_sequence,result_sequence,trigger_ms,timestamp_ms,deadline_ms;
-    uint32_t ping_generation,ping_id;
+    uint32_t generation, id, ping_sequence, result_sequence, trigger_ms,
+        timestamp_ms, deadline_ms;
+    uint32_t ping_generation, ping_id;
     int8_t ping_angle;
     ultrasonic_result_t echo;
     int8_t angle;
     uint8_t status;
-    bool pending,valid;
+    bool pending, valid;
 } sonar_snapshot_t;
+
 int sonar_service_init(void);
 int sonar_service_start(void);
 bool sonar_service_running(void);
 /* Copies by value through MBF, TMO_POL; callers must retry or stop on failure. */
 int sonar_request(const sonar_request_t *request);
-int sonar_result_read(sonar_snapshot_t *out,bool *new_result);
+int sonar_result_read(sonar_snapshot_t *out, bool *new_result);
 /* Bounded, non-consuming read: E_TMOUT if a writer is active or changed. */
 int sonar_snapshot_try_read(sonar_snapshot_t *out);
 #define SONAR_HISTORY_CAPACITY 16u
-typedef struct { uint32_t sequence; sonar_snapshot_t result; } sonar_history_entry_t;
+
+typedef struct {
+    uint32_t sequence;
+    sonar_snapshot_t result;
+} sonar_history_entry_t;
+
 /* One next publication. E_TMOUT: no new entry; E_OBJ: busy or not ready.
  * Set cursor to zero initially. Overflow returns the oldest retained entry
  * and reports the number of evicted entries. Busy leaves cursor/out intact.
  * Readers must run at least once per 2^31 publications. No retry loop. */
-int sonar_history_read(uint32_t *cursor,sonar_history_entry_t *out,uint32_t *missed);
+int sonar_history_read(uint32_t *cursor, sonar_history_entry_t *out,
+                       uint32_t *missed);
 #endif
