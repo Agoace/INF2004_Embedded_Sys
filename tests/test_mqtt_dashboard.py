@@ -1780,5 +1780,128 @@ class DashboardRebootTests(ModelCase):
                          "not reported (old heartbeat)")
 
 
+NODE = shutil.which("node")
+HARNESS = REPO / "tests" / "dashboard_page_harness.js"
+
+
+class InstanceTests(AppCase):
+    """The server instance ID is public, per process and separate from CSRF."""
+
+    def test_instance_is_on_page_state_and_events_but_is_not_the_csrf_token(self):
+        page = self.request("GET", "/")[2].decode()
+        self.assertIn(f'<meta name="instance" content="{self.app.instance}">', page)
+        self.assertNotIn("__INSTANCE__", page)
+        self.assertRegex(self.app.instance, r"^[0-9a-f]{16}$")
+        self.assertNotEqual(self.app.instance, self.app.csrf)
+        state = json.loads(self.request("GET", "/api/state")[2])
+        self.assertEqual(state["server_instance"], self.app.instance)
+        events = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        events.request("GET", "/events", headers={"Host": f"127.0.0.1:{self.port}"})
+        stream = events.getresponse()
+        frame = stream.fp.readline()
+        events.close()
+        self.assertEqual(json.loads(frame[len(b"data: "):])["server_instance"], self.app.instance)
+        self.assertNotIn("fixed-test-csrf", json.dumps(state))
+
+    def test_each_process_gets_a_new_instance(self):
+        other = dashboard.DashboardApp(self.model, None, 0, csrf="fixed-test-csrf")
+        self.assertNotEqual(other.instance, self.app.instance)
+
+    def test_old_page_token_is_still_refused(self):
+        # A restart is detected by instance ID; the CSRF check itself is unchanged.
+        status, _, body = self.post("estop", **{"X-CSRF-Token": "stale-token"})
+        self.assertEqual((status, json.loads(body)["error"]), (403, "bad CSRF token"))
+        self.assertEqual(self.link.sent, [])
+
+
+@unittest.skipUnless(NODE, "node is not installed; page script checks skipped")
+class PageScriptTests(AppCase):
+    """Run the served page script in node with a fake DOM and scripted replies."""
+
+    def run_page(self, steps, session=None, now=None):
+        page = self.request("GET", "/")[2].decode()
+        harness = {"page": page, "steps": steps, "session": session or {}, "now": now}
+        result = subprocess.run([NODE, str(HARNESS)], input=json.dumps(harness),
+                                capture_output=True, text=True, timeout=20, check=False)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
+
+    def state(self, instance=None):
+        snapshot = json.loads(self.request("GET", "/api/state")[2])
+        if instance is not None:
+            snapshot["server_instance"] = instance
+        return snapshot
+
+    def test_403_shows_persistent_red_error_naming_the_command(self):
+        state = self.state()
+        trace = self.run_page([{"render": state}, {"click": "estop"},
+                               {"respond": {"status": 403, "body": {"ok": False, "error": "bad CSRF token"}}},
+                               {"render": state}, {"render": state}])
+        self.assertEqual(len(trace["posts"]), 1)
+        self.assertEqual(trace["posts"][0]["headers"]["X-CSRF-Token"], "fixed-test-csrf")
+        self.assertFalse(trace["cmderror"]["hidden"])  # still shown after later renders
+        self.assertEqual(trace["cmderror"]["text"],
+                         "ESTOP NOT SENT: bad CSRF token (HTTP 403). Reload the page. "
+                         "Use GP21 to stop the robot.")
+
+    def test_network_error_and_bad_reply_are_not_silent(self):
+        state = self.state()
+        trace = self.run_page([{"render": state}, {"click": "estop"}, {"respond": "throw"}])
+        self.assertEqual(trace["cmderror"]["text"],
+                         "ESTOP NOT SENT: dashboard server unreachable. Reload the page. "
+                         "Use GP21 to stop the robot.")
+        trace = self.run_page([{"render": state}, {"click": "estop"},
+                               {"respond": {"status": 502, "body": None}}])
+        self.assertIn("ESTOP NOT SENT: no reply (HTTP 502)", trace["cmderror"]["text"])
+
+    def test_robot_refusal_names_command_without_reload_advice(self):
+        state = self.state()
+        trace = self.run_page([{"render": state}, {"click": "estop"},
+                               {"respond": {"status": 409, "body": {"ok": False,
+                                                                    "error": "robot is not idle"}}}])
+        self.assertEqual(trace["cmderror"]["text"],
+                         "ESTOP NOT SENT: robot is not idle (HTTP 409). Use GP21 to stop the robot.")
+
+    def test_success_clears_an_earlier_error(self):
+        state = self.state()
+        ok = {"ok": True, "puback": True, "request_id": 1, "note": "note."}
+        trace = self.run_page([{"render": state}, {"click": "estop"}, {"respond": "throw"},
+                               {"click": "estop"}, {"respond": {"status": 200, "body": ok}}])
+        self.assertTrue(trace["cmderror"]["hidden"])
+        self.assertEqual(trace["message"]["text"], "ESTOP sent (broker acknowledged). note.")
+
+    def test_instance_change_reloads_once_and_disables_commands(self):
+        state, other = self.state(), self.state("0123456789abcdef")
+        trace = self.run_page([{"render": state}, {"render": other}, {"click": "estop"}])
+        self.assertEqual(trace["reloads"], 1)
+        self.assertEqual(trace["posts"], [])  # disabled: the stale token is never used
+        self.assertTrue(trace["estop"]["disabled"])
+        self.assertFalse(trace["restart"]["hidden"])
+        self.assertIn("DASHBOARD RESTARTED", trace["restart"]["text"])
+
+    def test_repeated_restart_within_guard_shows_banner_instead_of_reload_loop(self):
+        other = self.state("0123456789abcdef")
+        first = self.run_page([{"render": other}], now=1000000)
+        self.assertEqual(first["reloads"], 1)
+        stamp = first["session"]["dashboard-reload-at"]
+        # The reloaded page sees a mismatch again within 5 s: banner, no second reload.
+        again = self.run_page([{"render": other}, {"click": "estop"}],
+                              session={"dashboard-reload-at": stamp}, now=1003000)
+        self.assertEqual((again["reloads"], again["posts"]), (0, []))
+        self.assertIn("DASHBOARD RESTARTED: reload the page", again["restart"]["text"])
+        self.assertTrue(again["estop"]["disabled"])
+        # After the guard expires, a new mismatch may reload again.
+        later = self.run_page([{"render": other}], session={"dashboard-reload-at": stamp},
+                              now=1006000)
+        self.assertEqual(later["reloads"], 1)
+
+    def test_same_instance_never_reloads(self):
+        state = self.state()
+        trace = self.run_page([{"render": state}, {"render": state}])
+        self.assertEqual(trace["reloads"], 0)
+        self.assertTrue(trace["restart"]["hidden"])
+        self.assertFalse(trace["estop"]["disabled"])
+
+
 if __name__ == "__main__":
     unittest.main(argv=[sys.argv[0]])

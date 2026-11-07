@@ -74,6 +74,8 @@ class DashboardApp:
         self.model = model
         self.commander = commander
         self.csrf = csrf or secrets.token_urlsafe(32)
+        # Random per process and not secret: lets an open page detect a restart.
+        self.instance = secrets.token_hex(8)
         self.extra_hosts = set()
         self.extra_origins = set()
         for origin in extra_origins:
@@ -115,11 +117,13 @@ class DashboardApp:
 
     def page(self):
         nonce = secrets.token_urlsafe(16)
-        html = PAGE.replace("__CSRF__", self.csrf).replace("__NONCE__", nonce)
+        html = (PAGE.replace("__CSRF__", self.csrf).replace("__NONCE__", nonce)
+                .replace("__INSTANCE__", self.instance))
         return html.encode("utf-8"), nonce
 
     def state_json(self):
-        return json.dumps(self.model.snapshot(), separators=(",", ":")).encode("utf-8")
+        snapshot = dict(self.model.snapshot(), server_instance=self.instance)
+        return json.dumps(snapshot, separators=(",", ":")).encode("utf-8")
 
     def command(self, body):
         """Handle an already authorised command body: JSON {"command": name, "confirm": bool}."""

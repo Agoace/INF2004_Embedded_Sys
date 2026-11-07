@@ -26,6 +26,7 @@ the four robot commands (ESTOP, DUMP, START, CALIBRATE).
 | [`scripts/dashboard_page.py`](../scripts/dashboard_page.py) | The page (HTML, CSS and JavaScript in one string) |
 | [`scripts/robot_wire.py`](../scripts/robot_wire.py) | Shared decoder, log merge and gap store, command packer |
 | [`tests/test_mqtt_dashboard.py`](../tests/test_mqtt_dashboard.py) | Host tests (no broker, no Paho) |
+| [`tests/dashboard_page_harness.js`](../tests/dashboard_page_harness.js) | Runs the served page script in Node with a fake DOM for the command-error and restart tests |
 
 ## Run
 
@@ -225,6 +226,41 @@ sends the retained status again after the reconnect.
 - ESTOP stays enabled when the broker is disconnected. Then the dashboard
   cannot send it, and it shows an error. Use GP21.
 
+### Command not sent
+
+A command that does not reach the broker is never silent. Any HTTP error
+reply, an unreadable reply or a network error shows a red line under the
+header. The line names the command and the server error, for example:
+
+`ESTOP NOT SENT: bad CSRF token (HTTP 403). Reload the page. Use GP21 to stop the robot.`
+
+The line stays visible. Live updates do not clear it. Only a later command
+that the server accepts clears it. A 409 reply is a robot-state refusal
+(confirm needed, or the robot is not idle), so its line does not say to reload.
+
+### Dashboard restart
+
+Each server process has a random instance ID. It is **not** secret and is
+not the CSRF value. The page receives it at load, and every `/events` and
+`/api/state` snapshot carries it as `server_instance`.
+
+After a dashboard restart, an open page still holds the old CSRF value, so
+the server refuses every command with 403. Live updates reconnect
+automatically, so the page can look normal. When the page sees a different
+instance ID, it:
+
+1. Disables every button at once and stops rendering the old view.
+2. Shows the red line `DASHBOARD RESTARTED: reloading the page. Commands are
+   disabled until it reloads. Use GP21 to stop the robot.`
+3. Reloads itself once.
+
+The reload is safe. It sends no command, and it only fetches the page again
+to get the new CSRF value. A reload clears any half-armed START or
+CALIBRATE confirm, so no confirm can carry over. If the reloaded page sees a
+mismatch again within 5 s (for example, a proxy that serves an old page),
+it does not reload again. It keeps the buttons disabled and shows
+`DASHBOARD RESTARTED: reload the page`. This prevents a reload loop.
+
 ### Command result
 
 A command goes to the broker with QoS 1. **A PUBACK from the broker is not
@@ -365,5 +401,12 @@ The tests use messages that the C code packs. They check these items:
 - The command bytes, and the confirm and gate checks.
 - The token never appears in a page, response, stream or log line.
 - Requests with a bad Origin, Host, CSRF value or content type are refused.
+- The instance ID is on the page, in `/api/state` and `/events`, differs per
+  process, and differs from the CSRF value.
+- Page script, run in Node: a 403, 502 or network error shows the
+  persistent red line naming the command; a 409 omits the reload advice; a
+  later success clears it; an instance change disables buttons and reloads
+  once; a repeat within 5 s shows the banner without a reload loop.
 
-No test uses a broker, a real token or a browser.
+No test uses a broker, a real token or a browser. The page script tests
+need `node`; they are skipped, and reported as skipped, if `node` is missing.
