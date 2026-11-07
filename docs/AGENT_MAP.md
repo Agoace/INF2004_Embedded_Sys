@@ -144,3 +144,5 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
+
+- Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
