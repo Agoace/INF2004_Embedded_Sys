@@ -141,6 +141,13 @@ void rs_detour_begin(rs_t *rs, uint32_t now_ms, uint8_t side, uint32_t scan_id)
     ++rs->detours_started;
 }
 
+void rs_scan_reattempt(rs_t *rs)
+{
+    if (rs->running && rs->scan_reattempts < RM_SUMMARY_SCAN_REATTEMPT_MAX) {
+        ++rs->scan_reattempts;
+    }
+}
+
 /* Close the open detour into *out. */
 static void close_detour(rs_t *rs, uint8_t outcome, uint16_t payload,
                          uint32_t now_ms, rm_detour_t *out)
@@ -225,9 +232,12 @@ bool rs_run_end(rs_t *rs, uint32_t now_ms, uint8_t stop_reason,
         was_open = true;
     }
     memset(summary, 0, sizeof(*summary));
+    const uint32_t retries = (uint32_t)rs->scan_reattempts
+                             << RM_SUMMARY_SCAN_REATTEMPT_SHIFT;
+
     summary->flags =
         (uint8_t)((rs->speed_error_valid ? RM_SUMMARY_SPEED_ERROR_VALID : 0u) |
-                  (was_open ? RM_SUMMARY_DETOUR_ABORTED : 0u));
+                  (was_open ? RM_SUMMARY_DETOUR_ABORTED : 0u) | retries);
     summary->stop_source = rs_stop_source(stop_reason);
     summary->stop_reason = stop_reason;
     summary->run_id = rs->runs;

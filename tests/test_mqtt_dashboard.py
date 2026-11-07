@@ -1150,6 +1150,22 @@ class BatchTwoCFixtureTests(ModelCase):
         self.assertEqual(self.model.discarded, 0)
 
 
+class ScanRetryDashboardTests(ModelCase):
+    def test_scan_retry_labels_and_summary_count(self):
+        self.model.ingest("robot/event", SAMPLES["event_scan_reverse_begin"])
+        self.model.ingest("robot/event", SAMPLES["event_scan_reverse_end"])
+        self.model.ingest("robot/event", SAMPLES["event_scan_rescan_begin"])
+        texts = [item["text"] for item in self.panel("events")["items"]]
+        self.assertEqual(texts[0], "#32 SCAN retry 1: rescan begins (both sides blocked)")
+        self.assertEqual(texts[-1], "#30 SCAN retry 1: reverse begins (both sides blocked)")
+        self.model.ingest("robot/obstacle", SAMPLES["obstacle_retry2"])
+        self.assertEqual(self.rows("obstacle")["Scan attempt"], "retry 2")
+        self.model.ingest("robot/summary", SAMPLES["summary_scan_reverse_timeout"])
+        rows = self.rows("summary")
+        self.assertEqual(rows["SCAN reverse-and-rescan attempts"], 2)
+        self.assertEqual(rows["Stop reason"], "scan reverse timed out")
+
+
 class CommanderTests(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()

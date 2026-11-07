@@ -165,7 +165,10 @@ missed a detour, and the panel counts these gaps. The side is the obstacle side
 the robot sets the valid flag.
 
 **Run summary:** the robot publishes `robot/summary` as a retained message at
-the end of each run. After a broker reconnect, the panel can show the retained
+the end of each run. Summary v2 flags bits 3–7 show the number of SCAN
+reverse-and-rescan attempts (0–31; the robot saturates at 31). The
+obstacle panel shows each profile attempt. The event list names kind 8 as
+a SCAN retry and shows its phase. After a broker reconnect, the panel can show the retained
 copy of an earlier run, and the note says so. While a new run is in progress,
 the note says that the summary is for the previous run.
 
