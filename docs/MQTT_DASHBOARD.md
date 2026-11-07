@@ -59,6 +59,22 @@ without the other. The dashboard does not write files.
 
 ## Remote view through Tailscale
 
+Verified on 2026-11-07 by the operator:
+
+```sh
+tailscale serve --bg --http=8080 http://127.0.0.1:8765
+```
+
+From `fedora-desk`, the browser opened
+`http://fedora-laptop.taild62d21.ts.net:8080/`. Live data and all buttons
+worked. The browser marks the page **Not secure** because the page uses
+plain HTTP. Tailscale still carries the connection over WireGuard. The short
+name `http://fedora-laptop:8080` returns HTTP 403 by design, because the
+dashboard checks the exact Host and Origin.
+
+HTTPS on port 8443 did not work on the hotspot. The Let's Encrypt
+certificate fetch or `SetDNS` step timed out. Retry HTTPS on normal Wi-Fi.
+
 The dashboard always binds `127.0.0.1`. To use it from another device on
 your tailnet, let Tailscale Serve forward one HTTPS port to it. Do not
 change the bind address.
@@ -170,7 +186,8 @@ draws any panel that the server sends.
 
 ## Robot link
 
-The robot publishes `robot/status` (2 bytes, QoS 1, retained). The robot also
+The robot publishes `robot/status` (version 2: 6 bytes, QoS 1, retained).
+The last four bytes contain the boot ID. Old version 1 messages have 2 bytes. The robot also
 sets it as its MQTT last will. When the robot drops, the broker publishes
 `offline`. The broker needs about 7.5 s for this (1.5 times the 5 s keep-alive,
 plus up to 1 s).
@@ -258,9 +275,9 @@ ESTOP is never blocked.
   subscribes to `robot/log`, `robot/status`, `robot/summary` and `robot/barcode`
   with QoS 1. A subscription limits the delivery QoS, and a DUMP refill batch,
   the status message and the summary are QoS 1.
-- The decoder accepts `robot/state` versions 1, 2 and 3 (48, 60 and 72 bytes)
-  and `robot/heartbeat` versions 1 and 2, so old captures still decode. The
-  firmware sends only the newest version.
+- The decoder accepts `robot/state` versions 1 to 4 (48, 60, 72 and 76 bytes)
+  and `robot/heartbeat` versions 1 to 3 (100, 100 and 108 bytes), so old captures
+  still decode. The firmware sends only the newest version.
 - The recorder (`scripts/mqtt_robot.py`) also subscribes to all these topics.
   Its CSV includes state, CPU load, detours, run summaries, barcode results,
   IMU snapshots and IMU motion events. It ignores unknown reserved versions
@@ -268,13 +285,60 @@ ESTOP is never blocked.
 - The dashboard subscribes again after every broker reconnect.
 - A message with a wrong length, version or reserved bit is discarded. It
   does not change the panels. The count shows in the page data.
-- Live log rows and DUMP refill rows merge by generation and index. A
-  repeated row (QoS 1 retry) is dropped. See the log rules in
+- Live log rows and DUMP refill rows merge by boot/session, generation, kind
+  and index. A repeated row (QoS 1 retry) is dropped only within the same
+  boot/session. See the log rules in
   [MQTT_WIRE.md](MQTT_WIRE.md).
 - The row gap counter covers live rows only. A DUMP fills old holes. The
   recorder prints the final gap report when it stops.
 - The log store keeps one entry for each row until the dashboard stops. Restart
   the dashboard after a long session.
+
+## Reboots and old captures
+
+Implemented observation messages carry a 32-bit `boot_id`. Commands stay at
+version 1 and 22 bytes. Reserved barcode and IMU messages do not change.
+The CSV also has `boot_session`: a local label that contains the boot ID and
+a session suffix. For old frames without an ID, it says `legacy:N`.
+
+The log store keeps separate duplicate records, gaps and DUMP request IDs
+for each boot/session. Two boots can both send generation 2, row 0: both
+rows must reach the CSV. A DUMP from one boot cannot fill a gap from another.
+Embedded 16-byte event records stay at version 1; they inherit the ID from
+the outer log message.
+
+A change of boot invalidates current sensor readings, charts, event and
+detour sequence counters, and pending command decisions. The next idle
+state must come from the current boot before START can become available.
+Delayed live frames from an already superseded boot do not replace current
+state. Retained status can arrive before the first live frame of that boot;
+the dashboard saves it until a live message identifies that boot.
+
+The run summary is retained as history, with its boot/session label. If it
+belongs to an earlier boot, the note says so. An older retained summary does
+not replace a summary already received from the current boot. A retained
+summary is not proof that the robot is online. The detour table shows only
+the current boot/session. Log records and gaps from all sessions remain
+available in the recorder report until the process stops.
+
+The 32-bit ID can repeat by accident. The receiver also starts a new local
+session after an OFFLINE-to-ONLINE status change, or when uptime goes
+backwards within a source. It checks state, heartbeat and live-log publish
+times separately. It does not compare times between topics, or use old
+summary/refill timestamps as live uptime. A normal 32-bit uptime wrap does
+not start a session. A broker disconnect alone does not prove a robot reboot.
+
+Legacy session labels are **inferred**, not unique robot identities. If both
+status transitions and uptime rollback are missed, a legacy reboot cannot
+be distinguished. A reordered legacy frame can also look like a rollback.
+After an accidental repeated ID, an old frame with that same ID is likewise
+ambiguous. Use the new formats for reliable separation of distinct boot IDs.
+
+Heartbeat version 3 separates unavailable boards from busy reads. The
+health panel shows the last unavailable-board mask and the total number of
+unavailable observations separately from the per-board busy counters. A
+busy read does not change the unavailable mask. An old heartbeat does not
+report board availability; the panel does not invent it.
 
 ## Checks
 
@@ -288,7 +352,11 @@ The tests use messages that the C code packs. They check these items:
 
 - Messages become panel data.
 - Stale data turns grey at the 1 s limit.
-- The row gap counter.
+- The row gap counter and boot-scoped gap refill.
+- Two boots with identical generation-2 rows both reach the CSV.
+- Legacy uptime rollback, uptime wrap, OFFLINE-to-ONLINE boundaries,
+  old retained summaries, delayed old live frames and detour resets.
+- Unavailable-board counters stay separate from busy-read counters.
 - The button rules (idle, fresh, broker, token, waiting, dump active, robot offline or silent).
 - The wheel distance and duty, the odometry dial, the obstacle panel and its scan ID gaps, the detour table and its sequence gaps, the run summary, CPU load, the reserved topics and the robot link levels.
 - The command bytes, and the confirm and gate checks.

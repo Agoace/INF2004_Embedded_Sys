@@ -42,12 +42,12 @@ class WireTests(unittest.TestCase):
         self.assertEqual((state["count_l"], state["count_r"]), (-2147483648, -1234567))
         self.assertTrue(all(state[name] == 1 for name in wire.STATE_FLAGS))
         self.assertEqual(state["kr1_hex"], "01020304" + "00" * 12)
-        sonar = wire.decode("robot/sonar", self.samples["robot/sonar"])
+        sonar = wire.decode("robot/sonar", legacy_frame("sonar", self.samples["robot/sonar"]))
         self.assertEqual(sonar, dict(version=1, status=1, valid=1, pending=1, angle=-30, ping_angle=30,
                                     sequence=0xFFFFFFFF, generation=0x12345678, request_id=33,
                                     trigger_ms=1000, timestamp_ms=1010, echo=0x4567, ping_sequence=123,
                                     echo_status=2, echo_mm=""))
-        event = wire.decode("robot/event", self.samples["robot/event"])
+        event = wire.decode("robot/event", legacy_frame("event", self.samples["robot/event"]))
         self.assertEqual(event, dict(version=1, kind=6, sequence=0x12345678, uptime_ms=1234,
                                     word=0xABCD, detail=4, run_relative=1, **{"from": 2, "to": 3}))
         heart = wire.decode("robot/heartbeat", self.samples["robot/heartbeat"])
@@ -82,7 +82,9 @@ class WireTests(unittest.TestCase):
                                     ("heartbeat", 98, 1), ("log", 2, 1)):
             bad = bytearray(self.samples["robot/" + topic])
             bad[offset] |= mask
-            if topic == "heartbeat" and offset == 98 and bad[0] == 2:
+            if topic == "heartbeat" and offset == 3 and bad[0] >= 3:
+                bad[3] = 0x20  # unavailable mask bits 5..7 stay reserved
+            if topic == "heartbeat" and offset == 98 and bad[0] >= 2:
                 struct.pack_into("<H", bad, 98, 1001)  # version 2: CPU load above 100.0 %
             with self.assertRaises(ValueError):
                 wire.decode("robot/" + topic, bad)
@@ -262,7 +264,8 @@ class LogBatchTests(unittest.TestCase):
     def test_c_frames_match_python_layout(self):
         live = self.batches["live"]
         records = [bytes([(i * 7 + 3) & 255 for i in range(16 * k, 16 * k + 16)]) for k in range(10)]
-        self.assertEqual(live, build_batch(count=10, generation=7, first=100, publish=5000,
+        self.assertEqual(legacy_frame("log", live),
+                         build_batch(count=10, generation=7, first=100, publish=5000,
                                            newest=4950, rows=125, records=records))
         header, rows = wire.parse_log_batch(live)
         self.assertEqual((header["kind"], header["count"], header["flags"], header["stream_id"]),
@@ -280,7 +283,7 @@ class LogBatchTests(unittest.TestCase):
         refill = wire.parse_log_batch(self.batches["refill_rows"])
         self.assertEqual((refill[0]["refill"], refill[0]["stream_id"], len(refill[1]), refill[1][11]["index"]),
                          (1, 111, 12, 35))
-        self.assertEqual(len(self.batches["refill_rows"]), 224)
+        self.assertEqual(len(self.batches["refill_rows"]), 228)
         events = wire.parse_log_batch(self.batches["refill_events"])[1]
         self.assertEqual([(e["index"], e["event_kind"], e["event_word"], e["event_detail"],
                            e["event_run_relative"]) for e in events],
@@ -407,15 +410,15 @@ class LogBatchTests(unittest.TestCase):
         self.log.handle(build_batch(count=2, first=0, generation=2, flags=2, skipped=33,
                                     publish=2000, newest=1990))
         self.assertEqual((self.gaps(), self.log.old_generation_skipped), ([], 33))
-        self.assertEqual(self.log.live_next, {1: 10, 2: 2})
+        self.assertEqual(self.log.live_next, {("legacy:0", 1): 10, ("legacy:0", 2): 2})
         # NEW_GENERATION frame lost: first frame seen for generation 3 starts at 40.
-        self.log.handle(build_batch(count=2, first=40, generation=3))
+        self.log.handle(build_batch(count=2, first=40, generation=3, publish=3000))
         self.assertEqual(self.gaps(), [("lost", 3, 0, 40)])
         # NEW_GENERATION that starts after a jump: rows before it were skipped, not lost.
-        self.log.handle(build_batch(count=2, first=60, generation=4, flags=6, skipped=5))
+        self.log.handle(build_batch(count=2, first=60, generation=4, flags=6, skipped=5, publish=4000))
         self.assertEqual(self.gaps()[-1], ("jumped", 4, 0, 60))
         self.assertEqual(self.log.old_generation_skipped, 38)
-        self.log.handle(build_batch(count=2, first=5, generation=5, flags=2))  # new gen not at zero
+        self.log.handle(build_batch(count=2, first=5, generation=5, flags=2, publish=5000))  # new gen not at zero
         self.assertEqual(self.gaps()[-1], ("lost", 5, 0, 5))
 
     def test_dump_complete_and_missing(self):
@@ -485,7 +488,7 @@ class LogBatchTests(unittest.TestCase):
 
     def test_cli_routes_log_batches_and_summarises(self):
         calls = []
-        frames = [self.batches["live"], build_batch(count=1, generation=7, first=300),
+        frames = [self.batches["live"], build_batch(count=1, generation=7, first=300, publish=6000),
                   b"bad", build_batch(count=2, flags=8)]
 
         class Client:
@@ -565,7 +568,7 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
 
     def test_c_packed_state_v2_and_old_version_bytes(self):
-        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3)))
+        self.assertIn((len(self.c_state), self.c_state[0]), ((60, 2), (72, 3), (76, 4)))
         result = wire.decode("robot/state", self.c_state)
         self.assertEqual((result["dist_left_mm"], result["dist_right_mm"], result["dist_avg_mm"]),
                          (-123456, 2 ** 31 - 1, -7))
@@ -577,7 +580,7 @@ class NewTopicTests(unittest.TestCase):
                     wire.decode("robot/state", bytes([version]) + self.c_state[1:size])
 
     def test_c_batch_two_frames_match_independent_builders(self):
-        self.assertEqual(self.dash["state_v3"], state_v3_frame(
+        self.assertEqual(legacy_frame("state", self.dash["state_v3"]), state_v3_frame(
             self.c_state, duty_left=-800, duty_right=32767, heading=-1234567, rate=-4749,
             dist=(-123456, 2 ** 31 - 1, -7)))
         for suffix, outcome, payload, flags in (("done_line", 3, 0x567, 1),
@@ -585,7 +588,7 @@ class NewTopicTests(unittest.TestCase):
                                                 ("failed", 7, 3, 0),
                                                 ("aborted", 8, 0, 1)):
             frame = self.dash["detour_" + suffix]
-            self.assertEqual(frame, detour_frame(
+            self.assertEqual(legacy_frame("detour", frame), detour_frame(
                 outcome=outcome, side=2, flags=flags, sequence=0x01020304, start=0xFFFFFFF0,
                 end=16, duration=32, distance=0xA1B2C3D4, lateral=0x1234, payload=payload,
                 scan=0x0A0B0C0D))
@@ -594,7 +597,7 @@ class NewTopicTests(unittest.TestCase):
                                                     ("aborted_detour", 6, 2, 2, 41),
                                                     ("no_speed_error", 0, 4, 3, 65535)):
             frame = self.dash["summary_" + suffix]
-            self.assertEqual(frame, summary_frame(
+            self.assertEqual(legacy_frame("summary", frame), summary_frame(
                 flags=flags, source=source, reason=reason, run=0x01020304, duration=61234,
                 distance=4321, speed_error=error, motion_faults=9, shell=4, shell_detail=258))
             self.assertEqual(wire.decode("robot/summary", frame)["stop_reason"], reason)
@@ -613,13 +616,14 @@ class NewTopicTests(unittest.TestCase):
         self.assertEqual((result["closest_mm"], result["profile_word"]), (510, 0x5A5A))
         self.assertEqual((result["right_free_step"], result["left_free_step"]), (7, 3))
         self.assertEqual((result["right_clear_deg"], result["left_clear_deg"]), (255, 15))
-        self.assertEqual(self.dash["obstacle"], obstacle_frame(
+        self.assertEqual(legacy_frame("obstacle", self.dash["obstacle"]), obstacle_frame(
             flags=0x0F, decision=2, angle=-30, scan=0x01020304, uptime=0xFFFFFFF0, closest=510,
             word=0x5A5A, right_step=7, left_step=3, right_clear=255, left_clear=15))
         self.assertEqual(wire.decode("robot/status", self.dash["status_online"])["robot_online"], 1)
         self.assertEqual(wire.decode("robot/status", self.dash["status_offline"])["robot_online"], 0)
         self.assertEqual((self.dash["status_online"], self.dash["status_offline"]),
-                         (bytes([1, 1]), bytes([1, 2])))
+                         (struct.pack("<BBI", 2, 1, 0x11223344),
+                          struct.pack("<BBI", 2, 2, 0x11223344)))
 
     def test_state_version_and_length_must_agree(self):
         good = self.state_v2()
@@ -707,8 +711,8 @@ def state_v3_frame(base, duty_left=-250, duty_right=1000, heading=-4500, rate=-1
 
 
 def heartbeat_frame(base, version=2, cpu=0x123):
-    frame = bytearray(base)
-    frame[0] = version
+    frame = bytearray(base[:100])
+    frame[0], frame[3] = version, 0
     struct.pack_into("<H", frame, 98, cpu if version == 2 else 0)
     return bytes(frame)
 
@@ -936,9 +940,301 @@ class BatchTwoTests(unittest.TestCase):
             writer.writerow(wire.decode(topic, data))
 
     def test_recorder_subscribes_to_the_new_topics_with_qos(self):
-        self.assertEqual(wire.SIZES["state"], 72)
-        self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (32, 44))
+        self.assertEqual(wire.SIZES["state"], 76)
+        self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (36, 48))
         self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1, "barcode": 1})
+
+
+def legacy_frame(name, frame):
+    """Check old prefix fields separately; reboot tests check every new ID/size."""
+    if name == "state":
+        return b"\x03" + frame[1:72]
+    if name == "log" and frame[0] == 2:
+        return b"\x01" + frame[1:32] + frame[36:]
+    size = {"sonar": 32, "event": 16, "obstacle": 20, "detour": 32, "summary": 44}[name]
+    return b"\x01" + frame[1:size]
+
+
+def with_boot(frame, boot=0xAABBCCDD, version=2):
+    """Independent builder: the old fixed layout, new version byte, trailing ID."""
+    return bytes([version]) + frame[1:] + struct.pack("<I", boot)
+
+
+def boot_batch(boot, generation=2, first=0, count=2, publish=1000, **kwargs):
+    old = build_batch(generation=generation, first=first, count=count, publish=publish, **kwargs)
+    return b"\x02" + old[1:32] + struct.pack("<I", boot) + old[32:]
+
+
+class RebootWireTests(unittest.TestCase):
+    def test_all_extended_observation_layouts_and_legacy_versions(self):
+        legacy = {"state": state_v3_frame(bytes(48)), "sonar": bytes([1]) + bytes(31),
+                  "event": bytes([1, 1]) + bytes(14), "obstacle": obstacle_frame(),
+                  "detour": detour_frame(), "summary": summary_frame(),
+                  "status": bytes([1, 1]), "log": bytes([1]) + bytes(31)}
+        for name, old in legacy.items():
+            version = 4 if name == "state" else 2
+            for boot in (0, 0x12345678, 0xFFFFFFFF):
+                frame = with_boot(old, boot, version)
+                decoded = wire.decode("robot/" + name, frame)
+                self.assertEqual(decoded["boot_id"], boot)
+                self.assertEqual(decoded["version"], version)
+                self.assertEqual({k: v for k, v in decoded.items()
+                                  if k not in ("version", "boot_id")},
+                                 {k: v for k, v in wire.decode("robot/" + name, old).items()
+                                  if k != "version"})
+                for bad in (frame[:-1], frame + b"\0", old[:1] + frame[1:],
+                            bytes([9]) + frame[1:]):
+                    with self.subTest(topic=name), self.assertRaises(ValueError):
+                        wire.decode("robot/" + name, bad)
+
+    def test_heartbeat_v3_unavailable_mask_and_total(self):
+        frame = bytearray(108)
+        frame[0], frame[3] = 3, 0b10101
+        struct.pack_into("<HII", frame, 98, 65535, 0x12345678, 0xABCDEF01)
+        result = wire.decode("robot/heartbeat", frame)
+        self.assertEqual((result["boot_id"], result["board_unavailable_mask"],
+                          result["board_unavailable"]), (0x12345678, 21, 0xABCDEF01))
+        self.assertEqual(result["cpu_load_permille"], 65535)
+        for mask in (0, 1, 2, 4, 8, 16, 31):
+            frame[3] = mask
+            self.assertEqual(wire.decode("robot/heartbeat", frame)["board_unavailable_mask"], mask)
+        for mask in (32, 64, 128, 255):
+            frame[3] = mask
+            with self.assertRaises(ValueError):
+                wire.decode("robot/heartbeat", frame)
+        for version in (1, 2):
+            legacy = bytes([version]) + bytes(99)
+            self.assertNotIn("board_unavailable", wire.decode("robot/heartbeat", legacy))
+            with self.assertRaises(ValueError):
+                wire.decode("robot/heartbeat", legacy[:3] + b"\x08" + legacy[4:])
+
+    def test_log_v2_batch_header_and_embedded_legacy_events(self):
+        for count in (1, 12):
+            frame = boot_batch(42, count=count)
+            head, records = wire.parse_log_batch(frame)
+            self.assertEqual(len(frame), 36 + 16 * count)
+            self.assertEqual((head["version"], head["boot_id"], len(records)), (2, 42, count))
+            self.assertEqual(records[0]["kr1_hex"], frame[36:52].hex())
+        frame = boot_batch(99, kind=6)
+        head, records = wire.parse_log_batch(frame)
+        self.assertEqual(head["boot_id"], 99)
+        self.assertEqual(records[0]["event_version"], 1)
+        self.assertEqual(records[0]["event_kind"], 1)
+        rows = wire.LogStream(report=lambda message: None).handle(frame)
+        self.assertEqual(rows[0]["boot_id"], 99)  # inherited from the outer frame
+        bad = bytearray(frame)
+        bad[36] = 2  # embedded events MUST NOT extend to version 2 / 20 B
+        with self.assertRaises(ValueError):
+            wire.parse_log_batch(bad)
+        for bad in (frame[:35], frame[:-1], frame + b"\0", b"\x03" + frame[1:]):
+            with self.assertRaises(ValueError):
+                wire.parse_log_batch(bad)
+
+    def test_log_v2_single_events_inherit_outer_boot(self):
+        frame = bytearray(36)
+        frame[0], frame[1], frame[16], frame[17] = 2, 2, 1, 7
+        struct.pack_into("<I", frame, 32, 0x11223344)
+        row = wire.LogStream(report=lambda message: None).handle(frame)[0]
+        self.assertEqual((row["boot_id"], row["event_version"], row["event_kind"]),
+                         (0x11223344, 1, 7))
+
+    def test_csv_covers_every_new_field(self):
+        fields = wire.csv_fields()
+        for name in ("boot_id", "boot_session", "board_unavailable", "board_unavailable_mask"):
+            self.assertIn(name, fields)
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fields)
+        for row in wire.LogStream(report=lambda message: None).handle(boot_batch(1)):
+            writer.writerow(row)
+
+
+class RebootLogTests(unittest.TestCase):
+    def setUp(self):
+        self.log = wire.LogStream(report=lambda message: None)
+
+    def test_c_boot_fixtures_decode_exact_values(self):
+        outputs = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            outputs[topic] = bytes.fromhex(encoded)
+        ids = {"a": 0x11223344, "b": 0xAABBCCDD}
+        for suffix, boot in ids.items():
+            batch = outputs[f"batch/boot_{suffix}"]
+            head, records = wire.parse_log_batch(batch)
+            self.assertEqual((head["version"], head["boot_id"], head["generation"],
+                              head["first_index"], head["publish_ms"], head["newest_ms"]),
+                             (2, boot, 2, 0, 5000, 4990))
+            self.assertEqual(records[0]["kr1_hex"][:2], f"{10 + (suffix == 'b'):02x}")
+            begin = wire.decode("robot/log", outputs[f"dash/log_begin_boot_{suffix}"])
+            self.assertEqual((begin["boot_id"], begin["dump_id"], begin["generation"],
+                              begin["rows_total"]), (boot, 7, 2, 1))
+            expected = {"state": 76, "heartbeat": 108, "status": 6,
+                        "status_offline": 6, "summary": 48, "detour": 36,
+                        "event": 20, "sonar": 36, "obstacle": 24}
+            for name, size in expected.items():
+                topic = "robot/status" if name.startswith("status") else "robot/" + name
+                frame = outputs[f"dash/{name}_boot_{suffix}"]
+                decoded = wire.decode(topic, frame)
+                self.assertEqual((len(frame), decoded["boot_id"]), (size, boot))
+            beat = wire.decode("robot/heartbeat", outputs[f"dash/heartbeat_boot_{suffix}"])
+            self.assertEqual((beat["board_unavailable_mask"], beat["board_unavailable"],
+                              beat["vehicle_busy"], beat["cpu_load_permille"]),
+                             (8, 233, 0, 117))
+            self.assertEqual(wire.decode("robot/status",
+                                         outputs[f"dash/status_offline_boot_{suffix}"])
+                             ["robot_online"], 0)
+        log = wire.LogStream(report=lambda message: None)
+        rows = log.handle(outputs["batch/boot_a"]) + log.handle(outputs["batch/boot_b"])
+        self.assertEqual([(r["boot_id"], r["generation"], r["index"]) for r in rows],
+                         [(0x11223344, 2, 0), (0xAABBCCDD, 2, 0)])
+        self.assertEqual(log.handle(outputs["batch/boot_a"]), [])  # duplicate within its boot
+
+    def test_exact_generation_two_collision_across_two_boots(self):
+        a, b = boot_batch(100), boot_batch(200)
+        self.assertEqual(len(self.log.handle(a)), 2)
+        self.assertEqual(len(self.log.handle(a)), 0)
+        rows = self.log.handle(b)
+        self.assertEqual(len(rows), 2)
+        self.assertEqual({r["boot_id"] for r in rows}, {200})
+        self.assertEqual(len(self.log.handle(a)), 0)  # late old boot still deduplicates
+        self.assertEqual(len(self.log.handle(b)), 0)
+        self.assertEqual(sum(len(v) for v in self.log.seen.values()), 4)
+        self.assertIn("4 rows", self.log.summary()[0])
+        self.assertEqual(self.log.sessions.boot_id, 200)
+
+    def test_gaps_and_refill_are_scoped_to_boot(self):
+        self.log.handle(boot_batch(100, first=0))
+        self.log.handle(boot_batch(100, first=4))  # boot A missing [2,4)
+        self.log.handle(boot_batch(200, first=0))
+        self.log.handle(boot_batch(200, first=4))  # boot B has the same gap
+        self.log.handle(boot_batch(200, first=2, flags=1, stream=5, newest=0))
+        self.assertEqual([g["boot_id"] for g in self.log.gaps], [100, 200])
+        summary = "\n".join(self.log.summary())
+        self.assertIn("[boot:00000064:0] live gap (lost): generation 2 rows 2-3, "
+                      "still missing [2-3]", summary)
+        self.assertIn("[boot:000000c8:0] live gap (lost): generation 2 rows 2-3, still missing []",
+                      summary)
+        self.assertEqual(len(self.log.handle(boot_batch(
+            100, first=2, flags=1, stream=5, newest=0))), 2)
+
+    def test_dump_ids_and_completion_do_not_collide(self):
+        def control(kind, boot):
+            body = struct.pack("<IIII", 2, 0, 0, 0)
+            old = struct.pack("<BBHIII", 1, kind, 0, 5, 2, 0) + body
+            return with_boot(old, boot)
+        for boot in (100, 200):
+            self.log.handle(control(0, boot))
+            self.log.handle(boot_batch(boot, flags=1, stream=5, newest=0))
+            self.log.handle(control(3, boot))
+        self.assertEqual(len(self.log.dumps), 2)
+        self.assertTrue(all(d["state"] == "complete" for d in self.log.dumps.values()))
+        self.assertEqual(sum(len(v) for v in self.log.seen.values()), 4)
+
+    def test_legacy_uptime_backwards_keeps_both_boots_rows(self):
+        self.log.observe("robot/state", {"uptime_ms": 5000})
+        self.log.handle(build_batch(generation=2))
+        self.log.observe("robot/state", {"uptime_ms": 100})
+        rows = self.log.handle(build_batch(generation=2))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["boot_session"], "legacy:1")
+        self.assertIn("2 rows", self.log.summary()[0])
+
+    def test_legacy_live_log_uptime_backwards_is_a_boundary(self):
+        self.log.handle(build_batch(generation=2, publish=5000))
+        rows = self.log.handle(build_batch(generation=2, publish=10))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["boot_session"], "legacy:1")
+
+    def test_uptime_is_compared_per_topic_and_wrap_is_not_a_reboot(self):
+        self.log.observe("robot/state", {"uptime_ms": 0xFFFFFFF0})
+        self.log.observe("robot/heartbeat", {"uptime_ms": 5})  # different source
+        self.log.observe("robot/state", {"uptime_ms": 16})  # legitimate uint32 wrap
+        self.assertEqual(self.log.sessions.current, "legacy:0")
+        self.log.handle(build_batch(publish=5000))
+        self.log.handle(build_batch(first=1, flags=1, stream=9, publish=1, newest=0))
+        self.assertEqual(self.log.sessions.current, "legacy:0")  # old refill time is not uptime
+
+    def test_status_boundary_also_separates_reused_explicit_boot_ids(self):
+        for boot in (None, 42):
+            log = wire.LogStream(report=lambda message: None)
+            online = {"robot_online": 1}
+            if boot is not None:
+                online["boot_id"] = boot
+            log.observe("robot/status", online)
+            frame = build_batch(generation=2) if boot is None else boot_batch(boot, count=1)
+            log.handle(frame)
+            log.observe("robot/status", dict(online, robot_online=0), retained=True)
+            log.observe("robot/status", online, retained=True)
+            self.assertEqual(len(log.handle(frame)), 1)
+            self.assertIn("2 rows", log.summary()[0])
+
+    def test_retained_messages_do_not_create_uptime_boundaries(self):
+        self.log.observe("robot/state", {"uptime_ms": 5000})
+        self.log.observe("robot/state", {"uptime_ms": 1}, retained=True)
+        self.log.observe("robot/summary", {"boot_id": 99, "start_ms": 1}, retained=True)
+        self.assertEqual(self.log.sessions.current, "legacy:0")
+
+    def test_cli_csv_keeps_both_boots_generation_two(self):
+        frames = [("robot/log", data) for data in
+                  (boot_batch(100), boot_batch(100), boot_batch(200), boot_batch(200))]
+
+        class Client:
+            def __init__(self, api):
+                pass
+
+            def connect(self, *args):
+                self.on_connect(self, None, None, types.SimpleNamespace(is_failure=False), None)
+
+            def subscribe(self, topics):
+                pass
+
+            def loop_forever(self):
+                for topic, frame in frames:
+                    self.on_message(self, None, types.SimpleNamespace(
+                        topic=topic, payload=frame, retain=False))
+
+            def disconnect(self):
+                pass
+
+            def loop_stop(self):
+                pass
+
+        modules = {name: types.ModuleType(name) for name in
+                   ("paho", "paho.mqtt", "paho.mqtt.client")}
+        modules["paho"].mqtt = modules["paho.mqtt"]
+        modules["paho.mqtt"].client = modules["paho.mqtt.client"]
+        modules["paho.mqtt.client"].Client = Client
+        modules["paho.mqtt.client"].CallbackAPIVersion = types.SimpleNamespace(VERSION2=object())
+        with mock.patch.dict(sys.modules, modules), \
+                contextlib.redirect_stdout(io.StringIO()) as output, \
+                contextlib.redirect_stderr(io.StringIO()) as report:
+            self.assertEqual(cli.main(["--host", "192.0.2.10"]), 0)
+        rows = list(csv.DictReader(io.StringIO(output.getvalue())))
+        self.assertEqual([(r["boot_id"], r["generation"], r["index"]) for r in rows],
+                         [("100", "2", "0"), ("100", "2", "1"),
+                          ("200", "2", "0"), ("200", "2", "1")])
+        self.assertEqual(len({r["boot_session"] for r in rows}), 2)
+        self.assertIn("4 rows, 0 events, 4 duplicates dropped", report.getvalue())
+
+        # Exercise the CLI's non-log observer, not just LogStream's direct API.
+        frames = [("robot/log", build_batch(generation=2)),
+                  ("robot/status", bytes([1, 2])), ("robot/status", bytes([1, 1])),
+                  ("robot/log", build_batch(generation=2))]
+        with mock.patch.dict(sys.modules, modules), \
+                contextlib.redirect_stdout(io.StringIO()) as output, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["--host", "192.0.2.10"]), 0)
+        rows = [r for r in csv.DictReader(io.StringIO(output.getvalue()))
+                if r["topic"] == "robot/log"]
+        self.assertEqual([r["boot_session"] for r in rows], ["legacy:0", "legacy:1"])
+        self.assertEqual([r["generation"] for r in rows], ["2", "2"])
+
+    def test_same_boot_id_with_uptime_reset_keeps_rows(self):
+        self.log.handle(boot_batch(42, publish=5000))
+        rows = self.log.handle(boot_batch(42, publish=10))
+        self.assertEqual(len(rows), 2)
+        self.assertNotEqual(rows[0]["boot_session"], "boot:0000002a:0")
+        self.assertIn("4 rows", self.log.summary()[0])
 
 
 if __name__ == "__main__":
