@@ -1,0 +1,274 @@
+"""Inline dashboard page: HTML, CSS and JavaScript in one string. No CDN, no files.
+
+The page draws whatever panels the server sends. A panel with rows gets a table,
+one with items gets a list, and a chart type with a renderer in CHART_RENDERERS
+gets a canvas. A new panel needs no change here.
+"""
+
+PAGE = r"""<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Robot dashboard</title>
+<meta name="csrf" content="__CSRF__">
+<style nonce="__NONCE__">
+:root { color-scheme: dark; --bg:#14171c; --card:#1e232b; --text:#e6e9ee; --dim:#8b95a3;
+  --ok:#3fb950; --warn:#d29922; --bad:#f85149; --line:#2d333d; }
+body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 system-ui, sans-serif; }
+header { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 14px;
+  background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0;
+  z-index:2; }
+.pill { padding:2px 10px; border-radius:12px; background:#2d333d; }
+.pill.ok { background:#1f4d2b; } .pill.bad { background:#6b1f1b; }
+.pill.warn { background:#5c4410; }
+#buttons { display:flex; flex-wrap:wrap; gap:8px; margin-left:auto; align-items:center; }
+button { font:inherit; padding:6px 14px; border-radius:6px; border:1px solid var(--line);
+  background:#2d333d; color:var(--text); cursor:pointer; }
+button:disabled { opacity:.35; cursor:not-allowed; }
+button.armed { background:var(--warn); color:#000; }
+#estop { background:var(--bad); color:#fff; font-weight:700; font-size:18px; padding:10px 26px;
+  border-color:#ff9087; }
+#message { padding:6px 14px; min-height:20px; color:var(--dim); }
+#banner { padding:10px 14px; background:var(--bad); color:#fff; font-weight:700; font-size:16px; }
+#banner[hidden] { display:none; }
+#grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:12px;
+  padding:12px 14px; }
+.panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
+  padding:10px 12px; }
+.panel.stale { opacity:.45; }
+.panel h2 { margin:0 0 6px; font-size:15px; display:flex; justify-content:space-between; }
+.age { color:var(--dim); font-weight:400; font-size:12px; }
+.panel table { width:100%; border-collapse:collapse; }
+.panel td { padding:1px 0; vertical-align:top; }
+.panel td:first-child { color:var(--dim); width:55%; }
+.items { max-height:220px; overflow-y:auto; font-family:ui-monospace, monospace; font-size:12px; }
+.note { color:var(--dim); font-style:italic; }
+canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin-top:6px; }
+</style>
+</head>
+<body>
+<header>
+  <strong>Robot dashboard</strong>
+  <span id="broker" class="pill">broker ?</span>
+  <span id="robot" class="pill">robot ?</span>
+  <span id="gaps" class="pill">row gaps 0</span>
+  <span id="server" class="pill">server ?</span>
+  <div id="buttons">
+    <button id="dump" data-command="dump">DUMP</button>
+    <button id="calibrate" data-command="calibrate">CALIBRATE</button>
+    <button id="start" data-command="start">START</button>
+    <button id="estop" data-command="estop">ESTOP</button>
+  </div>
+</header>
+<div id="banner" hidden></div>
+<div id="message"></div>
+<div id="grid"></div>
+<script nonce="__NONCE__">
+"use strict";
+const csrf = document.querySelector('meta[name="csrf"]').content;
+const armed = {};
+let latest = null;
+const ARM_MS = 4000;
+
+function text(node, value) { node.textContent = String(value); }
+function pill(id, label, level) {
+  const node = document.getElementById(id);
+  text(node, label);
+  node.className = "pill " + level;
+}
+function fmtAge(ms) {
+  if (ms === null || ms === undefined) return "no data";
+  return ms >= 65535 ? "no data" : (ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s");
+}
+
+function drawBars(ctx, canvas, chart) {
+  const w = canvas.width, h = canvas.height;
+  const x = angle => (angle + 90) / 180 * (w - 20) + 10;
+  chart.points.forEach(p => {
+    const angle = p[0], mm = p[1], age = p[2];
+    ctx.globalAlpha = age > 10000 ? 0.3 : 1;
+    if (mm === null) { ctx.fillStyle = "#f85149"; ctx.fillRect(x(angle) - 2, h - 6, 4, 4); }
+    else { const bar = Math.max(2, mm / chart.max_mm * (h - 10));
+      ctx.fillStyle = "#58a6ff"; ctx.fillRect(x(angle) - 2, h - 2 - bar, 4, bar); }
+  });
+  ctx.globalAlpha = 1;
+  return x;
+}
+const CHART_RENDERERS = {
+  obstacle(canvas, chart) {
+    const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+    const x = drawBars(ctx, canvas, chart);
+    ctx.strokeStyle = "#2d333d"; ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    // Clear sectors start at 0 deg: right is negative, left is positive.
+    const sector = (deg, sign) => {
+      if (deg === 255) return;
+      ctx.fillStyle = "rgba(63,185,80,0.18)";
+      ctx.fillRect(Math.min(x(0), x(sign * deg)), 0, Math.abs(x(sign * deg) - x(0)), h);
+    };
+    sector(chart.right_clear_deg, -1); sector(chart.left_clear_deg, 1);
+    if (chart.closest) {
+      const cx = x(chart.closest.angle);
+      const cy = h - 2 - chart.closest.mm / chart.max_mm * (h - 10);
+      const radius = 6 * (window.devicePixelRatio || 1);
+      ctx.strokeStyle = "#f0883e"; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, 6.283);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#8b95a3";
+    ctx.fillText("right", 2, 10); ctx.fillText("0", w / 2 - 3, 10);
+    ctx.fillText("left", w - 28, 10);
+  },
+  profile(canvas, chart) {
+    const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+    ctx.strokeStyle = "#2d333d"; ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    drawBars(ctx, canvas, chart);
+    ctx.fillStyle = "#8b95a3";
+    ctx.fillText("-90", 2, 10); ctx.fillText("0 deg", w / 2 - 12, 10);
+    ctx.fillText("+90", w - 26, 10);
+  },
+  trend(canvas, chart) {
+    const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+    ctx.strokeStyle = "#2d333d"; ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    ctx.beginPath(); ctx.moveTo(0, h / 2); ctx.lineTo(w, h / 2); ctx.stroke();
+    const values = chart.values;
+    if (values.length < 2) return;
+    ctx.strokeStyle = "#3fb950"; ctx.beginPath();
+    values.forEach((v, i) => {
+      const px = i / (values.length - 1) * (w - 2) + 1;
+      const py = h - 2 - (v - chart.min) / (chart.max - chart.min) * (h - 4);
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    });
+    ctx.stroke();
+  },
+};
+function setup(canvas) {
+  const ratio = window.devicePixelRatio || 1;
+  canvas.width = canvas.clientWidth * ratio; canvas.height = canvas.clientHeight * ratio;
+  const ctx = canvas.getContext("2d"); ctx.font = (11 * ratio) + "px sans-serif";
+  ctx.scale(1, 1); ctx.lineWidth = ratio;
+  return ctx;
+}
+
+function panelNode(panel) {
+  let node = document.getElementById("panel-" + panel.id);
+  if (!node) {
+    node = document.createElement("div");
+    node.id = "panel-" + panel.id; node.className = "panel";
+    node.innerHTML = '<h2><span class="title"></span><span class="age"></span></h2>' +
+      '<div class="note"></div><table></table><canvas hidden></canvas><div class="items"></div>';
+    document.getElementById("grid").appendChild(node);
+  }
+  return node;
+}
+function renderPanel(panel) {
+  const node = panelNode(panel);
+  node.classList.toggle("stale", panel.stale);
+  text(node.querySelector(".title"), panel.title);
+  text(node.querySelector(".age"), panel.placeholder ? "placeholder" : fmtAge(panel.age_ms) +
+       (panel.stale && panel.age_ms !== null ? " - stale" : ""));
+  text(node.querySelector(".note"), panel.note);
+  const table = node.querySelector("table");
+  table.replaceChildren();
+  panel.rows.forEach(row => {
+    const tr = table.insertRow();
+    text(tr.insertCell(), row.label); text(tr.insertCell(), row.value);
+  });
+  const canvas = node.querySelector("canvas");
+  const draw = panel.chart && CHART_RENDERERS[panel.chart.type];
+  canvas.hidden = !draw;
+  if (draw) draw(canvas, panel.chart);
+  const list = node.querySelector(".items");
+  list.replaceChildren();
+  panel.items.forEach(item => {
+    const line = document.createElement("div");
+    text(line, (item.age_ms === null ? "" : fmtAge(item.age_ms) + " ago  ") + item.text);
+    list.appendChild(line);
+  });
+}
+
+function renderButtons(buttons) {
+  Object.keys(buttons).forEach(name => {
+    const info = buttons[name], node = document.getElementById(name);
+    if (!node) return;
+    node.disabled = !info.enabled;
+    node.title = info.reason;
+    if (!info.enabled) delete armed[name];
+    const isArmed = armed[name] && armed[name] > Date.now();
+    node.classList.toggle("armed", Boolean(isArmed));
+    text(node, isArmed ? "CONFIRM " + name.toUpperCase() : name.toUpperCase());
+  });
+}
+function render(snapshot) {
+  latest = snapshot;
+  pill("broker", snapshot.broker.connected ? "broker connected" : "broker disconnected",
+       snapshot.broker.connected ? "ok" : "bad");
+  const level = snapshot.robot.level;
+  const levelClass = {online: "ok", offline: "bad"}[level] || "warn";
+  pill("robot", snapshot.robot.text, levelClass);
+  const banner = document.getElementById("banner");
+  banner.hidden = !(level === "offline" || level === "silent");
+  text(banner, level === "offline"
+    ? "ROBOT OFFLINE: the broker reports that the robot dropped. START, CALIBRATE and DUMP are " +
+      "disabled. An ESTOP will probably not arrive: use GP21."
+    : "ROBOT SILENT: no state data. START, CALIBRATE and DUMP are disabled. Use GP21 to stop.");
+  const gaps = snapshot.gaps;
+  pill("gaps", "row gaps " + gaps.total + " (lost " + gaps.lost_rows + ", skipped " +
+       gaps.jumped_rows + ")", gaps.total ? "warn" : "ok");
+  pill("server", "server live", "ok");
+  renderButtons(snapshot.buttons);
+  snapshot.panels.forEach(renderPanel);
+  if (snapshot.last_command) {
+    const c = snapshot.last_command;
+    text(document.getElementById("message"), c.command + " #" + c.request_id + ": " + c.status);
+  }
+}
+
+async function sendCommand(name) {
+  const body = {command: name, confirm: Boolean(latest && latest.buttons[name].needs_confirm)};
+  try {
+    const response = await fetch("/api/command", {method: "POST",
+      headers: {"Content-Type": "application/json", "X-CSRF-Token": csrf},
+      body: JSON.stringify(body)});
+    const result = await response.json();
+    text(document.getElementById("message"), result.ok ? name.toUpperCase() +
+      " sent (broker " + (result.puback ? "acknowledged" : "has not acknowledged yet") +
+      "). " + result.note : "Refused: " + result.error);
+  } catch (error) {
+    text(document.getElementById("message"), "Command failed: dashboard server unreachable");
+  }
+}
+document.getElementById("buttons").addEventListener("click", event => {
+  const node = event.target.closest("button");
+  if (!node || node.disabled) return;
+  const name = node.dataset.command;
+  const info = latest && latest.buttons[name];
+  if (info && info.needs_confirm) {
+    if (!(armed[name] && armed[name] > Date.now())) {
+      armed[name] = Date.now() + ARM_MS;
+      renderButtons(latest.buttons);
+      setTimeout(() => latest && renderButtons(latest.buttons), ARM_MS + 50);
+      return;
+    }
+    delete armed[name];
+  }
+  sendCommand(name);
+});
+
+function poll() {
+  fetch("/api/state").then(r => r.json()).then(render).catch(() => {
+    pill("server", "server unreachable", "bad");
+  });
+}
+let timer = null;
+function start() {
+  if (!window.EventSource) { timer = setInterval(poll, 500); return; }
+  const source = new EventSource("/events");
+  source.onmessage = message => { if (timer) { clearInterval(timer); timer = null; }
+    render(JSON.parse(message.data)); };
+  source.onerror = () => { pill("server", "server connection lost", "bad");
+    if (!timer) timer = setInterval(poll, 1000); };
+}
+start();
+</script>
+</body>
+</html>
+"""

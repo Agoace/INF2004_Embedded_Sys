@@ -295,3 +295,7 @@ link/broker; GP21 remains the real ESTOP. [Design](docs/KERNEL_MQTT.md),
 [wire layouts](docs/MQTT_WIRE.md), and [broker/private-settings runbook](docs/MQTT_RUNBOOK.md)
 explain ownership, binary CSV decoding and token-bearing commands. New-image
 network, cold-power and loaded motion/M1/M2 checks remain **Not run**.
+
+The live laptop view is [the MQTT dashboard](docs/MQTT_DASHBOARD.md): run
+`python3 scripts/mqtt_dashboard.py --host 127.0.0.1 --token-file <file>` and open
+`http://127.0.0.1:8765/`. It needs `paho-mqtt` 2.x only.

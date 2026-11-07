@@ -10,7 +10,15 @@ import struct
 import sys
 
 VERSION = 1
-SIZES = {"state": 48, "sonar": 32, "event": 16, "heartbeat": 100, "log": 32}
+# Recorded topics and their newest payload size. The log has variable batch sizes.
+SIZES = {"state": 60, "sonar": 32, "event": 16, "heartbeat": 100, "log": 32,
+         "obstacle": 20, "status": 2}
+STATE_SIZES = {1: 48, 2: 60}  # state version -> payload size; version 2 adds distances
+RESERVED_TOPICS = ("barcode", "imu")  # reserved, never published yet
+OBSTACLE_DECISIONS = ("none", "right", "left")
+OBSTACLE_FLAGS = ("closest_valid", "too_near", "left_blocked", "right_blocked")
+NO_CLOSEST_MM = 511
+BLOCKED_CLEAR_DEG = 255
 COMMANDS = {"estop": 1, "dump": 2, "calibrate": 3, "start": 4}
 STATE_FLAGS = ("line_valid", "line_fresh", "motion_fresh", "vehicle_fresh",
                "line_busy", "motion_busy", "vehicle_busy", "active")
@@ -70,11 +78,17 @@ def decode_kr1(data):
 def decode(topic, data):
     """Return flat CSV fields. Reject unknown versions, sizes and reserved bits."""
     name = topic.removeprefix("robot/")
+    if topic == "robot/" + name and name in RESERVED_TOPICS:
+        return decode_reserved(data)
     _require(topic == "robot/" + name and name in SIZES, "unknown topic")
     if name == "log" and len(data) >= 2 and data[1] in (LOG_ROWS, LOG_EVENTS):
         return parse_log_batch(data)[0]
-    _require(len(data) == SIZES[name], "wrong payload length")
-    _require(data[0] == VERSION, "unknown version")
+    if name == "state":
+        _require(len(data) == 0 or data[0] in STATE_SIZES, "unknown version")
+        _require(len(data) == STATE_SIZES.get(data[0] if data else 0), "wrong payload length")
+    else:
+        _require(len(data) == SIZES[name], "wrong payload length")
+        _require(data[0] == VERSION, "unknown version")
     result = {"version": data[0]}
     if name == "state":
         _require((_u16(data, 18) & 0xF000) == 0 and (_u32(data, 44) >> 20) == 0,
@@ -87,6 +101,14 @@ def decode(topic, data):
                       count_l=_i32(data, 36), count_r=_i32(data, 40),
                       norm_l=_u32(data, 44) & 1023, norm_c=(_u32(data, 44) >> 10) & 1023)
         result.update(decode_kr1(data[20:36]))
+        if data[0] == 2:
+            result.update(dist_left_mm=_i32(data, 48), dist_right_mm=_i32(data, 52),
+                          dist_avg_mm=_i32(data, 56))
+    elif name == "obstacle":
+        result.update(_decode_obstacle(data))
+    elif name == "status":
+        _require(data[1] in (1, 2), "status state")
+        result.update(status_state=data[1], robot_online=int(data[1] == 1))
     elif name == "sonar":
         _require((data[1] & 0xF0) == 0 and _u16(data, 26) == 0, "sonar reserved bits")
         result.update(status=data[1] & 3, valid=(data[1] >> 2) & 1,
@@ -138,6 +160,32 @@ def decode(topic, data):
                      4: ("abort_reason", "rows_sent", "events_sent")}[data[1]]
             result.update({key: _u32(body, 4 * i) for i, key in enumerate(names)})
     return result
+
+
+def _decode_obstacle(data):
+    """Decode the 20-byte obstacle profile summary of one completed scan."""
+    _require(data[1] & 0xF0 == 0, "obstacle reserved flag bits")
+    _require(data[2] <= 2, "obstacle decision")
+    closest_mm, right_step, left_step = _u16(data, 12), data[16], data[17]
+    _require(closest_mm <= NO_CLOSEST_MM and right_step <= 7 and left_step <= 7,
+             "obstacle range")
+    for clear in (data[18], data[19]):
+        _require(clear <= 35 or clear == BLOCKED_CLEAR_DEG, "obstacle clearance")
+    result = _flags(data[1], OBSTACLE_FLAGS)
+    result.update(decision=data[2], closest_angle_deg=_i8(data, 3), scan_id=_u32(data, 4),
+                  uptime_ms=_u32(data, 8), closest_mm=closest_mm, profile_word=_u16(data, 14),
+                  right_free_step=right_step, left_free_step=left_step,
+                  right_clear_deg=data[18], left_clear_deg=data[19])
+    return result
+
+
+def decode_reserved(data):
+    """Decode only the header of a reserved topic; the body layout is not defined yet.
+
+    A client ignores unknown versions (known 0) and shows "not implemented".
+    """
+    _require(len(data) >= 2, "reserved topic header")
+    return {"version": data[0], "kind": data[1], "length": len(data), "known": int(data[0] == 1)}
 
 
 def parse_log_batch(data):
@@ -353,11 +401,12 @@ def read_token(path):
 def csv_fields():
     fields = {"received_unix_s", "topic"}
     for name, size in SIZES.items():
-        sample = bytearray(size)
-        sample[0] = VERSION
-        if name == "event":
-            sample[1] = 1
-        fields.update(decode("robot/" + name, sample))
+        for version in (STATE_SIZES if name == "state" else (VERSION,)):
+            sample = bytearray(STATE_SIZES[version] if name == "state" else size)
+            sample[0] = version
+            if name in ("event", "status"):
+                sample[1] = 1
+            fields.update(decode("robot/" + name, sample))
     for kind in (1, 2, 3, 4):
         sample = bytearray(32)
         sample[0], sample[1] = VERSION, kind

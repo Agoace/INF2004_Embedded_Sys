@@ -30,7 +30,7 @@ class WireTests(unittest.TestCase):
             topic, encoded = line.split()
             if topic.startswith("batch/"):
                 cls.batches[topic.removeprefix("batch/")] = bytes.fromhex(encoded)
-            else:
+            elif topic.startswith("robot/"):
                 cls.samples[topic] = bytes.fromhex(encoded)
 
     def test_c_samples(self):
@@ -168,7 +168,8 @@ class WireTests(unittest.TestCase):
             self.assertEqual(cli.main(["--host", "test.invalid"]), 0)
         self.assertEqual(calls[0], ("api", version2))
         self.assertEqual(len(list(csv.DictReader(io.StringIO(output.getvalue())))), 1)
-        self.assertEqual(calls[2][1], [("robot/" + name, 0) for name in wire.SIZES])
+        self.assertEqual(calls[2][1], [("robot/" + name, 1 if name in ("log", "status") else 0)
+                                       for name in wire.SIZES])
         with tempfile.TemporaryDirectory() as folder:
             token = Path(folder) / "private-token"
             token.write_text(bytes(range(16)).hex())
@@ -514,6 +515,115 @@ class LogBatchTests(unittest.TestCase):
         self.assertEqual(text.count("discarded robot/log"), 2)
         self.assertIn("live gap (lost): generation 7 rows 110-299 (190 rows)", text)
         self.assertIn("log summary: 11 rows, 0 events, 0 duplicates dropped", text)
+
+
+def obstacle_frame(flags=0b0001, decision=1, angle=-15, scan=7, uptime=123456, closest=250,
+                   word=0x1234, right_step=3, left_step=7, right_clear=15, left_clear=255):
+    return struct.pack("<BBBbIIHHBBBB", 1, flags, decision, angle, scan, uptime, closest, word,
+                       right_step, left_step, right_clear, left_clear)
+
+
+class NewTopicTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.v1_state = None
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            if topic == "robot/state":
+                cls.v1_state = bytes.fromhex(encoded)
+        cls.v1_state = b"\x01" + cls.v1_state[1:48]  # first 48 bytes are the same in v1 and v2
+
+    def state_v2(self, left=-1500, right=2500, avg=500):
+        return b"\x02" + self.v1_state[1:] + struct.pack("<iii", left, right, avg)
+
+    def test_state_v2_adds_signed_distances_and_keeps_v1_fields(self):
+        v1 = wire.decode("robot/state", self.v1_state)
+        v2 = wire.decode("robot/state", self.state_v2())
+        self.assertEqual((v2["dist_left_mm"], v2["dist_right_mm"], v2["dist_avg_mm"]),
+                         (-1500, 2500, 500))
+        self.assertEqual((v1["version"], v2["version"]), (1, 2))
+        self.assertNotIn("dist_left_mm", v1)  # old captures still decode, no invented values
+        self.assertEqual({k: v for k, v in v2.items() if not k.startswith("dist_") and k != "version"},
+                         {k: v for k, v in v1.items() if k != "version"})
+        extreme = wire.decode("robot/state", self.state_v2(-2 ** 31, 2 ** 31 - 1, 0))
+        self.assertEqual((extreme["dist_left_mm"], extreme["dist_right_mm"]), (-2 ** 31, 2 ** 31 - 1))
+
+    def test_state_version_and_length_must_agree(self):
+        good = self.state_v2()
+        bad_frames = (b"", good[:-1], good + b"\0", b"\x01" + good[1:], b"\x03" + good[1:],
+                      b"\x02" + self.v1_state[1:], b"\x00" + good[1:], self.v1_state + b"\0",
+                      self.v1_state[:-1])
+        for bad in bad_frames:
+            with self.subTest(size=len(bad), version=bad[:1]), self.assertRaises(ValueError):
+                wire.decode("robot/state", bad)
+        for offset, mask in ((19, 0x80), (47, 0x80)):  # v1 reserved bits stay checked in v2
+            frame = bytearray(good)
+            frame[offset] |= mask
+            with self.assertRaises(ValueError):
+                wire.decode("robot/state", frame)
+
+    def test_obstacle_decode(self):
+        result = wire.decode("robot/obstacle", obstacle_frame())
+        self.assertEqual((result["closest_valid"], result["too_near"], result["left_blocked"],
+                          result["right_blocked"]), (1, 0, 0, 0))
+        self.assertEqual((result["decision"], result["closest_angle_deg"], result["scan_id"]),
+                         (1, -15, 7))
+        self.assertEqual((result["uptime_ms"], result["closest_mm"], result["profile_word"]),
+                         (123456, 250, 0x1234))
+        self.assertEqual((result["right_free_step"], result["left_free_step"]), (3, 7))
+        self.assertEqual((result["right_clear_deg"], result["left_clear_deg"]), (15, 255))
+        flags = wire.decode("robot/obstacle", obstacle_frame(flags=0b1110, decision=0, angle=0,
+                                                             closest=0, scan=0xFFFFFFFF))
+        self.assertEqual((flags["closest_valid"], flags["too_near"], flags["left_blocked"],
+                          flags["right_blocked"], flags["scan_id"]), (0, 1, 1, 1, 0xFFFFFFFF))
+        none = wire.decode("robot/obstacle", obstacle_frame(closest=511, angle=30))
+        self.assertEqual(none["closest_mm"], 511)
+
+    def test_obstacle_rejects_bad_frames(self):
+        good = obstacle_frame()
+        for bad in (b"", good[:-1], good + b"\0", b"\x02" + good[1:], b"\x00" + good[1:]):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/obstacle", bad)
+        for kwargs in (dict(flags=0x10), dict(flags=0x80), dict(decision=3), dict(closest=512),
+                       dict(right_step=8), dict(left_step=8), dict(right_clear=36),
+                       dict(left_clear=254)):
+            with self.subTest(**kwargs), self.assertRaises(ValueError):
+                wire.decode("robot/obstacle", obstacle_frame(**kwargs))
+
+    def test_status_decode(self):
+        online = wire.decode("robot/status", bytes([1, 1]))
+        offline = wire.decode("robot/status", bytes([1, 2]))
+        self.assertEqual((online["robot_online"], online["status_state"]), (1, 1))
+        self.assertEqual((offline["robot_online"], offline["status_state"]), (0, 2))
+        for bad in (b"", b"\x01", bytes([1, 0]), bytes([1, 3]), bytes([2, 1]), bytes([0, 1]),
+                    bytes([1, 1, 0])):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                wire.decode("robot/status", bad)
+
+    def test_reserved_topics_are_header_only(self):
+        for topic in ("robot/barcode", "robot/imu"):
+            known = wire.decode(topic, bytes([1, 9, 7, 7, 7]))
+            self.assertEqual((known["version"], known["kind"], known["length"], known["known"]),
+                             (1, 9, 5, 1))
+            self.assertEqual(wire.decode(topic, bytes([2, 1]))["known"], 0)  # unknown version
+            for bad in (b"", b"\x01"):
+                with self.assertRaises(ValueError):
+                    wire.decode(topic, bad)
+        with self.assertRaises(ValueError):
+            wire.decode("robot/nothing", bytes([1, 1]))
+
+    def test_csv_covers_new_fields(self):
+        fields = set(wire.csv_fields())
+        for name in ("dist_left_mm", "dist_right_mm", "dist_avg_mm", "closest_mm", "scan_id",
+                     "decision", "left_clear_deg", "right_clear_deg", "robot_online",
+                     "status_state", "profile_word", "closest_valid", "too_near"):
+            self.assertIn(name, fields)
+        stream = io.StringIO()
+        writer = csv.DictWriter(stream, fieldnames=wire.csv_fields())
+        for topic, data in (("robot/state", self.state_v2()), ("robot/state", self.v1_state),
+                            ("robot/obstacle", obstacle_frame()),
+                            ("robot/status", bytes([1, 1]))):
+            writer.writerow(wire.decode(topic, data))
 
 
 if __name__ == "__main__":
