@@ -410,3 +410,11 @@ The tests use messages that the C code packs. They check these items:
 
 No test uses a broker, a real token or a browser. The page script tests
 need `node`; they are skipped, and reported as skipped, if `node` is missing.
+
+Browser check (2026-11-07, PASS): laptop (`127.0.0.1:8765`) and fedora-desk
+(Tailscale HTTP 8080), both on the new page. Dashboard stopped: DUMP showed
+`DUMP NOT SENT: no reply (HTTP 502). Reload the page. Use GP21 to stop the
+robot.` and the page stayed. Dashboard started again: both pages reloaded
+themselves with no operator action, and the next DUMP was accepted (HTTP 200,
+complete dump). A page loaded before this change has no restart check and
+needs one manual reload.
