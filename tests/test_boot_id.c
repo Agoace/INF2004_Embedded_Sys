@@ -62,6 +62,7 @@ int main(void)
     test_extractor();
     assert(!boot_id_hw_generate(0));
     timer_ready = false;
+    assert(boot_id_init() < 0 && boot_id_get() == 0u);
     assert(!boot_id_hw_generate(&output) && output == 99u);
     timer_ready = true;
     enabled = false;

@@ -68,6 +68,7 @@ err_t mqtt_client_connect(mqtt_client_t *client,const ip_addr_t *address,u16_t p
     assert(strcmp(info->client_id,"inf2004-robot")==0 && info->keep_alive==5u);
     assert(strcmp(info->will_topic,"robot/status")==0 && info->will_msg_len==RM_STATUS_SIZE && info->will_qos==1u && info->will_retain==1u);
     assert((uint8_t)info->will_msg[0]==RM_STATUS_VERSION && (uint8_t)info->will_msg[1]==2u);
+    for(unsigned int i=0u;i<4u;++i) assert((uint8_t)info->will_msg[2u+i]==(uint8_t)(boot_identity>>(8u*i)));
     ++connect_count;connection_callback=callback;connection_arg=arg;return connect_result;
 }
 void mqtt_set_inpub_callback(mqtt_client_t *client,mqtt_incoming_publish_cb_t publish,
@@ -184,7 +185,7 @@ static void start_connected(void) {
 static void test_no_boot_id(void) {
     boot_identity=0u;poll_at(0u);poll_at(10000u);
     assert(new_count==0u && connect_count==0u && publication_count==0u);
-    boot_identity=0x11223344u;poll_at(10001u);
+    boot_identity=0x11003300u;poll_at(10001u); /* binary will includes zero bytes */
     assert(connect_count==1u); /* observer only; driving is not gated */
 }
 static void test_connection(void) {
