@@ -5,11 +5,18 @@
 #define FILL 0xa5u
 static uint64_t motion_stack[384], line_stack[256], sonar_stack[256];
 static uint64_t vehicle_stack[512], telemetry_stack[512], bench_stack[512];
+#if TM_MQTT
+static uint64_t health_stack[256];
+#endif
 typedef struct { const char *name; uint64_t *stack; uint32_t size, high; ID id; } slot_t;
 #define SLOT(n,s) {n,s,sizeof(s),0u,0}
 static slot_t slots[] = {SLOT("motion_task",motion_stack), SLOT("line_task",line_stack),
     SLOT("sonar_task",sonar_stack), SLOT("vehicle_task",vehicle_stack),
-    SLOT("telemetry_task",telemetry_stack), SLOT("motion_bench",bench_stack)};
+    SLOT("telemetry_task",telemetry_stack), SLOT("motion_bench",bench_stack)
+#if TM_MQTT
+    ,SLOT("health_task",health_stack)
+#endif
+};
 static bool equal(const char *a,const char *b) {
     while (*a && *a==*b) { ++a; ++b; }
     return *a==*b;
@@ -57,8 +64,8 @@ unsigned int app_task_stacks(app_stack_t *out,unsigned int capacity) {
     return n;
 }
 void app_task_report(void) {
-    app_stack_t rows[6];
-    const unsigned int n=app_task_stacks(rows,6u);
+    app_stack_t rows[sizeof(slots)/sizeof(slots[0])];
+    const unsigned int n=app_task_stacks(rows,(unsigned int)(sizeof(slots)/sizeof(slots[0])));
     for (unsigned int i=0u;i<n;++i)
         tm_printf((UB*)"[stack] %s size %lu high_water %lu free %lu %s\n",rows[i].name,
             (unsigned long)rows[i].size,(unsigned long)rows[i].used,(unsigned long)rows[i].free,
