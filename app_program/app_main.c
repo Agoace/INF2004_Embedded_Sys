@@ -25,6 +25,9 @@
 #include "app.h"
 #include "platform/drv_time.h"
 #include "platform/app_task.h"
+#if TM_MQTT
+#include "platform/idle_meter.h"
+#endif
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
@@ -43,6 +46,10 @@ EXPORT INT usermain(void)
 
 	/* Kernel hardware startup sets 1 us TIMER ticks; verify idempotently. */
 	CHECK(drv_time_init(), "drv_time_init");
+#if TM_MQTT
+	/* Before application startup: no acquisition or watchdog deadline yet. */
+	CHECK(idle_meter_calibrate(), "CPU meter calibration (noncritical)");
+#endif
 
 	/* tk_ref_ver: ask the kernel who it is */
 	tk_ref_ver(&ver);
