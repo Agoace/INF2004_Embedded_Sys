@@ -9,6 +9,38 @@ static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
 static uint32_t loss_base;
+#if TM_MQTT
+#include "../platform/app_board.h"
+static uint32_t log_generation;
+static APP_BOARD(telemetry_log_index_t) log_index;
+static void publish_index(void) {
+    const telemetry_log_index_t v={log_generation,stats.rows,stats.events,stats.lost};
+    app_board_publish(&log_index.sequence,log_index.words,&v,sizeof(v));
+}
+int telemetry_log_open(telemetry_log_index_t *out) {
+    if (!out) return E_PAR;
+    telemetry_log_index_t v;
+    if (!app_board_try_read(&log_index.sequence,log_index.words,&v,sizeof(v))) return E_TMOUT;
+    *out=v;return E_OK;
+}
+int telemetry_log_row(uint32_t generation,uint32_t index,uint8_t out[TELEMETRY_BYTES]) {
+    if (!out) return E_PAR;
+    telemetry_log_index_t v;const int er=telemetry_log_open(&v);
+    if (er<E_OK) return er;
+    if (v.generation!=generation) return E_OBJ;
+    if (index>=v.rows) return E_PAR;
+    for (unsigned int i=0u;i<TELEMETRY_BYTES;++i) out[i]=rows[index][i];
+    return E_OK;
+}
+int telemetry_log_event(uint32_t generation,uint32_t index,telemetry_event_t *out) {
+    if (!out) return E_PAR;
+    telemetry_log_index_t v;const int er=telemetry_log_open(&v);
+    if (er<E_OK) return er;
+    if (v.generation!=generation) return E_OBJ;
+    if (index>=v.events) return E_PAR;
+    *out=events[index];return E_OK;
+}
+#endif
 #if TM_CONSOLE_USB_CDC
 IMPORT volatile UW tm_usb_dropped;
 static UW dropped(void) { return tm_usb_dropped; }
@@ -57,7 +89,11 @@ static void telemetry_task(INT code,void *ctx) {
         if (tk_rcv_mbf(mbf_telemetry,&m,TMO_FEVR)!=(INT)sizeof(m)) continue;
         switch (m.kind) {
         case TELEMETRY_BEGIN:
-            stats.rows=0u;stats.events=0u;stats.storage_full=false;loss_base=m.loss_base;break;
+            stats.rows=0u;stats.events=0u;stats.storage_full=false;loss_base=m.loss_base;
+#if TM_MQTT
+            ++log_generation;
+#endif
+            break;
         case TELEMETRY_ROW:
             if (stats.rows==TELEMETRY_ROWS) { stats.storage_full=true;lose();break; }
             for (unsigned int i=0u;i<TELEMETRY_BYTES;++i) rows[stats.rows][i]=m.data.row[i];
@@ -69,12 +105,19 @@ static void telemetry_task(INT code,void *ctx) {
         case TELEMETRY_DUMP: info=m.data.info;info.reason[sizeof(info.reason)-1u]='\0';dump();break;
         default: lose();break;
         }
+#if TM_MQTT
+        publish_index();
+#endif
     }
 }
 int telemetry_init(void) {
     if (mbf_telemetry>0) return E_OK;
     const T_CMBF c={.mbfatr=TA_TFIFO,.bufsz=4096,.maxmsz=(INT)sizeof(telemetry_message_t)};
-    mbf_telemetry=tk_cre_mbf(&c);return mbf_telemetry<0 ? (int)mbf_telemetry : E_OK;
+    mbf_telemetry=tk_cre_mbf(&c);
+#if TM_MQTT
+    if (mbf_telemetry>0) publish_index();
+#endif
+    return mbf_telemetry<0 ? (int)mbf_telemetry : E_OK;
 }
 int telemetry_start(void) {
     if (mbf_telemetry<=0 || task>0) return E_OBJ;

@@ -26,4 +26,12 @@ bool telemetry_running(void);
 /* Core-0 task producers, value copy, MBF TMO_POL; never wait for the consumer. */
 int telemetry_send(const telemetry_message_t *message);
 void telemetry_stats(telemetry_stats_t *out);
+#if TM_MQTT
+typedef struct { uint32_t generation,rows,events,lost; } telemetry_log_index_t;
+/* Wi-Fi/core0 bounded readers: committed highwater only; never stall logging.
+ * E_OBJ generation changed, E_TMOUT publication busy, E_PAR bad index. */
+int telemetry_log_open(telemetry_log_index_t *out);
+int telemetry_log_row(uint32_t generation,uint32_t index,uint8_t out[TELEMETRY_BYTES]);
+int telemetry_log_event(uint32_t generation,uint32_t index,telemetry_event_t *out);
+#endif
 #endif
