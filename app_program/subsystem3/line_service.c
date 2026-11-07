@@ -4,6 +4,24 @@
 static ID mutex, task_id;
 static bool ready, calibrating;
 static line_snapshot_t snapshot;
+#if TM_MQTT
+#include "../platform/app_board.h"
+static APP_BOARD(line_snapshot_t) board;
+static void publish_line(void) { app_board_publish(&board.sequence,board.words,&snapshot,sizeof(snapshot)); }
+#else
+#define publish_line() ((void)0)
+#endif
+int line_snapshot_try_read(line_snapshot_t *out) {
+    if (!out) return E_PAR;
+    if (!ready) return E_OBJ;
+#if TM_MQTT
+    line_snapshot_t v;
+    if (!app_board_try_read(&board.sequence,board.words,&v,sizeof(v))) return E_TMOUT;
+    *out=v;return E_OK;
+#else
+    return E_OBJ;
+#endif
+}
 static void line_task(INT code,void *ctx) {
     (void)code;(void)ctx;
     for (;;) {
@@ -27,6 +45,7 @@ static void line_task(INT code,void *ctx) {
             snapshot.timestamp_us=sample.us;snapshot.valid=true;
             ++snapshot.sequence;++snapshot.processed;
             drv_line_stats(&snapshot.acquisition);
+            publish_line();
             const uint32_t cost=drv_time_us()-start;
             snapshot.cpu_us+=cost;
             if (cost>snapshot.sample_max_us) snapshot.sample_max_us=cost;
@@ -40,7 +59,7 @@ int line_service_init(void) {
     if (mutex<0) return (int)mutex;
     lp_init(&snapshot.line);lp_set_pair(&snapshot.line,true,0);
     const int er=drv_line_init();
-    if (er>=E_OK) ready=true;
+    if (er>=E_OK) { ready=true;publish_line(); }
     return er;
 }
 int line_service_start(void) {
@@ -57,7 +76,7 @@ int line_snapshot_read(line_snapshot_t *out,bool consume) {
     if (!ready) return E_OBJ;
     const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
     *out=snapshot;
-    if (consume) snapshot.event=VC_EVENT_NONE;
+    if (consume) { snapshot.event=VC_EVENT_NONE;publish_line(); }
     return (int)tk_unl_mtx(mutex);
 }
 int line_calibration_begin(void) {
@@ -65,6 +84,7 @@ int line_calibration_begin(void) {
     const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
     drv_line_flush();lp_calib_begin(&snapshot.line);calibrating=true;
     snapshot.event=VC_EVENT_NONE;snapshot.norm_peak=0u;snapshot.valid=false;
+    publish_line();
     return (int)tk_unl_mtx(mutex);
 }
 lp_calib_result_t line_calibration_end(void) {
@@ -72,17 +92,20 @@ lp_calib_result_t line_calibration_end(void) {
     unsigned int bad=0u;
     const lp_calib_result_t result=lp_calib_end(&snapshot.line,&bad);
     calibrating=false;snapshot.norm_peak=0u;
+    publish_line();
     (void)tk_unl_mtx(mutex);return result;
 }
 int line_calibration_abort(void) {
     if (!ready) return E_OBJ;
     const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
     calibrating=false;snapshot.norm_peak=0u;snapshot.event=VC_EVENT_NONE;
+    publish_line();
     return (int)tk_unl_mtx(mutex);
 }
 int line_tracking_reset(void) {
     if (!ready) return E_OBJ;
     const ER er=tk_loc_mtx(mutex,TMO_FEVR);if (er<0) return (int)er;
     lp_reset_tracking(&snapshot.line);snapshot.event=VC_EVENT_NONE;snapshot.norm_peak=0u;
+    publish_line();
     return (int)tk_unl_mtx(mutex);
 }
