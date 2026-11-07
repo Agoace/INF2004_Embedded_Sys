@@ -1,3 +1,7 @@
+/*
+ * network_queue.h - network queue and metrics access.
+ * Public functions not already declared in robot_network.h.
+ */
 #ifndef NETWORK_QUEUE_H
 #define NETWORK_QUEUE_H
 #include "robot_network.h"

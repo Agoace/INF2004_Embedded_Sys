@@ -26,6 +26,9 @@ typedef unsigned int UINT, UW, RELTIM;
 typedef unsigned char UB;
 typedef void (*FP)();
 typedef struct { int32_t hi; uint32_t lo; } SYSTIM;
+typedef struct { UINT spver,prver; } T_RVER;
+ER tk_ref_ver(T_RVER *version);
+ER tk_chg_pri(ID id,PRI priority);
 ER tk_get_otm(SYSTIM *time);
 ER tk_dly_tsk(RELTIM timeout);
 typedef struct { unsigned int mtxatr; } T_CMTX;
@@ -37,6 +40,8 @@ ER tk_unl_mtx(ID id);
 ER tk_del_mtx(ID id);
 ID tk_cre_cyc(const T_CCYC *c);
 ER tk_sta_cyc(ID id);
+ID tk_get_tid(void);
+void tk_ext_tsk(void);
 ER tk_slp_tsk(TMO timeout);
 INT tk_can_wup(ID id);
 ER tk_wup_tsk(ID id);
@@ -54,6 +59,7 @@ void mock_ei(UINT irq);
 #define TWF_ORW 1u
 #define TWF_BITCLR 0x20u
 #define E_TMOUT (-50)
+#define E_NOEXS (-42)
 typedef int SZ;
 typedef struct { FP task; PRI itskpri; SZ stksz; UW tskatr; void *bufptr; UW assprc; } T_CTSK;
 typedef struct { UW mbfatr; SZ bufsz; INT maxmsz; void *bufptr; } T_CMBF;

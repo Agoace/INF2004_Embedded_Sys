@@ -157,7 +157,9 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [`robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong named Wi-Fi hook, retry/subscription/publish, nonblocking QoS1 log cursor.
 - [`robot_network.h`](../app_program/subsystem1/robot_network.h), [`network_queue.c`](../app_program/subsystem1/network_queue.c) — bounded provider contract, events and separate ESTOP/ordinary command queues.
 - [`robot_health.c`](../app_program/subsystem1/robot_health.c) — priority31 1 s cyclic, app-stack minima, bounded health board.
-- [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`wire layout`](MQTT_WIRE.md), [`laptop client`](../scripts/mqtt_robot.py) — explicit v1 C/Python binary codec, Paho2 CSV and token-file commands.
+- [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`wire layout`](MQTT_WIRE.md), [`laptop client`](../scripts/mqtt_robot.py) — explicit per-topic-version C/Python binary codec, CSV and token-file commands.
+- [`log_stream.c`](../app_program/subsystem1/log_stream.c) — live freshness-first log and batched DUMP; [`test_log_stream.c`](../tests/test_log_stream.c).
+- [CPU load record](CPU_LOAD.md) — calibrated core-0 observer; target accuracy and idle-board range remain unmeasured.
 - [`robot_mqtt_secrets.h.example`](../app_program/subsystem1/robot_mqtt_secrets.h.example) — application-owned private settings example; private header is ignored.
 - [`tests/network_checks.cmake`](../tests/network_checks.cmake), [`mqtt_client_checks.cmake`](../tests/mqtt_client_checks.cmake), [`mqtt_protocol.cmake`](../tests/mqtt_protocol.cmake) — board/queue/live-log, mocked lwIP/client and C-to-Python packing tests.
 - Cross-module vehicle integration, broker procedure and hardware acceptance records belong to the staging branch.

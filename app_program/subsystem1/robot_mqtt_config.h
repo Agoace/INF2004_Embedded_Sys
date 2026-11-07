@@ -1,3 +1,9 @@
+/*
+ * robot_mqtt_config.h - broker address, port, client ID and command token.
+ *
+ * Defaults are safe placeholders. Private values come from
+ * robot_mqtt_secrets.h, which is not committed.
+ */
 #ifndef ROBOT_MQTT_CONFIG_H
 #define ROBOT_MQTT_CONFIG_H
 /* Application-owned settings. Never use the template demo MQTT settings. */
