@@ -24,6 +24,8 @@ static ID estop_queue;
 static uint32_t event_lost;
 static uint32_t command_lost;
 static uint32_t busy[ROBOT_BOARD_COUNT];
+static uint32_t unavailable;
+static uint8_t unavailable_mask;
 
 /* Increment a loss counter. Interrupts are masked for the update. */
 static void lost(uint32_t *counter)
@@ -155,6 +157,28 @@ void robot_network_busy(unsigned int board)
     }
 }
 
+/* Classify a main-board read: absence is not writer contention. */
+void robot_network_board_result(unsigned int board, int result)
+{
+    UINT irq;
+
+    if (board >= (unsigned int)ROBOT_BOARD_COUNT) {
+        return;
+    }
+    const uint8_t mask = (uint8_t)(1u << board);
+
+    DI(irq);
+    if (result >= E_OK) {
+        unavailable_mask = (uint8_t)(unavailable_mask & (uint8_t)~mask);
+    } else if (result == E_OBJ || result == E_NOEXS) {
+        ++unavailable;
+        unavailable_mask = (uint8_t)(unavailable_mask | mask);
+    } else {
+        ++busy[board];
+    }
+    EI(irq);
+}
+
 /* Count a command dropped before it reached the queue. */
 void robot_command_lost(void)
 {
@@ -173,6 +197,8 @@ void robot_queue_metrics(rm_heartbeat_t *out)
     out->motion_busy = busy[2];
     out->vehicle_busy = busy[3];
     out->health_busy = busy[4];
+    out->board_unavailable = unavailable;
+    out->board_unavailable_mask = unavailable_mask;
     EI(irq);
 }
 
