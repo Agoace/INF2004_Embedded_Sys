@@ -54,3 +54,5 @@ Cold-power timer gate: [S0-U01 platform test](../testing/subsystem1/TEST_LOG.md)
 Application SDK hardware subset: [Motor controller](MOTOR_CONTROLLER.md#sdk-hardware-subset).
 
 - [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — motion-only feeding, reset reason, SDK subset and pending two-boot S2-U05.
+
+- [Application task stacks](APPLICATION_TASKS.md) — static stacks, margin and high-water reporting.

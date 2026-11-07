@@ -24,41 +24,16 @@
 
 #include "app.h"
 #include "platform/drv_time.h"
+#include "platform/app_task.h"
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
- *   prc = TP_PRC1 (core 0), TP_PRC2 (core 1), or 0 for "any core".
+ *   Registered application tasks use prc = TP_PRC1 (core 0).
  */
 EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
 {
-	T_CTSK	ctsk = {0};
-	ID	tid;
-	ER	er;
-
-	ctsk.task    = entry;		/* function the task runs */
-	ctsk.itskpri = pri;		/* initial priority (1 = highest) */
-	ctsk.stksz   = TASK_STACK_SIZE;	/* kernel allocates the stack */
-	ctsk.tskatr  = TA_HLNG		/* written in a high-level language (C) */
-		     | TA_RNG3;		/* runs at user protection level */
-#if TK_SUPPORT_SMP
-	if (prc != 0) {
-		ctsk.tskatr |= TA_ASSPRC;	/* honour the affinity below */
-		ctsk.assprc  = prc;		/* which core(s) it may run on */
-	}
-#else
-	(void)prc;			/* single-core build: no affinity */
-#endif
-
-	/* tk_cre_tsk: create the task.  It starts in the DORMANT state. */
-	tid = tk_cre_tsk(&ctsk);
-	if (tid < E_OK) {
-		CHECK(tid, name);
-		return tid;
-	}
-
-	/* tk_sta_tsk: DORMANT -> READY.  The int is passed as stacd. */
-	er = tk_sta_tsk(tid, 0);
-	CHECK(er, name);
+	const ID tid = app_task_start(entry, pri, prc, name);
+	CHECK(tid, name);
 	return tid;
 }
 
@@ -106,7 +81,8 @@ EXPORT INT usermain(void)
 	subsystem3_test();
 	subsystem4_test();
 	subsystem5_test();
-	/* Destructive reset check must follow every other subsystem test. */
+	app_task_report();
+	/* Destructive reset check follows every other subsystem test. */
 	subsystem2_watchdog_test();
 	tm_printf((UB*)"[TEST] === test run end ===\n");
 #endif

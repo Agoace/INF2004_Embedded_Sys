@@ -142,3 +142,8 @@ See [Branch layout](BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program
 - [`app_program/platform/drv_watchdog.c`](../app_program/platform/drv_watchdog.c) and [`drv_watchdog_hw.c`](../app_program/platform/drv_watchdog_hw.c) — kernel startup/feed guard and SDK-only hardware/reset snapshot.
 - [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
 - [Kernel hardware watchdog](KERNEL_WATCHDOG.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.
+
+## Application task stacks
+
+- [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
+- [Application task stacks](APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
