@@ -4,23 +4,15 @@
 static ID mutex, task_id;
 static bool ready, calibrating;
 static line_snapshot_t snapshot;
-#if TM_MQTT
 #include "../platform/app_board.h"
 static APP_BOARD(line_snapshot_t) board;
 static void publish_line(void) { app_board_publish(&board.sequence,board.words,&snapshot,sizeof(snapshot)); }
-#else
-#define publish_line() ((void)0)
-#endif
 int line_snapshot_try_read(line_snapshot_t *out) {
     if (!out) return E_PAR;
     if (!ready) return E_OBJ;
-#if TM_MQTT
     line_snapshot_t v;
     if (!app_board_try_read(&board.sequence,board.words,&v,sizeof(v))) return E_TMOUT;
     *out=v;return E_OK;
-#else
-    return E_OBJ;
-#endif
 }
 static void line_task(INT code,void *ctx) {
     (void)code;(void)ctx;
