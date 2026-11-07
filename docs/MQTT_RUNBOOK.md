@@ -165,6 +165,10 @@ or stale health do not establish performance. Work/probe intervals include
 preemption and are not CPU percentages. Full stack margins under sustained
 traffic/dump remain a hardware gate; app minimum excludes template stacks.
 
+DUMP attempts at most one frame per 50 ms. A full 4501-row/512-event
+snapshot takes at least about 251 seconds, plus delay/ACK retries; this is
+intentional pacing, not a frozen vehicle/logger.
+
 For DUMP, verify BEGIN totals, each generation/index, and END counts. QoS1
 may duplicate frames; deduplicate by dump ID/generation/kind/index. A new
 run yields ABORT; request again for the new generation. Reset or a prolonged
