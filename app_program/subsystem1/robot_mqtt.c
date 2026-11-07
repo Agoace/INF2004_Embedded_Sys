@@ -23,8 +23,8 @@ static uint32_t rx_length,rx_expected;
 static bool rx_valid;
 static uint32_t retry_at,subscribe_at,state_at,heartbeat_at,log_at,state_sequence,sonar_cursor;
 static rm_heartbeat_t metrics;
-static rm_heartbeat_t health_cache;
-static uint32_t health_us;
+static rm_heartbeat_t health_cache={.stack_min_free=65535u};
+static bool health_present;
 static rm_event_t pending_event;
 static bool have_event;
 static rm_sonar_t pending_sonar;
@@ -184,16 +184,18 @@ static void service(uint32_t now) {
         }
     }
     if (due(now,state_at)) {
-        rm_state_t v={0};robot_network_state(&v);v.uptime_ms=now;v.sequence=++state_sequence;
+        rm_state_t v={0};robot_network_state(&v);v.uptime_ms=drv_time_ms();v.sequence=++state_sequence;
         uint8_t bytes[RM_STATE_SIZE];rm_pack_state(bytes,&v);(void)publish("robot/state",bytes,sizeof(bytes));
         state_at=now+200u;--budget;
     }
     if (due(now,heartbeat_at)) {
         rm_heartbeat_t v;uint32_t us;const int er=robot_health_try_read(&v,&us);
-        if (er>=E_OK) { health_cache=v;health_us=us; }
+        if (er>=E_OK) { health_cache=v;health_present=true; }
         else robot_network_busy(ROBOT_BOARD_HEALTH);
-        v=health_cache;const uint32_t age=(drv_time_us()-health_us)/1000u;
-        v.flags=0u;v.uptime_ms=now;v.health_age_ms=age>65535u ? 65535u : (uint16_t)age;
+        /* Producer uptime is in milliseconds: a stalled health board must
+         * not become fresh again at the 71-minute microsecond wrap. */
+        v=health_cache;const uint32_t age=health_present ? drv_time_ms()-health_cache.uptime_ms : 65535u;
+        v.flags=0u;v.uptime_ms=drv_time_ms();v.health_age_ms=age>65535u ? 65535u : (uint16_t)age;
         if (er>=E_OK && age<=2500u) v.flags|=32u;
         robot_network_metrics(&v);
         uint8_t bytes[RM_HEARTBEAT_SIZE];rm_pack_heartbeat(bytes,&v);(void)publish("robot/heartbeat",bytes,sizeof(bytes));
