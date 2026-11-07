@@ -17,7 +17,8 @@
 # unused GPIO IRQ helpers do not pull SDK handlers/runtime into the image.
 # SDK paths are system headers: SDK 2.3.0 GPIO/timer inline headers have
 # conversion/unused-parameter warnings under our strict application flags.
-# Application diagnostics remain enabled; no kernel file is changed.
+# Application diagnostics remain enabled. This fragment adds no SDK runtime.
+# Approved shared template changes are recorded in docs/TEMPLATE_CHANGES.md.
 
 ifeq ($(strip $(PICO_SDK_PATH)),)
 $(error PICO_SDK_PATH is required by the application hardware adapters)
