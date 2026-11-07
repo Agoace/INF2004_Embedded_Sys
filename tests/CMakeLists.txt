@@ -64,6 +64,7 @@ host_test(module_scan host-tests/test_scan.c ${servo_scan_source} ${obstacle_pro
 host_test(module_detour host-tests/test_detour.c ${detour_run_source} ${obstacle_detour_source} ${line_position_source})
 
 include("${CMAKE_CURRENT_LIST_DIR}/mqtt_protocol.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/template_checks.cmake")
 
 # Kernel time checks use host doubles, never real kernel/SDK headers.
 host_test(test_drv_time tests/test_drv_time.c app_program/platform/drv_time.c)

@@ -77,7 +77,6 @@ int32_t cyw43_utk_start_status(void)
     UINT irq; DI(irq); const ER result = start_status; EI(irq); return result;
 }
 
-IMPORT void cyw43_utk_task(INT stacd, void *exinf);
 
 /* The template used priority 4: below USB 3, above its qualification task.
  * Driving tasks 10-13 must not wait for network processing. Create the radio
@@ -92,7 +91,7 @@ IMPORT void cyw43_utk_task(INT stacd, void *exinf);
 #define CYW43_TASK_STACK     (6 * 1024)
 #endif
 
-EXPORT ER cyw43_utk_start(void)
+EXPORT int32_t cyw43_utk_start(void)
 {
     T_CTSK ctsk = {0};
     ID task;
