@@ -471,6 +471,16 @@ class DashboardModel:
         return {"lost_rows": lost, "jumped_rows": jumped, "total": lost + jumped,
                 "event_gaps": self.event_gaps, "duplicates": self.log.duplicates}
 
+    def visual_state(self, now):
+        """Numeric presentation fields; existing panel and command API stays intact."""
+        f = {} if self.state is None else self.state["fields"]
+        return {"mode": _name(STATE_NAMES, f.get("state")),
+                "module": f.get("module", 0),
+                "paused": self.telemetry_mode() == "idle",
+                "state": dict(f),
+                "state_stale": self.state is None or
+                self.state_age(now) > self.limits()["state_stale_ms"]}
+
     def snapshot(self):
         """Return everything the page needs as one JSON-ready dict."""
         with self.lock:
@@ -481,6 +491,7 @@ class DashboardModel:
                     "broker": {"connected": self.broker_connected},
                     "robot": self.robot_status(now),
                     "telemetry": self.telemetry(now),
+                    "view": self.visual_state(now),
                     "token_configured": self.token_configured,
                     "gaps": self.gap_counts(),
                     "discarded": self.discarded,

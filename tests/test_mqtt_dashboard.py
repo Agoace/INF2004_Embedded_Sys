@@ -2028,5 +2028,28 @@ class PageScriptTests(AppCase):
         self.assertTrue(trace["estop"]["disabled"])  # stale CSRF: commands are blocked
 
 
+class RedesignModelTests(ModelCase):
+    def test_visual_header_keeps_existing_api(self):
+        self.feed("state_running")
+        snap = self.model.snapshot()
+        self.assertEqual(snap["view"]["mode"], "RUNNING")
+        self.assertEqual(snap["view"]["module"], snap["view"]["state"]["module"])
+        self.assertIn("panels", snap)
+        self.assertIn("buttons", snap)
+        self.clock.advance(3000)
+        self.assertTrue(self.model.snapshot()["view"]["state_stale"])
+
+
+class RedesignLayoutTests(unittest.TestCase):
+    def test_offline_responsive_layout_and_health_section(self):
+        page = dashboard_page.PAGE
+        self.assertIn('name="viewport"', page)
+        self.assertIn('@media(max-width:800px)', page)
+        self.assertIn('<details id="health"', page)
+        self.assertIn('id="module-3">SCAN', page)
+        self.assertIn('id="estop" data-command="estop"', page)
+        self.assertNotIn('https://', page)
+
+
 if __name__ == "__main__":
     unittest.main(argv=[sys.argv[0]])

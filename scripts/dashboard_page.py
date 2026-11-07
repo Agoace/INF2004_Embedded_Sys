@@ -10,6 +10,7 @@ PAGE = r"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Robot dashboard</title>
 <meta name="csrf" content="__CSRF__">
 <meta name="instance" content="__INSTANCE__">
@@ -36,8 +37,31 @@ button.armed { background:var(--warn); color:#000; }
 #restart, #cmderror { padding:10px 14px; background:var(--bad); color:#fff; font-weight:700;
   font-size:16px; border-top:2px solid #ff9087; }
 #restart[hidden], #cmderror[hidden] { display:none; }
-#grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:12px;
-  padding:12px 14px; }
+#grid { display:grid; grid-template-columns:minmax(0, 1.8fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap:16px; padding:16px; max-width:1600px; margin:auto; }
+#panel-ultrasonic { grid-column:1; grid-row:1; }
+#panel-line { grid-column:2; grid-row:1; }
+#panel-wheels { grid-column:3; grid-row:1; }
+#panel-path { grid-column:1; grid-row:2; }
+#panel-summary { grid-column:2 / 4; grid-row:2; }
+#health { grid-column:1 / -1; min-width:0; }
+#health summary { cursor:pointer; font-weight:700; padding:12px; }
+#health-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
+#diagnostics { display:flex; flex-wrap:wrap; gap:8px; padding:12px; }
+#chain { display:flex; gap:6px; align-items:center; }
+#chain span { padding:4px 6px; border-radius:4px; color:var(--dim); }
+#chain .active { background:#1f5072; color:#b8e0ff; font-weight:700; }
+.panel { min-width:0; }
+.panel.paused { filter:grayscale(1); opacity:.6; }
+@media(max-width:800px) {
+  #grid { grid-template-columns:minmax(0,1fr); padding:10px; gap:10px; }
+  #panel-ultrasonic, #panel-line, #panel-wheels, #panel-path, #panel-summary {
+    grid-column:1; grid-row:auto; }
+  header { gap:6px; padding:8px; } #buttons { width:100%; margin:0; gap:6px; }
+  #buttons button { padding:8px; } #buttons #estop { margin-left:auto; padding:10px 20px; }
+  #chain { font-size:12px; } #chain span { padding:2px; }
+}
+
 .panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
   padding:10px 12px; }
 .panel.stale { opacity:.45; }
@@ -58,15 +82,16 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
 <body>
 <header>
   <strong>Robot dashboard</strong>
-  <span id="broker" class="pill">broker ?</span>
   <span id="robot" class="pill">robot ?</span>
-  <span id="telemetry" class="pill">telemetry ?</span>
-  <span id="gaps" class="pill">row gaps 0</span>
-  <span id="server" class="pill">server ?</span>
+  <span id="mode" class="pill">mode ?</span>
+  <nav id="chain" aria-label="Active module">
+    <span id="module-1">LINE</span> &gt; <span id="module-3">SCAN</span> &gt;
+    <span id="module-4">DETOUR</span> &gt; <span id="module-2">SEARCH</span>
+  </nav>
   <div id="buttons">
-    <button id="dump" data-command="dump">DUMP</button>
-    <button id="calibrate" data-command="calibrate">CALIBRATE</button>
+    <button id="calibrate" data-command="calibrate">CAL</button>
     <button id="start" data-command="start">START</button>
+    <button id="dump" data-command="dump">DUMP</button>
     <button id="estop" data-command="estop">ESTOP</button>
   </div>
 </header>
@@ -74,7 +99,15 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
 <div id="cmderror" hidden></div>
 <div id="banner" hidden></div>
 <div id="message"></div>
-<div id="grid"></div>
+<main id="grid">
+  <section id="panel-path" class="panel"><h2>RUN PATH</h2><p class="note">Waiting for live run rows.</p></section>
+  <details id="health" class="panel"><summary>HEALTH · connection, timing and counters</summary>
+    <div id="diagnostics"><span id="broker" class="pill">broker ?</span>
+      <span id="telemetry" class="pill">telemetry ?</span>
+      <span id="gaps" class="pill">row gaps 0</span><span id="server" class="pill">server ?</span></div>
+    <div id="health-grid"></div>
+  </details>
+</main>
 <script nonce="__NONCE__">
 "use strict";
 const csrf = document.querySelector('meta[name="csrf"]').content;
@@ -187,7 +220,8 @@ function panelNode(panel) {
     node.innerHTML = '<h2><span class="title"></span><span class="age"></span></h2>' +
       '<div class="note"></div><table class="facts"></table><canvas hidden></canvas>' +
       '<table class="rows" hidden></table><div class="items"></div>';
-    document.getElementById("grid").appendChild(node);
+    const primary = ["ultrasonic", "line", "wheels", "summary"].includes(panel.id);
+    document.getElementById(primary ? "grid" : "health-grid").appendChild(node);
   }
   return node;
 }
@@ -206,7 +240,9 @@ function renderGrid(grid, data) {
 function renderPanel(panel) {
   const node = panelNode(panel);
   node.classList.toggle("stale", panel.stale);
-  text(node.querySelector(".title"), panel.title);
+  node.classList.toggle("paused", Boolean(panel.paused));
+  const titles = {ultrasonic:"ULTRASONIC", line:"LINE", wheels:"DRIVE", summary:"LAST RUN"};
+  text(node.querySelector(".title"), titles[panel.id] || panel.title);
   text(node.querySelector(".age"), panel.placeholder ? "placeholder"
        : panel.paused ? "idle (paused)" + (panel.age_ms === null ? "" : ", data " +
                                            fmtAge(panel.age_ms))
@@ -241,7 +277,8 @@ function renderButtons(buttons) {
     if (!info.enabled) delete armed[name];
     const isArmed = armed[name] && armed[name] > Date.now();
     node.classList.toggle("armed", Boolean(isArmed));
-    text(node, isArmed ? "CONFIRM " + name.toUpperCase() : name.toUpperCase());
+    text(node, isArmed ? "CONFIRM " + name.toUpperCase() :
+      name === "calibrate" ? "CAL" : name.toUpperCase());
   });
 }
 // A different server instance means the dashboard process restarted, so this
@@ -289,6 +326,13 @@ function render(snapshot) {
   pill("gaps", "row gaps " + gaps.total + " (lost " + gaps.lost_rows + ", skipped " +
        gaps.jumped_rows + ")", gaps.total ? "warn" : "ok");
   pill("server", "server live", "ok");
+  const view = snapshot.view || {};
+  pill("mode", view.mode === "RUNNING" ? "RUN" : view.mode || "mode ?",
+       view.mode === "RUNNING" ? "ok" : "");
+  [1,3,4,2].forEach(id => {
+    const node = document.getElementById("module-" + id);
+    node.className = !view.state_stale && view.module === id ? "active" : "";
+  });
   renderButtons(snapshot.buttons);
   snapshot.panels.forEach(renderPanel);
   if (snapshot.last_command) {
