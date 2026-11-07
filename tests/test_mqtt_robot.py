@@ -1059,8 +1059,8 @@ class RebootLogTests(unittest.TestCase):
         self.log.handle(boot_batch(200, first=2, flags=1, stream=5, newest=0))
         self.assertEqual([g["boot_id"] for g in self.log.gaps], [100, 200])
         summary = "\n".join(self.log.summary())
-        self.assertIn("[boot:00000064:0] live gap (lost): generation 2 rows 2-3, still missing [2-3]",
-                      summary)
+        self.assertIn("[boot:00000064:0] live gap (lost): generation 2 rows 2-3, "
+                      "still missing [2-3]", summary)
         self.assertIn("[boot:000000c8:0] live gap (lost): generation 2 rows 2-3, still missing []",
                       summary)
         self.assertEqual(len(self.log.handle(boot_batch(
@@ -1124,7 +1124,8 @@ class RebootLogTests(unittest.TestCase):
         self.assertEqual(self.log.sessions.current, "legacy:0")
 
     def test_cli_csv_keeps_both_boots_generation_two(self):
-        frames = [boot_batch(100), boot_batch(100), boot_batch(200), boot_batch(200)]
+        frames = [("robot/log", data) for data in
+                  (boot_batch(100), boot_batch(100), boot_batch(200), boot_batch(200))]
 
         class Client:
             def __init__(self, api):
@@ -1137,9 +1138,9 @@ class RebootLogTests(unittest.TestCase):
                 pass
 
             def loop_forever(self):
-                for frame in frames:
+                for topic, frame in frames:
                     self.on_message(self, None, types.SimpleNamespace(
-                        topic="robot/log", payload=frame, retain=False))
+                        topic=topic, payload=frame, retain=False))
 
             def disconnect(self):
                 pass
@@ -1163,6 +1164,19 @@ class RebootLogTests(unittest.TestCase):
                           ("200", "2", "0"), ("200", "2", "1")])
         self.assertEqual(len({r["boot_session"] for r in rows}), 2)
         self.assertIn("4 rows, 0 events, 4 duplicates dropped", report.getvalue())
+
+        # Exercise the CLI's non-log observer, not just LogStream's direct API.
+        frames = [("robot/log", build_batch(generation=2)),
+                  ("robot/status", bytes([1, 2])), ("robot/status", bytes([1, 1])),
+                  ("robot/log", build_batch(generation=2))]
+        with mock.patch.dict(sys.modules, modules), \
+                contextlib.redirect_stdout(io.StringIO()) as output, \
+                contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(["--host", "192.0.2.10"]), 0)
+        rows = [r for r in csv.DictReader(io.StringIO(output.getvalue()))
+                if r["topic"] == "robot/log"]
+        self.assertEqual([r["boot_session"] for r in rows], ["legacy:0", "legacy:1"])
+        self.assertEqual([r["generation"] for r in rows], ["2", "2"])
 
     def test_same_boot_id_with_uptime_reset_keeps_rows(self):
         self.log.handle(boot_batch(42, publish=5000))

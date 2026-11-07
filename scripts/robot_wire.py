@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pure robot binary v1 decoder, log merge store and command packer.
+"""Pure versioned robot decoder, boot-scoped log merge store and command packer.
 
 No network and no Paho import: the recorder and the dashboard both use this module.
 """
@@ -14,7 +14,7 @@ VERSION = 1
 SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
          "obstacle": 24, "status": 6, "detour": 36, "summary": 48,
          "barcode": 20, "imu": 12}
-# State version -> payload size. Version 2 adds distances, version 3 adds duty and heading.
+# State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity.
 STATE_SIZES = {1: 48, 2: 60, 3: 72, 4: 76}
 HEARTBEAT_VERSIONS = (1, 2, 3)
 TOPIC_SIZES = {
