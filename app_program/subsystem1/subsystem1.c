@@ -1,3 +1,4 @@
+/* subsystem1.c - subsystem 1 (telemetry, MQTT queues and health) init/start. */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
 #include "subsystem1.h"
@@ -7,6 +8,7 @@
 #include "robot_health.h"
 #endif
 
+/* Create queues, health cyclic and telemetry objects. Network is optional. */
 EXPORT ER subsystem1_init(void)
 {
 #if TM_MQTT
@@ -21,6 +23,7 @@ EXPORT ER subsystem1_init(void)
 #endif
 }
 
+/* Start the health task and telemetry task. Network is optional. */
 EXPORT ER subsystem1_start(void)
 {
 #if TM_MQTT

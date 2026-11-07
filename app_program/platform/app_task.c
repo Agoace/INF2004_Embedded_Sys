@@ -1,16 +1,34 @@
+/*
+ * app_task.c - creates registered application tasks on caller-owned static
+ * stacks and measures their stack use.
+ *
+ * Each slot has a static, 8-byte aligned stack that is filled with a known
+ * pattern before the task starts. The unused part of the pattern shows how
+ * much stack remains. Only core 0 (TP_PRC1) tasks are registered.
+ */
 #include "app_task.h"
 #include <stdbool.h>
 #include <tm/tmonitor.h>
 #include <tk/syslib.h>
-#define FILL 0xa5u
-static uint64_t motion_stack[384];
-static uint64_t line_stack[256];
-static uint64_t sonar_stack[256];
-static uint64_t vehicle_stack[512];
-static uint64_t telemetry_stack[512];
-static uint64_t bench_stack[512];
+/* Fill pattern and stack sizes in 64-bit words (bytes = words * 8). */
+#define FILL                  0xa5u
+#define MOTION_STACK_WORDS    384
+#define LINE_STACK_WORDS      256
+#define SONAR_STACK_WORDS     256
+#define VEHICLE_STACK_WORDS   512
+#define TELEMETRY_STACK_WORDS 512
+#define BENCH_STACK_WORDS     512
+#define HEALTH_STACK_WORDS    256
+#define STACK_LOW_MARGIN      256u
+
+static uint64_t motion_stack[MOTION_STACK_WORDS];
+static uint64_t line_stack[LINE_STACK_WORDS];
+static uint64_t sonar_stack[SONAR_STACK_WORDS];
+static uint64_t vehicle_stack[VEHICLE_STACK_WORDS];
+static uint64_t telemetry_stack[TELEMETRY_STACK_WORDS];
+static uint64_t bench_stack[BENCH_STACK_WORDS];
 #if TM_MQTT
-static uint64_t health_stack[256];
+static uint64_t health_stack[HEALTH_STACK_WORDS];
 #endif
 typedef struct {
     const char *name;
@@ -32,6 +50,7 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack),
                          SLOT("health_task", health_stack)
 #endif
 };
+/* Compare two C strings. Returns true when they are equal. */
 static bool equal(const char *a, const char *b)
 {
     while (*a && *a == *b) {
@@ -41,6 +60,12 @@ static bool equal(const char *a, const char *b)
     return *a == *b;
 }
 
+/*
+ * Create and start the task registered under name.
+ * entry, priority and core are the usual kernel task parameters.
+ * Returns the task ID (> 0) or a negative error: E_CTX for the wrong core,
+ * E_PAR for an unknown name, E_OBJ if the slot is already running.
+ */
 ID app_task_start(FP entry, PRI priority, UW core, const char *name)
 {
 #if TK_SUPPORT_SMP
@@ -93,6 +118,10 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     return id;
 }
 
+/*
+ * Copy stack use of started tasks to out (at most capacity rows).
+ * Updates each high-water mark. Returns the number of rows written.
+ */
 unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
 {
     unsigned int n = 0u;
@@ -120,6 +149,7 @@ unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
     return n;
 }
 
+/* Print one line per started task: size, high water, free. */
 void app_task_report(void)
 {
     app_stack_t rows[sizeof(slots) / sizeof(slots[0])];
@@ -129,6 +159,6 @@ void app_task_report(void)
         tm_printf((UB *)"[stack] %s size %lu high_water %lu free %lu %s\n",
                   rows[i].name, (unsigned long)rows[i].size,
                   (unsigned long)rows[i].used, (unsigned long)rows[i].free,
-                  rows[i].free < 256u ? "LOW MARGIN" : "OK");
+                  rows[i].free < STACK_LOW_MARGIN ? "LOW MARGIN" : "OK");
     }
 }

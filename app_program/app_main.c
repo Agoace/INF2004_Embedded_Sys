@@ -27,6 +27,9 @@
 #include "vehicle/vehicle_task.h"
 #include "platform/app_task.h"
 
+/* TEST work runs below motion/sensors and above telemetry (30). */
+#define TEST_RUNNER_PRIORITY 20
+
 /*
  * Create and start one task (declared in app.h for every subsystem).
  *   Registered application tasks use prc = TP_PRC1 (core 0).
@@ -77,7 +80,7 @@ EXPORT INT usermain(void)
 #if APP_TEST
     /* Startup stays at priority 1. TEST work must be below motion/sensors,
 	   but above telemetry30 so its nonblocking saturation test still fills. */
-    const ER test_priority = tk_chg_pri(TSK_SELF, 20);
+    const ER test_priority = tk_chg_pri(TSK_SELF, TEST_RUNNER_PRIORITY);
     CHECK(test_priority, "TEST runner priority 20");
     if (test_priority >= E_OK) {
         tm_printf((UB *)"[TEST] === test run start (runner priority 20) ===\n");

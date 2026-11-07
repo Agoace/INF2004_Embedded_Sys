@@ -1,15 +1,31 @@
+/*
+ * network_queue.c - bounded message buffers between the vehicle task and
+ * the Wi-Fi task, with loss counters.
+ *
+ * Three message buffers exist: events (vehicle to network), commands
+ * (network to vehicle) and a dedicated ESTOP slot. All sends and receives
+ * poll (TMO_POL), so no caller ever waits. A full buffer drops the message
+ * and counts it.
+ */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
 #include "robot_network.h"
+
+/* Message buffer sizing: depth in messages; the kernel adds a header. */
+#define EVENT_QUEUE_DEPTH   16
+#define COMMAND_QUEUE_DEPTH 8
+#define MBF_HEADER_BYTES    4
+
 static ID event_queue;
 static ID command_queue;
 static ID estop_queue;
 static uint32_t event_lost;
 static uint32_t command_lost;
-static uint32_t busy[5];
+static uint32_t busy[ROBOT_BOARD_COUNT];
 
+/* Increment a loss counter. Interrupts are masked for the update. */
 static void lost(uint32_t *counter)
 {
     UINT irq;
@@ -18,19 +34,27 @@ static void lost(uint32_t *counter)
     EI(irq);
 }
 
+/*
+ * Create the three message buffers once.
+ * Returns E_OK (also if already created) or the first kernel error.
+ * On error all buffers made so far are deleted.
+ */
 int robot_network_init(void)
 {
     if (event_queue > 0 && command_queue > 0 && estop_queue > 0) {
         return E_OK;
     }
     T_CMBF q = {.mbfatr = TA_TFIFO,
-                .bufsz = 16 * (INT)(sizeof(rm_event_t) + 4u),
+                .bufsz =
+                    EVENT_QUEUE_DEPTH *
+                    (INT)(sizeof(rm_event_t) + (unsigned int)MBF_HEADER_BYTES),
                 .maxmsz = (INT)sizeof(rm_event_t)};
     event_queue = tk_cre_mbf(&q);
     if (event_queue < 0) {
         return (int)event_queue;
     }
-    q.bufsz = 8 * (INT)(sizeof(robot_command_t) + 4u);
+    q.bufsz = COMMAND_QUEUE_DEPTH *
+              (INT)(sizeof(robot_command_t) + (unsigned int)MBF_HEADER_BYTES);
     q.maxmsz = (INT)sizeof(robot_command_t);
     command_queue = tk_cre_mbf(&q);
     if (command_queue < 0) {
@@ -38,7 +62,7 @@ int robot_network_init(void)
         event_queue = 0;
         return (int)command_queue;
     }
-    q.bufsz = (INT)sizeof(robot_command_t) + 4;
+    q.bufsz = (INT)sizeof(robot_command_t) + MBF_HEADER_BYTES;
     estop_queue = tk_cre_mbf(&q);
     if (estop_queue < 0) {
         (void)tk_del_mbf(event_queue);
@@ -50,6 +74,10 @@ int robot_network_init(void)
     return E_OK;
 }
 
+/*
+ * Queue one event from the vehicle task. Never blocks.
+ * Returns a negative error and counts the loss when the buffer is full.
+ */
 int robot_event_push(const rm_event_t *event)
 {
     if (!event) {
@@ -64,6 +92,10 @@ int robot_event_push(const rm_event_t *event)
     return (int)er;
 }
 
+/*
+ * Take the oldest event. Never blocks.
+ * Returns the message size (> 0), E_TMOUT if empty, or an error.
+ */
 int robot_event_pop(rm_event_t *out)
 {
     if (!out) {
@@ -73,6 +105,11 @@ int robot_event_pop(rm_event_t *out)
                            : (int)E_OBJ;
 }
 
+/*
+ * Queue a remote command from the Wi-Fi task. Never blocks.
+ * ESTOP goes to its own slot. A full ESTOP slot already holds an ESTOP,
+ * so it counts as accepted but is counted as lost.
+ */
 int robot_command_push(const robot_command_t *command)
 {
     if (!command || command->opcode < RM_CMD_ESTOP ||
@@ -91,6 +128,10 @@ int robot_command_push(const robot_command_t *command)
     return command->opcode == RM_CMD_ESTOP && er == E_TMOUT ? E_OK : (int)er;
 }
 
+/*
+ * Take the next command. ESTOP is always read first.
+ * Returns the message size (> 0), E_TMOUT if both are empty, or an error.
+ */
 int robot_command_pop(robot_command_t *out)
 {
     if (!out) {
@@ -103,18 +144,24 @@ int robot_command_pop(robot_command_t *out)
     return stop > 0 ? (int)stop : (int)tk_rcv_mbf(command_queue, out, TMO_POL);
 }
 
+/*
+ * Count a board read that found the board busy.
+ * Boards outside ROBOT_BOARD_COUNT are ignored.
+ */
 void robot_network_busy(unsigned int board)
 {
-    if (board < 5u) {
+    if (board < (unsigned int)ROBOT_BOARD_COUNT) {
         lost(&busy[board]);
     }
 }
 
+/* Count a command dropped before it reached the queue. */
 void robot_command_lost(void)
 {
     lost(&command_lost);
 }
 
+/* Copy the queue loss and busy counters into a heartbeat. */
 void robot_queue_metrics(rm_heartbeat_t *out)
 {
     UINT irq;
@@ -129,6 +176,7 @@ void robot_queue_metrics(rm_heartbeat_t *out)
     EI(irq);
 }
 
+/* Default metrics provider. The MQTT module overrides it. */
 void __attribute__((weak)) robot_network_metrics(rm_heartbeat_t *out)
 {
     robot_queue_metrics(out);

@@ -1,3 +1,11 @@
+/*
+ * robot_network.h - interface between the robot application and the MQTT
+ * network module.
+ *
+ * Producers (vehicle, sensors, health) never call lwIP. They push events and
+ * read commands through bounded queues, and provide data through weak
+ * functions that the network module polls.
+ */
 #ifndef ROBOT_NETWORK_H
 #define ROBOT_NETWORK_H
 #include "mqtt_wire.h"
@@ -7,7 +15,8 @@ enum {
     ROBOT_BOARD_SONAR,
     ROBOT_BOARD_MOTION,
     ROBOT_BOARD_VEHICLE,
-    ROBOT_BOARD_HEALTH
+    ROBOT_BOARD_HEALTH,
+    ROBOT_BOARD_COUNT
 };
 
 typedef struct {

@@ -11,6 +11,8 @@
 #define RM_COMMAND_SIZE   22u
 #define RM_LOG_SIZE       32u
 #define RM_TOKEN_SIZE     16u
+/* Saturated age, or "not available" for 16-bit stack/age fields. */
+#define RM_NO_DATA_U16 65535u
 
 enum {
     RM_CMD_ESTOP = 1,

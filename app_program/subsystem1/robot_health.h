@@ -1,3 +1,4 @@
+/* robot_health.h - low-rate health task and its readable snapshot. */
 #ifndef ROBOT_HEALTH_H
 #define ROBOT_HEALTH_H
 #include "mqtt_wire.h"
