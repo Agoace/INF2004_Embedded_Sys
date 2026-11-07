@@ -87,11 +87,27 @@ def control(kind, dump_id, generation, body):
     return struct.pack("<BBHIII", 1, kind, 0, dump_id, generation, 0) + body
 
 
+def state_v2(name="state_idle", left=1500, right=1700, average=1600):
+    """Version 2 state: the first 48 bytes are the C-packed v1 layout, then three i32."""
+    return b"\x02" + SAMPLES[name][1:48] + struct.pack("<iii", left, right, average)
+
+
+def obstacle(flags=0b0001, decision=1, angle=-15, scan=7, uptime=5000, closest=250, word=0x1234,
+             right_step=3, left_step=7, right_clear=15, left_clear=255):
+    return struct.pack("<BBBbIIHHBBBB", 1, flags, decision, angle, scan, uptime, closest, word,
+                       right_step, left_step, right_clear, left_clear)
+
+
+ONLINE = bytes([1, 1])
+OFFLINE = bytes([1, 2])
+
+
 class ModelCase(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
         self.model = model_module.DashboardModel(clock=self.clock, token_configured=True)
         self.model.set_broker_connected(True)
+        self.model.ingest("robot/status", ONLINE)
 
     def feed(self, name):
         self.model.ingest(topic_for(name), SAMPLES[name])
@@ -113,11 +129,12 @@ class PanelTests(ModelCase):
     def test_every_panel_exists_without_data(self):
         snapshot = self.model.snapshot()
         ids = [panel["id"] for panel in snapshot["panels"]]
-        self.assertEqual(ids, ["vehicle", "line", "wheels", "ultrasonic", "events", "health",
-                               "barcode", "imu", "log"])
+        self.assertEqual(ids, ["vehicle", "line", "wheels", "ultrasonic", "obstacle", "events",
+                               "health", "barcode", "imu", "log"])
         for panel in snapshot["panels"]:
             self.assertTrue(panel["stale"])
-        self.assertEqual(snapshot["robot"]["text"], "no robot data yet")
+        self.assertEqual(snapshot["robot"]["level"], "silent")  # status online, no state yet
+        self.assertFalse(snapshot["robot"]["online"])
         json.dumps(snapshot)  # must be plain JSON
 
     def test_state_panels_from_c_packed_message(self):
@@ -249,13 +266,17 @@ class StaleTests(ModelCase):
         self.assertEqual(self.rows("ultrasonic")["Latest"], "345 mm")  # old value is still shown
 
     def test_robot_status(self):
-        self.assertFalse(self.model.snapshot()["robot"]["online"])
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "silent")
         self.feed("heartbeat")
-        self.assertTrue(self.model.snapshot()["robot"]["online"])
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "silent")  # heartbeat is not state
+        self.feed("state_idle")
+        robot = self.model.snapshot()["robot"]
+        self.assertEqual((robot["online"], robot["level"], robot["text"]),
+                         (True, "online", "ROBOT ONLINE"))
         self.clock.advance(3100)
         robot = self.model.snapshot()["robot"]
         self.assertFalse(robot["online"])
-        self.assertEqual(robot["text"], "robot silent for 3 s")
+        self.assertEqual((robot["level"], robot["text"]), ("silent", "robot silent: no state for 3 s"))
 
     def test_malformed_messages_are_counted_and_change_nothing(self):
         self.feed("state_idle")
@@ -333,7 +354,7 @@ class ButtonTests(ModelCase):
         self.assertFalse(self.button("estop")["needs_confirm"])
 
     def test_start_and_calibrate_need_idle_and_fresh_data(self):
-        self.assertIn("no state data", self.button("start")["reason"])
+        self.assertIn("robot is silent", self.button("start")["reason"])  # status, no state
         self.idle_fresh()
         for name in ("start", "calibrate"):
             self.assertEqual(self.button(name), {"enabled": True, "reason": "",
@@ -367,9 +388,10 @@ class ButtonTests(ModelCase):
             self.assertEqual(self.button(name)["reason"], "no token file: only ESTOP is available")
 
     def test_dump_disabled_while_dump_active(self):
+        self.feed("state_idle")
         self.feed("heartbeat_dump")
         self.assertEqual(self.button("dump")["reason"], "a RAM dump is already running")
-        self.clock.advance(3000)  # stale heartbeat: do not trust the flag
+        self.clock.advance(2900)  # stale heartbeat: do not trust the flag
         self.assertTrue(self.button("dump")["enabled"])
 
     def test_pending_command_blocks_until_decision_or_timeout(self):
@@ -408,6 +430,219 @@ class ButtonTests(ModelCase):
         self.assertIn("PUBACK is not acceptance", text)
 
 
+class WheelDistanceTests(ModelCase):
+    def test_distance_from_state_v2(self):
+        self.model.ingest("robot/state", state_v2(left=-1500, right=2500, average=500))
+        rows = self.rows("wheels")
+        self.assertEqual(rows["Distance left / right / average"], "-1500 / 2500 / 500 mm")
+        self.assertEqual(self.panel("wheels")["age_ms"], 8)  # motion board age
+        self.assertIn("since robot boot", self.panel("wheels")["note"])
+        self.assertEqual(rows["Encoder counts left / right"], "1000 / -2000")
+
+    def test_distance_follows_the_newest_state(self):
+        self.model.ingest("robot/state", state_v2(left=10, right=20, average=15))
+        self.model.ingest("robot/state", state_v2(left=11, right=21, average=16))
+        self.assertEqual(self.rows("wheels")["Distance left / right / average"],
+                         "11 / 21 / 16 mm")
+
+    def test_old_v1_state_does_not_invent_distance(self):
+        self.model.ingest("robot/state", b"\x01" + SAMPLES["state_idle"][1:48])
+        self.assertEqual(self.rows("wheels")["Distance left / right / average"],
+                         "not reported (old state v1)")
+
+    def test_v2_state_still_drives_every_other_panel_and_the_button_rules(self):
+        self.model.ingest("robot/state", state_v2())
+        self.assertEqual(self.rows("line")["Position"], -25)
+        self.assertEqual(self.rows("vehicle")["State"], "IDLE")
+        self.assertTrue(self.button("start")["enabled"])
+        self.model.ingest("robot/state", state_v2("state_running"))
+        self.assertFalse(self.button("start")["enabled"])
+
+
+class ObstacleTests(ModelCase):
+    def feed_obstacle(self, **kwargs):
+        self.model.ingest("robot/obstacle", obstacle(**kwargs))
+
+    def test_before_any_scan(self):
+        panel = self.panel("obstacle")
+        self.assertEqual((panel["age_ms"], panel["note"]), (None, "no completed scan yet"))
+
+    def test_summary_rows(self):
+        self.feed_obstacle()
+        rows = self.rows("obstacle")
+        self.assertEqual(rows["Closest"], "250 mm at -15 deg (right)")
+        self.assertEqual(rows["Right clearance"], "15 deg (3 steps free)")
+        self.assertEqual(rows["Left clearance"], "blocked")
+        self.assertEqual(rows["Detour decision"], "right")
+        self.assertEqual((rows["Scan ID"], rows["Scans missed (ID gaps)"]), (7, 0))
+        self.assertEqual(rows["Profile word"], "0x1234")
+        self.feed_obstacle(scan=8, angle=30, decision=2, right_clear=255, left_clear=20,
+                           left_step=4, right_step=7)
+        rows = self.rows("obstacle")
+        self.assertEqual(rows["Closest"], "250 mm at 30 deg (left)")
+        self.assertEqual((rows["Detour decision"], rows["Left clearance"],
+                          rows["Right clearance"]), ("left", "20 deg (4 steps free)", "blocked"))
+        self.feed_obstacle(scan=9, angle=0, decision=0, flags=0b1101, closest=100)
+        self.assertEqual(self.rows("obstacle")["Closest"], "100 mm at 0 deg (ahead)")
+        self.assertEqual(self.rows("obstacle")["Detour decision"], "none (both sides blocked)")
+
+    def test_closest_special_cases(self):
+        self.feed_obstacle(flags=0b0010, closest=0, angle=0, scan=1)  # too near
+        self.assertEqual(self.rows("obstacle")["Closest"], "too near (below sensor range)")
+        self.feed_obstacle(flags=0b0000, closest=511, angle=0, scan=2)  # nothing seen
+        self.assertEqual(self.rows("obstacle")["Closest"], "none seen")
+        self.assertIsNone(self.panel("obstacle")["chart"]["closest"])
+
+    def test_scan_id_gaps_are_counted(self):
+        for scan in (1, 2, 5, 6, 10):
+            self.feed_obstacle(scan=scan)
+        self.assertEqual(self.rows("obstacle")["Scans missed (ID gaps)"], 2 + 3)
+        self.feed_obstacle(scan=1)  # the robot restarted: a lower ID is not a gap
+        self.assertEqual(self.rows("obstacle")["Scans missed (ID gaps)"], 5)
+        self.feed_obstacle(scan=2)
+        self.assertEqual(self.rows("obstacle")["Scans missed (ID gaps)"], 5)
+
+    def test_chart_overlays_the_scan_profile(self):
+        self.feed("sonar_valid")
+        self.feed("sonar_error")
+        self.feed_obstacle(angle=-30, closest=345)
+        chart = self.panel("obstacle")["chart"]
+        self.assertEqual(chart["type"], "obstacle")
+        self.assertEqual([p[0] for p in chart["points"]], [-30, 30])
+        self.assertEqual(chart["closest"], {"angle": -30, "mm": 345})
+        self.assertEqual((chart["right_clear_deg"], chart["left_clear_deg"], chart["decision"]),
+                         (15, 255, 1))
+
+    def test_age_is_time_since_scan_and_never_grey(self):
+        self.feed_obstacle()
+        self.clock.advance(60000)
+        panel = self.panel("obstacle")
+        self.assertEqual(panel["age_ms"], 60000)
+        self.assertFalse(panel["stale"])  # a scan result is a point in time
+
+    def test_bad_frame_is_discarded(self):
+        self.feed_obstacle()
+        self.model.ingest("robot/obstacle", obstacle(decision=3))
+        self.model.ingest("robot/obstacle", obstacle()[:-1])
+        self.assertEqual(self.model.snapshot()["discarded"], 2)
+        self.assertEqual(self.rows("obstacle")["Scan ID"], 7)
+
+
+class ReservedTopicTests(ModelCase):
+    def test_not_implemented_until_data_arrives(self):
+        self.assertEqual(self.panel("imu")["note"], "not implemented: no data on robot/imu yet")
+        self.assertTrue(self.panel("imu")["placeholder"])
+        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+        self.feed("state_idle")
+        self.assertEqual(self.rows("barcode")["Raw GP28 sample"], 777)
+        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+
+    def test_data_is_acknowledged_but_not_decoded(self):
+        self.model.ingest("robot/barcode", bytes([1, 3, 9, 9]))
+        self.model.ingest("robot/imu", bytes([1, 1, 0, 0, 0, 0]))
+        self.assertEqual(self.rows("barcode")["Decoded command"],
+                         "data received (kind 3, 4 bytes); decoder not implemented")
+        imu = self.panel("imu")
+        self.assertFalse(imu["placeholder"])
+        self.assertEqual(imu["rows"][0]["value"],
+                         "data received (kind 1, 6 bytes); decoder not implemented")
+        self.assertFalse(imu["stale"])
+        self.clock.advance(1500)
+        self.assertTrue(self.panel("imu")["stale"])
+
+    def test_unknown_versions_are_ignored_not_counted_as_errors(self):
+        self.model.ingest("robot/barcode", bytes([2, 1, 5]))
+        self.model.ingest("robot/imu", bytes([9, 1, 5]))
+        self.assertEqual((self.model.ignored_reserved, self.model.snapshot()["discarded"]), (2, 0))
+        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+        self.assertTrue(self.panel("imu")["placeholder"])
+        self.model.ingest("robot/imu", b"\x01")  # too short to read a header
+        self.assertEqual(self.model.snapshot()["discarded"], 1)
+
+
+class RobotStatusTests(ModelCase):
+    def fresh_idle(self):
+        self.feed("state_idle")
+
+    def test_online_needs_status_and_recent_state(self):
+        self.fresh_idle()
+        robot = self.model.snapshot()["robot"]
+        self.assertEqual((robot["level"], robot["status"]["retained"]), ("online", False))
+        self.clock.advance(3100)
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "silent")
+
+    def test_retained_offline_shows_at_once_and_blocks_commands(self):
+        self.fresh_idle()
+        self.model.ingest("robot/status", OFFLINE, retained=True)
+        robot = self.model.snapshot()["robot"]
+        self.assertEqual((robot["level"], robot["online"]), ("offline", False))
+        self.assertEqual(robot["text"], "ROBOT OFFLINE (broker last will)")
+        self.assertTrue(robot["status"]["retained"])
+        for name in ("start", "calibrate", "dump"):
+            self.assertEqual(self.button(name), {"enabled": False, "reason": "robot is offline",
+                                                 "needs_confirm": name != "dump"})
+
+    def test_estop_stays_enabled_with_a_warning_when_offline(self):
+        self.fresh_idle()
+        self.model.ingest("robot/status", OFFLINE)
+        estop = self.button("estop")
+        self.assertTrue(estop["enabled"])
+        self.assertIn("delivery is unlikely", estop["reason"])
+        self.assertIn("GP21", estop["reason"])
+        self.model.ingest("robot/status", ONLINE)
+        self.assertEqual(self.button("estop")["reason"], "")
+
+    def test_robot_comes_back_online(self):
+        self.fresh_idle()
+        self.model.ingest("robot/status", OFFLINE, retained=True)
+        self.assertFalse(self.button("start")["enabled"])
+        self.model.ingest("robot/status", ONLINE)  # robot reconnected, retained online
+        self.fresh_idle()
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "online")
+        self.assertTrue(self.button("start")["enabled"])
+
+    def test_silent_robot_blocks_everything_except_estop(self):
+        self.fresh_idle()
+        self.clock.advance(3500)
+        for name in ("start", "calibrate", "dump"):
+            self.assertEqual(self.button(name)["reason"], "robot is silent (no state data)")
+        self.assertTrue(self.button("estop")["enabled"])
+
+    def test_unknown_status_keeps_the_older_rules_when_data_is_recent(self):
+        self.model.status = None  # an old firmware: no robot/status was ever sent
+        self.fresh_idle()
+        robot = self.model.snapshot()["robot"]
+        self.assertEqual((robot["level"], robot["online"]), ("unknown", False))
+        self.assertTrue(self.button("start")["enabled"])
+        self.clock.advance(3500)
+        self.assertEqual(self.button("dump")["reason"], "no recent robot data")
+
+    def test_broker_disconnect_forgets_the_status(self):
+        self.model.ingest("robot/status", OFFLINE, retained=True)
+        self.model.set_broker_connected(False)
+        self.assertIsNone(self.model.snapshot()["robot"]["status"])
+        self.model.set_broker_connected(True)
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "unknown")  # retained comes again
+
+    def test_bad_status_is_discarded(self):
+        for bad in (b"", bytes([1, 0]), bytes([1, 3]), bytes([2, 1]), bytes([1, 1, 1])):
+            self.model.ingest("robot/status", bad)
+        self.assertEqual(self.model.snapshot()["discarded"], 5)
+        self.assertTrue(self.model.status["online"])
+
+    def test_commander_refuses_gated_commands_when_offline_but_sends_estop(self):
+        link = FakeLink()
+        commander = dashboard.Commander(link, self.model, TOKEN, lambda: 5)
+        self.fresh_idle()
+        self.model.ingest("robot/status", OFFLINE, retained=True)
+        for name in ("start", "calibrate", "dump"):
+            status, result = commander.send(name, True)
+            self.assertEqual((status, result["error"]), (409, "robot is offline"))
+        self.assertEqual(link.sent, [])
+        self.assertEqual(commander.send("estop", None)[0], 200)
+        self.assertEqual(len(link.sent), 1)
+
+
 class CommanderTests(unittest.TestCase):
     def setUp(self):
         self.clock = FakeClock()
@@ -415,6 +650,7 @@ class CommanderTests(unittest.TestCase):
         self.model.set_broker_connected(True)
         self.link = FakeLink()
         self.commander = dashboard.Commander(self.link, self.model, TOKEN, lambda: 0x12345678)
+        self.model.ingest("robot/status", ONLINE)
         self.model.ingest("robot/state", SAMPLES["state_idle"])
 
     def test_payload_follows_the_wire_contract(self):
@@ -479,6 +715,7 @@ class AppCase(unittest.TestCase):
         self.clock = FakeClock()
         self.model = model_module.DashboardModel(clock=self.clock, token_configured=True)
         self.model.set_broker_connected(True)
+        self.model.ingest("robot/status", ONLINE)
         self.model.ingest("robot/state", SAMPLES["state_idle"])
         self.link = FakeLink()
         commander = dashboard.Commander(self.link, self.model, TOKEN, lambda: 4242)
@@ -678,6 +915,8 @@ class PageTests(unittest.TestCase):
         self.assertIn("CHART_RENDERERS", script)
         self.assertNotIn("eval(", script)
         self.assertEqual(script.count("innerHTML"), 1)  # one static template, no data in it
+        self.assertIn('id="banner"', __import__("dashboard_page").PAGE)
+        self.assertIn("obstacle(canvas, chart)", script)
         for command in ("estop", "dump", "start", "calibrate"):
             self.assertIn(f'data-command="{command}"', __import__("dashboard_page").PAGE)
 
@@ -739,12 +978,19 @@ class PahoLinkTests(unittest.TestCase):
         self.assertTrue(model.broker_connected)
         subscribe = [call for call in calls if call[0] == "subscribe"][-1][1]
         self.assertEqual(dict(subscribe), {"robot/state": 0, "robot/sonar": 0, "robot/event": 0,
-                                           "robot/heartbeat": 0, "robot/log": 1})
+                                           "robot/heartbeat": 0, "robot/log": 1,
+                                           "robot/obstacle": 0, "robot/status": 1,
+                                           "robot/barcode": 1, "robot/imu": 0})
         self.assertTrue(link.publish(b"payload", 3))
         self.assertIn(("publish", "robot/cmd", b"payload", 1, False), calls)
         link._on_message(None, None, types.SimpleNamespace(topic="robot/state",
-                                                           payload=SAMPLES["state_idle"]))
+                                                           payload=SAMPLES["state_idle"],
+                                                           retain=False))
         self.assertIsNotNone(model.state)
+        link._on_message(None, None, types.SimpleNamespace(topic="robot/status", payload=OFFLINE,
+                                                           retain=True))
+        self.assertEqual(model.status, {"online": False, "retained": True,
+                                        "rx": model.status["rx"]})
         link._on_disconnect(None, None, None, None, None)
         self.assertFalse(model.broker_connected)
         link._on_connect(link.client, None, None, types.SimpleNamespace(is_failure=True), None)

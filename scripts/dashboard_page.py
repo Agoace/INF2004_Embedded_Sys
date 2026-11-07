@@ -29,6 +29,8 @@ button.armed { background:var(--warn); color:#000; }
 #estop { background:var(--bad); color:#fff; font-weight:700; font-size:18px; padding:10px 26px;
   border-color:#ff9087; }
 #message { padding:6px 14px; min-height:20px; color:var(--dim); }
+#banner { padding:10px 14px; background:var(--bad); color:#fff; font-weight:700; font-size:16px; }
+#banner[hidden] { display:none; }
 #grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(330px, 1fr)); gap:12px;
   padding:12px 14px; }
 .panel { background:var(--card); border:1px solid var(--line); border-radius:8px;
@@ -58,6 +60,7 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
     <button id="estop" data-command="estop">ESTOP</button>
   </div>
 </header>
+<div id="banner" hidden></div>
 <div id="message"></div>
 <div id="grid"></div>
 <script nonce="__NONCE__">
@@ -78,19 +81,47 @@ function fmtAge(ms) {
   return ms >= 65535 ? "no data" : (ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s");
 }
 
+function drawBars(ctx, canvas, chart) {
+  const w = canvas.width, h = canvas.height;
+  const x = angle => (angle + 90) / 180 * (w - 20) + 10;
+  chart.points.forEach(p => {
+    const angle = p[0], mm = p[1], age = p[2];
+    ctx.globalAlpha = age > 10000 ? 0.3 : 1;
+    if (mm === null) { ctx.fillStyle = "#f85149"; ctx.fillRect(x(angle) - 2, h - 6, 4, 4); }
+    else { const bar = Math.max(2, mm / chart.max_mm * (h - 10));
+      ctx.fillStyle = "#58a6ff"; ctx.fillRect(x(angle) - 2, h - 2 - bar, 4, bar); }
+  });
+  ctx.globalAlpha = 1;
+  return x;
+}
 const CHART_RENDERERS = {
+  obstacle(canvas, chart) {
+    const ctx = setup(canvas), w = canvas.width, h = canvas.height;
+    const x = drawBars(ctx, canvas, chart);
+    ctx.strokeStyle = "#2d333d"; ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
+    // Clear sectors start at 0 deg: right is negative, left is positive.
+    const sector = (deg, sign) => {
+      if (deg === 255) return;
+      ctx.fillStyle = "rgba(63,185,80,0.18)";
+      ctx.fillRect(Math.min(x(0), x(sign * deg)), 0, Math.abs(x(sign * deg) - x(0)), h);
+    };
+    sector(chart.right_clear_deg, -1); sector(chart.left_clear_deg, 1);
+    if (chart.closest) {
+      const cx = x(chart.closest.angle);
+      const cy = h - 2 - chart.closest.mm / chart.max_mm * (h - 10);
+      const radius = 6 * (window.devicePixelRatio || 1);
+      ctx.strokeStyle = "#f0883e"; ctx.beginPath(); ctx.arc(cx, cy, radius, 0, 6.283);
+      ctx.stroke();
+    }
+    ctx.fillStyle = "#8b95a3";
+    ctx.fillText("right", 2, 10); ctx.fillText("0", w / 2 - 3, 10);
+    ctx.fillText("left", w - 28, 10);
+  },
   profile(canvas, chart) {
     const ctx = setup(canvas), w = canvas.width, h = canvas.height;
     ctx.strokeStyle = "#2d333d"; ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
-    const x = angle => (angle + 90) / 180 * (w - 20) + 10;
-    chart.points.forEach(p => {
-      const angle = p[0], mm = p[1], age = p[2];
-      ctx.globalAlpha = age > 10000 ? 0.3 : 1;
-      if (mm === null) { ctx.fillStyle = "#f85149"; ctx.fillRect(x(angle) - 2, h - 6, 4, 4); }
-      else { const bar = Math.max(2, mm / chart.max_mm * (h - 10));
-        ctx.fillStyle = "#58a6ff"; ctx.fillRect(x(angle) - 2, h - 2 - bar, 4, bar); }
-    });
-    ctx.globalAlpha = 1; ctx.fillStyle = "#8b95a3";
+    drawBars(ctx, canvas, chart);
+    ctx.fillStyle = "#8b95a3";
     ctx.fillText("-90", 2, 10); ctx.fillText("0 deg", w / 2 - 12, 10);
     ctx.fillText("+90", w - 26, 10);
   },
@@ -170,7 +201,15 @@ function render(snapshot) {
   latest = snapshot;
   pill("broker", snapshot.broker.connected ? "broker connected" : "broker disconnected",
        snapshot.broker.connected ? "ok" : "bad");
-  pill("robot", snapshot.robot.text, snapshot.robot.online ? "ok" : "bad");
+  const level = snapshot.robot.level;
+  const levelClass = {online: "ok", offline: "bad"}[level] || "warn";
+  pill("robot", snapshot.robot.text, levelClass);
+  const banner = document.getElementById("banner");
+  banner.hidden = !(level === "offline" || level === "silent");
+  text(banner, level === "offline"
+    ? "ROBOT OFFLINE: the broker reports that the robot dropped. START, CALIBRATE and DUMP are " +
+      "disabled. An ESTOP will probably not arrive: use GP21."
+    : "ROBOT SILENT: no state data. START, CALIBRATE and DUMP are disabled. Use GP21 to stop.");
   const gaps = snapshot.gaps;
   pill("gaps", "row gaps " + gaps.total + " (lost " + gaps.lost_rows + ", skipped " +
        gaps.jumped_rows + ")", gaps.total ? "warn" : "ok");

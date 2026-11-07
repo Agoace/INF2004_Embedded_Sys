@@ -20,6 +20,7 @@ PROFILE_LIMIT = 256
 TREND_LIMIT = 100
 LOG_MESSAGE_LIMIT = 20
 CONFIRM_COMMANDS = ("start", "calibrate")
+OBSTACLE_DECISION_TEXT = {0: "none (both sides blocked)", 1: "right", 2: "left"}
 
 STATE_NAMES = {0: "IDLE", 1: "RUNNING", 2: "FAULT"}
 MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle scan",
@@ -74,6 +75,12 @@ class DashboardModel:
         self.last_discard = ""
         self.state = None  # {"fields": dict, "rx": ms}
         self.heartbeat = None
+        self.status = None  # robot/status: {"online": bool, "retained": bool, "rx": ms}
+        self.obstacle = None
+        self.obstacle_scan_id = None
+        self.obstacle_missed = 0
+        self.reserved = {"barcode": None, "imu": None}
+        self.ignored_reserved = 0
         self.sonar = None
         self.sonar_profile = {}  # angle -> {"mm", "text", "rx"}
         self.events = collections.deque(maxlen=EVENT_LIMIT)
@@ -95,8 +102,10 @@ class DashboardModel:
     def set_broker_connected(self, connected):
         with self.lock:
             self.broker_connected = bool(connected)
+            if not connected:
+                self.status = None  # the broker will send the retained status again
 
-    def ingest(self, topic, payload):
+    def ingest(self, topic, payload, retained=False):
         """Decode one message. A malformed message is counted and never changes state."""
         with self.lock:
             now = self.now_ms()
@@ -105,15 +114,26 @@ class DashboardModel:
                     rows = self.log.handle(payload)
                     self._log_rows(rows, now)
                 else:
-                    self._store(topic, robot_wire.decode(topic, payload), now)
+                    self._store(topic, robot_wire.decode(topic, payload), now, retained)
             except ValueError as error:
                 self.discarded += 1
                 self.last_discard = f"{topic}: {error}"
                 return
             self.last_message_ms = now
 
-    def _store(self, topic, fields, now):
-        if topic == "robot/state":
+    def _store(self, topic, fields, now, retained=False):
+        if topic == "robot/status":
+            self.status = {"online": bool(fields["robot_online"]), "retained": retained,
+                           "rx": now}
+        elif topic == "robot/obstacle":
+            self._store_obstacle(fields, now)
+        elif topic in ("robot/barcode", "robot/imu"):
+            name = topic.removeprefix("robot/")
+            if fields["known"]:
+                self.reserved[name] = {"fields": fields, "rx": now}
+            else:
+                self.ignored_reserved += 1
+        elif topic == "robot/state":
             self.state = {"fields": fields, "rx": now}
             self.trend.append(fields["kr1_position"])
         elif topic == "robot/heartbeat":
@@ -122,6 +142,13 @@ class DashboardModel:
             self._store_sonar(fields, now)
         elif topic == "robot/event":
             self._store_event(fields, now)
+
+    def _store_obstacle(self, fields, now):
+        scan_id = fields["scan_id"]
+        if self.obstacle_scan_id is not None and scan_id > self.obstacle_scan_id + 1:
+            self.obstacle_missed += scan_id - self.obstacle_scan_id - 1
+        self.obstacle_scan_id = scan_id  # a lower number means the robot restarted
+        self.obstacle = {"fields": fields, "rx": now}
 
     def _store_sonar(self, fields, now):
         if self.sonar is not None and self.sonar["fields"]["sequence"] == fields["sequence"]:
@@ -198,12 +225,31 @@ class DashboardModel:
         return min(int(now - record["rx"]) + extra, MISSING_AGE_MS)
 
     def robot_status(self, now):
-        if self.last_message_ms is None:
-            return {"online": False, "text": "no robot data yet", "age_ms": None}
-        age = int(now - self.last_message_ms)
-        online = age <= ROBOT_OFFLINE_MS
-        return {"online": online, "age_ms": age,
-                "text": "robot online" if online else f"robot silent for {age // 1000} s"}
+        """Return the robot link level: online, offline, silent or unknown.
+
+        online  = robot/status says online AND robot/state is recent
+        offline = robot/status says offline (shown at once, also when retained)
+        silent  = robot/status says online but robot/state stopped (link may be dying)
+        unknown = no robot/status message yet
+        """
+        status = self.status
+        state_age = None if self.state is None else int(now - self.state["rx"])
+        last_age = None if self.last_message_ms is None else int(now - self.last_message_ms)
+        if status is None:
+            level, text = "unknown", "robot status unknown (no robot/status yet)"
+        elif not status["online"]:
+            level, text = "offline", "ROBOT OFFLINE (broker last will)"
+        elif state_age is None or state_age > ROBOT_OFFLINE_MS:
+            level = "silent"
+            text = "robot silent: no state for " + ("ever" if state_age is None
+                                                    else f"{state_age // 1000} s")
+        else:
+            level, text = "online", "ROBOT ONLINE"
+        return {"online": level == "online", "level": level, "text": text, "age_ms": last_age,
+                "heard_recently": last_age is not None and last_age <= ROBOT_OFFLINE_MS,
+                "status": None if status is None else
+                {"online": status["online"], "retained": status["retained"],
+                 "age_ms": int(now - status["rx"])}}
 
     def _state_problem(self, now):
         """Return why robot/state is not usable for a gated button, or an empty string."""
@@ -235,8 +281,12 @@ class DashboardModel:
             result = {"enabled": False, "reason": "", "needs_confirm": command in CONFIRM_COMMANDS}
             if command == "estop":
                 result["enabled"] = True
+                link = self.robot_status(now)["level"]
                 if not self.broker_connected:
                     result["reason"] = "broker not connected: ESTOP cannot be sent now"
+                elif link in ("offline", "silent"):
+                    result["reason"] = ("robot is not reachable: ESTOP delivery is unlikely. "
+                                        "Use GP21.")
                 return result
             reason = self._gate_reason(command, now)
             result["enabled"] = reason == ""
@@ -250,6 +300,13 @@ class DashboardModel:
             return "broker not connected"
         if not self.token_configured:
             return "no token file: only ESTOP is available"
+        robot = self.robot_status(now)
+        if robot["level"] == "offline":
+            return "robot is offline"
+        if robot["level"] == "silent":
+            return "robot is silent (no state data)"
+        if robot["level"] == "unknown" and not robot["heard_recently"]:
+            return "no recent robot data"
         if self._pending_open(now):
             return "waiting for the robot decision on the previous command"
         if command == "dump":
@@ -366,7 +423,14 @@ def wheels_panel(model, now):
              f"{fields['kr1_measured_l']} / {fields['kr1_measured_r']} mm/s"),
             ("Encoder counts left / right", f"{fields['count_l']} / {fields['count_r']}"),
             ("Servo", f"{fields['kr1_servo_deg']} deg")]
-    return make_panel("wheels", "Wheels", model.state_age(now, "motion_age_ms"), rows=rows)
+    if "dist_avg_mm" in fields:
+        rows.insert(3, ("Distance left / right / average",
+                        f"{fields['dist_left_mm']} / {fields['dist_right_mm']} / "
+                        f"{fields['dist_avg_mm']} mm"))
+    else:
+        rows.insert(3, ("Distance left / right / average", "not reported (old state v1)"))
+    return make_panel("wheels", "Wheels", model.state_age(now, "motion_age_ms"), rows=rows,
+                      note="distance: signed mm since robot boot, forward is positive")
 
 
 @register_panel
@@ -380,6 +444,46 @@ def ultrasonic_panel(model, now):
             ("Pending request", "yes" if fields["pending"] else "no")]
     return make_panel("ultrasonic", "Ultrasonic", model.record_age(now, model.sonar), rows=rows,
                       chart={"type": "profile", "points": points, "max_mm": 511})
+
+
+def _clear_text(deg, step):
+    return "blocked" if deg == robot_wire.BLOCKED_CLEAR_DEG else f"{deg} deg ({step} steps free)"
+
+
+def _closest_text(fields):
+    if fields["too_near"]:
+        return "too near (below sensor range)"
+    if not fields["closest_valid"] or fields["closest_mm"] == robot_wire.NO_CLOSEST_MM:
+        return "none seen"
+    angle = fields["closest_angle_deg"]
+    side = "ahead" if angle == 0 else ("left" if angle > 0 else "right")
+    return f"{fields['closest_mm']} mm at {angle} deg ({side})"
+
+
+@register_panel
+def obstacle_panel(model, now):
+    if model.obstacle is None:
+        return make_panel("obstacle", "Obstacle profile", None, stale_ms=None,
+                          note="no completed scan yet")
+    fields = model.obstacle["fields"]
+    rows = [("Closest", _closest_text(fields)),
+            ("Right clearance", _clear_text(fields["right_clear_deg"],
+                                            fields["right_free_step"])),
+            ("Left clearance", _clear_text(fields["left_clear_deg"], fields["left_free_step"])),
+            ("Detour decision", _name(OBSTACLE_DECISION_TEXT, fields["decision"])),
+            ("Scan ID", fields["scan_id"]),
+            ("Scans missed (ID gaps)", model.obstacle_missed),
+            ("Profile word", f"0x{fields['profile_word']:04x}")]
+    points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
+              for angle, entry in sorted(model.sonar_profile.items())]
+    chart = {"type": "obstacle", "points": points, "max_mm": 511,
+             "closest": None if not fields["closest_valid"] else
+             {"angle": fields["closest_angle_deg"], "mm": fields["closest_mm"]},
+             "right_clear_deg": fields["right_clear_deg"],
+             "left_clear_deg": fields["left_clear_deg"], "decision": fields["decision"]}
+    return make_panel("obstacle", "Obstacle profile", model.record_age(now, model.obstacle),
+                      stale_ms=None, rows=rows, chart=chart,
+                      note="age = time since the scan finished; angle: right is negative")
 
 
 @register_panel
@@ -419,20 +523,35 @@ def health_panel(model, now):
                       stale_ms=HEARTBEAT_STALE_MS, rows=rows)
 
 
+def _reserved_text(model, name):
+    record = model.reserved[name]
+    if record is None:
+        return "not implemented yet"
+    fields = record["fields"]
+    return (f"data received (kind {fields['kind']}, {fields['length']} bytes); "
+            "decoder not implemented")
+
+
 @register_panel
 def barcode_panel(model, now):
-    if model.state is None:
-        return make_panel("barcode", "Barcode", None, note="waiting for robot/state")
-    rows = [("Raw GP28 sample", model.state["fields"]["raw_bc"]),
-            ("Decoded command", "not implemented yet")]
-    return make_panel("barcode", "Barcode", model.state_age(now), rows=rows)
+    rows = []
+    age = None
+    if model.state is not None:
+        rows.append(("Raw GP28 sample", model.state["fields"]["raw_bc"]))
+        age = model.state_age(now)
+    rows.append(("Decoded command", _reserved_text(model, "barcode")))
+    return make_panel("barcode", "Barcode", age, rows=rows,
+                      note="" if model.state else "waiting for robot/state")
 
 
 @register_panel
 def imu_panel(model, now):
-    del model, now
-    return make_panel("imu", "IMU", None, placeholder=True,
-                      note="placeholder: no IMU data on the wire yet")
+    record = model.reserved["imu"]
+    if record is None:
+        return make_panel("imu", "IMU", None, placeholder=True,
+                          note="not implemented: no data on robot/imu yet")
+    return make_panel("imu", "IMU", model.record_age(now, record),
+                      rows=[("Data", _reserved_text(model, "imu"))])
 
 
 @register_panel

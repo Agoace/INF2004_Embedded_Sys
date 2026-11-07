@@ -63,7 +63,7 @@ The top bar shows four status labels and the buttons.
 | Label | Meaning |
 | --- | --- |
 | broker | Green when the dashboard is connected to the broker. |
-| robot | Green when any robot message arrived in the last 3 s. |
+| robot | The robot link: **ONLINE** (green), **OFFLINE** (red), **silent** or **unknown** (amber). See [Robot link](#robot-link). |
 | row gaps | Live log rows that are missing: **lost** (QoS 0 frames that never arrived) plus **skipped** (rows the robot skipped on purpose to catch up). |
 | server | Green while the page receives updates from the dashboard server. |
 
@@ -75,23 +75,59 @@ the robot reports for that board.
 | --- | --- | --- |
 | Vehicle | `robot/state`, `robot/event` | State, module, running flag, motion faults, vehicle board status, last command and the robot decision. |
 | Line sensor | `robot/state` | Position, raw and normalised left and centre values, and a short position trend. |
-| Wheels | `robot/state` | Requested and measured wheel speed, encoder counts and servo angle. |
+| Wheels | `robot/state` | Requested and measured wheel speed, distance travelled (left, right, average, in mm), encoder counts and servo angle. |
 | Ultrasonic | `robot/sonar` | Latest distance (or the sensor error) and a bar chart of the latest result for each angle. |
+| Obstacle profile | `robot/obstacle`, `robot/sonar` | The result of each completed scan: closest distance and angle, right and left clearance, the detour decision, scan ID and missed scans. The chart shows the latest sonar result for each angle. Green bands mark the clear sectors. A ring marks the closest point. |
 | Events | `robot/event` | The last 50 events. Event gaps count missing event sequence numbers. This panel never turns grey. |
 | Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, minimum free stack, reset reason. It turns grey after 2.5 s. |
-| Barcode | `robot/state` | Raw GP28 sample. The decoded command is not implemented yet. |
-| IMU | none | Placeholder. |
+| Barcode | `robot/state`, `robot/barcode` | Raw GP28 sample. The decoded command shows `not implemented yet` until data arrives on the reserved topic. |
+| IMU | `robot/imu` | Placeholder that shows `not implemented` until data arrives on the reserved topic. |
 | RAM log stream | `robot/log` | Live rows, merged DUMP rows, lost and skipped rows, data age, rows behind. |
+
+**Wheel distance** is signed millimetres since the robot booted. Forward is
+positive. The average is `(left + right) / 2`, cut toward zero. It comes from
+`robot/state` version 2. An old version 1 message has no distance, and the panel
+says `not reported`.
+
+**Obstacle angles:** a negative angle is to the right. A positive angle is to the
+left. The decision is the side that the robot detours around. The decision
+`none` means that both sides are blocked. The robot cannot reverse, so the
+detour then fails. The robot does not send an obstacle width. The panel shows
+only angular clearance. A gap in the scan ID means that a scan result was not
+received. The panel counts these gaps. The age is the time since the scan
+finished. This panel never turns grey, because a scan is one point in time.
+
+The barcode and IMU topics are reserved. The robot firmware does not publish
+them yet. When a message with version 1 arrives, the panel shows its kind and
+length and says that the decoder is not implemented. A message with another
+version is ignored.
 
 A new panel needs only one builder function in `dashboard_model.py`. The page
 draws any panel that the server sends.
+
+## Robot link
+
+The robot publishes `robot/status` (2 bytes, QoS 1, retained). The robot also
+sets it as its MQTT last will. When the robot drops, the broker publishes
+`offline`. The broker needs about 7.5 s for this (1.5 times the 5 s keep-alive,
+plus up to 1 s).
+
+| Level | Rule |
+| --- | --- |
+| ONLINE | `robot/status` says online **and** `robot/state` arrived in the last 3 s. |
+| OFFLINE | `robot/status` says offline. A retained offline message shows at once. A red banner shows. |
+| silent | `robot/status` says online but `robot/state` stopped for more than 3 s. The link may be dying. A banner shows. |
+| unknown | No `robot/status` message yet. This is normal for older firmware. The older button rules apply, with a check that robot data is recent. |
+
+The dashboard forgets the status when its own broker link drops. The broker
+sends the retained status again after the reconnect.
 
 ## Buttons
 
 | Button | Enabled when | Confirm step |
 | --- | --- | --- |
-| ESTOP | Always. | No. One click sends it. |
-| DUMP | Broker connected, token file set, no command waiting for a decision, and no dump already running. DUMP may run while the robot drives. | No. |
+| ESTOP | Always. When the robot is OFFLINE or silent, a hint warns that delivery is unlikely. Use GP21. | No. One click sends it. |
+| DUMP | Broker connected, token file set, robot not OFFLINE and not silent, no command waiting for a decision, and no dump already running. DUMP may run while the robot drives. | No. |
 | START | Same as DUMP, and the state message is newer than 1 s, the vehicle board is fresh and not busy, and the robot is idle (state IDLE and not running). | Yes. |
 | CALIBRATE | Same as START. | Yes. |
 
@@ -154,8 +190,10 @@ ESTOP is never blocked.
 ## Data rules
 
 - The dashboard subscribes to `robot/state`, `robot/sonar`, `robot/event`,
-  `robot/heartbeat` and `robot/log`. It subscribes to `robot/log` with QoS 1.
-  A subscription limits the delivery QoS, and a DUMP refill batch is QoS 1.
+  `robot/heartbeat`, `robot/log`, `robot/obstacle`, `robot/status`,
+  `robot/barcode` and `robot/imu`. It subscribes to `robot/log`, `robot/status`
+  and `robot/barcode` with QoS 1. A subscription limits the delivery QoS, and a
+  DUMP refill batch and the status message are QoS 1.
 - The dashboard subscribes again after every broker reconnect.
 - A message with a wrong length, version or reserved bit is discarded. It
   does not change the panels. The count shows in the page data.
@@ -180,7 +218,8 @@ The tests use messages that the C code packs. They check these items:
 - Messages become panel data.
 - Stale data turns grey at the 1 s limit.
 - The row gap counter.
-- The button rules (idle, fresh, broker, token, waiting, dump active).
+- The button rules (idle, fresh, broker, token, waiting, dump active, robot offline or silent).
+- The wheel distance, the obstacle panel and its scan ID gaps, the reserved topics and the robot link levels.
 - The command bytes, and the confirm and gate checks.
 - The token never appears in a page, response, stream or log line.
 - Requests with a bad Origin, Host, CSRF value or content type are refused.

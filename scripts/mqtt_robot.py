@@ -13,7 +13,7 @@ from robot_wire import (COMMANDS, SIZES, LogStream, csv_fields, decode,  # noqa:
                         pack_command, read_token)
 
 CSV_FLUSH_SECONDS = 1.0
-SUBSCRIBE_QOS = {"log": 1}
+SUBSCRIBE_QOS = {"log": 1, "status": 1}
 
 
 class CsvSink:
@@ -71,7 +71,7 @@ def main(argv=None):
         if reason_code.is_failure:
             print("broker connection rejected", file=sys.stderr)
             return
-        # A subscription caps delivery QoS: robot/log needs QoS 1 for DUMP refill batches.
+        # A subscription caps delivery QoS: robot/log (DUMP refill) and robot/status are QoS 1.
         mqtt_client.subscribe([("robot/" + name, SUBSCRIBE_QOS.get(name, 0)) for name in SIZES])
         connected.set()
 
