@@ -179,6 +179,8 @@ EXPORT void knl_diag_attention(void)
 /*
  * Startup Device
  */
+#include "timer_tick.h"
+
 EXPORT void knl_startup_hw(void)
 {
 	const T_SETUP_REG	*p;
@@ -186,6 +188,13 @@ EXPORT void knl_startup_hw(void)
 
 	/* Startup System Clock */
 	startup_clock(CLKATR_USB | CLKATR_ADC | CLKATR_RTC | CLKATR_PREI);
+
+	/* clk_ref is now the 12 MHz XOSC. Establish 1 us TIMER ticks before
+	 * any device, kernel task or radio driver can read time_us_64().
+	 * Failure is terminal before drivers start, not an unbounded bit wait. */
+	if (!knl_startup_timer_tick()) {
+		for (;;) { /* no safe clock: fail closed before device startup */ }
+	}
 
 	for(INT i = 0; (rst = module_tbl[i]); i++) {
 		set_w(RESETS_RESET, rst);
