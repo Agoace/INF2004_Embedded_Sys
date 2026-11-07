@@ -100,6 +100,21 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
     return record->result;
 }
 void robot_network_state(rm_state_t *value) { assert(in_hook);*value=(rm_state_t){.flags=15u,.state=2u,.raw_bc=321u}; }
+/* Vehicle phase provider. Default: no vehicle consumer, so the older
+ * scenarios keep RUN rates. */
+static int vehicle_result = E_OBJ;
+static uint8_t vehicle_phase;
+static bool vehicle_active;
+int robot_network_vehicle_phase(uint8_t *phase, bool *active)
+{
+    assert(in_hook && !irq_off);
+    if (vehicle_result < 0) {
+        return vehicle_result;
+    }
+    *phase = vehicle_phase;
+    *active = vehicle_active;
+    return E_OK;
+}
 int robot_network_sonar(uint32_t *cursor,rm_sonar_t *value,uint32_t *missed) {
     assert(in_hook);++sonar_reads;*missed=sonar_missed;sonar_missed=0u;
     if (sonar_busy) return E_TMOUT;
@@ -537,6 +552,171 @@ static void test_log_disconnect(void) {
     assert(qos1==2u && last_topic("robot/log")!=NULL); /* BEGIN sent again */
     assert(acknowledge_all(ERR_OK)==2u || true);
 }
+static uint16_t mode_word(const publication_t *r)
+{
+    return (uint16_t)(r->data[70] | (r->data[71] << 8));
+}
+
+static bool heartbeat_idle(const publication_t *r)
+{
+    return (r->data[1] & RM_HEARTBEAT_FLAG_IDLE) != 0u;
+}
+
+/* Count publications of topic in [first, publication_count). */
+static unsigned int count_since(const char *topic, unsigned int first)
+{
+    unsigned int count = 0u;
+
+    for (unsigned int i = first; i < publication_count; ++i) {
+        if (strcmp(publications[i].topic, topic) == 0) {
+            ++count;
+        }
+    }
+    return count;
+}
+
+static void poll_range(uint32_t from, uint32_t to, uint32_t step)
+{
+    for (uint32_t t = from; t <= to; t += step) {
+        poll_at(t);
+    }
+}
+
+/* idle -> calibrate -> run -> stop -> grace -> idle, publication level. */
+static void test_idle_rates(void)
+{
+    publication_t *s;
+    publication_t *h;
+    publication_t *log;
+    unsigned int first;
+    unsigned int sonar_before;
+
+    vehicle_result = E_OK;
+    vehicle_phase = 0u;
+    vehicle_active = false;
+    start_connected();
+    s = last_topic("robot/state");
+    h = last_topic("robot/heartbeat");
+    assert(s && (s->data[0] == 5u) && (mode_word(s) == RM_STATE_MODE_IDLE));
+    assert(h && (h->data[0] == 4u) && heartbeat_idle(h));
+    ram_index.rows = 40u;
+    ram_index.newest_ms = 10u;
+    for (unsigned int i = 0u; i < 4u; ++i) {
+        sonar[sonar_head++] = (rm_sonar_t){.history_sequence = 1u + i,
+                                           .status = 1u};
+    }
+    events[event_head++] = (rm_event_t){.kind = 6u, .sequence = 1u};
+    last_summary = (rm_summary_t){.run_id = 1u};
+    summary_result = E_OK;
+    first = publication_count;
+    sonar_before = sonar_reads;
+    poll_range(10u, 10000u, 10u);
+    /* IDLE for 10 s: state 1 Hz, heartbeat every 5 s, no live log or sonar,
+     * events and the summary unchanged. */
+    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/heartbeat", first) == 2u);
+    assert(count_since("robot/log", first) == 0u);
+    assert(count_since("robot/sonar", first) == 0u);
+    assert((sonar_reads == sonar_before) && (sonar_tail == 0u));
+    assert(count_since("robot/event", first) == 1u);
+    assert(count_since("robot/summary", first) == 1u);
+    /* CALIBRATE: RUN at once; state and heartbeat are not delayed. */
+    vehicle_phase = 1u;
+    vehicle_active = true;
+    first = publication_count;
+    poll_at(10005u);
+    s = last_topic("robot/state");
+    h = last_topic("robot/heartbeat");
+    assert((count_since("robot/state", first) == 1u) && (mode_word(s) == 0u));
+    assert((count_since("robot/heartbeat", first) == 1u) &&
+           !heartbeat_idle(h));
+    assert(count_since("robot/sonar", first) == 2u); /* ring entries */
+    log = last_topic("robot/log");
+    assert(log && (log->data[3] == RM_LOG_FLAG_JUMPED));
+    assert(u32(log->data + 12) == 30u); /* jump to the newest 10 rows */
+    vehicle_phase = 3u;
+    first = publication_count;
+    poll_range(10010u, 12005u, 5u);
+    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/heartbeat", first) == 2u);
+    /* Stop: RUN rates continue for the 2 s grace, then IDLE. */
+    vehicle_phase = 0u;
+    vehicle_active = false;
+    poll_at(12010u);
+    first = publication_count;
+    poll_range(12015u, 14005u, 5u);
+    assert(mode_word(last_topic("robot/state")) == 0u);
+    assert(count_since("robot/state", first) == 10u);
+    poll_at(14010u);
+    first = publication_count;
+    poll_range(14015u, 24000u, 5u);
+    assert(mode_word(last_topic("robot/state")) == RM_STATE_MODE_IDLE);
+    assert(heartbeat_idle(last_topic("robot/heartbeat")));
+    assert(count_since("robot/state", first) <= 11u);
+    assert(count_since("robot/heartbeat", first) <= 3u);
+    assert(count_since("robot/log", first) == 0u);
+    assert(count_since("robot/sonar", first) == 0u);
+}
+
+/* A DUMP refill works while idle; the live stream stays paused. */
+static void test_idle_dump(void)
+{
+    bool end_seen = false;
+    rm_heartbeat_t value = {0};
+
+    vehicle_result = E_OK;
+    start_connected();
+    assert(robot_network_dump(700u) == E_OK);
+    for (unsigned int step = 0u; (step < 40u) && !end_seen; ++step) {
+        poll_at(100u + (step * 10u));
+        for (unsigned int i = 0u; i < publication_count; ++i) {
+            if (is_log_qos1(&publications[i]) &&
+                (publications[i].data[1] == RM_LOG_END)) {
+                end_seen = true;
+            }
+        }
+        (void)acknowledge_all(ERR_OK);
+    }
+    assert(end_seen);
+    for (unsigned int i = 0u; i < publication_count; ++i) {
+        assert(!((strcmp(publications[i].topic, "robot/log") == 0) &&
+                 (publications[i].qos == 0u)));
+    }
+    robot_network_metrics(&value);
+    assert((value.flags & 8u) == 0u); /* the dump finished */
+}
+
+/* TEST/BENCH (no vehicle consumer): RUN rates and RUN frames. */
+static void test_idle_no_vehicle(void)
+{
+    unsigned int first;
+
+    vehicle_result = E_OBJ;
+    start_connected();
+    first = publication_count;
+    ram_index.rows = 12u;
+    poll_range(1u, 2000u, 1u);
+    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/heartbeat", first) == 2u);
+    assert(count_since("robot/log", first) >= 1u);
+    assert(mode_word(last_topic("robot/state")) == 0u);
+    assert(!heartbeat_idle(last_topic("robot/heartbeat")));
+}
+
+/* A busy vehicle board keeps the last decision; it never forces RUN. */
+static void test_idle_busy(void)
+{
+    unsigned int first;
+
+    vehicle_result = E_OK;
+    start_connected();
+    vehicle_result = E_TMOUT;
+    first = publication_count;
+    poll_range(10u, 3000u, 10u);
+    assert(count_since("robot/state", first) == 3u);
+    assert(mode_word(last_topic("robot/state")) == RM_STATE_MODE_IDLE);
+}
+
 int main(int argc,char **argv) {
     assert(argc==1 || argc==2);
     if (!(argc==2 && !strcmp(argv[1],"unconfigured"))) assert(strcmp(ROBOT_MQTT_COMMAND_TOKEN_HEX,FIXTURE_TOKEN_HEX)==0);
@@ -557,6 +737,10 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"log_dump")) test_log_dump(false);
     else if (!strcmp(argv[1],"log_dump_ack_error")) test_log_dump(true);
     else if (!strcmp(argv[1],"log_disconnect")) test_log_disconnect();
+    else if (!strcmp(argv[1], "idle_rates")) test_idle_rates();
+    else if (!strcmp(argv[1], "idle_dump")) test_idle_dump();
+    else if (!strcmp(argv[1], "idle_no_vehicle")) test_idle_no_vehicle();
+    else if (!strcmp(argv[1], "idle_busy")) test_idle_busy();
     else assert(0);
     assert(hook_calls>0u && irq_off==0u && di_count==ei_count);return 0;
 }

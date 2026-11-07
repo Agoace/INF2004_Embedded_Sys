@@ -111,12 +111,13 @@ The top bar shows four status labels and the buttons.
 | --- | --- |
 | broker | Green when the dashboard is connected to the broker. |
 | robot | The robot link: **ONLINE** (green), **OFFLINE** (red), **silent** or **unknown** (amber). See [Robot link](#robot-link). |
+| telemetry | The robot publication mode: **telemetry full rate**, **idle, telemetry paused** (amber), or **mode unknown** for old firmware. It also shows the age of the newest state. See [Idle telemetry](#idle-telemetry). |
 | row gaps | Live log rows that are missing: **lost** (QoS 0 frames that never arrived) plus **skipped** (rows the robot skipped on purpose to catch up). |
 | server | Green while the page receives updates from the dashboard server. |
 
 Each panel shows its **data age** at the top right. A panel turns grey and
-shows `stale` when its data is older than 1 s. The age includes the age that
-the robot reports for that board.
+shows `stale` when its data is older than 1 s (2.5 s in idle telemetry). The
+age includes the age that the robot reports for that board.
 
 | Panel | Source | What it shows |
 | --- | --- | --- |
@@ -127,7 +128,7 @@ the robot reports for that board.
 | Ultrasonic | `robot/sonar` | Latest distance (or the sensor error) and a bar chart of the latest result for each angle. |
 | Obstacle profile and detours | `robot/obstacle`, `robot/sonar`, `robot/detour` | The result of each completed scan: closest distance and angle, right and left clearance, the decision, scan ID, scan stage and missed scans. The chart shows the latest sonar result for each angle. Green bands mark the clear sectors. A ring marks the closest point. Below the chart, one table row for each of the last 8 detours: side, outcome, duration, distance, maximum sideways offset and the scan that started it. |
 | Events | `robot/event` | The last 50 events. Event gaps count missing event sequence numbers. This panel never turns grey. |
-| Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, CPU load, minimum free stack, reset reason. It turns grey after 2.5 s. |
+| Health | `robot/heartbeat` | Wi-Fi poll gaps, loss and busy counters, CPU load, minimum free stack, reset reason. It turns grey after 2.5 s (12 s in idle telemetry). |
 | Barcode | `robot/state`, `robot/barcode` | Raw GP28 sample. Rows for detected, decoded, unreadable, decoded command, confidence (agreeing reads of all reads), direction, navigation command, result, and issued or executed. They show `not implemented yet` until data arrives on the reserved topic. |
 | IMU | `robot/imu` | Pitch, heading, turn rate, hump state, height, peak, collision, validity and the latest motion event. It is a placeholder until data arrives on the reserved topic. Values are raw: the units are not fixed yet. |
 | Run summary | `robot/summary` | The totals of the last finished run: stop source and reason, duration, distance, line losses, obstacles, detours, speed error, faults. Barcode and hump fields show `not implemented yet` until the robot sets the implemented flag. This panel never turns grey. |
@@ -205,13 +206,36 @@ plus up to 1 s).
 The dashboard forgets the status when its own broker link drops. The broker
 sends the retained status again after the reconnect.
 
+## Idle telemetry
+
+The robot firmware has two publication modes; see
+[Publication modes](MQTT_WIRE.md#publication-modes). In IDLE it sends state
+at 1 Hz and a heartbeat every 5 s, and it pauses the live log and sonar.
+
+| Item | Full rate (RUN or unknown) | Idle telemetry |
+| --- | --- | --- |
+| State panels stale after | 1 s | 2.5 s |
+| Health panel stale after | 2.5 s | 12 s |
+| START, CALIBRATE state age limit | 1 s | 2.5 s |
+| DUMP "already running" heartbeat limit | 2.5 s | 12 s |
+| Ultrasonic and RAM log panels | Normal age and stale rules | `idle (paused)` plus the data age; not grey |
+| Robot silent after | 3 s | 3 s |
+
+- The newest `robot/state` v5 or `robot/heartbeat` v4 message sets the mode.
+  Older firmware sends no mode, so the full-rate limits apply.
+- START and CALIBRATE still need ONLINE status, fresh state and an idle
+  vehicle. Only the age limit changes.
+- The silent limit stays at 3 s: three idle state messages must be missing.
+- The recorder (`mqtt_robot.py`) changes only in decoding. Its CSV has a
+  `telemetry_idle` column.
+
 ## Buttons
 
 | Button | Enabled when | Confirm step |
 | --- | --- | --- |
 | ESTOP | Always. When the robot is OFFLINE or silent, a hint warns that delivery is unlikely. Use GP21. | No. One click sends it. |
 | DUMP | Broker connected, token file set, robot not OFFLINE and not silent, no command waiting for a decision, and no dump already running. DUMP may run while the robot drives. | No. |
-| START | Same as DUMP, and the state message is newer than 1 s, the vehicle board is fresh and not busy, and the robot is idle (state IDLE and not running). | Yes. |
+| START | Same as DUMP, and the state message is newer than 1 s (2.5 s in idle telemetry), the vehicle board is fresh and not busy, and the robot is idle (state IDLE and not running). | Yes. |
 | CALIBRATE | Same as START. | Yes. |
 
 - A confirm step is two clicks. The first click arms the button for 4 s and
@@ -278,8 +302,9 @@ ESTOP is never blocked.
   subscribes to `robot/log`, `robot/status`, `robot/summary` and `robot/barcode`
   with QoS 1. A subscription limits the delivery QoS, and a DUMP refill batch,
   the status message and the summary are QoS 1.
-- The decoder accepts `robot/state` versions 1 to 4 (48, 60, 72 and 76 bytes)
-  and `robot/heartbeat` versions 1 to 3 (100, 100 and 108 bytes), so old captures
+- The decoder accepts `robot/state` versions 1 to 5 (48, 60, 72, 76 and 76
+  bytes) and `robot/heartbeat` versions 1 to 4 (100, 100, 108 and 108 bytes),
+  so old captures
   still decode. The firmware sends only the newest version.
 - The recorder (`scripts/mqtt_robot.py`) also subscribes to all these topics.
   Its CSV includes state, CPU load, detours, run summaries, barcode results,
@@ -354,7 +379,7 @@ ctest --test-dir /tmp/robot-host-tests -R test_mqtt_dashboard --output-on-failur
 The tests use messages that the C code packs. They check these items:
 
 - Messages become panel data.
-- Stale data turns grey at the 1 s limit.
+- Stale data turns grey at the 1 s limit (2.5 s in idle telemetry).
 - The row gap counter and boot-scoped gap refill.
 - Two boots with identical generation-2 rows both reach the CSV.
 - Legacy uptime rollback, uptime wrap, OFFLINE-to-ONLINE boundaries,

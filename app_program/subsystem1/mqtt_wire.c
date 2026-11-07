@@ -15,7 +15,7 @@
 #define WIRE_NORM_BITS                     10
 #define WIRE_KR1_BYTES                     16u
 #define WIRE_SUMMARY_FLAGS_MASK            255u
-#define WIRE_HEARTBEAT_FLAGS_MASK          63u
+#define WIRE_HEARTBEAT_FLAGS_MASK          127u
 #define WIRE_SONAR_STATUS_MASK             3u
 #define WIRE_SONAR_VALID_FLAG              4u
 #define WIRE_SONAR_PENDING_FLAG            8u
@@ -105,6 +105,7 @@ void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
         DUTY_RIGHT_PERMILLE_OFFSET = 62,
         HEADING_CDEG_OFFSET = 64,
         TURN_RATE_DDPS_OFFSET = 68,
+        MODE_OFFSET = 70,
     };
 
     memset(out, 0, RM_STATE_SIZE);
@@ -133,6 +134,7 @@ void rm_pack_state(uint8_t out[RM_STATE_SIZE], const rm_state_t *v)
     put16(out + DUTY_RIGHT_PERMILLE_OFFSET, (uint16_t)v->duty_right_permille);
     put32(out + HEADING_CDEG_OFFSET, (uint32_t)v->heading_cdeg);
     put16(out + TURN_RATE_DDPS_OFFSET, (uint16_t)v->turn_rate_ddps);
+    put16(out + MODE_OFFSET, (uint16_t)(v->mode & RM_STATE_MODE_IDLE));
     put32(out + RM_STATE_SIZE - sizeof(uint32_t), v->boot_id);
 }
 

@@ -56,6 +56,7 @@ canvas { width:100%; height:120px; background:#10131a; border-radius:4px; margin
   <strong>Robot dashboard</strong>
   <span id="broker" class="pill">broker ?</span>
   <span id="robot" class="pill">robot ?</span>
+  <span id="telemetry" class="pill">telemetry ?</span>
   <span id="gaps" class="pill">row gaps 0</span>
   <span id="server" class="pill">server ?</span>
   <div id="buttons">
@@ -197,8 +198,10 @@ function renderPanel(panel) {
   const node = panelNode(panel);
   node.classList.toggle("stale", panel.stale);
   text(node.querySelector(".title"), panel.title);
-  text(node.querySelector(".age"), panel.placeholder ? "placeholder" : fmtAge(panel.age_ms) +
-       (panel.stale && panel.age_ms !== null ? " - stale" : ""));
+  text(node.querySelector(".age"), panel.placeholder ? "placeholder"
+       : panel.paused ? "idle (paused)" + (panel.age_ms === null ? "" : ", data " +
+                                           fmtAge(panel.age_ms))
+       : fmtAge(panel.age_ms) + (panel.stale && panel.age_ms !== null ? " - stale" : ""));
   text(node.querySelector(".note"), panel.note);
   const table = node.querySelector("table.facts");
   table.replaceChildren();
@@ -245,6 +248,11 @@ function render(snapshot) {
     ? "ROBOT OFFLINE: the broker reports that the robot dropped. START, CALIBRATE and DUMP are " +
       "disabled. An ESTOP will probably not arrive: use GP21."
     : "ROBOT SILENT: no state data. START, CALIBRATE and DUMP are disabled. Use GP21 to stop.");
+  const tele = snapshot.telemetry;
+  const teleAge = tele.state_age_ms === null ? "" : ", state " + fmtAge(tele.state_age_ms);
+  pill("telemetry", tele.mode === "idle" ? "idle, telemetry paused" + teleAge
+       : tele.mode === "run" ? "telemetry full rate" + teleAge
+       : "telemetry mode unknown (old firmware)" + teleAge, tele.mode === "idle" ? "warn" : "");
   const gaps = snapshot.gaps;
   pill("gaps", "row gaps " + gaps.total + " (lost " + gaps.lost_rows + ", skipped " +
        gaps.jumped_rows + ")", gaps.total ? "warn" : "ok");

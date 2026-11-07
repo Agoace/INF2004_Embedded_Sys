@@ -4,8 +4,6 @@
 #include <stddef.h>
 
 /* Task timing and resource limits. */
-#define STATE_PERIOD_MS      200u
-#define HEARTBEAT_PERIOD_MS  1000u
 #define HEALTH_FRESH_MS      2500u
 #define WIFI_TASK_PRIORITY   20u
 #define ROUTINE_FRAME_BUDGET 4u
@@ -21,6 +19,7 @@
 #include "robot_health.h"
 #include "telemetry.h"
 #include "log_stream.h"
+#include "telemetry_mode.h"
 #include "robot_mqtt_config.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id.h"
@@ -76,6 +75,8 @@ static rm_detour_t pending_detour;
 static bool have_detour;
 static uint32_t summary_cursor;
 static uint32_t summary_retry_at;
+static pm_tracker_t mode_tracker;
+static pm_mode_t mode = PM_MODE_RUN;
 static bool status_pending;
 static uint32_t status_retry_at;
 static uint8_t will_payload[RM_STATUS_SIZE];
@@ -138,7 +139,48 @@ static void configure(void)
      * A valid configured token restricts EVERY command, including ESTOP. */
     commands_enabled = good && any != 0u;
     log_stream_init(boot_id_get());
+    pm_init(&mode_tracker);
     configured = true;
+}
+
+/*
+ * Provide the vehicle run phase for the publication mode. The default has
+ * no vehicle consumer, so TEST and BENCH images always publish at RUN rates.
+ */
+int __attribute__((weak)) robot_network_vehicle_phase(uint8_t *phase,
+                                                      bool *active)
+{
+    *phase = 0u;
+    *active = false;
+    return E_OBJ;
+}
+
+/*
+ * Update the publication mode from one bounded vehicle board read.
+ */
+static void update_mode(uint32_t now)
+{
+    uint8_t phase = 0u;
+    bool active = false;
+    const int er = robot_network_vehicle_phase(&phase, &active);
+    pm_board_t board = PM_BOARD_OK;
+
+    if ((er == E_OBJ) || (er == E_NOEXS)) {
+        board = PM_BOARD_NONE;
+    } else if (er < E_OK) {
+        board = PM_BOARD_BUSY;
+    } else {
+        /* Readable board: use the phase and the run flag. */
+    }
+    const pm_mode_t next = pm_update(&mode_tracker, board, phase, active, now);
+
+    if ((next == PM_MODE_RUN) && (mode == PM_MODE_IDLE)) {
+        /* Leave IDLE at once: the next state and heartbeat are not delayed
+         * by the long idle periods. */
+        state_at = now;
+        heartbeat_at = now;
+    }
+    mode = next;
 }
 
 /*
@@ -457,6 +499,7 @@ static int log_publish(const uint8_t *data, size_t length, uint8_t qos,
 static void service(uint32_t now)
 {
     unsigned int budget = ROUTINE_FRAME_BUDGET;
+    update_mode(now);
     service_status(now);
     service_summary(now);
     if (!subscribed && !subscribe_pending && due(now, subscribe_at)) {
@@ -473,11 +516,12 @@ static void service(uint32_t now)
         robot_network_state(&v);
         v.uptime_ms = drv_time_ms();
         v.sequence = ++state_sequence;
+        v.mode = (mode == PM_MODE_IDLE) ? RM_STATE_MODE_IDLE : 0u;
         uint8_t bytes[RM_STATE_SIZE];
         v.boot_id = boot_id_get();
         rm_pack_state(bytes, &v);
         (void)publish("robot/state", bytes, sizeof(bytes));
-        state_at = now + STATE_PERIOD_MS;
+        state_at = now + pm_state_period_ms(mode);
         --budget;
     }
     if (due(now, heartbeat_at)) {
@@ -502,10 +546,13 @@ static void service(uint32_t now)
             v.flags |= 32u;
         }
         robot_network_metrics(&v);
+        if (mode == PM_MODE_IDLE) {
+            v.flags |= RM_HEARTBEAT_FLAG_IDLE;
+        }
         uint8_t bytes[RM_HEARTBEAT_SIZE];
         rm_pack_heartbeat(bytes, &v);
         (void)publish("robot/heartbeat", bytes, sizeof(bytes));
-        heartbeat_at = now + HEARTBEAT_PERIOD_MS;
+        heartbeat_at = now + pm_heartbeat_period_ms(mode);
         --budget;
     }
     if (!have_event) {
@@ -547,7 +594,10 @@ static void service(uint32_t now)
         }
         --budget;
     }
-    for (unsigned int n = 0u; n < SONAR_FRAME_BUDGET && budget > 0u; ++n) {
+    /* IDLE: the sonar history ring keeps its entries; nothing is read. */
+    for (unsigned int n = 0u;
+         pm_streams_live(mode) && (n < SONAR_FRAME_BUDGET) && (budget > 0u);
+         ++n) {
         if (!have_sonar) {
             uint32_t missed = 0u;
             const int er =
@@ -572,8 +622,9 @@ static void service(uint32_t now)
         have_sonar = false;
         --budget;
     }
-    /* Own bounded budget: at most 1 live batch + 2 DUMP frames per poll. */
-    log_stream_service(log_publish);
+    /* Own bounded budget: at most 1 live batch + 2 DUMP frames per poll.
+     * IDLE stops only the live batches; a DUMP refill still runs. */
+    log_stream_service(log_publish, pm_streams_live(mode));
 }
 
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */

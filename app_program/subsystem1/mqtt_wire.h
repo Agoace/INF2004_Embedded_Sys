@@ -9,7 +9,9 @@
 #define RM_VERSION 1u
 /* Each observation topic has its own version; commands stay version 1. */
 #define RM_STATE_SIZE        76u
-#define RM_STATE_VERSION     4u
+#define RM_STATE_VERSION     5u
+/* robot/state v5 u16 at offset 70: bit 0 idle publication rates. */
+#define RM_STATE_MODE_IDLE   1u
 #define RM_STATE_V1_SIZE     48u
 #define RM_STATE_V2_SIZE     60u
 #define RM_SONAR_SIZE        36u
@@ -22,7 +24,9 @@
 #define RM_EVENT_VERSION     2u
 #define RM_EVENT_RECORD_SIZE 16u
 #define RM_HEARTBEAT_SIZE    108u
-#define RM_HEARTBEAT_VERSION 3u
+#define RM_HEARTBEAT_VERSION 4u
+/* robot/heartbeat v4 flags (byte 1) bit 6: idle publication rates. */
+#define RM_HEARTBEAT_FLAG_IDLE 64u
 #define RM_CPU_LOAD_UNKNOWN  65535u
 #define RM_DETOUR_SIZE       36u
 #define RM_DETOUR_VERSION    2u
@@ -77,6 +81,7 @@ typedef struct {
     int16_t duty_right_permille;
     int32_t heading_cdeg;
     int16_t turn_rate_ddps;
+    uint16_t mode; /* RM_STATE_MODE_*; other bits are packed as zero */
     uint32_t boot_id;
 } rm_state_t;
 

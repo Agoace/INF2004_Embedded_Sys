@@ -14,11 +14,13 @@ VERSION = 1
 SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
          "obstacle": 24, "status": 6, "detour": 36, "summary": 48,
          "barcode": 20, "imu": 12}
-# State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity.
-STATE_SIZES = {1: 48, 2: 60, 3: 72, 4: 76}
-HEARTBEAT_VERSIONS = (1, 2, 3)
+# State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity,
+# v5 adds the telemetry mode word (u16 at 70, bit 0 idle).
+STATE_SIZES = {1: 48, 2: 60, 3: 72, 4: 76, 5: 76}
+# Heartbeat v4 adds flags bit 6 telemetry_idle.
+HEARTBEAT_VERSIONS = (1, 2, 3, 4)
 TOPIC_SIZES = {
-    "state": STATE_SIZES, "heartbeat": {1: 100, 2: 100, 3: 108},
+    "state": STATE_SIZES, "heartbeat": {1: 100, 2: 100, 3: 108, 4: 108},
     "sonar": {1: 32, 2: 36}, "event": {1: 16, 2: 20},
     "obstacle": {1: 20, 2: 24}, "detour": {1: 32, 2: 36},
     "summary": {1: 44, 2: 48}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
@@ -45,7 +47,7 @@ COMMANDS = {"estop": 1, "dump": 2, "calibrate": 3, "start": 4}
 STATE_FLAGS = ("line_valid", "line_fresh", "motion_fresh", "vehicle_fresh",
                "line_busy", "motion_busy", "vehicle_busy", "active")
 HEARTBEAT_FLAGS = ("wifi_up", "mqtt_connected", "subscribed", "log_dump_active",
-                   "commands_enabled", "health_fresh")
+                   "commands_enabled", "health_fresh", "telemetry_idle")
 LOG_ROWS, LOG_EVENTS = 5, 6
 LOG_HEADER_SIZE, LOG_RECORD_SIZE, LOG_MAX_COUNT = 32, 16, 12
 LOG_FLAGS = ("refill", "new_generation", "jumped")
@@ -130,8 +132,11 @@ def decode(topic, data):
         if data[0] >= 2:
             result.update(dist_left_mm=_i32(data, 48), dist_right_mm=_i32(data, 52),
                           dist_avg_mm=_i32(data, 56))
+        mode_word = _u16(data, 70) if data[0] >= 3 else 0
+        _require((mode_word & (0xFFFE if data[0] >= 5 else 0xFFFF)) == 0,
+                 "state reserved word")
+        result["telemetry_idle"] = mode_word & 1
         if data[0] >= 3:
-            _require(_u16(data, 70) == 0, "state reserved word")
             result.update(duty_left_permille=_i16(data, 60), duty_right_permille=_i16(data, 62),
                           heading_cdeg=_i32(data, 64), turn_rate_ddps=_i16(data, 68))
     elif name == "obstacle":
@@ -166,7 +171,8 @@ def decode(topic, data):
                       detail=data[14], run_relative=data[15] & 1)
     elif name == "heartbeat":
         unavailable_mask = data[3] if data[0] >= 3 else 0
-        _require((data[1] & 0xC0) == 0 and _u16(data, 42) == 0 and
+        flags_reserved = 0x80 if data[0] >= 4 else 0xC0
+        _require((data[1] & flags_reserved) == 0 and _u16(data, 42) == 0 and
                  (data[3] & (0xE0 if data[0] >= 3 else 0xFF)) == 0 and
                  data[2] <= 2 and data[83] <= 3, "heartbeat reserved bits or enum")
         if data[0] >= 3:

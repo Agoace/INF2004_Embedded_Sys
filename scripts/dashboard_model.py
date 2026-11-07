@@ -12,6 +12,9 @@ import robot_wire
 
 STALE_MS = 1000  # data older than this is greyed out
 HEARTBEAT_STALE_MS = 2500  # the robot sends a heartbeat once per second
+# Idle telemetry mode (state v5 / heartbeat v4 bit set): state at 1 Hz, heartbeat every 5 s.
+IDLE_STALE_MS = 2500
+IDLE_HEARTBEAT_STALE_MS = 12000
 ROBOT_OFFLINE_MS = 3000  # no robot message at all for this long
 PENDING_TIMEOUT_MS = 5000  # wait this long for a robot decision on a command
 MISSING_AGE_MS = 65535  # robot value for a board with no data
@@ -70,9 +73,15 @@ def register_panel(builder):
 
 
 def make_panel(panel_id, title, age_ms, stale_ms=STALE_MS, rows=None, chart=None,
-               items=None, note="", placeholder=False, table=None):
-    """Build one panel. age_ms None means no data yet; stale_ms None means never stale."""
-    if placeholder:
+               items=None, note="", placeholder=False, table=None, paused=False):
+    """Build one panel. age_ms None means no data yet; stale_ms None means never stale.
+
+    paused True: the robot does not publish this stream in idle telemetry mode, so the
+    panel is not stale; the page shows "idle (paused)" and the data age.
+    """
+    if paused:
+        stale = False
+    elif placeholder:
         stale = True
     elif age_ms is None:
         stale = True
@@ -81,7 +90,7 @@ def make_panel(panel_id, title, age_ms, stale_ms=STALE_MS, rows=None, chart=None
     return {"id": panel_id, "title": title, "age_ms": age_ms, "stale": stale,
             "rows": [{"label": label, "value": value} for label, value in (rows or [])],
             "chart": chart, "items": items or [], "note": note, "placeholder": placeholder,
-            "table": table}
+            "table": table, "paused": paused}
 
 
 def _name(table, value):
@@ -312,6 +321,33 @@ class DashboardModel:
             return None
         return min(int(now - record["rx"]) + extra, MISSING_AGE_MS)
 
+    def telemetry_mode(self):
+        """Return "idle", "run" or "unknown" from the newest frame that carries the mode bit.
+
+        robot/state v5 and robot/heartbeat v4 carry it. Older firmware: "unknown", and the
+        dashboard uses the run (full rate) limits.
+        """
+        newest = None
+        for record, version in ((self.state, 5), (self.heartbeat, 4)):
+            if record is not None and record["fields"]["version"] >= version and (
+                    newest is None or record["rx"] >= newest["rx"]):
+                newest = record
+        if newest is None:
+            return "unknown"
+        return "idle" if newest["fields"]["telemetry_idle"] else "run"
+
+    def limits(self):
+        """Freshness limits in ms for the current telemetry mode."""
+        if self.telemetry_mode() == "idle":
+            return {"state_stale_ms": IDLE_STALE_MS, "heartbeat_stale_ms": IDLE_HEARTBEAT_STALE_MS}
+        return {"state_stale_ms": STALE_MS, "heartbeat_stale_ms": HEARTBEAT_STALE_MS}
+
+    def telemetry(self, now):
+        mode = self.telemetry_mode()
+        return {"mode": mode, "paused": mode == "idle", **self.limits(),
+                "state_age_ms": self.record_age(now, self.state),
+                "heartbeat_age_ms": self.record_age(now, self.heartbeat)}
+
     def robot_status(self, now):
         """Return the robot link level: online, offline, silent or unknown.
 
@@ -344,8 +380,9 @@ class DashboardModel:
         if self.state is None:
             return "no state data from the robot"
         age = int(now - self.state["rx"])
-        if age > STALE_MS:
-            return f"robot state is {age} ms old"
+        limit = self.limits()["state_stale_ms"]
+        if age > limit:
+            return f"robot state is {age} ms old (limit {limit} ms)"
         fields = self.state["fields"]
         if fields["vehicle_busy"]:
             return "vehicle board read busy"
@@ -399,7 +436,8 @@ class DashboardModel:
             return "waiting for the robot decision on the previous command"
         if command == "dump":
             heartbeat = self.heartbeat
-            if (heartbeat is not None and now - heartbeat["rx"] <= HEARTBEAT_STALE_MS
+            if (heartbeat is not None
+                    and now - heartbeat["rx"] <= self.limits()["heartbeat_stale_ms"]
                     and heartbeat["fields"]["log_dump_active"]):
                 return "a RAM dump is already running"
             return ""
@@ -442,6 +480,7 @@ class DashboardModel:
                              "inferred": self.log.sessions.boot_id is None},
                     "broker": {"connected": self.broker_connected},
                     "robot": self.robot_status(now),
+                    "telemetry": self.telemetry(now),
                     "token_configured": self.token_configured,
                     "gaps": self.gap_counts(),
                     "discarded": self.discarded,
@@ -503,6 +542,7 @@ def vehicle_panel(model, now):
     decision = model.last_decision
     rows.append(("Last robot decision", "none" if decision is None else decision["text"]))
     return make_panel("vehicle", "Vehicle", age, rows=rows,
+                      stale_ms=model.limits()["state_stale_ms"],
                       note="" if model.state else "waiting for robot/state")
 
 
@@ -519,7 +559,7 @@ def line_panel(model, now):
     chart = {"type": "trend", "values": list(model.trend), "min": -128, "max": 127,
              "label": "line position"}
     return make_panel("line", "Line sensor", model.state_age(now, "line_age_ms"),
-                      rows=rows, chart=chart)
+                      stale_ms=model.limits()["state_stale_ms"], rows=rows, chart=chart)
 
 
 def _signed(value, scale, unit, digits=1):
@@ -549,6 +589,7 @@ def wheels_panel(model, now):
     rows += [("Encoder counts left / right", f"{fields['count_l']} / {fields['count_r']}"),
              ("Servo", f"{fields['kr1_servo_deg']} deg")]
     return make_panel("wheels", "Wheels", model.state_age(now, "motion_age_ms"), rows=rows,
+                      stale_ms=model.limits()["state_stale_ms"],
                       note="distance: signed mm since robot boot, forward is positive. "
                       "duty: forward is positive")
 
@@ -586,6 +627,7 @@ def odometry_panel(model, now):
     rows.append(("IMU turn rate (raw)", NOT_IMPLEMENTED if imu_fields is None
                  else imu_fields["turn_rate_raw"]))
     return make_panel("odometry", "Odometry (encoder-derived)", age, rows=rows, chart=chart,
+                      stale_ms=model.limits()["state_stale_ms"],
                       note="heading = (right - left counts) / 24.05 counts per degree; "
                       "origin is robot boot. IMU rows are for comparison later")
 
@@ -593,14 +635,16 @@ def odometry_panel(model, now):
 @register_panel
 def ultrasonic_panel(model, now):
     if model.sonar is None:
-        return make_panel("ultrasonic", "Ultrasonic", None, note="no sonar result yet")
+        return make_panel("ultrasonic", "Ultrasonic", None, note="no sonar result yet",
+                          paused=model.telemetry_mode() == "idle")
     fields = model.sonar["fields"]
     points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
               for angle, entry in sorted(model.sonar_profile.items())]
     rows = [("Latest", _sonar_distance(fields)), ("Angle", f"{fields['angle']} deg"),
             ("Pending request", "yes" if fields["pending"] else "no")]
     return make_panel("ultrasonic", "Ultrasonic", model.record_age(now, model.sonar), rows=rows,
-                      chart={"type": "profile", "points": points, "max_mm": 511})
+                      chart={"type": "profile", "points": points, "max_mm": 511},
+                      paused=model.telemetry_mode() == "idle")
 
 
 def _clear_text(deg, step):
@@ -698,7 +742,8 @@ def events_panel(model, now):
 @register_panel
 def health_panel(model, now):
     if model.heartbeat is None:
-        return make_panel("health", "Health", None, stale_ms=HEARTBEAT_STALE_MS,
+        return make_panel("health", "Health", None,
+                          stale_ms=model.limits()["heartbeat_stale_ms"],
                           note="waiting for robot/heartbeat")
     f = model.heartbeat["fields"]
     rows = [("Wi-Fi", "up" if f["wifi_up"] else "down"),
@@ -722,7 +767,7 @@ def health_panel(model, now):
             ("Restricted commands", "configured" if f["commands_enabled"] else "not configured"),
             ("Robot health age", f"{f['health_age_ms']} ms")]
     return make_panel("health", "Health", model.record_age(now, model.heartbeat),
-                      stale_ms=HEARTBEAT_STALE_MS, rows=rows)
+                      stale_ms=model.limits()["heartbeat_stale_ms"], rows=rows)
 
 
 def _yes_no(value):
@@ -843,7 +888,8 @@ def summary_panel(model, now):
         notes.append("this is the broker's retained copy: it may be from an earlier run")
     state = model.state
     if (scope == model.log.sessions.current and state is not None and
-            now - state["rx"] <= STALE_MS and state["fields"]["active"]):
+            now - state["rx"] <= model.limits()["state_stale_ms"]
+            and state["fields"]["active"]):
         notes.append("a new run is in progress: this summary is the previous run")
     return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
                       rows=rows, note="; ".join(notes))
@@ -869,4 +915,5 @@ def log_panel(model, now):
     items = [{"age_ms": None, "text": message} for message in reversed(model.log_messages)]
     return make_panel("log", "RAM log stream", age, rows=rows, items=items,
                       note=("" if last else "no live log rows yet; ") +
-                      "receive counts: current session; gaps and duplicates: all sessions")
+                      "receive counts: current session; gaps and duplicates: all sessions",
+                      paused=model.telemetry_mode() == "idle")

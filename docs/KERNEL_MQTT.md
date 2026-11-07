@@ -71,8 +71,16 @@ once from the existing lwIP arena. No SDK runtime or extra SDK source is
 added. `0.0.0.0` is a nonconnecting broker placeholder, not a discovery mode.
 
 Each hook makes at most four publish attempts, at most two sonar records,
-and at most one log attempt. State is due every 200 ms; heartbeat every
-1000 ms. There is no catch-up burst after a missed deadline. MQTT callbacks
+and at most one log attempt. In RUN, state is due every 200 ms and the
+heartbeat every 1000 ms. In IDLE, state is due every 1000 ms and the heartbeat
+every 5000 ms, and the hook publishes no live log batches and no sonar
+records. RUN covers vehicle work plus a 2 s grace; TEST and BENCH images
+always use RUN. The mode rule is pure
+([telemetry_mode.c](../app_program/subsystem1/telemetry_mode.c)); the hook
+reads it from one bounded vehicle-board read
+(`robot_network_vehicle_phase`). That read is not counted in the heartbeat
+busy or unavailable counters. See
+[Publication modes](MQTT_WIRE.md#publication-modes). There is no catch-up burst after a missed deadline. MQTT callbacks
 stage only a bounded 22-byte command, reject malformed fragments and
 count failures. No token is logged. lwIP copies publish bytes into its
 output buffer; stack-local packed arrays do not escape.
@@ -185,7 +193,9 @@ the skipped count. It never replays a backlog. A new run generation restarts
 at index 0 and reports old rows that were never published. QoS 0 means no
 head-of-line blocking: a slow or stalled broker cannot delay newer rows, and
 no ACK is awaited. A failed publish retries after 50 ms with the same cursor.
-At most one live batch is published per poll.
+At most one live batch is published per poll. In IDLE publication mode the live stream
+is paused; on return to RUN it jumps to the newest 10 rows and reports the
+skip. DUMP refill runs in both modes.
 
 The newest-row time comes from the telemetry task. It stores the uptime when it
 commits each row (`MQTT` builds only, one 32-bit store). Age is the time since

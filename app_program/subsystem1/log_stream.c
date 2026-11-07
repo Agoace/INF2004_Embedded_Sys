@@ -554,11 +554,18 @@ bool log_stream_dump_active(void)
 }
 
 /*
- * Service bounded live and refill batches through the supplied sink.
+ * Service bounded live and refill batches through the supplied sink. A
+ * paused live stream (IDLE mode) does no work; DUMP refill always runs.
  */
-void log_stream_service(log_stream_publish_fn publish)
+void log_stream_service(log_stream_publish_fn publish, bool live)
 {
-    live_service(publish);
+    if (live) {
+        live_service(publish);
+    } else {
+        /* Paused live stream: resume with a jump to the newest rows, so the
+         * first RUN batches are fresh and the skip is reported. */
+        s_live.jump_pending = true;
+    }
     dump_service(publish);
 }
 

@@ -175,5 +175,27 @@ int main(void) {
         assert(busy[ROBOT_BOARD_VEHICLE]==before_busy);
         assert(unavailable_reads[ROBOT_BOARD_VEHICLE]==before_absent+2u);
     }
+    /* Publication-mode provider: one read, no busy or unavailable counts. */
+    {
+        const unsigned int before_busy = busy[ROBOT_BOARD_VEHICLE];
+        const unsigned int before_absent =
+            unavailable_reads[ROBOT_BOARD_VEHICLE];
+        const unsigned int before_reads = reads[3];
+        uint8_t phase = 9u;
+        bool active = false;
+
+        vehicle_error = E_OK;
+        vehicle_value.phase = 3u;
+        vehicle_value.active = true;
+        assert(robot_network_vehicle_phase(&phase, &active) == E_OK);
+        assert((phase == 3u) && active && (reads[3] == before_reads + 1u));
+        vehicle_error = E_TMOUT;
+        assert(robot_network_vehicle_phase(&phase, &active) == E_TMOUT);
+        vehicle_error = E_OBJ;
+        assert(robot_network_vehicle_phase(&phase, &active) == E_OBJ);
+        assert((phase == 3u) && active); /* unchanged on error */
+        assert(busy[ROBOT_BOARD_VEHICLE] == before_busy);
+        assert(unavailable_reads[ROBOT_BOARD_VEHICLE] == before_absent);
+    }
     return 0;
 }

@@ -21,6 +21,7 @@ from unittest import mock
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO / "scripts"))
 import dashboard_model as model_module  # noqa: E402
+import dashboard_page  # noqa: E402
 import mqtt_dashboard as dashboard  # noqa: E402
 import robot_wire  # noqa: E402
 
@@ -605,7 +606,7 @@ class CPackedNewTopicTests(ModelCase):
 
     def test_c_packed_state_is_v2_with_distance_fields(self):
         self.assertIn((len(SAMPLES["state_idle"]), SAMPLES["state_idle"][0]),
-                      ((60, 2), (72, 3), (76, 4)))
+                      ((60, 2), (72, 3), (76, 4), (76, 5)))
         self.feed("state_idle")
         self.assertEqual(self.rows("wheels")["Distance left / right / average"], "0 / 0 / 0 mm")
         self.assertTrue(self.button("start")["enabled"])
@@ -1778,6 +1779,97 @@ class DashboardRebootTests(ModelCase):
         self.model.ingest("robot/heartbeat", heartbeat_v(2))
         self.assertEqual(self.rows("health")["Unavailable boards (last explicit read)"],
                          "not reported (old heartbeat)")
+
+
+def idle_mode(frame, idle=True):
+    """Return a state v5 or heartbeat v4 copy of a C fixture with the idle bit set or clear."""
+    out = bytearray(frame)
+    if len(out) == 76:
+        out[0] = 5
+        struct.pack_into("<H", out, 70, 1 if idle else 0)
+    else:
+        out[0] = 4
+        out[1] = (out[1] | 0x40) if idle else (out[1] & 0x3F)
+    return bytes(out)
+
+
+class TelemetryModeTests(ModelCase):
+    def ingest(self, name, idle=True):
+        self.model.ingest(topic_for(name), idle_mode(SAMPLES[name], idle))
+
+    def test_old_firmware_uses_run_limits(self):
+        state, beat = bytearray(SAMPLES["state_idle"]), bytearray(SAMPLES["heartbeat"])
+        state[0], beat[0] = 4, 3  # state v4 and heartbeat v3 carry no mode bit
+        self.model.ingest("robot/state", bytes(state))
+        self.model.ingest("robot/heartbeat", bytes(beat))
+        telemetry = self.model.snapshot()["telemetry"]
+        self.assertEqual((telemetry["mode"], telemetry["state_stale_ms"]), ("unknown", 1000))
+        self.clock.advance(1500)
+        self.assertIn("ms old", self.button("start")["reason"])
+
+    def test_idle_limits_keep_start_enabled_and_pause_streams(self):
+        self.ingest("state_idle")
+        self.ingest("heartbeat")
+        self.clock.advance(2400)  # one missed 1 Hz idle state is not stale
+        snapshot = self.model.snapshot()
+        self.assertEqual(snapshot["telemetry"]["mode"], "idle")
+        self.assertEqual(snapshot["telemetry"]["state_age_ms"], 2400)
+        self.assertTrue(snapshot["buttons"]["start"]["enabled"])
+        self.assertTrue(snapshot["buttons"]["calibrate"]["enabled"])
+        self.assertFalse(self.panel("line")["stale"])
+        self.assertFalse(self.panel("health")["stale"])
+        for panel_id in ("ultrasonic", "log"):
+            panel = self.panel(panel_id)
+            self.assertTrue(panel["paused"])
+            self.assertFalse(panel["stale"])
+        self.clock.advance(200)  # 2600 ms: past the idle state limit
+        self.assertIn("limit 2500 ms", self.button("start")["reason"])
+        self.assertTrue(self.panel("line")["stale"])
+
+    def test_idle_heartbeat_limit(self):
+        self.ingest("heartbeat")
+        self.clock.advance(11900)
+        self.assertFalse(self.panel("health")["stale"])
+        self.clock.advance(200)
+        self.assertTrue(self.panel("health")["stale"])
+
+    def test_run_frame_restores_full_rate_limits(self):
+        self.ingest("state_idle")
+        self.clock.advance(100)
+        self.ingest("state_running", idle=False)
+        snapshot = self.model.snapshot()
+        self.assertEqual(snapshot["telemetry"]["mode"], "run")
+        self.assertFalse(self.panel("ultrasonic")["paused"])
+        self.clock.advance(1500)
+        self.assertTrue(self.panel("line")["stale"])
+
+    def test_newest_frame_decides(self):
+        self.ingest("state_idle")
+        self.clock.advance(50)
+        self.ingest("heartbeat", idle=False)
+        self.assertEqual(self.model.telemetry_mode(), "run")
+        self.clock.advance(50)
+        self.ingest("state_idle")
+        self.assertEqual(self.model.telemetry_mode(), "idle")
+
+    def test_offline_and_silent_gates_still_apply_in_idle(self):
+        self.ingest("state_idle")
+        self.clock.advance(3100)  # past ROBOT_OFFLINE_MS: about 3 missed idle states
+        self.assertEqual(self.model.snapshot()["robot"]["level"], "silent")
+        self.assertFalse(self.button("start")["enabled"])
+        self.assertTrue(self.button("estop")["enabled"])
+
+    def test_dump_gate_uses_idle_heartbeat_limit(self):
+        self.ingest("state_idle")
+        self.ingest("heartbeat_dump")
+        self.clock.advance(2000)
+        self.ingest("state_idle")
+        self.assertIn("already running", self.button("dump")["reason"])
+
+    def test_page_shows_the_paused_text(self):
+        html = dashboard_page.PAGE
+        self.assertIn("idle (paused)", html)
+        self.assertIn("idle, telemetry paused", html)
 
 
 if __name__ == "__main__":

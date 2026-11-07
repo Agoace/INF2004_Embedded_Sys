@@ -250,6 +250,23 @@ int robot_network_summary(uint32_t *cursor, rm_summary_t *out)
 }
 
 /*
+ * Report the vehicle run phase for the MQTT publication mode. One bounded
+ * board read: E_TMOUT busy, E_OBJ no vehicle consumer (TEST, BENCH).
+ */
+int robot_network_vehicle_phase(uint8_t *phase, bool *active)
+{
+    vehicle_snapshot_t vehicle;
+    const int result = vehicle_snapshot_try_read(&vehicle);
+
+    if (result < E_OK) {
+        return result;
+    }
+    *phase = vehicle.phase;
+    *active = vehicle.active;
+    return E_OK;
+}
+
+/*
  * Collect motion and vehicle health from bounded public-board reads.
  */
 void robot_health_collect(rm_heartbeat_t *out)
