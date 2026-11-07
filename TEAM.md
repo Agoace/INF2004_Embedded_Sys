@@ -7,7 +7,7 @@
 | 1 | Telemetry RAM log, MQTT Wi-Fi-task publication, health31 and laptop protocol | `app_program/subsystem1/` |
 | 2 | Motion: motors, servo, encoders and exclusive floor bench | `app_program/subsystem2/` |
 | 3 | Line acquisition/filter/calibration snapshot and sampled-only barcode raw | `app_program/subsystem3/` |
-| 4 | IMU, not yet ported | `app_program/subsystem4/` |
+| 4 | TEST-only GY-511 raw probe; no robot integration | `app_program/subsystem4/` |
 | 5 | Ultrasonic request/echo service and pure obstacle modules | `app_program/subsystem5/` |
 
 The template demos are removed. GP19 is free. Keep subsystem init/start
@@ -28,7 +28,7 @@ team agreement. STEP 7 keeps pure modules/settings unchanged.
 | GP28 | S3 | Barcode analog ADC2, sampled only; VBAT jumper open |
 | GP2 / GP3 | S5 | Ultrasonic echo / trigger |
 | GP23 / GP24 / GP25 / GP29 | Reserved | Pico W radio |
-| GP0 / GP1 | Console when enabled | UART0 TX / RX; CRASH_REPORT=1 or CONSOLE=uart |
+| GP0 / GP1 | S4 TEST | I2C0 SDA / SCL, GY-511; requires USB only, CRASH_REPORT=0. Disconnect IMU before a UART demo. |
 | GP19 | Unclaimed | Old LED demo removed |
 
 ## 3. Tasks and peripherals
@@ -81,7 +81,9 @@ existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/KERNEL_MQ
 Robot uses five application tasks, three inherited mutexes, two cyclic
 handlers, two message buffers (256/4096 bytes) and one result event flag.
 TEST starts four service/motion tasks, neither button task; BENCH starts
-only motion/bench. S4 creates no objects. Existing kernel limits suffice.
+only motion/bench. S4 TEST creates one temporary 10 ms cyclic for its 30 s
+raw IMU check, then deletes it; no robot task or object is added.
+Existing kernel limits suffice. See [IMU bring-up](docs/IMU_BRINGUP.md).
 MQTT adds a health task/cyclic and three bounded event/command MBFs.
 Approved shared template changes are listed in [the ledger](docs/TEMPLATE_CHANGES.md).
 Every task loops forever or exits through

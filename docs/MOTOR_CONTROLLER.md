@@ -472,6 +472,7 @@ src/rp2_common/hardware_base/include
 src/rp2_common/hardware_gpio/include
 src/rp2_common/hardware_pwm/include
 src/rp2_common/hardware_adc/include
+src/rp2_common/hardware_i2c/include
 src/rp2_common/hardware_timer/include
 src/rp2_common/hardware_ticks/include
 src/rp2_common/hardware_watchdog/include
@@ -493,7 +494,9 @@ uses it as well as the retained SDK link proof. Source added for
 `WIFI=none`: `src/rp2_common/hardware_gpio/gpio.c`. For `WIFI=cyw43` the
 fragment reuses the template's existing `mtkernel_3/cyw43/gpio.o`, not a
 duplicate copy. No PWM/resets .c files exist: the selected APIs are inline.
-Timer and clocks .c files are not added. Source added:
+Timer, clocks and I2C .c files are not added. The TEST-only
+[IMU adapter](IMU_BRINGUP.md) uses I2C0 registers and adds the hardware_i2c
+header path; TEST links newlib libm for static pitch/roll. Source added:
 `src/rp2_common/hardware_ticks/ticks.c`; its RP2040 `tick_start()` only
 writes the tick register and needs no SDK runtime. Also added:
 `src/rp2_common/hardware_watchdog/watchdog.c`; only its runtime-free

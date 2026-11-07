@@ -173,6 +173,17 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
+## TEST-only IMU acquisition
+
+- [GY-511 bring-up](IMU_BRINGUP.md) — steps 0/1, existing UART-off build settings, units, source credit and pending operator tilt/timing checks.
+- [IMU step 1 validation](IMU_STEP1_VALIDATION.md) — strict host/ARM, six-profile sizes, startup/UART disassembly proof, no hardware result.
+- [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
+- [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.
+- [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, signed-permutation mounting table and static pitch/roll.
+- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — TEST runner, 10 ms cyclic and 100 ms USB diagnostics for 30 s.
+- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict host decode/protocol and hardware register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs/) supplies SDK doubles.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — S4-U01 tilt/absent-sensor/timing and S4-U02 cold-power checks, Not run.
+
 ## Kernel ultrasonic acquisition
 
 - [`app_program/subsystem5/drv_ultrasonic.c`](../app_program/subsystem5/drv_ultrasonic.c) — core-0 echo state machine with GPIO13 edge dispatch and TIMER timestamps; SDK-only `drv_ultrasonic_hw.c` drives GP3.
