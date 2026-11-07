@@ -24,5 +24,8 @@ typedef struct {
 int32_t cyw43_utk_start(void);
 void cyw43_utk_get_status(T_CYW43_UTK_STATUS *status);
 void cyw43_utk_task(int32_t stacd, void *exinf);
+/* TM_MQTT only: Wi-Fi task context, after sys_check_timeouts(), link UP.
+ * Only this task may call lwIP. An application may override the weak demo. */
+void cyw43_utk_app_poll(void);
 
 #endif
