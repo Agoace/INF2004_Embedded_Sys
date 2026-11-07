@@ -1,5 +1,20 @@
 # Motion timing investigation — STEP 8 follow-up
 
+## Measured result — 2026-11-07
+
+The operator ran the DIAG=1 capture. Run, MQTT ESTOP and the first GP20 dump
+showed no late tick (gap 9896..10085 us). The second GP20 reported 18
+observations, all marked as USB-dump phase `0x10000`. Worst gap 14467 us:
+release interval 9995 us (cyclic on time), dispatch delay 4488 us, mutex
+wait 15 us. Thus the delay is between the cyclic wake and motion task entry,
+while the USB task drains the dump. See the
+[hardware record](MTK3_STEP8_HARDWARE_RESULTS.md#diag1-motion-timing-capture--2026-11-07).
+The approved fix lowers the USB console task below every driving task:
+the USB console priority change in the [template ledger](TEMPLATE_CHANGES.md). Repeat the same capture with
+the fixed DIAG=1 image to prove the dispatch delay is gone.
+
+The sections below are the original pre-capture analysis.
+
 ## Evidence and conclusion
 
 The operator reported a lifetime start-gap range of 9916..10087 us on the
