@@ -20,13 +20,10 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) — one time-base owner; original bare-metal interrupt contract.
 - [ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) — one actuator owner and value-based interfaces.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
-- [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — module/integration branches, merge rules, template layout and archive tags.
-- [CONTROL_ARCHITECTURE.md](architecture/CONTROL_ARCHITECTURE.md) — earlier workload and core-split proposal; not the current scheduler contract.
-- [INTERRUPT_CONVENTIONS.md](architecture/INTERRUPT_CONVENTIONS.md) — event, time and polling ownership rules.
-- [robo_pico_rtos_multicore_plan.md](architecture/robo_pico_rtos_multicore_plan.md) — task/core design proposal and port comparison.
+- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
+- [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
-- [VEHICLE_STATE_MACHINE.md](architecture/VEHICLE_STATE_MACHINE.md) — shared shell, route table, outcomes and safety stop.
-- [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — our cross-subsystem CR1 interpretation, widths and open measurements.
+- [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
 ## Kernel
 
@@ -94,6 +91,14 @@ not current acceptance reports. Local course originals are not public records.
 - [TELEMETRY_SCHEMA.md](archive/TELEMETRY_SCHEMA.md) — older instrument JSON contract; not the current MQTT wire format.
 - [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
 - [WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) — earlier UDP bench dashboard, replaced by the MQTT dashboard.
+
+### Architecture history
+
+- [architecture/BRANCH_LAYOUT.md](archive/architecture/BRANCH_LAYOUT.md) — full source record; only links/paths adjusted.
+- [architecture/INTERRUPT_CONVENTIONS.md](archive/architecture/INTERRUPT_CONVENTIONS.md) — full source record; only links/paths adjusted.
+- [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
+- [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
+- [architecture/robo_pico_rtos_multicore_plan.md](archive/architecture/robo_pico_rtos_multicore_plan.md) — full source record; only links/paths adjusted.
 
 ## Original-template reference exceptions
 

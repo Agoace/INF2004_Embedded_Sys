@@ -42,9 +42,9 @@ ultrasonic_service()  (any time later; never waits)
 ```
 
 - The interrupt only records a timer value and changes the phase. This follows
-  the [interrupt conventions](../architecture/INTERRUPT_CONVENTIONS.md#event-driven-work).
+  the [interrupt conventions](../archive/architecture/INTERRUPT_CONVENTIONS.md#event-driven-work).
 - Timeouts are found by polling, because a missing edge produces no interrupt.
-  This is the [no-event polling](../architecture/INTERRUPT_CONVENTIONS.md#polling-for-no-event)
+  This is the [no-event polling](../archive/architecture/INTERRUPT_CONVENTIONS.md#polling-for-no-event)
   pattern.
 - The edge times come from the interrupt. A late `ultrasonic_service()` call
   does not change the measured distance.

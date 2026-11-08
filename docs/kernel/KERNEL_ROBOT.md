@@ -92,7 +92,7 @@ sample or statistics copy; no cross-core synchronization is claimed.
 The ISR now averages eight conversions each on L/ADC1, C/ADC0 and barcode/
 ADC2 in that order, about 48 us of conversion time before software overhead.
 Actual duration must be measured. The GP28 wiring/bar constraints are in
-[Control architecture](../architecture/CONTROL_ARCHITECTURE.md); no barcode decoder or
+[Control architecture](../archive/architecture/CONTROL_ARCHITECTURE.md); no barcode decoder or
 Ziven files change. The template `adca` device stays unopened; ADC3/GP29 is
 never selected. CLK_ADC still uses the checked 48 MHz PLL_USB source.
 

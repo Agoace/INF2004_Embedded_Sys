@@ -14,7 +14,7 @@ solve them. Use it as input when the barcode work starts.
 | Barcode location | Beside the line, on the left | Operator |
 | Sensor location | Left front of the robot. It does not move | Operator |
 | Sensor height | About 5.5 mm or more above the floor, so that it does not touch the ramp | Operator |
-| Sensor output | Analog, GP28 (ADC2). See the [pin update](../architecture/CONTROL_ARCHITECTURE.md) | Operator |
+| Sensor output | Analog, GP28 (ADC2). See the [pin update](../archive/architecture/CONTROL_ARCHITECTURE.md) | Operator |
 | Narrowest bar | About 5 mm (large barcode), 2–3 mm (small barcode) | Operator |
 | Bar height | The sensor stays on the bars, also when the robot weaves | Operator |
 | Content | Probably 3 characters for each copy, for example `*A*` (start, letter, stop) | Operator, not sure |

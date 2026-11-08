@@ -2,7 +2,7 @@
 
 The first target in the new layers
 ([ADR: Vehicle Controller](../architecture/ADR_VEHICLE_CONTROLLER.md)): line tracing and
-line search as modules in the [shell](../architecture/VEHICLE_STATE_MACHINE.md), wheel
+line search as modules in the [shell](../architecture/ARCHITECTURE.md), wheel
 speeds through the [motor controller](../s2-motion/MOTOR_CONTROLLER.md). Branch:
 `yx-line-steer`. Status: run on the track (P5–P9); **stopped at the P7 settings** on 2026-11-04, see [End state](#end-state-2026-11-04).
 The goal of the first run (P5) is to compare with P4 of the

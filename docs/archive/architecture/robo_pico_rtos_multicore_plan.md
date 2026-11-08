@@ -437,7 +437,7 @@ The architecture is ready for integration when:
 - [Branch `yx-detour`](https://github.com/Agoace/INF2004_Embedded_Sys/tree/yx-detour)
 - [Vehicle State Machine implementation](https://github.com/Agoace/INF2004_Embedded_Sys/blob/yx-detour/app_program/vehicle/vehicle_sm.c)
 - [Current test firmware, `vc_line_test.c`](https://github.com/Agoace/INF2004_Embedded_Sys/blob/yx-detour/src/vc_line_test.c)
-- [Current integration test report, `VC_DETOUR_RUN.md`](../s5-obstacle/VC_DETOUR_RUN.md)
+- [Current integration test report, `VC_DETOUR_RUN.md`](../../s5-obstacle/VC_DETOUR_RUN.md)
 
 **Official platform/kernel documentation:**
 - [Raspberry Pi Pico / Pico W hardware overview](https://www.raspberrypi.com/documentation/microcontrollers/pico-series.html)
