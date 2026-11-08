@@ -24,6 +24,7 @@ static int motion_error;
 static int missed;
 static int wake_error;
 static bool sensor_ok = true;
+static bool sensor_empty;
 static bool stale_motion;
 static bool corrupt_read;
 static unsigned int create_calls;
@@ -53,6 +54,11 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now, imu_units_t *out)
     clock_us += 530u;
     probe->last_us = 530u;
     probe->max_us = 530u;
+    probe->no_sample = sensor_empty;
+    probe->fifo_last_samples = 0u;
+    if (sensor_empty) {
+        return false;
+    }
     if (!sensor_ok) {
         ++probe->faults;
         ++probe->nacks;
@@ -64,6 +70,15 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now, imu_units_t *out)
     out->accel_mg[1] = 80;
     out->accel_mg[2] = 1375;
     out->mag_valid = true;
+    probe->fifo_last_samples = 4u;
+    for (unsigned int i = 0u; i < 4u; ++i) {
+        probe->fifo_raw[i][0] = -320;
+        probe->fifo_raw[i][1] = 1280;
+        probe->fifo_raw[i][2] = 22000;
+    }
+    for (unsigned int axis = 0u; axis < 3u; ++axis) {
+        probe->mean_accel_mg[axis] = (float)out->accel_mg[axis];
+    }
     return true;
 }
 
@@ -201,6 +216,59 @@ int main(int argc, char **argv)
     assert(imu_service_start() == E_OBJ);
     assert(imu_snapshot_try_read(&out) == E_TMOUT);
     assert(memcmp(&out, &saved, sizeof(out)) == 0);
+    if (argc > 1 && strcmp(argv[1], "fifo_empty") == 0) {
+        run(103u);
+        saved = read_snapshot();
+        sensor_empty = true;
+        const uint32_t mark = imu_request_mark();
+
+        run(3u);
+        out = read_snapshot();
+        assert(out.timestamp_us == saved.timestamp_us);
+        assert(out.value.samples == saved.value.samples);
+        assert(out.marks != mark);
+        sensor_empty = false;
+        run(1u);
+        assert(read_snapshot().marks == mark);
+        return 0;
+    }
+#if APP_IMU_STREAM
+    if (argc > 1 && strcmp(argv[1], "capture") == 0) {
+        uint32_t samples, batches;
+        imu_capture_reason_t reason;
+        imu_capture_batch_t b;
+        int16_t raw[IMU_FIFO_MAX_BATCH][3];
+
+        imu_capture_stop_request(); /* Idle stop cannot poison next arm. */
+        assert(imu_capture_request() && !imu_capture_request());
+        assert(!imu_capture_release());
+        run(200u);
+        assert(imu_capture_frozen(&samples, &batches, &reason));
+        assert(samples == 800u && batches == 200u);
+        assert(reason == IMU_CAPTURE_FULL && !imu_capture_request());
+        assert(imu_capture_batch_read(199u, &b, raw));
+        assert(b.first == 796u && b.count == 4u && raw[3][2] == 22000);
+        assert(!imu_capture_batch_read(200u, &b, raw));
+        assert(!imu_capture_frozen(NULL, &batches, &reason));
+        run(2u);
+        assert(imu_capture_release() && !imu_capture_release());
+        assert(imu_capture_request());
+        run(1u);
+        (void)imu_request_mark();
+        run(1u);
+        imu_capture_stop_request();
+        run(1u);
+        assert(imu_capture_frozen(&samples, &batches, &reason));
+        assert(samples == 8u && reason == IMU_CAPTURE_STOP);
+        assert(imu_capture_release() && imu_capture_request());
+        sensor_ok = false;
+        run(1u);
+        assert(imu_capture_frozen(&samples, &batches, &reason));
+        assert(samples == 0u && reason == IMU_CAPTURE_GAP);
+        assert(imu_capture_release());
+        return 0;
+    }
+#endif
     if (argc > 1 && strcmp(argv[1], "count_wrap") == 0) {
         counts[0] = INT32_MAX - 1;
         counts[1] = INT32_MAX - 1;

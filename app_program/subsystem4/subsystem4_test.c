@@ -92,6 +92,41 @@ static void report(const imu_snapshot_t *snapshot)
 static imu_drive_stats_t vibration;
 static uint32_t vibration_stamp;
 static bool have_vibration_stamp;
+static uint32_t dump_index;
+
+/* One immutable batch per 20 ms wake, only AFTER a confirmed drive stop.
+ * A new drive pauses dumping and cannot overwrite the pending capture. */
+static void capture_dump_tick(void)
+{
+    uint32_t samples;
+    uint32_t batches;
+    imu_capture_reason_t reason;
+    imu_capture_batch_t batch;
+    int16_t raw[IMU_FIFO_MAX_BATCH][3];
+
+    if (!imu_capture_frozen(&samples, &batches, &reason)) {
+        return;
+    }
+    if (dump_index < batches &&
+        imu_capture_batch_read(dump_index, &batch, raw)) {
+        tm_printf((UB *)"[S4_RAW_BATCH] batch %lu first %lu n %lu t_us %lu\n",
+                  (unsigned long)dump_index, (unsigned long)batch.first,
+                  (unsigned long)batch.count,
+                  (unsigned long)batch.timestamp_us);
+        for (uint32_t i = 0u; i < batch.count; ++i) {
+            tm_printf((UB *)"[S4_RAW] %lu %ld %ld %ld\n",
+                      (unsigned long)(batch.first + i), (long)raw[i][0],
+                      (long)raw[i][1], (long)raw[i][2]);
+        }
+        ++dump_index;
+    }
+    if (dump_index == batches) {
+        tm_printf((UB *)"[S4_RAW_END] n %lu batches %lu reason %u odr 400\n",
+                  (unsigned long)samples, (unsigned long)batches,
+                  (unsigned int)reason);
+        (void)imu_capture_release();
+    }
+}
 
 static void vibration_report(void)
 {
@@ -135,6 +170,12 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
     if (!was_active && job->active) {
         imu_drive_stats_reset(&vibration);
         have_vibration_stamp = false;
+        if (imu_capture_request()) {
+            dump_index = 0u;
+            tm_printf((UB *)"[S4_RAW_ARM] 800 raw16 XYZ; dump AFTER stop\n");
+        } else {
+            tm_printf((UB *)"[S4_RAW] disabled/busy; drive unaffected\n");
+        }
     }
     if ((was_active || job->active) && observed && s->value.valid &&
         (!have_vibration_stamp || vibration_stamp != s->timestamp_us)) {
@@ -163,6 +204,7 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
         print_mm("travel_mm", job->distance_mm);
         tm_printf((UB *)"\n");
         if (was_active && !job->active) {
+            imu_capture_stop_request();
             vibration_report();
         }
     }
@@ -176,16 +218,26 @@ static void diagnostics(const imu_snapshot_t *s)
 #if APP_IMU_STREAM
     vibration_report();
 #endif
-    tm_printf((UB *)"[S4_INT1] ctrl3 %02x before %u after %u "
-              "checks %lu matches %lu mismatches %lu high %lu low %lu\n",
-              (unsigned int)s->probe.ctrl3,
-              (unsigned int)s->probe.int1_before,
-              (unsigned int)s->probe.int1_after,
-              (unsigned long)s->probe.int1_checks,
-              (unsigned long)s->probe.int1_matches,
-              (unsigned long)s->probe.int1_mismatches,
-              (unsigned long)s->probe.int1_before_high,
-              (unsigned long)s->probe.int1_after_low);
+    tm_printf((UB *)"[S4_FIFO] ctrl1 %02x ctrl5 %02x fifo_ctrl %02x "
+              "src %02x n %u polls %lu batches %lu samples %lu min %lu "
+              "max %lu empty %lu overrun %lu backlog %lu bad %lu reset %lu",
+              (unsigned int)s->probe.ctrl1, (unsigned int)s->probe.ctrl5,
+              (unsigned int)s->probe.fifo_ctrl,
+              (unsigned int)s->probe.fifo_status,
+              s->probe.fifo_last_samples,
+              (unsigned long)s->probe.fifo_cycles,
+              (unsigned long)s->probe.fifo_batches,
+              (unsigned long)s->probe.fifo_samples,
+              (unsigned long)s->probe.fifo_min,
+              (unsigned long)s->probe.fifo_max,
+              (unsigned long)s->probe.fifo_empty,
+              (unsigned long)s->probe.fifo_overruns,
+              (unsigned long)s->probe.fifo_backlogs,
+              (unsigned long)s->probe.fifo_bad_status,
+              (unsigned long)s->probe.fifo_recoveries);
+    print_mm("mean_samples_per_poll", s->probe.fifo_cycles == 0u ? 0.0f :
+             (float)s->probe.fifo_samples / (float)s->probe.fifo_cycles);
+    tm_printf((UB *)"\n");
     tm_printf((UB *)"[S4_QUALITY] refresh_rejects %lu tilt_ddeg %ld "
               "peak_rejects %lu omega_mrad_s %ld alpha_mrad_s2 %ld\n",
               (unsigned long)v->refresh_rejects,
@@ -322,6 +374,9 @@ EXPORT void subsystem4_test(void)
             tm_printf((UB *)"[S4] MARK %lu\n", (unsigned long)printed_mark);
         }
         report(&snapshot);
+        if (!drive.active && !stop_pending) {
+            capture_dump_tick();
+        }
 #else
         if (cycle % 5u == 4u) {
             report(&snapshot);

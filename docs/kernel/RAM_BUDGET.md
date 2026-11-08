@@ -57,7 +57,7 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **4428 B**, including2048 B stack; step2c below |
+| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **4700 B** in MQTT, including 2048 B stack; step 2d below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
@@ -163,7 +163,7 @@ Step2b retains work/core/read last/max/total counters, includes checked
 phase replay, and adds only one roll sine (pitch sine is reused). New target
 work/stack/timing MUST be recorded after an approved run; **Not run** here.
 Do not project host throughput onto the Cortex-M0+. See
-[S4 evidence and pending checks](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
+[S4 evidence and pending checks](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
 
 ## IMU step 2c measured delta
 
@@ -193,7 +193,32 @@ exclusive core CPU use. It does not validate this changed math/snapshot.
 Step2c adds a roll sine, expected-pitch asin and bounded median, keeping
 work/core/read counters. Hardware timing, both stacks and flat/driven noise
 must be measured, not inferred from host throughput or step2b wall time.
-See [current checks](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
+See [current checks](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
+
+## IMU step 2d measured delta
+
+Same public example settings and toolchain as step 2c; no firmware flashed.
+
+| MQTT static RAM | Bytes | Delta |
+| --- | ---: | ---: |
+| Original b569adc baseline | 184784 | reference |
+| Step 2c 8c5d679 | 189212 | +4428 |
+| Step 2d: data 904 + bss 188580 | 189484 | **+4700 original; +272 step 2c** |
+
+The common growth is the probe state: FIFO counters, the 48 B raw batch
+and the float mean. The probe is held three times (probe, snapshot value
+and board copy); the snapshot is now 460 B. MQTT text grows 1164 B.
+The 7888 B raw capture exists ONLY in the IMU_STREAM image: its bss grows
+8176 B (capture plus the common 288 B). Other images keep no capture
+storage or code. The 2048 B IMU static stack is unchanged.
+
+Strict ARM local frames (`-fstack-usage`, IMU_STREAM): IMU `sample` 800 B
+(step 2c 784 B), `imu_probe_read` 128 B including the 48 B burst buffer,
+`imu_hw_read` 40 B; TEST observer `subsystem4_test` 776 B, snapshot read
+488 B. These are frames, not total stack bounds. Physical high-water,
+`work_us` and CPU are **Not run**. Estimated bus read is about 1.1 ms per
+10 ms at 4 samples, up to about 1.6 ms at 8, versus about 0.56 ms before;
+see [IMU step 2d](../s4-imu/IMU.md#read-path-and-the-2-ms-deadline).
 
 ## Steps if the RAM becomes too small
 

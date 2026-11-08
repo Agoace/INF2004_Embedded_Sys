@@ -195,7 +195,8 @@ the next plain `make` goes back to the defaults.
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
 
 Robot/TEST images now run the observe-only GY-511 task at 100 Hz, with no
-driving action or MQTT/KR1 IMU field. They require USB and `CRASH_REPORT=0`;
+driving action or MQTT/KR1 IMU field. Step 2d reads the 400 Hz sensor FIFO
+and feeds the mean of each 10 ms batch. They require USB and `CRASH_REPORT=0`;
 UART-conflict builds are rejected. BENCH has no IMU task. For the 50 Hz
 RIGHT-wheel roll-only stream (legacy full-model diagnostics retained),
 use `TEST=1 IMU_STREAM=1` with
@@ -203,7 +204,8 @@ use `TEST=1 IMU_STREAM=1` with
 resets peaks/integral/distance. GP21 optionally drives equal100 mm/s for
 600 mm or10 s; second press/fault stops. VIN is required: lift wheels and
 verify stopping FIRST. Boot level/still >=1 s; tilted refresh is guarded.
-See the [current IMU procedure](docs/s4-imu/IMU.md#step-2c-current-procedure).
+After a GP21 drive stops, IMU_STREAM dumps a 2 s raw 400 Hz capture.
+See the [current IMU procedure](docs/s4-imu/IMU.md#step-2d-current-procedure).
 Ordinary TEST retains the existing test order and destructive watchdog test.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call

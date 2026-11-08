@@ -2,6 +2,7 @@
 #ifndef IMU_PROBE_H
 #define IMU_PROBE_H
 #include "imu_decode.h"
+#include "imu_fifo.h"
 
 typedef struct {
     uint32_t reads;
@@ -19,13 +20,26 @@ typedef struct {
     uint8_t ctrl1;
     uint8_t ctrl3;
     uint8_t ctrl4;
-    uint32_t int1_checks;     /* Successful accel reads only, not IRQs. */
-    uint32_t int1_matches;    /* HIGH before, LOW immediately after. */
-    uint32_t int1_mismatches;
-    uint32_t int1_before_high;
-    uint32_t int1_after_low;
-    bool int1_before;
-    bool int1_after;
+    uint8_t ctrl5;
+    uint8_t fifo_ctrl;
+    uint8_t fifo_status;      /* Last FIFO_SRC_REG_A value. */
+    /* Ready read cycles; accepted batches/samples; min/max per accepted
+     * batch; EMPTY cycles; OVRN, count>8 and contradictory status cases;
+     * successful bypass->stream resets. */
+    uint32_t fifo_cycles;
+    uint32_t fifo_batches;
+    uint32_t fifo_samples;
+    uint32_t fifo_min;
+    uint32_t fifo_max;
+    uint32_t fifo_empty;
+    uint32_t fifo_overruns;
+    uint32_t fifo_backlogs;
+    uint32_t fifo_bad_status;
+    uint32_t fifo_recoveries;
+    unsigned int fifo_last_samples;
+    bool no_sample;          /* EMPTY, not an invalid/duplicate observation. */
+    float mean_accel_mg[3];  /* Mapped, fractional batch mean. */
+    int16_t fifo_raw[IMU_FIFO_MAX_BATCH][3]; /* Bus words, sensor axes. */
 } imu_probe_t;
 
 void imu_probe_init(imu_probe_t *probe);

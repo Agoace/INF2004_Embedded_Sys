@@ -43,13 +43,28 @@ bool imu_hw_drive_down(void)
     return !gpio_get(21u);
 }
 
-bool imu_hw_int1_high(void)
-{
-    return gpio_get(7u);
-}
-
 static uint32_t started;
 static uint32_t spins;
+static uint32_t cycle_started;
+static uint32_t cycle_spins;
+static bool cycle_active;
+
+void imu_hw_cycle_begin(void)
+{
+    cycle_started = imu_hw_time_us();
+    cycle_spins = 0u;
+    cycle_active = true;
+}
+
+int imu_hw_cycle_end(void)
+{
+    const bool expired_cycle = cycle_active &&
+        ((uint32_t)(imu_hw_time_us() - cycle_started) >= BUS_TIMEOUT_US ||
+         cycle_spins >= BUS_SPIN_LIMIT);
+
+    cycle_active = false;
+    return expired_cycle ? IMU_IO_TIMEOUT : IMU_IO_OK;
+}
 
 uint32_t imu_hw_time_us(void)
 {
@@ -65,6 +80,13 @@ static void begin_wait(void)
 static bool expired(void)
 {
     ++spins;
+    if (cycle_active) {
+        ++cycle_spins;
+        if ((uint32_t)(imu_hw_time_us() - cycle_started) >= BUS_TIMEOUT_US ||
+            cycle_spins >= BUS_SPIN_LIMIT) {
+            return true;
+        }
+    }
     return ((uint32_t)(imu_hw_time_us() - started) >= BUS_TIMEOUT_US) ||
            (spins >= BUS_SPIN_LIMIT);
 }
@@ -107,8 +129,9 @@ int imu_hw_init(void)
     gpio_set_function(SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(SDA_PIN);
     gpio_pull_up(SCL_PIN);
-    /* INT1 is push-pull/high-active; weak down exposes an unwired input.
-     * No edge detector, GPIO callback, IRQ or magnetometer DRDY ownership. */
+    /* GP7 (accel INT1) stays a pulled-down input. Step 2d routes no event
+     * to INT1 (CTRL_REG3_A=0) and nothing reads GP7. No edge detector,
+     * GPIO callback, IRQ or magnetometer DRDY ownership. */
     gpio_init(7u);
     gpio_set_dir(7u, GPIO_IN);
     gpio_pull_down(7u);
@@ -118,6 +141,9 @@ int imu_hw_init(void)
 static int select_device(uint8_t address)
 {
     begin_wait();
+    if (expired()) {
+        return IMU_IO_TIMEOUT;
+    }
     i2c0_hw->enable = 0u;
     while (i2c0_hw->enable_status != 0u) {
         if (expired()) {
@@ -163,31 +189,39 @@ int imu_hw_read(uint8_t address, uint8_t reg, uint8_t *out, size_t length)
 {
     int result;
 
-    if ((out == NULL) || (length == 0u) || (length > 6u)) {
+    if ((out == NULL) || (length == 0u) || (length > IMU_HW_MAX_READ)) {
         return IMU_IO_PARAM;
     }
     result = select_device(address);
     if (result != IMU_IO_OK) {
         return result;
     }
-    /* At most seven FIFO words (depth 16). Register pointer then repeated
-     * start to read; the last byte sends STOP. No IRQ or DMA is used. */
+    /* Keep at most 8 read commands in flight, below BOTH 16-word FIFOs.
+     * With the subaddress word, TX holds at most 9 words. Drain RX while
+     * queuing long bursts; never queue 48 commands at once. No IRQ/DMA. */
     i2c0_hw->data_cmd = reg;
-    for (size_t i = 0u; i < length; ++i) {
-        const uint32_t restart = (i == 0u) ? I2C_IC_DATA_CMD_RESTART_BITS : 0u;
-        const uint32_t stop = (i + 1u == length)
-                                  ? I2C_IC_DATA_CMD_STOP_BITS : 0u;
-        i2c0_hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS | restart | stop;
-    }
-    for (size_t i = 0u; i < length; ++i) {
-        while (i2c0_hw->rxflr == 0u) {
-            result = poll_error();
-            if (result != IMU_IO_OK) {
-                i2c0_hw->enable = 0u;
-                return result;
-            }
+    size_t queued = 0u;
+    size_t received = 0u;
+
+    while (received < length) {
+        if (queued < length && queued - received < 8u) {
+            const uint32_t restart = queued == 0u ?
+                                    I2C_IC_DATA_CMD_RESTART_BITS : 0u;
+            const uint32_t stop = queued + 1u == length ?
+                                 I2C_IC_DATA_CMD_STOP_BITS : 0u;
+
+            i2c0_hw->data_cmd = I2C_IC_DATA_CMD_CMD_BITS | restart | stop;
+            ++queued;
         }
-        out[i] = (uint8_t)i2c0_hw->data_cmd;
+        if (received < queued && i2c0_hw->rxflr != 0u) {
+            out[received] = (uint8_t)i2c0_hw->data_cmd;
+            ++received;
+        }
+        result = poll_error();
+        if (result != IMU_IO_OK) {
+            i2c0_hw->enable = 0u;
+            return result;
+        }
     }
     return finish();
 }

@@ -1,8 +1,11 @@
-# GY-511 IMU: roll-only observer, step 2c
+# GY-511 IMU: roll-only observer, step 2d FIFO input
 
 ## Current scope
 
-Step 2c extends `75ff329` (step 2b), originally based on `b569adc`. Robot and
+Step 2d extends `8c5d679` (step 2c), which extends `75ff329` (step 2b),
+originally based on `b569adc`. Step 2d changes ONLY the accelerometer input:
+400 Hz FIFO samples are averaged into each 10 ms observation. See
+[step 2d FIFO input](#step-2d-fifo-input). Robot and
 TEST run an IMU observer; BENCH does not. The observer has no motor commands,
 terrain states, height-detection thresholds, climb events, MQTT or KR1
 fields. It cannot change normal driving. The explicit exception is a
@@ -15,7 +18,10 @@ are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
 not merged. Its event system, terrain thresholds and minimum-height policy
 were not ported. The LSM303DLHC has no gyro; no gyro result is claimed.
 
-**Hardware step 2c is Not run.** Step 2b static RIGHT-wheel/lifted-drive
+**Hardware step 2d is Not run.** Step 2c hardware ran on `8c5d679`:
+driven hump peaks 16.8/13.1/12.4 mm over the 10 mm hump, so it is NOT a
+height PASS. See [step 2c results](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
+Step 2b static RIGHT-wheel/lifted-drive
 results are partial: distance/button stop PASS, driven height estimator
 unusable because pitch vibrates. The new-cable session had no resets;
 the cause of the earlier three resets is still unproven. Offline analysis
@@ -81,7 +87,7 @@ no heartbeat format or dedicated IMU telemetry field changes.
 | Setting | Value / meaning |
 | --- | --- |
 | Acquisition | 10 ms, priority14, physical core0; 2048-byte static registered stack |
-| Bus / units | Unchanged 400 kHz register polling, 100 Hz HR +/-2 g, 1 mg/LSB; mag still read each cycle |
+| Bus / units | 400 kHz register polling; step 2d: 400 Hz HR +/-2 g FIFO, mean of each 10 ms batch, 1 mg/LSB; mag still read each cycle |
 | Candidate duration | At least 1000 ms and 100 samples of continuous valid stationary input |
 | Quiet gate | Per-axis sample standard deviation <=20 mg; initial engineering value, not hardware-tuned |
 | Bias | Window mean minus `(0,0,1000)` mg, independently for all axes |
@@ -452,7 +458,7 @@ max for the next hardware run. A single20 mm raw spike becomes a2 mm mean
 peak and a1 mm median20 peak; this is smoothing, not perfect artifact veto.
 No fixture result establishes physical accuracy, and no fit corrects its bias.
 
-## Step 2c current procedure
+## Step 2c procedure at 8c5d679 (historical)
 
 1. Build IMU_STREAM as above. Boot LEVEL, USB console, GP0/1 clear of UART.
    GP7 now connects GY-511 accelerometer INT1; GP6 connects magnetometer
@@ -491,8 +497,8 @@ No fixture result establishes physical accuracy, and no fit corrects its bias.
    template deviation9); DO NOT start it as part of this change.
 7. Record actual new work/core/read timing, gaps and both task stack bounds.
    Step2b work1562 us average/max2530 us is NOT a step2c measurement.
-   Physical roll-only accuracy, noise, delay and stopping remain pending
-   [step2c tests](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
+   Physical roll-only accuracy, noise, delay and stopping: see
+   [step2c results](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
 
 ## Step 2c software validation
 
@@ -523,6 +529,268 @@ UART pin guards and startup pin safety remain enforced. Template deviations
 stay8 against c3b0954; no clock/IRQ/SDK runtime owner is added. See the
 [current RAM/stack evidence](../kernel/RAM_BUDGET.md#imu-step-2c-measured-delta).
 These results are software gates, not physical peak accuracy or CPU bounds.
+
+## Step 2d FIFO input
+
+### Why step 2d
+
+Step 2c hardware on `8c5d679` read driven peaks 16.8/13.1/12.4 mm over the
+10 mm RIGHT-wheel hump. On flat floor, roll-only height noise had sd
+1.6..2.7 mm and the 200 ms median gave false peaks up to 5.7 mm. An
+offline spectrum of the raw 50 Hz pitch/roll on flat floor put about 50 %
+of the variance in 12..25 Hz, piled at the Nyquist limit. This is LIKELY
+aliased motor/gear vibration; it is not proven. The INT1 poll also showed
+about 3.5 % of reads with no new sample: a 100 Hz poll against a 100 Hz
+sensor clock that drifts reads the same sample twice.
+[Results](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
+
+### What changed
+
+| Item | Step 2c | Step 2d |
+| --- | --- | --- |
+| Accel rate | 100 Hz, one sample read per 10 ms | 400 Hz into the 32-sample FIFO, stream mode |
+| Per 10 ms | Read OUT registers once | Read FIFO_SRC once, then ONE burst of all n new samples, n<=8 (48 B) |
+| Value to core | That one sample | Mean of the n samples (boxcar anti-alias filter, decimation to 100 Hz) |
+| Duplicates | About 3.5 % of reads | Not possible: a FIFO read removes the sample |
+| INT1/GP7 | DRDY polled before/after the read | Retired; CTRL_REG3_A=0x00, GP7 stays a pulled-down unread input |
+| Core, filters, height, peaks | Unchanged | Unchanged; still a 10 ms cyclic, task14 |
+| Magnetometer | 75 Hz continuous, read each cycle | Unchanged; also read in empty/reset cycles |
+
+[imu_fifo.c](../../app_program/subsystem4/imu_fifo.c) is pure: FIFO_SRC
+decode, little-endian word decode and the HR mean (each left-aligned word
+divided by 16, sign-corrected, then averaged as a float in mg).
+[imu_probe.c](../../app_program/subsystem4/imu_probe.c) does the bounded
+read. The service feeds the mean to the unchanged core. No GPIO IRQ, no
+SDK runtime, clock or IRQ owner, and no template change: the deviation
+count stays 8.
+
+### Register setup
+
+The probe writes in this order: CTRL_REG1_A=0x00 (power down),
+FIFO_CTRL_REG_A=0x00 (bypass clears the FIFO), CTRL_REG2_A=0x00,
+CTRL_REG3_A=0x00, CTRL_REG4_A=0x88 (BDU, HR, +/-2 g), CTRL_REG5_A=0x40
+(FIFO_EN), CTRL_REG6_A=0x00, the three unchanged magnetometer registers,
+FIFO_CTRL_REG_A=0x80 (stream mode, no watermark use) and last
+CTRL_REG1_A=0x77 (400 Hz, normal mode, XYZ on). It reads back every
+setting after the bypass write and refuses a mismatch. `[S4_FIFO]` prints
+the saved `ctrl1`, `ctrl5` and `fifo_ctrl` readbacks: expect 77, 40, 80.
+
+### Source facts: datasheet, not hardware-verified
+
+Sources: ST LSM303DLHC datasheet DocID018771 Rev 2 (November 2013), and
+ST AN3308 Doc ID 18198 Rev 1 (January 2011). AN3308 is the LIS3DH
+application note. The LSM303DLHC accelerometer has the same FIFO registers,
+but its datasheet does not describe the FIFO behaviour. Thus the AN3308
+rows are RELATED-DEVICE facts. No PDF is committed.
+
+| Fact | Source | Status |
+| --- | --- | --- |
+| ODR 0111 = 400 Hz normal/low-power | Datasheet 7.1.1, Table 20 | Datasheet |
+| HR (normal) mode bandwidth ODR/9, turn-on 7/ODR | Datasheet 3, Table 8 | Datasheet; filter shape not published |
+| FIFO_EN is CTRL_REG5_A bit 6 | Datasheet 7.1.5, Tables 28/29 | Datasheet |
+| FM[1:0]=10 is stream mode, 00 bypass | Datasheet 7.1.12, Tables 36/37/38 | Datasheet |
+| FIFO_SRC_REG_A = WTM, OVRN_FIFO, EMPTY, FSS[4:0] | Datasheet 7.1.13, Table 39 | Datasheet |
+| SUB bit 7 = 1 enables address auto-increment | Datasheet 5.1.1 | Datasheet |
+| Register map 0x20..0x2F | Datasheet 6, Table 17 | Datasheet |
+| FIFO holds 32 sample sets; OUT registers give the oldest set | AN3308 9.1, Tables 33/34 | Related device |
+| FSS = unread count; EMPTY=1 at 0; at 32 unread OVRN=1 and FSS=31 | AN3308 9.2.3, Tables 37/38 | Related device |
+| Bypass clears the FIFO; FIFO_SRC then reads 0x20 | AN3308 9.3.1 | Related device |
+| Stream mode overwrites the oldest set when full | AN3308 9.3.3 | Related device |
+| A burst read rolls back from 0x2D to 0x28 | AN3308 9.5 | Related device |
+| I2C cost: about 29 clocks to start plus 9 per byte | AN3308 9.5 | Related device |
+| LIS3DH FIFO stores 10-bit samples | AN3308 9.1 | Related device; LSM303DLHC HR FIFO width unknown |
+
+Nothing in this table is hardware-verified for step 2d. The capture below
+can check burst rollback (continuous XYZ triplets near 1 g on Z), sample
+rate (about 4 per 10 ms) and FIFO resolution (if all raw words are a
+multiple of 64, the FIFO keeps 10 bits, so one count is 4 mg).
+
+### Read path and the 2 ms deadline
+
+Each ready cycle: `imu_hw_cycle_begin()`, one FIFO_SRC read, at most one
+burst of `6*n` bytes from 0x28 with auto-increment (sub-address 0xA8),
+one 6-byte magnetometer read, `imu_hw_cycle_end()`. One 2 ms deadline
+covers the WHOLE cycle. A transfer does not start after the deadline; a
+running transfer stops and the controller is disabled. A late cycle is a
+counted timeout fault: the observation is invalid and the existing paced
+reconfiguration (with a FIFO reset by bypass) follows one second later.
+In IMU_STREAM any probe fault stops the GP21 drive and blocks new drives
+until reboot. A deadline miss is thus visible, never a silent late value.
+
+The read is single-pass. A sample that arrives during the burst stays in
+the FIFO and starts the NEXT mean, so there is no gap and no duplicate.
+The hardware layer keeps at most 8 read commands in flight (TX FIFO <=9
+words, RX FIFO <=8 bytes) and drains RX while it queues a long burst.
+
+| Case | Action | Counter |
+| --- | --- | --- |
+| n=0 with EMPTY | No observation: core not stepped, timestamp kept, MARK waits one tick | `empty` |
+| n=1..8 | Mean of n to core; `reads`, `batches`, `samples`, `min`/`max` | normal |
+| n>8 (backlog, e.g. a wake later than about 20 ms) | Bypass then stream reset; invalid observation | `backlog`, `reset` |
+| OVRN (32 unread, data lost) | Same reset; invalid observation | `overrun`, `reset` |
+| EMPTY with n>0, or no EMPTY with n=0 | Same reset; invalid observation | `bad`, `reset` |
+| Bus fault or deadline | Counted fault; invalid; reconfigure after 1 s | `faults`, `timeout`/`nack` |
+
+An invalid observation breaks the angle/height windows like any other
+invalid sample; peaks are kept. During a GP21 drive, the observer stops
+the drive if it sees an invalid snapshot (existing rule). A partial or old
+mean never reaches the core: the mean is used only after the whole cycle,
+including the magnetometer read and the deadline check, succeeded.
+
+Bus-time ESTIMATE (AN3308 9.5 clock counts at 400 kHz, plus about 57 us
+per transfer from the step 1 measurement of 530 us for two 6-byte reads):
+
+| n | Ideal bus us | Estimate us |
+| ---: | ---: | ---: |
+| 4 (nominal) | 915 | about 1090 |
+| 5 | 1050 | about 1220 |
+| 8 (largest accepted) | 1455 | about 1630 |
+
+These are not measurements. Preemption by tasks 10..13 adds to the wall
+time (step 2b read max 705 us versus mean 564 us). With n=8 the margin
+to 2 ms is only about 0.37 ms. The task busy-waits on the bus, so the read
+part of `work_us` grows from about 0.56 ms to about 1.1 ms per 10 ms
+(about +5 % of core 0 at priority 14). Measure `read_us`, `work_us`, gaps
+and the IMU/TEST stack high-water on hardware.
+
+### Anti-alias effect (fixtures only)
+
+A 4-sample boxcar at 400 Hz has gain `|sin(pi*f/100)/(4*sin(pi*f/400))|`.
+It is zero at 100 and 200 Hz, which fold to 0 Hz after 100 Hz decimation.
+[test_imu_fifo.c](../../tests/test_imu_fifo.c) drives pure sines through
+the mean and checks the folded amplitude against this formula:
+
+| Input | Folds to at 100 Hz | One sample per 10 ms | Mean of 4 at 400 Hz |
+| ---: | ---: | ---: | ---: |
+| 37 Hz | 37 Hz (no fold) | 1.000 | 0.801 |
+| 113 Hz | 13 Hz | 1.000 | 0.128 |
+| 137 Hz | 37 Hz | 1.000 | 0.261 |
+| 187 Hz | 13 Hz | 1.000 | 0.100 |
+
+The single-sample column omits the sensor's own filter. Table 8 gives HR
+bandwidth ODR/9: about 11 Hz at 100 Hz ODR, about 44 Hz at 400 Hz ODR.
+Thus step 2d removes folds from near 100/200 Hz but lets MORE 11..44 Hz
+content into the raw 100 Hz angles than step 2c did, if the old internal
+filter worked as stated. The 100 ms roll LPF and mean/median windows still
+follow. Which effect wins on this robot is a HARDWARE question; the raw
+capture answers it. A fixture is not proof of real vibration rejection.
+
+### INT1 check retired
+
+Step 2c INT1 evidence: 1600 checks, 1541 matches, 59 mismatches. It proved
+the GP7 wiring and showed the duplicate reads. Step 2d retires the check:
+
+1. At 400 Hz DRDY changes every 2.5 ms; one level poll per 10 ms says
+   nothing useful about a burst of about 4 samples.
+2. FIFO_SRC gives the exact number of new samples, and a FIFO read removes
+   each sample. That replaces the freshness check with a direct count.
+3. A GPIO IRQ is not approved. CTRL_REG3_A=0x00 routes no event to INT1.
+
+GP7 stays a pulled-down input that nothing reads; GP6 stays unused.
+
+### TEST raw capture (IMU_STREAM only)
+
+[imu_capture.c](../../app_program/subsystem4/imu_capture.c) is pure
+fixed storage: 800 raw sample sets (4800 B, exact left-aligned 16-bit
+words in SENSOR axes; the axis map is identity) and 256 batch records
+(3072 B: time, first index, count). Total 7888 B static, ONLY in the
+IMU_STREAM image; other images have no capture storage or code.
+
+```text
+IDLE -> ARMED (GP21 drive start) -> ACTIVE (next IMU14 tick)
+ACTIVE -> FROZEN: 800 samples, 2 s, drive stop, error gap, or 256 batches
+FROZEN -> dump after CONFIRMED stop, one batch per 20 ms -> release -> IDLE
+```
+
+- IMU14 is the only writer. It copies at most 8 sample sets per tick and
+  never waits. FROZEN data does not change until the observer releases it.
+- The observer dumps only when no drive is active and no stop is pending.
+  A new GP21 start during a dump pauses the dump, prints
+  `[S4_RAW] disabled/busy; drive unaffected` and does not overwrite the
+  old capture. Capture state never changes drive permission.
+- An empty cycle adds a zero-count batch. A FIFO reset or bus fault
+  freezes the capture with reason GAP; it never joins data across a gap.
+- The final batch can be cropped at 800; the pipeline mean never is.
+
+Output lines, after `[S4_RAW_ARM] 800 raw16 XYZ; dump AFTER stop`:
+
+| Line | Fields |
+| --- | --- |
+| `[S4_RAW_BATCH]` | `batch` index, `first` sample index, `n` count, `t_us` IMU14 read-completion time |
+| `[S4_RAW]` | sample index, X, Y, Z raw words; mg = word/16 in HR, before bias |
+| `[S4_RAW_END]` | `n` samples, `batches`, `reason` (1 FULL, 2 TIME, 3 STOP, 4 GAP, 5 BATCHES FULL), `odr 400` |
+
+There is no per-sample timestamp: samples are 2.5 ms apart on the SENSOR
+clock, and the last sample of a batch is at most about one sample period
+plus the read time before `t_us`.
+
+### New reported fields
+
+`[S4_FIFO]`, once per second: `ctrl1`, `ctrl5`, `fifo_ctrl` readbacks;
+last `src` and `n`; `polls` (ready read cycles), `batches`, `samples`,
+`min`/`max` per accepted batch, `empty`, `overrun`, `backlog`, `bad`,
+`reset`, and `mean_samples_per_poll = samples/polls`. Expect about 4.000
+and `min`/`max` 3/5. Timing stays in `[S4_DIAG]`: `read_us`, `work_us`,
+`core_us` and their maxima/totals, `gap_max_us`, `missed`, `wake_lost`.
+CPU: the no-radio IMU_STREAM image has no idle meter (MQTT images only).
+Use the `work_total_us` change over elapsed time as the wall-work fraction;
+it includes preemption, so it is not exclusive CPU time.
+
+## Step 2d current procedure
+
+1. Build IMU_STREAM as before. Boot LEVEL, USB console only, GP0/1 free
+   of UART wiring. Keep the VIN and lifted-first GP21 rules of step 2b.
+2. Static: check `[S4_FIFO]` readbacks 77/40/80, mean samples per poll
+   about 4, and zero overrun/backlog/bad/reset. Record `read_us` and
+   `read_max_us` (estimate about 1.1 ms; deadline 2 ms).
+3. Lifted wheels, one GP21 drive: wait for `[S4_RAW_END]`. Check reason
+   FULL, 800 samples, continuous XYZ triplets near (0,0,+1 g raw) and
+   whether every word is a multiple of 64 (10-bit FIFO).
+4. Flat 600 mm drive, then THREE RIGHT-wheel 10 mm hump drives, LEVEL start
+   and GP20 MARK before each. Save each raw capture. Compare roll height
+   sd, median false peaks and `[S4_VIB]` std with step 2c.
+5. Offline: compute the spectrum of the 400 Hz raw capture. Report the
+   energy near 100/200 Hz (removed by the mean) and in 11..44 Hz (now
+   passed by the sensor). Do not tune windows from one run.
+6. Record `polls`, `samples`, `min`/`max`, `empty`, `overrun`, `backlog`,
+   `reset`, faults/timeouts, `read_us`/`work_us`/`core_us` maxima, gaps
+   and both stack high-water marks. Pending:
+   [step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-pending-hardware).
+
+## Step 2d software validation
+
+Local only: no push, flash, broker or hardware. Public example settings
+headers in a separate copy; generated firmware and proof ELFs removed.
+
+- 165/165 host tests pass. New: FIFO status edges (0, 1..31, contradictory,
+  OVRN/32), word decode and HR mean; alias fixtures above; probe counts
+  0/1/4/8 accepted, 9 backlog, OVRN and contradictory status reset, a
+  sample arriving during the burst kept for the next mean, deadline fault,
+  setup readbacks 77/40/80; capture FULL/TIME/STOP/GAP/batch-full/crop;
+  service EMPTY (no step, no new timestamp, MARK delayed one tick) and
+  capture handoff (arm, freeze at 800, immutable read, release, stop, gap);
+  observer dump only after a confirmed stop, one batch per wake, one
+  release. Clang address/undefined/float-cast sanitizers pass 41 IMU tests.
+- Recorder 67/67 and dashboard 180/180 pass.
+- Seven clean `make -j4 --output-sync=target` builds have zero warnings.
+  15 related units per profile (all subsystem4 sources, vehicle_task,
+  app_task) pass `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`
+  (105 compilations). Seven SDK retained-link proofs pass; no `__atomic_*`
+  helper. The UART-conflict `#error` still rejects the IMU adapter.
+- Template deviations stay 8 against c3b0954.
+
+| Clean profile | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Default SMP1 USB/Wi-Fi | 331260 | 760 | 130560 |
+| Robot SMP0 no radio | 84340 | 688 | 124024 |
+| BENCH SMP0 no radio | 41982 | 148 | 95460 |
+| MQTT SMP0 | 395536 | 904 | 188580 |
+| TEST SMP0 no radio | 78532 | 688 | 123444 |
+| MQTT-TEST SMP0 | 385800 | 904 | 187604 |
+| IMU_STREAM SMP0 no radio | 75752 | 688 | 131140 |
+
+See [RAM evidence](../kernel/RAM_BUDGET.md#imu-step-2d-measured-delta).
+These are software gates, not physical noise, timing or accuracy results.
 
 ## Historical steps 0 and 1
 

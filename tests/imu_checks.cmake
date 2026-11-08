@@ -1,3 +1,8 @@
+host_test(test_imu_fifo tests/test_imu_fifo.c
+    app_program/subsystem4/imu_fifo.c)
+target_link_libraries(test_imu_fifo PRIVATE m)
+host_test(test_imu_capture tests/test_imu_capture.c
+    app_program/subsystem4/imu_capture.c)
 host_test(test_imu_support tests/test_imu_support.c
     app_program/subsystem4/imu_support.c)
 target_link_libraries(test_imu_support PRIVATE m)
@@ -29,7 +34,21 @@ target_compile_definitions(test_imu_service PRIVATE APP_TEST=1 APP_BENCH=0)
 target_compile_options(test_imu_service PRIVATE
     -include "${REPO}/tests/imu_service_hook.h")
 target_link_libraries(test_imu_service PRIVATE m)
-foreach(failure create_failure start_failure cyclic_failure count_wrap)
+host_test(test_imu_capture_service tests/test_imu_service.c
+    app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
+    app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
+    app_program/subsystem4/imu_capture.c)
+target_include_directories(test_imu_capture_service BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_imu_capture_service PRIVATE
+    APP_TEST=1 APP_BENCH=0 APP_IMU_STREAM=1)
+target_compile_options(test_imu_capture_service PRIVATE
+    -include "${REPO}/tests/imu_service_hook.h")
+target_link_libraries(test_imu_capture_service PRIVATE m)
+add_test(NAME test_imu_capture_service_handoff
+    COMMAND test_imu_capture_service capture)
+foreach(failure create_failure start_failure cyclic_failure count_wrap
+        fifo_empty)
     add_test(NAME test_imu_service_${failure}
         COMMAND test_imu_service ${failure})
 endforeach()
@@ -60,7 +79,8 @@ host_test(test_imu_decode tests/test_imu_decode.c
     app_program/subsystem4/imu_decode.c)
 target_link_libraries(test_imu_decode PRIVATE m)
 host_test(test_imu_probe tests/test_imu_probe.c
-    app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c)
+    app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c
+    app_program/subsystem4/imu_fifo.c)
 target_link_libraries(test_imu_probe PRIVATE m)
 host_test(test_imu_hw tests/test_imu_hw.c app_program/subsystem4/imu_hw.c)
 target_include_directories(test_imu_hw BEFORE PRIVATE

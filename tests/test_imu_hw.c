@@ -11,7 +11,6 @@ fake_i2c_t fake_i2c;
 fake_reset_t fake_reset;
 fake_timer_t fake_timer;
 static unsigned int pins;
-static bool int1;
 static bool pulled_down;
 
 void gpio_set_function(unsigned int pin, unsigned int function)
@@ -39,13 +38,13 @@ void gpio_set_dir(unsigned int pin, unsigned int direction)
 }
 bool gpio_get(unsigned int pin)
 {
-    assert(pin == 7u || pin == 20u || pin == 21u);
-    return pin == 7u ? int1 : false;
+    assert(pin == 20u || pin == 21u); /* Step 2d never reads GP7/INT1. */
+    return false;
 }
 
 int main(void)
 {
-    uint8_t bytes[6];
+    uint8_t bytes[IMU_HW_MAX_READ];
 
     imu_hw_mark_init();
     assert(imu_hw_mark_down());
@@ -57,9 +56,7 @@ int main(void)
     assert(imu_hw_init() == IMU_IO_OK && pins == 3u);
     assert(fake_i2c.fs_scl_hcnt == 126u && fake_i2c.fs_scl_lcnt == 187u);
     assert(fake_i2c.sda_hold == 38u && fake_i2c.intr_mask == 0u);
-    assert(pulled_down && !imu_hw_int1_high());
-    int1 = true;
-    assert(imu_hw_int1_high());
+    assert(pulled_down); /* GP7 stays a pulled-down, unread input. */
     fake_i2c.enable_status = 1u;
     assert(imu_hw_read(0x19u, 0x0fu, bytes, 1u) == IMU_IO_TIMEOUT);
     fake_i2c.enable_status = 0u;
@@ -71,12 +68,21 @@ int main(void)
     assert(imu_hw_read(0x19u, 0x0fu, bytes, 1u) == IMU_IO_TIMEOUT);
     fake_i2c.raw_intr_stat = I2C_IC_RAW_INTR_STAT_STOP_DET_BITS;
     assert(imu_hw_read(0x19u, 0xa8u, bytes, 6u) == IMU_IO_OK);
+    assert(imu_hw_read(0x19u, 0xa8u, bytes, sizeof(bytes)) == IMU_IO_OK);
+    imu_hw_cycle_begin();
+    fake_timer.timerawl += 1999u;
+    assert(imu_hw_read(0x19u, 0x2fu, bytes, 1u) == IMU_IO_OK);
+    assert(imu_hw_cycle_end() == IMU_IO_OK);
+    imu_hw_cycle_begin();
+    fake_timer.timerawl += 2000u;
+    assert(imu_hw_read(0x19u, 0x2fu, bytes, 1u) == IMU_IO_TIMEOUT);
+    assert(imu_hw_cycle_end() == IMU_IO_TIMEOUT);
     assert(imu_hw_write(0x19u, 0x20u, 0x57u) == IMU_IO_OK);
     assert(fake_i2c.data_cmd == (0x57u | I2C_IC_DATA_CMD_STOP_BITS));
     fake_i2c.tx_abrt_source = 1u;
     assert(imu_hw_write(0x1eu, 0x02u, 0u) == IMU_IO_NACK);
     assert(imu_hw_read(0x19u, 0u, NULL, 1u) == IMU_IO_PARAM);
     assert(imu_hw_read(0x19u, 0u, bytes, 0u) == IMU_IO_PARAM);
-    assert(imu_hw_read(0x19u, 0u, bytes, 7u) == IMU_IO_PARAM);
+    assert(imu_hw_read(0x19u, 0u, bytes, IMU_HW_MAX_READ + 1u) == IMU_IO_PARAM);
     return 0;
 }

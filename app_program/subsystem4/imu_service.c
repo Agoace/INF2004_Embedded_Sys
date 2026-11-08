@@ -35,6 +35,44 @@ static float travel_mm;
 static float yaw_rad;
 static const mc_config_t motion_config = MC_ROBOT_CONFIG;
 
+#if APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+#define CAP_IDLE 0u
+#define CAP_ARMED 1u
+#define CAP_ACTIVE 2u
+#define CAP_FROZEN 3u
+static imu_capture_t capture;
+static uint32_t capture_state;
+static uint32_t capture_stop;
+#endif
+
+static void capture_tick(bool valid, uint32_t stamp)
+{
+#if APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    uint32_t state = __atomic_load_n(&capture_state, __ATOMIC_ACQUIRE);
+
+    if (state == CAP_ARMED) {
+        imu_capture_begin(&capture, stamp);
+        __atomic_store_n(&capture_state, CAP_ACTIVE, __ATOMIC_RELEASE);
+        state = CAP_ACTIVE;
+    }
+    if (state == CAP_ACTIVE) {
+        if (__atomic_load_n(&capture_stop, __ATOMIC_ACQUIRE) != 0u) {
+            imu_capture_finish(&capture, IMU_CAPTURE_STOP);
+        } else {
+            imu_capture_append(&capture, probe.fifo_raw,
+                valid ? probe.fifo_last_samples : 0u, stamp,
+                !valid && !probe.no_sample);
+        }
+        if (!capture.active) {
+            __atomic_store_n(&capture_state, CAP_FROZEN, __ATOMIC_RELEASE);
+        }
+    }
+#else
+    (void)valid;
+    (void)stamp;
+#endif
+}
+
 /* Modular count difference without signed overflow or implementation-
  * defined conversion of a large unsigned value to int32_t. */
 static int32_t count_delta(int32_t current, int32_t previous)
@@ -96,11 +134,12 @@ static void sample(void)
     const uint32_t epoch = vehicle_calibration_epoch();
     imu_core_input_t input = {0};
     const bool valid = imu_probe_read(&probe, drv_time_ms(), &value.raw);
+    const uint32_t read_done = drv_time_us(); /* TEST capture batch time. */
 
     input.now_ms = drv_time_ms();
     input.accel_valid = valid;
     for (unsigned int axis = 0u; axis < 3u; ++axis) {
-        input.accel_mg[axis] = (float)value.raw.accel_mg[axis];
+        input.accel_mg[axis] = probe.mean_accel_mg[axis];
     }
     encoder_input(&input);
     input.calibration_epoch = vehicle_calibration_epoch();
@@ -112,10 +151,15 @@ static void sample(void)
 
     const imu_core_t before = core;
 
-    imu_core_step(&core, &input);
+    const bool empty = !valid && probe.no_sample;
+
+    if (!empty) {
+        imu_core_step(&core, &input);
+    }
+    capture_tick(valid, read_done);
     const uint32_t after = vehicle_calibration_epoch();
 
-    if (after != input.calibration_epoch) {
+    if (!empty && after != input.calibration_epoch) {
         /* Vehicle priority 13 may preempt this priority-14 computation.
          * Discard a candidate calibration across ANY phase transition;
          * replay once with calibration forbidden, never wait/retry. */
@@ -124,7 +168,7 @@ static void sample(void)
         input.calibration_allowed = false;
         imu_core_step(&core, &input);
     }
-    if (requested != value.marks) {
+    if (!empty && requested != value.marks) {
         /* MARK acknowledges a zero-height reference at THIS observation,
          * not an interval of travel collected before the press. */
         imu_core_mark(&core);
@@ -140,8 +184,12 @@ static void sample(void)
     previous_us = started;
     value.value = core.output;
     value.probe = probe;
-    value.timestamp_us = ended;
-    value.timestamp_ms = input.now_ms;
+    /* EMPTY is not a new observation. Publish counters but retain the
+     * actual data timestamp so consumers can detect age/duplicates. */
+    if (!empty) {
+        value.timestamp_us = ended;
+        value.timestamp_ms = input.now_ms;
+    }
     value.compute_last_us = compute;
     value.compute_total_us += compute;
     if (compute > value.compute_max_us) {
@@ -263,3 +311,88 @@ uint32_t imu_request_mark(void)
     return 0u;
 }
 #endif
+
+bool imu_capture_request(void)
+{
+#if !APP_BENCH && APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    /* Single TEST requester. The worker never transitions out of IDLE;
+     * no compare-exchange/runtime helper or multi-requester claim needed. */
+    if (__atomic_load_n(&capture_state, __ATOMIC_ACQUIRE) != CAP_IDLE) {
+        return false;
+    }
+    __atomic_store_n(&capture_state, CAP_ARMED, __ATOMIC_RELEASE);
+    return true;
+#else
+    return false;
+#endif
+}
+
+void imu_capture_stop_request(void)
+{
+#if !APP_BENCH && APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    const uint32_t state = __atomic_load_n(&capture_state, __ATOMIC_ACQUIRE);
+
+    if (state == CAP_ARMED || state == CAP_ACTIVE) {
+        __atomic_store_n(&capture_stop, 1u, __ATOMIC_RELEASE);
+    }
+#endif
+}
+
+bool imu_capture_frozen(uint32_t *samples, uint32_t *batches,
+                         imu_capture_reason_t *reason)
+{
+#if !APP_BENCH && APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    if (__atomic_load_n(&capture_state, __ATOMIC_ACQUIRE) != CAP_FROZEN ||
+        samples == NULL || batches == NULL || reason == NULL) {
+        return false;
+    }
+    *samples = capture.samples;
+    *batches = capture.batches;
+    *reason = capture.reason;
+    return true;
+#else
+    (void)samples;
+    (void)batches;
+    (void)reason;
+    return false;
+#endif
+}
+
+bool imu_capture_batch_read(uint32_t index, imu_capture_batch_t *batch,
+                             int16_t raw[IMU_FIFO_MAX_BATCH][3])
+{
+#if !APP_BENCH && APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    if (__atomic_load_n(&capture_state, __ATOMIC_ACQUIRE) != CAP_FROZEN ||
+        index >= capture.batches || batch == NULL || raw == NULL) {
+        return false;
+    }
+    *batch = capture.batch[index];
+    for (uint32_t i = 0u; i < batch->count; ++i) {
+        for (unsigned int axis = 0u; axis < 3u; ++axis) {
+            raw[i][axis] = capture.raw[batch->first + i][axis];
+        }
+    }
+    return true;
+#else
+    (void)index;
+    (void)batch;
+    (void)raw;
+    return false;
+#endif
+}
+
+bool imu_capture_release(void)
+{
+#if !APP_BENCH && APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
+    if (__atomic_load_n(&capture_state, __ATOMIC_ACQUIRE) != CAP_FROZEN) {
+        return false;
+    }
+    /* Sole TEST consumer releases after its last copy. Clear stop BEFORE
+     * IDLE permits a new arm; writer never touches frozen storage. */
+    __atomic_store_n(&capture_stop, 0u, __ATOMIC_RELEASE);
+    __atomic_store_n(&capture_state, CAP_IDLE, __ATOMIC_RELEASE);
+    return true;
+#else
+    return false;
+#endif
+}

@@ -113,6 +113,70 @@ int motion_stop(void)
 void imu_hw_mark_init(void) { ++marker_inits; }
 bool imu_hw_mark_down(void) { return wakes >= 3u && wakes <= 8u; }
 uint32_t imu_request_mark(void) { return ++requests; }
+/* Fake capture handoff: armed at drive start, frozen at the stop request,
+ * then the observer must dump ONE batch per wake and release once. */
+static unsigned int capture_state; /* 0 idle, 1 armed, 2 frozen */
+static unsigned int capture_requests;
+static unsigned int capture_stops;
+static unsigned int capture_reads;
+static unsigned int capture_releases;
+static unsigned int capture_stop_wake;
+static unsigned int last_read_wake;
+static unsigned int raw_lines;
+static unsigned int raw_end_lines;
+static bool capture_mode(void)
+{
+    return strcmp(mode, "drive_distance") == 0 ||
+           strcmp(mode, "drive_button") == 0;
+}
+bool imu_capture_request(void)
+{
+    if (!capture_mode() || capture_state != 0u) {
+        return false;
+    }
+    ++capture_requests;
+    capture_state = 1u;
+    return true;
+}
+void imu_capture_stop_request(void)
+{
+    if (capture_state == 1u) {
+        ++capture_stops;
+        capture_state = 2u;
+        capture_stop_wake = wakes;
+    }
+}
+bool imu_capture_frozen(uint32_t *samples, uint32_t *batches,
+                         imu_capture_reason_t *reason)
+{
+    if (capture_state != 2u) {
+        return false;
+    }
+    *samples = 10u;
+    *batches = 3u;
+    *reason = IMU_CAPTURE_STOP;
+    return true;
+}
+bool imu_capture_batch_read(uint32_t index, imu_capture_batch_t *batch,
+                             int16_t raw[IMU_FIFO_MAX_BATCH][3])
+{
+    assert(capture_state == 2u && index < 3u && drive_stops == 1u);
+    assert(wakes > last_read_wake); /* Throttle: one batch per wake. */
+    last_read_wake = wakes;
+    ++capture_reads;
+    batch->first = index * 4u;
+    batch->count = index == 2u ? 2u : 4u;
+    batch->timestamp_us = index * 10000u;
+    memset(raw, 0, sizeof(int16_t) * 3u * IMU_FIFO_MAX_BATCH);
+    return true;
+}
+bool imu_capture_release(void)
+{
+    assert(capture_state == 2u && capture_reads == 3u);
+    ++capture_releases;
+    capture_state = 0u;
+    return true;
+}
 int imu_snapshot_try_read(imu_snapshot_t *out)
 {
     memset(out, 0, sizeof(*out));
@@ -163,6 +227,10 @@ int tm_printf(const UB *format, ...)
             ++drive_stops;
         }
         va_end(args);
+    } else if (strncmp(text, "[S4_RAW] %lu", 12u) == 0) {
+        ++raw_lines;
+    } else if (strncmp(text, "[S4_RAW_END]", 12u) == 0) {
+        ++raw_end_lines;
     } else if (strcmp(text, "[S4] MARK %lu\n") == 0) {
         va_list args;
 
@@ -218,6 +286,15 @@ int main(int argc, char **argv)
         }
 
         assert(last_reason == expected);
+        if (capture_mode()) {
+            /* Dump starts only after the confirmed stop, never in a drive. */
+            assert(capture_requests == 1u && capture_stops == 1u);
+            assert(capture_reads == 3u && capture_releases == 1u);
+            assert(raw_lines == 10u && raw_end_lines == 1u);
+            assert(last_read_wake == capture_stop_wake + 2u);
+        } else {
+            assert(capture_reads == 0u && capture_releases == 0u);
+        }
         return 0;
     }
     assert(reports == 50u); /* Every 20 ms, not the old 10 Hz print gate. */

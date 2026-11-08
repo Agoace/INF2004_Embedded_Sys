@@ -42,7 +42,7 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 | line | 11 | Each 1 ms ADC acquisition; filter, learned line values and snapshot | 2048 |
 | sonar | 12 | Request/edge wake; 10 ms deadline cyclic; trigger and result service | 2048 |
 | vehicle | 13 | After each completed motion tick; buttons, calibration, modules and commands | 4096 |
-| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded probe/count reads, pure observe-only core and board | 2048 |
+| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO batch/count reads, pure observe-only core and board | 2048 |
 | Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8192 with lwIP (template-owned) |
 | TEST runner | 20 | Initial task after startup; no normal vehicle/bench task | Initial task stack |
 | USB console | 21 | IRQ wake or 10 ms fallback; console drain | 2048 UP / 4096 SMP (template-owned) |
@@ -56,7 +56,7 @@ Task functions do not return. They loop or call `tk_ext_tsk()`.
 IMU_STREAM's TEST20 observer alone can request the operator GP21 drive
 trial (100 mm/s,600 mm/10 s), with stop-pending retries. No IMU14 height or
 quality result chooses a drive command. VIN/lifted-first hardware checks
-remain pending; see the [procedure](../s4-imu/IMU.md#step-2c-current-procedure).
+remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 
 ### Interfaces and kernel objects
 
@@ -205,7 +205,7 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [app_task.c](../../app_program/platform/app_task.c),
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
-- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-2-measured-delta)
+- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-2d-measured-delta)
   and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),

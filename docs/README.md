@@ -49,7 +49,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — step2c roll-only RIGHT height, mean/median peaks, pitch-quality ratio, polled INT1 and50Hz per-drive stats; actual triangular-hump/noise fixtures, partial step2b hardware and pending current acceptance.
+- [IMU.md](s4-imu/IMU.md) — step 2d 400 Hz FIFO batch mean into the unchanged step 2c roll-only RIGHT height, cited datasheet/AN3308 facts, alias fixtures, retired INT1 check and TEST raw capture; step 2c hardware NOT a height PASS, step 2d hardware pending.
 
 ## S5 — Obstacle
 

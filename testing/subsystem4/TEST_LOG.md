@@ -136,20 +136,42 @@ motivates step2c; offline agreement is not physical accuracy acceptance.
 | S4-U07 | Static blocks, RIGHT first; then LEFT/both/caster | **Partial on75ff329**: RIGHT results below; LEFT/both/caster and current step2c checks Not run |
 | S4-U08 | VIN, lifted GP21, then driven RIGHT-wheel hump | **Lifted distance/button PASS on75ff329**; driven estimator FINDING below, no height-accuracy PASS; hardware timeout/fault paths Not run |
 
-### Step 2c pending hardware
+### Step 2c hardware on 8c5d679
+
+Operator-supplied numbers only; private log name
+`build/mtk_logs/s4_step2c_215556.txt` was NOT opened or copied.
+**Driven result: NOT a height PASS.**
 
 | Check | Result |
 | --- | --- |
-| INT1 HIGH-before/LOW-after accel reads, readback CTRL_REG3=0x10, weak pull-down/no IRQ | **Not run** |
-| Flat600 mm drive: roll-only peak/median, quality ratio, per-drive std and actual work/stack/gaps | **Not run** |
-| Three10 mm RIGHT-wheel hump drives, LEVEL start and GP20 BEFORE EACH; raw/mean/median peaks plus full-model diagnostics | **Not run** |
+| INT1 HIGH-before/LOW-after accel reads, CTRL_REG3=0x10, weak pull-down/no IRQ | 1600 checks: 1541 matches, 59 mismatches; HIGH before 1544, LOW after 1579. GP7 wiring works. About 3.5 % of reads (56 LOW-before) found no new sample: duplicate reads from sensor/kernel clock drift |
+| Flat drive: roll-only noise, median false peaks | Roll-only height noise sd 1.6..2.7 mm; 200 ms median false peaks up to 5.7 mm on FLAT floor |
+| Three 10 mm RIGHT-wheel hump drives | Reported peaks 16.8/13.1/12.4 mm; **NOT a height PASS** (10 mm object) |
+| Per-drive `[S4_VIB]` std, three drives as supplied | Pitch 2.95/3.55/4.14 degrees; roll 2.04/1.80/2.05 degrees |
+| Offline spectrum, raw 50 Hz pitch/roll, flat | About 50 % of variance in 12..25 Hz, piled at Nyquist: LIKELY aliased motor/gear vibration, not proven |
+| Work/stack/gaps for step 2c | Not supplied; Not run as a recorded result |
 
-Use the [current step2c procedure](../../docs/s4-imu/IMU.md#step-2c-current-procedure).
-The real hump is10 mm high/195 mm long: about95 mm per6-degree ramp,
-only5 mm flat crest. At100 mm/s, above80% height lasts about0.43 s and
-above90% about0.24 s. Do not assume a0.5 s flat plateau.
-Investigate the three unexplained resets before treating any trial as
-reliable. Do not substitute offline gated peaks for a firmware/hardware PASS.
+These findings start [step 2d](../../docs/s4-imu/IMU.md#step-2d-fifo-input).
+The [step 2c procedure](../../docs/s4-imu/IMU.md#step-2c-procedure-at-8c5d679-historical)
+stays as history. The real hump is 10 mm high/195 mm long: about 95 mm
+per 6-degree ramp, only a 5 mm flat crest. At 100 mm/s, above 80 % height
+lasts about 0.43 s and above 90 % about 0.24 s. Do not assume a 0.5 s flat
+plateau. Investigate the three unexplained step 2 resets before treating
+any trial as reliable. Do not substitute offline gated peaks for a
+firmware/hardware PASS.
+
+### Step 2d pending hardware
+
+Software only on the step 2d commit; see
+[step 2d procedure](../../docs/s4-imu/IMU.md#step-2d-current-procedure).
+
+| Check | Result |
+| --- | --- |
+| Readbacks ctrl1 77, ctrl5 40, fifo_ctrl 80; samples per poll mean/min/max; empty/overrun/backlog/bad/reset counts | **Not run** |
+| `read_us`/`work_us`/`core_us` average and maximum against the 2 ms cycle deadline; gaps; IMU14/TEST20 stack high-water | **Not run** |
+| Raw 400 Hz capture: FULL 800 samples, continuous triplets (burst rollback), 10-bit or 12-bit FIFO words | **Not run** |
+| Flat 600 mm drive: roll height sd and median false peak versus step 2c | **Not run** |
+| Three 10 mm RIGHT-wheel hump drives, LEVEL start, GP20 before each | **Not run** |
 
 ### S4-U04 procedure
 
