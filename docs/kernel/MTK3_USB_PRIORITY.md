@@ -12,7 +12,7 @@ TinyUSB configuration are unchanged.
 ## Why
 
 The DIAG=1 capture of 2026-11-07 measured the motion delay
-([hardware record](../archive/MTK3_STEP8_HARDWARE_RESULTS.md#diag1-motion-timing-capture--2026-11-07)).
+([hardware record](../archive/MTK3_STEP8_RECORD.md#diag1-motion-timing-capture--2026-11-07)).
 While a GP20 dump drained, the motion cyclic release stayed on time
 (release interval 9995 us), but motion entered 4488 us after release.
 Mutex wait was at most 15 us. The USB task at 3 can drain the ring

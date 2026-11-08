@@ -18,7 +18,7 @@ The main `mtk3-staging` checkout remains at `8ec3523`. The candidate is
 | Final style-only cleanup | `ed21052` |
 | Final dashboard implementation | `f2b863e` |
 
-[Validation](MTK3_STEP8_VALIDATION.md) records the six clean builds, strict ARM
+[Validation](MTK3_STEP8_RECORD.md) records the six clean builds, strict ARM
 152/152, host 111/111, SDK probes 6/6 and style code-identity proof. Hardware
 rows, actual hook wall time and CPU-load measurement remain **Not run**.
 [Wire contract](../s1-telemetry/MQTT_WIRE.md) owns all byte layouts and reserved formats.

@@ -266,7 +266,7 @@ count; TEST and post-session USB lines show work/threshold/window details.
 A no-poll or stale-health interval is not a performance pass.
 
 Static sizes, strict ARM/SDK proofs and host tests are recorded in
-[Kernel robot](../kernel/KERNEL_ROBOT.md). Earlier-image [operator results](../archive/MTK3_STEP8_HARDWARE_RESULTS.md) include
+[Kernel robot](../kernel/KERNEL_ROBOT.md). Earlier-image [operator results](../archive/MTK3_STEP8_RECORD.md) include
 cold-power TIMER, timing, MQTT/reconnect, commands and basic M1/M2. They do not
 validate later boot/session/diagnostic or SCAN-retry changes. New-image
 hardware still needs its own acceptance. No push or flash is

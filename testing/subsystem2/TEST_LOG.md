@@ -27,7 +27,7 @@ These do not validate the later boot-ID or diagnostic image.
 M1-MQTT lifetime gap 9916..10087 us; later ESTOP run 8952..11038 us exceeds
 the gate by 38 us. M2 successful detour later reported 9902..10099 us.
 Do not treat lifetime extrema as per-run extrema or guess a cause. See
-[hardware details](../../docs/archive/MTK3_STEP8_HARDWARE_RESULTS.md) and the
+[hardware details](../../docs/archive/MTK3_STEP8_RECORD.md) and the
 [diagnostic-only investigation](../../docs/archive/MOTION_TIMING_INVESTIGATION.md).
 A per-run window is proposed there, not silently added to production.
 

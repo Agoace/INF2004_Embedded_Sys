@@ -456,4 +456,4 @@ Wi-Fi20, full-load stack/timing, and independent M1/M2 with MQTT are
 **Not run**. Exact [wire layouts](../s1-telemetry/MQTT_WIRE.md) and [broker procedure](../s1-telemetry/MQTT_RUNBOOK.md)
 are separate records. Final software results are recorded below.
 
-[STEP 8 software validation](../archive/MTK3_STEP8_VALIDATION.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.
+[STEP 8 software validation](../archive/MTK3_STEP8_RECORD.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.

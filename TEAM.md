@@ -84,7 +84,7 @@ TEST starts four service/motion tasks, neither button task; BENCH starts
 only motion/bench. S4 TEST creates one temporary 10 ms cyclic for its 30 s
 raw IMU check, then deletes it; IMU_STREAM=1 keeps it until power-off and
 uses GP20 for debounced MARK lines. No robot task or object is added.
-Existing kernel limits suffice. See [IMU bring-up](docs/s4-imu/IMU_BRINGUP.md).
+Existing kernel limits suffice. See [IMU bring-up](docs/s4-imu/IMU.md).
 MQTT adds a health task/cyclic and three bounded event/command MBFs.
 Approved shared template changes are listed in [the ledger](docs/architecture/TEMPLATE_CHANGES.md).
 Every task loops forever or exits through

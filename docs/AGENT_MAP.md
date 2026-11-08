@@ -176,10 +176,10 @@ vehicle task described below.
 
 ## TEST-only IMU acquisition
 
-- [GY-511 bring-up](s4-imu/IMU_BRINGUP.md) — steps 0/1, existing UART-off build settings, units, source credit and pending operator tilt/timing checks.
-- [Scale investigation](s4-imu/IMU_SCALE_INVESTIGATION.md) — partial hardware evidence, nominal datasheet units and pending six-face measurements.
+- [GY-511 bring-up](s4-imu/IMU.md) — steps 0/1, existing UART-off build settings, units, source credit and pending operator tilt/timing checks.
+- [Scale investigation](s4-imu/IMU.md) — partial hardware evidence, nominal datasheet units and pending six-face measurements.
 - [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM; default TEST is unchanged.
-- [IMU step 1 validation](s4-imu/IMU_STEP1_VALIDATION.md) — strict host/ARM, six-profile sizes, startup/UART disassembly proof, no hardware result.
+- [IMU step 1 validation](s4-imu/IMU.md) — strict host/ARM, six-profile sizes, startup/UART disassembly proof, no hardware result.
 - [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
 - [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.
 - [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, signed-permutation mounting table and static pitch/roll.
@@ -229,7 +229,7 @@ vehicle task described below.
 ## STEP 8 MQTT navigation
 
 - [USB console priority](kernel/MTK3_USB_PRIORITY.md) — template USB task 21, below driving and Wi-Fi; order check [`test_task_priorities.py`](../tests/test_task_priorities.py).
-- [Timing investigation](archive/MOTION_TIMING_INVESTIGATION.md) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](archive/MTK3_STEP8_HARDWARE_RESULTS.md) remain tied to the tested earlier image.
+- [Timing investigation](archive/MOTION_TIMING_INVESTIGATION.md) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](archive/MTK3_STEP8_RECORD.md) remain tied to the tested earlier image.
 
 - [`boot_id.c`](../app_program/platform/boot_id.c), [`boot_id_hw.c`](../app_program/platform/boot_id_hw.c), and [`boot_entropy.c`](../app_program/platform/boot_entropy.c) — bounded ROSC per-boot observation label and pure bit extraction; [`test_boot_id.c`](../tests/test_boot_id.c). Binary two-boot fixtures: [`mqtt_boot_fixtures.h`](../tests/mqtt_boot_fixtures.h).
 
@@ -261,6 +261,6 @@ vehicle task described below.
 - Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
 
 - [`tests/vehicle_network_checks.cmake`](../tests/vehicle_network_checks.cmake) — adapter age/wrap/busy, exhaustive command policy, and real vehicle task non-critical queue/DUMP/ESTOP tests.
-- [STEP 8 validation](archive/MTK3_STEP8_VALIDATION.md) — clean build/strict/link/host results, ELF bindings, memory limits and pending physical acceptance.
+- [STEP 8 validation](archive/MTK3_STEP8_RECORD.md) — clean build/strict/link/host results, ELF bindings, memory limits and pending physical acceptance.
 - [`tests/test_log_stream.c`](../tests/test_log_stream.c) — live batching/jump/generation/failure and DUMP window/ACK/rewind/abort/throughput and live-pause tests.
 - [`tests/test_telemetry_mode.c`](../tests/test_telemetry_mode.c) — publication-mode transitions: run cycle, ESTOP, busy and absent vehicle board, time wrap.

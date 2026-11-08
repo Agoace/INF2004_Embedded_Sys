@@ -15,9 +15,9 @@ For repository structure and implementation entry points, see the [Agent Navigat
 
 - [Project requirements summary](project-requirements/README.md) — our own summary; course originals stay local and ignored.
 
-- [GY-511 IMU bring-up](s4-imu/IMU_BRINGUP.md) — TEST-only LSM303DLHC, I2C0 GP0/GP1, raw units, axis map, bounded reads and pending operator tilt/timing check.
-- [IMU scale investigation](s4-imu/IMU_SCALE_INVESTIGATION.md) — datasheet/config/decode audit, partial hardware timing and unexplained static magnitude; six-face procedure.
-- [IMU step 1 validation](s4-imu/IMU_STEP1_VALIDATION.md) — host tests, six clean profiles, strict ARM, startup/UART proof and hardware limits.
+- [GY-511 IMU bring-up](s4-imu/IMU.md) — TEST-only LSM303DLHC, I2C0 GP0/GP1, raw units, axis map, bounded reads and pending operator tilt/timing check.
+- [IMU scale investigation](s4-imu/IMU.md) — datasheet/config/decode audit, partial hardware timing and unexplained static magnitude; six-face procedure.
+- [IMU step 1 validation](s4-imu/IMU.md) — host tests, six clean profiles, strict ARM, startup/UART proof and hardware limits.
 
 - [CPU load observation](kernel/CPU_LOAD.md) — calibrated lowest-priority meter, host checks, target measurement limits.
 - [STEP 8 follow-up handoff](archive/MTK3_FOLLOWUP_HANDOFF.md) — feature/style commits, owner tips, recoverable helper cleanup and pending hardware work.
@@ -102,8 +102,8 @@ Application SDK hardware subset: [Motor controller](s2-motion/MOTOR_CONTROLLER.m
 - [MQTT operator runbook](s1-telemetry/MQTT_RUNBOOK.md) — scoped Mosquitto/firewall, private settings, laptop CSV/commands and pending hardware checks.
 - [MQTT dashboard runbook](s1-telemetry/MQTT_DASHBOARD.md) — live laptop dashboard: how to run it, panels, button rules, command result and local web security.
 
-- [STEP 8 reboot/timing follow-up](archive/MTK3_STEP8_REBOOT_FOLLOWUP.md) — boot-scoped sessions, board accounting, diagnostic proof, validation and outstanding hardware.
+- [STEP 8 reboot/timing follow-up](archive/MTK3_STEP8_RECORD.md) — boot-scoped sessions, board accounting, diagnostic proof, validation and outstanding hardware.
 - [USB console priority](kernel/MTK3_USB_PRIORITY.md) — option A: USB 3 to 21, measured cause, priority order, output and enumeration consequences.
-- [STEP 8 hardware results](archive/MTK3_STEP8_HARDWARE_RESULTS.md) — operator results from 2026-11-07, limits and new-image checks.
+- [STEP 8 hardware results](archive/MTK3_STEP8_RECORD.md) — operator results from 2026-11-07, limits and new-image checks.
 - [Motion timing investigation](archive/MOTION_TIMING_INVESTIGATION.md) — lifetime-gap confound, opt-in diagnostic capture and proposed per-run window.
-- [STEP 8 software validation](archive/MTK3_STEP8_VALIDATION.md) — six profiles, strict ARM/host/link checks, bindings and memory limitations; no hardware acceptance.
+- [STEP 8 software validation](archive/MTK3_STEP8_RECORD.md) — six profiles, strict ARM/host/link checks, bindings and memory limitations; no hardware acceptance.

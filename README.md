@@ -197,7 +197,7 @@ the next plain `make` goes back to the defaults.
 For the operator-only GY-511 tilt check, use `TEST=1 IMU_STREAM=1` with
 `SMP=0 WIFI=none NET=none`. It skips other tests and streams S4 until power-off;
 GP20 adds position markers. The IMU requires USB only and `CRASH_REPORT=0`.
-See [IMU bring-up](docs/s4-imu/IMU_BRINGUP.md#continuous-operator-stream). Default
+See [IMU bring-up](docs/s4-imu/IMU.md#continuous-operator-stream). Default
 TEST without this option is unchanged.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call

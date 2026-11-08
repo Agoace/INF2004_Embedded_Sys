@@ -40,5 +40,5 @@ Use the original course material to resolve a requirement or marking detail.
 
 Use the [documentation index](../README.md) for the current subsystem records
 and the [agent map](../AGENT_MAP.md) for source locations. The
-[IMU record](../s4-imu/IMU_BRINGUP.md) explains the measured acceleration bias
+[IMU record](../s4-imu/IMU.md) explains the measured acceleration bias
 and why calibration and hump thresholds still need separate work.
