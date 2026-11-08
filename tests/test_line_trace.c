@@ -27,7 +27,7 @@ static int failures;
         }                                                                                 \
     } while (0)
 
-/* Locked line tracing in mm/s (docs/LINE_STEER_MM.md). */
+/* Locked line tracing in mm/s (docs/s3-line-barcode/LINE_STEER_MM.md). */
 static const lt_config_t LT = {{171, 100u, 100u, 62, 378, 50u, 400u}, 450, 20};
 static const ls_config_t LS = {131, 316};
 

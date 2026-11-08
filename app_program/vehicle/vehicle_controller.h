@@ -12,7 +12,7 @@
  * VC_EVENT_NONE when the 10 ms mailbox wait times out, so timeouts run.
  *
  * Pure logic: no hardware or RTOS calls. The same code runs on the Pico
- * and in the host unit test. See docs/VEHICLE_CONTROLLER.md.
+ * and in the host unit test. See docs/archive/VEHICLE_CONTROLLER.md.
  */
 
 /* ---------------------------------------------------------------------

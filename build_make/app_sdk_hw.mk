@@ -20,7 +20,7 @@
 # Application diagnostics remain enabled. This fragment adds no SDK runtime.
 # IMU TEST uses hardware_i2c register headers only: i2c.c is NOT compiled.
 # No SDK clock/time helpers are used. TEST static tilt uses newlib libm.
-# Approved shared template changes are recorded in docs/TEMPLATE_CHANGES.md.
+# Approved shared template changes are recorded in docs/architecture/TEMPLATE_CHANGES.md.
 ifeq ($(TEST),1)
 APP_SDK_HW_LIBS += -lm
 endif

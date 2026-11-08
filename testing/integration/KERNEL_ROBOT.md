@@ -14,7 +14,7 @@
    and ruler for the 20 ultrasonic pings. Do not proceed after any failure.
 3. Cold-power the normal single-core radio-off robot image with wheels
    lifted; check GP21 calibration and emergency stop. Then use the same
-   track/box as [R4](../../docs/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm),
+   track/box as [R4](../../docs/s5-obstacle/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm),
    VIN supply and USB disconnected. Keep access to GP21. Press GP21 once:
    calibration spin, 1 s wait, then the run. GP21 again latches ESTOP.
 4. Observe two detours and recovery to line without contact. Stop for unsafe
@@ -113,4 +113,4 @@ Repeat cold-power S0-U01 on all four role families and S2-U01 with Wi-Fi20.
 M1/M2 remain independent local-drive criteria: loss of AP/broker must not
 stop or degrade driving. Network S1-U04/U05/U06 separately cover reconnect,
 rates/loss/decode and NORMAL-robot command policy. All are **Not run** on
-the STEP 8 image. Use [the runbook](../../docs/MQTT_RUNBOOK.md).
+the STEP 8 image. Use [the runbook](../../docs/s1-telemetry/MQTT_RUNBOOK.md).

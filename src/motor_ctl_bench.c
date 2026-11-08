@@ -1,5 +1,6 @@
 /*
- * Motor controller bench test on the floor (docs/MOTOR_CONTROLLER.md, step 3).
+ * Motor controller bench test on the floor (docs/s2-motion/MOTOR_CONTROLLER.md,
+ * step 3).
  *
  * Drives a fixed list of wheel speed steps through the motor controller
  * (src/motor_ctl_pico.c) and records one row per 10 ms tick in RAM. After

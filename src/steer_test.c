@@ -23,12 +23,13 @@
  * limit RUN_LIMIT_MS. The log keeps the last LOG_KEEP_MS of the run.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (USB_POWER_SAFETY.md). The run is logged every 50 ms and saved to the
+ * (docs/s2-motion/USB_POWER_SAFETY.md). The run is logged every 50 ms and saved
+ * to the
  * last two flash sectors when the robot stops, so it survives a restart.
  * Connect USB at any time after the run and open the serial port: the last
  * saved run prints once, then the summary every 5 s.
  *
- * Wi-Fi log (src/wifi_log.c, docs/STEER_WIFI_LOG.md): with
+ * Wi-Fi log (src/wifi_log.c, docs/archive/STEER_WIFI_LOG.md): with
  * src/wifi_config.h, the robot joins the network in the background (LED on
  * when joined) and broadcasts the printf output and the run log live, 5
  * entries every 250 ms. When a run stops, and when Wi-Fi joins with a

@@ -68,10 +68,12 @@
  *     Track run P3: a junction arm reset the memory that the line was
  *     past C; the robot waited 300 ms and searched left first.
  *     The junction hold (LP_FLAG_JUNCTION_HOLD) is not used.
- *   - Centred: both see the line, no junction, |C - L - target| <= LP_PAIR_CENTRED.
+ *   - Centred: both see the line, no junction, |C - L - target| <=
+ *   LP_PAIR_CENTRED.
  * Calibration checks only L and C.
  *
- * Pure logic: no hardware or RTOS calls. See docs/LINE_POSITION.md.
+ * Pure logic: no hardware or RTOS calls. See
+ * docs/s3-line-barcode/LINE_POSITION.md.
  */
 
 #define LP_SENSORS 3u

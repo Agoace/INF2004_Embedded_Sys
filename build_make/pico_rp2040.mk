@@ -45,15 +45,17 @@ WIFI_SUFFIX := _wifi
 # SMP=0 is supported: the radio service task simply drops its TP_PRC1 affinity
 # request when TK_SUPPORT_SMP is off (see cyw43_utk_kernel.c), the same way the
 # USB console task already did. Everything touching the radio and lwIP still
-# runs on that one task, which is what docs/RELEASE.md safety rule 6 actually
-# requires -- single-core satisfies it trivially.
+# runs on that one task; see the execution-and-hook section in
+# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook.
+# Single-core satisfies the same ownership rule.
 endif
 
 # Optional lwIP network stack on top of WIFI=cyw43. NO_SYS=1 (raw API, no
 # tcpip thread): everything that calls into lwIP -- cyw43_poll(),
 # sys_check_timeouts(), and any application tcp_*/udp_*/dns_* call -- runs
 # on the same processor-1-owned task that already services the radio, per
-# docs/RELEASE.md safety rule 6. See lib/liblwip/sysdepend/pico_rp2040/.
+# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook.
+# See lib/liblwip/sysdepend/pico_rp2040/.
 NET ?= none
 ifneq ($(filter $(NET),none lwip),$(NET))
 $(error Unknown NET '$(NET)'; use none or lwip)
@@ -320,7 +322,8 @@ endif
 
 ################################################################################
 # CYW43439 radio (polling architecture). NET=lwip below adds lwIP on top,
-# still within the same polling model -- see docs/RELEASE.md and
+# still within the same polling model -- see
+# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook and
 # lib/liblwip/sysdepend/pico_rp2040/.
 ################################################################################
 

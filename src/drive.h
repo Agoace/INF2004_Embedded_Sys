@@ -4,7 +4,8 @@
  *   Left wheel  = motor 1: PWM GP8 (forward) / GP9 (reverse), encoder GP16/GP17
  *   Right wheel = motor 2: PWM GP10 (forward) / GP11 (reverse), encoder GP4/GP5
  *
- * Sides and encoder signs were measured on 2026-10-27 (CALIBRATION_RESULTS.md).
+ * Sides and encoder signs were measured on 2026-10-27
+ * (docs/s2-motion/CALIBRATION_RESULTS.md).
  * drive_counts() gives both wheels with forward = positive.
  * 2535 encoder counts = one wheel turn.
  *

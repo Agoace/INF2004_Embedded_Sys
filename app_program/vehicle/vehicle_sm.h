@@ -1,6 +1,7 @@
 /*
  * Vehicle state machine: the Vehicle Controller shell
- * (docs/ADR_VEHICLE_CONTROLLER.md, docs/VEHICLE_STATE_MACHINE.md).
+ * (docs/architecture/ADR_VEHICLE_CONTROLLER.md,
+ * docs/architecture/VEHICLE_STATE_MACHINE.md).
  *
  * It runs one module at a time. Each module does its job, interprets the
  * shared detectors for that job, and returns RUNNING or an outcome. The

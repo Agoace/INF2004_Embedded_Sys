@@ -1,17 +1,17 @@
 /*
  * Track test: line tracing through the Vehicle Controller shell and the
- * motor controller (docs/VC_LINE_RUN.md).
+ * motor controller (docs/s3-line-barcode/VC_LINE_RUN.md).
  *
  *   GP21  spin calibration, then the run after 1 s; press again to stop
  *   GP20  (idle) next steering D from D_STEPS; the value is printed
  *
- * Layers (docs/ADR_VEHICLE_CONTROLLER.md):
+ * Layers (docs/architecture/ADR_VEHICLE_CONTROLLER.md):
  *   detectors  line position (src/line_position.c) every 1 ms, ultrasonic
  *              reading at the period the running module asks (default
  *              100 ms), wheel counts (motor controller)
  *   modules    LINE (src/line_trace.c), SEARCH (src/line_search.c),
  *              SCAN (src/servo_scan.c) and DETOUR (src/detour_run.c,
- *              detour v1.8 in wheel speeds; docs/VC_DETOUR_RUN.md)
+ *              detour v1.8 in wheel speeds; docs/s5-obstacle/VC_DETOUR_RUN.md)
  *   shell      src/vehicle_sm.c, every 10 ms (heartbeat flag)
  *   motors     src/motor_ctl_pico.c: the only owner of the motor PWM,
  *              the servo PWM and the encoders; wheel speeds in mm/s
@@ -20,7 +20,7 @@
  * in its interrupt (phase 0) and restarts the watchdog (100 ms). The shell
  * steps at phase 9, 1 ms before the next mc_tick. The line sample and
  * lp_update() run in the main loop on a 1 ms flag, as in detour_test (not
- * yet in the interrupt, docs/ADR_HEARTBEAT.md).
+ * yet in the interrupt, docs/architecture/ADR_HEARTBEAT.md).
  *
  * A run stops on: GP21, the time limit RUN_LIMIT_MS, or the shell leaving
  * RUNNING (failed search, scan or detour, ultrasonic fault, wheel stall).
@@ -29,9 +29,9 @@
  * sweep ends, back off), as detour_test.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (USB_POWER_SAFETY.md).
+ * (docs/s2-motion/USB_POWER_SAFETY.md).
  *
- * Log: the steering log (docs/STEER_WIFI_LOG.md) every 50 ms, live and
+ * Log: the steering log (docs/archive/STEER_WIFI_LOG.md) every 50 ms, live and
  * replayed after the run. Log header flag SL_FLAG_SPEED: the two wheel
  * fields are the asked wheel speeds in 4 mm/s units. Mode 3 (BYPS) is
  * SCAN or DETOUR; its position field is the scan point + 10 (SCAN) or the
@@ -78,14 +78,20 @@
 #define VC_LINE_KI_Q8 128u
 #endif
 
-/* Locked line tracing (docs/TWO_SENSOR_LINE_TRACING.md) mapped to mm/s
- * through the duty map (docs/LINE_STEER_MM.md): base 25 % -> 171,
+/*
+ * Locked line tracing (docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) mapped
+ * to mm/s
+ * through the duty map (docs/s3-line-barcode/LINE_STEER_MM.md): base 25 % ->
+ * 171,
  * min 12 % -> 62, max 50 % -> 378. Straight 450 counts across a junction;
  * side hint above 20 counts of turn.
- * P7 (docs/VC_LINE_RUN.md, after P6): matched to what P4 really did, not
+ * P7 (docs/s3-line-barcode/VC_LINE_RUN.md, after P6): matched to what P4 really
+ * did, not
  * to the straight-run duty map. P4 drove 146 mm/s; P6 turned 17 % harder
  * than P4 for the same position. Base 146; gain, D and far gain x 0.85. */
-/* D test after P7 (docs/VC_LINE_RUN.md): GP20 picks the next D. All other
+/*
+ * D test after P7 (docs/s3-line-barcode/VC_LINE_RUN.md): GP20 picks the next D.
+ * All other
  * settings stay. The first value is the P7 value. */
 static const uint8_t D_STEPS[] = {85u, 130u, 50u};
 #define D_STEP_COUNT (sizeof D_STEPS / sizeof D_STEPS[0])
@@ -103,7 +109,7 @@ static const ls_config_t SEARCH_CFG = {.speed_mm_s = 131, .turn_counts = 2535 / 
 /* Scan: the robot stands still 300 ms first (detour_test STOP_SETTLE_MS). */
 static const ss_config_t SCAN_CFG = {.stop_ms = 300u};
 
-/* Detour v1.8 (src/detour_test.c, docs/OBSTACLE_DETOUR_HANDOFF.md) with
+/* Detour v1.8 (src/detour_test.c, docs/archive/OBSTACLE_DETOUR_HANDOFF.md) with
  * wheel speeds: straights and the non-sweep turns 131 mm/s (20 %); the
  * sweeps 20 deg/s = 19 mm/s per wheel, held by the motor controller (no
  * duty rate control). No heading hold on the straights (operator
@@ -651,7 +657,10 @@ int main(void) {
     line_sensors_init();
     ultrasonic_init(ULTRASONIC_TRIGGER_PIN, ULTRASONIC_ECHO_PIN, NULL);
     hb_init(&hb);
-    /* P9 (docs/VC_LINE_RUN.md) ran without the I term; now the robot value. */
+    /*
+     * P9 (docs/s3-line-barcode/VC_LINE_RUN.md) ran without the I term; now the
+     * robot value.
+     */
     mc_cfg.ki_q8 = VC_LINE_KI_Q8;
     const bool mc_ok = mcp_init(&hb, &mc_cfg); /* motors 0, servo centre; hook at phase 0 */
     f_1ms = hb_add_flag(&hb, 1u, 0u);

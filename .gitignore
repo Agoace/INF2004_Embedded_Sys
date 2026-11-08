@@ -54,3 +54,7 @@ config/wifi_secrets.h
 
 # App-owned MQTT command token/broker settings (never commit).
 app_program/subsystem1/robot_mqtt_secrets.h
+
+# Public repository: keep course originals local; track only our summary.
+/docs/project-requirements/*
+!/docs/project-requirements/README.md

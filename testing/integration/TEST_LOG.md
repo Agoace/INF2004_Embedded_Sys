@@ -13,7 +13,7 @@ Interfaces are recorded in TEAM.md.
 
 ## STEP 8 earlier-image acceptance — operator results 2026-11-07
 
-See [the hardware record](../../docs/MTK3_STEP8_HARDWARE_RESULTS.md) for exact
+See [the hardware record](../../docs/archive/MTK3_STEP8_HARDWARE_RESULTS.md) for exact
 measurements and limits. These results do not validate later boot/session,
 diagnostic or SCAN-retry changes; new-image hardware remains Not run.
 
@@ -24,6 +24,6 @@ diagnostic or SCAN-retry changes; new-image hardware remains Not run.
 | M2 + MQTT | Independent local navigation/GP21/watchdog acceptance with live telemetry and dump; network never becomes a fault | Basic PASS at 16:13: LEFT, 22041 ms, 995 mm, lateral 318 mm, returned to line, losses 0; one-point clearance margin; earlier all-blocked scans correctly failed |
 | S1-U04/U05/U06 | Network connect/rates/loss/CSV/commands, separately from M1/M2 | Tested reconnect/LWT, live log/DUMP and command cases PASS; full checklist coverage not claimed |
 
-Software [validation](../../docs/MTK3_STEP8_VALIDATION.md) is not hardware
+Software [validation](../../docs/archive/MTK3_STEP8_VALIDATION.md) is not hardware
 acceptance. No push or flash was performed by the software worker in this follow-up. The operator authorizes these
 checks and records revision, profile, power source and duration.

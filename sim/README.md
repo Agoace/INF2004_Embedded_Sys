@@ -1,7 +1,7 @@
 # Host firmware simulator
 
 This host build reads the real `src/` files. It does not change or link to
-firmware CMake targets. See the [simulation record](../docs/SIMULATION.md)
+firmware CMake targets. See the [simulation record](../docs/simulation/SIMULATION.md)
 for the design, model equations, assumptions, and remaining work.
 
 ## Build and run
@@ -167,7 +167,7 @@ only, not a dependency of the editor or the simulator.
 - [`scenarios/box_straight.json`](scenarios/box_straight.json) keeps the
   120 × 120 mm box on the line at x = 800 mm. Boxes now default to specular
   echoes (assumed 20° incidence cut, corner echo off). See the
-  [material model and recorded fit limits](../docs/SIM_ECHO_FIT.md).
+  [material model and recorded fit limits](../docs/simulation/SIM_ECHO_FIT.md).
   With ideal material, the accepted reference firmware enters
   FOLLOW → STOP → SCAN → DETOUR → FAILED, ending at its 25 s detour time
   limit. It chooses LEFT; no contact occurs. This is not claimed as success.

@@ -1,8 +1,9 @@
 /*
- * Motor controller, Pico layer (docs/MOTOR_CONTROLLER.md, step 2).
+ * Motor controller, Pico layer (docs/s2-motion/MOTOR_CONTROLLER.md, step 2).
  *
  * The only code that writes the motor PWM and the servo PWM and reads the
- * wheel encoders (docs/ADR_MOTOR_CONTROLLER.md). Do not link it with
+ * wheel encoders (docs/architecture/ADR_MOTOR_CONTROLLER.md). Do not link it
+ * with
  * drive.c or servo.c: they drive the same pins.
  *
  *   Left wheel  : PWM GP8 (forward) / GP9 (reverse), encoder GP16/GP17
@@ -10,7 +11,8 @@
  *   Servo       : GP15, 50 Hz
  *   Motor PWM   : 20 kHz (wrap 6249); 0 on both pins = coast
  *
- * Timing (docs/ADR_HEARTBEAT.md): mcp_init() adds a heartbeat hook every
+ * Timing (docs/architecture/ADR_HEARTBEAT.md): mcp_init() adds a heartbeat hook
+ * every
  * cfg.tick_ms. The hook runs in the heartbeat interrupt: it reads the
  * encoders, runs mc_tick(), and writes the motor and servo PWM. The
  * main-loop calls below only store values; the next hook acts on them.

@@ -1,5 +1,6 @@
 /*
- * Heartbeat: the one time base for every module (docs/ADR_HEARTBEAT.md).
+ * Heartbeat: the one time base for every module
+ * (docs/architecture/ADR_HEARTBEAT.md).
  *
  * A hardware timer calls hb_tick() every HB_TICK_US (1 ms) in interrupt
  * context (src/heartbeat_pico.c). Users connect in two ways:

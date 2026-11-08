@@ -1,6 +1,6 @@
 /*
  * Bench test: line following with the obstacle bypass (src/obstacle_bypass.c,
- * docs/OBSTACLE_BYPASS.md).
+ * docs/archive/OBSTACLE_BYPASS.md).
  *
  *   GP21  spin calibration, then the run after 1 s; press again to stop
  *   GP20  spin calibration only
@@ -20,9 +20,10 @@
  * a failed bypass, or the time limit RUN_LIMIT_MS.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (USB_POWER_SAFETY.md).
+ * (docs/s2-motion/USB_POWER_SAFETY.md).
  *
- * Log: kept in RAM only (not in flash). The Wi-Fi log (docs/STEER_WIFI_LOG.md)
+ * Log: kept in RAM only (not in flash). The Wi-Fi log
+ * (docs/archive/STEER_WIFI_LOG.md)
  * gets the entries live; when the run stops, the bypass readings and the
  * whole kept log are sent again (replay). Mode 3 in the log is BYPS (STOP,
  * SCAN or BYPASS). Keep the robot on for about 2 s after it stops. A USB
@@ -80,7 +81,7 @@ static const steer_config_t STEER_BYPASS = {
     .max_pct = 50u,
     .right_trim_pct = 1,
 };
-/* First values: tune on the track (docs/OBSTACLE_BYPASS.md). Clearance
+/* First values: tune on the track (docs/archive/OBSTACLE_BYPASS.md). Clearance
  * from the sensor = 80 mm half robot width + 70 mm for the front corner
  * (runs 12-14: 110 mm let the corner hit). */
 static const bp_config_t BYPASS = {

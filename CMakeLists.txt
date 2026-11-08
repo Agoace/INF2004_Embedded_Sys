@@ -301,7 +301,7 @@ pico_enable_stdio_usb(steer_test 1)
 pico_enable_stdio_uart(steer_test 0)
 pico_add_extra_outputs(steer_test)
 
-# Bench test: line following with the obstacle bypass (docs/OBSTACLE_BYPASS.md).
+# Bench test: line following with the obstacle bypass (docs/archive/OBSTACLE_BYPASS.md).
 add_executable(bypass_test
     src/bypass_test.c
     src/obstacle_bypass.c
@@ -392,7 +392,7 @@ pico_enable_stdio_uart(heartbeat_test 0)
 pico_add_extra_outputs(heartbeat_test)
 
 # Motor controller (core + Pico layer) with the heartbeat, for any target
-# that drives the robot through the motor controller (docs/MOTOR_CONTROLLER.md).
+# that drives the robot through the motor controller (docs/s2-motion/MOTOR_CONTROLLER.md).
 add_library(motor_ctl_pico STATIC
     app_program/subsystem2/motor_ctl.c
     src/motor_ctl_pico.c
@@ -435,7 +435,7 @@ pico_add_extra_outputs(motor_ctl_bench)
 
 # Vehicle Controller test: line tracing, search, scan and detour modules
 # in the shell, wheel speeds through the motor controller
-# (docs/VC_LINE_RUN.md, docs/VC_DETOUR_RUN.md).
+# (docs/s3-line-barcode/VC_LINE_RUN.md, docs/s5-obstacle/VC_DETOUR_RUN.md).
 add_executable(vc_line_test
     src/vc_line_test.c
     app_program/subsystem3/line_trace.c

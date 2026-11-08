@@ -1,5 +1,6 @@
 /*
- * Obstacle bypass by edge following, version 4 (docs/OBSTACLE_BYPASS.md).
+ * Obstacle bypass by edge following, version 4
+ * (docs/archive/OBSTACLE_BYPASS.md).
  *
  * Assumption: one isolated obstacle on the line, inside the field of view
  * of the scan. The caller stops the robot at OBST_STOP, runs one scan, and

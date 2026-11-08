@@ -1,18 +1,21 @@
 /*
- * Motor controller settings for this robot (docs/ADR_MOTOR_CONTROLLER.md).
+ * Motor controller settings for this robot
+ * (docs/architecture/ADR_MOTOR_CONTROLLER.md).
  * The hardware quirks live here and nowhere else.
  *
  * Sources:
  *   - 2535 counts per wheel turn, wheel 65 mm: 12414 counts per metre;
- *     track 111 mm: 24.05 counts per degree (docs/CALIBRATION_RESULTS.md).
+ *     track 111 mm: 24.05 counts per degree
+ *     (docs/s2-motion/CALIBRATION_RESULTS.md).
  *   - Feed-forward: straight-line fit to the steady points of floor bench
- *     run B1 (2026-11-04, docs/MOTOR_CONTROLLER.md): 20, 40, 150 and
+ *     run B1 (2026-11-04, docs/s2-motion/MOTOR_CONTROLLER.md): 20, 40, 150 and
  *     300 mm/s, each wheel and direction. Below 5 counts per tick the
  *     real duty is flat at about 80-97 permille (dead zone); the fit is
  *     about 10 permille low there and the I term adds the rest.
  *     (Step 1 used a rough fit to the track logs; its reverse values
  *     were too high.)
- *   - Start kick 12 %, 10 counts, 250 ms (start policy, docs/CALIBRATION_RESULTS.md;
+ *   - Start kick 12 %, 10 counts, 250 ms (start policy,
+ *   docs/s2-motion/CALIBRATION_RESULTS.md;
  *     a loaded wheel does not turn below about 12 %).
  *   - Servo: 1500 us centre, safe range 1100-1900 us, 100/9 us per degree
  *     (src/servo.h, detour_test servo_pulse()); settle estimate 42 ms +

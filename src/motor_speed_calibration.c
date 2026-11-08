@@ -21,7 +21,8 @@
 #define EMERGENCY_STOP_BUTTON_PIN 21
 
 /* Measured 2535 counts per wheel revolution for both motors by the
- * 50-revolution rotation drift test. See docs/MOTOR_ROTATION_DRIFT.md.
+ * 50-revolution rotation drift test. See
+ * docs/s2-motion/MOTOR_ROTATION_DRIFT.md.
  * This supersedes the earlier 2540 and 2539, which were not independent
  * measurements. RPM values recorded before this change read about 0.197%
  * low. */

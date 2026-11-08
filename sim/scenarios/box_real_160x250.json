@@ -7,8 +7,8 @@
   "seed": 1,
   "provenance": {
     "track": "Published spec: https://www.robotics.org.za/CK-RE-TRACK-COMO-16; Cytron EVA tiles, 315 x 315 x 10 mm, black 18 mm line on white",
-    "geometry": "docs/CALIBRATION_RESULTS.md#robot-geometry; conservative 160 x 190 mm rectangle",
-    "adc": "docs/LINE_POSITION.md run 1; physical L/C/R after correction of the old pin labels"
+    "geometry": "docs/s2-motion/CALIBRATION_RESULTS.md#robot-geometry; conservative 160 x 190 mm rectangle",
+    "adc": "docs/s3-line-barcode/LINE_POSITION.md run 1; physical L/C/R after correction of the old pin labels"
   },
   "track": {
     "tile_size_mm": 315,
@@ -179,7 +179,7 @@
       "beam_deg": {
         "value": 5,
         "assumed": true,
-        "note": "Fitted, not measured: with 5 (2.5 degrees each side), 16 degree incidence and 300 mm corner echoes the sim scan gives the free steps of run R2 (docs/VC_DETOUR_RUN.md), R 6 L 4"
+        "note": "Fitted, not measured: with 5 (2.5 degrees each side), 16 degree incidence and 300 mm corner echoes the sim scan gives the free steps of run R2 (docs/s5-obstacle/VC_DETOUR_RUN.md), R 6 L 4"
       },
       "rise_latency_us": 215,
       "echo_timeout_us": 3000,
@@ -197,7 +197,7 @@
           "heading_deg": 0
         },
         "assumed": true,
-        "note": "Centre 20 mm right of the line: R2 corner readings at -25 (236 mm) and +15 degrees (236 mm) give face edges near y -100 and +60. Size [250, 160] is the operator's rough measurement (2026-11-05): 160 mm face toward the robot, 250 mm along the line (run R2, docs/VC_DETOUR_RUN.md)"
+        "note": "Centre 20 mm right of the line: R2 corner readings at -25 (236 mm) and +15 degrees (236 mm) give face edges near y -100 and +60. Size [250, 160] is the operator's rough measurement (2026-11-05): 160 mm face toward the robot, 250 mm along the line (run R2, docs/s5-obstacle/VC_DETOUR_RUN.md)"
       },
       "size_mm": [
         250,

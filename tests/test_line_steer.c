@@ -262,7 +262,9 @@ int main(void) {
         failures += bad;
     }
 
-    /* Locked line tracing in mm/s (docs/LINE_STEER_MM.md): base 171, min 62,
+    /*
+     * Locked line tracing in mm/s (docs/s3-line-barcode/LINE_STEER_MM.md): base
+     * 171, min 62,
      * max 378, gain 100, D 100, far gain 400 above 50. */
     {
         const steer_mm_config_t lk = {171, 100u, 100u, 62, 378, 50u, 400u};

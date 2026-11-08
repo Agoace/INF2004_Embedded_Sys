@@ -1,4 +1,7 @@
-/* Independent module test. See docs/BRANCH_LAYOUT.md for build commands. */
+/*
+ * Independent module test. See docs/architecture/BRANCH_LAYOUT.md for build
+ * commands.
+ */
 #include <assert.h>
 #include "../app_program/subsystem5/detour_run.h"
 #include "../app_program/subsystem5/servo_scan.h"

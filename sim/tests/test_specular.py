@@ -115,7 +115,7 @@ class Specular(unittest.TestCase):
             validate(s)
 
     def test_narrow_beam_real_box_scan(self):
-        # Run R2 box (docs/VC_DETOUR_RUN.md): 160 mm face, 250 mm deep,
+        # Run R2 box (docs/s5-obstacle/VC_DETOUR_RUN.md): 160 mm face, 250 mm deep,
         # centre 20 mm right, 218 mm ahead of the sensor. Recorded:
         # 487 236 227 227 218 218 218 227 227 236 NR NR NR (R 6, L 4).
         box = target(218, 0, [250, 160])
