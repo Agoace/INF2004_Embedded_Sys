@@ -167,7 +167,7 @@ only, not a dependency of the editor or the simulator.
 - [`scenarios/box_straight.json`](scenarios/box_straight.json) keeps the
   120 × 120 mm box on the line at x = 800 mm. Boxes now default to specular
   echoes (assumed 20° incidence cut, corner echo off). See the
-  [material model and recorded fit limits](../docs/simulation/SIM_ECHO_FIT.md).
+  [material model and recorded fit limits](../docs/simulation/SIMULATION.md).
   With ideal material, the accepted reference firmware enters
   FOLLOW → STOP → SCAN → DETOUR → FAILED, ending at its 25 s detour time
   limit. It chooses LEFT; no contact occurs. This is not claimed as success.

@@ -19,7 +19,7 @@ python3 sim/box_sweep.py --run
 The baseline uses the existing `box_straight.json`; the script does not
 rewrite it. Omit `--run` to generate only. Results are saved in ignored
 `sim/output/bigbox/SCENARIO/`: `trace.json`, `run.html`, and `console.txt`.
-The main scenario is [`box_wide_deep.json`](../../sim/scenarios/box_wide_deep.json).
+The main scenario is [`box_wide_deep.json`](../../../sim/scenarios/box_wide_deep.json).
 
 ## Results
 

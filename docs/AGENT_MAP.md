@@ -26,7 +26,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s3-line-barcode/](s3-line-barcode/) | Current kernel LINE/SEARCH and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
-| [simulation/](simulation/) | Host simulator design, echo fit and box sweep. |
+| [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
 | [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
 
 The detailed entries below retain source and test navigation. Archive links do
@@ -50,9 +50,7 @@ robot builds; the development record also retains older CMake bench examples.
 | Current kernel ultrasonic driver/service | [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — bounded request/echo contract, packed result and sensor limits. |
 | Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
-| 2D firmware simulation | [docs/simulation/SIMULATION.md](simulation/SIMULATION.md) — design and milestone status; [sim/README.md](../sim/README.md) — host build, schema, trace, and tests |
-| Echo material and recorded-scan fit | [docs/simulation/SIM_ECHO_FIT.md](simulation/SIM_ECHO_FIT.md) — assumed specular settings, native-probe tables, and fit limits |
-| v1.5 box-size test record | [docs/simulation/SIM_BOX_SWEEP.md](simulation/SIM_BOX_SWEEP.md) — seven fixed-front box cases, captured console, hooks, and screenshots |
+| Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
 | Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) |
 | ADR: motor controller owns the actuators | [docs/architecture/ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) |

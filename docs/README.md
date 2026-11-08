@@ -69,9 +69,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Simulation
 
-- [SIMULATION.md](simulation/SIMULATION.md) — separate host simulation, deterministic clock, devices, traces, viewer and limits.
-- [SIM_ECHO_FIT.md](simulation/SIM_ECHO_FIT.md) — assumed echo materials and recorded-versus-simulated fit limits.
-- [SIM_BOX_SWEEP.md](simulation/SIM_BOX_SWEEP.md) — seven fixed-front box cases, console evidence, hooks and viewer captures.
+- [SIMULATION.md](simulation/SIMULATION.md) — implemented host model, interfaces, assumptions, echo-fit and box-sweep summaries; not kernel/track proof.
 
 ## Archive
 
@@ -109,6 +107,12 @@ not current acceptance reports. Local course originals are not public records.
 - [s5-obstacle/OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md) — full source record; only links/paths adjusted.
 - [s5-obstacle/VC_DETOUR_RUN.md](archive/s5-obstacle/VC_DETOUR_RUN.md) — full source record; only links/paths adjusted.
 - [s5-obstacle/ULTRASONIC_DRIVER.md](archive/s5-obstacle/ULTRASONIC_DRIVER.md) — full source record; only links/paths adjusted.
+
+### Simulation history
+
+- [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
+- [simulation/SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — full source record; only links/paths adjusted.
+- [simulation/SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — full source record; only links/paths adjusted.
 
 ## Original-template reference exceptions
 
