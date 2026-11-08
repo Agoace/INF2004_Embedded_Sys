@@ -13,6 +13,26 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 
 ## Documentation locations
 
+Only `README.md` and this map stay at the `docs/` root. The index lists each
+record once. Use these topic directories before choosing a source entry below:
+
+| Directory | Scope |
+| --- | --- |
+| [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
+| [architecture/](architecture/) | Shared contracts, decisions, CR1 interpretation and branch layout. |
+| [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
+| [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
+| [s2-motion/](s2-motion/) | Motor control, calibration and USB power safety. |
+| [s3-line-barcode/](s3-line-barcode/) | Line position, steering, barcode ideas and line-run evidence. |
+| [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
+| [s5-obstacle/](s5-obstacle/) | Ultrasonic sensing, scanning and detour evidence. |
+| [simulation/](simulation/) | Host simulator design, echo fit and box sweep. |
+| [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
+
+The detailed entries below retain source and test navigation. Archive links do
+not imply current hardware acceptance. Follow the root README for current
+robot builds; the development record also retains older CMake bench examples.
+
 | Content | Location |
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
@@ -24,7 +44,7 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Motor rotation drift record | [docs/s2-motion/MOTOR_ROTATION_DRIFT.md](s2-motion/MOTOR_ROTATION_DRIFT.md) |
 | Interrupt and polling conventions | [docs/architecture/INTERRUPT_CONVENTIONS.md](architecture/INTERRUPT_CONVENTIONS.md) |
 | USB power safety | [docs/s2-motion/USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md) |
-| Wi-Fi telemetry dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
+| Archived UDP bench dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/MQTT_DASHBOARD.md](s1-telemetry/MQTT_DASHBOARD.md) |
 | Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
 | Ultrasonic driver record | [docs/s5-obstacle/ULTRASONIC_DRIVER.md](s5-obstacle/ULTRASONIC_DRIVER.md) |
@@ -41,12 +61,12 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
 | Vehicle state machine record | [docs/architecture/VEHICLE_STATE_MACHINE.md](architecture/VEHICLE_STATE_MACHINE.md) — shell [`app_program/vehicle/vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), test [`tests/test_vehicle_sm.c`](../tests/test_vehicle_sm.c) |
 | Vehicle Controller line run | [docs/s3-line-barcode/VC_LINE_RUN.md](s3-line-barcode/VC_LINE_RUN.md) — modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
-| Vehicle Controller detour run | [docs/s5-obstacle/VC_DETOUR_RUN.md](s5-obstacle/VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
+| Vehicle Controller detour run (physical detour completed; see revision-specific results) | [docs/s5-obstacle/VC_DETOUR_RUN.md](s5-obstacle/VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
 | Line steering in mm/s | [docs/s3-line-barcode/LINE_STEER_MM.md](s3-line-barcode/LINE_STEER_MM.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
 | Duty map record | [docs/s2-motion/DUTY_MAP.md](s2-motion/DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/s2-motion/HEARTBEAT.md](s2-motion/HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
 | Motor controller record | [docs/s2-motion/MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
-| Vehicle Controller record | [docs/archive/VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) |
+| Superseded preliminary Vehicle Controller record | [docs/archive/VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md](s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/s3-line-barcode/LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md) |
 | Line steering record | [docs/s3-line-barcode/LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md) |
@@ -66,8 +86,8 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Motor duty calibration | [`src/motor_duty_calibration.c`](../src/motor_duty_calibration.c) |
 | Motor speed calibration | [`src/motor_speed_calibration.c`](../src/motor_speed_calibration.c) |
 | Motor rotation drift | [`src/motor_rotation_drift.c`](../src/motor_rotation_drift.c) |
-| Telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
-| Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
+| Earlier bench telemetry transport | [`src/telemetry.c`](../src/telemetry.c), [`src/telemetry.h`](../src/telemetry.h) |
+| Earlier UDP Wi-Fi telemetry probe | [`src/wifi_telemetry_probe.c`](../src/wifi_telemetry_probe.c) |
 | Ultrasonic driver | [`src/ultrasonic.c`](../src/ultrasonic.c), [`app_program/subsystem5/ultrasonic.h`](../app_program/subsystem5/ultrasonic.h) |
 | Ultrasonic bench test | [`src/ultrasonic_test.c`](../src/ultrasonic_test.c) |
 | Forward obstacle watch | [`app_program/subsystem5/obstacle.c`](../app_program/subsystem5/obstacle.c), [`app_program/subsystem5/obstacle.h`](../app_program/subsystem5/obstacle.h) |
@@ -78,17 +98,17 @@ The parent-workspace link opens the School Repos map on GitHub, so it also works
 | Obstacle detour (straights and turns on the spot) | [`app_program/subsystem5/obstacle_detour.c`](../app_program/subsystem5/obstacle_detour.c), [`app_program/subsystem5/obstacle_detour.h`](../app_program/subsystem5/obstacle_detour.h); track test [`src/detour_test.c`](../src/detour_test.c); host test [`tests/test_obstacle_detour.c`](../tests/test_obstacle_detour.c) |
 | Normalised line position | [`app_program/subsystem3/line_position.c`](../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../app_program/subsystem3/line_position.h) |
 | Line position bench test | [`src/line_test.c`](../src/line_test.c) |
-| Line steering | [`src/line_steer.c`](../app_program/subsystem3/line_steer.c), [`src/line_steer.h`](../app_program/subsystem3/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
+| Line steering | [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../app_program/subsystem3/line_steer.h); bench test [`src/steer_test.c`](../src/steer_test.c) |
 | Steering Wi-Fi log | [`src/wifi_log.c`](../src/wifi_log.c), packet format [`src/steer_log.c`](../src/steer_log.c); receiver [`scripts/steer_log_receiver.py`](../scripts/steer_log_receiver.py) |
 | Drive, IR reads, spin calibration (bench parts) | [`src/drive.c`](../src/drive.c), [`src/line_sensors.c`](../src/line_sensors.c), [`src/line_spin.c`](../src/line_spin.c) |
-| Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
+| Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
 | Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
-| Telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
-| Telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
+| Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
+| Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
 | Eventual control architecture | [`CONTROL_ARCHITECTURE.md`](architecture/CONTROL_ARCHITECTURE.md) |
 | Barcode reading ideas (not built) | [`BARCODE_READING_IDEAS.md`](s3-line-barcode/BARCODE_READING_IDEAS.md) |
@@ -176,16 +196,14 @@ vehicle task described below.
 
 ## TEST-only IMU acquisition
 
-- [GY-511 bring-up](s4-imu/IMU.md) — steps 0/1, existing UART-off build settings, units, source credit and pending operator tilt/timing checks.
-- [Scale investigation](s4-imu/IMU.md) — partial hardware evidence, nominal datasheet units and pending six-face measurements.
+- [GY-511 IMU record](s4-imu/IMU.md) — merged steps 0/1 bring-up, scale evidence and software validation. The raw magnitude is explained by positive Z offset, not uniform gain. Six-face signs confirm the accelerometer identity map; S4-U03 stream passed. Calibration/core integration is not implemented. Absent-device, cold-power and MQTT-TEST checks remain pending.
 - [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM; default TEST is unchanged.
-- [IMU step 1 validation](s4-imu/IMU.md) — strict host/ARM, six-profile sizes, startup/UART disassembly proof, no hardware result.
 - [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
 - [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.
 - [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, signed-permutation mounting table and static pitch/roll.
-- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — TEST runner, 10 ms cyclic and 100 ms USB diagnostics for 30 s.
+- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — TEST runner, 10 ms cyclic and 100 ms USB diagnostics: 30 s normally, continuous with IMU_STREAM=1.
 - [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict host decode/protocol and hardware register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
-- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — S4-U01 tilt/absent-sensor/timing and S4-U02 cold-power checks, Not run.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — S4-U01 partial/sign evidence, S4-U03 continuous-stream PASS and still-pending absent-device/cold-power/MQTT-TEST checks.
 
 ## Kernel ultrasonic acquisition
 
@@ -200,8 +218,8 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
-- [Kernel robot design](kernel/KERNEL_ROBOT.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits, software validation and pending hardware checks.
-- [R5 procedure](../testing/integration/KERNEL_ROBOT.md) — pending track check, compare with bare-metal R4.
+- [Kernel robot design](kernel/KERNEL_ROBOT.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits and revision-scoped validation.
+- [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
 
@@ -224,7 +242,8 @@ vehicle task described below.
 ## Approved template deviations
 
 - [Template change ledger](architecture/TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.
-- [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`.
+- [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`; the count must remain eight.
+- Known reference exceptions: original lecturer-template comments in [`sys_arch.h`](../lib/liblwip/sysdepend/pico_rp2040/include/arch/sys_arch.h) and [`lwipopts.h`](../lib/liblwip/sysdepend/pico_rp2040/lwipopts.h) cite the missing `RELEASE.md`. Leave both files untouched. These are the only two permitted old-path grep hits. The current rule is [single-task Wi-Fi/lwIP ownership](s1-telemetry/KERNEL_MQTT.md#execution-and-hook).
 
 ## STEP 8 MQTT navigation
 
@@ -261,6 +280,6 @@ vehicle task described below.
 - Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
 
 - [`tests/vehicle_network_checks.cmake`](../tests/vehicle_network_checks.cmake) — adapter age/wrap/busy, exhaustive command policy, and real vehicle task non-critical queue/DUMP/ESTOP tests.
-- [STEP 8 validation](archive/MTK3_STEP8_RECORD.md) — clean build/strict/link/host results, ELF bindings, memory limits and pending physical acceptance.
+- [STEP 8 consolidated historical record](archive/MTK3_STEP8_RECORD.md) — software build/strict/link/host results, hardware evidence and reboot follow-up in separate source sections; never extend a PASS to a later revision.
 - [`tests/test_log_stream.c`](../tests/test_log_stream.c) — live batching/jump/generation/failure and DUMP window/ACK/rewind/abort/throughput and live-pause tests.
 - [`tests/test_telemetry_mode.c`](../tests/test_telemetry_mode.c) — publication-mode transitions: run cycle, ESTOP, busy and absent vehicle board, time wrap.
