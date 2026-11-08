@@ -13,14 +13,19 @@ commit inside this repository before the parent updates its recorded revision.
 | `mtk3-staging` | Integrated robot program; the only module-combination branch |
 | `mtk3` | Course-template/platform base |
 | `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface lineage |
-| `mtk3-line`, `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
-| `mtk3-telemetry` | S1 transport, RAM log, boards and network lineage |
-| `mtk3-imu` | TEST-only S4 bring-up; not robot calibration/core integration |
+| `mtk3-line` | Line tracing and line search; the barcode reader is an optional extension of this module |
+| `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
+| `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
+| `mtk3-imu` | S4 IMU module development |
 | `main` | Original course-template history; do not change |
 | `ziven-barcode-algo`, `yanshan`, `jaison-imu` | Reference branches; port approved ideas, do not merge them |
 
-Temporary helper branches are not new integration branches. Create a fresh
-worktree from the assigned staging revision. Keep the main checkout and
+Each module has its own development branch. Do module work and module-level
+tests on that branch. Merge it into `mtk3-staging`, where the complete
+system is integrated and tested. Use a temporary helper branch only for
+work that changes many modules at once, for example a documentation
+rewrite. Temporary helper branches are not new integration branches.
+Create a fresh worktree from the assigned staging revision. Keep the main checkout and
 another worker's branch untouched. Main performs hardware runs and pushes
 unless it assigns those operations explicitly.
 
@@ -29,6 +34,11 @@ unless it assigns those operations explicitly.
 1. Keep pure interfaces and logic independent of hardware and the kernel.
 2. Test a module in its own worktree. Commit there, not in another branch.
 3. Merge module/helper work into staging with `--no-ff`. Do not rebase.
+   Before new work on a module branch, merge the current staging tip into
+   that branch first (`--no-ff`, or a fast-forward when the branch has no
+   own commits). This keeps the documentation layout and shared code
+   current. On 2026-11-08 all module branches were fast-forwarded to the
+   documentation rewrite (`c2b2154`).
 4. If parallel changes must be combined, the assigned second merger merges
    the other tip with `--no-ff`, then repairs links and runs checks again.
 5. Commit and push the child repository before updating its parent gitlink.
