@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "imu_settings.h"
+#include "imu_roll.h"
 
 #define IMU_STILL_MS 1000u
 #define IMU_STILL_MIN_SAMPLES 100u
@@ -38,11 +39,12 @@ typedef struct {
     float yaw_accel_rad_s2;
     float lateral_fake_mm_s2;
     float forward_fake_mm_s2;
-    float left_mm;           /* Caster-flat alternative. */
-    float right_mm;          /* PRIMARY: caster/left wheel on flat. */
+    imu_roll_output_t roll_only; /* PRIMARY, pitch quality never gates. */
+    float left_mm;           /* Step2b caster-flat diagnostic. */
+    float right_mm;          /* Step2b full-model diagnostic. */
     float caster_mm;         /* Wheels-flat alternative, not simultaneous. */
     float left_peak_mm;
-    float right_peak_mm;     /* Consistency-qualified smoothed peak. */
+    float right_peak_mm;     /* Step2b gated diagnostic, not primary. */
     float caster_peak_mm;
     float right_smoothed_mm;
     float left_residual_mm;
@@ -76,6 +78,7 @@ typedef struct {
 
 typedef struct {
     imu_core_output_t output;
+    imu_roll_t roll_estimator;
     float mean[3];
     float m2[3];
     float minimum[3];

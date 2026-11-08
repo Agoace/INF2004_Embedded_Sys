@@ -32,6 +32,9 @@ static void reset_support_window(imu_core_t *core)
     core->support_sum = 0.0f;
     core->support_bad_count = 0u;
     core->output.support_peak_eligible = false;
+    imu_roll_step(&core->roll_estimator, 0.0f, 0.0f, IMU_TRACK_MM,
+                   IMU_WHEELBASE_MM, 0.0f, false);
+    core->output.roll_only = core->roll_estimator.output;
 }
 
 static void reset_integral(imu_core_t *core)
@@ -50,6 +53,8 @@ void imu_core_mark(imu_core_t *core)
         core->output.right_peak_mm = 0.0f;
         core->output.caster_peak_mm = 0.0f;
         reset_support_window(core);
+        imu_roll_mark(&core->roll_estimator);
+        core->output.roll_only = core->roll_estimator.output;
     }
 }
 
@@ -400,6 +405,13 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
     const float pitch_sine = sinf(core->corrected_rad);
 
     support(core, pitch_sine, sinf(core->corrected_roll_rad));
+    /* Match the operator's roll-only offline model: bias-corrected roll
+     * LPF, NOT yaw-corrected roll. Keep both corrected axes for diagnostics. */
+    imu_roll_step(&core->roll_estimator, sinf(core->roll_rad),
+                   core->corrected_rad, IMU_TRACK_MM, IMU_WHEELBASE_MM,
+                   IMU_ROLL_PITCH_TOLERANCE_DEG / 57.2957795f,
+                   out->calibrated && out->motion_valid);
+    out->roll_only = core->roll_estimator.output;
     if (out->calibrated && sample_time && distinct) {
         out->height_mm += pitch_sine * ds;
         out->peak_mm = fmaxf(out->peak_mm, out->height_mm);

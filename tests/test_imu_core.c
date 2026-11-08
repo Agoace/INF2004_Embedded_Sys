@@ -450,6 +450,8 @@ static void support_peaks_survive_refresh(void)
     core.output.left_peak_mm = 20.0f;
     core.output.right_peak_mm = 10.0f;
     core.output.caster_peak_mm = 15.0f;
+    core.roll_estimator.output.peak_mm = 10.0f;
+    core.roll_estimator.output.plateau_mm = 9.0f;
     core.output.height_mm = 7.0f;
     core.output.peak_mm = 9.0f;
     ticks(&core, &in, 202u);
@@ -458,10 +460,15 @@ static void support_peaks_survive_refresh(void)
     assert(core.output.left_peak_mm == 20.0f);
     assert(core.output.right_peak_mm == 10.0f);
     assert(core.output.caster_peak_mm == 15.0f);
+    assert(core.output.roll_only.peak_mm == 10.0f);
+    assert(core.output.roll_only.plateau_mm == 9.0f);
     imu_core_mark(&core);
     assert(core.output.left_peak_mm == 0.0f);
     assert(core.output.right_peak_mm == 0.0f);
     assert(core.output.caster_peak_mm == 0.0f);
+    assert(core.output.roll_only.peak_mm == 0.0f);
+    assert(core.output.roll_only.plateau_mm == 0.0f);
+    assert(core.output.roll_only.quality_samples == 0u);
 }
 
 static void duplicates_gaps_and_wrap(void)

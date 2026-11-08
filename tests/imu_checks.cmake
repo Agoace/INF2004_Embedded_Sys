@@ -4,16 +4,25 @@ target_link_libraries(test_imu_support PRIVATE m)
 host_test(test_imu_drive tests/test_imu_drive.c
     app_program/subsystem4/imu_drive.c)
 target_link_libraries(test_imu_drive PRIVATE m)
+foreach(window 15 20 31)
+    host_test(test_imu_roll_${window} tests/test_imu_roll.c
+        app_program/subsystem4/imu_roll.c)
+    target_compile_definitions(test_imu_roll_${window} PRIVATE
+        IMU_ROLL_PLATEAU_SAMPLES=${window}u)
+    target_link_libraries(test_imu_roll_${window} PRIVATE m)
+endforeach()
 host_test(test_imu_core tests/test_imu_core.c
-    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c)
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+    app_program/subsystem4/imu_roll.c)
 target_link_libraries(test_imu_core PRIVATE m)
 host_test(test_imu_core_benchmark tests/test_imu_core_benchmark.c
-    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c)
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+    app_program/subsystem4/imu_roll.c)
 target_compile_options(test_imu_core_benchmark PRIVATE -Os)
 target_link_libraries(test_imu_core_benchmark PRIVATE m)
 host_test(test_imu_service tests/test_imu_service.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
-    app_program/subsystem4/imu_support.c)
+    app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c)
 target_include_directories(test_imu_service BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_service PRIVATE APP_TEST=1 APP_BENCH=0)

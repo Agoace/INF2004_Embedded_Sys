@@ -29,4 +29,14 @@ typedef struct {
 int16_t imu_drive_step(imu_drive_t *job, uint32_t now_ms, float travel_mm,
                        bool press, bool fault);
 void imu_drive_cancel(imu_drive_t *job);
+
+/* Pure per-drive observer statistics, never a drive input. Sample std. */
+typedef struct {
+    uint32_t samples;
+    float mean[2];           /* Corrected pitch, filtered roll, degrees. */
+    float m2[2];
+} imu_drive_stats_t;
+void imu_drive_stats_reset(imu_drive_stats_t *stats);
+void imu_drive_stats_add(imu_drive_stats_t *stats, float pitch, float roll);
+void imu_drive_stats_std(const imu_drive_stats_t *stats, float out[2]);
 #endif

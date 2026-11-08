@@ -20,8 +20,8 @@ typedef struct {
  * left_mm/right_mm assume the caster is flat. caster_mm instead assumes
  * both drive wheels are flat. These are ALTERNATIVE hypotheses, not three
  * simultaneous contact heights. Values are signed; never clamp to zero.
- * For the course's right-wheel hump, right_mm is primary and fabs(left_mm)
- * is a consistency diagnostic only. This module supplies no threshold.
+ * These are step2b diagnostics; step2c primary is roll-only in imu_roll.h.
+ * This module supplies no threshold or primary-peak quality decision.
  */
 imu_support_t imu_support(float pitch_rad, float roll_rad,
                           float wheelbase_mm, float track_mm);

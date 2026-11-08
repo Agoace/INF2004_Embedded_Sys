@@ -190,10 +190,11 @@ vehicle task described below.
 
 ## Observe-only IMU task
 
-- [GY-511 IMU record](s4-imu/IMU.md) — step2b RIGHT-wheel support hypotheses, guarded refresh, yaw/lever correction and quality-smoothed peak; optional bounded GP21 TEST drive; partial dfade14 evidence is not current physical acceptance.
+- [GY-511 IMU record](s4-imu/IMU.md) — step2c roll-only RIGHT-wheel primary, mean peak/median statistic and pitch-quality ratio; legacy support diagnostics, polled INT1 checks, bounded GP21 TEST drive; partial step2b hardware, no step2c acceptance.
 - [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure guarded calibration, compensated pitch/roll, support-quality peaks and secondary slope integral; no driving decisions or packed fields.
 - [`imu_support.c`](../app_program/subsystem4/imu_support.c), [`imu_settings.h`](../app_program/subsystem4/imu_settings.h) — pure alternative support hypotheses; WB80/T111, forward60/height130, refresh1degree, consistency2mm settings.
-- [`imu_drive.c`](../app_program/subsystem4/imu_drive.c) — pure IMU_STREAM-only GP21 job, equal100mm/s to600mm/10s; stop-pending/retry glue in TEST reporter, no height-dependent driving.
+- [`imu_drive.c`](../app_program/subsystem4/imu_drive.c) — pure bounded GP21 job and per-drive Welford stats; TEST reporter owns stop-pending/retries, no height-dependent driving.
+- [`imu_roll.c`](../app_program/subsystem4/imu_roll.c), [`imu_roll.h`](../app_program/subsystem4/imu_roll.h) — roll-only height, mean10/median20 maxima, wide diagnostic pitch ratio; fixtures compare15/20/31 windows and explicit crest/noise tradeoffs.
 - [`imu_service.c`](../app_program/subsystem4/imu_service.c), [`imu_service.h`](../app_program/subsystem4/imu_service.h) — robot/TEST task14 and own 10 ms cyclic; bounded motion-count read, calibration-epoch guard, sole snapshot writer and acknowledged MARK; BENCH excluded.
 - [`vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — atomic calibration epoch covers the unchanged line spin/pause/abort/home routine, also without MQTT.
 - [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM.
@@ -202,7 +203,7 @@ vehicle task described below.
 - [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, identity mounting table and static pitch/roll.
 - [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; zero-duty hand-push mode, not a bus owner.
 - [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark and existing protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
-- [RAM budget](kernel/RAM_BUDGET.md#imu-step-2b-measured-delta) — measured4028B MQTT delta including2048B stack (+296B over step2); dfade14 work13..14% and larger step2b frame bounds still need hardware checks.
+- [RAM budget](kernel/RAM_BUDGET.md#imu-step-2c-measured-delta) — measured4428B MQTT delta including2048B stack (+400B over step2b); step2b work1562us average, current timing/stack still pending.
 - [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence; pending absent-device/cold-power/MQTT-TEST gates plus S4-U04 noise and U05/U06 hand-push cases, all step2 Not run.
 
 ## Kernel ultrasonic acquisition

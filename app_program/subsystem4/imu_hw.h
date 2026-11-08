@@ -15,6 +15,8 @@ int imu_hw_init(void);
 int imu_hw_read(uint8_t address, uint8_t reg, uint8_t *out, size_t length);
 int imu_hw_write(uint8_t address, uint8_t reg, uint8_t value);
 uint32_t imu_hw_time_us(void);
+/* GP7 accelerometer INT1, active high, weak pull-down, polling only. */
+bool imu_hw_int1_high(void);
 /* STREAM-only GP20 input, active low, internal pull-up. */
 void imu_hw_mark_init(void);
 bool imu_hw_mark_down(void);

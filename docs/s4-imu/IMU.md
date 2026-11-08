@@ -1,8 +1,8 @@
-# GY-511 IMU: support-model observer, step 2b
+# GY-511 IMU: roll-only observer, step 2c
 
 ## Current scope
 
-Step 2b extends `dfade14`, originally based on staging `b569adc`. Robot and
+Step 2c extends `75ff329` (step 2b), originally based on `b569adc`. Robot and
 TEST run an IMU observer; BENCH does not. The observer has no motor commands,
 terrain states, height-detection thresholds, climb events, MQTT or KR1
 fields. It cannot change normal driving. The explicit exception is a
@@ -15,10 +15,13 @@ are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
 not merged. Its event system, terrain thresholds and minimum-height policy
 were not ported. The LSM303DLHC has no gyro; no gyro result is claimed.
 
-**Hardware step 2b is Not run.** Stationary/hand-push evidence on `dfade14`
-is partial, with three unexplained resets. Offline support-model analysis
-is not firmware height acceptance. Earlier S4-U03 PASS validates only the
-older raw stream and signs, not this model, powered drive or peak quality.
+**Hardware step 2c is Not run.** Step 2b static RIGHT-wheel/lifted-drive
+results are partial: distance/button stop PASS, driven height estimator
+unusable because pitch vibrates. The new-cable session had no resets;
+the cause of the earlier three resets is still unproven. Offline analysis
+is not firmware height acceptance. See the current model/procedure below.
+The CURRENT primary is roll-only; the step2b pitch-dependent model remains
+diagnostic, not a moving-height acceptance result.
 See [S4 results and pending tests](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 
 ## Step 2 data path and interface
@@ -260,7 +263,7 @@ MQTT static RAM increases **3732 B**, including the **2048 B static stack**;
 see [RAM evidence and CPU estimate](../kernel/RAM_BUDGET.md#imu-step-2-measured-delta).
 Stack depth and real task CPU cost remain hardware gates, not size results.
 
-## Step 2b support hypotheses and peak quality
+## Step 2b support hypotheses and peak quality (now diagnostic)
 
 The course operator confirmed a hump under the RIGHT drive wheel only;
 left wheel/caster remain on the floor. Positive roll is right-side-up,
@@ -303,7 +306,7 @@ are MARK and boot. GP21 START does not reset them (run-start reset is later
 step3 work). The old integral retains its calibration reset. Invalid
 samples preserve existing peaks but invalidate the averaging window.
 
-## Step 2b current procedure
+## Step 2b procedure at75ff329 (historical)
 
 1. Use the same IMU_STREAM build command above. Flash only with approval.
    Boot on known level support, USB only, GP0/1 free of UART wiring.
@@ -342,9 +345,10 @@ New [pure drive job](../../app_program/subsystem4/imu_drive.c) is used ONLY
 by the IMU_STREAM observer, not normal robot or ordinary TEST. Host cases
 cover distance/time/wrap, second press, stale/missing/faulted inputs,
 command failure and both stop APIs failing before recovery. All powered
-and static step-2b cases are [Not run](../../testing/subsystem4/TEST_LOG.md#step-2b-pending-hardware).
+and static cases were originally Not run at75ff329; see the later
+[partial hardware results](../../testing/subsystem4/TEST_LOG.md#step-2b-hardware-on75ff329).
 
-## Step 2b software validation
+## Step 2b software validation at75ff329 (historical)
 
 157 host cases pass, including pure support/drive, left/right turns and
 spins, angular lever-arm sign, stopped-block refresh rejection, full-window
@@ -379,7 +383,146 @@ conflicts are still compile-time errors; no SDK clock/IRQ/runtime owner is
 added. Public fixtures and generated firmware/proof copies are removed.
 See [current RAM/CPU evidence](../kernel/RAM_BUDGET.md#imu-step-2b-measured-delta).
 New physical work_us, stack high-water, powered fault-stop timing and
-static/driven support accuracy remain **Not run**.
+static/driven accuracy were originally Not run; later step2b observations
+are recorded in the test log, not inferred from these host results.
+
+## Step 2c primary model
+
+On a RIGHT-wheel hump, with left wheel AND caster on the floor:
+
+- Primary height: `hR = T*sin(filtered_roll)`, effective T=111 mm.
+- Expected pitch: `-asin(hR/(2*WB))`, WB=80 mm.
+- Pitch consistency is diagnostic only. A configurable WIDE 10-degree
+  tolerance sets a flag and the ratio matches/valid samples since MARK.
+  Bad pitch NEVER gates the primary height, windows, peak or plateau.
+- Use the bias-corrected roll LPF, not the yaw-corrected roll, to match the
+  operator's offline roll-only evidence. The corrected angles and the
+  entire step2b zR/zL/zC model remain diagnostics. Its old `eligible` bit
+  describes ONLY the old pitch-dependent peak, not the new primary.
+- This remains a known-contact hypothesis. Roll noise, turning acceleration,
+  body flex and hand lifts can create false height; no contact detector or
+  terrain event is added. No height or quality value drives the robot.
+
+[imu_roll.c](../../app_program/subsystem4/imu_roll.c) is pure. It uses the
+existing 100 ms roll LPF, a FULL 10-sample mean for the smoothed positive
+peak, then a FULL trailing 20-sample median of mean outputs for the
+`plateau` value (maximum median since MARK). This is a robust statistic,
+not proof of a physical flat plateau. Instant signed height is not clamped.
+Both maxima start at zero, persist through near-level calibration refresh,
+and reset only at MARK/boot, not GP21 START. MARK also clears window and
+quality counters. Invalid data/gaps/refresh clear readiness/windows but
+preserve peaks; stale numeric averages must not be used when readiness is
+false. Geometry and the wide tolerance are in imu_settings.h; median length
+is configurable up to31 samples in imu_roll.h. Default20 is approved.
+
+### Filter response and window choice (fixtures only)
+
+100 Hz, dt=10 ms, alpha=10/(100+10). The roll LPF's low-frequency group
+delay is100 ms; the 10-sample mean adds45 ms, total about145 ms (14.5 mm
+at100 mm/s). Median is nonlinear: it has no universal group delay. For a
+monotonic signal, its additional central-sample delay is about70/95/150 ms
+for15/20/31 samples. These values are NOT measured hardware timing.
+
+The actual test hump is10 mm high/195 mm long:95 mm ramp each side and
+5 mm crest, ramp angle about6 degrees. Above80% lasts430 ms, above90%
+240 ms at100 mm/s. The alternative fixture extends the crest to50 mm,
+a500 ms flat top. Fixtures transform height to roll, apply the actual LPF
+recurrence, mean10, then median. No hidden amplitude correction is applied.
+
+| Median window | Triangle median max / bias mm | 500 ms flat-top median max mm | Flat WHITE sd2 mm: median max mm | Flat 400 ms sine sd2 mm: median max mm | Step median t90 ms |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 150 ms /15 | 9.364 /-0.636 | 9.979 | 1.188 | 2.173 | 370 |
+| **200 ms /20 default** | **9.310 /-0.690** | **9.974** | **1.098** | **1.797** | **390** |
+| 310 ms /31 | 9.143 /-0.857 | 9.961 | 0.890 | 0.975 | 450 |
+
+Mean peak without median: triangle9.426, flat-top9.986 mm. Mean step
+response t10/t50/t90=50/130/300 ms with a warmed window. Median startup
+needs10+N-1 consecutive valid samples (290 ms for default20); the step
+fixture starts with level/warmed windows, not cold initialization.
+
+The noise fixtures inject sd2 mm AFTER the roll LPF (the observed driving
+roll sd1.0..1.2 degrees is about2 mm). WHITE noise uses a fixed seed over
+10 s; the sine has400 ms period. Neither spectrum was measured, and these
+maxima are NOT expected real noise bounds. Mean-only white maximum1.717 mm.
+A slow oscillation survives longer windows; max-since-MARK also grows with
+observation time. Median20 trades a small additional crest bias over15 for
+more noise suppression, with less crest attenuation/delay than31. The
+measured noise spectrum is unknown, so retain BOTH mean peak and median
+max for the next hardware run. A single20 mm raw spike becomes a2 mm mean
+peak and a1 mm median20 peak; this is smoothing, not perfect artifact veto.
+No fixture result establishes physical accuracy, and no fit corrects its bias.
+
+## Step 2c current procedure
+
+1. Build IMU_STREAM as above. Boot LEVEL, USB console, GP0/1 clear of UART.
+   GP7 now connects GY-511 accelerometer INT1; GP6 connects magnetometer
+   DRDY and is unused. Grove7 also exposes GP28 barcode analog: leave any
+   barcode digital output disconnected from GP7. Do not change GP28 mux.
+2. Probe writes/readbacks CTRL_REG3_A=0x10 (I1_DRDY1), CTRL_REG6_A=0x00
+   (high-active/default mode), retaining100 Hz/BDU/HR/2 g. GP7 is a SIO
+   input with weak PULL-DOWN; the sensor drives it, no external pull-up is
+   requested. This exposes an unwired LOW input. No GPIO IRQ/edge callback,
+   FIFO, SDK clock/runtime or ninth template deviation is introduced.
+3. Read path samples GP7 immediately before and after the SIX accel bytes,
+   BEFORE magnetometer transfer. Successful accel reads count HIGH->LOW
+   matches; other pairs count mismatches, with separate HIGH-before and
+   LOW-after totals. Failed accel transfers do not count checks. A mag fault
+   may occur AFTER a completed check. Levels are the last attempt. INT1 is
+   only a wiring/freshness diagnostic: mismatches neither discard samples
+   nor drive/stop the robot. Poll phase/ODR jitter can cause mismatches even
+   when wiring works. Transition behavior is **Not run** on hardware here.
+4. Keep the approved VIN/lifted-first GP21 safety procedure above. Do one
+   flat600 mm drive, then THREE right-wheel hump drives, LEVEL start and
+   GP20 MARK BEFORE EACH. Do not lift the body after MARK. Inspect new
+   `roll_zR/avg/peak/plateau`, readiness, pitch quality/ratio, old full model,
+   source timestamps and INT1 counters. Label each drive and object.
+5. `[S4_VIB]` reports per-drive Welford SAMPLE std/mean of corrected pitch
+   and filtered roll, accumulated from distinct valid observer snapshots
+   at50 Hz, with0.1-degree input quantization. Reset on accepted GP21 start,
+   not MARK; report periodically and at stop. The command window includes
+   startup but not post-stop coasting. Hump pose changes also contribute:
+   this is whole-drive angle spread, not isolated vibration variance. It is
+   not the100 Hz sensor population or a terrain decision.
+   Timestamped raw/filtered/corrected angles remain in the50 Hz stream for
+   offline analysis. No embedded dominant-frequency guess is added.
+6. Frequencies at/above25 Hz may alias in this observer stream. Whether
+   that explains the driving noise remains OPEN. Only if actual flat data
+   requires it, separately approve step2d (400 Hz/FIFO/INT1 IRQ, likely
+   template deviation9); DO NOT start it as part of this change.
+7. Record actual new work/core/read timing, gaps and both task stack bounds.
+   Step2b work1562 us average/max2530 us is NOT a step2c measurement.
+   Physical roll-only accuracy, noise, delay and stopping remain pending
+   [step2c tests](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
+
+## Step 2c software validation
+
+160 host cases pass, including median15/20/31 fixtures, bad pitch that
+NEVER gates the new peak, signed heights, MARK/invalid readiness, support
+peak persistence across refresh, Welford sample std, all four INT1 pairs
+and configuration/readback/failure exits. Recorder67/dashboard180 remain
+green. New physical measurements remain Not run.
+
+| Clean profile | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Default SMP1 USB/Wi-Fi | 330116 | 760 | 130280 |
+| Robot SMP0 no radio | 83196 | 688 | 123744 |
+| BENCH SMP0 no radio | 41982 | 148 | 95460 |
+| MQTT SMP0 | 394372 | 904 | 188308 |
+| TEST SMP0 no radio | 77184 | 688 | 123172 |
+| MQTT-TEST SMP0 | 384432 | 904 | 187324 |
+| IMU_STREAM SMP0 no radio | 73084 | 688 | 122964 |
+
+Clang AddressSanitizer/undefined-behavior/float-cast checks pass for core,
+service, roll15/20/31, drive/stats, probe, register adapter and every stream
+fault scenario. GPIO tests include weak pull-down and both INT1 levels.
+
+Seven clean warning-free builds use `make -j4 --output-sync=target`.
+Twelve related units/profile pass strict ARM flags (84 compilations).
+Seven retained SDK proofs pass with no unresolved/atomic-runtime helpers.
+UART pin guards and startup pin safety remain enforced. Template deviations
+stay8 against c3b0954; no clock/IRQ/SDK runtime owner is added. See the
+[current RAM/stack evidence](../kernel/RAM_BUDGET.md#imu-step-2c-measured-delta).
+These results are software gates, not physical peak accuracy or CPU bounds.
 
 ## Historical steps 0 and 1
 

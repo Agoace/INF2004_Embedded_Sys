@@ -56,7 +56,7 @@ Task functions do not return. They loop or call `tk_ext_tsk()`.
 IMU_STREAM's TEST20 observer alone can request the operator GP21 drive
 trial (100 mm/s,600 mm/10 s), with stop-pending retries. No IMU14 height or
 quality result chooses a drive command. VIN/lifted-first hardware checks
-remain pending; see the [procedure](../s4-imu/IMU.md#step-2b-current-procedure).
+remain pending; see the [procedure](../s4-imu/IMU.md#step-2c-current-procedure).
 
 ### Interfaces and kernel objects
 

@@ -43,6 +43,11 @@ bool imu_hw_drive_down(void)
     return !gpio_get(21u);
 }
 
+bool imu_hw_int1_high(void)
+{
+    return gpio_get(7u);
+}
+
 static uint32_t started;
 static uint32_t spins;
 
@@ -102,6 +107,11 @@ int imu_hw_init(void)
     gpio_set_function(SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(SDA_PIN);
     gpio_pull_up(SCL_PIN);
+    /* INT1 is push-pull/high-active; weak down exposes an unwired input.
+     * No edge detector, GPIO callback, IRQ or magnetometer DRDY ownership. */
+    gpio_init(7u);
+    gpio_set_dir(7u, GPIO_IN);
+    gpio_pull_down(7u);
     return IMU_IO_OK;
 }
 

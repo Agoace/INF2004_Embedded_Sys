@@ -55,7 +55,7 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
 GP0/GP1 belong to I2C0. BENCH has no IMU task. Follow the current
-[50 Hz support/GP21 procedure](../s4-imu/IMU.md#step-2b-current-procedure).
+[50 Hz support/GP21 procedure](../s4-imu/IMU.md#step-2c-current-procedure).
 The GP21 drive trial requires VIN and a lifted-wheel stop check first.
 It is not the full TEST suite or a navigation feature.
 

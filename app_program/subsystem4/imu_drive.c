@@ -3,6 +3,41 @@
 #include <math.h>
 #include <stddef.h>
 
+void imu_drive_stats_reset(imu_drive_stats_t *s)
+{
+    if (s != NULL) {
+        *s = (imu_drive_stats_t){0};
+    }
+}
+
+void imu_drive_stats_add(imu_drive_stats_t *s, float pitch, float roll)
+{
+    const float values[2] = {pitch, roll};
+
+    if (s == NULL || !isfinite(pitch) || !isfinite(roll) ||
+        s->samples == UINT32_MAX) {
+        return;
+    }
+    ++s->samples;
+    for (unsigned int i = 0u; i < 2u; ++i) {
+        const float delta = values[i] - s->mean[i];
+
+        s->mean[i] += delta / (float)s->samples;
+        s->m2[i] += delta * (values[i] - s->mean[i]);
+    }
+}
+
+void imu_drive_stats_std(const imu_drive_stats_t *s, float out[2])
+{
+    if (s == NULL || out == NULL) {
+        return;
+    }
+    for (unsigned int i = 0u; i < 2u; ++i) {
+        out[i] = s->samples > 1u ?
+            sqrtf(fmaxf(s->m2[i], 0.0f) / (float)(s->samples - 1u)) : 0.0f;
+    }
+}
+
 void imu_drive_cancel(imu_drive_t *job)
 {
     if (job != NULL) {

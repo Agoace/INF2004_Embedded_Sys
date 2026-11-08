@@ -197,12 +197,13 @@ the next plain `make` goes back to the defaults.
 Robot/TEST images now run the observe-only GY-511 task at 100 Hz, with no
 driving action or MQTT/KR1 IMU field. They require USB and `CRASH_REPORT=0`;
 UART-conflict builds are rejected. BENCH has no IMU task. For the 50 Hz
-RIGHT-wheel support stream, use `TEST=1 IMU_STREAM=1` with
+RIGHT-wheel roll-only stream (legacy full-model diagnostics retained),
+use `TEST=1 IMU_STREAM=1` with
 `SMP=0 WIFI=none NET=none`. It skips other tests until power-off; GP20 MARK
 resets peaks/integral/distance. GP21 optionally drives equal100 mm/s for
 600 mm or10 s; second press/fault stops. VIN is required: lift wheels and
 verify stopping FIRST. Boot level/still >=1 s; tilted refresh is guarded.
-See the [current IMU procedure](docs/s4-imu/IMU.md#step-2b-current-procedure).
+See the [current IMU procedure](docs/s4-imu/IMU.md#step-2c-current-procedure).
 Ordinary TEST retains the existing test order and destructive watchdog test.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call

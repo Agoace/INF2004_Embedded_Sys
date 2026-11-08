@@ -87,14 +87,67 @@ confirmed the RIGHT wheel only, with left wheel/caster on the floor. The
 step-2b defaults are WB80/T111, not the offline fit79; track115 was a rough
 operator measurement, not a replacement for the effective calibrated111.
 
-### Step 2b pending hardware
+### Step 2b hardware on75ff329
+
+Operator-supplied numbers only; private log name
+`build/mtk_logs/s4_step2b_192054.txt` was NOT opened or copied.
+
+- New cable: no resets,21400 reads,zero faults, max sample gap18.4 ms,
+  missed wakes0. This does not establish the cause of the earlier resets.
+- Work average1562/max2530 us; read564/705 us; core818/1053 us.
+  Average wall-work is15.62% at100 Hz, not exclusive core CPU utilization.
+  These are step2b measurements, NOT the new step2c budget.
+- Static RIGHT-wheel objects,1 s means: rough5 mm object gave5.2/5.2 mm
+  as reported;10 mm ramp had roll+5.4/pitch-4.1 degrees, roll-only
+  `111*sin(roll)` about10.5 mm versus full-model firmware zR11.1 mm.
+  Notebook, compressible13..14 mm: roll-only12.5 mm. Expected pitch from
+  right-lift geometry was-3.7 degrees at roll5.4, measured-4.1: static
+  pose is consistent with caster/left wheel staying on the floor.
+- After MARK3 the body was lifted by hand: zL28 mm and full-model zR
+  peak13.95 mm became polluted. A tilt-only observer cannot prove ground
+  contact or reject every hand-lift pose. MARK on LEVEL before each trial.
+- VIN/lifted wheels: GP21 automatic DISTANCE stop at601.6 mm; another run
+  BUTTON stop at93.8 mm. Operator PASS. These are encoder distances at the
+  stop decision, not verified physical ground stopping distances/braking.
+- Three powered100 mm/s right-wheel hump runs started LEVEL (operator
+  confirmed); no GP20 between runs, so firmware peak retained13.95 mm.
+  Offline split only: corrected-pitch sd3.2..4.9 degrees versus static
+  0.1..0.3, roll sd about1.0..1.2 degrees. Pitch contribution swung zR
+  about+/-14 mm on FLAT floor; abs(zL)<=2 eligibility almost never held.
+  The full-model primary was unusable while driving, not a height PASS.
+
+Offline roll-only `T*sin(filtered roll)`,200 ms mean (not step2c firmware):
+
+| Run over10 mm hump | Offline peak mm | Offline median of samples >0.8 peak mm |
+| --- | ---: | ---: |
+| 1 | 14.4 | 12.9 |
+| 2 | 7.4 | 6.7 |
+| 3 | 12.8 | 11.6 |
+
+Earlier hand-push roll-only estimates were10.4/6.0/13.9 mm. The derived
+RIGHT-only model uses roll=asin(h/T), with left wheel/caster on the floor;
+pitch=-asin(h/(2*WB)) becomes a consistency diagnostic. Dynamic pitch noise
+motivates step2c; offline agreement is not physical accuracy acceptance.
+
+### Step 2b remaining checks
 
 | ID | Check | Result |
 | --- | --- | --- |
-| S4-U07 | Static measured blocks: RIGHT first, then LEFT, both drive wheels and caster; signs, alternate hypotheses, guarded refresh, 2 mm consistency eligibility and smoothed peaks/MARK | **Not run** |
-| S4-U08 | VIN, lifted-wheel GP21 first check; equal100 mm/s,600 mm or10 s maximum, second press/fault stop; then three driven RIGHT-wheel hump passes with full traces and stop verification | **Not run** |
+| S4-U07 | Static blocks, RIGHT first; then LEFT/both/caster | **Partial on75ff329**: RIGHT results below; LEFT/both/caster and current step2c checks Not run |
+| S4-U08 | VIN, lifted GP21, then driven RIGHT-wheel hump | **Lifted distance/button PASS on75ff329**; driven estimator FINDING below, no height-accuracy PASS; hardware timeout/fault paths Not run |
 
-Use the [step-2b procedure](../../docs/s4-imu/IMU.md#step-2b-current-procedure).
+### Step 2c pending hardware
+
+| Check | Result |
+| --- | --- |
+| INT1 HIGH-before/LOW-after accel reads, readback CTRL_REG3=0x10, weak pull-down/no IRQ | **Not run** |
+| Flat600 mm drive: roll-only peak/median, quality ratio, per-drive std and actual work/stack/gaps | **Not run** |
+| Three10 mm RIGHT-wheel hump drives, LEVEL start and GP20 BEFORE EACH; raw/mean/median peaks plus full-model diagnostics | **Not run** |
+
+Use the [current step2c procedure](../../docs/s4-imu/IMU.md#step-2c-current-procedure).
+The real hump is10 mm high/195 mm long: about95 mm per6-degree ramp,
+only5 mm flat crest. At100 mm/s, above80% height lasts about0.43 s and
+above90% about0.24 s. Do not assume a0.5 s flat plateau.
 Investigate the three unexplained resets before treating any trial as
 reliable. Do not substitute offline gated peaks for a firmware/hardware PASS.
 

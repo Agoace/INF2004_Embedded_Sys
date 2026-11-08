@@ -32,5 +32,20 @@ int main(void)
     assert(imu_drive_step(&job, 10000u, 20.0f, true, false) == 100);
     assert(imu_drive_step(&job, 10020u, INFINITY, false, false) == 0);
     assert(!job.active);
+    imu_drive_stats_t stats;
+    float std[2];
+
+    imu_drive_stats_reset(&stats);
+    imu_drive_stats_add(&stats, 1, -2);
+    imu_drive_stats_add(&stats, 2, 0);
+    imu_drive_stats_add(&stats, 3, 2);
+    imu_drive_stats_add(&stats, NAN, 0);
+    imu_drive_stats_std(&stats, std);
+    assert(stats.samples == 3u && stats.mean[0] == 2);
+    assert(fabsf(std[0] - 1) < 0.0001f);
+    assert(fabsf(std[1] - 2) < 0.0001f);
+    imu_drive_stats_reset(&stats);
+    imu_drive_stats_std(&stats, std);
+    assert(stats.samples == 0u && std[0] == 0 && std[1] == 0);
     return 0;
 }

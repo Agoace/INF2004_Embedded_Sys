@@ -57,7 +57,7 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Static stack, bias/support/filter state, snapshot and libm state | about 3 KB | **4028 B**, including 2048 B stack; step2b below |
+| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **4428 B**, including2048 B stack; step2c below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
@@ -163,7 +163,37 @@ Step2b retains work/core/read last/max/total counters, includes checked
 phase replay, and adds only one roll sine (pitch sine is reused). New target
 work/stack/timing MUST be recorded after an approved run; **Not run** here.
 Do not project host throughput onto the Cortex-M0+. See
-[S4 evidence and pending checks](../../testing/subsystem4/TEST_LOG.md#step-2b-pending-hardware).
+[S4 evidence and pending checks](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
+
+## IMU step 2c measured delta
+
+Same public fixture/toolchain as step2b; no firmware flashed.
+
+| MQTT static RAM | Bytes | Delta |
+| --- | ---: | ---: |
+| Original b569adc baseline | 184784 | reference |
+| Step2b75ff329 | 188812 | +4028 |
+| Step2c: data904 + bss188308 | 189212 | **+4428 original; +400 step2b** |
+
+Static remainder72932 B before dynamic kernel use. The2048 B IMU static
+stack is included; no queue/stack reduction, packing or CR1 work is used.
+New storage is the bounded roll mean/median state, output copy and INT1
+counters. STREAM grows424 B overall: common400 B plus net24 B for its
+observer Welford/timestamp state and link alignment.
+
+Host core/output/probe/snapshot sizes644/228/68/372 B. Strict ARM local
+frames: sample784, core120, roll136, entry16 B. These are NOT total stack
+bounds; sorting uses a bounded20-float local array (capacity31 configurable).
+New physical high-water/CPU acceptance is **Not run**.
+
+Step2b hardware supplied by the operator: work average1562/max2530 us,
+read564/705 us, core818/1053 us, max gap18.4 ms, missed0,21400 reads and
+zero faults/resets with a new cable. Average work is15.62% at100 Hz, not
+exclusive core CPU use. It does not validate this changed math/snapshot.
+Step2c adds a roll sine, expected-pitch asin and bounded median, keeping
+work/core/read counters. Hardware timing, both stacks and flat/driven noise
+must be measured, not inferred from host throughput or step2b wall time.
+See [current checks](../../testing/subsystem4/TEST_LOG.md#step-2c-pending-hardware).
 
 ## Steps if the RAM becomes too small
 

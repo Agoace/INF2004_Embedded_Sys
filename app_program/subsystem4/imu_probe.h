@@ -17,7 +17,15 @@ typedef struct {
     bool ready;
     /* Last successful setup readbacks, not live register reads. */
     uint8_t ctrl1;
+    uint8_t ctrl3;
     uint8_t ctrl4;
+    uint32_t int1_checks;     /* Successful accel reads only, not IRQs. */
+    uint32_t int1_matches;    /* HIGH before, LOW immediately after. */
+    uint32_t int1_mismatches;
+    uint32_t int1_before_high;
+    uint32_t int1_after_low;
+    bool int1_before;
+    bool int1_after;
 } imu_probe_t;
 
 void imu_probe_init(imu_probe_t *probe);

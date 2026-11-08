@@ -10,6 +10,14 @@ static unsigned int calls;
 static unsigned int fail_call;
 static int fail_result;
 static bool wrong_readback;
+static bool int1_before = true;
+static bool int1_after;
+static unsigned int int1_calls;
+
+bool imu_hw_int1_high(void)
+{
+    return (++int1_calls % 2u) != 0u ? int1_before : int1_after;
+}
 
 static int step(void)
 {
@@ -64,6 +72,9 @@ static void reset(imu_probe_t *probe)
     fail_call = 0u;
     now_us = 0u;
     wrong_readback = false;
+    int1_before = true;
+    int1_after = false;
+    int1_calls = 0u;
     imu_probe_init(probe);
 }
 
@@ -78,12 +89,23 @@ int main(void)
     assert(!imu_probe_read(&probe, 0u, &value)); /* setup, no sample yet */
     setup_calls = calls;
     assert(probe.ready && !probe.faults);
-    assert(probe.ctrl1 == 0x57u && probe.ctrl4 == 0x88u);
+    assert(probe.ctrl1 == 0x57u && probe.ctrl3 == 0x10u &&
+           probe.ctrl4 == 0x88u);
+    assert(registers[0][0x22] == 0x10u && registers[0][0x25] == 0u);
     assert(registers[0][0x20] == 0x57u && registers[0][0x23] == 0x88u);
     assert(registers[1][0] == 0x18u && registers[1][1] == 0x20u);
     assert(registers[1][2] == 0u);
     assert(imu_probe_read(&probe, 20u, &value));
     assert(probe.reads == 1u && probe.last_us == 80u && probe.max_us == 80u);
+    assert(probe.int1_checks == 1u && probe.int1_matches == 1u);
+    for (unsigned int pair = 0u; pair < 3u; ++pair) {
+        int1_before = pair == 1u;
+        int1_after = pair != 0u;
+        assert(imu_probe_read(&probe, 21u + pair, &value));
+    }
+    assert(probe.int1_checks == 4u && probe.int1_matches == 1u &&
+           probe.int1_mismatches == 3u);
+    assert(probe.int1_before_high == 2u && probe.int1_after_low == 2u);
     fail_call = calls + 2u;
     fail_result = IMU_IO_TIMEOUT;
     memset(&value, 0x55, sizeof(value));
@@ -93,9 +115,16 @@ int main(void)
         assert(memcmp(&saved, &value, sizeof(value)) == 0);
     }
     assert(probe.timeouts == 1u && probe.faults == 1u && !probe.ready);
+    assert(probe.int1_checks == 5u); /* Mag failed AFTER accel check. */
     before = calls;
     assert(!imu_probe_read(&probe, 1029u, &value) && calls == before);
     assert(!imu_probe_read(&probe, 1030u, &value) && probe.ready);
+    reset(&probe);
+    assert(!imu_probe_read(&probe, 0u, &value));
+    fail_call = calls + 1u;
+    fail_result = IMU_IO_NACK;
+    assert(!imu_probe_read(&probe, 20u, &value));
+    assert(probe.int1_checks == 0u && int1_calls == 2u);
     /* Fault at each setup stage: init, identities, writes and readbacks. */
     for (unsigned int i = 1u; i <= setup_calls; ++i) {
         reset(&probe);

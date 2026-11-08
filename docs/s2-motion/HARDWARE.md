@@ -15,7 +15,8 @@ before a powered test. Historical calibration used Pico SDK2.3.0.
 | GY-511 SDA/SCL | GP0/GP1 | I2C0, robot/TEST IMU observer; USB console, crash mirror off |
 | Sonar echo/trigger | GP2/GP3 | HC-SR04+, sonar service |
 | Right/motor 2 encoder A/B | GP4/GP5 | Motion; forward raw count decreases, sign-1 |
-| GY-511 DRDY | GP6 | Earlier level HIGH; edge behavior not established; TEST reads use polling |
+| GY-511 DRDY (magnetometer) | GP6 | Connected, unused; not the accelerometer data-ready signal |
+| GY-511 INT1 (accelerometer) | GP7 | CTRL_REG3 I1_DRDY1; polled before/after reads, input with weak pull-down; no IRQ |
 | Left/motor 1 driver | GP8/GP9 | Forward/reverse PWM |
 | Right/motor 2 driver | GP10/GP11 | Forward/reverse PWM |
 | Servo | GP15 | Motion owns PWM; positive angle turns left |
@@ -30,7 +31,10 @@ labels into the current two-sensor wiring. GP29/ADC3 is not selected.
 The GY-511 scan found accelerometer0x19 and magnetometer0x1E. Current
 accelerometer TEST bring-up and scale limits are in [IMU.md](../s4-imu/IMU.md);
 the raw magnitude is not calibrated gravity. No magnetometer navigation
-or verified DRDY transition is implied.
+is implied. Grove 7 exposes GP7 and GP28: GP7 now carries accelerometer
+INT1 while GP28 remains the barcode analog input. Do not assign GP7 to
+barcode output or enable a GPIO IRQ. Step 2c checks INT1 HIGH before and
+LOW after the accel read; that transition is still a pending hardware gate.
 
 ## Geometry and distance settings
 

@@ -40,12 +40,13 @@ static void report(const imu_snapshot_t *snapshot)
 {
     const imu_core_output_t *v = &snapshot->value;
 
-    tm_printf((UB *)"[S4] t_ms %lu valid %u motion %u "
+    tm_printf((UB *)"[S4] t_ms %lu source_us %lu valid %u motion %u "
               "raw_mg %ld %ld %ld cal_mg %ld %ld %ld "
               "raw_ddeg %ld %ld pitch_ddeg %ld roll_ddeg %ld "
               "filt_ddeg %ld %ld corrected_ddeg %ld "
               "v_mm_s %ld a_mm_s2 %ld cal %u faults %lu",
               (unsigned long)snapshot->timestamp_ms,
+              (unsigned long)snapshot->timestamp_us,
               (unsigned int)v->valid, (unsigned int)v->motion_valid,
               (long)snapshot->raw.accel_mg[0],
               (long)snapshot->raw.accel_mg[1],
@@ -62,6 +63,17 @@ static void report(const imu_snapshot_t *snapshot)
     print_mm("distance_mm", v->distance_mm);
     print_mm("height_mm", v->height_mm);
     print_mm("peak_mm", v->peak_mm);
+    print_mm("roll_zR_mm", v->roll_only.height_mm);
+    print_mm("roll_avg_mm", v->roll_only.smoothed_mm);
+    print_mm("roll_peak_mm", v->roll_only.peak_mm);
+    print_mm("roll_plateau_mm", v->roll_only.plateau_mm);
+    print_mm("pitch_expected_deg", v->roll_only.expected_pitch_rad *
+             57.2957795f);
+    print_mm("quality_ratio", v->roll_only.quality_ratio);
+    tm_printf((UB *)" roll_ready %u %u pitch_quality %u",
+              (unsigned int)v->roll_only.smooth_ready,
+              (unsigned int)v->roll_only.plateau_ready,
+              (unsigned int)v->roll_only.quality_good);
     print_mm("zR_mm", v->right_mm);
     print_mm("zR_avg_mm", v->right_smoothed_mm);
     print_mm("zR_peak_mm", v->right_peak_mm);
@@ -77,6 +89,24 @@ static void report(const imu_snapshot_t *snapshot)
 }
 
 #if APP_IMU_STREAM
+static imu_drive_stats_t vibration;
+static uint32_t vibration_stamp;
+static bool have_vibration_stamp;
+
+static void vibration_report(void)
+{
+    float std[2];
+
+    imu_drive_stats_std(&vibration, std);
+    tm_printf((UB *)"[S4_VIB] n %lu observer_hz 50",
+              (unsigned long)vibration.samples);
+    print_mm("pitch_mean_deg", vibration.mean[0]);
+    print_mm("roll_mean_deg", vibration.mean[1]);
+    print_mm("pitch_std_deg", std[0]);
+    print_mm("roll_std_deg", std[1]);
+    tm_printf((UB *)"\n");
+}
+
 /* This is the ONLY drive client here, compiled out of ordinary TEST/robot.
  * VIN and a clear test area are operator preconditions, not sensed inputs. */
 static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
@@ -102,6 +132,18 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
             imu_drive_cancel(job);
         }
     }
+    if (!was_active && job->active) {
+        imu_drive_stats_reset(&vibration);
+        have_vibration_stamp = false;
+    }
+    if ((was_active || job->active) && observed && s->value.valid &&
+        (!have_vibration_stamp || vibration_stamp != s->timestamp_us)) {
+        imu_drive_stats_add(&vibration,
+            (float)s->value.corrected_pitch_ddeg * 0.1f,
+            (float)s->value.filtered_roll_ddeg * 0.1f);
+        vibration_stamp = s->timestamp_us;
+        have_vibration_stamp = true;
+    }
     if (!job->active && (was_active || press || *stop_pending)) {
         const bool was_pending = *stop_pending;
         bool stopped = motion_stop() >= E_OK;
@@ -120,6 +162,9 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
                   (unsigned int)job->active, (unsigned int)job->reason);
         print_mm("travel_mm", job->distance_mm);
         tm_printf((UB *)"\n");
+        if (was_active && !job->active) {
+            vibration_report();
+        }
     }
 }
 #endif
@@ -128,6 +173,19 @@ static void diagnostics(const imu_snapshot_t *s)
 {
     const imu_core_output_t *v = &s->value;
 
+#if APP_IMU_STREAM
+    vibration_report();
+#endif
+    tm_printf((UB *)"[S4_INT1] ctrl3 %02x before %u after %u "
+              "checks %lu matches %lu mismatches %lu high %lu low %lu\n",
+              (unsigned int)s->probe.ctrl3,
+              (unsigned int)s->probe.int1_before,
+              (unsigned int)s->probe.int1_after,
+              (unsigned long)s->probe.int1_checks,
+              (unsigned long)s->probe.int1_matches,
+              (unsigned long)s->probe.int1_mismatches,
+              (unsigned long)s->probe.int1_before_high,
+              (unsigned long)s->probe.int1_after_low);
     tm_printf((UB *)"[S4_QUALITY] refresh_rejects %lu tilt_ddeg %ld "
               "peak_rejects %lu omega_mrad_s %ld alpha_mrad_s2 %ld\n",
               (unsigned long)v->refresh_rejects,

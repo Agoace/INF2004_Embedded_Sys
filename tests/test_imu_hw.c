@@ -11,19 +11,37 @@ fake_i2c_t fake_i2c;
 fake_reset_t fake_reset;
 fake_timer_t fake_timer;
 static unsigned int pins;
+static bool int1;
+static bool pulled_down;
 
 void gpio_set_function(unsigned int pin, unsigned int function)
 {
     assert((pin < 2u) && (function == GPIO_FUNC_I2C));
     pins |= 1u << pin;
 }
-void gpio_pull_up(unsigned int pin) { assert(pin < 2u || pin == 20u); }
-void gpio_init(unsigned int pin) { assert(pin == 20u); }
+void gpio_pull_up(unsigned int pin)
+{
+    assert(pin < 2u || pin == 20u || pin == 21u);
+}
+void gpio_pull_down(unsigned int pin)
+{
+    assert(pin == 7u);
+    pulled_down = true;
+}
+void gpio_init(unsigned int pin)
+{
+    assert(pin == 7u || pin == 20u || pin == 21u);
+}
 void gpio_set_dir(unsigned int pin, unsigned int direction)
 {
-    assert(pin == 20u && direction == GPIO_IN);
+    assert((pin == 7u || pin == 20u || pin == 21u) &&
+           direction == GPIO_IN);
 }
-bool gpio_get(unsigned int pin) { assert(pin == 20u); return false; }
+bool gpio_get(unsigned int pin)
+{
+    assert(pin == 7u || pin == 20u || pin == 21u);
+    return pin == 7u ? int1 : false;
+}
 
 int main(void)
 {
@@ -31,12 +49,17 @@ int main(void)
 
     imu_hw_mark_init();
     assert(imu_hw_mark_down());
+    imu_hw_drive_init();
+    assert(imu_hw_drive_down());
 
     assert(imu_hw_init() == IMU_IO_TIMEOUT); /* reset never completes */
     fake_reset.reset_done = RESETS_RESET_I2C0_BITS;
     assert(imu_hw_init() == IMU_IO_OK && pins == 3u);
     assert(fake_i2c.fs_scl_hcnt == 126u && fake_i2c.fs_scl_lcnt == 187u);
     assert(fake_i2c.sda_hold == 38u && fake_i2c.intr_mask == 0u);
+    assert(pulled_down && !imu_hw_int1_high());
+    int1 = true;
+    assert(imu_hw_int1_high());
     fake_i2c.enable_status = 1u;
     assert(imu_hw_read(0x19u, 0x0fu, bytes, 1u) == IMU_IO_TIMEOUT);
     fake_i2c.enable_status = 0u;

@@ -16,9 +16,10 @@ typedef struct {
 static const reg_setting_t settings[] = {
     {IMU_ACCEL_ADDR, 0x20u, 0x00u}, /* power down during configuration */
     {IMU_ACCEL_ADDR, 0x21u, 0x00u},
-    {IMU_ACCEL_ADDR, 0x22u, 0x00u}, /* no DRDY pin */
+    {IMU_ACCEL_ADDR, 0x22u, 0x10u}, /* I1_DRDY1: accel DRDY on INT1/GP7 */
     {IMU_ACCEL_ADDR, 0x23u, 0x88u}, /* BDU, HR, +/-2 g, little endian */
     {IMU_ACCEL_ADDR, 0x24u, 0x00u},
+    {IMU_ACCEL_ADDR, 0x25u, 0x00u}, /* high-active, default output mode */
     {IMU_MAG_ADDR, 0x00u, 0x18u},   /* 75 Hz */
     {IMU_MAG_ADDR, 0x01u, 0x20u},   /* +/-1.3 gauss */
     {IMU_MAG_ADDR, 0x02u, 0x00u},   /* continuous */
@@ -73,6 +74,9 @@ static int configure(imu_probe_t *probe)
         if ((s->address == IMU_ACCEL_ADDR) && (s->reg == 0x20u)) {
             probe->ctrl1 = id[0];
         }
+        if ((s->address == IMU_ACCEL_ADDR) && (s->reg == 0x22u)) {
+            probe->ctrl3 = id[0];
+        }
         if ((s->address == IMU_ACCEL_ADDR) && (s->reg == 0x23u)) {
             probe->ctrl4 = id[0];
         }
@@ -112,8 +116,17 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now_ms, imu_units_t *out)
             return false;
         }
     } else {
+        probe->int1_before = imu_hw_int1_high();
         result = imu_hw_read(IMU_ACCEL_ADDR, 0xa8u, accel, sizeof(accel));
+        probe->int1_after = imu_hw_int1_high();
         if (result == IMU_IO_OK) {
+            ++probe->int1_checks;
+            probe->int1_before_high += probe->int1_before ? 1u : 0u;
+            probe->int1_after_low += probe->int1_after ? 0u : 1u;
+            const bool match = probe->int1_before && !probe->int1_after;
+
+            probe->int1_matches += match ? 1u : 0u;
+            probe->int1_mismatches += match ? 0u : 1u;
             /* Mag auto-increments without setting the accel-specific bit 7. */
             result = imu_hw_read(IMU_MAG_ADDR, 0x03u, mag, sizeof(mag));
         }
