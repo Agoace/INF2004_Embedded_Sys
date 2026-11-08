@@ -33,7 +33,7 @@ It reduces backlog and does not introduce drift or a periodic timer. No
 MQTT operation runs in this task. STEP 8 adds the separate named hook on
 the existing Wi-Fi owner; it pulls committed RAM entries and boards, not
 this producer queue. No control or logger task calls lwIP. See
-[MQTT design](KERNEL_MQTT.md) and [wire layout](MQTT_WIRE.md).
+[MQTT design](KERNEL_MQTT.md) and [wire layout](../../s1-telemetry/MQTT_WIRE.md).
 
 The transport does not change KR1 bit fields or VE text. Decoders continue
 to ignore descriptive headers. The 4 spare KR1 flag bits contain only the

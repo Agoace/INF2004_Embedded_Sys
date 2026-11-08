@@ -46,7 +46,7 @@ WIFI_SUFFIX := _wifi
 # request when TK_SUPPORT_SMP is off (see cyw43_utk_kernel.c), the same way the
 # USB console task already did. Everything touching the radio and lwIP still
 # runs on that one task; see the execution-and-hook section in
-# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook.
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook.
 # Single-core satisfies the same ownership rule.
 endif
 
@@ -54,7 +54,7 @@ endif
 # tcpip thread): everything that calls into lwIP -- cyw43_poll(),
 # sys_check_timeouts(), and any application tcp_*/udp_*/dns_* call -- runs
 # on the same processor-1-owned task that already services the radio, per
-# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook.
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook.
 # See lib/liblwip/sysdepend/pico_rp2040/.
 NET ?= none
 ifneq ($(filter $(NET),none lwip),$(NET))
@@ -323,7 +323,7 @@ endif
 ################################################################################
 # CYW43439 radio (polling architecture). NET=lwip below adds lwIP on top,
 # still within the same polling model -- see
-# docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook and
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook and
 # lib/liblwip/sysdepend/pico_rp2040/.
 ################################################################################
 

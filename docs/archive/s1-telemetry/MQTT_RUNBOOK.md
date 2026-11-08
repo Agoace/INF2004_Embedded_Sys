@@ -7,8 +7,8 @@ hardware tests. This implementation did not connect, flash or push. Lift
 both wheels before TEST power; S2-U02 moves motors and S2-U05 resets once.
 MQTT is optional telemetry. GP21 remains the real ESTOP; remote ESTOP is
 best effort. M1/M2 must pass independently of network availability.
-See [design and limits](KERNEL_MQTT.md), [wire layout](MQTT_WIRE.md), and
-[template changes](../architecture/TEMPLATE_CHANGES.md).
+See [design and limits](KERNEL_MQTT.md), [wire layout](../../s1-telemetry/MQTT_WIRE.md), and
+[template changes](../../architecture/TEMPLATE_CHANGES.md).
 
 ## 1. Set up a broker on the robot network
 
@@ -116,7 +116,7 @@ python3 scripts/mqtt_robot.py --host <LAPTOP_ROBOT_IP> --csv robot-mqtt.csv
 It subscribes to state, sonar, event, heartbeat and log, validates version,
 length/reserved fields, and decodes signed values to a flat CSV. It does
 not subscribe to `robot/cmd` or record tokens. It subscribes again after a
-broker reconnect. See [wire fields](MQTT_WIRE.md) for units and flags.
+broker reconnect. See [wire fields](../../s1-telemetry/MQTT_WIRE.md) for units and flags.
 
 Commands apply only to the NORMAL robot. TEST/BENCH deliberately do not
 start vehicle and do not consume these queues; broker ACK never proves a
@@ -152,7 +152,7 @@ private-setting presence (not values), power source, profile and duration.
 | S1-U04 connect/reconnect | Connect/subscription; retained ONLINE after CONNACK and OFFLINE will after AP loss (5 s keepalive; about 7.5 s broker threshold plus timer/delivery delay); broker restart and AP outage; robot/RAM log unaffected; reconnect without accumulating timeout chains |
 | S1-U05 rate/loss/decode | Signed distance/duty, encoder heading/rate, obstacle scan-ID gaps (width unavailable), detour results, retained run summary, CPU known/unknown; Live log stream about 100 rows/s in 10-row batches, data age, gaps/jumps after reconnect, DUMP refill merge and Wi-Fi hook wall time with streaming on; nominal 5 Hz state, all retained service sonar results, rare vehicle events, 1 Hz heartbeat; CSV signs/flags; sequence gaps/history misses/event losses under traffic |
 | S1-U06 commands | Unconfigured ESTOP-only; configured wrong token refused for every opcode; idle rules; calibration then START; DUMP while driving; queue-full/duplicate policy; GP21 still works |
-| S1-U07 CPU meter | MQTT TEST idle board, wheels lifted: save printed reference rate and three load samples, establish expected range, verify independent target timing and stack margin; [method](../kernel/KERNEL.md) |
+| S1-U07 CPU meter | MQTT TEST idle board, wheels lifted: save printed reference rate and three load samples, establish expected range, verify independent target timing and stack margin; [method](../kernel/CPU_LOAD.md) |
 | S2-U01 Wi-Fi20 | Unchanged 499–501 ticks / <=11000 us gap / zero missed; window and lifetime Wi-Fi wall counters, >10000 us gaps and probe cost |
 | M1/M2 with MQTT | Same local motor/navigation acceptance; separate network acceptance, lost broker never stops motion |
 

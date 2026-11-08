@@ -51,7 +51,7 @@ the normal image after a cold VIN power-on.
 STEP 7 outcomes above remain historical. Earlier STEP 8 operator results
 are summarized below and in [the hardware record](../../docs/archive/MTK3_STEP8_RECORD.md).
 They do not validate later boot/session, diagnostics or SCAN-retry changes.
-Follow [the broker runbook](../../docs/s1-telemetry/MQTT_RUNBOOK.md).
+Follow [the broker runbook](../../docs/s1-telemetry/OPERATION.md).
 
 | ID | Check | Result |
 | --- | --- | --- |

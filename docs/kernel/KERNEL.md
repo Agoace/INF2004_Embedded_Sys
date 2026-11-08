@@ -9,7 +9,7 @@ at a time, and saves a RAM log. Optional MQTT sends observations; loss of
 Wi-Fi never stops or starts the robot.
 
 Use [BUILD.md](BUILD.md) for images and flashing, [motion](../s2-motion/DUTY_MAP.md)
-for control, and [telemetry](../s1-telemetry/KERNEL_TELEMETRY.md) for network ownership.
+for control, and [telemetry](../s1-telemetry/TELEMETRY.md) for network ownership.
 The [template ledger](../architecture/TEMPLATE_CHANGES.md) lists eight approved
 shared-file deviations. This record describes current behavior, not the old
 multi-core proposal or acceptance of every possible load.

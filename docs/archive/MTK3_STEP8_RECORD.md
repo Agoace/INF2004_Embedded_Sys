@@ -143,7 +143,7 @@ interrupt time. Target accuracy and idle-board expected range remain
 
 ## Remaining hardware acceptance
 
-Use [the runbook](../s1-telemetry/MQTT_RUNBOOK.md). All are **Not run**: S0-U01 cold power;
+Use [the runbook](s1-telemetry/MQTT_RUNBOOK.md). All are **Not run**: S0-U01 cold power;
 S1-U04 reconnect/will timing; S1-U05 stream age/loss/rates, distance/duty/
 odometry, profile/detour/summary decode and loaded hook/stack timing; S1-U06
 commands; S1-U07 idle-board CPU measurement; S2-U01 independent motion/Wi-Fi
@@ -209,7 +209,7 @@ The operator verified Tailscale Serve on 2026-11-07: live data and all buttons
 worked from the remote desktop. Plain HTTP through the tailnet was used;
 short-hostname Host/Origin rejection was intentional. HTTPS certificate
 provisioning failed on the hotspot and needs a normal-network retry.
-See [remote dashboard instructions](../s1-telemetry/MQTT_DASHBOARD.md#remote-view-through-tailscale).
+See [remote dashboard instructions](s1-telemetry/MQTT_DASHBOARD.md#remote-view-through-tailscale).
 
 ## Boot/session image results — 2026-11-07
 

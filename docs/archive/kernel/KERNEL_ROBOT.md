@@ -6,7 +6,7 @@ STEP 7 separates acquisition, navigation and telemetry into core-0 tasks.
 STEP 8 adds optional, non-critical MQTT telemetry through the existing
 Wi-Fi/lwIP task. Its new hardware checks are **Not run**; STEP 7 passes
 below do not validate the new startup, boards or network load. See
-[MQTT design](../../s1-telemetry/KERNEL_MQTT.md), [runbook](../../s1-telemetry/MQTT_RUNBOOK.md) and
+[MQTT design](../s1-telemetry/KERNEL_MQTT.md), [runbook](../s1-telemetry/MQTT_RUNBOOK.md) and
 [template ledger](../../architecture/TEMPLATE_CHANGES.md).
 Pure LINE/SEARCH/SCAN/DETOUR modules, routes, motor tuning and
 [`vehicle_robot_config.h`](../../../app_program/vehicle/vehicle_robot_config.h)
@@ -209,7 +209,7 @@ a producer failure/storage-full stops the active session, never blocks
 control. A BEGIN clears saved indices, not lifetime loss counts. GP20
 sends a DUMP command and diagnostic copy; priority30 owns formatting and
 paced USB output. No new run starts while a dump is queued/active. See
-[telemetry contract](../../s1-telemetry/KERNEL_TELEMETRY.md).
+[telemetry contract](../s1-telemetry/KERNEL_TELEMETRY.md).
 
 `KR index hex` keeps the exact 16-byte little-endian mask layout:
 
@@ -426,7 +426,7 @@ counters. Health31 publishes uptime/reset, losses, overruns, app-stack
 minimum and network status. One-attempt atomic-word reads never spin.
 Busy/unavailable reads count per board; retained values have fresh flags
 cleared and explicit saturated ages. History/events do not depend on a
-latest-board read. See [board details](../../s1-telemetry/KERNEL_MQTT.md#pull-boards).
+latest-board read. See [board details](../s1-telemetry/KERNEL_MQTT.md#pull-boards).
 
 Only vehicle pushes bounded rare events. Token-bearing commands queue to
 vehicle, never directly to motion. ESTOP has a dedicated queue slot and
@@ -453,7 +453,7 @@ health is not a performance pass. No picotool reset interface is added.
 
 New-image S0-U01 cold-power (including MQTT), S1-U04/U05/U06, S2-U01 with
 Wi-Fi20, full-load stack/timing, and independent M1/M2 with MQTT are
-**Not run**. Exact [wire layouts](../../s1-telemetry/MQTT_WIRE.md) and [broker procedure](../../s1-telemetry/MQTT_RUNBOOK.md)
+**Not run**. Exact [wire layouts](../../s1-telemetry/MQTT_WIRE.md) and [broker procedure](../s1-telemetry/MQTT_RUNBOOK.md)
 are separate records. Final software results are recorded below.
 
 [STEP 8 software validation](../MTK3_STEP8_RECORD.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.

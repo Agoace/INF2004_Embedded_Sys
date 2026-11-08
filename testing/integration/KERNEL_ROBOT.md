@@ -113,4 +113,4 @@ Repeat cold-power S0-U01 on all four role families and S2-U01 with Wi-Fi20.
 M1/M2 remain independent local-drive criteria: loss of AP/broker must not
 stop or degrade driving. Network S1-U04/U05/U06 separately cover reconnect,
 rates/loss/decode and NORMAL-robot command policy. All are **Not run** on
-the STEP 8 image. Use [the runbook](../../docs/s1-telemetry/MQTT_RUNBOOK.md).
+the STEP 8 image. Use [the runbook](../../docs/s1-telemetry/OPERATION.md).

@@ -45,7 +45,7 @@ robot builds; the development record also retains older CMake bench examples.
 | Interrupt and polling conventions | [docs/architecture/INTERRUPT_CONVENTIONS.md](architecture/INTERRUPT_CONVENTIONS.md) |
 | USB power safety | [docs/s2-motion/USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md) |
 | Archived UDP bench dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
-| Live MQTT dashboard (laptop) | [docs/s1-telemetry/MQTT_DASHBOARD.md](s1-telemetry/MQTT_DASHBOARD.md) |
+| Live MQTT dashboard (laptop) | [docs/s1-telemetry/OPERATION.md](s1-telemetry/OPERATION.md) |
 | Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
 | Ultrasonic driver record | [docs/s5-obstacle/ULTRASONIC_DRIVER.md](s5-obstacle/ULTRASONIC_DRIVER.md) |
 | Forward obstacle watch record | [docs/s5-obstacle/OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md) |
@@ -237,13 +237,13 @@ vehicle task described below.
 ## Kernel telemetry
 
 - [`app_program/subsystem1/telemetry.c`](../app_program/subsystem1/telemetry.c) — priority-30 RAM log/dump owner; value messages via `mbf_telemetry`, `TMO_POL` producer sends.
-- [Kernel telemetry](s1-telemetry/KERNEL_TELEMETRY.md) — RAM ownership, local loss policy and current MQTT boundary.
+- [Kernel telemetry](s1-telemetry/TELEMETRY.md) — RAM ownership, local loss policy and current MQTT boundary.
 
 ## Approved template deviations
 
 - [Template change ledger](architecture/TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.
 - [`scripts/check-template-changes.py`](../scripts/check-template-changes.py) — verify the complete recorded deviation file list against `c3b0954`; the count must remain eight.
-- Known reference exceptions: original lecturer-template comments in [`sys_arch.h`](../lib/liblwip/sysdepend/pico_rp2040/include/arch/sys_arch.h) and [`lwipopts.h`](../lib/liblwip/sysdepend/pico_rp2040/lwipopts.h) cite the missing `RELEASE.md`. Leave both files untouched. These are the only two permitted old-path grep hits. The current rule is [single-task Wi-Fi/lwIP ownership](s1-telemetry/KERNEL_MQTT.md#execution-and-hook).
+- Known reference exceptions: original lecturer-template comments in [`sys_arch.h`](../lib/liblwip/sysdepend/pico_rp2040/include/arch/sys_arch.h) and [`lwipopts.h`](../lib/liblwip/sysdepend/pico_rp2040/lwipopts.h) cite the missing `RELEASE.md`. Leave both files untouched. These are the only two permitted old-path grep hits. The current rule is [single-task Wi-Fi/lwIP ownership](s1-telemetry/TELEMETRY.md#execution-and-hook).
 
 ## STEP 8 MQTT navigation
 
@@ -258,7 +258,7 @@ vehicle task described below.
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
 - [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load record](kernel/KERNEL.md).
 
-- [Design](s1-telemetry/KERNEL_MQTT.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/MQTT_RUNBOOK.md).
+- [Design](s1-telemetry/TELEMETRY.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/OPERATION.md).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.
 - [`log_stream.c`](../app_program/subsystem1/log_stream.c) — live RAM-log stream (QoS 0, jump-to-newest, data age) and batched QoS 1 DUMP refill with ACK cursor; live pause in IDLE; no lwIP dependency.
 - [`telemetry_mode.c`](../app_program/subsystem1/telemetry_mode.c) — pure RUN/IDLE publication-mode rule (2 s grace, TEST/BENCH always RUN) and the per-mode periods.
@@ -267,7 +267,7 @@ vehicle task described below.
 - [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`scripts/robot_wire.py`](../scripts/robot_wire.py), [`scripts/mqtt_robot.py`](../scripts/mqtt_robot.py) — explicit binary codec, pure Python decoder with log merge/gap store (no Paho), and Paho2 VERSION2 receiver/CSV/commands.
 - [`robot_mqtt_secrets.h.example`](../app_program/subsystem1/robot_mqtt_secrets.h.example) — app-owned private-header example; do not edit the template config example.
 - [`vehicle_board.h`](../app_program/vehicle/vehicle_board.h), [`vehicle_mqtt.c`](../app_program/vehicle/vehicle_mqtt.c), [`vehicle_network_policy.c`](../app_program/vehicle/vehicle_network_policy.c) — vehicle read board, bounded cross-board adapters and idle/command policy.
-- [`scripts/mqtt_dashboard.py`](../scripts/mqtt_dashboard.py), [`dashboard_model.py`](../scripts/dashboard_model.py), [`dashboard_page.py`](../scripts/dashboard_page.py) — laptop-only live dashboard ([runbook](s1-telemetry/MQTT_DASHBOARD.md)): HTTP/SSE server with CSRF/Origin/Host checks, pure panel and button-gating model, inline page; it uses `robot_wire.py` and never sends the token to the browser. [`scripts/dashboard_replay.py`](../scripts/dashboard_replay.py) makes offline public-fixture pages and screenshots for the responsive layout.
+- [`scripts/mqtt_dashboard.py`](../scripts/mqtt_dashboard.py), [`dashboard_model.py`](../scripts/dashboard_model.py), [`dashboard_page.py`](../scripts/dashboard_page.py) — laptop-only live dashboard ([runbook](s1-telemetry/OPERATION.md)): HTTP/SSE server with CSRF/Origin/Host checks, pure panel and button-gating model, inline page; it uses `robot_wire.py` and never sends the token to the browser. [`scripts/dashboard_replay.py`](../scripts/dashboard_replay.py) makes offline public-fixture pages and screenshots for the responsive layout.
 - [`tests/mqtt_protocol.cmake`](../tests/mqtt_protocol.cmake), [`dashboard_checks.cmake`](../tests/dashboard_checks.cmake), [`network_checks.cmake`](../tests/network_checks.cmake), [`mqtt_client_checks.cmake`](../tests/mqtt_client_checks.cmake) — C/Python packing, board/queue/log and mocked transport regression tests.
 - [`tests/test_sonar_history.c`](../tests/test_sonar_history.c) — non-consuming latest/history reads, overflow/miss and sequence wrap.
 

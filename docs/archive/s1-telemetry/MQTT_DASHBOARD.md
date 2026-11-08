@@ -9,10 +9,10 @@ the four robot commands (ESTOP, DUMP, START, CALIBRATE).
 - The broker (Mosquitto) and the dashboard run on the **laptop**.
 - The dashboard binds to `127.0.0.1` only. Only that laptop can open it.
 - The page works offline. It has no CDN and loads no file from the network.
-- The wire contract is [MQTT_WIRE.md](MQTT_WIRE.md). The broker set-up is in
+- The wire contract is [MQTT_WIRE.md](../../s1-telemetry/MQTT_WIRE.md). The broker set-up is in
   [MQTT_RUNBOOK.md](MQTT_RUNBOOK.md).
 - The older UDP tool `scripts/telemetry_dashboard.py` is a bench tool. See
-  [the UDP dashboard note](../archive/WIFI_TELEMETRY_DASHBOARD.md). Use this dashboard for
+  [the UDP dashboard note](../WIFI_TELEMETRY_DASHBOARD.md). Use this dashboard for
   the MQTT robot.
 - GP21 is the real emergency stop. The remote ESTOP button is best effort.
   The network never stops the vehicle by itself.
@@ -21,13 +21,13 @@ the four robot commands (ESTOP, DUMP, START, CALIBRATE).
 
 | File | Job |
 | --- | --- |
-| [`scripts/mqtt_dashboard.py`](../../scripts/mqtt_dashboard.py) | HTTP server, MQTT link, command rules, command line |
-| [`scripts/dashboard_model.py`](../../scripts/dashboard_model.py) | Pure model: messages in, panel data and button rules out |
-| [`scripts/dashboard_page.py`](../../scripts/dashboard_page.py) | The page (HTML, CSS and JavaScript in one string) |
-| [`scripts/robot_wire.py`](../../scripts/robot_wire.py) | Shared decoder, log merge and gap store, command packer |
-| [`tests/test_mqtt_dashboard.py`](../../tests/test_mqtt_dashboard.py) | Host tests (no broker, no Paho) |
-| [`tests/dashboard_page_harness.js`](../../tests/dashboard_page_harness.js) | Runs the served page script in Node with a fake DOM for drawing, command-error and restart tests |
-| [`scripts/dashboard_replay.py`](../../scripts/dashboard_replay.py) | Offline public-fixture replay pages and Firefox screenshots; no broker or private configuration |
+| [`scripts/mqtt_dashboard.py`](../../../scripts/mqtt_dashboard.py) | HTTP server, MQTT link, command rules, command line |
+| [`scripts/dashboard_model.py`](../../../scripts/dashboard_model.py) | Pure model: messages in, panel data and button rules out |
+| [`scripts/dashboard_page.py`](../../../scripts/dashboard_page.py) | The page (HTML, CSS and JavaScript in one string) |
+| [`scripts/robot_wire.py`](../../../scripts/robot_wire.py) | Shared decoder, log merge and gap store, command packer |
+| [`tests/test_mqtt_dashboard.py`](../../../tests/test_mqtt_dashboard.py) | Host tests (no broker, no Paho) |
+| [`tests/dashboard_page_harness.js`](../../../tests/dashboard_page_harness.js) | Runs the served page script in Node with a fake DOM for drawing, command-error and restart tests |
+| [`scripts/dashboard_replay.py`](../../../scripts/dashboard_replay.py) | Offline public-fixture replay pages and Firefox screenshots; no broker or private configuration |
 
 ## Run
 
@@ -294,7 +294,7 @@ sends the retained status again after the reconnect.
 ## Idle telemetry
 
 The robot firmware has two publication modes; see
-[Publication modes](MQTT_WIRE.md#publication-modes). In IDLE it sends state
+[Publication modes](../../s1-telemetry/MQTT_WIRE.md#publication-modes). In IDLE it sends state
 at 1 Hz and a heartbeat every 5 s, and it pauses the live log and sonar.
 
 | Item | Full rate (RUN or unknown) | Idle telemetry |
@@ -409,7 +409,7 @@ ESTOP is never blocked.
 - Every `GET` also needs a correct `Host` header.
 - Request IDs come from the server (random 32-bit values). The browser cannot
   choose one.
-- Commands follow [MQTT_WIRE.md](MQTT_WIRE.md): topic `robot/cmd`, QoS 1, not
+- Commands follow [MQTT_WIRE.md](../../s1-telemetry/MQTT_WIRE.md): topic `robot/cmd`, QoS 1, not
   retained, 22 bytes with a 16-byte token.
 - Anyone who can run programs on the laptop can read the token file or open
   the dashboard. Keep the laptop trusted.
@@ -436,7 +436,7 @@ ESTOP is never blocked.
 - Live log rows and DUMP refill rows merge by boot/session, generation, kind
   and index. A repeated row (QoS 1 retry) is dropped only within the same
   boot/session. See the log rules in
-  [MQTT_WIRE.md](MQTT_WIRE.md).
+  [MQTT_WIRE.md](../../s1-telemetry/MQTT_WIRE.md).
 - The row gap counter covers live rows only. A DUMP fills old holes. The
   recorder prints the final gap report when it stops.
 - The log store keeps one entry for each row until the dashboard stops. Restart

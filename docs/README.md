@@ -35,11 +35,9 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S1 — Telemetry
 
-- [KERNEL_MQTT.md](s1-telemetry/KERNEL_MQTT.md) — sole Wi-Fi/lwIP owner, pull boards, queues and timing limits.
-- [KERNEL_TELEMETRY.md](s1-telemetry/KERNEL_TELEMETRY.md) — nonblocking message transport, RAM log owner and local loss policy.
-- [MQTT_DASHBOARD.md](s1-telemetry/MQTT_DASHBOARD.md) — responsive live dashboard, offline replay, panels, command gating and web security.
-- [MQTT_RUNBOOK.md](s1-telemetry/MQTT_RUNBOOK.md) — broker/firewall scope, private settings, CSV and operator commands.
-- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — topic versions, boot identity, packed bytes, masks and decoder contract.
+- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes and RAM/live/refill ownership.
+- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — current binary topics, versions, bytes, masks, boot/session and decoder contract.
+- [OPERATION.md](s1-telemetry/OPERATION.md) — broker, recorder, dashboard, Tailscale, security, operation and radio-loss troubleshooting.
 
 ## S2 — Motion
 
@@ -102,6 +100,14 @@ only link/path/anchor repairs follow the move.
 - [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
 - [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
 - [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
+
+
+### S1 originals
+
+- [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_TELEMETRY.md](archive/s1-telemetry/KERNEL_TELEMETRY.md) — full historical source, with its measured values and original limits.
+- [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
+- [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
 
 
 ## Original-template reference exceptions

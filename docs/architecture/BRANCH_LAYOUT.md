@@ -207,6 +207,6 @@ adapters and integration/timing acceptance. Protocol and test-only
 `mtk3-*` topic branches merge into their owner with `--no-ff`; they are
 not additional runtime modules. Only `mtk3-staging-next` combines all work.
 
-[MQTT design](../s1-telemetry/KERNEL_MQTT.md) and [runbook](../s1-telemetry/MQTT_RUNBOOK.md) describe the
+[MQTT design](../s1-telemetry/TELEMETRY.md) and [runbook](../s1-telemetry/OPERATION.md) describe the
 non-critical network policy. New-image hardware rows remain **Not run**;
 software validation never grants push or flash permission.

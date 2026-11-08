@@ -255,7 +255,7 @@ Each option goes through the same steps:
 The makefile also has `NET=lwip` and `MQTT=1` (TCP/IP and MQTT over WiFi).
 They need the SDK's `lib/lwip` submodule and a `config/wifi_secrets.h`
 (copy `config/wifi_secrets.example.h`). The robot uses its own MQTT settings;
-see [the operator runbook](docs/s1-telemetry/MQTT_RUNBOOK.md), not the template demo.
+see [the operator runbook](docs/s1-telemetry/OPERATION.md), not the template demo.
 
 ---
 
@@ -297,11 +297,11 @@ the recorded file list. No SDK startup/runtime is added.
 
 `make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 -j4` adds non-critical MQTT on the
 existing Wi-Fi task at priority20 and health31. Driving never requires a
-link/broker; GP21 remains the real ESTOP. [Design](docs/s1-telemetry/KERNEL_MQTT.md),
-[wire layouts](docs/s1-telemetry/MQTT_WIRE.md), and [broker/private-settings runbook](docs/s1-telemetry/MQTT_RUNBOOK.md)
+link/broker; GP21 remains the real ESTOP. [Design](docs/s1-telemetry/TELEMETRY.md),
+[wire layouts](docs/s1-telemetry/MQTT_WIRE.md), and [broker/private-settings runbook](docs/s1-telemetry/OPERATION.md)
 explain ownership, binary CSV decoding and token-bearing commands. New-image
 network, cold-power and loaded motion/M1/M2 checks remain **Not run**.
 
-The live laptop view is [the MQTT dashboard](docs/s1-telemetry/MQTT_DASHBOARD.md): run
+The live laptop view is [the MQTT dashboard](docs/s1-telemetry/OPERATION.md): run
 `python3 scripts/mqtt_dashboard.py --host 127.0.0.1 --token-file <file>` and open
 `http://127.0.0.1:8765/`. It needs `paho-mqtt` 2.x only.

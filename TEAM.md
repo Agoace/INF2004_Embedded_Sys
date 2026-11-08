@@ -74,7 +74,7 @@ No sensor hardware access, queue draining or dump loop remains in vehicle;
 buttons may stay there. Ultrasonic results use their own deadline/age,
 not the LINE 10 ms limit. No echo is unknown, never clear. No application
 control task may call radio, lwIP or TinyUSB directly. MQTT runs only in the
-existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/s1-telemetry/KERNEL_MQTT.md).
+existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/s1-telemetry/TELEMETRY.md).
 
 ## 5. Objects, measurement and acceptance
 
@@ -118,7 +118,7 @@ repeat the checks. Read [watchdog procedure](docs/kernel/KERNEL.md).
 - Vehicle owns its board and is the sole live event producer. Its command
   queues are eight ordinary records plus a separate one-slot ESTOP queue.
 - S1 owns MQTT/health, binary v1 packing and paced log transport.
-  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/MQTT_RUNBOOK.md).
+  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/OPERATION.md).
 - Busy reads, network queues and disconnects count losses, never motor or
   vehicle faults. Boot and RAM logging do not require the network.
 - Valid configured token is required for every command. Without a valid
