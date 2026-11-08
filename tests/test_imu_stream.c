@@ -4,6 +4,8 @@
 #include <string.h>
 #include "../app_program/app.h"
 #include "../app_program/subsystem4/imu_service.h"
+#include "../app_program/subsystem4/imu_drive.h"
+#include "../app_program/subsystem2/motion.h"
 
 static jmp_buf stop;
 static unsigned int wakes;
@@ -19,6 +21,54 @@ static bool create_error;
 static bool start_error;
 static bool stop_error;
 static uint32_t acknowledged;
+static const char *mode = "";
+static unsigned int limit = 50u;
+static unsigned int speed_calls;
+static unsigned int first_speed_wake;
+static unsigned int estop_calls;
+static unsigned int drive_stops;
+static unsigned int last_reason;
+static unsigned int failed_stops;
+
+uint32_t drv_time_us(void) { return wakes * 20000u; }
+int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
+{
+    memset(out, 0, sizeof(*out));
+    out->watchdog_armed = true;
+    if (wakes >= 15u && strcmp(mode, "drive_motor_fault") == 0) {
+        out->faults = 1u;
+    }
+    *stamp = drv_time_us();
+    return E_OK;
+}
+int motion_set_speed(int16_t left, int16_t right)
+{
+    assert(left == 100 && right == 100);
+    if (speed_calls == 0u) {
+        first_speed_wake = wakes;
+    }
+    ++speed_calls;
+    return wakes >= 15u && strcmp(mode, "drive_command_fault") == 0
+               ? E_SYS : E_OK;
+}
+int motion_estop(void)
+{
+    ++estop_calls;
+    return strcmp(mode, "drive_double_stop") == 0 ||
+           strcmp(mode, "drive_double_cleanup") == 0 ? E_SYS : E_OK;
+}
+void imu_hw_drive_init(void) { }
+bool imu_hw_drive_down(void)
+{
+    if (strncmp(mode, "drive_", 6u) != 0) {
+        return false;
+    }
+    if (strcmp(mode, "drive_held_boot") == 0) {
+        return wakes <= 10u || (wakes >= 21u && wakes <= 26u);
+    }
+    return (wakes >= 3u && wakes <= 8u) ||
+        (strcmp(mode, "drive_button") == 0 && wakes >= 20u && wakes <= 25u);
+}
 
 uint32_t drv_time_ms(void) { return wakes * 20u; }
 ID tk_get_tid(void) { return 8; }
@@ -35,13 +85,31 @@ ER tk_wup_tsk(ID id) { assert(id == 8); return E_OK; }
 ER tk_slp_tsk(TMO timeout)
 {
     assert(timeout == 100);
-    if (++wakes > 50u) {
+    ++wakes;
+    if (wakes == 15u && strcmp(mode, "drive_double_cleanup") == 0) {
+        return E_TMOUT;
+    }
+    if (wakes > limit) {
         longjmp(stop, 1);
     }
     return E_OK;
 }
-INT tk_can_wup(ID id) { assert(id == TSK_SELF); return 0; }
-int motion_stop(void) { ++stop_calls; return stop_error ? E_SYS : E_OK; }
+INT tk_can_wup(ID id)
+{
+    assert(id == TSK_SELF);
+    return wakes == 15u && strcmp(mode, "drive_wake_fault") == 0 ? 2 : 0;
+}
+int motion_stop(void)
+{
+    ++stop_calls;
+    if (wakes >= 15u && failed_stops < 2u &&
+        (strcmp(mode, "drive_double_stop") == 0 ||
+         strcmp(mode, "drive_double_cleanup") == 0)) {
+        ++failed_stops;
+        return E_SYS;
+    }
+    return stop_error ? E_SYS : E_OK;
+}
 void imu_hw_mark_init(void) { ++marker_inits; }
 bool imu_hw_mark_down(void) { return wakes >= 3u && wakes <= 8u; }
 uint32_t imu_request_mark(void) { return ++requests; }
@@ -49,6 +117,26 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
 {
     memset(out, 0, sizeof(*out));
     out->timestamp_ms = drv_time_ms();
+    out->timestamp_us = drv_time_us();
+    out->value.calibrated = true;
+    out->raw.mag_valid = true;
+    out->value.travel_mm = strcmp(mode, "drive_timeout") == 0
+                               ? 0.0f : (float)wakes * 2.0f;
+    if (wakes >= 15u) {
+        if (strcmp(mode, "drive_unavailable") == 0) {
+            return E_TMOUT;
+        }
+        if (strcmp(mode, "drive_fault") == 0 ||
+            strcmp(mode, "drive_double_stop") == 0) {
+            out->probe.faults = 1u;
+        }
+        if (strcmp(mode, "drive_mag_fault") == 0) {
+            out->raw.mag_valid = false;
+        }
+        if (strcmp(mode, "drive_stale") == 0) {
+            out->timestamp_us -= 40000u;
+        }
+    }
     out->marks = acknowledged;
     acknowledged = requests; /* Acknowledge on the following observer poll. */
     out->value.valid = true;
@@ -64,6 +152,17 @@ int tm_printf(const UB *format, ...)
         ++reports;
     } else if (strncmp(text, "[S4_DIAG]", 9u) == 0) {
         ++diagnostics;
+    } else if (strcmp(text, "[S4_DRIVE] active %u reason %u") == 0) {
+        va_list args;
+
+        va_start(args, format);
+        const unsigned int active = va_arg(args, unsigned int);
+
+        last_reason = va_arg(args, unsigned int);
+        if (active == 0u) {
+            ++drive_stops;
+        }
+        va_end(args);
     } else if (strcmp(text, "[S4] MARK %lu\n") == 0) {
         va_list args;
 
@@ -77,7 +176,11 @@ int tm_printf(const UB *format, ...)
 
 int main(int argc, char **argv)
 {
-    if (argc > 1) {
+    if (argc > 1 && strncmp(argv[1], "drive_", 6u) == 0) {
+        mode = argv[1];
+        limit = strcmp(mode, "drive_timeout") == 0 ? 510u : 350u;
+    }
+    if (argc > 1 && strncmp(argv[1], "drive_", 6u) != 0) {
         create_error = strcmp(argv[1], "create_failure") == 0;
         start_error = strcmp(argv[1], "start_failure") == 0;
         stop_error = strcmp(argv[1], "stop_failure") == 0;
@@ -88,7 +191,34 @@ int main(int argc, char **argv)
     }
     if (setjmp(stop) == 0) {
         subsystem4_test();
-        assert(false); /* IMU_STREAM does not end by itself. */
+        /* Only observer wake failure exits after stop is confirmed. */
+        assert(strcmp(mode, "drive_double_cleanup") == 0);
+    }
+    if (strncmp(mode, "drive_", 6u) == 0) {
+        assert(speed_calls > 0u && drive_stops == 1u);
+        if (strcmp(mode, "drive_double_stop") == 0 ||
+            strcmp(mode, "drive_double_cleanup") == 0) {
+            assert(stop_calls == 4u && estop_calls == 2u);
+            assert(speed_calls == 10u); /* Never reissue after failed stop. */
+        } else {
+            assert(stop_calls == 2u && estop_calls == 0u);
+        }
+        if (strcmp(mode, "drive_held_boot") == 0) {
+            assert(first_speed_wake == 23u);
+        }
+        unsigned int expected = IMU_DRIVE_FAULT;
+
+        if (strcmp(mode, "drive_distance") == 0 ||
+            strcmp(mode, "drive_held_boot") == 0) {
+            expected = IMU_DRIVE_DISTANCE;
+        } else if (strcmp(mode, "drive_timeout") == 0) {
+            expected = IMU_DRIVE_TIMEOUT;
+        } else if (strcmp(mode, "drive_button") == 0) {
+            expected = IMU_DRIVE_BUTTON;
+        }
+
+        assert(last_reason == expected);
+        return 0;
     }
     assert(reports == 50u); /* Every 20 ms, not the old 10 Hz print gate. */
     assert(diagnostics == 1u && stack_reports == 1u);

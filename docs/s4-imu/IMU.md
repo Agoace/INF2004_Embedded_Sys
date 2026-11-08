@@ -1,11 +1,13 @@
-# GY-511 IMU: observe-only step 2
+# GY-511 IMU: support-model observer, step 2b
 
 ## Current scope
 
-Step 2 starts from staging `b569adc`. The robot and TEST images now run an
-IMU observer. BENCH does not. The observer has no motor commands, terrain
-states, hump thresholds, climb events, MQTT fields or KR1 fields. It cannot
-change driving or stop the robot on an IMU fault. CR1 packing is deferred.
+Step 2b extends `dfade14`, originally based on staging `b569adc`. Robot and
+TEST run an IMU observer; BENCH does not. The observer has no motor commands,
+terrain states, height-detection thresholds, climb events, MQTT or KR1
+fields. It cannot change normal driving. The explicit exception is a
+separate operator-triggered GP21 straight-drive job in IMU_STREAM only;
+its stop policy is described below. CR1 packing is deferred.
 
 Bias, pure-core separation, filtering and signed height-integration ideas
 are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
@@ -13,9 +15,11 @@ are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
 not merged. Its event system, terrain thresholds and minimum-height policy
 were not ported. The LSM303DLHC has no gyro; no gyro result is claimed.
 
-**Hardware step 2 is Not run.** The earlier S4-U03 PASS validates the older
-raw stream and axis signs, not calibration, dynamic pitch or hump height.
-See [pending tests](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+**Hardware step 2b is Not run.** Stationary/hand-push evidence on `dfade14`
+is partial, with three unexplained resets. Offline support-model analysis
+is not firmware height acceptance. Earlier S4-U03 PASS validates only the
+older raw stream and signs, not this model, powered drive or peak quality.
+See [S4 results and pending tests](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 
 ## Step 2 data path and interface
 
@@ -38,8 +42,8 @@ See [pending tests](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not
 | [host checks](../../tests/imu_checks.cmake) | Core, task/board, BENCH exclusion, 50 Hz reporter and existing hardware/probe/debounce checks |
 
 The input is identity-mapped accel mg (+X right, +Y forward, +Z up), signed
-mean wheel travel and its timestamp, per-wheel stillness and a calibration
-permission/epoch. The service uses coherent count deltas, not truncated
+mean wheel travel, left-positive encoder yaw and their timestamp, per-wheel
+stillness and a calibration permission/epoch. The service uses coherent count deltas, not truncated
 integer `travel_mm` or commanded speed:
 
 `ds_mm = 1000 * (delta_left + delta_right) / (2 * 12414)`
@@ -95,12 +99,15 @@ No fixed hand-held offset or `1/1.375` gain is installed.
 **Boot on level support and remain still for at least one second.** Bias
 removal defines that support as level. It cannot distinguish real slope,
 mounting tilt or gain error from sensor offset. The operator-approved rule
-also refreshes calibration after every further >=1 s stationary window.
-Every accepted refresh resets height, peak and distance and clears the angle
-filter. Therefore **a one-second stop on a hump can erase the segment and
-redefine that slope as level**. A host regression demonstrates this limit.
-Keep the robot moving through the hump, and record calibration counts; do
-not count an automatic reset as a successful return-to-zero measurement.
+also considers refresh after every further >=1 s stationary window.
+Step 2b accepts refresh only when the window mean, corrected with the
+CURRENT bias, differs from level by LESS THAN the configurable 1 degree.
+Larger tilt rejects refresh and increments both reject counters; a block
+or stopped slope above that tilt must not become level. Boot calibration is unchanged.
+Accepted near-level refresh resets the OLD integral h/peak/distance and
+angle/quality windows, but preserves all NEW support peaks until MARK. The guard is not independent proof of level and can follow
+small incremental changes. Record calibration counts; do not count a reset
+as a successful return-to-zero measurement.
 
 Motion, nonzero duty, a calibration epoch change, an invalid sensor/motion
 sample or a time gap breaks the stationary window. Noise/magnitude failures
@@ -117,10 +124,20 @@ Let `a = raw_accel - bias` in mg and `v` be signed encoder speed in mm/s:
 - Pitch: `atan2(aY, sqrt(aX*aX + aZ*aZ))`; roll: `atan2(aX, aZ)`.
 - Encoder forward acceleration: `(v_k - v_previous) / delta_seconds`,
   followed by the encoder acceleration filter above.
-- Compensated pitch: low-pass
-  `atan2(aY - forward_accel_mm_s2 / 9.80665, sqrt(aX*aX + aZ*aZ))`.
-  One mg is 9.80665 mm/s². Forward-positive acceleration is subtracted from
-  +Y; reverse does not reverse the tilt sign.
+- Left-positive yaw: `delta_yaw = (ds_right - ds_left) / track`.
+  Windowed yaw velocity/acceleration use the same timestamps as speed.
+- Fake lateral acceleration: `aX_fake = -v*omega - forward_mm*alpha_yaw`.
+- Fake forward acceleration: `aY_fake = dv/dt - forward_mm*omega*omega`.
+  All lengths/speeds here use mm. Left turning at positive forward speed
+  accelerates toward LEFT, or -X. The sensor ahead of the axle also sees
+  -X angular-acceleration and -Y centripetal terms. Host tests pin both
+  turn signs, both spins and an angular ramp; no silent sign inversion.
+- Compensated vector: `cX=aX-aX_fake/9.80665`,
+  `cY=aY-aY_fake/9.80665`, `cZ=aZ`. One mg is 9.80665 mm/s².
+  Low-pass `atan2(cY,sqrt(cX*cX+cZ*cZ))` and `atan2(cX,cZ)` for pitch/roll.
+  Reverse does not reverse the tilt sign. Sensor HEIGHT130 mm is a retained
+  setting only: it does not enter this planar yaw model. Without a gyro,
+  pitch/roll angular acceleration and lever-arm effects remain unknown.
 - Height: `height_mm += sin(compensated_filtered_pitch_rad) * ds_mm`.
   Peak is the largest signed relative height since calibration/MARK, with
   initial peak zero. It is not a threshold, event or maximum accepted hump.
@@ -155,7 +172,7 @@ and remove the UART adapter. The existing compile guard now covers both
 image roles. No additional template deviation is needed; the count stays 8.
 
 IMU_STREAM skips other subsystem tests and the destructive watchdog test.
-It requests zero duty once through `motion_stop()`; motion remains the only
+It initially requests zero duty through `motion_stop()`; motion remains the only
 PWM writer and the normal motion watchdog remains active. The driver sets
 both forward/reverse PWM levels to zero: **COAST, not active braking**
 ([driver](../../app_program/subsystem2/drv_motor_hw.c)). A compare update
@@ -178,11 +195,11 @@ repeat. The angle filter and bias do not reset on MARK. Formatting/USB work
 stays at TEST priority20, never inside task14. Nominal output frequency is
 not a guarantee that a slow/unplugged USB host receives every line.
 
-Use [S4-U04/U05/U06](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+Use [S4-U04/U05/U06](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 The 10 mm, 195 mm long bring-up hump is not the course maximum. No 7-degree
 CLIMB or 15 mm minimum-height rule is imported.
 
-## Step 2 software results
+## Step 2 software results at dfade14 (historical)
 
 Local-only validation uses public build fixtures and ARM GNU 14.3.rel1;
 there was no push, flash, broker or hardware run. All **142 host tests**
@@ -242,6 +259,127 @@ not. No SDK runtime, interrupt or clock owner was added.
 MQTT static RAM increases **3732 B**, including the **2048 B static stack**;
 see [RAM evidence and CPU estimate](../kernel/RAM_BUDGET.md#imu-step-2-measured-delta).
 Stack depth and real task CPU cost remain hardware gates, not size results.
+
+## Step 2b support hypotheses and peak quality
+
+The course operator confirmed a hump under the RIGHT drive wheel only;
+left wheel/caster remain on the floor. Positive roll is right-side-up,
+negative pitch is nose-down. The earlier slope integral remains a secondary
+long/full-width-slope diagnostic, not the primary one-wheel estimate.
+
+| Alternative hypothesis | Signed height estimate |
+| --- | --- |
+| Caster on flat | `zR=-WB*sin(pitch)+(T/2)*sin(roll)`; PRIMARY right wheel |
+| Caster on flat | `zL=-WB*sin(pitch)-(T/2)*sin(roll)`; consistency/secondary |
+| Both drive wheels on flat | `zC=+WB*sin(pitch)`; caster-lift diagnostic |
+
+These are alternative reference assumptions, NOT simultaneous absolute
+contact heights. Common vertical translation is unobservable from tilt;
+a small residual alone does not prove the caster is on the floor.
+With pitch -5.0 and roll +7.1 degrees, WB80/T111 gives
+zR13.832, zL0.113, zC-6.972 mm. The negative zC does not mean that the
+caster is below ground; its wheels-flat hypothesis is not true in that pose.
+No height is clamped. No hypothesis/detector chooses a driving action.
+
+[imu_support.c](../../app_program/subsystem4/imu_support.c) is pure and
+host-tested for left/right/both/caster blocks and alternate geometry.
+[imu_settings.h](../../app_program/subsystem4/imu_settings.h) gives editable
+positive geometry defaults: effective track111 mm (not rough115), WB80 mm,
+sensor60 mm ahead/130 mm high, refresh tilt1 degree and consistency2 mm.
+The offline fit used WB79 and remains separately labelled in the test log.
+
+Instant zR/zL/zC use compensated filtered pitch AND roll. Sines are computed
+once per axis; the pitch sine is reused for the existing integral. Stream
+also shows all three peaks since MARK, `left_residual_mm=abs(zL)`, smoothed
+zR and peak eligibility. The PRIMARY zR peak uses a full 10-sample boxcar
+average (nominal100 ms at100 Hz), and ALL ten valid samples must have
+abs(zL)<=2 mm. This configurable tolerance is a model-consistency quality
+check only, not a terrain-height threshold. Raw heights, secondary peaks
+and slope integral remain ungated diagnostics. Window warm-up, invalid
+input, gaps and MARK cannot leak an old average into a new peak. MARK
+clears support peaks/window, not the current geometric heights or bias.
+Accepted near-level calibration preserves support peaks; their only resets
+are MARK and boot. GP21 START does not reset them (run-start reset is later
+step3 work). The old integral retains its calibration reset. Invalid
+samples preserve existing peaks but invalidate the averaging window.
+
+## Step 2b current procedure
+
+1. Use the same IMU_STREAM build command above. Flash only with approval.
+   Boot on known level support, USB only, GP0/1 free of UART wiring.
+2. Inspect RIGHT-wheel blocks first; then left, both wheels and caster.
+   Keep the body still long enough to check that a >1 degree tilt rejects
+   refresh rather than installing a new level. Save bias/reject counts,
+   signed alternative heights, residual, eligibility and smoothed peaks.
+3. Resolve unexplained resets before powered floor trials.
+   **VIN is required for driving; software does not sense or prove it.**
+   First lift both wheels, restrain the chassis, keep an independent way to
+   remove VIN, and check the stop behavior before floor work. Zero duty is
+   coast, not a brake or an immediate physical stop guarantee.
+4. GP20 MARK is unchanged. A debounced GP21 press starts equal wheel-speed
+   requests of100 mm/s through the motion owner, refreshed every20 ms.
+   Stop at600 mm signed mean encoder travel OR10 s, whichever occurs first.
+   A button held across boot must be released/repressed before driving.
+   A second press, stale/unavailable IMU/motor data, missing calibration,
+   sensor/motor fault (including invalid magnetometer data), missed
+   observer wake or command failure stops the job.
+   Cumulative probe faults prevent start until reboot. No height/consistency
+   value affects this job. MARK/refresh cannot extend its distance budget.
+5. A separate stop-pending latch retries `motion_stop()` then checked
+   `motion_estop()` each observer tick if both fail. Starts remain forbidden
+   until stop is confirmed; timeout cleanup also retains the cyclic while
+   retrying. A warning says to remove VIN. Permanent API or hardware failure
+   cannot prove a physical stop; do not rely on this button as an independent
+   safety circuit. The normal motion watchdog/stale policy remains owned
+   by motion, not the IMU task.
+6. After the lifted check, make three driven RIGHT-wheel hump passes with
+   MARK and full timestamped traces. Stop/start cases, geometry, slip, yaw
+   correction delay and the three unexplained earlier resets remain gates.
+   Report actual new work/core timing and stack high-water; the older
+   13..14% wall-work measurement is NOT a step-2b bound.
+
+New [pure drive job](../../app_program/subsystem4/imu_drive.c) is used ONLY
+by the IMU_STREAM observer, not normal robot or ordinary TEST. Host cases
+cover distance/time/wrap, second press, stale/missing/faulted inputs,
+command failure and both stop APIs failing before recovery. All powered
+and static step-2b cases are [Not run](../../testing/subsystem4/TEST_LOG.md#step-2b-pending-hardware).
+
+## Step 2b software validation
+
+157 host cases pass, including pure support/drive, left/right turns and
+spins, angular lever-arm sign, stopped-block refresh rejection, full-window
+consistency gating, MARK/fault window reset, support-peak persistence across
+level refresh, distance/timeout/button/fault
+stops and retry after both owner stop APIs fail, including observer-timeout
+cleanup. An isolated single-sample height spike confirms the boxcar peak
+is an average, not a single-sample maximum. The original slope-
+integral synthetic/flat-error regressions remain unchanged. Host results
+are not a physical accuracy or stop-latency claim.
+
+| Clean profile | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Default SMP1 USB/Wi-Fi | 328032 | 760 | 129880 |
+| Robot SMP0 no radio | 81108 | 688 | 123344 |
+| BENCH SMP0 no radio | 41982 | 148 | 95460 |
+| MQTT SMP0 | 392292 | 904 | 187908 |
+| TEST SMP0 no radio | 74620 | 688 | 122772 |
+| MQTT-TEST SMP0 | 381868 | 904 | 186924 |
+| IMU_STREAM SMP0 no radio | 69696 | 688 | 122540 |
+
+Clang AddressSanitizer, undefined-behavior and float-cast checks pass for
+core, service, support, drive and the stream including every fault scenario.
+Recorder67/dashboard180 remain green. These host checks do not prove real
+motor stopping or target timing.
+
+All seven clean `-j4 --output-sync=target` builds are warning-free. Eleven
+related units/profile pass strict ARM flags (77 compilations), seven SDK
+retained-link proofs pass, and no unresolved or atomic-runtime helpers
+appear. The template deviation count remains8 against c3b0954. UART pin
+conflicts are still compile-time errors; no SDK clock/IRQ/runtime owner is
+added. Public fixtures and generated firmware/proof copies are removed.
+See [current RAM/CPU evidence](../kernel/RAM_BUDGET.md#imu-step-2b-measured-delta).
+New physical work_us, stack high-water, powered fault-stop timing and
+static/driven support accuracy remain **Not run**.
 
 ## Historical steps 0 and 1
 

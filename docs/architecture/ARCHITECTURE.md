@@ -56,7 +56,10 @@ tasks to core 1. The earlier proposed core split is not implemented.
 | Idle meter, when enabled | 32 | Lowest-priority CPU-load reference |
 
 TEST moves its runner to priority 20 after startup. IMU_STREAM runs only
-S4 tests. BENCH is exclusive with the vehicle program. Task stacks and
+S4 tests, including an explicitly operator-triggered GP21 straight-drive
+trial bounded by600 mm/10 s, second press and faults; height never commands
+it. VIN and lifted-first stop checks are required. BENCH is exclusive with
+the vehicle program. Task stacks and
 kernel object sizes are in the [kernel record](../kernel/KERNEL.md).
 
 ### Interrupt and polling rules

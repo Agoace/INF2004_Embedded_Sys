@@ -31,6 +31,18 @@ bool imu_hw_mark_down(void)
     return !gpio_get(20u);
 }
 
+void imu_hw_drive_init(void)
+{
+    gpio_init(21u);
+    gpio_set_dir(21u, GPIO_IN);
+    gpio_pull_up(21u);
+}
+
+bool imu_hw_drive_down(void)
+{
+    return !gpio_get(21u);
+}
+
 static uint32_t started;
 static uint32_t spins;
 

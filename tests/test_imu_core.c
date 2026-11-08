@@ -322,13 +322,146 @@ static void stationary_slope_refresh(void)
     assert(core.output.height_mm > 10.0f);
     in.wheels_still = true;
     ticks(&core, &in, 101u);
-    /* Approved automatic refresh treats any stationary support as level.
-     * This intentionally demonstrates the stop-on-hump limitation. */
-    assert(core.output.calibrations == 2u);
+    /* A stopped slope must NOT become a new level reference. */
+    assert(core.output.calibrations == 1u);
+    assert(core.output.refresh_rejects == 1u);
+    assert(core.output.height_mm > 10.0f);
+    assert(core.output.pitch_ddeg >= 59);
+    assert(core.output.bias_mg[1] == 80.0f);
+}
+
+static void flat_turn(float v, float omega)
+{
+    imu_core_t core;
+    imu_core_input_t in;
+
+    calibrated(&core, &in);
+    in.wheels_still = false;
+    for (unsigned int i = 0u; i < 300u; ++i) {
+        in.travel_mm += v * 0.01f;
+        in.yaw_rad += omega * 0.01f;
+        in.accel_mg[0] = -20.0f - v * omega / 9.80665f;
+        in.accel_mg[1] = 80.0f - 60.0f * omega * omega / 9.80665f;
+        tick(&core, &in);
+    }
+    assert(fabsf(core.output.yaw_rate_rad_s - omega) < 0.001f);
+    assert(fabsf(core.output.lateral_fake_mm_s2 + v * omega) < 0.1f);
+    assert(abs(core.output.corrected_pitch_ddeg) <= 1);
+    assert(abs(core.output.corrected_roll_ddeg) <= 1);
+    if (v > 0.0f) {
+        assert(core.output.roll_ddeg * (omega > 0.0f ? 1 : -1) < 0);
+    }
+}
+
+static void angular_acceleration(void)
+{
+    imu_core_t core;
+    imu_core_input_t in;
+
+    calibrated(&core, &in);
+    in.wheels_still = false;
+    for (unsigned int i = 1u; i <= 300u; ++i) {
+        const float t = (float)i * 0.01f;
+        const float omega = 0.5f * t;
+
+        in.yaw_rad = 0.25f * t * t;
+        in.accel_mg[0] = -20.0f - 60.0f * 0.5f / 9.80665f;
+        in.accel_mg[1] = 80.0f - 60.0f * omega * omega / 9.80665f;
+        tick(&core, &in);
+    }
+    assert(fabsf(core.output.yaw_accel_rad_s2 - 0.5f) < 0.01f);
+    assert(abs(core.output.corrected_roll_ddeg) <= 1);
+    assert(abs(core.output.corrected_pitch_ddeg) <= 2);
+}
+
+static void support_and_refresh_guard(void)
+{
+    imu_core_t core;
+    imu_core_input_t in;
+    const float p = asinf(-10.0f / (2.0f * 80.0f));
+    const float r = asinf(10.0f / 111.0f);
+
+    calibrated(&core, &in);
+    in.accel_mg[0] = -20.0f + 1000.0f * sinf(r) * cosf(p);
+    in.accel_mg[1] = 80.0f + 1000.0f * sinf(p);
+    in.accel_mg[2] = 375.0f + 1000.0f * cosf(r) * cosf(p);
+    ticks(&core, &in, 300u);
+    assert(core.output.calibrations == 1u);
+    assert(core.output.refresh_rejects >= 2u);
+    assert(core.output.support_peak_eligible);
+    assert(fabsf(core.output.right_smoothed_mm - 10.0f) < 0.01f);
+    assert(fabsf(core.output.left_mm) < 0.01f);
+    assert(fabsf(core.output.right_peak_mm - 10.0f) < 0.02f);
+    imu_core_mark(&core);
+    assert(core.output.right_peak_mm == 0.0f);
+    ticks(&core, &in, 9u);
+    assert(!core.output.support_peak_eligible);
+    tick(&core, &in);
+    assert(core.output.support_peak_eligible);
+    /* Both wheels lifted is outside the RIGHT-only course hypothesis. */
+    in.accel_mg[0] = -20.0f;
+    in.accel_mg[1] = 80.0f - 1000.0f * 20.0f / 80.0f;
+    in.accel_mg[2] = 375.0f + 1000.0f * sqrtf(1.0f - 0.25f * 0.25f);
+    ticks(&core, &in, 200u);
+    imu_core_mark(&core);
+    ticks(&core, &in, 30u);
+    assert(core.output.left_mm > 19.9f && core.output.right_mm > 19.9f);
+    assert(!core.output.support_peak_eligible);
+    assert(core.output.right_peak_mm == 0.0f);
+    assert(core.output.left_peak_mm > 19.9f);
+    assert(core.output.support_peak_rejects > 0u);
+    /* Faults break the averaging window but preserve the peaks. */
+    in.accel_valid = false;
+    tick(&core, &in);
+    assert(core.support_count == 0u);
+    assert(core.output.left_peak_mm > 19.9f);
+}
+
+static void support_single_sample(void)
+{
+    imu_core_t core;
+    imu_core_input_t in;
+    const float p = asinf(-20.0f / 160.0f);
+    const float r = asinf(20.0f / 111.0f);
+
+    calibrated(&core, &in);
+    in.wheels_still = false;
+    imu_core_mark(&core);
+    ticks(&core, &in, 10u);
+    /* Isolate the boxcar from the separate angle low-pass. */
+    core.have_filter = false;
+    in.accel_mg[0] = -20.0f + 1000.0f * sinf(r) * cosf(p);
+    in.accel_mg[1] = 80.0f + 1000.0f * sinf(p);
+    in.accel_mg[2] = 375.0f + 1000.0f * cosf(r) * cosf(p);
+    tick(&core, &in);
+    assert(core.output.support_peak_eligible);
+    assert(core.output.right_mm > 19.9f);
+    assert(fabsf(core.output.right_smoothed_mm - 2.0f) < 0.01f);
+    assert(core.output.right_peak_mm < 2.01f);
+}
+
+static void support_peaks_survive_refresh(void)
+{
+    imu_core_t core;
+    imu_core_input_t in;
+
+    calibrated(&core, &in);
+    /* Exercise persistence independently of the static geometry tests. */
+    core.output.left_peak_mm = 20.0f;
+    core.output.right_peak_mm = 10.0f;
+    core.output.caster_peak_mm = 15.0f;
+    core.output.height_mm = 7.0f;
+    core.output.peak_mm = 9.0f;
+    ticks(&core, &in, 202u);
+    assert(core.output.calibrations == 3u);
     assert(core.output.height_mm == 0.0f && core.output.peak_mm == 0.0f);
-    assert(core.output.distance_mm == 0.0f);
-    assert(abs(core.output.pitch_ddeg) <= 1);
-    assert(core.output.bias_mg[1] > 180.0f);
+    assert(core.output.left_peak_mm == 20.0f);
+    assert(core.output.right_peak_mm == 10.0f);
+    assert(core.output.caster_peak_mm == 15.0f);
+    imu_core_mark(&core);
+    assert(core.output.left_peak_mm == 0.0f);
+    assert(core.output.right_peak_mm == 0.0f);
+    assert(core.output.caster_peak_mm == 0.0f);
 }
 
 static void duplicates_gaps_and_wrap(void)
@@ -404,6 +537,16 @@ int main(void)
     flat_start_stop(460.0f, 1.0f);
     flat_start_stop(460.0f, -1.0f);
     stationary_slope_refresh();
+    flat_turn(100.0f, 1.0f);
+    flat_turn(100.0f, -1.0f);
+    flat_turn(-100.0f, 1.0f);
+    flat_turn(-100.0f, -1.0f);
+    flat_turn(0.0f, 1.0f);
+    flat_turn(0.0f, -1.0f);
+    angular_acceleration();
+    support_and_refresh_guard();
+    support_single_sample();
+    support_peaks_survive_refresh();
     duplicates_gaps_and_wrap();
     return 0;
 }

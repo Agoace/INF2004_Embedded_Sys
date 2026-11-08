@@ -1,12 +1,19 @@
+host_test(test_imu_support tests/test_imu_support.c
+    app_program/subsystem4/imu_support.c)
+target_link_libraries(test_imu_support PRIVATE m)
+host_test(test_imu_drive tests/test_imu_drive.c
+    app_program/subsystem4/imu_drive.c)
+target_link_libraries(test_imu_drive PRIVATE m)
 host_test(test_imu_core tests/test_imu_core.c
-    app_program/subsystem4/imu_core.c)
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c)
 target_link_libraries(test_imu_core PRIVATE m)
 host_test(test_imu_core_benchmark tests/test_imu_core_benchmark.c
-    app_program/subsystem4/imu_core.c)
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c)
 target_compile_options(test_imu_core_benchmark PRIVATE -Os)
 target_link_libraries(test_imu_core_benchmark PRIVATE m)
 host_test(test_imu_service tests/test_imu_service.c
-    app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c)
+    app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
+    app_program/subsystem4/imu_support.c)
 target_include_directories(test_imu_service BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_service PRIVATE APP_TEST=1 APP_BENCH=0)
@@ -23,7 +30,8 @@ target_include_directories(test_imu_bench BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_bench PRIVATE APP_BENCH=1)
 host_test(test_imu_stream tests/test_imu_stream.c
-    app_program/subsystem4/subsystem4_test.c app_program/subsystem4/imu_mark.c)
+    app_program/subsystem4/subsystem4_test.c app_program/subsystem4/imu_mark.c
+    app_program/subsystem4/imu_drive.c)
 target_include_directories(test_imu_stream BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_stream PRIVATE
@@ -32,6 +40,12 @@ target_link_libraries(test_imu_stream PRIVATE m)
 foreach(failure create_failure start_failure stop_failure)
     add_test(NAME test_imu_stream_${failure}
         COMMAND test_imu_stream ${failure})
+endforeach()
+foreach(scenario distance timeout button fault mag_fault unavailable motor_fault
+                 command_fault wake_fault stale double_stop double_cleanup
+                 held_boot)
+    add_test(NAME test_imu_drive_stream_${scenario}
+        COMMAND test_imu_stream drive_${scenario})
 endforeach()
 host_test(test_imu_decode tests/test_imu_decode.c
     app_program/subsystem4/imu_decode.c)

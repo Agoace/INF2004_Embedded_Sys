@@ -53,6 +53,10 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 
 The motion notification slot has one consumer: vehicle or bench, never both.
 Task functions do not return. They loop or call `tk_ext_tsk()`.
+IMU_STREAM's TEST20 observer alone can request the operator GP21 drive
+trial (100 mm/s,600 mm/10 s), with stop-pending retries. No IMU14 height or
+quality result chooses a drive command. VIN/lifted-first hardware checks
+remain pending; see the [procedure](../s4-imu/IMU.md#step-2b-current-procedure).
 
 ### Interfaces and kernel objects
 
@@ -202,7 +206,7 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
 - [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-2-measured-delta)
-  and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+  and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),
   [integration TEST_LOG](../../testing/integration/TEST_LOG.md).

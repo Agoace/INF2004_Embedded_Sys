@@ -32,6 +32,7 @@ static uint32_t motion_fraction_us;
 static bool have_counts;
 static bool wheels_still;
 static float travel_mm;
+static float yaw_rad;
 static const mc_config_t motion_config = MC_ROBOT_CONFIG;
 
 /* Modular count difference without signed overflow or implementation-
@@ -73,12 +74,15 @@ static void encoder_input(imu_core_input_t *input)
         wheels_still = have_counts && left == 0 && right == 0;
         travel_mm += ((float)left + (float)right) * 500.0f /
                      (float)motion_config.counts_per_m;
+        yaw_rad += ((float)right - (float)left) * 1000.0f /
+                   ((float)motion_config.counts_per_m * IMU_TRACK_MM);
         previous_counts[0] = status.counts[0];
         previous_counts[1] = status.counts[1];
         previous_motion_us = stamp;
         have_counts = true;
     }
     input->travel_mm = travel_mm;
+    input->yaw_rad = yaw_rad;
     /* A relative encoder clock from distinct source stamps. Preserve us
      * fractions and modular wrap; duplicate stamps keep the SAME time. */
     input->travel_ms = previous_motion_ms;

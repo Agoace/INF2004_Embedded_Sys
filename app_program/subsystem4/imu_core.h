@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "imu_settings.h"
 
 #define IMU_STILL_MS 1000u
 #define IMU_STILL_MIN_SAMPLES 100u
@@ -16,6 +17,7 @@
 typedef struct {
     float accel_mg[3];       /* Already mapped: X right, Y forward, Z up. */
     float travel_mm;         /* Signed mean wheel travel, not total path. */
+    float yaw_rad;           /* Encoder heading, positive LEFT/CCW. */
     uint32_t now_ms;
     uint32_t travel_ms;      /* Timestamp of the encoder observation. */
     uint32_t calibration_epoch; /* Odd during the whole line spin routine. */
@@ -32,6 +34,22 @@ typedef struct {
     float travel_mm;
     float speed_mm_s;
     float forward_accel_mm_s2; /* Filtered encoder derivative. */
+    float yaw_rate_rad_s;
+    float yaw_accel_rad_s2;
+    float lateral_fake_mm_s2;
+    float forward_fake_mm_s2;
+    float left_mm;           /* Caster-flat alternative. */
+    float right_mm;          /* PRIMARY: caster/left wheel on flat. */
+    float caster_mm;         /* Wheels-flat alternative, not simultaneous. */
+    float left_peak_mm;
+    float right_peak_mm;     /* Consistency-qualified smoothed peak. */
+    float caster_peak_mm;
+    float right_smoothed_mm;
+    float left_residual_mm;
+    bool support_peak_eligible;
+    uint32_t support_peak_rejects;
+    uint32_t refresh_rejects;
+    int32_t refresh_tilt_ddeg;
     float height_mm;
     float peak_mm;
     float distance_mm;       /* Signed distance since MARK/calibration. */
@@ -42,6 +60,7 @@ typedef struct {
     int32_t filtered_pitch_ddeg;
     int32_t filtered_roll_ddeg;
     int32_t corrected_pitch_ddeg;
+    int32_t corrected_roll_ddeg;
     uint32_t samples;
     uint32_t valid_samples;
     uint32_t invalid_samples;
@@ -62,12 +81,22 @@ typedef struct {
     float minimum[3];
     float maximum[3];
     float previous_travel;
+    float previous_yaw;
+    float previous_yaw_rate;
+    float window_yaw;
     float mark_travel;
     float previous_speed;
     float window_distance;
     float pitch_rad;
     float roll_rad;
     float corrected_rad;
+    float corrected_roll_rad;
+    float support_window[IMU_SUPPORT_WINDOW_SAMPLES];
+    bool support_bad[IMU_SUPPORT_WINDOW_SAMPLES];
+    float support_sum;
+    unsigned int support_count;
+    unsigned int support_index;
+    unsigned int support_bad_count;
     uint32_t still_start;
     uint32_t still_count;
     uint32_t previous_ms;
@@ -86,7 +115,8 @@ void imu_core_init(imu_core_t *core);
 /* Always consumes one observation, including invalid/fault observations.
  * Never bridges a bad/old encoder interval with a later tilt sample. */
 void imu_core_step(imu_core_t *core, const imu_core_input_t *input);
-/* Only MARK and accepted calibration reset height/peak/distance. */
+/* MARK resets integral/support peaks. Calibration resets integral only;
+ * support peaks persist until MARK (or fresh boot), not a driving START. */
 void imu_core_mark(imu_core_t *core);
 
 #endif

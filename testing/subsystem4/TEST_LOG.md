@@ -36,7 +36,7 @@ The TEST output prints data and counters, not an automatic hardware PASS.
 No stationary calibration, filtering, hump threshold or robot integration
 has been tested or implemented in this historical steps-0/1 result.
 
-## Observe-only step 2 (Not run)
+## Observe-only step 2 and step 2b
 
 Software starts from staging `b569adc`. See the
 [current implementation and formulas](../../docs/s4-imu/IMU.md#current-scope)
@@ -46,9 +46,57 @@ S4-U03's old raw-stream PASS does not imply that these checks pass.
 
 | ID | Check | Result |
 | --- | --- | --- |
-| S4-U04 | Stationary LEVEL support, then wheels-lifted motor noise: automatic >=1 s calibration/refresh, per-axis bias and noise, post-bias magnitude, no calibration during wheel activity or CALIBRATE spin, fault responsiveness, 100 Hz task timing and stack/CPU load | **Not run** |
-| S4-U05 | Three zero-duty hand pushes over the 10 mm high, 195 mm long hump, GP20 MARK before each: record calibrated/raw/filtered/compensated pitch, encoder travel/speed and height; expect about 10 mm peak and return near zero without an intervening calibration/MARK reset | **Not run** |
+| S4-U04 | Stationary LEVEL support, motor noise, guarded refresh, timing/stack/CPU and fault checks | **Partial on dfade14**, stationary hand-push session below; powered noise and step-2b checks Not run |
+| S4-U05 | Three hand pushes and later driven RIGHT-wheel hump trials | Hand-push finding/offline analysis below; **not height acceptance**. Step-2b driven trials Not run |
 | S4-U06 | Later zero-duty hand pushes over measured 5 mm and 20 mm humps; record geometry, speed, trace and error, no detection/minimum-height threshold | **Not run** |
+
+### dfade14 hand-push hardware and offline analysis
+
+Operator report, private log name only:
+`build/mtk_logs/s4_step2_hump_175042.txt`. No private log contents are copied.
+
+- Calibration worked: corrected magnitude about 1000 mg, Z bias about
+  +373 mg, refresh during still periods. Filtered stationary pitch noise
+  about +/-0.1..0.3 degrees. Reported window: 1100 reads, zero faults.
+- IMU high-water 752/2048 B. Work about 1.3..1.4 ms per 10 ms (about
+  13..14% wall-work fraction), max 2.48 ms; core about 0.63 ms, read 0.54 ms.
+  These replace the earlier 6..10% planning estimate, not exclusive CPU
+  measurements. They apply to dfade14, not step 2b or all-load stack bounds.
+- Three resets had no message. USB cable movement was suspected but is
+  UNCONFIRMED; neither watchdog nor power/cable cause is established.
+- The hump was under ONE RIGHT wheel. Roll +3..+7 degrees and pitch
+  -2..-5 degrees indicate axle rise with caster staying down, not a long
+  full-width slope. The slope integral gave negative values about
+  -4/-7/-10 mm and did not estimate wheel lift correctly.
+- Hand-push encoder travel was 170..218 mm versus about 400 mm expected.
+  Gearmotor-wheel slip makes this hand-push distance unsuitable as truth.
+
+Offline recalculation used WB=79 mm, T=111 mm, compensated filtered pitch
+and filtered roll under the caster-flat hypothesis. These are OFFLINE
+numbers, not firmware outputs. Plateau is the median of samples above
+0.8 times the selected peak. References are rough/compressible, not gauges.
+
+| Push / object | Offline zR plateau median mm | Offline peak mm | Consistency / limit |
+| --- | ---: | ---: | --- |
+| 1: 10 mm right-wheel ramp | 10.2 | 11.1 | zL about 0.4 mm |
+| 2: roughly 5 mm one-wheel object | 6.0 | 6.9 | Selected with abs(zL)<2 mm; ungated peak13.9 mm had zL10.3 mm, a hand press/lift artifact |
+| 3: notebook, rough13..14 mm, compressible | 13.9 | 14.8 | zL about1.6 mm |
+
+Useful model evidence, not physical height acceptance. The course operator
+confirmed the RIGHT wheel only, with left wheel/caster on the floor. The
+step-2b defaults are WB80/T111, not the offline fit79; track115 was a rough
+operator measurement, not a replacement for the effective calibrated111.
+
+### Step 2b pending hardware
+
+| ID | Check | Result |
+| --- | --- | --- |
+| S4-U07 | Static measured blocks: RIGHT first, then LEFT, both drive wheels and caster; signs, alternate hypotheses, guarded refresh, 2 mm consistency eligibility and smoothed peaks/MARK | **Not run** |
+| S4-U08 | VIN, lifted-wheel GP21 first check; equal100 mm/s,600 mm or10 s maximum, second press/fault stop; then three driven RIGHT-wheel hump passes with full traces and stop verification | **Not run** |
+
+Use the [step-2b procedure](../../docs/s4-imu/IMU.md#step-2b-current-procedure).
+Investigate the three unexplained resets before treating any trial as
+reliable. Do not substitute offline gated peaks for a firmware/hardware PASS.
 
 ### S4-U04 procedure
 
@@ -59,12 +107,14 @@ S4-U03's old raw-stream PASS does not imply that these checks pass.
    Record calibration count/flag, all three bias/noise values and rejects.
    The known raw ~1375 mg magnitude must not cause perpetual rejection;
    corrected stationary acceleration should be near `(0,0,1000)` mg.
-3. Repeat stationary refresh. Confirm its height/peak/distance reset is
-   visible. A stationary tilted support is NOT an independent calibration:
-   it defines that support as level. Do not install hand-held gain constants.
-4. For motor-on noise, lift both wheels and use a separately operator-
-   approved motor-test harness. IMU_STREAM itself requests zero duty and
-   deliberately supplies no motor-driving path. Record the harness/revision
+3. Repeat stationary level refresh, then hold a wheel on a block: step 2b
+   must reject refresh when tilt differs by >=1 degree from current bias-
+   corrected level. Record refresh rejects, unchanged bias and retained
+   heights. Boot still requires LEVEL support; no hand-held gain constants.
+4. For motor-on noise, lift both wheels and use the operator-approved
+   step2b GP21 bounded drive trial, with VIN and verified stops. It sends
+   equal100 mm/s for600 mm or10 s, never a height-dependent command.
+   Record the image/revision
    and motor state. Rotation/nonzero duty and the entire line CALIBRATE
    spin/pause/home episode must prevent an IMU bias refresh. A zero mean
    wheel delta during equal/opposite rotation must not count as stillness.
@@ -73,12 +123,12 @@ S4-U03's old raw-stream PASS does not imply that these checks pass.
    timing, USB drops and all task high-water/free bytes. Require at least
    the existing 256 B untouched stack margin; do not infer it from size.
    Work counters include preemption, not exclusive CPU. Compare the idle
-   meter too; the documented 6..10% IMU planning estimate is not acceptance.
+   meter too. The dfade14 measured13..14% fraction is not a step-2b bound.
 6. Power off before disconnect/reconnect. Confirm counted absent-device
    faults, paced retry and responsive USB with normal motion watchdog
    ownership. This remains the separately pending absent-device gate too.
 
-### S4-U05 and S4-U06 procedure
+### dfade14 S4-U05 and S4-U06 procedure (historical)
 
 1. Boot on level support and wait for calibration. IMU_STREAM runs only S4,
    reports at nominal 50 Hz and leaves the normal motion watchdog active.
@@ -88,7 +138,8 @@ S4-U03's old raw-stream PASS does not imply that these checks pass.
    bias, fault counters and full timestamped trace, not just the largest
    printed number. Use a gentle, measured push speed near 100 mm/s first.
 3. Do not stop for >=1 s on the slope/crest. Automatic stationary refresh
-   would erase height/peak/distance and redefine the pose as level. Verify
+   in dfade14 would erase height/peak/distance and redefine level (step2b
+   guards tilted refresh). Verify
    the calibration count does not change from MARK through the return
    measurement. A return to zero only after refresh or another MARK fails
    to establish return accuracy.

@@ -23,7 +23,7 @@ team agreement. STEP 7 keeps pure modules/settings unchanged.
 | GP16 / GP17 | S2 | Left encoder A / B; count sign +1 |
 | GP4 / GP5 | S2 | Right encoder A / B; count sign -1 |
 | GP15 | S2 | Servo PWM |
-| GP20 / GP21 | Vehicle, exclusive S2 bench or S4 TEST stream | Dump/MARK / calibrate-start or ESTOP; pull-up, active low |
+| GP20 / GP21 | Vehicle, exclusive S2 bench or S4 TEST stream | Dump/MARK; normal calibrate-start/ESTOP, STREAM bounded drive/stop; active low |
 | GP27 / GP26 | S3 | Left / centre line sensor |
 | GP28 | S3 | Barcode analog ADC2, sampled only; VBAT jumper open |
 | GP2 / GP3 | S5 | Ultrasonic echo / trigger |
@@ -86,6 +86,9 @@ event flag. TEST starts five service/motion tasks, neither button task;
 BENCH starts only motion/bench and has no IMU task/stack reserve. S4 TEST
 adds a temporary 20 ms observer cyclic for its 30 s report; IMU_STREAM=1
 keeps it until power-off with 50 Hz samples and acknowledged GP20 MARK.
+STREAM alone permits GP21 equal100 mm/s to600 mm/10 s, second press/fault
+stop, with checked stop-pending retries. VIN/lifted-first checks required;
+no IMU height/quality value commands driving.
 The IMU task owns its separate persistent 10 ms cyclic and bounded board;
 it adds no control mutex, IRQ, queue, driving action or wire field.
 Existing kernel limits suffice. See [IMU observer](docs/s4-imu/IMU.md).

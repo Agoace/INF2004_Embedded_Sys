@@ -1,6 +1,7 @@
 /* Observe-only bias/filter/height ideas from Jaison, b2a6bb6.
  * No events, thresholds for terrain, kernel calls or driving outputs. */
 #include "imu_core.h"
+#include "imu_support.h"
 #include <math.h>
 #include <stddef.h>
 #include <string.h>
@@ -24,13 +25,31 @@ static void reset_window(imu_core_t *core)
     core->still_count = 0u;
 }
 
+static void reset_support_window(imu_core_t *core)
+{
+    core->support_count = 0u;
+    core->support_index = 0u;
+    core->support_sum = 0.0f;
+    core->support_bad_count = 0u;
+    core->output.support_peak_eligible = false;
+}
+
+static void reset_integral(imu_core_t *core)
+{
+    core->output.height_mm = 0.0f;
+    core->output.peak_mm = 0.0f;
+    core->output.distance_mm = 0.0f;
+    core->mark_travel = core->output.travel_mm;
+}
+
 void imu_core_mark(imu_core_t *core)
 {
     if (core != NULL) {
-        core->output.height_mm = 0.0f;
-        core->output.peak_mm = 0.0f;
-        core->output.distance_mm = 0.0f;
-        core->mark_travel = core->output.travel_mm;
+        reset_integral(core);
+        core->output.left_peak_mm = 0.0f;
+        core->output.right_peak_mm = 0.0f;
+        core->output.caster_peak_mm = 0.0f;
+        reset_support_window(core);
     }
 }
 
@@ -99,32 +118,51 @@ static void calibrate(imu_core_t *core, const imu_core_input_t *in)
         core->still_count < IMU_STILL_MIN_SAMPLES) {
         return;
     }
-    if (calibration_good(core)) {
+    bool refresh_good = true;
+
+    if (core->output.calibrated) {
+        const float x = core->mean[0] - core->output.bias_mg[0];
+        const float y = core->mean[1] - core->output.bias_mg[1];
+        const float z = core->mean[2] - core->output.bias_mg[2];
+        const float tilt = atan2f(sqrtf(x * x + y * y), z);
+
+        core->output.refresh_tilt_ddeg = (int32_t)(tilt * RAD_TO_DDEG);
+        refresh_good = tilt * RAD_TO_DDEG < IMU_REFRESH_TILT_DEG * 10.0f;
+    }
+    if (calibration_good(core) && refresh_good) {
         for (unsigned int axis = 0u; axis < 3u; ++axis) {
             core->output.bias_mg[axis] = core->mean[axis] -
                                        (axis == 2u ? GRAVITY_MG : 0.0f);
         }
         core->output.calibrated = true;
         ++core->output.calibrations;
-        imu_core_mark(core);
+        reset_integral(core);
+        reset_support_window(core);
+        /* Support peaks belong to MARK, not to a stationary refresh. */
         core->have_filter = false;
         core->output.forward_accel_mm_s2 = 0.0f;
     } else {
         ++core->output.calibration_rejects;
+        if (!refresh_good) {
+            ++core->output.refresh_rejects;
+        }
     }
     reset_window(core);
 }
 
 /* Velocity uses a 100 ms count-distance window; acceleration is a signed
  * velocity derivative at window midpoints, then a 100 ms low-pass. */
-static void velocity(imu_core_t *core, float ds, uint32_t dt,
+static void velocity(imu_core_t *core, float ds, float dyaw, uint32_t dt,
                      uint32_t now)
 {
+    core->window_yaw += dyaw;
     core->window_distance += ds;
     core->window_ms += dt;
     if (core->window_ms >= IMU_ENCODER_WINDOW_MS) {
         const float v = core->window_distance * 1000.0f /
                         (float)core->window_ms;
+        const float omega = core->window_yaw * 1000.0f /
+                            (float)core->window_ms;
         const uint32_t midpoint = now - core->window_ms / 2u;
 
         if (core->have_speed) {
@@ -136,16 +174,24 @@ static void velocity(imu_core_t *core, float ds, uint32_t dt,
                 const float alpha = (float)delta /
                                     (IMU_FILTER_TAU_MS + (float)delta);
 
+                const float angular = (omega - core->previous_yaw_rate) *
+                                      1000.0f / (float)delta;
+
                 core->output.forward_accel_mm_s2 += alpha *
                     (a - core->output.forward_accel_mm_s2);
+                core->output.yaw_accel_rad_s2 += alpha *
+                    (angular - core->output.yaw_accel_rad_s2);
             }
         }
         core->output.speed_mm_s = v;
+        core->output.yaw_rate_rad_s = omega;
+        core->previous_yaw_rate = omega;
         core->previous_speed = v;
         core->velocity_ms = midpoint;
         core->have_speed = true;
         core->window_ms = 0u;
         core->window_distance = 0.0f;
+        core->window_yaw = 0.0f;
     }
 }
 
@@ -157,6 +203,9 @@ static void break_motion(imu_core_t *core)
     core->window_distance = 0.0f;
     core->output.forward_accel_mm_s2 = 0.0f;
     core->output.speed_mm_s = 0.0f;
+    core->output.yaw_rate_rad_s = 0.0f;
+    core->output.yaw_accel_rad_s2 = 0.0f;
+    core->window_yaw = 0.0f;
 }
 
 /* Return distance only for a distinct, bounded encoder interval. */
@@ -167,7 +216,8 @@ static float motion(imu_core_t *core, const imu_core_input_t *in,
 
     *distinct = false;
     core->output.motion_valid = in->motion_valid &&
-                                isfinite(in->travel_mm);
+                                isfinite(in->travel_mm) &&
+                                isfinite(in->yaw_rad);
     if (!core->output.motion_valid) {
         ++core->output.motion_misses;
         break_motion(core);
@@ -183,7 +233,8 @@ static float motion(imu_core_t *core, const imu_core_input_t *in,
         const uint32_t dt = in->travel_ms - core->previous_travel_ms;
 
         ds = in->travel_mm - core->previous_travel;
-        if (dt == 0u && ds == 0.0f) {
+        if (dt == 0u && ds == 0.0f &&
+            in->yaw_rad == core->previous_yaw) {
             return 0.0f;
         }
         if (dt == 0u || dt > IMU_MAX_GAP_MS || !isfinite(ds)) {
@@ -192,13 +243,66 @@ static float motion(imu_core_t *core, const imu_core_input_t *in,
             ds = 0.0f;
         } else {
             *distinct = true;
-            velocity(core, ds, dt, in->travel_ms);
+            velocity(core, ds, in->yaw_rad - core->previous_yaw, dt,
+                      in->travel_ms);
         }
     }
     core->previous_travel = in->travel_mm;
+    core->previous_yaw = in->yaw_rad;
     core->previous_travel_ms = in->travel_ms;
     core->have_motion = true;
     return ds;
+}
+
+/* Quality tolerance affects only the primary smoothed peak, not heights,
+ * secondary peaks, driving or any terrain state/event. */
+static void support(imu_core_t *core, float pitch_sine, float roll_sine)
+{
+    imu_core_output_t *out = &core->output;
+    const imu_support_t z = imu_support_from_sines(pitch_sine, roll_sine,
+                            IMU_WHEELBASE_MM, IMU_TRACK_MM);
+
+    out->left_mm = z.left_mm;
+    out->right_mm = z.right_mm;
+    out->caster_mm = z.caster_mm;
+    out->left_residual_mm = fabsf(z.left_mm);
+    if (!out->calibrated) {
+        reset_support_window(core);
+        return;
+    }
+    out->left_peak_mm = fmaxf(out->left_peak_mm, z.left_mm);
+    out->caster_peak_mm = fmaxf(out->caster_peak_mm, z.caster_mm);
+    if (!out->motion_valid) {
+        reset_support_window(core);
+        return;
+    }
+    const unsigned int index = core->support_index;
+    const bool bad = out->left_residual_mm > IMU_SUPPORT_TOLERANCE_MM;
+
+    if (core->support_count == IMU_SUPPORT_WINDOW_SAMPLES) {
+        core->support_sum -= core->support_window[index];
+        if (core->support_bad[index]) {
+            --core->support_bad_count;
+        }
+    } else {
+        ++core->support_count;
+    }
+    core->support_window[index] = z.right_mm;
+    core->support_bad[index] = bad;
+    core->support_sum += z.right_mm;
+    if (bad) {
+        ++core->support_bad_count;
+    }
+    core->support_index = (index + 1u) % IMU_SUPPORT_WINDOW_SAMPLES;
+    out->right_smoothed_mm = core->support_sum / (float)core->support_count;
+    out->support_peak_eligible = core->support_count ==
+        IMU_SUPPORT_WINDOW_SAMPLES && core->support_bad_count == 0u;
+    if (out->support_peak_eligible) {
+        out->right_peak_mm = fmaxf(out->right_peak_mm,
+                                  out->right_smoothed_mm);
+    } else if (core->support_count == IMU_SUPPORT_WINDOW_SAMPLES) {
+        ++out->support_peak_rejects;
+    }
 }
 
 void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
@@ -224,6 +328,7 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
         ++out->gap_resets;
         break_motion(core);
         core->have_filter = false;
+        reset_support_window(core);
     }
     core->previous_ms = in->now_ms;
     core->have_sample = true;
@@ -236,6 +341,7 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
         reset_window(core);
         break_motion(core);
         core->have_filter = false;
+        reset_support_window(core);
         return;
     }
     ++out->valid_samples;
@@ -251,12 +357,22 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
     }
     const float p = pitch(out->accel_mg);
     const float r = atan2f(out->accel_mg[0], out->accel_mg[2]);
+    /* +omega is LEFT, therefore centripetal acceleration is -X.
+     * The forward lever arm contributes -X*alpha and -Y*omega^2.
+     * Sensor height has no contribution in this planar yaw model. */
+    const float omega = out->yaw_rate_rad_s;
+
+    out->lateral_fake_mm_s2 = -out->speed_mm_s * omega -
+                             IMU_FORWARD_MM * out->yaw_accel_rad_s2;
+    out->forward_fake_mm_s2 = out->forward_accel_mm_s2 -
+                             IMU_FORWARD_MM * omega * omega;
     const float corrected[3] = {
-        out->accel_mg[0],
-        out->accel_mg[1] - out->forward_accel_mm_s2 / MG_TO_MM_S2,
+        out->accel_mg[0] - out->lateral_fake_mm_s2 / MG_TO_MM_S2,
+        out->accel_mg[1] - out->forward_fake_mm_s2 / MG_TO_MM_S2,
         out->accel_mg[2]
     };
     const float cp = pitch(corrected);
+    const float cr = atan2f(corrected[0], corrected[2]);
     const float alpha = (float)dt / (IMU_FILTER_TAU_MS + (float)dt);
 
     out->raw_pitch_ddeg = (int32_t)(pitch(in->accel_mg) * RAD_TO_DDEG);
@@ -268,17 +384,24 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
         core->pitch_rad = p;
         core->roll_rad = r;
         core->corrected_rad = cp;
+        core->corrected_roll_rad = cr;
         core->have_filter = true;
     } else {
         core->pitch_rad += alpha * (p - core->pitch_rad);
         core->roll_rad += alpha * (r - core->roll_rad);
         core->corrected_rad += alpha * (cp - core->corrected_rad);
+        core->corrected_roll_rad += alpha * (cr - core->corrected_roll_rad);
     }
     out->filtered_pitch_ddeg = (int32_t)(core->pitch_rad * RAD_TO_DDEG);
     out->filtered_roll_ddeg = (int32_t)(core->roll_rad * RAD_TO_DDEG);
     out->corrected_pitch_ddeg = (int32_t)(core->corrected_rad * RAD_TO_DDEG);
+    out->corrected_roll_ddeg = (int32_t)(core->corrected_roll_rad *
+                                       RAD_TO_DDEG);
+    const float pitch_sine = sinf(core->corrected_rad);
+
+    support(core, pitch_sine, sinf(core->corrected_roll_rad));
     if (out->calibrated && sample_time && distinct) {
-        out->height_mm += sinf(core->corrected_rad) * ds;
+        out->height_mm += pitch_sine * ds;
         out->peak_mm = fmaxf(out->peak_mm, out->height_mm);
         ++out->integrated_samples;
     }

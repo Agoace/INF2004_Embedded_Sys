@@ -18,4 +18,7 @@ uint32_t imu_hw_time_us(void);
 /* STREAM-only GP20 input, active low, internal pull-up. */
 void imu_hw_mark_init(void);
 bool imu_hw_mark_down(void);
+/* IMU_STREAM-only GP21 bounded drive job; active low, no IRQ. */
+void imu_hw_drive_init(void);
+bool imu_hw_drive_down(void);
 #endif

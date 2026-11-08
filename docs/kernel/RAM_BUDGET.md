@@ -57,7 +57,7 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Static task stack, bias/filter/height state, snapshot and libm state | about 3 KB | **3732 B**, including 2048 B stack; step 2 below |
+| IMU (subsystem 4) | Static stack, bias/support/filter state, snapshot and libm state | about 3 KB | **4028 B**, including 2048 B stack; step2b below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
@@ -112,8 +112,9 @@ wall time was about 530..566 us per 10 ms period: **5.3..5.7%** of one
 core-period before the new core/publication work. This is an old-image
 observation, includes preemption, and is not measured step-2 exclusive CPU.
 
-Use **about 6..10% of core0** as a provisional healthy-device planning
-estimate (about 0.6..1.0 ms work per 10 ms). Only the bus component has prior
+The old **6..10% of core0** provisional healthy-device planning
+estimate (about 0.6..1.0 ms per10 ms) was too low: dfade14 hardware later
+reported about13..14% wall-work, as recorded below. Only the bus component had prior
 hardware evidence; the allowance for software float/math/boards is not a
 target measurement or a guaranteed upper bound. Fault/setup paths can cost
 more, and task14 remains below all driving tasks10..13.
@@ -131,8 +132,38 @@ bounded calibration replay. These are wall times and include preemption;
 they are not exclusive task CPU times. For a stable interval, compare work
 counter differences to elapsed time and the existing idle-meter change.
 Record the interval, faults, max gap, missed wakes, USB drops and every
-stack margin in [S4-U04](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+stack margin in [S4-U04](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 Actual step-2 CPU, stack depth and motion timing under this load are Not run.
+
+## IMU step 2b measured delta
+
+Same public fixture/toolchain/profile as above; no private log/config read.
+
+| MQTT static RAM | Bytes | Delta |
+| --- | ---: | ---: |
+| Rebuilt original b569adc baseline | 184784 | reference |
+| dfade14 step2 | 188516 | +3732 |
+| Step2b: data904 + bss187908 | 188812 | **+4028 vs original; +296 vs step2** |
+
+The 2048 B static IMU stack is already included, not an extra dynamic
+allocation. Static remainder is73332 B before dynamic kernel use. No CR1
+packing or queue/stack reduction was used. Added state is the two-axis yaw
+compensation, support heights/quality window and larger bounded snapshot.
+The GP21 drive state lives only on the TEST observer's existing stack.
+
+Host sizes: core388, output192, probe44, snapshot312 B. Strict ARM compiler
+local frames: sample528, core-step112, entry16 B (not whole-call-tree bounds).
+Physical IMU high-water752/2048 B was measured only on dfade14; it does NOT
+validate these larger frames or the powered TEST observer's stack.
+
+Operator dfade14 hardware: work1.3..1.4 ms/10 ms (about13..14% wall-work),
+max2.48 ms, core about0.63 ms, read about0.54 ms. There were three unexplained
+resets. This supersedes the older6..10% estimate, not exclusive CPU evidence.
+Step2b retains work/core/read last/max/total counters, includes checked
+phase replay, and adds only one roll sine (pitch sine is reused). New target
+work/stack/timing MUST be recorded after an approved run; **Not run** here.
+Do not project host throughput onto the Cortex-M0+. See
+[S4 evidence and pending checks](../../testing/subsystem4/TEST_LOG.md#step-2b-pending-hardware).
 
 ## Steps if the RAM becomes too small
 

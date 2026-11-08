@@ -29,7 +29,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — historical RAM groups, measured IMU step-2 delta from `b569adc`, CPU/stack limits, shortage steps and CR1 order.
+- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — historical groups and measured step2/2b deltas from b569adc, dfade14 CPU/stack evidence and pending current checks; shortage/CR1 order.
 
 ## S1 — Telemetry
 
@@ -49,7 +49,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — observe-only robot/TEST task, bias/filter/encoder-compensated height, 50 Hz hand-push stream and software evidence; physical step 2 pending; older raw-stream/scale records retained.
+- [IMU.md](s4-imu/IMU.md) — RIGHT-wheel support model, yaw/lever correction, guarded refresh/quality peaks and bounded GP21 TEST drive; partial hand-push/offline evidence, no powered/static step2b acceptance; older records retained.
 
 ## S5 — Obstacle
 
