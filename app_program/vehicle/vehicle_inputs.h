@@ -1,9 +1,11 @@
 /*
  * Detector data for the Vehicle Controller modules (src/vehicle_sm.h,
- * docs/VEHICLE_STATE_MACHINE.md). The application glue fills one copy
+ * docs/architecture/VEHICLE_STATE_MACHINE.md). The application glue fills one
+ * copy
  * before each vsm_step() and the shell passes it to the running module.
  *
- * Detectors never decide (docs/ADR_VEHICLE_CONTROLLER.md, rule 1): each
+ * Detectors never decide (docs/architecture/ADR_VEHICLE_CONTROLLER.md, rule 1):
+ * each
  * field is a measurement or a detector event; the running module
  * interprets it for its job.
  *

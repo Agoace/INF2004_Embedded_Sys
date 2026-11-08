@@ -15,7 +15,7 @@
  * step": the number of 5-degree steps from straight ahead to the first
  * free point. A smaller free step is a shorter way around the obstacle.
  *
- * Pure logic: no hardware or RTOS calls. See docs/OBSTACLE_SCAN.md.
+ * Pure logic: no hardware or RTOS calls. See docs/s5-obstacle/OBSTACLE_SCAN.md.
  */
 
 /* A VALID point at least this much farther than the obstacle is free:

@@ -1,5 +1,6 @@
 /*
- * Steering log packets for Wi-Fi (UDP broadcast). See docs/STEER_WIFI_LOG.md.
+ * Steering log packets for Wi-Fi (UDP broadcast). See
+ * docs/archive/STEER_WIFI_LOG.md.
  *
  * Every packet starts with a 5-byte header:
  *

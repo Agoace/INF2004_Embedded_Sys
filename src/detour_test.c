@@ -31,13 +31,15 @@
  * a failed detour, or the time limit RUN_LIMIT_MS.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (USB_POWER_SAFETY.md).
+ * (docs/s2-motion/USB_POWER_SAFETY.md).
  *
- * Log: kept in RAM only (not in flash). The Wi-Fi log (docs/STEER_WIFI_LOG.md)
+ * Log: kept in RAM only (not in flash). The Wi-Fi log
+ * (docs/archive/STEER_WIFI_LOG.md)
  * gets the entries live; when the run stops, the detour readings and the
  * whole kept log are sent again (replay). Mode 3 in the log is BYPS (STOP,
  * SCAN or DETOUR). Log header flag SL_FLAG_DETOUR: in the reading records,
- * state << 2 | phase is the detour step and steer is 0. Keep the robot on for about 2 s after it stops. A USB
+ * state << 2 | phase is the detour step and steer is 0. Keep the robot on for
+ * about 2 s after it stops. A USB
  * terminal that connects after the run gets the summary and the log.
  */
 #include <stdbool.h>
@@ -94,9 +96,9 @@ static const steer_config_t STEER_FOLLOW = {
     .max_pct = 50u,
     .right_trim_pct = 1,
 };
-/* First values: tune on the track. Geometry (docs/OBSTACLE_BYPASS.md):
+/* First values: tune on the track. Geometry (docs/archive/OBSTACLE_BYPASS.md):
  * vehicle length 190 mm, track 111 mm, servo axis 65 mm ahead of the rear
- * axle. See docs/CALIBRATION_RESULTS.md, Robot geometry: sweep 150 mm
+ * axle. See docs/s2-motion/CALIBRATION_RESULTS.md, Robot geometry: sweep 150 mm
  * uses the calculated 146.7 mm front-corner circle; line_ahead_mm is
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
@@ -136,8 +138,12 @@ static const dt_config_t DETOUR = {
     .sweep_mm = 150u,
     .margin_mm = 30u,
     .sensor_ahead_mm = 65u,
-    .line_ahead_mm = 123u, /* rear axle to line sensors, 65 + 58 mm; v1-v1.4: 100;
-                           * docs/CALIBRATION_RESULTS.md, Robot geometry */
+    .line_ahead_mm = 123u, /*
+                            * rear axle to line sensors, 65 + 58 mm; v1-v1.4:
+                            * 100;
+                           * docs/s2-motion/CALIBRATION_RESULTS.md, Robot
+                           * geometry
+                           */
     .seen_mm = 400u,
     .counts_per_deg_x100 = 2405u,
     .total_max_ms = 40000u,

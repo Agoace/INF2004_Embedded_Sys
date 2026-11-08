@@ -1,5 +1,5 @@
 /*
- * Duty map bench on the floor (docs/DUTY_MAP.md).
+ * Duty map bench on the floor (docs/s2-motion/DUTY_MAP.md).
  *
  * Open loop: both wheels get the same fixed duty, forward then reverse,
  * for each level in LEVELS. The steady speed of each wheel is measured
@@ -15,7 +15,8 @@
  *   - GP21 during the run: stop.
  *
  * Each drive starts from rest with a kick (12 % until 10 counts, at most
- * 250 ms), as in the start policy (docs/CALIBRATION_RESULTS.md); a level
+ * 250 ms), as in the start policy (docs/s2-motion/CALIBRATION_RESULTS.md); a
+ * level
  * below the running minimum then slows the wheel to 0 (reported as 0).
  *
  *   GP21  start the run (after 1 s); press again to stop.

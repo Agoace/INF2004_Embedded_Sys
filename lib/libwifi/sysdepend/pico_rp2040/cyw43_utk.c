@@ -11,7 +11,9 @@
  * timeouts() then needs polling from here for the same reason cyw43_poll()
  * does: NO_SYS=1 means nothing else ever calls it. Both run on this task,
  * which is the single processor-1 owner of the whole radio+network stack
- * (docs/RELEASE.md safety rule 6) -- see lib/liblwip/sysdepend/pico_rp2040/. */
+ * (docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook) -- see
+ * lib/liblwip/sysdepend/pico_rp2040/.
+ */
 #include "lwip/init.h"
 #include "lwip/timeouts.h"
 #include "lwip/netif.h"

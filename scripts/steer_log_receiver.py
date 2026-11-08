@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Receive the steer_test Wi-Fi log (UDP broadcast, port 4243).
 
-Packet format: src/steer_log.h and docs/STEER_WIFI_LOG.md.
+Packet format: src/steer_log.h and docs/archive/STEER_WIFI_LOG.md.
 
 The robot sends:
   - TEXT packets: its printf output (spin, calibration, run summary);

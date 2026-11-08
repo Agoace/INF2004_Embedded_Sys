@@ -1,6 +1,6 @@
 /*
  * Detour module for the Vehicle Controller shell (module DETOUR,
- * src/vehicle_sm.h). See docs/VC_DETOUR_RUN.md.
+ * src/vehicle_sm.h). See docs/s5-obstacle/VC_DETOUR_RUN.md.
  *
  * Runs the detour logic of src/obstacle_detour.c (v1.8) unchanged and
  * turns its command word into wheel speeds:

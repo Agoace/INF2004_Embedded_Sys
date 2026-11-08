@@ -18,7 +18,7 @@ static const ls_config_t SEARCH_CFG = {.speed_mm_s = 131, .turn_counts = 2535 / 
 /* Scan: the robot stands still 300 ms first (detour_test STOP_SETTLE_MS). */
 static const ss_config_t SCAN_CFG = {.stop_ms = 300u};
 
-/* Detour v1.8 (src/detour_test.c, docs/OBSTACLE_DETOUR_HANDOFF.md) with
+/* Detour v1.8 (src/detour_test.c, docs/archive/OBSTACLE_DETOUR_HANDOFF.md) with
  * wheel speeds: straights and the non-sweep turns 131 mm/s (20 %); the
  * sweeps 20 deg/s = 19 mm/s per wheel, held by the motor controller (no
  * duty rate control). No heading hold on the straights (operator

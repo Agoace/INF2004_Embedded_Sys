@@ -37,7 +37,7 @@ IMPORT void	tm_tusb_discard_input(void);
  * (DIAG capture 2026-11-07). 21 is below motion/sensors/vehicle 10-13,
  * Wi-Fi 20 and the TEST runner 20, but above telemetry 30 (the GP20 dump
  * producer), health 31 and the always-ready CPU meter 32. The IRQ priority
- * and interrupt wake are unchanged. See docs/TEMPLATE_CHANGES.md.
+ * and interrupt wake are unchanged. See docs/architecture/TEMPLATE_CHANGES.md.
  */
 #define USB_TASK_PRIORITY	21
 #if TK_SUPPORT_SMP

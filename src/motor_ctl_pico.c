@@ -18,7 +18,10 @@ typedef struct {
     int32_t count_sign; /* +1 if forward counts up */
 } wheel_pins_t;
 
-/* Sides and encoder signs: measured 2026-10-27 (CALIBRATION_RESULTS.md). */
+/*
+ * Sides and encoder signs: measured 2026-10-27
+ * (docs/s2-motion/CALIBRATION_RESULTS.md).
+ */
 static const wheel_pins_t PINS[MC_WHEELS] = {
     [MC_LEFT] = {8u, 9u, 16u, 17u, +1},
     [MC_RIGHT] = {10u, 11u, 4u, 5u, -1},

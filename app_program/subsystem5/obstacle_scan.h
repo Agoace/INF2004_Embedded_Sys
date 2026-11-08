@@ -16,7 +16,7 @@
  *
  * During a scan this module owns the ultrasonic driver: it calls
  * ultrasonic_trigger() and ultrasonic_service(). Do not trigger the sensor
- * from other code until the scan ends. See docs/OBSTACLE_SCAN.md.
+ * from other code until the scan ends. See docs/s5-obstacle/OBSTACLE_SCAN.md.
  */
 
 /* Scan points: index 0-12 (4 bits); 13-15 are not used.

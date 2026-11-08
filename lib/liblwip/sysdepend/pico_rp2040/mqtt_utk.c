@@ -3,7 +3,8 @@
  *	MQTT client wiring for micro T-Kernel (RP2040, NO_SYS=1)
  *
  *	Runs entirely on the single processor-1-owned task that already owns
- *	the CYW43439 and the rest of lwIP (docs/RELEASE.md safety rule 6):
+ *	the CYW43439 and the rest of lwIP
+ *	(docs/s1-telemetry/KERNEL_MQTT.md#execution-and-hook):
  *	cyw43_utk_task() (cyw43_utk.c) calls mqtt_utk_start() once, the first
  *	time it observes CYW43_LINK_UP. mqtt.c's own keepalive/ping/retry
  *	timers, and the heartbeat below, both ride the same sys_check_timeouts()

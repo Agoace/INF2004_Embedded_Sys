@@ -50,7 +50,7 @@
  *      No reverse.
  *
  * Pure logic, no hardware: host-tested by tests/test_line_steer.c.
- * See docs/LINE_STEERING.md.
+ * See docs/s3-line-barcode/LINE_STEERING.md.
  */
 #ifndef LINE_STEER_H
 #define LINE_STEER_H
@@ -133,14 +133,16 @@ bool steer_calm_update(steer_calm_t *c, int8_t position, bool trigger, uint32_t 
 
 /*
  * Steering in wheel speed (mm/s), for the motor controller
- * (docs/ADR_MOTOR_CONTROLLER.md). The same rule as steer_update(), with
+ * (docs/architecture/ADR_MOTOR_CONTROLLER.md). The same rule as steer_update(),
+ * with
  * base, min and max in mm/s and no trim: the motor controller holds the
  * wheel speeds, so the wheel differences and the dead zone are not the
  * caller's work.
  *
  * min_mm_s keeps the shape of the duty rule: the inner wheel slows to
  * min_mm_s, then stops (no reverse). It is a steering setting here, not a
- * motor limit. Values for the locked line tracing: docs/LINE_STEER_MM.md.
+ * motor limit. Values for the locked line tracing:
+ * docs/s3-line-barcode/LINE_STEER_MM.md.
  *
  * Steer mm word: bits 0-8 left mm/s (0..511), bits 9-17 right, 18-31 spare.
  */

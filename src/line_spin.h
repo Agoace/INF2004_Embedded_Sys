@@ -6,7 +6,8 @@
  * right, sampling the sensors every 1 ms. Then the calibration is made and
  * the robot turns back until the line is under the centre sensor.
  *
- * Limits for USB power (USB_POWER_SAFETY.md, spin-calibration exception):
+ * Limits for USB power (docs/s2-motion/USB_POWER_SAFETY.md, spin-calibration
+ * exception):
  * duty 20 %, the right wheel starts 50 ms after the left, and a stall (no
  * encoder count for 500 ms after a 1 s start) or 6 s per step stops both.
  *

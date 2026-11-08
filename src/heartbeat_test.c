@@ -1,5 +1,5 @@
 /*
- * Bench test for the heartbeat (docs/HEARTBEAT.md). No motors move.
+ * Bench test for the heartbeat (docs/s2-motion/HEARTBEAT.md). No motors move.
  *
  * Every second, over USB serial: tick count, tick gap (min/max), longest
  * interrupt work, overrun counters, missed main-loop frames.

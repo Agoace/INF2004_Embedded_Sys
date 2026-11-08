@@ -1,6 +1,6 @@
 /*
  * Servo scan module for the Vehicle Controller shell (module SCAN,
- * src/vehicle_sm.h). See docs/VC_DETOUR_RUN.md.
+ * src/vehicle_sm.h). See docs/s5-obstacle/VC_DETOUR_RUN.md.
  *
  * The scan of src/obstacle_scan.c without hardware calls: the servo angle
  * goes out in the drive command, and the readings come in through the

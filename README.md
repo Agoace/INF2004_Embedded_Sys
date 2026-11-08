@@ -197,7 +197,7 @@ the next plain `make` goes back to the defaults.
 For the operator-only GY-511 tilt check, use `TEST=1 IMU_STREAM=1` with
 `SMP=0 WIFI=none NET=none`. It skips other tests and streams S4 until power-off;
 GP20 adds position markers. The IMU requires USB only and `CRASH_REPORT=0`.
-See [IMU bring-up](docs/IMU_BRINGUP.md#continuous-operator-stream). Default
+See [IMU bring-up](docs/s4-imu/IMU.md#continuous-operator-stream). Default
 TEST without this option is unchanged.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
@@ -255,7 +255,7 @@ Each option goes through the same steps:
 The makefile also has `NET=lwip` and `MQTT=1` (TCP/IP and MQTT over WiFi).
 They need the SDK's `lib/lwip` submodule and a `config/wifi_secrets.h`
 (copy `config/wifi_secrets.example.h`). The robot uses its own MQTT settings;
-see [the operator runbook](docs/MQTT_RUNBOOK.md), not the template demo.
+see [the operator runbook](docs/s1-telemetry/MQTT_RUNBOOK.md), not the template demo.
 
 ---
 
@@ -265,7 +265,7 @@ T-License 2.2. This dual-core RP2040 port is derived from the official
 
 ## Robot logic and reference firmware
 
-See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; staging connects the four robot modules through the vehicle task.
+See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/architecture/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; staging connects the four robot modules through the vehicle task.
 
 The robot platform needs Pico SDK register headers even with `WIFI=none`.
 Keep the USB console enabled for the initial bring-up builds.
@@ -280,15 +280,15 @@ These new task-split hardware checks and M1/M2 repeats are Not run. Use
 `make SMP=0 WIFI=none BENCH=1 -j4` for the earlier motion-only bench.
 GP21 calibrates then starts the robot, or latches ESTOP during a session;
 GP20 dumps saved RAM data instead of changing D. TEST images start neither
-button task. Read [the kernel robot safety/design record](docs/KERNEL_ROBOT.md)
+button task. Read [the kernel robot safety/design record](docs/kernel/KERNEL_ROBOT.md)
 and pass the lifted-wheel checks before floor work. R5 has not run.
 
 The barcode work is not started. The ideas for it are in
-[Barcode reading ideas](docs/BARCODE_READING_IDEAS.md).
+[Barcode reading ideas](docs/s3-line-barcode/BARCODE_READING_IDEAS.md).
 
 ## Local template changes
 
-See [the template change ledger](docs/TEMPLATE_CHANGES.md) for approved shared
+See [the template change ledger](docs/architecture/TEMPLATE_CHANGES.md) for approved shared
 changes, their reasons, and the procedure after a lecturer update. Template
 source is not frozen. Run `python3 scripts/check-template-changes.py` to check
 the recorded file list. No SDK startup/runtime is added.
@@ -297,11 +297,11 @@ the recorded file list. No SDK startup/runtime is added.
 
 `make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 -j4` adds non-critical MQTT on the
 existing Wi-Fi task at priority20 and health31. Driving never requires a
-link/broker; GP21 remains the real ESTOP. [Design](docs/KERNEL_MQTT.md),
-[wire layouts](docs/MQTT_WIRE.md), and [broker/private-settings runbook](docs/MQTT_RUNBOOK.md)
+link/broker; GP21 remains the real ESTOP. [Design](docs/s1-telemetry/KERNEL_MQTT.md),
+[wire layouts](docs/s1-telemetry/MQTT_WIRE.md), and [broker/private-settings runbook](docs/s1-telemetry/MQTT_RUNBOOK.md)
 explain ownership, binary CSV decoding and token-bearing commands. New-image
 network, cold-power and loaded motion/M1/M2 checks remain **Not run**.
 
-The live laptop view is [the MQTT dashboard](docs/MQTT_DASHBOARD.md): run
+The live laptop view is [the MQTT dashboard](docs/s1-telemetry/MQTT_DASHBOARD.md): run
 `python3 scripts/mqtt_dashboard.py --host 127.0.0.1 --token-file <file>` and open
 `http://127.0.0.1:8765/`. It needs `paho-mqtt` 2.x only.

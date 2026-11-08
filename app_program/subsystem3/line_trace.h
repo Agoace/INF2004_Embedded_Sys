@@ -1,11 +1,11 @@
 /*
  * Line tracing module for the Vehicle Controller shell (module LINE,
- * src/vehicle_sm.h). See docs/VC_LINE_RUN.md.
+ * src/vehicle_sm.h). See docs/s3-line-barcode/VC_LINE_RUN.md.
  *
  * The behaviour of the locked FOLLOW phase of detour_test
- * (docs/TWO_SENSOR_LINE_TRACING.md) in wheel speeds:
+ * (docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) in wheel speeds:
  *   - steering: steer_mm_update() on the line position
- *     (docs/LINE_STEER_MM.md); straight across a junction for
+ *     (docs/s3-line-barcode/LINE_STEER_MM.md); straight across a junction for
  *     straight_counts of travel;
  *   - side hint to the line detector from the wheel counts: turned more
  *     than hint_counts to the right means the line is probably left;

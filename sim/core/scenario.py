@@ -200,7 +200,7 @@ def validate(s):
     ultra = robot["ultrasonic"]
     obj(ultra, "robot.ultrasonic", "beam_deg rise_latency_us echo_timeout_us trigger_gap_us")
     # Full sector angle: 30 is the data sheet beam; smaller values model the
-    # narrow effective beam of the real sensor (docs/SIMULATION.md).
+    # narrow effective beam of the real sensor (docs/simulation/SIMULATION.md).
     number(ultra["beam_deg"], "robot.ultrasonic.beam_deg", 0.5, 30)
     timing = {key: value for key, value in ultra.items() if key != "beam_deg"}
     for key, value in timing.items():
