@@ -12,7 +12,7 @@ before a powered test. Historical calibration used Pico SDK2.3.0.
 
 | Function | Pico pin | Current connection / owner |
 | --- | --- | --- |
-| GY-511 SDA/SCL | GP0/GP1 | I2C0, TEST-only IMU; USB console, crash mirror off |
+| GY-511 SDA/SCL | GP0/GP1 | I2C0, robot/TEST IMU observer; USB console, crash mirror off |
 | Sonar echo/trigger | GP2/GP3 | HC-SR04+, sonar service |
 | Right/motor 2 encoder A/B | GP4/GP5 | Motion; forward raw count decreases, sign-1 |
 | GY-511 DRDY | GP6 | Earlier level HIGH; edge behavior not established; TEST reads use polling |

@@ -58,6 +58,9 @@ static bool cancelled;
 static bool prev_run;
 static bool prev_dump;
 static bool step_open;
+/* Single writer; odd throughout line calibration, even otherwise.
+ * Observer only. No IMU result can affect navigation or motion. */
+static uint32_t calibration_epoch;
 static uint32_t wake_lost;
 static uint32_t overruns;
 static uint32_t response_max_us;
@@ -638,7 +641,7 @@ static void cal_pause(void)
 /*
  * Run the existing line calibration and retain its failure policy.
  */
-static bool calibrate(void)
+static bool calibrate_body(void)
 {
     motion_diag_phase(MOTION_DIAG_CALIBRATE);
     motion_status_t s;
@@ -665,6 +668,19 @@ static bool calibrate(void)
     ok = cal_spin(-1, GOAL_HOME, home, calibrated);
     read_line();
     return ok && calibrated && lp_calibrated(&lp);
+}
+
+/* Preserve every existing calibration exit and motion decision. */
+static bool calibrate(void)
+{
+    const uint32_t epoch = __atomic_load_n(&calibration_epoch,
+                                            __ATOMIC_SEQ_CST);
+
+    __atomic_store_n(&calibration_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
+    const bool ok = calibrate_body();
+
+    __atomic_store_n(&calibration_epoch, epoch + 2u, __ATOMIC_SEQ_CST);
+    return ok;
 }
 
 typedef struct {
@@ -1198,6 +1214,16 @@ int vehicle_task_start(void)
     return E_OK;
 }
 #endif
+/* Available without MQTT. TEST/BENCH cannot run vehicle calibration. */
+uint32_t vehicle_calibration_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&calibration_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
 #if !TM_MQTT || APP_TEST || APP_BENCH
 int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
 {

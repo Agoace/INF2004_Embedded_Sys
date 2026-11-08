@@ -24,7 +24,8 @@ echo interrupt -> sonar12 -------+-> vehicle13 -> motion commands
                     +-----------------+          next motor tick
                                       |
                                       +-> RAM queue -> telemetry30
-read-only boards -> Wi-Fi20 -> broker; health31 -> health board
+10 ms IMU cyclic -> IMU14 -> read-only board -> TEST20 USB observer
+read-only network boards -> Wi-Fi20 -> broker; health31 -> health board
 USB21 drains the console; idle_meter32 estimates unused core-0 time
 ```
 
@@ -41,6 +42,7 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 | line | 11 | Each 1 ms ADC acquisition; filter, learned line values and snapshot | 2048 |
 | sonar | 12 | Request/edge wake; 10 ms deadline cyclic; trigger and result service | 2048 |
 | vehicle | 13 | After each completed motion tick; buttons, calibration, modules and commands | 4096 |
+| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded probe/count reads, pure observe-only core and board | 2048 |
 | Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8192 with lwIP (template-owned) |
 | TEST runner | 20 | Initial task after startup; no normal vehicle/bench task | Initial task stack |
 | USB console | 21 | IRQ wake or 10 ms fallback; console drain | 2048 UP / 4096 SMP (template-owned) |
@@ -61,6 +63,7 @@ Task functions do not return. They loop or call `tk_ext_tsk()`.
 | Sonar | 256-byte request message buffer; copied requests with generation, ID, angle, not-before time and deadline; result mutex and event flag |
 | Telemetry | 4096-byte message buffer, by-value messages, no producer wait; array owner is telemetry30 |
 | Network | Bounded read-only boards, event/command queues; never a control mutex or PWM writer |
+| IMU | Bounded motion-count copy and own snapshot board; atomic vehicle calibration epoch, no motion mutex or commands |
 
 Only core 0 enables ADC/GPIO interrupts. GPIO IRQ13 is interrupt priority 1;
 ADC TIMER alarm0 uses 2; USB IRQ5 keeps 0; SysTick/PendSV use 3. These are
@@ -96,11 +99,12 @@ not add its normal 128-byte allowance.
 
 | Reserve/use | Bytes | Meaning |
 | --- | ---: | --- |
-| Six base regions, including exclusive bench | 19456 | Reserved even when some tasks do not start |
+| Six original regions, including exclusive bench | 19456 | Reserved even when some tasks do not start |
+| IMU region, not BENCH | 2048 | Static reserve in robot/TEST, physical high-water pending |
 | MQTT extra health + idle meter | 2560 | 2048 +512 |
-| All registered regions in MQTT image | 22016 | Includes the inactive bench region |
-| Active normal robot, no MQTT | 15360 | Five task stacks |
-| Active normal MQTT robot | 17920 | Five tasks + health + idle meter |
+| All registered regions in MQTT image | 24064 | Includes IMU and the inactive bench region |
+| Active normal robot, no MQTT | 17408 | Six task stacks, including IMU |
+| Active normal MQTT robot | 19968 | Six tasks + health + idle meter |
 | Low-margin threshold | 256 | Untouched bytes required per active application stack |
 
 `app_task_stacks()` scans the fill pattern from the low end and keeps the
@@ -156,7 +160,7 @@ diagnostic only and does not gate motion. Target accuracy is not established.
 
 ## USB priority
 
-USB runs at 21, below motion10 through vehicle13 and Wi-Fi/TEST20, but above
+USB runs at 21, below driving10..13, IMU14 and Wi-Fi/TEST20, but above
 the telemetry30 dump producer and always-ready meter32. Only its task
 priority changed; the 4096-byte output ring (4095 usable), 64-byte chunk,
 IRQ priority, counted wakes and TinyUSB ownership remain unchanged.
@@ -197,6 +201,8 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [app_task.c](../../app_program/platform/app_task.c),
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
+- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-2-measured-delta)
+  and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),
   [integration TEST_LOG](../../testing/integration/TEST_LOG.md).

@@ -24,7 +24,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
 | [s3-line-barcode/](s3-line-barcode/) | Current kernel LINE/SEARCH and analog barcode ideas; originals in archive/s3-line-barcode/. |
-| [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
+| [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
 | [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
@@ -188,16 +188,20 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
-## TEST-only IMU acquisition
+## Observe-only IMU task
 
-- [GY-511 IMU record](s4-imu/IMU.md) — merged steps 0/1 bring-up, scale evidence and software validation. The raw magnitude is explained by positive Z offset, not uniform gain. Six-face signs confirm the accelerometer identity map; S4-U03 stream passed. Calibration/core integration is not implemented. Absent-device, cold-power and MQTT-TEST checks remain pending.
-- [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM; default TEST is unchanged.
-- [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
+- [GY-511 IMU record](s4-imu/IMU.md) — current step-2 bias/filter/encoder-compensated relative height, 50 Hz hand-push stream and limits; old steps0/1 retained. Six-face signs/raw-stream S4-U03 passed, but no physical step-2 acceptance.
+- [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure calibration, angles, filters, signed distance/height and counters; no driving decisions, SDK/kernel or packed wire fields.
+- [`imu_service.c`](../app_program/subsystem4/imu_service.c), [`imu_service.h`](../app_program/subsystem4/imu_service.h) — robot/TEST task14 and own 10 ms cyclic; bounded motion-count read, calibration-epoch guard, sole snapshot writer and acknowledged MARK; BENCH excluded.
+- [`vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — atomic calibration epoch covers the unchanged line spin/pause/abort/home routine, also without MQTT.
+- [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM.
+- [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — robot/TEST SDK register layer, bounded I2C0 on GP0/GP1, UART-conflict guard; no SDK runtime ownership.
 - [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.
-- [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, signed-permutation mounting table and static pitch/roll.
-- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — TEST runner, 10 ms cyclic and 100 ms USB diagnostics: 30 s normally, continuous with IMU_STREAM=1.
-- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict host decode/protocol and hardware register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
-- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — S4-U01 partial/sign evidence, S4-U03 continuous-stream PASS and still-pending absent-device/cold-power/MQTT-TEST checks.
+- [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, identity mounting table and static pitch/roll.
+- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; zero-duty hand-push mode, not a bus owner.
+- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark and existing protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
+- [RAM budget](kernel/RAM_BUDGET.md#imu-step-2-measured-delta) — measured 3732 B MQTT delta including 2048 B stack, compiler/host evidence and explicitly provisional CPU estimate.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence; pending absent-device/cold-power/MQTT-TEST gates plus S4-U04 noise and U05/U06 hand-push cases, all step2 Not run.
 
 ## Kernel ultrasonic acquisition
 

@@ -15,6 +15,7 @@
 #define MOTION_STACK_WORDS    384
 #define LINE_STACK_WORDS      256
 #define SONAR_STACK_WORDS     256
+#define IMU_STACK_WORDS       256
 #define VEHICLE_STACK_WORDS   512
 #define TELEMETRY_STACK_WORDS 512
 #define BENCH_STACK_WORDS     512
@@ -25,6 +26,9 @@
 static uint64_t motion_stack[MOTION_STACK_WORDS];
 static uint64_t line_stack[LINE_STACK_WORDS];
 static uint64_t sonar_stack[SONAR_STACK_WORDS];
+#if !APP_BENCH
+static uint64_t imu_stack[IMU_STACK_WORDS];
+#endif
 static uint64_t vehicle_stack[VEHICLE_STACK_WORDS];
 static uint64_t telemetry_stack[TELEMETRY_STACK_WORDS];
 static uint64_t bench_stack[BENCH_STACK_WORDS];
@@ -44,6 +48,9 @@ typedef struct {
 static slot_t slots[] = {SLOT("motion_task", motion_stack),
                          SLOT("line_task", line_stack),
                          SLOT("sonar_task", sonar_stack),
+#if !APP_BENCH
+                         SLOT("imu_task", imu_stack),
+#endif
                          SLOT("vehicle_task", vehicle_stack),
                          SLOT("telemetry_task", telemetry_stack),
                          SLOT("motion_bench", bench_stack)

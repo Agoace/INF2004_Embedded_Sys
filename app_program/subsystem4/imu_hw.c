@@ -1,7 +1,7 @@
 /* SDK-only LSM303DLHC bus adapter. Port ideas: Jaison, b2a6bb6.
  * Register-level I2C: no SDK time, IRQ, clock or runtime ownership.
- * Only the TEST runner calls this adapter; normal robot builds do not. */
-#if APP_TEST
+ * IMU task owns the robot/TEST bus; the TEST observer also polls GP20. */
+#if !APP_BENCH
 #include "imu_hw.h"
 #include "hardware/gpio.h"
 #include "hardware/regs/i2c.h"

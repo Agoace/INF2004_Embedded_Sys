@@ -1,4 +1,4 @@
-/* LSM303DLHC TEST probe, adapted from Jaison's b2a6bb6 register setup. */
+/* LSM303DLHC bounded probe, from Jaison's b2a6bb6 register setup. */
 #ifndef IMU_PROBE_H
 #define IMU_PROBE_H
 #include "imu_decode.h"

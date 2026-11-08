@@ -18,12 +18,10 @@
 # SDK paths are system headers: SDK 2.3.0 GPIO/timer inline headers have
 # conversion/unused-parameter warnings under our strict application flags.
 # Application diagnostics remain enabled. This fragment adds no SDK runtime.
-# IMU TEST uses hardware_i2c register headers only: i2c.c is NOT compiled.
-# No SDK clock/time helpers are used. TEST static tilt uses newlib libm.
-# Approved shared template changes are recorded in docs/architecture/TEMPLATE_CHANGES.md.
-ifeq ($(TEST),1)
+# IMU uses hardware_i2c register headers only: i2c.c is NOT compiled.
+# No SDK clock/time helpers are used. The pure IMU observer uses libm.
+# Approved shared template changes are in docs/architecture/TEMPLATE_CHANGES.md.
 APP_SDK_HW_LIBS += -lm
-endif
 
 ifeq ($(strip $(PICO_SDK_PATH)),)
 $(error PICO_SDK_PATH is required by the application hardware adapters)

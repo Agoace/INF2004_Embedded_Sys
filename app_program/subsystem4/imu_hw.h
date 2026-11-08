@@ -1,4 +1,4 @@
-/* TEST-only I2C0 adapter. Register ideas: Jaison, b2a6bb6. */
+/* Robot/TEST I2C0 adapter. Register ideas: Jaison, b2a6bb6. */
 #ifndef IMU_HW_H
 #define IMU_HW_H
 #include <stdbool.h>

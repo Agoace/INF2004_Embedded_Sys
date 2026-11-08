@@ -1,7 +1,254 @@
-# GY-511 IMU: bring-up, scale and validation
+# GY-511 IMU: observe-only step 2
+
+## Current scope
+
+Step 2 starts from staging `b569adc`. The robot and TEST images now run an
+IMU observer. BENCH does not. The observer has no motor commands, terrain
+states, hump thresholds, climb events, MQTT fields or KR1 fields. It cannot
+change driving or stop the robot on an IMU fault. CR1 packing is deferred.
+
+Bias, pure-core separation, filtering and signed height-integration ideas
+are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
+`IMU-Telemetry/src/imu_core.c`. Ideas were ported; the reference branch was
+not merged. Its event system, terrain thresholds and minimum-height policy
+were not ported. The LSM303DLHC has no gyro; no gyro result is claimed.
+
+**Hardware step 2 is Not run.** The earlier S4-U03 PASS validates the older
+raw stream and axis signs, not calibration, dynamic pitch or hump height.
+See [pending tests](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+
+## Step 2 data path and interface
+
+```text
+10 ms kernel cyclic -> IMU task14 -> bounded probe -> pure IMU core
+                               ^                    |
+    bounded motion count board-+                    v
+    vehicle calibration epoch -+          bounded observation board
+                                                    |
+                                      TEST observer20 -> USB at 50 Hz
+```
+
+| File | Role |
+| --- | --- |
+| [imu_core.h](../../app_program/subsystem4/imu_core.h), [imu_core.c](../../app_program/subsystem4/imu_core.c) | Pure state, calibration, angles, filters and relative height; no SDK/kernel headers |
+| [imu_service.c](../../app_program/subsystem4/imu_service.c) | Core-0 task14, own 10 ms cyclic, probe/motion observations and sole snapshot writer |
+| [imu_service.h](../../app_program/subsystem4/imu_service.h) | `imu_snapshot_try_read()` and acknowledged operator MARK request |
+| [imu_hw.c](../../app_program/subsystem4/imu_hw.c) | Bounded I2C register adapter only; still no SDK runtime/IRQ/clock owner |
+| [subsystem4_test.c](../../app_program/subsystem4/subsystem4_test.c) | Observer only; no competing bus reader; TEST-only zero-duty request and USB output |
+| [host checks](../../tests/imu_checks.cmake) | Core, task/board, BENCH exclusion, 50 Hz reporter and existing hardware/probe/debounce checks |
+
+The input is identity-mapped accel mg (+X right, +Y forward, +Z up), signed
+mean wheel travel and its timestamp, per-wheel stillness and a calibration
+permission/epoch. The service uses coherent count deltas, not truncated
+integer `travel_mm` or commanded speed:
+
+`ds_mm = 1000 * (delta_left + delta_right) / (2 * 12414)`
+
+The ratio comes from `MC_ROBOT_CONFIG`. Both wheel counts must be unchanged
+and both actual duties zero for a stationary candidate. Equal/opposite wheel
+motion is not stillness. The existing bounded motion-board read must succeed
+and be at most 30000 us old. Duplicate source stamps do not generate another
+velocity derivative or height update. Distinct source microsecond intervals
+and their fractional remainder form the relative encoder millisecond clock;
+this avoids duplicate-time jitter and handles the 32-bit microsecond wrap.
+
+`vehicle_calibration_epoch()` is one atomic load, also without MQTT. It is
+odd for the whole existing line-calibration routine, including pauses,
+failures, abort and home spin. It changes on entry/exit. No existing motion
+command or calibration outcome changes. The IMU reads it before/after input
+collection and after core calculation. A transition during calculation
+causes one rollback/replay with calibration forbidden, not a retry loop.
+This prevents a candidate commit across a higher-priority vehicle action.
+
+Snapshot reads return E_PAR for null, E_OBJ if inactive, or E_TMOUT for a
+busy/empty board. Failure leaves the caller's output unchanged. There is one
+writer and one bounded copy; no reader waits for the writer. The snapshot
+has raw/calibrated acceleration, bias, angles in 0.1 degree, signed travel,
+windowed speed, encoder acceleration, height/peak/distance, calibration,
+validity, probe faults and timing/sample counters. It is not a wire packet.
+Existing health stack-minimum reporting includes the new registered stack;
+no heartbeat format or dedicated IMU telemetry field changes.
+
+## Step 2 calibration and settings
+
+| Setting | Value / meaning |
+| --- | --- |
+| Acquisition | 10 ms, priority14, physical core0; 2048-byte static registered stack |
+| Bus / units | Unchanged 400 kHz register polling, 100 Hz HR +/-2 g, 1 mg/LSB; mag still read each cycle |
+| Candidate duration | At least 1000 ms and 100 samples of continuous valid stationary input |
+| Quiet gate | Per-axis sample standard deviation <=20 mg; initial engineering value, not hardware-tuned |
+| Bias | Window mean minus `(0,0,1000)` mg, independently for all axes |
+| Magnitude gate | Corrected whole-window envelope inside 900..1100 mg, AFTER candidate bias removal |
+| Pitch/roll filter | `alpha = dt_ms / (100 + dt_ms)`; 100 ms time constant |
+| Encoder speed | Signed rolling-distance window of at least 100 ms |
+| Encoder acceleration | Difference of window velocities at their midpoint times; 100 ms low-pass |
+| Invalid time | Zero/rollback time or interval >100 ms breaks derivative/integration history |
+| Observer output | IMU_STREAM nominal 50 Hz; ordinary S4 window 30 s with 10 Hz sample lines |
+
+Welford accumulation gives each axis mean and sample standard deviation.
+The corrected minimum/maximum axis envelope is a conservative magnitude
+check for the entire window; checking only the corrected mean would always
+produce 1 g by construction. Neither magnitude nor quietness proves level.
+The known raw magnitude near 1375 mg is NOT rejected before bias removal.
+No fixed hand-held offset or `1/1.375` gain is installed.
+
+**Boot on level support and remain still for at least one second.** Bias
+removal defines that support as level. It cannot distinguish real slope,
+mounting tilt or gain error from sensor offset. The operator-approved rule
+also refreshes calibration after every further >=1 s stationary window.
+Every accepted refresh resets height, peak and distance and clears the angle
+filter. Therefore **a one-second stop on a hump can erase the segment and
+redefine that slope as level**. A host regression demonstrates this limit.
+Keep the robot moving through the hump, and record calibration counts; do
+not count an automatic reset as a successful return-to-zero measurement.
+
+Motion, nonzero duty, a calibration epoch change, an invalid sensor/motion
+sample or a time gap breaks the stationary window. Noise/magnitude failures
+at the end of a complete window increment `calibration_rejects`; interrupted
+windows are discarded, not counted as completed rejects. Bias and the
+calibrated flag survive faults and MARK. A failed/retry-wait probe observation
+is invalid; it is not a new successful sample. Bus faults have separate
+NACK, timeout, identity and configuration counters and retain paced retries.
+
+## Step 2 angle and height formulas
+
+Let `a = raw_accel - bias` in mg and `v` be signed encoder speed in mm/s:
+
+- Pitch: `atan2(aY, sqrt(aX*aX + aZ*aZ))`; roll: `atan2(aX, aZ)`.
+- Encoder forward acceleration: `(v_k - v_previous) / delta_seconds`,
+  followed by the encoder acceleration filter above.
+- Compensated pitch: low-pass
+  `atan2(aY - forward_accel_mm_s2 / 9.80665, sqrt(aX*aX + aZ*aZ))`.
+  One mg is 9.80665 mm/s². Forward-positive acceleration is subtracted from
+  +Y; reverse does not reverse the tilt sign.
+- Height: `height_mm += sin(compensated_filtered_pitch_rad) * ds_mm`.
+  Peak is the largest signed relative height since calibration/MARK, with
+  initial peak zero. It is not a threshold, event or maximum accepted hump.
+- Distance is signed mean travel relative to the last calibration/MARK;
+  it is not absolute path length. It can recover encoder distance after a
+  source gap, while height deliberately omits the missing interval.
+
+Invalid samples do not consume distance with stale pitch. They break the
+integration/derivative baseline but do NOT reset the accumulated height or
+peak. The first later valid encoder observation establishes a new baseline.
+Only accepted calibration and operator MARK reset height/peak/distance.
+Angles are reported as integer tenths of a degree, truncated toward zero;
+internal filtering and integration use radians without that quantization.
+
+This is a relative estimate, not an absolute height sensor. Encoder slip,
+gear lash, turns, lever-arm acceleration and filter delay remain errors.
+There is no gyro or independent dynamic attitude reference. Window midpoint
+times correct derivative scale but do not remove its delay relative to the
+current accelerometer sample. Even 0.1 degree residual pitch gives about
+1.75 mm height error per metre. No ground-height clamp hides that drift.
+
+## Step 2 operator checks
+
+Build in `build_make` (do not flash without operator approval):
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 IMU_STREAM=1 -j4 --output-sync=target
+```
+
+GP0/GP1 are reserved for I2C in robot and TEST. Use USB, `CRASH_REPORT=0`,
+and remove the UART adapter. The existing compile guard now covers both
+image roles. No additional template deviation is needed; the count stays 8.
+
+IMU_STREAM skips other subsystem tests and the destructive watchdog test.
+It requests zero duty once through `motion_stop()`; motion remains the only
+PWM writer and the normal motion watchdog remains active. The driver sets
+both forward/reverse PWM levels to zero: **COAST, not active braking**
+([driver](../../app_program/subsystem2/drv_motor_hw.c)). A compare update
+within 50 us is not a physical stop-time guarantee. Hand pushing is possible;
+zero duty alone is not proof of stillness.
+
+The TEST observer has its own 20 ms cyclic and prints one sample per wake.
+`t_ms` is the sample millisecond timestamp; `raw_mg`/`cal_mg` are raw/bias-
+removed acceleration. `raw_ddeg`, `pitch_ddeg`, `roll_ddeg`, `filt_ddeg` and
+`corrected_ddeg` separate raw, calibrated, filtered and compensated angles.
+Travel, distance, height and peak print in mm; speed and forward acceleration
+print in mm/s and mm/s². Each line includes calibration and fault status.
+One-second diagnostics show bias, standard deviations, calibration/reject
+counts, probe counters, timing and registered-stack high-water marks.
+
+GP20 remains a 30 ms debounced active-low input. MARK is requested by the
+observer and applied by the sole IMU writer on its next tick. `[S4] MARK n`
+prints only after the snapshot acknowledges it. Holding the button does not
+repeat. The angle filter and bias do not reset on MARK. Formatting/USB work
+stays at TEST priority20, never inside task14. Nominal output frequency is
+not a guarantee that a slow/unplugged USB host receives every line.
+
+Use [S4-U04/U05/U06](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+The 10 mm, 195 mm long bring-up hump is not the course maximum. No 7-degree
+CLIMB or 15 mm minimum-height rule is imported.
+
+## Step 2 software results
+
+Local-only validation uses public build fixtures and ARM GNU 14.3.rel1;
+there was no push, flash, broker or hardware run. All **142 host tests**
+pass. The core tests include known +375 mg Z bias, noise and post-bias
+magnitude rejection, moving/equal-opposite wheel inhibit, phase transitions,
+faults, refresh, MARK, angle/filter signs, forward/reverse/braking correction,
+duplicate stamps, gaps, time wrap and the stop-on-slope reset limit. Task
+checks force a phase transition at the would-be commit, a torn board copy,
+source failures/staleness, signed count wrap and object/start/wake failures.
+The reporter test verifies 50 sample lines per 50 x20 ms wakes and one
+acknowledged debounced MARK. A moving-source MARK test checks exact zero
+height/peak/distance in its acknowledged snapshot. Clang undefined-behavior
+and float-cast sanitizer runs also pass for core/task tests. These are
+doubles, not physical acceptance.
+
+| Synthetic constant-speed case | Peak mm | Final height mm |
+| --- | ---: | ---: |
+| 5 mm / 195 mm surface-distance profile | 4.734 | -0.000 |
+| 10 mm / 195 mm profile | 9.469 | -0.001 |
+| 20 mm / 195 mm profile | 18.952 | -0.007 |
+
+These profiles use 100 mm/s, a 5 mm crest and a settled moving lead-in before
+MARK, followed by enough flat travel for the filters to settle. They are
+not replayed sensor/encoder measurements or proof for a physical hump.
+
+| Quantized flat start/cruise/brake/rest case | False peak mm | Largest absolute error / final height mm |
+| --- | ---: | ---: |
+| +/-100 mm/s, +/-500 mm/s² ramps | 0.405 | 0.431 / -0.431 |
+| +/-460 mm/s, +/-500 mm/s² ramps | 1.590 | 7.994 / -7.994 |
+
+Both directions give the listed errors. Encoders are quantized at 12414
+counts/m; rest lasts 0.9 s, so no refresh erases the residual. These tests
+expose compensation delay/error, especially the roughly 8 mm final error at
+460 mm/s. They do NOT establish dynamic height accuracy. Keep all physical
+height cases Not run until measured traces support an acceptance decision.
+
+| Clean firmware profile | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Default SMP1, USB/Wi-Fi | 326640 | 760 | 129592 |
+| Robot SMP0, WIFI/NET none | 79716 | 688 | 123056 |
+| BENCH SMP0, WIFI/NET none | 41982 | 148 | 95460 |
+| MQTT SMP0 | 390892 | 904 | 187612 |
+| TEST SMP0, WIFI/NET none | 72776 | 688 | 122476 |
+| MQTT-TEST SMP0 | 380016 | 904 | 186636 |
+| IMU_STREAM SMP0 | 66352 | 688 | 122244 |
+
+All seven clean builds use `-j4 --output-sync=target`, with zero warnings.
+Nine changed/related C units pass strict ARM compilation in every profile:
+core, service, subsystem4, TEST reporter, hardware, probe, decode, vehicle
+and static task registry. Flags are `-Wall -Wextra -Wconversion -Wshadow
+-Wformat=2 -Werror`. All seven retained SDK link proofs pass; no unresolved
+or `__atomic_*` runtime symbols. Startup disassembly still has no GP0/GP1
+UART pin-function loop. UART-conflict compile rejection is checked separately.
+The normal robot/MQTT and TEST images retain IMU hardware/probe; BENCH does
+not. No SDK runtime, interrupt or clock owner was added.
+
+MQTT static RAM increases **3732 B**, including the **2048 B static stack**;
+see [RAM evidence and CPU estimate](../kernel/RAM_BUDGET.md#imu-step-2-measured-delta).
+Stack depth and real task CPU cost remain hardware gates, not size results.
+
+## Historical steps 0 and 1
 
 The three source records below are retained in full. Their original revision
 scopes and historical Not-run statements remain attached to their evidence.
+Their TEST-only/no-calibration descriptions apply to those old revisions,
+not the current observe-only step 2 above.
 
 ## Source: IMU_BRINGUP.md
 

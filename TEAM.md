@@ -23,12 +23,12 @@ team agreement. STEP 7 keeps pure modules/settings unchanged.
 | GP16 / GP17 | S2 | Left encoder A / B; count sign +1 |
 | GP4 / GP5 | S2 | Right encoder A / B; count sign -1 |
 | GP15 | S2 | Servo PWM |
-| GP20 / GP21 | Vehicle or exclusive S2 bench | Dump request / calibrate-start or ESTOP; pull-up, active low |
+| GP20 / GP21 | Vehicle, exclusive S2 bench or S4 TEST stream | Dump/MARK / calibrate-start or ESTOP; pull-up, active low |
 | GP27 / GP26 | S3 | Left / centre line sensor |
 | GP28 | S3 | Barcode analog ADC2, sampled only; VBAT jumper open |
 | GP2 / GP3 | S5 | Ultrasonic echo / trigger |
 | GP23 / GP24 / GP25 / GP29 | Reserved | Pico W radio |
-| GP0 / GP1 | S4 TEST | I2C0 SDA / SCL, GY-511; requires USB only, CRASH_REPORT=0. Disconnect IMU before a UART demo. |
+| GP0 / GP1 | S4 robot/TEST | I2C0 SDA / SCL, GY-511; USB only, CRASH_REPORT=0. BENCH has no IMU; disconnect it before a UART demo. |
 | GP19 | Unclaimed | Old LED demo removed |
 
 ## 3. Tasks and peripherals
@@ -43,6 +43,7 @@ All application tasks run on physical core 0 (`TP_PRC1`).
 | line_task | 11 | Every 1 ms sample wake; raw queue, lp and calibration snapshot | 2048 |
 | sonar_task | 12 | Request/edge wakes plus 10 ms deadline cyclic | 2048 |
 | vehicle_task | 13 | Motion after-tick wake, modules, spin behaviour, buttons, commands | 4096 |
+| imu_task, robot/TEST | 14 | Separate 10 ms cyclic, bounded reads, bias/filter/relative height; observe only | 2048 |
 | telemetry_task | 30 | MBF receive, RAM log and paced GP20 dump | 4096 |
 | health_task, MQTT only | 31 | 1 s cyclic; bounded health board, app-stack scan | 2048 |
 | motion_bench, exclusive BENCH | 11 | Earlier bench; never with vehicle or TEST | 4096 |
@@ -69,6 +70,7 @@ avoid the 10 ms kernel tick granularity; measured CPU cost is still owed.
 | IF-02 | S3 | Vehicle | line_snapshot_read; inherited mutex; raw L/C/raw_bc, lp, validity/time/counters; only LINE age >10 ms stops active motion |
 | IF-03 | S5 | Vehicle | sonar_request MBF TMO_POL; correlated result mutex + event flag; WATCH/ONCE/STOP, generation/ID/angle/deadline; ping_sent means real trigger |
 | IF-04 | S1 | Vehicle producers/operator | telemetry_send MBF TMO_POL; by-value rows/events/info/dump; lost count on full buffer, never blocks |
+| IF-05 | S4 | TEST/operator observer | imu_snapshot_try_read, bounded unchanged-on-failure copy; acknowledged MARK; no MQTT/KR1 fields or driving output |
 
 No sensor hardware access, queue draining or dump loop remains in vehicle;
 buttons may stay there. Ultrasonic results use their own deadline/age,
@@ -78,21 +80,25 @@ existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/s1-teleme
 
 ## 5. Objects, measurement and acceptance
 
-Robot uses five application tasks, three inherited mutexes, two cyclic
-handlers, two message buffers (256/4096 bytes) and one result event flag.
-TEST starts four service/motion tasks, neither button task; BENCH starts
-only motion/bench. S4 TEST creates one temporary 10 ms cyclic for its 30 s
-raw IMU check, then deletes it; IMU_STREAM=1 keeps it until power-off and
-uses GP20 for debounced MARK lines. No robot task or object is added.
-Existing kernel limits suffice. See [IMU bring-up](docs/s4-imu/IMU.md).
+Robot uses six application tasks, including IMU, three inherited mutexes,
+three cyclic handlers, two message buffers (256/4096 bytes) and one result
+event flag. TEST starts five service/motion tasks, neither button task;
+BENCH starts only motion/bench and has no IMU task/stack reserve. S4 TEST
+adds a temporary 20 ms observer cyclic for its 30 s report; IMU_STREAM=1
+keeps it until power-off with 50 Hz samples and acknowledged GP20 MARK.
+The IMU task owns its separate persistent 10 ms cyclic and bounded board;
+it adds no control mutex, IRQ, queue, driving action or wire field.
+Existing kernel limits suffice. See [IMU observer](docs/s4-imu/IMU.md).
 MQTT adds a health task/cyclic and three bounded event/command MBFs.
 Approved shared template changes are listed in [the ledger](docs/architecture/TEMPLATE_CHANGES.md).
 Every task loops forever or exits through
 `tk_ext_tsk()`, never returns.
 
 Application stacks use TA_USERBUF, 8-byte alignment and a fill pattern;
-19456 bytes reserve six regions without MQTT; health adds 2048, for 21504. TEST/GP20 report high-water/free
-bytes, including motion. Initial budgets are not physical measurements;
+21504 bytes reserve seven regions without MQTT (including IMU and the
+inactive bench); MQTT health/idle add 2560, for 24064. TEST/GP20 report
+high-water/free bytes, including IMU. Its step-2 high-water remains pending.
+Initial budgets are not physical measurements;
 require at least 256 untouched bytes after full load/dump. Template service
 stacks are outside this report. Vehicle deadline overruns and line/ISR
 elapsed-work counters are also reported. The task-split TEST checks,

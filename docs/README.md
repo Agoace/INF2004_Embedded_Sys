@@ -29,7 +29,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — static RAM by group at `cr1-pre-imu`, dynamic estimate, steps for a RAM shortage and the CR1 order.
+- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — historical RAM groups, measured IMU step-2 delta from `b569adc`, CPU/stack limits, shortage steps and CR1 order.
 
 ## S1 — Telemetry
 
@@ -49,7 +49,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — merged bring-up, scale and validation records; positive Z offset explains raw magnitude, six-face axes confirmed and TEST stream passed; calibration remains pending.
+- [IMU.md](s4-imu/IMU.md) — observe-only robot/TEST task, bias/filter/encoder-compensated height, 50 Hz hand-push stream and software evidence; physical step 2 pending; older raw-stream/scale records retained.
 
 ## S5 — Obstacle
 

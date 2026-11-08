@@ -194,11 +194,14 @@ the next plain `make` goes back to the defaults.
 | `TEST` | **`0`**, `1` | `1` compiles every `subsystemN_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
 
-For the operator-only GY-511 tilt check, use `TEST=1 IMU_STREAM=1` with
-`SMP=0 WIFI=none NET=none`. It skips other tests and streams S4 until power-off;
-GP20 adds position markers. The IMU requires USB only and `CRASH_REPORT=0`.
-See [IMU bring-up](docs/s4-imu/IMU.md#continuous-operator-stream). Default
-TEST without this option is unchanged.
+Robot/TEST images now run the observe-only GY-511 task at 100 Hz, with no
+driving action or MQTT/KR1 IMU field. They require USB and `CRASH_REPORT=0`;
+UART-conflict builds are rejected. BENCH has no IMU task. For a zero-duty,
+50 Hz hand-push stream, use `TEST=1 IMU_STREAM=1` with
+`SMP=0 WIFI=none NET=none`. It skips other tests until power-off; GP20 MARK
+resets height/peak/distance. Boot on level support and stay still >=1 s.
+See the [current IMU procedure](docs/s4-imu/IMU.md#step-2-operator-checks).
+Ordinary TEST retains the existing test order and destructive watchdog test.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
 `tm_printf`: it waits in a buffer until the kernel's USB task sends it. If the
@@ -209,7 +212,9 @@ need to know why the Pico crashed or froze, build with `CRASH_REPORT=1`,
 connect a USB-serial adapter (adapter RX → GP0, adapter GND → GND), and read
 it at 115200 baud. Normal `tm_printf` output on USB works the same with
 either setting. If a subsystem has claimed GP0/GP1 in `TEAM.md`, unplug that
-hardware before using `CRASH_REPORT=1`.
+hardware before using `CRASH_REPORT=1`. The current robot/TEST IMU task
+also rejects this build: use USB for those roles, or an exclusive
+`BENCH=1` image with the IMU disconnected for UART diagnostics.
 
 The options are part of the image name, e.g.
 `mtk3pico_smp1_usb_cdc_wifi_test.uf2`, so you can always tell which build

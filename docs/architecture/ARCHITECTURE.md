@@ -31,7 +31,7 @@ read-only observation boards -> Wi-Fi task -> MQTT -> laptop dashboard
 | S1 telemetry | RAM log/dump, bounded network queues, MQTT codecs and health | No network call in a control task |
 | S2 motion | Speed loop, encoders, motor/servo PWM, stale-command stop | Sole actuator owner; sole watchdog feeder |
 | S3 line/barcode | ADC acquisition, pair-mode line learning and observations | Barcode is raw analog only; no robot barcode decoder |
-| S4 IMU | TEST-only GY-511 probe and continuous stream | No calibration, hump control or robot call path |
+| S4 IMU | Robot/TEST observer: stationary bias, filtered/compensated pitch and relative height | No driving action, terrain events, MQTT/KR1 fields or physical step-2 acceptance |
 | S5 obstacle | Asynchronous echo service, monitor, scan and detour modules | Sensor service does not choose a route |
 | Vehicle | Calibration/run phases, buttons, module shell and routing | No ADC polling, echo wait, network call or dump loop |
 
@@ -48,6 +48,7 @@ tasks to core 1. The earlier proposed core split is not implemented.
 | Line | 11 | Wake for queued 1 ms ADC samples |
 | Sonar | 12 | Requests, echo edges and 10 ms deadline checks |
 | Vehicle | 13 | Motion after-tick notification, 10 ms |
+| IMU, robot/TEST only | 14 | Own 10 ms cyclic, bounded sensor/count reads and observation board |
 | Wi-Fi, when enabled | 20 | Sole CYW43/lwIP/MQTT owner; requested 2 ms sleep |
 | USB console | 21 | Interrupt wake or 10 ms fallback |
 | Telemetry | 30 | Nonblocking producer messages, RAM storage and dump |
@@ -65,6 +66,7 @@ kernel object sizes are in the [kernel record](../kernel/KERNEL.md).
 | Encoder and echo edges | Core-0 GPIO13 dispatcher, IRQ level 1 | Record counts/timestamps, set state and wake a task |
 | ADC sampling | TIMER alarm 0 / IRQ0, level 2; 1 ms absolute targets | Eight conversions per channel, timestamped 128-slot queue |
 | Motion scheduling | Kernel cyclic, 10 ms | Complete one tick; do not replay old releases |
+| IMU observation | Separate kernel cyclic, 10 ms, task14 | Bounded bus/count reads; no motion wake-client replacement or driving decision |
 | Missing echo / stalled wheel | Bounded deadline or progress check | A missing edge cannot generate its own interrupt |
 | GP21 operator button | Poll every 20 ms, then immediate motion ESTOP | Not a hardware ESTOP interrupt |
 

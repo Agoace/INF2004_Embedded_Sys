@@ -57,12 +57,82 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Task stack about 2 KB, calibration, pitch and hump state | about 3 KB | Not yet |
+| IMU (subsystem 4) | Static task stack, bias/filter/height state, snapshot and libm state | about 3 KB | **3732 B**, including 2048 B stack; step 2 below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
-Worst case is about 12 KB of the estimated 60 KB. A RAM shortage is not
-expected. Record the measured value in this table when a module is merged.
+With measured IMU and estimated barcode options, the combined need is
+about 13 KB of the original estimated 60 KB. A RAM shortage is not expected.
+Record barcode measurements when implemented; this is not the CR1 baseline.
+
+## IMU step 2 measured delta
+
+Both MQTT images were built locally from clean objects with ARM GNU
+14.3.rel1, `SMP=0 WIFI=cyw43 NET=lwip MQTT=1` and identical public fixtures.
+The before image was rebuilt from **`b569adc`**, not inferred from the older
+`689e43e` table. No device, network or private configuration was used.
+
+| MQTT measurement | Before `b569adc` | Observe-only step 2 | Delta |
+| --- | ---: | ---: | ---: |
+| text | 374944 | 390892 | +15948 |
+| data | 368 | 904 | +536 |
+| bss | 184416 | 187612 | +3196 |
+| **Static main RAM: data + bss** | **184784** | **188516** | **+3732** |
+| Part of 262144 B | 70.5% | 71.9% | +1.4 percentage points |
+| Main RAM not statically reserved | 77360 | 73628 | -3732 |
+
+The delta **already includes** the 2048 B `imu_stack`; do not add the stack
+again. The remaining 1684 B covers core/calibration state, raw/probe state,
+the snapshot and its bounded board, count/timing state, one task-registry
+entry, the vehicle calibration epoch, alignment and libm-related state.
+The math-library errno path also retains newlib state (`_impure_data` 512 B,
+`_impure_ptr` 4 B, `__sf` 312 B): 828 B of this delta. No compact CR1 fields,
+reduced queues, smaller stacks or packed log rows were used to save RAM.
+
+Registered application regions now total 24064 B in MQTT (including the
+inactive 4096 B bench reserve). The historical group table above also
+includes a 512 B kernel stack, so its comparable stack group is now
+24576 B. Existing dynamic buffers and template-owned stacks are unchanged;
+the 73628 B remainder is not all free system memory.
+
+Host `sizeof` output is core 236 B, core output 124 B, probe 44 B and
+snapshot 244 B; strict task/board tests also pass. ARM sizes above are
+authoritative because host pointers/alignment can differ.
+The nine-unit strict ARM build emits stack-use records: task entry 16 B,
+`sample()` 368 B, `imu_core_step()` 72 B in the MQTT profile. These local
+frames are not a whole-call-tree bound: libm, kernel calls and interrupt
+context still need margin. The 2048 B registered stack has fill-pattern
+high-water reporting in TEST/health. Its physical high-water acceptance is
+**Not run**; do not reduce it from host or compiler-local frame sizes.
+
+### CPU estimate and measurement limit
+
+The bus workload remains two reads at 100 Hz. Earlier step-1 hardware read
+wall time was about 530..566 us per 10 ms period: **5.3..5.7%** of one
+core-period before the new core/publication work. This is an old-image
+observation, includes preemption, and is not measured step-2 exclusive CPU.
+
+Use **about 6..10% of core0** as a provisional healthy-device planning
+estimate (about 0.6..1.0 ms work per 10 ms). Only the bus component has prior
+hardware evidence; the allowance for software float/math/boards is not a
+target measurement or a guaranteed upper bound. Fault/setup paths can cost
+more, and task14 remains below all driving tasks10..13.
+
+The reproducible host-only benchmark is
+[tests/test_imu_core_benchmark.c](../../tests/test_imu_core_benchmark.c):
+one million moving updates, `-Os`, 73.6..74.8 ns/update across three local
+runs. Run the CMake target `test_imu_core_benchmark` from the host build.
+This proves host throughput only, **not Cortex-M0+ cost** or bus behavior.
+
+Target snapshots/one-second TEST diagnostics expose `work_last/max/total_us`
+and `compute_last/max/total_us`. Work covers the full sample, including
+publication, and appears one cycle later. Compute covers pure-core work and
+bounded calibration replay. These are wall times and include preemption;
+they are not exclusive task CPU times. For a stable interval, compare work
+counter differences to elapsed time and the existing idle-meter change.
+Record the interval, faults, max gap, missed wakes, USB drops and every
+stack margin in [S4-U04](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-not-run).
+Actual step-2 CPU, stack depth and motion timing under this load are Not run.
 
 ## Steps if the RAM becomes too small
 
