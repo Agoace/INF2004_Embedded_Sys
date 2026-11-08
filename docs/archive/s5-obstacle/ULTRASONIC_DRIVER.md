@@ -4,22 +4,22 @@ Status: Implemented; bench-tested; mounted range test pending
 
 This record describes the non-blocking HC-SR04+ driver for the Spatial
 Optimizer (Buddy 5) and the `ultrasonic_test` bench target. The data format
-follows [Change Requirement 1](../architecture/week8_change_requirement_1_notes.md#13-buddy-5--ultrasonic-distance).
+follows [Change Requirement 1](../../architecture/week8_change_requirement_1_notes.md#13-buddy-5--ultrasonic-distance).
 
 ## Wiring
 
 | Signal | GPIO | Note |
 | --- | --- | --- |
-| Echo | GP2 | HC-SR04+ on 3.3 V; no divider needed. See [calibration results](../s2-motion/CALIBRATION_RESULTS.md#hc-sr04). |
+| Echo | GP2 | HC-SR04+ on 3.3 V; no divider needed. See [calibration results](../../s2-motion/CALIBRATION_RESULTS.md#hc-sr04). |
 | Trigger | GP3 | 10 µs HIGH pulse |
 
 ## Files
 
 | File | Purpose |
 | --- | --- |
-| [`app_program/subsystem5/ultrasonic.h`](../../app_program/subsystem5/ultrasonic.h) | Public API, status codes, packed result layout |
-| [`src/ultrasonic.c`](../../src/ultrasonic.c) | Echo interrupt, timeout detection, conversion, publication |
-| [`src/ultrasonic_test.c`](../../src/ultrasonic_test.c) | Bench test: live readings and 50-reading batch statistics |
+| [`app_program/subsystem5/ultrasonic.h`](../../../app_program/subsystem5/ultrasonic.h) | Public API, status codes, packed result layout |
+| [`src/ultrasonic.c`](../../../src/ultrasonic.c) | Echo interrupt, timeout detection, conversion, publication |
+| [`src/ultrasonic_test.c`](../../../src/ultrasonic_test.c) | Bench test: live readings and 50-reading batch statistics |
 
 The driver has no RTOS dependency. An RTOS build can release `sem_echo` from
 the optional echo hook.
@@ -42,9 +42,9 @@ ultrasonic_service()  (any time later; never waits)
 ```
 
 - The interrupt only records a timer value and changes the phase. This follows
-  the [interrupt conventions](../archive/architecture/INTERRUPT_CONVENTIONS.md#event-driven-work).
+  the [interrupt conventions](../architecture/INTERRUPT_CONVENTIONS.md#event-driven-work).
 - Timeouts are found by polling, because a missing edge produces no interrupt.
-  This is the [no-event polling](../archive/architecture/INTERRUPT_CONVENTIONS.md#polling-for-no-event)
+  This is the [no-event polling](../architecture/INTERRUPT_CONVENTIONS.md#polling-for-no-event)
   pattern.
 - The edge times come from the interrupt. A late `ultrasonic_service()` call
   does not change the measured distance.
@@ -98,7 +98,7 @@ Rules:
   and `511`, and the far code gave no decision value. The range was then
   changed to 0–511 mm. Runs 6 and 7 then added the 60 mm floor and the
   TOO_NEAR code. This replaces the 0–400 mm
-  range in the [Week 8 notes](../architecture/week8_change_requirement_1_notes.md#13-buddy-5--ultrasonic-distance).
+  range in the [Week 8 notes](../../architecture/week8_change_requirement_1_notes.md#13-buddy-5--ultrasonic-distance).
 - NO_RETURN is not a fault. The sensor answered the trigger, so it works.
   NO_RETURN is still unknown: open space, fabric, a tilted face, or a narrow
   object all give NO_RETURN. The Vehicle Controller owner must decide how to
@@ -108,7 +108,7 @@ Rules:
 - Before the first measurement, the word is `0x0200` (NO_RISE, streak 0).
   A real fault always has a streak of 1 or more, so this word cannot come
   from a measurement. Use `ultrasonic_result_is_none()`.
-- Change from the Week 8 notes: [section 17](../architecture/week8_change_requirement_1_notes.md#17-ultrasonic-result-status)
+- Change from the Week 8 notes: [section 17](../../architecture/week8_change_requirement_1_notes.md#17-ultrasonic-result-status)
   lists three outcomes. The bench test showed that the HC-SR04+ holds Echo
   HIGH when no echo returns, so open space looked like a fault. The fourth
   code separates that case. This change needs team agreement.
@@ -123,7 +123,7 @@ Rules:
 The driver uses 32-bit timer values and 32-bit arithmetic for the pulse width
 and millimetre conversion. It converts the result to the 9-bit field before
 publication. This matches
-[Change Requirement 1, section 4](../architecture/week8_change_requirement_1_notes.md#4-wider-arithmetic-can-still-be-valid).
+[Change Requirement 1, section 4](../../architecture/week8_change_requirement_1_notes.md#4-wider-arithmetic-can-still-be-valid).
 
 Conversion: `distance_mm = (pulse_us × 343 + 1000) / 2000`, rounded to the
 nearest mm. The constant assumes about 20 °C.
@@ -366,4 +366,4 @@ reader while a recorder is running.
 - Get team agreement on the four status codes and on how the Vehicle
   Controller drives on NO_RETURN.
 - Decide whether the Obstacle Task needs the 1 mm resolution
-  (see [notes, section 50](../architecture/week8_change_requirement_1_notes.md#50-resolution-is-a-separate-decision-from-range)).
+  (see [notes, section 50](../../architecture/week8_change_requirement_1_notes.md#50-resolution-is-a-separate-decision-from-range)).

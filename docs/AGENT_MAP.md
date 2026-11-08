@@ -25,7 +25,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s2-motion/](s2-motion/) | Motor control, calibration and USB power safety. |
 | [s3-line-barcode/](s3-line-barcode/) | Current kernel LINE/SEARCH and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
-| [s5-obstacle/](s5-obstacle/) | Ultrasonic sensing, scanning and detour evidence. |
+| [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Host simulator design, echo fit and box sweep. |
 | [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
 
@@ -47,9 +47,8 @@ robot builds; the development record also retains older CMake bench examples.
 | Archived UDP bench dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/MQTT_DASHBOARD.md](s1-telemetry/MQTT_DASHBOARD.md) |
 | Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
-| Ultrasonic driver record | [docs/s5-obstacle/ULTRASONIC_DRIVER.md](s5-obstacle/ULTRASONIC_DRIVER.md) |
-| Forward obstacle watch record | [docs/s5-obstacle/OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md) |
-| Servo obstacle scan record | [docs/s5-obstacle/OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md) |
+| Current kernel ultrasonic driver/service | [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — bounded request/echo contract, packed result and sensor limits. |
+| Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | 2D firmware simulation | [docs/simulation/SIMULATION.md](simulation/SIMULATION.md) — design and milestone status; [sim/README.md](../sim/README.md) — host build, schema, trace, and tests |
 | Echo material and recorded-scan fit | [docs/simulation/SIM_ECHO_FIT.md](simulation/SIM_ECHO_FIT.md) — assumed specular settings, native-probe tables, and fit limits |
@@ -60,7 +59,7 @@ robot builds; the development record also retains older CMake bench examples.
 | ADR: one hardware heartbeat | [docs/architecture/ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) |
 | ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
 | Current kernel LINE/SEARCH | [LINE.md](s3-line-barcode/LINE.md) — pair detection, retained P7 mm/s settings, search and evidence; modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
-| Vehicle Controller detour run (physical detour completed; see revision-specific results) | [docs/s5-obstacle/VC_DETOUR_RUN.md](s5-obstacle/VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
+| SCAN/DETOUR modules and scoped physical results | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
 | Line steering in mm/s | [docs/s3-line-barcode/LINE.md](s3-line-barcode/LINE.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
 | Duty map record | [docs/s2-motion/DUTY_MAP.md](s2-motion/DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/s2-motion/HEARTBEAT.md](s2-motion/HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
@@ -100,7 +99,7 @@ robot builds; the development record also retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |

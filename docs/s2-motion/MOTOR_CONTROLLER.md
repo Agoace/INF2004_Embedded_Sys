@@ -50,7 +50,7 @@ repository measured 111 mm.
 
 Servo: 1500 µs centre, 1100–1900 µs (±36°), 11.1 µs per degree. Settle
 estimate 42 ms + 3.6 ms per degree, fitted to the scan settle times
-(150 ms for 30°, 60 ms for 5°; [servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md)).
+(150 ms for 30°, 60 ms for 5°; [servo obstacle scan](../s5-obstacle/OBSTACLE.md)).
 
 ## Pico layer
 

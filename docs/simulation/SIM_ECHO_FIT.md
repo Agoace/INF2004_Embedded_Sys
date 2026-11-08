@@ -32,7 +32,7 @@ at this sampled surface; it is not an echo hit or a firmware input.
 
 ## What the records constrain
 
-[Scan run 1](../s5-obstacle/OBSTACLE_SCAN.md#run-1-object-straight-ahead) records a face
+[Scan run 1](../archive/s5-obstacle/OBSTACLE_SCAN.md#run-1-object-straight-ahead) records a face
 about 165 mm away, visible from −25° to +20°, with rising end readings.
 It explicitly does not record object type or width. The same record says
 flat faces can lose returns beyond about 20–25°. We choose the conservative

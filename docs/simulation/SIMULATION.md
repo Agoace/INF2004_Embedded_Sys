@@ -198,7 +198,7 @@ The operator approved the conservative 160 × 190 mm rectangle for the first
 release. Draw the same shape used for contact. Keep the outline configurable;
 do not claim that the left mount
 fills the full rectangle. The 58 mm offset is an echo mean, not a ruler
-measurement. [Ultrasonic run 7](../s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset)
+measurement. [Ultrasonic run 7](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset)
 says readings at this short range were about 11 mm high. A 47 mm true
 offset gives front x = 112 mm and corner radius about 138 mm. Provide a
 sensitivity scenario for that alternative. Servo axis and sensor face are
@@ -396,7 +396,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   delay. Real scan/detour settle waits remain in the firmware. A configurable
   slew model can follow later; no measured slew rate is available here.
 - Use a 30° full beam, ±15° about the servo direction
-  ([scan beam](../s5-obstacle/OBSTACLE_SCAN.md#scan-points)), by default. The scenario
+  ([scan beam](../archive/s5-obstacle/OBSTACLE_SCAN.md#scan-points)), by default. The scenario
   value `robot.ultrasonic.beam_deg` (0.5–30, full angle) sets a narrower
   beam; see [narrow beam](#narrow-beam-real-box). Find the nearest surface in
   the sector, not only on the centre ray. Draw the centre ray, sector, and
@@ -406,7 +406,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   The current box defaults use the deterministic specular rule below;
   ideal material remains selectable for old traces. This is not a claim
   about complete real ultrasound: tilted flat faces and thin objects can give no echo; see
-  [driver representation rules](../s5-obstacle/ULTRASONIC_DRIVER.md#packed-result).
+  [driver representation rules](../s5-obstacle/ULTRASONIC.md#packed-result).
 - Preserve the `ultrasonic.h` 16-bit result: bits 0–8 distance, 9–10 status,
   11–13 fault streak, 14–15 zero. VALID below 60 mm has distance code 0;
   60–511 mm is rounded distance. Beyond 511 or no detectable return gives
@@ -417,7 +417,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   STUCK_HIGH injection publishes immediately with trigger success and no
   busy state. Other results become available only through service after
   their scheduled completion; do not return an echo synchronously.
-- Timing source: [driver constants](../s5-obstacle/ULTRASONIC_DRIVER.md#timing-constants)
+- Timing source: [driver constants](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#timing-constants)
   and `ultrasonic.c`: 10 µs trigger, measured rise latency 212–217 µs,
   2 ms rise timeout, 3 ms echo timeout, sound speed 343 m/s. Choose 215 µs
   fixed latency within that measured range. Pulse duration is 2d/343 with
@@ -908,7 +908,7 @@ each servo angle.
 [`box_real_160x250.json`](../../sim/scenarios/box_real_160x250.json) uses
 fitted, assumed values: `beam_deg` 5 (±2.5°), specular, 16° incidence,
 corner echoes to 300 mm, box centre (800, −20). Its scan matches the
-free steps of run R2 ([detour run](../s5-obstacle/VC_DETOUR_RUN.md)):
+free steps of run R2 ([detour run](../s5-obstacle/OBSTACLE.md)):
 
 ```text
 R2 (real): 487 236 227 227 218 218 218 227 227 236 NR NR NR   R 6 L 4 -> LEFT

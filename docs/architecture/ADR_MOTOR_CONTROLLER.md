@@ -25,8 +25,8 @@ So each caller must know the robot's hardware quirks:
 | Battery voltage drop | Not handled | Second-detour stalls at 14–15 % (D31, D33, D35) |
 | Encoder signs, 2535 counts per wheel turn | `drive.c` | [Calibration results](../s2-motion/CALIBRATION_RESULTS.md) |
 | 24.05 counts per degree of turn | `detour_test.c` | Calculated; slip not measured |
-| Servo centre and safe range (1100–1900 µs) | `servo.h` | [Servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md) |
-| Servo settle time before a ping | `obstacle_scan.c` timing | [Servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md) |
+| Servo centre and safe range (1100–1900 µs) | `servo.h` | [Servo obstacle scan](../s5-obstacle/OBSTACLE.md) |
+| Servo settle time before a ping | `obstacle_scan.c` timing | [Servo obstacle scan](../s5-obstacle/OBSTACLE.md) |
 
 The team Motion module (Buddy 2, branch `motor-line-manager`, now in tag `archive/yx-line-abstraction`,
 `src/motion/`, `docs/MOTION_CONTROL.md`) already owns the motors and has

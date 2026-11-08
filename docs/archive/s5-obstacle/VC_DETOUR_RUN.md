@@ -1,24 +1,24 @@
 # Vehicle Controller detour run (step c)
 
-Step (c) of the [Vehicle Controller state machine](../architecture/ARCHITECTURE.md):
+Step (c) of the [Vehicle Controller state machine](../../architecture/ARCHITECTURE.md):
 the obstacle scan and the obstacle detour as modules in the shell, wheel
-speeds through the [motor controller](../s2-motion/MOTOR_CONTROLLER.md). Branch:
+speeds through the [motor controller](../../s2-motion/MOTOR_CONTROLLER.md). Branch:
 `yx-detour` (from `yx-line-steer`). Target: `vc_line_test` (the same
-target as the [Vehicle Controller line run](../s3-line-barcode/LINE.md), now with all
+target as the [Vehicle Controller line run](../../s3-line-barcode/LINE.md), now with all
 four modules).
 
 Status: built and host-tested on 2026-11-04; first track run R1 on 2026-11-05: **one detour done**, see [Run R1](#run-r1-2026-11-05-boot-a21a-run-1).
 Scope of the first track test (operator 2026-11-04): the port only. The
 open detour problems B, D, E and F
-([detour handoff](../archive/OBSTACLE_DETOUR_HANDOFF.md#open-problems)) are not
+([detour handoff](../OBSTACLE_DETOUR_HANDOFF.md#open-problems)) are not
 fixed; the test also shows whether E (the low-duty sweep stall) is gone.
 
-- Scan module: [`app_program/subsystem5/servo_scan.c`](../../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/servo_scan.h`](../../app_program/subsystem5/servo_scan.h)
-- Detour module: [`app_program/subsystem5/detour_run.c`](../../app_program/subsystem5/detour_run.c), [`app_program/subsystem5/detour_run.h`](../../app_program/subsystem5/detour_run.h)
-- Detour logic (unchanged, v1.8): [`app_program/subsystem5/obstacle_detour.c`](../../app_program/subsystem5/obstacle_detour.c)
-- Ping request: [`app_program/vehicle/vehicle_inputs.h`](../../app_program/vehicle/vehicle_inputs.h)
-- Pico glue: [`src/vc_line_test.c`](../../src/vc_line_test.c)
-- Host unit test: [`tests/test_obstacle_modules.c`](../../tests/test_obstacle_modules.c)
+- Scan module: [`app_program/subsystem5/servo_scan.c`](../../../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/servo_scan.h`](../../../app_program/subsystem5/servo_scan.h)
+- Detour module: [`app_program/subsystem5/detour_run.c`](../../../app_program/subsystem5/detour_run.c), [`app_program/subsystem5/detour_run.h`](../../../app_program/subsystem5/detour_run.h)
+- Detour logic (unchanged, v1.8): [`app_program/subsystem5/obstacle_detour.c`](../../../app_program/subsystem5/obstacle_detour.c)
+- Ping request: [`app_program/vehicle/vehicle_inputs.h`](../../../app_program/vehicle/vehicle_inputs.h)
+- Pico glue: [`src/vc_line_test.c`](../../../src/vc_line_test.c)
+- Host unit test: [`tests/test_obstacle_modules.c`](../../../tests/test_obstacle_modules.c)
 
 ## Route
 
@@ -240,7 +240,7 @@ about 160 mm across the line and 250 mm along it.
   (fault 0x01), SAFETY stop.
 
 Simulator check (`detour_test` sim with a narrow beam, see
-[narrow beam](../simulation/SIMULATION.md#narrow-beam-real-box)): the same box, same seen angle (−52°),
+[narrow beam](../../simulation/SIMULATION.md#narrow-beam-real-box)): the same box, same seen angle (−52°),
 gives 22 mm clearance at 350 mm, 54 mm at 400, 91 mm at 450 and 500;
 a 40° back off at 350 mm hits the box.
 
@@ -284,7 +284,7 @@ pose: front 123, rear 67, half width 80. Odometry only, so about ±20 mm:
 | ALIGN spin | **71** | 178 |
 
 The sim prediction for the 160 mm face was 91 mm ([narrow
-beam](../simulation/SIMULATION.md#narrow-beam-real-box)); the robot got 71–95 mm.
+beam](../../simulation/SIMULATION.md#narrow-beam-real-box)); the robot got 71–95 mm.
 
 Other notes:
 

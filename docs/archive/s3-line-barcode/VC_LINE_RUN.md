@@ -13,7 +13,7 @@ The goal of the first run (P5) is to compare with P4 of the
 - Detector data for modules: [`app_program/vehicle/vehicle_inputs.h`](../../../app_program/vehicle/vehicle_inputs.h)
 - Pico glue (target): [`src/vc_line_test.c`](../../../src/vc_line_test.c)
 - Host unit test: [`tests/test_line_trace.c`](../../../tests/test_line_trace.c)
-- Later (step c): the same target also runs the scan and detour modules ([Vehicle Controller detour run](../../s5-obstacle/VC_DETOUR_RUN.md)).
+- Later (step c): the same target also runs the scan and detour modules ([Vehicle Controller detour run](../s5-obstacle/VC_DETOUR_RUN.md)).
 
 ## Layers
 

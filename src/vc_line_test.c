@@ -11,7 +11,7 @@
  *              100 ms), wheel counts (motor controller)
  *   modules    LINE (src/line_trace.c), SEARCH (src/line_search.c),
  *              SCAN (src/servo_scan.c) and DETOUR (src/detour_run.c,
- *              detour v1.8 in wheel speeds; docs/s5-obstacle/VC_DETOUR_RUN.md)
+ *              detour v1.8 in wheel speeds; docs/s5-obstacle/OBSTACLE.md)
  *   shell      src/vehicle_sm.c, every 10 ms (heartbeat flag)
  *   motors     src/motor_ctl_pico.c: the only owner of the motor PWM,
  *              the servo PWM and the encoders; wheel speeds in mm/s

@@ -21,7 +21,7 @@ turn back to look again.
 ## Assumptions
 
 - One obstacle sits on the line. Nothing else is near it.
-- The scan (±30°, [OBSTACLE_SCAN.md](../s5-obstacle/OBSTACLE_SCAN.md)) sees past at least
+- The scan (±30°, [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md)) sees past at least
   one side of it.
 - The robot finds the line again after the obstacle. No odometry and no
   map are used.

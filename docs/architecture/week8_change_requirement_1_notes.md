@@ -513,7 +513,7 @@ The ±15° mounted servo and 400 mm profile range were a worked example, not the
 > still 9 bits. Code `0` with VALID means TOO_NEAR (less than 60 mm), because
 > the sensor reports wrong distances below about 40 mm. An echo beyond
 > 511 mm is NO_RETURN. See
-> [Ultrasonic driver](../s5-obstacle/ULTRASONIC_DRIVER.md#packed-result).
+> [Ultrasonic driver](../s5-obstacle/ULTRASONIC.md#packed-result).
 
 ## Chosen application range
 
@@ -632,7 +632,7 @@ Preferred approach:
 > before trigger), and NO_RETURN (sensor works, no echo within 511 mm). The
 > HC-SR04+ holds Echo HIGH when no echo returns, so with three codes open
 > space was reported as a fault. NO_RETURN is still unknown, not clear. See
-> [Ultrasonic driver](../s5-obstacle/ULTRASONIC_DRIVER.md#packed-result).
+> [Ultrasonic driver](../s5-obstacle/ULTRASONIC.md#packed-result).
 
 At least three outcomes were discussed:
 
@@ -686,7 +686,7 @@ the 10 µs calibration step does **not** automatically mean final application re
 
 > **Update 2026-10-27 (measured):** the mounted servo turns about **±41°**
 > before the mount touches the robot (1040 µs right, 1960 µs left). The scan
-> uses **±30°**. See [Servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits).
+> uses **±30°**. See [Servo obstacle scan](../s5-obstacle/OBSTACLE.md#mounted-servo-limits).
 
 With surrounding hardware installed, practical movement is about:
 
@@ -839,7 +839,7 @@ The final documentation should state the geometry assumption.
 > The Vehicle Controller needs only the shorter way around. The PROFILE
 > word is 15 bits: obstacle distance (9), right free step (3), left free
 > step (3). Sections 23–26 are kept as history. See
-> [Servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md#profile-analysis-and-the-profile-event).
+> [Servo obstacle scan](../s5-obstacle/OBSTACLE.md#profile-analysis-and-the-profile-event).
 
 At 1 mm resolution:
 

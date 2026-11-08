@@ -435,7 +435,7 @@ pico_add_extra_outputs(motor_ctl_bench)
 
 # Vehicle Controller test: line tracing, search, scan and detour modules
 # in the shell, wheel speeds through the motor controller
-# (docs/s3-line-barcode/LINE.md, docs/s5-obstacle/VC_DETOUR_RUN.md).
+# (docs/s3-line-barcode/LINE.md, docs/s5-obstacle/OBSTACLE.md).
 add_executable(vc_line_test
     src/vc_line_test.c
     app_program/subsystem3/line_trace.c
