@@ -178,8 +178,8 @@ and the number missed. Readers must not lag by 2^31 publications.
 
 The history and current-board readers make one bounded attempt. They never
 spin or wait for the lower-priority sonar writer. History returns `E_OBJ`
-when busy or unready, `E_TMOUT` when stable with no new entry, `E_PAR` for a
-null argument, and `E_OK` for an entry. Busy leaves cursor and output unchanged;
+when unready, `E_TMOUT` for a writer conflict, `E_NOEXS` when no next entry
+exists, `E_PAR` for a null argument, and `E_OK` for an entry. Busy leaves cursor and output unchanged;
 missed is zero on busy or no-new. The current-board try-read returns `E_TMOUT`
 when busy and does not consume the vehicle's result notification. History
 reads do not depend on a successful current-board read. Atomic aligned
@@ -261,7 +261,8 @@ The meter replaces WFI sleep and increases power use. It does not preempt any
 other task. Host arithmetic checks bound rounding to 1 permille; target
 measurement error and the idle-board expected range are **not established**.
 S1-U07 prints the measured load and calibration rate in the TEST image.
-No target measurement is claimed.
+Recorded target observations, not an accuracy bound, are in
+[the kernel results](../kernel/KERNEL.md#results-and-limits).
 
 Flags: bit 0 Wi-Fi up; 1 MQTT connected; 2 subscribed; 3 RAM dump active;
 4 restricted commands configured (the wire/CSV name remains `commands_enabled`);
@@ -435,7 +436,7 @@ values do not include TCP/IP or Wi-Fi framing.
 IDLE uses 80% fewer bytes. Before this change, the live log and sonar were
 already near zero while idle, because the vehicle writes log rows and
 requests sonar results only while it runs. The change therefore guarantees
-that idle traffic is zero. It does not save a large measured amount.
+that idle live-log and sonar traffic is zero, not that all MQTT traffic is zero. It does not save a large measured amount.
 The mode costs no extra bytes: it uses one reserved state bit and one spare
 heartbeat flag bit.
 
@@ -592,8 +593,10 @@ Times are 32-bit ms and wrap after 49.7 days; subtract with wraparound.
 - The Wi-Fi task reads rows from the RAM log with its own cursor. Driving and
   telemetry tasks do not know about it.
 - It publishes when 10 rows are waiting, or when at least one row has waited
-  100 ms. At 100 rows/s this is about 10 rows every 100 ms.
-- If the cursor lags more than 100 rows (about 1 s), or after an MQTT
+  100 ms. At a synthetic 100 rows/s this is about 10 rows every 100 ms.
+  The current vehicle logs every 20 ms (about 50 rows/s), so partial batches
+  can be sent after the 100 ms wait.
+- If the cursor lags more than 100 rows (about 2 s at the current 50 rows/s), or after an MQTT
   reconnect, it jumps to the newest rows. It skips the older rows without
   replay. The next frame has JUMPED set and `skipped_before` equal to the
   number skipped.
@@ -671,7 +674,7 @@ repository file. The client never prints token bytes. A command uses a random
 The default command mode exits after the broker acknowledges publication;
 run a separate receiver to record command decisions or a RAM dump.
 
-The receiver subscribes to the five telemetry topics after each connection.
+The receiver subscribes to all observation topics listed above after each connection.
 It writes one wide CSV table with topic, receive time, device times, sequence,
 and decoded fields. Unused fields are empty. Receive time is Unix wall time
 on the host, not a measured network latency. A disconnected receiver cannot

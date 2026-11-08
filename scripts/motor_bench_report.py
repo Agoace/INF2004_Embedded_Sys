@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report for a motor_ctl_bench run (docs/s2-motion/MOTOR_CONTROLLER.md, floor bench).
+"""Report for a motor_ctl_bench run (docs/s2-motion/MOTION.md, floor bench).
 
 Usage: python3 scripts/motor_bench_report.py build/steer_logs/text_<boot>.txt
 

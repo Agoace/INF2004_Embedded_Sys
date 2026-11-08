@@ -6,14 +6,14 @@ sends to the receiver directly; run 4 of the steering test arrived live,
 
 `steer_test` sends its printf output and its 50 ms run log over Wi-Fi, so a
 run on the track can be watched from the laptop without USB. The flash log
-([line steering bench test](../s3-line-barcode/LINE_STEERING.md#bench-test)) stays as the
+([line steering bench test](s3-line-barcode/LINE_STEERING.md#bench-test)) stays as the
 backup.
 
 ## Why
 
 The track is away from the PC. A run that ends with a power cut saves no
 flash log, and USB must stay disconnected while the motors run
-([USB power safety](../s2-motion/USB_POWER_SAFETY.md)).
+([USB power safety](s2-motion/USB_POWER_SAFETY.md)).
 
 ## Network
 
@@ -73,7 +73,7 @@ LOG packet: header, then:
 | Bytes | Field |
 | --- | --- |
 | 5 | Run number (0: a saved run from before the restart) |
-| 6 | Flags: bit 0 replay, bit 1 last replay packet, bit 2 `bypass_test` run (mode 3 is BYPS), bit 3 `detour_test` run, bit 4 `vc_line_test` run (`SL_FLAG_SPEED`: the wheel fields are asked speeds in 4 mm/s units, [Vehicle Controller line run](../s3-line-barcode/VC_LINE_RUN.md)) |
+| 6 | Flags: bit 0 replay, bit 1 last replay packet, bit 2 `bypass_test` run (mode 3 is BYPS), bit 3 `detour_test` run, bit 4 `vc_line_test` run (`SL_FLAG_SPEED`: the wheel fields are asked speeds in 4 mm/s units, [Vehicle Controller line run](s3-line-barcode/VC_LINE_RUN.md)) |
 | 7–8 | Index of the first entry (time = index × 50 ms) |
 | 9 | Number of entries, at most 20 |
 | 10… | Entries, 11 bytes each |

@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted, 2026-11-04 (operator: option B); revised 2026-11-04: owner is a separate platform module (decision 7) |
 | Scope | Timing of all modules on core 0 |
-| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [motor controller](../s2-motion/MOTOR_CONTROLLER.md), [interrupt conventions](INTERRUPT_CONVENTIONS.md), [control architecture](CONTROL_ARCHITECTURE.md) |
+| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [motor controller](../s2-motion/MOTION.md), [interrupt conventions](ARCHITECTURE.md), [control architecture](../archive/architecture/CONTROL_ARCHITECTURE.md) |
 
 ## Context
 
@@ -43,7 +43,7 @@
    call; measure the worst-case handler time; count overruns. Shared
    data between the main loop and the handler (for example
    `mc_set_speed()` against `mc_tick()`) uses a short interrupt-off
-   section ([interrupt conventions](INTERRUPT_CONVENTIONS.md)).
+   section ([interrupt conventions](ARCHITECTURE.md)).
 
 | Every | Where | Work |
 | --- | --- | --- |
@@ -92,5 +92,5 @@ the same.
   `mc_tick()` into it; it does not own the timer.
 - With μT-Kernel (team firmware, `motion_task_utkernel.c`), the RTOS tick
   takes the place of the heartbeat; the split stays the same.
-- Core 1 (planned in [control architecture](CONTROL_ARCHITECTURE.md))
+- Core 1 (planned in [control architecture](../archive/architecture/CONTROL_ARCHITECTURE.md))
   keeps the peripherals that tolerate delay.

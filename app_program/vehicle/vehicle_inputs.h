@@ -1,6 +1,6 @@
 /*
  * Detector data for the Vehicle Controller modules (src/vehicle_sm.h,
- * docs/architecture/VEHICLE_STATE_MACHINE.md). The application glue fills one
+ * docs/architecture/ARCHITECTURE.md). The application glue fills one
  * copy
  * before each vsm_step() and the shell passes it to the running module.
  *

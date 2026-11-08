@@ -21,7 +21,7 @@ turn back to look again.
 ## Assumptions
 
 - One obstacle sits on the line. Nothing else is near it.
-- The scan (±30°, [OBSTACLE_SCAN.md](../s5-obstacle/OBSTACLE_SCAN.md)) sees past at least
+- The scan (±30°, [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md)) sees past at least
   one side of it.
 - The robot finds the line again after the obstacle. No odometry and no
   map are used.
@@ -143,7 +143,7 @@ rear axle is the back wheel. Operator measurements, 2026-10-30 (about):
 | Robot width (widest point) | 160 mm (versions 2, 4 and 4.1: clearance) |
 | Robot length (overall) | 190 mm (given after the bypass was shelved; not used in the code) |
 
-See the main [robot geometry record](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry) for sources, calculated values, and limits.
+See the main [robot geometry record](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) for sources, calculated values, and limits.
 
 At steering angle δ the rear axle turns on radius R = L / tan δ. Each wheel
 then runs at speed × (1 ∓ (W/2)·tan δ / L). `line_steer` with gain 100 %
@@ -195,7 +195,7 @@ gives STOP.
 
 Pins: ultrasonic trigger GP3, echo GP2, servo GP15. Buttons as `steer_test`.
 
-Procedure (power from VIN, USB unplugged, [USB_POWER_SAFETY.md](../s2-motion/USB_POWER_SAFETY.md)):
+Procedure (power from VIN, USB unplugged, [USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md)):
 
 1. Start the receiver ([STEER_WIFI_LOG.md](STEER_WIFI_LOG.md#use)).
 2. Put an obstacle on a straight part of the line, at least 60 cm ahead of

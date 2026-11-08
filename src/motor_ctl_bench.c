@@ -1,5 +1,5 @@
 /*
- * Motor controller bench test on the floor (docs/s2-motion/MOTOR_CONTROLLER.md,
+ * Motor controller bench test on the floor (docs/s2-motion/MOTION.md,
  * step 3).
  *
  * Drives a fixed list of wheel speed steps through the motor controller

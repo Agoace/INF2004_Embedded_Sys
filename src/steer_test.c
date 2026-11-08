@@ -23,7 +23,8 @@
  * limit RUN_LIMIT_MS. The log keeps the last LOG_KEEP_MS of the run.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (docs/s2-motion/USB_POWER_SAFETY.md). The run is logged every 50 ms and saved
+ * (docs/archive/s2-motion/USB_POWER_SAFETY.md). The run is logged every 50 ms
+ * and saved
  * to the
  * last two flash sectors when the robot stops, so it survives a restart.
  * Connect USB at any time after the run and open the serial port: the last

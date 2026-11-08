@@ -27,7 +27,7 @@
 #define BRAKE_SETTLE_MS 100
 /* Measured 2535 counts per wheel revolution for both motors by the
  * 50-revolution rotation drift test. See
- * docs/s2-motion/MOTOR_ROTATION_DRIFT.md.
+ * docs/s2-motion/HARDWARE.md.
  * The brake compensation is set so each stop threshold stays at the
  * empirically tuned 2500 counts that this test used before, and the
  * measured 33-40 count braking travel still applies. The corrected value

@@ -73,7 +73,7 @@
  * Calibration checks only L and C.
  *
  * Pure logic: no hardware or RTOS calls. See
- * docs/s3-line-barcode/LINE_POSITION.md.
+ * docs/s3-line-barcode/LINE.md.
  */
 
 #define LP_SENSORS 3u

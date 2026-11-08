@@ -14,7 +14,7 @@
  * the same logic runs on the Pico and in the host unit test.
  *
  * One task owns an obstacle_monitor_t. Do not share it between tasks; share
- * only the returned event word. See docs/s5-obstacle/OBSTACLE_MONITOR.md.
+ * only the returned event word. See docs/s5-obstacle/OBSTACLE.md.
  */
 
 /* Measured echo distance from the sensor to the robot front (run 7).

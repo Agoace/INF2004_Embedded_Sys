@@ -20,7 +20,7 @@ typedef struct {
 
 /*
  * Sides and encoder signs: measured 2026-10-27
- * (docs/s2-motion/CALIBRATION_RESULTS.md).
+ * (docs/s2-motion/HARDWARE.md).
  */
 static const wheel_pins_t PINS[MC_WHEELS] = {
     [MC_LEFT] = {8u, 9u, 16u, 17u, +1},

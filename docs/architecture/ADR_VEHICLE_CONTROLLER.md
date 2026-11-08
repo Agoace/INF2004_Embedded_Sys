@@ -106,7 +106,7 @@ The outcome word uses the packed event format of the Week 8 work
 - Vehicle Controller step 1 changes shape: the line-following and
   line-search details move into modules; the controller keeps the table
   and the safety stop. The shell is a new module,
-  [vehicle state machine](VEHICLE_STATE_MACHINE.md) (`vehicle_sm`); step 1
+  [vehicle state machine](ARCHITECTURE.md) (`vehicle_sm`); step 1
   (`vehicle_controller.[ch]`) stays because the line detector uses its
   event word. Its motion command word output (ROTATE and others)
   is replaced by wheel speeds from the running module.

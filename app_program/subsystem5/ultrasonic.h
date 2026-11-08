@@ -13,7 +13,7 @@
  * call converts the raw timing into a bounded result and publishes it.
  *
  * Raw timer values stay in this module. Only the packed result leaves it.
- * See docs/s5-obstacle/ULTRASONIC_DRIVER.md for the representation table.
+ * See docs/s5-obstacle/ULTRASONIC.md for the representation table.
  */
 
 /*

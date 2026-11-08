@@ -74,7 +74,7 @@ No sensor hardware access, queue draining or dump loop remains in vehicle;
 buttons may stay there. Ultrasonic results use their own deadline/age,
 not the LINE 10 ms limit. No echo is unknown, never clear. No application
 control task may call radio, lwIP or TinyUSB directly. MQTT runs only in the
-existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/s1-telemetry/KERNEL_MQTT.md).
+existing Wi-Fi task; sensors know no transport. See [MQTT design](docs/s1-telemetry/TELEMETRY.md).
 
 ## 5. Objects, measurement and acceptance
 
@@ -99,7 +99,7 @@ elapsed-work counters are also reported. The task-split TEST checks,
 M1/M2 repeats and CPU/ISR/stack measurements **passed on 2026-11-06** (see
 [step 7 results](testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 Physical stop latency and the full track (R5) are not run. See
-[task/object and plan-vs-port tables](docs/kernel/KERNEL_ROBOT.md).
+[task/object and plan-vs-port tables](docs/kernel/KERNEL.md).
 
 ## Hardware watchdog ownership
 
@@ -109,7 +109,7 @@ it or driving. Debug halt pauses it. Stale-command stop remains separate.
 S2-U05 runs LAST in TEST, uses scratch0/1 for a one-time result, and never
 repurposes SDK/bootrom scratch4..7. The earlier watchdog image passed
 S2-U05 on 2026-11-06 (99 ms, no repeat) and M1. This task-split image must
-repeat the checks. Read [watchdog procedure](docs/kernel/KERNEL_WATCHDOG.md).
+repeat the checks. Read [watchdog procedure](docs/kernel/KERNEL.md).
 
 ## STEP 8 interfaces and acceptance
 
@@ -118,7 +118,7 @@ repeat the checks. Read [watchdog procedure](docs/kernel/KERNEL_WATCHDOG.md).
 - Vehicle owns its board and is the sole live event producer. Its command
   queues are eight ordinary records plus a separate one-slot ESTOP queue.
 - S1 owns MQTT/health, binary v1 packing and paced log transport.
-  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/MQTT_RUNBOOK.md).
+  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/OPERATION.md).
 - Busy reads, network queues and disconnects count losses, never motor or
   vehicle faults. Boot and RAM logging do not require the network.
 - Valid configured token is required for every command. Without a valid

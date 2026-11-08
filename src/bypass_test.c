@@ -20,7 +20,7 @@
  * a failed bypass, or the time limit RUN_LIMIT_MS.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (docs/s2-motion/USB_POWER_SAFETY.md).
+ * (docs/archive/s2-motion/USB_POWER_SAFETY.md).
  *
  * Log: kept in RAM only (not in flash). The Wi-Fi log
  * (docs/archive/STEER_WIFI_LOG.md)
