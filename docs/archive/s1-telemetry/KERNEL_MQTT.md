@@ -13,7 +13,7 @@ meter; see [method and unmeasured target limits](../kernel/CPU_LOAD.md). A retai
 ONLINE/OFFLINE last will uses a 5-second keepalive; recent state is still
 required to establish that a robot is online. Barcode/IMU/JUNCTION and scan
 stage are reserved contracts, not implemented sensors or navigation changes.
-All byte layouts and estimator limits are in [the wire contract](MQTT_WIRE.md).
+All byte layouts and estimator limits are in [the wire contract](../../s1-telemetry/MQTT_WIRE.md).
 
 ## Purpose and safety
 
@@ -32,8 +32,8 @@ the watchdog. Pure navigation, tuning, routes and eight-conversion ADC
 means are unchanged. GP28 is sampled only, with the VBAT jumper open.
 
 Build and broker steps are in [the runbook](MQTT_RUNBOOK.md). Exact wire
-layouts are in [the binary protocol](MQTT_WIRE.md). Shared platform changes
-and the lecturer-update procedure are in [the template ledger](../architecture/TEMPLATE_CHANGES.md).
+layouts are in [the binary protocol](../../s1-telemetry/MQTT_WIRE.md). Shared platform changes
+and the lecturer-update procedure are in [the template ledger](../../architecture/TEMPLATE_CHANGES.md).
 All new-image hardware checks remain **Not run** until the operator runs them.
 
 ## Execution and hook
@@ -55,7 +55,7 @@ health31 <- bounded boards + stack scan; 1 s cyclic -> health board
 The template used Wi-Fi priority 4: below USB 3, above its qualification
 task. It now **creates Wi-Fi directly at 20**, below driving tasks 10–13
 and above RAM telemetry 30. The USB console is 21, below Wi-Fi (see the
-[template ledger](../architecture/TEMPLATE_CHANGES.md)). There is no priority-change
+[template ledger](../../architecture/TEMPLATE_CHANGES.md)). There is no priority-change
 wrapper and no transient execution at priority 4.
 
 Under `TM_MQTT`, the template poll calls `cyw43_utk_app_poll()` after
@@ -78,11 +78,11 @@ every 5000 ms, and the hook publishes no live log batches and no sonar
 records. It moves the sonar history cursor to the newest entry instead
 (a skip, not counted as missed), so RUN does not publish old idle results. RUN covers vehicle work plus a 2 s grace; TEST and BENCH images
 always use RUN. The mode rule is pure
-([telemetry_mode.c](../../app_program/subsystem1/telemetry_mode.c)); the hook
+([telemetry_mode.c](../../../app_program/subsystem1/telemetry_mode.c)); the hook
 reads it from one bounded vehicle-board read
 (`robot_network_vehicle_phase`). That read is not counted in the heartbeat
 busy or unavailable counters. See
-[Publication modes](MQTT_WIRE.md#publication-modes). There is no catch-up burst after a missed deadline. MQTT callbacks
+[Publication modes](../../s1-telemetry/MQTT_WIRE.md#publication-modes). There is no catch-up burst after a missed deadline. MQTT callbacks
 stage only a bounded 22-byte command, reject malformed fragments and
 count failures. No token is logged. lwIP copies publish bytes into its
 output buffer; stack-local packed arrays do not escape.
@@ -181,9 +181,9 @@ never become vehicle or motor faults.
 
 ## Live log stream and DUMP refill
 
-`robot/log` carries two streams from [`log_stream.c`](../../app_program/subsystem1/log_stream.c).
+`robot/log` carries two streams from [`log_stream.c`](../../../app_program/subsystem1/log_stream.c).
 Both read the RAM log through bounded readers and never wait for the logger.
-Wire layouts are in [MQTT_WIRE.md](MQTT_WIRE.md#ram-log), the dashboard contract.
+Wire layouts are in [MQTT_WIRE.md](../../s1-telemetry/MQTT_WIRE.md#ram-log), the dashboard contract.
 
 **Live stream (QoS 0, freshness first).** A cursor follows the newest KR1
 rows. It publishes 10 rows when 10 are waiting, or fewer when the oldest has
@@ -266,7 +266,7 @@ count; TEST and post-session USB lines show work/threshold/window details.
 A no-poll or stale-health interval is not a performance pass.
 
 Static sizes, strict ARM/SDK proofs and host tests are recorded in
-[Kernel robot](../kernel/KERNEL_ROBOT.md). Earlier-image [operator results](../archive/MTK3_STEP8_RECORD.md) include
+[Kernel robot](../kernel/KERNEL_ROBOT.md). Earlier-image [operator results](../MTK3_STEP8_RECORD.md) include
 cold-power TIMER, timing, MQTT/reconnect, commands and basic M1/M2. They do not
 validate later boot/session/diagnostic or SCAN-retry changes. New-image
 hardware still needs its own acceptance. No push or flash is

@@ -120,7 +120,7 @@ TURN_AWAY ──▶ STRAIGHT ──▶ TURN_TOWARD ──▶ back off 40° ─�
 | v1.2 | `a21237e` | Back off 15°; straights 350 mm |
 | v1.3 | `65da406` | Back off 30° |
 | v1.4 | `5efeacd` | Back off 40° |
-| v1.5 | — | `line_ahead_mm` 100 → 123 mm from [robot geometry](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry) (calculated from operator dimensions and the echo offset); not run on the track yet |
+| v1.5 | — | `line_ahead_mm` 100 → 123 mm from [robot geometry](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) (calculated from operator dimensions and the echo offset); not run on the track yet |
 
 ## Track runs
 
@@ -214,9 +214,9 @@ The operator decided to fix the line problems (A–D) later, after the 40° back
 
 | Value | In the code | Note |
 | --- | ---: | --- |
-| Turn counts per degree | 24.05 | Calculated from track 111 mm; wheel slip not measured; see [robot geometry](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
-| Front-corner circle (rear axle to farthest corner) | 150 mm | Calculated, 146.7 mm; see [robot geometry](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
-| Line sensors ahead of the rear axle | 123 mm | Calculated 123 mm (line sensors at the robot front); used since v1.5; see [robot geometry](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
+| Turn counts per degree | 24.05 | Calculated from track 111 mm; wheel slip not measured; see [robot geometry](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
+| Front-corner circle (rear axle to farthest corner) | 150 mm | Calculated, 146.7 mm; see [robot geometry](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
+| Line sensors ahead of the rear axle | 123 mm | Calculated 123 mm (line sensors at the robot front); used since v1.5; see [robot geometry](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
 
 ## Commands
 

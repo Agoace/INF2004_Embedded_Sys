@@ -10,7 +10,7 @@ follows [Change Requirement 1](../../architecture/week8_change_requirement_1_not
 
 | Signal | GPIO | Note |
 | --- | --- | --- |
-| Echo | GP2 | HC-SR04+ on 3.3 V; no divider needed. See [calibration results](../../s2-motion/CALIBRATION_RESULTS.md#hc-sr04). |
+| Echo | GP2 | HC-SR04+ on 3.3 V; no divider needed. See [calibration results](../s2-motion/CALIBRATION_RESULTS.md#hc-sr04). |
 | Trigger | GP3 | 10 µs HIGH pulse |
 
 ## Files

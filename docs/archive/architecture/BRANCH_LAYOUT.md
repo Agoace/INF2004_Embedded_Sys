@@ -163,7 +163,7 @@ TEST builds run lifted-wheel subsystem checks with neither button task.
 Robot settings move from `src/` to S2. Pure modules still have no kernel
 or SDK includes. New kernel-side adapters include no SDK headers; new
 `*_hw.c` adapters include no kernel headers. GPIO IRQ 13 has one core-0
-owner and priority 1. See [Motor controller](../../s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer)
+owner and priority 1. See [Motor controller](../s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer)
 and TEAM.md. No on-target test is marked as passed by a build.
 
 ## Kernel robot port
@@ -177,7 +177,7 @@ The staging-only integration is `app_program/vehicle/vehicle_task.c` plus
 the reference-extracted settings and fixed RAM log/decoder. A normal build
 runs the robot; `BENCH=1` selects only the S2 bench, and `TEST=1` selects
 subsystem checks with neither button task. Selection changes the image
-name and stale-object profile. See [Kernel robot program](../../kernel/KERNEL_ROBOT.md)
+name and stale-object profile. See [Kernel robot program](../kernel/KERNEL_ROBOT.md)
 for rates, ADC ownership, known phase/watchdog differences and R5 status.
 
 ## STEP 7 task split
@@ -188,7 +188,7 @@ sonar requests/results. New `mtk3-telemetry`, created from `mtk3`, owns S1
 RAM logging and dump transport. Staging alone rewires the robot consumer.
 Use fresh worktrees, commit in the owning branch, then merge `--no-ff`
 into the candidate; never rebase or merge another student's reference
-branch. [Kernel robot](../../kernel/KERNEL_ROBOT.md) has the task/object and plan-vs-port
+branch. [Kernel robot](../kernel/KERNEL_ROBOT.md) has the task/object and plan-vs-port
 tables. No MQTT or barcode algorithm is added in this step.
 
 ## STEP 8 MQTT and shared template changes
@@ -207,6 +207,6 @@ adapters and integration/timing acceptance. Protocol and test-only
 `mtk3-*` topic branches merge into their owner with `--no-ff`; they are
 not additional runtime modules. Only `mtk3-staging-next` combines all work.
 
-[MQTT design](../../s1-telemetry/KERNEL_MQTT.md) and [runbook](../../s1-telemetry/MQTT_RUNBOOK.md) describe the
+[MQTT design](../s1-telemetry/KERNEL_MQTT.md) and [runbook](../s1-telemetry/MQTT_RUNBOOK.md) describe the
 non-critical network policy. New-image hardware rows remain **Not run**;
 software validation never grants push or flash permission.

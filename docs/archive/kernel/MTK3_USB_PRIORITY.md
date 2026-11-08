@@ -4,7 +4,7 @@
 
 The template USB console service task ran at priority 3, above every
 application task. The local robot now creates it at **21**. This is the
-eighth path in the [template ledger](../architecture/TEMPLATE_CHANGES.md). Only the task
+eighth path in the [template ledger](../../architecture/TEMPLATE_CHANGES.md). Only the task
 priority constant changes. The 4096-byte drop-on-full output ring, USB IRQ
 level 0, the IRQ-to-task wake, the 10 ms fallback poll, core-0 pinning and
 TinyUSB configuration are unchanged.
@@ -12,7 +12,7 @@ TinyUSB configuration are unchanged.
 ## Why
 
 The DIAG=1 capture of 2026-11-07 measured the motion delay
-([hardware record](../archive/MTK3_STEP8_RECORD.md#diag1-motion-timing-capture--2026-11-07)).
+([hardware record](../MTK3_STEP8_RECORD.md#diag1-motion-timing-capture--2026-11-07)).
 While a GP20 dump drained, the motion cyclic release stayed on time
 (release interval 9995 us), but motion entered 4488 us after release.
 Mutex wait was at most 15 us. The USB task at 3 can drain the ring

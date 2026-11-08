@@ -1,12 +1,12 @@
 # Heartbeat
 
 The heartbeat is the one time base for all modules on core 0. Decision:
-[ADR: heartbeat](../architecture/ADR_HEARTBEAT.md). Branch: `yx-heartbeat`.
+[ADR: heartbeat](../../architecture/ADR_HEARTBEAT.md). Branch: `yx-heartbeat`.
 
-- Core (pure, host-tested): [`src/heartbeat.c`](../../src/heartbeat.c), [`src/heartbeat.h`](../../src/heartbeat.h)
-- Pico layer (timer and watchdog): [`src/heartbeat_pico.c`](../../src/heartbeat_pico.c), [`src/heartbeat_pico.h`](../../src/heartbeat_pico.h)
-- Host unit test: [`tests/test_heartbeat.c`](../../tests/test_heartbeat.c)
-- Bench target: `heartbeat_test` ([`src/heartbeat_test.c`](../../src/heartbeat_test.c)); no motors move
+- Core (pure, host-tested): [`src/heartbeat.c`](../../../src/heartbeat.c), [`src/heartbeat.h`](../../../src/heartbeat.h)
+- Pico layer (timer and watchdog): [`src/heartbeat_pico.c`](../../../src/heartbeat_pico.c), [`src/heartbeat_pico.h`](../../../src/heartbeat_pico.h)
+- Host unit test: [`tests/test_heartbeat.c`](../../../tests/test_heartbeat.c)
+- Bench target: `heartbeat_test` ([`src/heartbeat_test.c`](../../../src/heartbeat_test.c)); no motors move
 
 ## How it works
 

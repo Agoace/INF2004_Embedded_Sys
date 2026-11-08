@@ -1,5 +1,5 @@
 /*
- * Motor controller, Pico layer (docs/s2-motion/MOTOR_CONTROLLER.md, step 2).
+ * Motor controller, Pico layer (docs/s2-motion/MOTION.md, step 2).
  *
  * The only code that writes the motor PWM and the servo PWM and reads the
  * wheel encoders (docs/architecture/ADR_MOTOR_CONTROLLER.md). Do not link it

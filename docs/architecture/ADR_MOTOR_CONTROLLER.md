@@ -23,7 +23,7 @@ So each caller must know the robot's hardware quirks:
 | Dead zone: a loaded wheel does not turn below about 12 % | `min_pct` 12 in `line_steer` | Bench run 2026-10-29 |
 | Reverse is weaker (left wheel) | Detour sweep minimum 14 % | D19, D27 ([detour handoff](../archive/OBSTACLE_DETOUR_HANDOFF.md)) |
 | Battery voltage drop | Not handled | Second-detour stalls at 14–15 % (D31, D33, D35) |
-| Encoder signs, 2535 counts per wheel turn | `drive.c` | [Calibration results](../s2-motion/CALIBRATION_RESULTS.md) |
+| Encoder signs, 2535 counts per wheel turn | `drive.c` | [Calibration results](../s2-motion/HARDWARE.md) |
 | 24.05 counts per degree of turn | `detour_test.c` | Calculated; slip not measured |
 | Servo centre and safe range (1100–1900 µs) | `servo.h` | [Servo obstacle scan](../s5-obstacle/OBSTACLE.md) |
 | Servo settle time before a ping | `obstacle_scan.c` timing | [Servo obstacle scan](../s5-obstacle/OBSTACLE.md) |

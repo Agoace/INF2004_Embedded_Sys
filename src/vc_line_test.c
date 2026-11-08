@@ -29,7 +29,7 @@
  * sweep ends, back off), as detour_test.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (docs/s2-motion/USB_POWER_SAFETY.md).
+ * (docs/archive/s2-motion/USB_POWER_SAFETY.md).
  *
  * Log: the steering log (docs/archive/STEER_WIFI_LOG.md) every 50 ms, live and
  * replayed after the run. Log header flag SL_FLAG_SPEED: the two wheel

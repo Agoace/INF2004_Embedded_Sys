@@ -31,7 +31,7 @@
  * a failed detour, or the time limit RUN_LIMIT_MS.
  *
  * Power: a driving test. Use 5 V VIN with USB disconnected
- * (docs/s2-motion/USB_POWER_SAFETY.md).
+ * (docs/archive/s2-motion/USB_POWER_SAFETY.md).
  *
  * Log: kept in RAM only (not in flash). The Wi-Fi log
  * (docs/archive/STEER_WIFI_LOG.md)
@@ -98,7 +98,7 @@ static const steer_config_t STEER_FOLLOW = {
 };
 /* First values: tune on the track. Geometry (docs/archive/OBSTACLE_BYPASS.md):
  * vehicle length 190 mm, track 111 mm, servo axis 65 mm ahead of the rear
- * axle. See docs/s2-motion/CALIBRATION_RESULTS.md, Robot geometry: sweep 150 mm
+ * axle. See docs/s2-motion/HARDWARE.md, Robot geometry: sweep 150 mm
  * uses the calculated 146.7 mm front-corner circle; line_ahead_mm is
  * 123 mm from the rear axle to the front-mounted line sensors. Turn counts:
  * 111 mm x pi / 180 = 1.937 mm per degree of (right - left) = 24.05
@@ -141,7 +141,7 @@ static const dt_config_t DETOUR = {
     .line_ahead_mm = 123u, /*
                             * rear axle to line sensors, 65 + 58 mm; v1-v1.4:
                             * 100;
-                           * docs/s2-motion/CALIBRATION_RESULTS.md, Robot
+                           * docs/s2-motion/HARDWARE.md, Robot
                            * geometry
                            */
     .seen_mm = 400u,

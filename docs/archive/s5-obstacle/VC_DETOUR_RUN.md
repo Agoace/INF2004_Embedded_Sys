@@ -2,7 +2,7 @@
 
 Step (c) of the [Vehicle Controller state machine](../../architecture/ARCHITECTURE.md):
 the obstacle scan and the obstacle detour as modules in the shell, wheel
-speeds through the [motor controller](../../s2-motion/MOTOR_CONTROLLER.md). Branch:
+speeds through the [motor controller](../s2-motion/MOTOR_CONTROLLER.md). Branch:
 `yx-detour` (from `yx-line-steer`). Target: `vc_line_test` (the same
 target as the [Vehicle Controller line run](../../s3-line-barcode/LINE.md), now with all
 four modules).

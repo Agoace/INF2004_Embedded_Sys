@@ -56,7 +56,7 @@ tasks to core 1. The earlier proposed core split is not implemented.
 
 TEST moves its runner to priority 20 after startup. IMU_STREAM runs only
 S4 tests. BENCH is exclusive with the vehicle program. Task stacks and
-kernel object sizes are in the [kernel record](../kernel/KERNEL_ROBOT.md).
+kernel object sizes are in the [kernel record](../kernel/KERNEL.md).
 
 ### Interrupt and polling rules
 

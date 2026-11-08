@@ -22,7 +22,7 @@
 
 /* Measured 2535 counts per wheel revolution for both motors by the
  * 50-revolution rotation drift test. See
- * docs/s2-motion/MOTOR_ROTATION_DRIFT.md.
+ * docs/s2-motion/HARDWARE.md.
  * This supersedes the earlier 2540 and 2539, which were not independent
  * measurements. RPM values recorded before this change read about 0.197%
  * low. */

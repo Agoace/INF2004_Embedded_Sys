@@ -27,31 +27,19 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Kernel
 
-- [APPLICATION_TASKS.md](kernel/APPLICATION_TASKS.md) — static task stacks, ownership and high-water limits.
-- [CPU_LOAD.md](kernel/CPU_LOAD.md) — calibrated idle meter and measurement limits.
-- [DEVELOPMENT.md](kernel/DEVELOPMENT.md) — toolchain, flash and serial setup; older CMake bench examples are not the current robot build.
-- [KERNEL_ROBOT.md](kernel/KERNEL_ROBOT.md) — task/object design, sensor freshness, deadlines and revision-scoped validation.
-- [KERNEL_WATCHDOG.md](kernel/KERNEL_WATCHDOG.md) — motion-only feeding, reset classification and two-boot procedure.
-- [MTK3_LAYOUT_CHECKS.md](kernel/MTK3_LAYOUT_CHECKS.md) — course-template layout and early platform checks.
-- [MTK3_MOTION_CHECKS.md](kernel/MTK3_MOTION_CHECKS.md) — motion port, SDK link proof, image sizes and original hardware gates.
-- [MTK3_USB_PRIORITY.md](kernel/MTK3_USB_PRIORITY.md) — measured USB dispatch issue and priority 21 decision.
+- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
+- [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 
 ## S1 — Telemetry
 
-- [KERNEL_MQTT.md](s1-telemetry/KERNEL_MQTT.md) — sole Wi-Fi/lwIP owner, pull boards, queues and timing limits.
-- [KERNEL_TELEMETRY.md](s1-telemetry/KERNEL_TELEMETRY.md) — nonblocking message transport, RAM log owner and local loss policy.
-- [MQTT_DASHBOARD.md](s1-telemetry/MQTT_DASHBOARD.md) — responsive live dashboard, offline replay, panels, command gating and web security.
-- [MQTT_RUNBOOK.md](s1-telemetry/MQTT_RUNBOOK.md) — broker/firewall scope, private settings, CSV and operator commands.
-- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — topic versions, boot identity, packed bytes, masks and decoder contract.
+- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes and RAM/live/refill ownership.
+- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — current binary topics, versions, bytes, masks, boot/session and decoder contract.
+- [OPERATION.md](s1-telemetry/OPERATION.md) — broker, recorder, dashboard, Tailscale, security, operation and radio-loss troubleshooting.
 
 ## S2 — Motion
 
-- [CALIBRATION_RESULTS.md](s2-motion/CALIBRATION_RESULTS.md) — confirmed wiring, geometry, sensors, servo limits and motor calibration.
-- [DUTY_MAP.md](s2-motion/DUTY_MAP.md) — loaded floor mapping from duty to wheel speed.
-- [HEARTBEAT.md](s2-motion/HEARTBEAT.md) — original bare-metal time-base implementation and bench tests.
-- [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md) — controller interface, robot settings, kernel layer and approved SDK subset.
-- [MOTOR_ROTATION_DRIFT.md](s2-motion/MOTOR_ROTATION_DRIFT.md) — 50-revolution encoder measurements and alignment evidence.
-- [USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md) — shared USB current limit, motor-test procedure and bounded exception.
+- [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
+- [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
 
 ## S3 — Line and barcode
 
@@ -113,6 +101,35 @@ not current acceptance reports. Local course originals are not public records.
 - [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — full source record; only links/paths adjusted.
+### Kernel originals
+
+The full original records retain their prose, numbers and revision limits;
+only link/path/anchor repairs follow the move.
+
+- [APPLICATION_TASKS.md](archive/kernel/APPLICATION_TASKS.md) — full historical source, with its measured values and original limits.
+- [CPU_LOAD.md](archive/kernel/CPU_LOAD.md) — full historical source, with its measured values and original limits.
+- [DEVELOPMENT.md](archive/kernel/DEVELOPMENT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_ROBOT.md](archive/kernel/KERNEL_ROBOT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_WATCHDOG.md](archive/kernel/KERNEL_WATCHDOG.md) — full historical source, with its measured values and original limits.
+- [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
+- [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
+- [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
+
+### S1 originals
+
+- [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_TELEMETRY.md](archive/s1-telemetry/KERNEL_TELEMETRY.md) — full historical source, with its measured values and original limits.
+- [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
+- [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
+
+### S2 originals
+
+- [CALIBRATION_RESULTS.md](archive/s2-motion/CALIBRATION_RESULTS.md) — full historical source, with its measured values and original limits.
+- [DUTY_MAP.md](archive/s2-motion/DUTY_MAP.md) — full historical source, with its measured values and original limits.
+- [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md) — full historical source, with its measured values and original limits.
+- [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md) — full historical source, with its measured values and original limits.
+- [MOTOR_ROTATION_DRIFT.md](archive/s2-motion/MOTOR_ROTATION_DRIFT.md) — full historical source, with its measured values and original limits.
+- [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; retained evidence, not a current procedure.
 
 ## Original-template reference exceptions
 

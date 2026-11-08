@@ -98,6 +98,6 @@ ground on the ramp.
 - [Line steering in mm/s](LINE_STEER_MM.md) (2026-11-04, branch
   `yx-line-steer`): the same rule in wheel speed for the motor
   controller, settings mapped one to one through the
-  [duty map](../../s2-motion/DUTY_MAP.md). The duty version here is unchanged (800000
+  [duty map](../s2-motion/DUTY_MAP.md). The duty version here is unchanged (800000
   updates compared with this tag, 0 differences). Not yet run on the
   track; a new record is needed before it replaces this design.

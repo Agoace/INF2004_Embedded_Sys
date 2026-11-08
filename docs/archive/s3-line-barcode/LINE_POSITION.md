@@ -260,7 +260,7 @@ start on the line ─▶ left ¼ wheel turn ─▶ right ¼ wheel turn past the 
 - The last step stops on the line, not on the encoder count. Tyres slip
   when the robot turns on the spot.
 - USB power limits: see the
-  [spin-calibration exception](../../s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception).
+  [spin-calibration exception](../s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception).
 
 Procedure:
 

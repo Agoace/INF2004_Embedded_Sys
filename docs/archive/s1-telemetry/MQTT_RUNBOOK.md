@@ -7,8 +7,8 @@ hardware tests. This implementation did not connect, flash or push. Lift
 both wheels before TEST power; S2-U02 moves motors and S2-U05 resets once.
 MQTT is optional telemetry. GP21 remains the real ESTOP; remote ESTOP is
 best effort. M1/M2 must pass independently of network availability.
-See [design and limits](KERNEL_MQTT.md), [wire layout](MQTT_WIRE.md), and
-[template changes](../architecture/TEMPLATE_CHANGES.md).
+See [design and limits](KERNEL_MQTT.md), [wire layout](../../s1-telemetry/MQTT_WIRE.md), and
+[template changes](../../architecture/TEMPLATE_CHANGES.md).
 
 ## 1. Set up a broker on the robot network
 
@@ -116,7 +116,7 @@ python3 scripts/mqtt_robot.py --host <LAPTOP_ROBOT_IP> --csv robot-mqtt.csv
 It subscribes to state, sonar, event, heartbeat and log, validates version,
 length/reserved fields, and decodes signed values to a flat CSV. It does
 not subscribe to `robot/cmd` or record tokens. It subscribes again after a
-broker reconnect. See [wire fields](MQTT_WIRE.md) for units and flags.
+broker reconnect. See [wire fields](../../s1-telemetry/MQTT_WIRE.md) for units and flags.
 
 Commands apply only to the NORMAL robot. TEST/BENCH deliberately do not
 start vehicle and do not consume these queues; broker ACK never proves a
