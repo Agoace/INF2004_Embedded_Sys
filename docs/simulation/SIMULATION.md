@@ -206,8 +206,8 @@ not proved to coincide: use zero face offset from the axis only as an
 explicit provisional model setting, pending a measurement.
 
 IR lateral spacing, line width, and sensor footprint size are not stated
-as measured dimensions in [LINE_POSITION.md](../s3-line-barcode/LINE_POSITION.md) or
-[LINE_STEERING.md](../s3-line-barcode/LINE_STEERING.md). The operator approved marked guesses
+as measured dimensions in [LINE_POSITION.md](../s3-line-barcode/LINE.md) or
+[LINE_STEERING.md](../s3-line-barcode/LINE.md). The operator approved marked guesses
 because the robot is not available. Require explicit scenario values, not
 silent defaults. Require physical L/C/R order, with the centre at y = 0.
 The provisional sensing points are x = 119 mm, not the board-tip x = 123 mm.
@@ -268,7 +268,7 @@ board width alone does not establish it.
 Add a consistency scenario for every spacing/line-width/footprint set:
 centre the line in the C–L gap and require under 1 % rise above the floor
 relative to each sensor's floor-to-line range, with noise disabled. Compare
-with [the recorded gap test](../s3-line-barcode/LINE_POSITION.md#the-gaps-between-the-sensors).
+with [the recorded gap test](../archive/s3-line-barcode/LINE_POSITION.md#the-gaps-between-the-sensors).
 With the published 18 mm line and guessed 3 mm footprint, the 14 mm spacing
 case must fail this check and the 22 mm case must pass. A failed check must
 be reported as an inconsistent model, not hidden by changing ADC endpoints. This check constrains the guesses; it does not
@@ -299,7 +299,7 @@ for motor 1 and 2539 for motor 2. Apply its correction factors 2540/2535 and
 
 The [minimum unloaded duty record](../s2-motion/CALIBRATION_RESULTS.md#minimum-unloaded-motor-duty)
 reports VIN movement at 6 % left and 7 % right; it recommends 8 % common
-minimum and a 10 % start kick. The [loaded steering record](../s3-line-barcode/LINE_STEERING.md#how-it-works)
+minimum and a 10 % start kick. The [loaded steering record](../s3-line-barcode/LINE.md#how-it-works)
 uses about 12 % as the loaded start threshold. Do not implement a start
 kick unless the firmware commands one. The operator approved the unloaded
 speed table plus a provisional loaded profile, and symmetric reverse.
@@ -479,7 +479,7 @@ Generate raw 12-bit ADC samples, not `line_seen`, position, or events.
 The unchanged `line_spin.c` must calibrate through the scenario button;
 `line_position.c` must do all learning and threshold decisions.
 
-[Line position run 1](../s3-line-barcode/LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power)
+[Line position run 1](../archive/s3-line-barcode/LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power)
 uses old labels (L = GP26, physical right; R = GP28, physical left).
 Keep these recorded ADC endpoints: they were measured on this mat. The
 published line width does not change them. The physical order for fake
@@ -494,11 +494,11 @@ published line width does not change them. The physical order for fake
 Mix floor and line readings by footprint overlap with the scenario's line
 band; clamp to 0–4095 and round consistently. A point model alone produces
 unrealistically sharp edges, so footprint width must be a visible scenario
-parameter. The [gap observations](../s3-line-barcode/LINE_POSITION.md#the-gaps-between-the-sensors)
+parameter. The [gap observations](../archive/s3-line-barcode/LINE_POSITION.md#the-gaps-between-the-sensors)
 show less than 1 % rise between sensors and about ±2 ADC noise, with floor
 variation about 100 counts. Do not use broad overlap that removes the real
 gaps. Begin with noise disabled. Later add seeded noise, a small optional
-gap response, and floor patches. [Steering observations](../s3-line-barcode/LINE_STEERING.md#straight-across-a-junction)
+gap response, and floor patches. [Steering observations](../archive/s3-line-barcode/LINE_STEERING.md#straight-across-a-junction)
 confirm narrow overlap and mostly 0/±100 position; ramp behaviour is outside
 the first flat-floor model.
 
@@ -557,7 +557,7 @@ left-wheel stall at 9.042200 s; it does not drive through the box.
 > controlled measurement and that the sensors are 14.5 mm apart with wide,
 > overlapping spots. `two_sensor_straight` and `two_sensor_track` use
 > 14.5 mm spacing, a 16 mm spot (guess) and `gap_check: false`. The
-> firmware uses pair mode ([Line position](../s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03)).
+> firmware uses pair mode ([Line position](../archive/s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03)).
 
 ## Scenario and trace formats
 

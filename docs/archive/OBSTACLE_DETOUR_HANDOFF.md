@@ -176,7 +176,7 @@ Obstacle: box or bottle on a straight part of the line. All runs went LEFT. File
 | D31 | same file | Second STOP at 40.2 s; away +47°; straight to (238, 255); TURN_TOWARD at 14 %: both wheels slowed to 0 after about 15°; left wheel stall stop at 47.7 s |
 | D32 | `run_20261103-173323_boot740b_run4.txt` | v1.8. STOP 221 mm, LEFT; away +44°; seen at −51°, back off 30 of 95°; DONE at 25.0 s |
 | D33 | same file | Second STOP at 47.2 s; away +41°; TURN_TOWARD at 14–15 %: both wheels slowed to 0; left wheel stall stop at 55.4 s |
-| — | `run_20261104-123613_bootc481_run1.txt` | Line only, over the ramp, barcode sensor removed: no jerk (see [two-sensor line tracing](../s3-line-barcode/TWO_SENSOR_LINE_TRACING.md#ramp-2026-11-04)) |
+| — | `run_20261104-123613_bootc481_run1.txt` | Line only, over the ramp, barcode sensor removed: no jerk (see [two-sensor line tracing](s3-line-barcode/TWO_SENSOR_LINE_TRACING.md#ramp-2026-11-04)) |
 | D34 | `run_20261104-123900_bootc481_run2.txt` | v1.8. STOP 212 mm; away +46°; seen at −57°, back off 30 of 103°; DONE at 27.1 s |
 | D35 | same file | Second STOP at 49.7 s; away +41°; straight to (264, 229); TURN_TOWARD at 14–15 %: both wheels slowed to 0 after about 20°; right wheel stall stop at 57.6 s |
 | D36 | `run_20261104-124043_bootc481_run3.txt` | v1.8. STOP 220 mm; away +44°; seen at −59°, back off 30 of 103°; DONE at 25.9 s |

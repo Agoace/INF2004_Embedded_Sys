@@ -5,14 +5,14 @@ branch. It replaces the fixed ADC thresholds of the first line detector
 (`src/line_detector.c`: black ≤ 1200, white ≥ 2600) with values that each
 sensor learns. The first detector is not changed.
 
-- Code: [`app_program/subsystem3/line_position.c`](../../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../../app_program/subsystem3/line_position.h)
-- Host unit test: [`tests/test_line_position.c`](../../tests/test_line_position.c)
-- Bench test: [`src/line_test.c`](../../src/line_test.c); spin calibration in [`src/line_spin.c`](../../src/line_spin.c)
+- Code: [`app_program/subsystem3/line_position.c`](../../../app_program/subsystem3/line_position.c), [`app_program/subsystem3/line_position.h`](../../../app_program/subsystem3/line_position.h)
+- Host unit test: [`tests/test_line_position.c`](../../../tests/test_line_position.c)
+- Bench test: [`src/line_test.c`](../../../src/line_test.c); spin calibration in [`src/line_spin.c`](../../../src/line_spin.c)
 - Steering from the position: [Line steering](LINE_STEERING.md)
 - Sensor pins, robot's own sides: left **GP28**, centre GP27, right **GP26**, set in
-  [`src/line_sensors.c`](../../src/line_sensors.c). [`src/ir_module_pins.h`](../../src/ir_module_pins.h)
+  [`src/line_sensors.c`](../../../src/line_sensors.c). [`src/ir_module_pins.h`](../../../src/ir_module_pins.h)
   names them the other way round.
-- Events go to the [Vehicle Controller](../archive/VEHICLE_CONTROLLER.md)
+- Events go to the [Vehicle Controller](../VEHICLE_CONTROLLER.md)
 
 > **Update 2026-11-03:** the course allows only two line sensors. The robot
 > now uses **pair mode**: left **GP27** (the old left sensor), centre
@@ -162,7 +162,7 @@ every reading.
 
 ## Events for the Vehicle Controller
 
-`lp_update()` returns a [Vehicle Controller event word](../archive/VEHICLE_CONTROLLER.md#data-representation):
+`lp_update()` returns a [Vehicle Controller event word](../VEHICLE_CONTROLLER.md#data-representation):
 
 | Event | When | Payload |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ start on the line ─▶ left ¼ wheel turn ─▶ right ¼ wheel turn past the 
 - The last step stops on the line, not on the encoder count. Tyres slip
   when the robot turns on the spot.
 - USB power limits: see the
-  [spin-calibration exception](../s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception).
+  [spin-calibration exception](../../s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception).
 
 Procedure:
 
@@ -328,9 +328,9 @@ sideways.
 Course rule: two line sensors. The wiring changed: the old left sensor
 moved from GP28 to **GP27** (left), the old centre sensor moved from GP27
 to **GP26** (centre). The old right sensor is disabled.
-[`src/line_sensors.c`](../../src/line_sensors.c) reads only GP27 and GP26 when
+[`src/line_sensors.c`](../../../src/line_sensors.c) reads only GP27 and GP26 when
 `LINE_SENSORS_PAIR` is 1 (the default in
-[`src/line_sensors.h`](../../src/line_sensors.h)) and returns 0 for the right
+[`src/line_sensors.h`](../../../src/line_sensors.h)) and returns 0 for the right
 input. Every target that calls `lp_init()` then calls
 `lp_set_pair(&lp, LINE_SENSORS_PAIR != 0, 0)`.
 
@@ -376,7 +376,7 @@ input. Every target that calls `lp_init()` then calls
 
 ### Host test
 
-The pair block in [`tests/test_line_position.c`](../../tests/test_line_position.c)
+The pair block in [`tests/test_line_position.c`](../../../tests/test_line_position.c)
 checks: three-sensor mode rejects the disabled right input, pair
 calibration ignores it, `lp_init` turns pair mode off, the right reading
 is cleared, centred and its ±20 limit, both signs, no junction, the 5 %
@@ -400,9 +400,9 @@ it gives the same result (equivalent).
 ### Simulator results, 2026-11-03
 
 `detour_test` with pair mode, scenarios
-[`two_sensor_track`](../../sim/scenarios/two_sensor_track.json) (the operator's
+[`two_sensor_track`](../../../sim/scenarios/two_sensor_track.json) (the operator's
 test-track loop with curves and crosses, no obstacle, 60 s) and
-[`two_sensor_straight`](../../sim/scenarios/two_sensor_straight.json). Spacing
+[`two_sensor_straight`](../../../sim/scenarios/two_sensor_straight.json). Spacing
 14.5 mm; spot width 16 mm (guess); the recorded-gap check is off
 (`gap_check: false`).
 
@@ -492,7 +492,7 @@ far gain (see the steering bullet above).
 ### Robot check: spin recording, 2026-11-03, boot 5209
 
 `detour_test` GP20 (spin calibration only) with the raw recording of
-[`src/line_spin.c`](../../src/line_spin.c): L and C every 2 ms, 1634 samples,
+[`src/line_spin.c`](../../../src/line_spin.c): L and C every 2 ms, 1634 samples,
 all received over Wi-Fi. Calibration: L floor 172, line 2487; C floor 158,
 line 2611. Copy on the laptop: `build/steer_logs/spin_raw_boot5209.csv`
 (not committed).

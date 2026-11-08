@@ -23,7 +23,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, calibration and USB power safety. |
-| [s3-line-barcode/](s3-line-barcode/) | Line position, steering, barcode ideas and line-run evidence. |
+| [s3-line-barcode/](s3-line-barcode/) | Current kernel LINE/SEARCH and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
 | [s5-obstacle/](s5-obstacle/) | Ultrasonic sensing, scanning and detour evidence. |
 | [simulation/](simulation/) | Host simulator design, echo fit and box sweep. |
@@ -59,16 +59,13 @@ robot builds; the development record also retains older CMake bench examples.
 | ADR: motor controller owns the actuators | [docs/architecture/ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) |
 | ADR: one hardware heartbeat | [docs/architecture/ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) |
 | ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
-| Vehicle Controller line run | [docs/s3-line-barcode/VC_LINE_RUN.md](s3-line-barcode/VC_LINE_RUN.md) — modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
+| Current kernel LINE/SEARCH | [LINE.md](s3-line-barcode/LINE.md) — pair detection, retained P7 mm/s settings, search and evidence; modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
 | Vehicle Controller detour run (physical detour completed; see revision-specific results) | [docs/s5-obstacle/VC_DETOUR_RUN.md](s5-obstacle/VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
-| Line steering in mm/s | [docs/s3-line-barcode/LINE_STEER_MM.md](s3-line-barcode/LINE_STEER_MM.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
+| Line steering in mm/s | [docs/s3-line-barcode/LINE.md](s3-line-barcode/LINE.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
 | Duty map record | [docs/s2-motion/DUTY_MAP.md](s2-motion/DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
 | Heartbeat record | [docs/s2-motion/HEARTBEAT.md](s2-motion/HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
 | Motor controller record | [docs/s2-motion/MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Superseded preliminary Vehicle Controller record | [docs/archive/VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) |
-| Two-sensor line tracing (locked design) | [docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md](s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) |
-| Normalised line position record | [docs/s3-line-barcode/LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md) |
-| Line steering record | [docs/s3-line-barcode/LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md) |
 | Steering Wi-Fi log | [docs/archive/STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) |
 | Week 6 design-review diagrams | [`design-review/`](../design-review) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) |
@@ -103,14 +100,14 @@ robot builds; the development record also retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
 | Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
-| Barcode reading ideas (not built) | [`BARCODE_READING_IDEAS.md`](s3-line-barcode/BARCODE_READING_IDEAS.md) |
+| Barcode input/ideas, not a robot decoder | [BARCODE.md](s3-line-barcode/BARCODE.md) — analog GP28, course geometry and validation still required. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
 | Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |

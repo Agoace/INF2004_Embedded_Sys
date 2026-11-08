@@ -1,6 +1,6 @@
 /*
  * Track test: line tracing through the Vehicle Controller shell and the
- * motor controller (docs/s3-line-barcode/VC_LINE_RUN.md).
+ * motor controller (docs/s3-line-barcode/LINE.md).
  *
  *   GP21  spin calibration, then the run after 1 s; press again to stop
  *   GP20  (idle) next steering D from D_STEPS; the value is printed
@@ -79,18 +79,18 @@
 #endif
 
 /*
- * Locked line tracing (docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) mapped
+ * Locked line tracing (docs/s3-line-barcode/LINE.md) mapped
  * to mm/s
- * through the duty map (docs/s3-line-barcode/LINE_STEER_MM.md): base 25 % ->
+ * through the duty map (docs/s3-line-barcode/LINE.md): base 25 % ->
  * 171,
  * min 12 % -> 62, max 50 % -> 378. Straight 450 counts across a junction;
  * side hint above 20 counts of turn.
- * P7 (docs/s3-line-barcode/VC_LINE_RUN.md, after P6): matched to what P4 really
+ * P7 (docs/s3-line-barcode/LINE.md, after P6): matched to what P4 really
  * did, not
  * to the straight-run duty map. P4 drove 146 mm/s; P6 turned 17 % harder
  * than P4 for the same position. Base 146; gain, D and far gain x 0.85. */
 /*
- * D test after P7 (docs/s3-line-barcode/VC_LINE_RUN.md): GP20 picks the next D.
+ * D test after P7 (docs/s3-line-barcode/LINE.md): GP20 picks the next D.
  * All other
  * settings stay. The first value is the P7 value. */
 static const uint8_t D_STEPS[] = {85u, 130u, 50u};
@@ -658,7 +658,7 @@ int main(void) {
     ultrasonic_init(ULTRASONIC_TRIGGER_PIN, ULTRASONIC_ECHO_PIN, NULL);
     hb_init(&hb);
     /*
-     * P9 (docs/s3-line-barcode/VC_LINE_RUN.md) ran without the I term; now the
+     * P9 (docs/s3-line-barcode/LINE.md) ran without the I term; now the
      * robot value.
      */
     mc_cfg.ki_q8 = VC_LINE_KI_Q8;

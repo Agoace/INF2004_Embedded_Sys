@@ -99,7 +99,7 @@ The scan confirms power, ground, SDA, SCL, and I²C communication. The DRDY line
 - A changing-target test is still useful to confirm the sensor response range.
 - 2026-10-27, `line_test` spin calibration on the track: the line reads
   higher than the floor. Floor and line values differ by sensor: L 191/3424,
-  C 185/2615, R 202/1645. See [Normalised line position](../s3-line-barcode/LINE_POSITION.md#bench-test).
+  C 185/2615, R 202/1645. See [Normalised line position](../archive/s3-line-barcode/LINE_POSITION.md#bench-test).
   These labels follow `ir_module_pins.h`. The robot's own left sensor is
   GP28 and its right sensor is GP26, so "L" here is the physical right.
 

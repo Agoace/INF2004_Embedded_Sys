@@ -1,8 +1,8 @@
 /*
  * Line search module for the Vehicle Controller shell (module SEARCH,
- * src/vehicle_sm.h). See docs/s3-line-barcode/VC_LINE_RUN.md.
+ * src/vehicle_sm.h). See docs/s3-line-barcode/LINE.md.
  *
- * The search of detour_test (docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md)
+ * The search of detour_test (docs/s3-line-barcode/LINE.md)
  * in wheel
  * speeds: turn on the spot toward the side where the line was last seen
  * (payload: vc_line_side_t; RIGHT turns right, else left) until the turn

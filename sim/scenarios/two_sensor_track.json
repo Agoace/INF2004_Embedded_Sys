@@ -20,7 +20,7 @@
   },
   "obstacles": [],
   "provenance": {
-    "adc": "docs/s3-line-barcode/LINE_POSITION.md run 1; physical L/C/R after correction of the old pin labels; IR layout: Operator 2026-11-03: course rule two line sensors; 14.5 mm spacing; about 9 mm height; the 2026-10-27 gap test is not used (gap_check false)",
+    "adc": "docs/s3-line-barcode/LINE.md run 1; physical L/C/R after correction of the old pin labels; IR layout: Operator 2026-11-03: course rule two line sensors; 14.5 mm spacing; about 9 mm height; the 2026-10-27 gap test is not used (gap_check false)",
     "geometry": "docs/s2-motion/CALIBRATION_RESULTS.md#robot-geometry; conservative 160 x 190 mm rectangle",
     "track": "Published spec: https://www.robotics.org.za/CK-RE-TRACK-COMO-16; Cytron EVA tiles, 315 x 315 x 10 mm, black 18 mm line on white"
   },

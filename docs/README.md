@@ -55,12 +55,8 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S3 — Line and barcode
 
-- [BARCODE_READING_IDEAS.md](s3-line-barcode/BARCODE_READING_IDEAS.md) — unimplemented decoding ideas and sensor/geometry limits.
-- [LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md) — learned floor/line values and packed line events.
-- [LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md) — line position to wheel duty, optional D term and bench procedure.
-- [LINE_STEER_MM.md](s3-line-barcode/LINE_STEER_MM.md) — locked steering translated to wheel speeds; see the line-run evidence for physical scope.
-- [TWO_SENSOR_LINE_TRACING.md](s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) — locked two-sensor design, wiring, settings and evidence.
-- [VC_LINE_RUN.md](s3-line-barcode/VC_LINE_RUN.md) — LINE/SEARCH module integration and recorded P5–P9 runs.
+- [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
+- [BARCODE.md](s3-line-barcode/BARCODE.md) — analog GP28 input and course geometry; decoder ideas only, not robot implementation.
 
 ## S4 — IMU
 
@@ -99,6 +95,15 @@ not current acceptance reports. Local course originals are not public records.
 - [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
 - [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
 - [architecture/robo_pico_rtos_multicore_plan.md](archive/architecture/robo_pico_rtos_multicore_plan.md) — full source record; only links/paths adjusted.
+
+### S3 — Line and barcode history
+
+- [s3-line-barcode/LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md) — full source record; only links/paths adjusted.
+- [s3-line-barcode/LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md) — full source record; only links/paths adjusted.
+- [s3-line-barcode/LINE_STEER_MM.md](archive/s3-line-barcode/LINE_STEER_MM.md) — full source record; only links/paths adjusted.
+- [s3-line-barcode/TWO_SENSOR_LINE_TRACING.md](archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) — full source record; only links/paths adjusted.
+- [s3-line-barcode/VC_LINE_RUN.md](archive/s3-line-barcode/VC_LINE_RUN.md) — full source record; only links/paths adjusted.
+- [s3-line-barcode/BARCODE_READING_IDEAS.md](archive/s3-line-barcode/BARCODE_READING_IDEAS.md) — full source record; only links/paths adjusted.
 
 ## Original-template reference exceptions
 

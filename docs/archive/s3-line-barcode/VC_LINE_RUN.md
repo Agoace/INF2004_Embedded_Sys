@@ -1,19 +1,19 @@
 # Vehicle Controller line run (`vc_line_test`)
 
 The first target in the new layers
-([ADR: Vehicle Controller](../architecture/ADR_VEHICLE_CONTROLLER.md)): line tracing and
-line search as modules in the [shell](../architecture/ARCHITECTURE.md), wheel
-speeds through the [motor controller](../s2-motion/MOTOR_CONTROLLER.md). Branch:
+([ADR: Vehicle Controller](../../architecture/ADR_VEHICLE_CONTROLLER.md)): line tracing and
+line search as modules in the [shell](../../architecture/ARCHITECTURE.md), wheel
+speeds through the [motor controller](../../s2-motion/MOTOR_CONTROLLER.md). Branch:
 `yx-line-steer`. Status: run on the track (P5–P9); **stopped at the P7 settings** on 2026-11-04, see [End state](#end-state-2026-11-04).
 The goal of the first run (P5) is to compare with P4 of the
 [locked line tracing](TWO_SENSOR_LINE_TRACING.md).
 
-- Line tracing module: [`app_program/subsystem3/line_trace.c`](../../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_trace.h`](../../app_program/subsystem3/line_trace.h)
-- Line search module: [`app_program/subsystem3/line_search.c`](../../app_program/subsystem3/line_search.c), [`app_program/subsystem3/line_search.h`](../../app_program/subsystem3/line_search.h)
-- Detector data for modules: [`app_program/vehicle/vehicle_inputs.h`](../../app_program/vehicle/vehicle_inputs.h)
-- Pico glue (target): [`src/vc_line_test.c`](../../src/vc_line_test.c)
-- Host unit test: [`tests/test_line_trace.c`](../../tests/test_line_trace.c)
-- Later (step c): the same target also runs the scan and detour modules ([Vehicle Controller detour run](../s5-obstacle/VC_DETOUR_RUN.md)).
+- Line tracing module: [`app_program/subsystem3/line_trace.c`](../../../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_trace.h`](../../../app_program/subsystem3/line_trace.h)
+- Line search module: [`app_program/subsystem3/line_search.c`](../../../app_program/subsystem3/line_search.c), [`app_program/subsystem3/line_search.h`](../../../app_program/subsystem3/line_search.h)
+- Detector data for modules: [`app_program/vehicle/vehicle_inputs.h`](../../../app_program/vehicle/vehicle_inputs.h)
+- Pico glue (target): [`src/vc_line_test.c`](../../../src/vc_line_test.c)
+- Host unit test: [`tests/test_line_trace.c`](../../../tests/test_line_trace.c)
+- Later (step c): the same target also runs the scan and detour modules ([Vehicle Controller detour run](../../s5-obstacle/VC_DETOUR_RUN.md)).
 
 ## Layers
 
@@ -33,7 +33,7 @@ The goal of the first run (P5) is to compare with P4 of the
 | Shell | `vsm_step()` on the 10 ms flag at phase 9 (1 ms before the next `mc_tick`; phase 1 until P5), routes `VSM_DEFAULT_ROUTES` |
 | Motor controller | The only writer of motor and servo PWM. A latched stall stops the run (shell FAULT SAFETY) |
 
-Deviation from the [heartbeat ADR](../architecture/ADR_HEARTBEAT.md): the line sample and
+Deviation from the [heartbeat ADR](../../architecture/ADR_HEARTBEAT.md): the line sample and
 `lp_update()` run in the main loop on a 1 ms flag (as in `detour_test`),
 not in the interrupt. A late main loop is counted as missed frames.
 
@@ -44,7 +44,7 @@ not in the interrupt. A late main loop is counted as missed frames.
 | LINE | `steer_mm_update()` on the position ([mm/s steering](LINE_STEER_MM.md)); straight for 450 counts across a junction hold; side hint to the line detector when the turn (left − right counts since centred) is above 20; forward watch (`obstacle_update()`) on each new reading. `start()`: D, heading, watch and junction memory reset | LINE_LOST (payload: side), OBSTACLE (payload: mm), FAILED 1 (ultrasonic fault) |
 | SEARCH | Turn on the spot at 131 mm/s toward the last side (RIGHT: right first, else left) to 316 counts ((right − left) / 2), then the other way to 316 past the start | FOUND, FAILED 1 (not found) |
 
-Settings, mapped once through the [duty map](../s2-motion/DUTY_MAP.md):
+Settings, mapped once through the [duty map](../../s2-motion/DUTY_MAP.md):
 
 | Setting | `detour_test` (duty) | `vc_line_test` (mm/s) |
 | --- | --- | --- |
@@ -67,7 +67,7 @@ fault or 6 s per step stops it.
 
 ## Log
 
-The [steering Wi-Fi log](../archive/STEER_WIFI_LOG.md) every 50 ms, live and
+The [steering Wi-Fi log](../STEER_WIFI_LOG.md) every 50 ms, live and
 replayed after the run. Header flag bit 4 (`SL_FLAG_SPEED`): the two wheel
 fields are the asked speeds in 4 mm/s units; the receiver shows mm/s.
 Modes: FOLW, SRCH, STRT. The summary gives the stop reason, the shell

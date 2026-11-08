@@ -263,7 +263,7 @@ int main(void) {
     }
 
     /*
-     * Locked line tracing in mm/s (docs/s3-line-barcode/LINE_STEER_MM.md): base
+     * Locked line tracing in mm/s (docs/s3-line-barcode/LINE.md): base
      * 171, min 62,
      * max 378, gain 100, D 100, far gain 400 above 50. */
     {

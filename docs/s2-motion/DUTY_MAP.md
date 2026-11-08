@@ -4,7 +4,7 @@ Maps open-loop motor duty (%) to steady wheel speed (mm/s) on the floor,
 with the robot's weight on the wheels. Use: move the locked duty-based
 settings (line steering, detour) to wheel speeds for the
 [motor controller](MOTOR_CONTROLLER.md), one to one, so the first track
-run compares with run P4 ([two-sensor line tracing](../s3-line-barcode/TWO_SENSOR_LINE_TRACING.md)).
+run compares with run P4 ([two-sensor line tracing](../s3-line-barcode/LINE.md)).
 Branch: `yx-line-steer`.
 
 - Bench target: `duty_map_bench` ([`src/duty_map_bench.c`](../../src/duty_map_bench.c))

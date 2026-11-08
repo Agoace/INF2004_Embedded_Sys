@@ -284,7 +284,7 @@ button task. Read [the kernel robot safety/design record](docs/kernel/KERNEL_ROB
 and pass the lifted-wheel checks before floor work. R5 has not run.
 
 The barcode work is not started. The ideas for it are in
-[Barcode reading ideas](docs/s3-line-barcode/BARCODE_READING_IDEAS.md).
+[Barcode reading ideas](docs/s3-line-barcode/BARCODE.md).
 
 ## Local template changes
 

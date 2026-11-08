@@ -18,7 +18,7 @@ name so that the line detector does not change.
 | Step | Scope | Status |
 | --- | --- | --- |
 | a | Shell: route table, start and step of the running module, handoff in the same tick, safety stop, operator start/stop/reset | Done 2026-11-04: host-tested |
-| b | Line tracing module (wheel speeds in mm/s) | Done 2026-11-04: host-tested ([Vehicle Controller line run](../../s3-line-barcode/VC_LINE_RUN.md)); needs a track run (line tracing is locked) |
+| b | Line tracing module (wheel speeds in mm/s) | Done 2026-11-04: host-tested ([Vehicle Controller line run](../s3-line-barcode/VC_LINE_RUN.md)); needs a track run (line tracing is locked) |
 | c | Detour and scan modules | Done 2026-11-04: host-tested ([Vehicle Controller detour run](../../s5-obstacle/VC_DETOUR_RUN.md)); needs a track run |
 | d | Line search module | Done 2026-11-04: host-tested, same record |
 | e | Glue on the Pico: detectors on the heartbeat, `vsm_step()` on the 10 ms flag, drive command to `mcp_*` | First version 2026-11-04: `vc_line_test` (LINE and SEARCH only; line sample on a 1 ms main-loop flag) |

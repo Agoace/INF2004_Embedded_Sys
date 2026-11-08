@@ -3,14 +3,14 @@
 The locked two-sensor line steering
 ([two-sensor line tracing](TWO_SENSOR_LINE_TRACING.md), tag
 `line-tracing-2sensor-v1`) moved from motor duty to wheel speed, so the
-[motor controller](../s2-motion/MOTOR_CONTROLLER.md) holds the wheel speeds. Branch:
+[motor controller](../../s2-motion/MOTOR_CONTROLLER.md) holds the wheel speeds. Branch:
 `mtk3-line`; integration: `mtk3-staging`. Status: code and host tests done; used by [`vc_line_test`](VC_LINE_RUN.md); **not run on the track**.
 The lock rule applies: a track run and a new record are needed before
 this replaces the duty version.
 
-- Code: `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../../app_program/subsystem3/line_steer.h)
-- Host unit test: [`tests/test_line_steer.c`](../../tests/test_line_steer.c)
-- Speed values from the [duty map](../s2-motion/DUTY_MAP.md) (run DM1, floor)
+- Code: `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../../../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../../../app_program/subsystem3/line_steer.h)
+- Host unit test: [`tests/test_line_steer.c`](../../../tests/test_line_steer.c)
+- Speed values from the [duty map](../../s2-motion/DUTY_MAP.md) (run DM1, floor)
 
 ## Rule
 
@@ -21,7 +21,7 @@ Only the units and the trim differ.
 | --- | --- | --- |
 | Base, min, max | % duty | mm/s |
 | Gain, D, far gain | no unit (turn per position) | the same |
-| Trim | `right_trim_pct` | **none**: the motor controller makes the wheels match (hardware quirks stay in the controller, [ADR](../architecture/ADR_MOTOR_CONTROLLER.md)) |
+| Trim | `right_trim_pct` | **none**: the motor controller makes the wheels match (hardware quirks stay in the controller, [ADR](../../architecture/ADR_MOTOR_CONTROLLER.md)) |
 | Min | Duty at which a loaded wheel starts to turn (a motor limit) | **Steering setting**: the inner wheel slows to min, then stops. Kept so that the first track run compares with P4 |
 | Output | Steer word: 7 + 7 bits (duty %) | Steer mm word: 9 + 9 bits (0–511 mm/s), bits 18–31 spare |
 

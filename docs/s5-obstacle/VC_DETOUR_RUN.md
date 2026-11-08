@@ -4,7 +4,7 @@ Step (c) of the [Vehicle Controller state machine](../architecture/ARCHITECTURE.
 the obstacle scan and the obstacle detour as modules in the shell, wheel
 speeds through the [motor controller](../s2-motion/MOTOR_CONTROLLER.md). Branch:
 `yx-detour` (from `yx-line-steer`). Target: `vc_line_test` (the same
-target as the [Vehicle Controller line run](../s3-line-barcode/VC_LINE_RUN.md), now with all
+target as the [Vehicle Controller line run](../s3-line-barcode/LINE.md), now with all
 four modules).
 
 Status: built and host-tested on 2026-11-04; first track run R1 on 2026-11-05: **one detour done**, see [Run R1](#run-r1-2026-11-05-boot-a21a-run-1).

@@ -4,12 +4,12 @@ This record describes proportional line steering on the `yx-line_tracing`
 branch: the [normalised line position](LINE_POSITION.md) sets the left and
 right wheel duty.
 
-- Code: [`app_program/subsystem3/line_steer.c`](../../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../../app_program/subsystem3/line_steer.h)
-- Host unit test: [`tests/test_line_steer.c`](../../tests/test_line_steer.c)
-- Bench test: [`src/steer_test.c`](../../src/steer_test.c)
-- Shared bench parts: [`src/drive.c`](../../src/drive.c) (motors and encoders),
-  [`src/line_sensors.c`](../../src/line_sensors.c) (IR reads),
-  [`src/line_spin.c`](../../src/line_spin.c) (spin calibration)
+- Code: [`app_program/subsystem3/line_steer.c`](../../../app_program/subsystem3/line_steer.c), [`app_program/subsystem3/line_steer.h`](../../../app_program/subsystem3/line_steer.h)
+- Host unit test: [`tests/test_line_steer.c`](../../../tests/test_line_steer.c)
+- Bench test: [`src/steer_test.c`](../../../src/steer_test.c)
+- Shared bench parts: [`src/drive.c`](../../../src/drive.c) (motors and encoders),
+  [`src/line_sensors.c`](../../../src/line_sensors.c) (IR reads),
+  [`src/line_spin.c`](../../../src/line_spin.c) (spin calibration)
 
 ## How it works
 
@@ -26,7 +26,7 @@ duty  = min + wheel speed, or 0 if the wheel speed is 0 or less
 
 The correction is a share of the base speed, so it is the same ratio at
 any speed. Above the start duty our motors are close to linear
-([unloaded speed test](../s2-motion/CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)).
+([unloaded speed test](../../s2-motion/CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)).
 
 | Position | Meaning | Wheels L / R (base 20 %, gain 150 %, min 12 %, max 30 %) | Before (raw duty, gain 100 %) |
 | ---: | --- | --- | --- |
@@ -261,12 +261,12 @@ whole run.
 > there was no time limit, and GP20 then GP21 were pressed.
 
 This is a driving test, so use 5 V VIN with USB disconnected
-([USB power safety](../s2-motion/USB_POWER_SAFETY.md)). The run is logged every 50 ms
+([USB power safety](../../s2-motion/USB_POWER_SAFETY.md)). The run is logged every 50 ms
 (position, duties, raw readings, side and its source, hint, wheel counts)
 and saved to the last two flash sectors when the robot stops, so a restart
 does not lose it. Connect USB and open the serial port: the summary and
 log print once, then the summary repeats every 5 s. The same text and log
-also go over Wi-Fi ([steering Wi-Fi log](../archive/STEER_WIFI_LOG.md)).
+also go over Wi-Fi ([steering Wi-Fi log](../STEER_WIFI_LOG.md)).
 
 Procedure:
 
@@ -291,7 +291,7 @@ Base 25 %, max 50 %. The robot turned away from the line and lost it after
 The spin's first step turns left as coded, so the motor sides are correct.
 The operator confirmed that the sensor sides were swapped: GP26 is the
 robot's right sensor and GP28 its left. Fixed in
-[`src/line_sensors.c`](../../src/line_sensors.c). A second run also turned the
+[`src/line_sensors.c`](../../../src/line_sensors.c). A second run also turned the
 wrong way; its report was lost when the Pico restarted, so the run is now
 saved to flash.
 
