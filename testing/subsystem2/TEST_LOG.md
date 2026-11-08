@@ -66,7 +66,7 @@ The approved correction changes TEST only:
   maxima and late/missed counts around S0 printing, S1 burst, its yield and
   print, and S2 entry/exit. They are copied under the motion mutex without
   output. The one PROBE block and lifetime INFO print only after the window.
-  See [expected format](../../docs/kernel/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only).
+  See [expected format](../../docs/archive/kernel/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only).
 
 **New-image hardware status: PASS 2026-11-06** (see the S2-U01 row). Record both boots and the exact
 revision before changing this row. If demotion removes the startup delay,
@@ -97,7 +97,7 @@ Lift both wheels before TEST power. Keep USB connected for this check.
 The elapsed value is the last live CPU observation before reset, not a
 hardware-latched reset timestamp. Use a scope/independent timer to verify
 strict reset/physical stop latency. Debug halt pauses the watchdog; do not
-halt during the test. See [watchdog design](../../docs/kernel/KERNEL_WATCHDOG.md).
+halt during the test. See [watchdog design](../../docs/kernel/KERNEL.md).
 Failure to initialize the motion clock or start the task/cyclic prevents
 watchdog startup and driving; S2-U05 reports that it is not armed.
 

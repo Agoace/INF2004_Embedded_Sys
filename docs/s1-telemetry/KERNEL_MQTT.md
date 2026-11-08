@@ -9,7 +9,7 @@ and retain, with retry and reconnect publication. The vehicle's pure
 `run_stats` observer never returns commands or alters module inputs.
 
 Heartbeat v2 adds total core-0 CPU load from the calibrated lowest-priority
-meter; see [method and unmeasured target limits](../kernel/CPU_LOAD.md). A retained
+meter; see [method and unmeasured target limits](../kernel/KERNEL.md). A retained
 ONLINE/OFFLINE last will uses a 5-second keepalive; recent state is still
 required to establish that a robot is online. Barcode/IMU/JUNCTION and scan
 stage are reserved contracts, not implemented sensors or navigation changes.
@@ -266,7 +266,7 @@ count; TEST and post-session USB lines show work/threshold/window details.
 A no-poll or stale-health interval is not a performance pass.
 
 Static sizes, strict ARM/SDK proofs and host tests are recorded in
-[Kernel robot](../kernel/KERNEL_ROBOT.md). Earlier-image [operator results](../archive/MTK3_STEP8_RECORD.md) include
+[Kernel robot](../kernel/KERNEL.md). Earlier-image [operator results](../archive/MTK3_STEP8_RECORD.md) include
 cold-power TIMER, timing, MQTT/reconnect, commands and basic M1/M2. They do not
 validate later boot/session/diagnostic or SCAN-retry changes. New-image
 hardware still needs its own acceptance. No push or flash is

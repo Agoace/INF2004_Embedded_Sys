@@ -39,7 +39,7 @@ robot builds; the development record also retains older CMake bench examples.
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
-| Development setup | [docs/kernel/DEVELOPMENT.md](kernel/DEVELOPMENT.md) |
+| Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
 | Calibration record | [docs/s2-motion/CALIBRATION_RESULTS.md](s2-motion/CALIBRATION_RESULTS.md) |
 | Motor rotation drift record | [docs/s2-motion/MOTOR_ROTATION_DRIFT.md](s2-motion/MOTOR_ROTATION_DRIFT.md) |
 | Interrupt and polling conventions | [docs/architecture/INTERRUPT_CONVENTIONS.md](architecture/INTERRUPT_CONVENTIONS.md) |
@@ -157,7 +157,7 @@ are in [`host-tests/`](../host-tests); run all host tests with
 kernel task. Staging now connects LINE/SEARCH/SCAN/DETOUR through the
 vehicle task described below.
 
-- [Course template layout checks](kernel/MTK3_LAYOUT_CHECKS.md)
+- [Course template layout checks](archive/kernel/MTK3_LAYOUT_CHECKS.md)
 
 ## Kernel platform
 
@@ -186,7 +186,7 @@ vehicle task described below.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
 
-- [μT-Kernel motion bring-up checks](kernel/MTK3_MOTION_CHECKS.md) — candidate revisions, SDK link proof, sizes, IRQ priority and hardware checks still not run.
+- [μT-Kernel motion bring-up checks](archive/kernel/MTK3_MOTION_CHECKS.md) — candidate revisions, SDK link proof, sizes, IRQ priority and hardware checks still not run.
 
 ## Kernel line acquisition
 
@@ -218,19 +218,19 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
-- [Kernel robot design](kernel/KERNEL_ROBOT.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits and revision-scoped validation.
+- [Kernel robot design](kernel/KERNEL.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits and revision-scoped validation.
 - [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
 
 - [`app_program/platform/drv_watchdog.c`](../app_program/platform/drv_watchdog.c) and [`drv_watchdog_hw.c`](../app_program/platform/drv_watchdog_hw.c) — kernel startup/feed guard and SDK-only hardware/reset snapshot.
 - [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
-- [Kernel hardware watchdog](kernel/KERNEL_WATCHDOG.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.
+- [Kernel hardware watchdog](kernel/KERNEL.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.
 
 ## Application task stacks
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
-- [Application task stacks](kernel/APPLICATION_TASKS.md) — sizes, ownership and measurement limits.
+- [Application task stacks](kernel/KERNEL.md) — sizes, ownership and measurement limits.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
@@ -247,7 +247,7 @@ vehicle task described below.
 
 ## STEP 8 MQTT navigation
 
-- [USB console priority](kernel/MTK3_USB_PRIORITY.md) — template USB task 21, below driving and Wi-Fi; order check [`test_task_priorities.py`](../tests/test_task_priorities.py).
+- [USB console priority](kernel/KERNEL.md) — template USB task 21, below driving and Wi-Fi; order check [`test_task_priorities.py`](../tests/test_task_priorities.py).
 - [Timing investigation](archive/MOTION_TIMING_INVESTIGATION.md) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](archive/MTK3_STEP8_RECORD.md) remain tied to the tested earlier image.
 
 - [`boot_id.c`](../app_program/platform/boot_id.c), [`boot_id_hw.c`](../app_program/platform/boot_id_hw.c), and [`boot_entropy.c`](../app_program/platform/boot_entropy.c) — bounded ROSC per-boot observation label and pure bit extraction; [`test_boot_id.c`](../tests/test_boot_id.c). Binary two-boot fixtures: [`mqtt_boot_fixtures.h`](../tests/mqtt_boot_fixtures.h).
@@ -256,7 +256,7 @@ vehicle task described below.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
-- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load record](kernel/CPU_LOAD.md).
+- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load record](kernel/KERNEL.md).
 
 - [Design](s1-telemetry/KERNEL_MQTT.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/MQTT_RUNBOOK.md).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.

@@ -1,7 +1,7 @@
 # Course template layout checks
 
 This is the layout-only record at `2117122`. Later motion bring-up removes
-the demo and connects the motor task. See [Motor controller](../s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer) for the current layer and its not-run hardware tests.
+the demo and connects the motor task. See [Motor controller](../../s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer) for the current layer and its not-run hardware tests.
 
 ## Scope
 

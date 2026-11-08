@@ -346,7 +346,7 @@ reset level 0; GPIO is below USB and above SysTick/PendSV level 3.
 ### Bench and tests
 
 The bench task has priority 11 on core 0 and now requires `BENCH=1`.
-The default normal image selects the [kernel robot program](../kernel/KERNEL_ROBOT.md)
+The default normal image selects the [kernel robot program](../kernel/KERNEL.md)
 instead; only one task owns the buttons and tick notification slot. GP21 arms a run after 1 s;
 press again to ESTOP. GP20 prints the saved log. Buttons use pull-ups,
 active low, polled every 20 ms. The B3 step list is unchanged and the RAM
@@ -380,7 +380,7 @@ do not measure hardware timing or physical safety.
 
 ### Hardware watchdog
 
-The [watchdog record](../kernel/KERNEL_WATCHDOG.md) defines the motion-only 100 ms
+The [watchdog record](../kernel/KERNEL.md) defines the motion-only 100 ms
 hardware watchdog, startup prerequisites, reset classification and pending
 S2-U05 two-boot test. It supplements the stale-command stop. A failed
 motion initialization does not start it; motor PWM remains zero.

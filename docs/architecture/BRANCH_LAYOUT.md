@@ -177,7 +177,7 @@ The staging-only integration is `app_program/vehicle/vehicle_task.c` plus
 the reference-extracted settings and fixed RAM log/decoder. A normal build
 runs the robot; `BENCH=1` selects only the S2 bench, and `TEST=1` selects
 subsystem checks with neither button task. Selection changes the image
-name and stale-object profile. See [Kernel robot program](../kernel/KERNEL_ROBOT.md)
+name and stale-object profile. See [Kernel robot program](../kernel/KERNEL.md)
 for rates, ADC ownership, known phase/watchdog differences and R5 status.
 
 ## STEP 7 task split
@@ -188,7 +188,7 @@ sonar requests/results. New `mtk3-telemetry`, created from `mtk3`, owns S1
 RAM logging and dump transport. Staging alone rewires the robot consumer.
 Use fresh worktrees, commit in the owning branch, then merge `--no-ff`
 into the candidate; never rebase or merge another student's reference
-branch. [Kernel robot](../kernel/KERNEL_ROBOT.md) has the task/object and plan-vs-port
+branch. [Kernel robot](../kernel/KERNEL.md) has the task/object and plan-vs-port
 tables. No MQTT or barcode algorithm is added in this step.
 
 ## STEP 8 MQTT and shared template changes

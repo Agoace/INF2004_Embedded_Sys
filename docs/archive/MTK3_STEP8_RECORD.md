@@ -139,7 +139,7 @@ interrupts-disabled boot calibration and its lowest-priority task. Symbol
 inspection confirms one `idle_meter_loop`. It replaces WFI sleep, increases
 power use, and measures core 0 only. With SMP=0, that includes Wi-Fi and
 interrupt time. Target accuracy and idle-board expected range remain
-**not established**; [CPU record](../kernel/CPU_LOAD.md) gives the procedure.
+**not established**; [CPU record](kernel/CPU_LOAD.md) gives the procedure.
 
 ## Remaining hardware acceptance
 

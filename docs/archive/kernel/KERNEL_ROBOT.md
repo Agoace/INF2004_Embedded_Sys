@@ -6,15 +6,15 @@ STEP 7 separates acquisition, navigation and telemetry into core-0 tasks.
 STEP 8 adds optional, non-critical MQTT telemetry through the existing
 Wi-Fi/lwIP task. Its new hardware checks are **Not run**; STEP 7 passes
 below do not validate the new startup, boards or network load. See
-[MQTT design](../s1-telemetry/KERNEL_MQTT.md), [runbook](../s1-telemetry/MQTT_RUNBOOK.md) and
-[template ledger](../architecture/TEMPLATE_CHANGES.md).
+[MQTT design](../../s1-telemetry/KERNEL_MQTT.md), [runbook](../../s1-telemetry/MQTT_RUNBOOK.md) and
+[template ledger](../../architecture/TEMPLATE_CHANGES.md).
 Pure LINE/SEARCH/SCAN/DETOUR modules, routes, motor tuning and
-[`vehicle_robot_config.h`](../../app_program/vehicle/vehicle_robot_config.h)
+[`vehicle_robot_config.h`](../../../app_program/vehicle/vehicle_robot_config.h)
 are unchanged. The configuration contract compares the reference block
-in [`src/vc_line_test.c`](../../src/vc_line_test.c) exactly (NULL becomes 0).
+in [`src/vc_line_test.c`](../../../src/vc_line_test.c) exactly (NULL becomes 0).
 Earlier watchdog-image S2-U05 and M1 passes do not validate this new image.
 The task-split hardware checks passed on 2026-11-06: TEST image 3f889a1,
-M1-S7 and M2-S7. See the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06). R5 (full track) is not run.
+M1-S7 and M2-S7. See the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06). R5 (full track) is not run.
 
 Lift both wheels before TEST power. S2-U02 briefly drives real motors;
 S2-U05 runs LAST and intentionally resets, then reports the previous reset
@@ -23,7 +23,7 @@ on the next boot without repeating it. Read the
 Normal GP21 starts spin calibration, waits 1 s, then drives for at most
 90 s. GP21 during calibration/run latches ESTOP. GP20 requests a saved RAM
 dump only while idle. Do not reset before saving. Use VIN without USB for
-track work; see [USB power safety](../s2-motion/USB_POWER_SAFETY.md).
+track work; see [USB power safety](../../s2-motion/USB_POWER_SAFETY.md).
 
 ## Selection and ownership
 
@@ -44,7 +44,7 @@ driving tasks 10–13 and above telemetry 30. The USB console is 21 (template
 3): a measured GP20 dump delayed motion dispatch by up to 4.5 ms at 3. The
 original template used Wi-Fi 4, below USB 3 but above its qualification task. Driving
 must not wait for network processing. Approved shared changes are recorded
-in [the template ledger](../architecture/TEMPLATE_CHANGES.md). Vehicle activation requires
+in [the template ledger](../../architecture/TEMPLATE_CHANGES.md). Vehicle activation requires
 an armed motion watchdog and successfully started line, sonar and telemetry
 services (including the sonar deadline cyclic). Failed startup is reported
 by the existing init/start CHECK path and does not permit a robot session.
@@ -92,7 +92,7 @@ sample or statistics copy; no cross-core synchronization is claimed.
 The ISR now averages eight conversions each on L/ADC1, C/ADC0 and barcode/
 ADC2 in that order, about 48 us of conversion time before software overhead.
 Actual duration must be measured. The GP28 wiring/bar constraints are in
-[Control architecture](../architecture/CONTROL_ARCHITECTURE.md); no barcode decoder or
+[Control architecture](../../architecture/CONTROL_ARCHITECTURE.md); no barcode decoder or
 Ziven files change. The template `adca` device stays unopened; ADC3/GP29 is
 never selected. CLK_ADC still uses the checked 48 MHz PLL_USB source.
 
@@ -128,7 +128,7 @@ wake overhead. Higher-priority preemption is included. It is instrumented
 processing wall cost, **not exact total CPU utilization**. ISR measurements
 exclude wrapper entry/exit and final counter stores. TIMER resolution is
 1 us; accumulated unsigned counters use window subtraction. Measured on
-2026-11-06: ISR max 114 us, 69–75 per-mille (see the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
+2026-11-06: ISR max 114 us, 69–75 per-mille (see the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 
 ## Ultrasonic request/result service
 
@@ -198,7 +198,7 @@ new multi-task health-vote watchdog. Debug halt deliberately pauses it.
 | Lower-priority telemetry, ~110 ms target | Message-driven priority30 owner drains when ready instead of waiting 110 ms; no MQTT/network calls |
 | Drive expiry and safety | Existing latest-value/stale-command/ESTOP path retained; no new drive mailbox/generation protocol |
 | Critical-task progress watchdog | Explicit approved motion-only feeding; stale command, line age and sonar deadlines stop bad sessions |
-| Timing/stack evidence | Instrumentation and host doubles implemented; ISR, processing and stack measured on 2026-11-06 (see the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)); physical stop latency not run |
+| Timing/stack evidence | Instrumentation and host doubles implemented; ISR, processing and stack measured on 2026-11-06 (see the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)); physical stop latency not run |
 
 ## KR1 rows and VE events
 
@@ -209,7 +209,7 @@ a producer failure/storage-full stops the active session, never blocks
 control. A BEGIN clears saved indices, not lifetime loss counts. GP20
 sends a DUMP command and diagnostic copy; priority30 owns formatting and
 paced USB output. No new run starts while a dump is queued/active. See
-[telemetry contract](../s1-telemetry/KERNEL_TELEMETRY.md).
+[telemetry contract](../../s1-telemetry/KERNEL_TELEMETRY.md).
 
 `KR index hex` keeps the exact 16-byte little-endian mask layout:
 
@@ -257,11 +257,11 @@ Accept only after calibration, full navigation, queue saturation and dump
 show at least 256 untouched bytes per active application stack. A pattern
 scan is not an overflow detector or proof of worst-case use.
 
-Repeat [M1/M2](../../testing/integration/KERNEL_ROBOT.md) on this new image;
+Repeat [M1/M2](../../../testing/integration/KERNEL_ROBOT.md) on this new image;
 repeat S0-U01, S2-U01/U02/U04/U05, S3-U01/U02/U03 and S5-U01/U02 first.
 Do not reuse old-image hardware passes. New task CPU cost, ISR duration,
 stack high-water, overloaded timing, physical STOP and sensor optics are
-**Not run** unless listed in the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
+**Not run** unless listed in the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
 
 ## Local STEP 7 software validation
 
@@ -312,14 +312,14 @@ RAM region before dynamic kernel/message-buffer/template-stack use. The
 At STEP 7, no pure module/configuration, `src/`, `sim/`, Ziven source or
 template/kernel/lib/device/include/config file changed. STEP 8 keeps pure
 references unchanged but permits listed shared template deviations; see
-[the current ledger](../architecture/TEMPLATE_CHANGES.md).
+[the current ledger](../../architecture/TEMPLATE_CHANGES.md).
 Bare-metal/simulator checks were therefore not repeated. Documentation,
 map links/anchors, diff whitespace, local secret checks and tracked-tree
 clean checks pass. Logs and retained probe/compiler evidence are under
 `/tmp/step7-results/`; generated firmware and other scratch worktrees are
 removed at completion. The candidate checkout is retained at `/tmp/mtk3t`.
 No push or flash was performed. Hardware timing, stack and M1/M2 results:
-see the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
+see the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06).
 
 ## FIX 1 and PROBE A (TEST only)
 
@@ -332,7 +332,7 @@ sonar240/2048 and telemetry416/4096 bytes. Instrumented S3 work was about
 1.3% of the elapsed window, max207 us/sample; ISR about7.5%, max114 us.
 These are earlier-image observations, not acceptance of this correction.
 The ignored source log is `build/mtk_logs/s7_test_20261106-215149.txt` in
-the main checkout. The [S2 record](../../testing/subsystem2/TEST_LOG.md#step-7-s2-u01-failure-and-approved-windowprobe-correction)
+the main checkout. The [S2 record](../../../testing/subsystem2/TEST_LOG.md#step-7-s2-u01-failure-and-approved-windowprobe-correction)
 has the analysis and current status.
 
 The earlier S2 check mixed a tick delta with lifetime gap/counter fields.
@@ -385,7 +385,7 @@ result. A prior late1 with zero window late/missed confirms it preceded the
 window. All-zero lifetime late counts are also valid if the lower TEST
 priority removes the delay. A PROBE capture failure prints `unavailable
 error <code>` rather than invented zeros. TIMER us is the raw wrapping
-32-bit timestamp. **Hardware: PASS on 2026-11-06** (see the [step 7 results](../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
+32-bit timestamp. **Hardware: PASS on 2026-11-06** (see the [step 7 results](../../../testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 
 ### FIX 1 local software checks
 
@@ -426,7 +426,7 @@ counters. Health31 publishes uptime/reset, losses, overruns, app-stack
 minimum and network status. One-attempt atomic-word reads never spin.
 Busy/unavailable reads count per board; retained values have fresh flags
 cleared and explicit saturated ages. History/events do not depend on a
-latest-board read. See [board details](../s1-telemetry/KERNEL_MQTT.md#pull-boards).
+latest-board read. See [board details](../../s1-telemetry/KERNEL_MQTT.md#pull-boards).
 
 Only vehicle pushes bounded rare events. Token-bearing commands queue to
 vehicle, never directly to motion. ESTOP has a dedicated queue slot and
@@ -453,7 +453,7 @@ health is not a performance pass. No picotool reset interface is added.
 
 New-image S0-U01 cold-power (including MQTT), S1-U04/U05/U06, S2-U01 with
 Wi-Fi20, full-load stack/timing, and independent M1/M2 with MQTT are
-**Not run**. Exact [wire layouts](../s1-telemetry/MQTT_WIRE.md) and [broker procedure](../s1-telemetry/MQTT_RUNBOOK.md)
+**Not run**. Exact [wire layouts](../../s1-telemetry/MQTT_WIRE.md) and [broker procedure](../../s1-telemetry/MQTT_RUNBOOK.md)
 are separate records. Final software results are recorded below.
 
-[STEP 8 software validation](../archive/MTK3_STEP8_RECORD.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.
+[STEP 8 software validation](../MTK3_STEP8_RECORD.md) supersedes the earlier build sizes for the current image. Hardware rows above remain historical or explicitly Not run.

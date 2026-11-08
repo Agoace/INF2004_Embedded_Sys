@@ -118,7 +118,7 @@ picotool load -f -v -x build/motor_rotation_drift.uf2
 ```
 
 The motor target must use VIN motor power and the USB cable must stay
-unconnected while the motors operate. See the [USB power safety procedure](../s2-motion/USB_POWER_SAFETY.md).
+unconnected while the motors operate. See the [USB power safety procedure](../../s2-motion/USB_POWER_SAFETY.md).
 
 ### Read-only dashboard
 
@@ -234,11 +234,11 @@ Read USB serial to record each pulse width. Stop moving toward an endpoint immed
 
 ## Motor encoder calibration
 
-> **Motor power warning:** Do not power the Robo Pico motors from the Raspberry Pi 400 USB ports. The Pi 400 has a shared 1.2 A USB peripheral limit. A motor test caused USB over-current and disconnected the external SSD. Follow the [USB power safety procedure](../s2-motion/USB_POWER_SAFETY.md) and use the regulated VIN supply.
+> **Motor power warning:** Do not power the Robo Pico motors from the Raspberry Pi 400 USB ports. The Pi 400 has a shared 1.2 A USB peripheral limit. A motor test caused USB over-current and disconnected the external SSD. Follow the [USB power safety procedure](../../s2-motion/USB_POWER_SAFETY.md) and use the regulated VIN supply.
 
 Lift the wheels before using this target. The current calibration runs a motor 1 repeatability test: tap GP20 to start ten forward/backward wheel-revolution cycles at 10% power. Each leg uses the GP16/GP17 encoder and a 2500-count stop threshold. The tool brakes between directions, prints each result, and reports cumulative signed drift. A five-second timeout limits each leg. GP21 is an emergency stop, and motor 2 stays disabled. The historical
 The shared value is now 2535 counts per revolution, as recorded in the
-[50-revolution measurement](../s2-motion/MOTOR_ROTATION_DRIFT.md).
+[50-revolution measurement](../../s2-motion/MOTOR_ROTATION_DRIFT.md).
 
 ```sh
 cmake --build build --target motor_encoder_calibration
@@ -278,7 +278,7 @@ value, a secondary 51-revolution check, and the measured jog resolution.
 The firmware does not print during the motor run by design. It stores the
 result in RAM and repeats it every two seconds while idle. Reconnect USB after
 the motor stops to read the saved result. Follow the bounded USB exception in
-the [USB power safety procedure](../s2-motion/USB_POWER_SAFETY.md); do not generalise it
+the [USB power safety procedure](../../s2-motion/USB_POWER_SAFETY.md); do not generalise it
 to multiple motors or higher duty.
 
 ### Minimum free-running duty
@@ -305,7 +305,7 @@ picotool load -f -v -x build/motor_speed_calibration.uf2
 
 Keep both wheels lifted. GP20 starts the test and GP21 stops it. Use VIN power because motor voltage changes the result and USB motor power can exceed the Pi 400 peripheral current limit.
 
-A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. This historical result is superseded; use the shared 2535 counts-per-revolution value in the [motor rotation drift record](../s2-motion/MOTOR_ROTATION_DRIFT.md).
+A 10-cycle motor 2 test at 10% power produced an average of 2532.9 counts in direction A and 2532.3 counts in direction B. The final signed drift was -6 counts, approximately -0.85°, and no visual wheel-position drift was observed. This historical result is superseded; use the shared 2535 counts-per-revolution value in the [motor rotation drift record](../../s2-motion/MOTOR_ROTATION_DRIFT.md).
 
 **Echo voltage:** The fitted module is an HC-SR04+. The front silkscreen reads HC-SR04, but the reverse side identifies HC-SR04+. Its Echo output follows its logic supply and is 3.3 V compatible, so no level conversion is fitted or needed. The Robo Pico specification limits digital inputs to 3.6 V; a classic HC-SR04 powered at 5 V Vcc can produce a 5 V Echo signal and requires a suitable voltage divider.
 

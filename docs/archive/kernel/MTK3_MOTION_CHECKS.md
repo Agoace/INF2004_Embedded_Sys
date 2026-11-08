@@ -98,8 +98,8 @@ and bench task. No kernel capacity/configuration value was changed.
 ## SDK link result and boundaries
 
 The exhaustive include/source list and repeat commands are in
-[Motor controller — SDK hardware subset](../s2-motion/MOTOR_CONTROLLER.md#sdk-hardware-subset)
-and [`build_make/app_sdk_hw.mk`](../../build_make/app_sdk_hw.mk).
+[Motor controller — SDK hardware subset](../../s2-motion/MOTOR_CONTROLLER.md#sdk-hardware-subset)
+and [`build_make/app_sdk_hw.mk`](../../../build_make/app_sdk_hw.mk).
 
 - PWM and resets: inline SDK functions, no .c library source required.
 - GPIO: SDK `gpio.c`; reuse the existing radio object when enabled.
@@ -137,7 +137,7 @@ not write its priority. GPIO is below USB, above SysTick/PendSV priority 3.
 Operator post-flash S2-U01/U02/U03 and B4-lifted functional checks passed;
 see the exact results and lifted-versus-floor limits in the S2 log.
 S0-U01 on the fixed image, S2-U04 and floor B4 remain **Not run**. Read
-[the S2 test log](../../testing/subsystem2/TEST_LOG.md) before any hardware
+[the S2 test log](../../../testing/subsystem2/TEST_LOG.md) before any hardware
 work: **lift both wheels before power with TEST=1**, which sends a real
 brief speed command. The normal bench needs GP21 to start after 1 s;
 GP21 again latches ESTOP, GP20 prints the saved run. Never reset before
@@ -182,7 +182,7 @@ hardware timing, electrical behaviour or the full RTOS vehicle plan.
 ## STEP 8 early kernel TIMER source
 
 This supersedes the old boot-order dependency, not its historical results.
-[Template changes](../architecture/TEMPLATE_CHANGES.md) now permit reviewed shared edits.
+[Template changes](../../architecture/TEMPLATE_CHANGES.md) now permit reviewed shared edits.
 `Reset_Handler` calls `knl_startup_hw` before data/BSS/kernel initialization;
 that function selects clk_ref/XOSC then performs bounded register-only
 WATCHDOG_TICK setup (12 cycles, ENABLE, RUNNING), before any device/task.

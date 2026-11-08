@@ -5,7 +5,7 @@ registered core-0 application tasks, using `TA_USERBUF`, static 8-byte
 aligned storage, and a 0xa5 fill pattern before `tk_cre_tsk()`. Failed create
 or start returns the error; failed start deletes the dormant task. No
 kernel source is needed for this helper; approved shared changes are in
-[the template ledger](../architecture/TEMPLATE_CHANGES.md). Startup runs on core 0 before the
+[the template ledger](../../architecture/TEMPLATE_CHANGES.md). Startup runs on core 0 before the
 application tasks can run, so no allocation lock is needed.
 
 | Task | Stack bytes |

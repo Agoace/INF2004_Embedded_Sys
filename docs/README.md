@@ -30,14 +30,8 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Kernel
 
-- [APPLICATION_TASKS.md](kernel/APPLICATION_TASKS.md) — static task stacks, ownership and high-water limits.
-- [CPU_LOAD.md](kernel/CPU_LOAD.md) — calibrated idle meter and measurement limits.
-- [DEVELOPMENT.md](kernel/DEVELOPMENT.md) — toolchain, flash and serial setup; older CMake bench examples are not the current robot build.
-- [KERNEL_ROBOT.md](kernel/KERNEL_ROBOT.md) — task/object design, sensor freshness, deadlines and revision-scoped validation.
-- [KERNEL_WATCHDOG.md](kernel/KERNEL_WATCHDOG.md) — motion-only feeding, reset classification and two-boot procedure.
-- [MTK3_LAYOUT_CHECKS.md](kernel/MTK3_LAYOUT_CHECKS.md) — course-template layout and early platform checks.
-- [MTK3_MOTION_CHECKS.md](kernel/MTK3_MOTION_CHECKS.md) — motion port, SDK link proof, image sizes and original hardware gates.
-- [MTK3_USB_PRIORITY.md](kernel/MTK3_USB_PRIORITY.md) — measured USB dispatch issue and priority 21 decision.
+- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
+- [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 
 ## S1 — Telemetry
 
@@ -94,6 +88,21 @@ not current acceptance reports. Local course originals are not public records.
 - [TELEMETRY_SCHEMA.md](archive/TELEMETRY_SCHEMA.md) — older instrument JSON contract; not the current MQTT wire format.
 - [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
 - [WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) — earlier UDP bench dashboard, replaced by the MQTT dashboard.
+
+### Kernel originals
+
+The full original records retain their prose, numbers and revision limits;
+only link/path/anchor repairs follow the move.
+
+- [APPLICATION_TASKS.md](archive/kernel/APPLICATION_TASKS.md) — full historical source, with its measured values and original limits.
+- [CPU_LOAD.md](archive/kernel/CPU_LOAD.md) — full historical source, with its measured values and original limits.
+- [DEVELOPMENT.md](archive/kernel/DEVELOPMENT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_ROBOT.md](archive/kernel/KERNEL_ROBOT.md) — full historical source, with its measured values and original limits.
+- [KERNEL_WATCHDOG.md](archive/kernel/KERNEL_WATCHDOG.md) — full historical source, with its measured values and original limits.
+- [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
+- [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
+- [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
+
 
 ## Original-template reference exceptions
 

@@ -52,7 +52,7 @@ scratch4 value from the newly started watchdog.
 
 ## S2-U05 two-boot TEST procedure
 
-This is a destructive reset test. Result 2026-11-06: **PASS**, reset after 99 ms (see the [S2 test log](../../testing/subsystem2/TEST_LOG.md)). It runs last, after S1..S5,
+This is a destructive reset test. Result 2026-11-06: **PASS**, reset after 99 ms (see the [S2 test log](../../../testing/subsystem2/TEST_LOG.md)). It runs last, after S1..S5,
 not inside the early S2 test sequence. Both wheels must be lifted.
 
 1. Cold-power a TEST image. Save earlier test output. S2-U05 stops the motors,

@@ -58,9 +58,9 @@ an accuracy bound.
 **Operator target observation, 2026-11-07:** idle 117 permille; heartbeat
 under traffic 139 permille; calibrated peak 4026729 iterations/s. These are
 observed values, not an independent absolute-accuracy proof or an approved
-acceptance range. See [hardware evidence](../archive/MTK3_STEP8_RECORD.md).
+acceptance range. See [hardware evidence](../MTK3_STEP8_RECORD.md).
 No device was flashed for the later boot/session diagnostic follow-up.
 
-See [wire contract](../s1-telemetry/MQTT_WIRE.md#heartbeat),
-[test rows](../../testing/subsystem1/TEST_LOG.md), and
+See [wire contract](../../s1-telemetry/MQTT_WIRE.md#heartbeat),
+[test rows](../../../testing/subsystem1/TEST_LOG.md), and
 [application stacks](APPLICATION_TASKS.md).
