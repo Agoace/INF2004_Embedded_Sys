@@ -2,6 +2,9 @@
 #include <setjmp.h>
 #include <tk/tkernel.h>
 #include "../app_program/subsystem3/line_service.h"
+#if APP_BARCODE_CAPTURE
+#include "../app_program/subsystem3/barcode_capture.h"
+#endif
 static FP entry;static jmp_buf end;static unsigned int sleeps;
 static bool available;static uint32_t clock_us;static uint16_t value=500u;
 static int held;static unsigned int listens;
@@ -33,6 +36,9 @@ int main(void) {
     assert(line_service_init()==E_OK && line_service_start()==E_OK && listens==1u && line_service_running());
     assert(line_service_start()==E_OBJ);
     assert(line_snapshot_read(&s,false)==E_OK && !s.valid);
+#if APP_BARCODE_CAPTURE
+    barcode_capture_begin();
+#endif
     assert(line_calibration_begin()==E_OK);
     for (unsigned int i=0u;i<16u;++i) sample(i%2u ? 3500u : 500u);
     assert(line_calibration_end()==LP_CALIB_OK);
@@ -49,6 +55,14 @@ int main(void) {
     assert(line_calibration_begin()==E_OK);sample(1234u);
     assert(line_calibration_abort()==E_OK);
     assert(line_snapshot_read(&s,false)==E_OK && lp_floor(&s.line,0u)==floor);
+#if APP_BARCODE_CAPTURE
+    barcode_capture_freeze();
+    size_t count;
+    const barcode_sample_t *rows = barcode_capture_rows(&count);
+    assert(count == 18u && rows[0].raw == 4095u);
+    assert(rows[count - 1u].raw == 4095u && rows[count - 1u].flags == 0u);
+    assert(barcode_capture_max_us() > 0u && !held);
+#endif
     assert(line_tracking_reset()==E_OK);
     assert(line_snapshot_read(&s,false)==E_OK && s.event==VC_EVENT_NONE && s.norm_peak==0u);
     return 0;

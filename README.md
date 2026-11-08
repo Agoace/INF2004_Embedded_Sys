@@ -285,8 +285,9 @@ and pass the lifted-wheel checks before floor work. R5 has not run.
 The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
 
-The barcode work is not started. The ideas for it are in
-[Barcode reading ideas](docs/s3-line-barcode/BARCODE.md).
+Barcode B1 has a pure Code 39 decoder and a TEST-only hand-push capture
+profile. It does not change robot routing; physical decode checks are Not
+run. See [Barcode B1](docs/s3-line-barcode/BARCODE.md).
 
 ## Local template changes
 

@@ -52,10 +52,29 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `DIAG` | 0; 1 adds fixed motion timing captures, printed at GP20 |
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
+| `BARCODE_CAPTURE` | 0; 1 selects TEST-only hand-push capture |
 
 For the TEST-only IMU, use USB console and `CRASH_REPORT=0` because GP0/GP1
 belong to I2C0. Follow [IMU operation](../s4-imu/IMU.md#continuous-operator-stream).
 It is not the full TEST suite or a navigation feature.
+
+### Barcode B1 hand-push image
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
+```
+
+The filename is `mtk3pico_smp0_usb_cdc_test_barcode_capture.uf2`. Use USB
+console and CRASH_REPORT=0 on the connected robot. This profile requires
+TEST=1, SMP=0, WIFI=none, NET=none and MQTT=0; BENCH and IMU_STREAM are
+rejected. It skips ordinary subsystem tests and the S2 powered steps.
+Initial duty is stopped; GP20 records floor/white/black ranges, then arms
+or freezes a 4096-sample analog capture. No GP21 barcode handling exists.
+The TEST runner decodes incrementally and dumps only after freeze. First
+physical pass is HAND PUSH STRAIGHT over the 2x F print. Read the
+[B1 procedure and RAM limits](../s3-line-barcode/BARCODE.md) before use.
+
+### Profile identity
 
 The profile marker prevents reuse of objects with different options. For a
 fully clean validation, use `make clean` with the same profile options,

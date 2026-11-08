@@ -15,7 +15,9 @@ INT tk_get_prc(void) { return 1; }
 ID app_task_start(FP entry,PRI pri,UW core,const char *name) {
     (void)entry;(void)pri;(void)core;(void)name;assert(0);return E_SYS;
 }
-#if APP_IMU_STREAM
+#if APP_BARCODE_CAPTURE
+#define EXPECT_SUBSYSTEM(n) assert(0 && "barcode must skip all other tests")
+#elif APP_IMU_STREAM
 #define EXPECT_SUBSYSTEM(n) assert(priority == 20 && n == 4 && tests == 0u)
 #else
 #define EXPECT_SUBSYSTEM(n) assert(priority == 20 && tests == n - 1u)
@@ -29,6 +31,9 @@ SUBSYSTEM(2)
 SUBSYSTEM(3)
 SUBSYSTEM(4)
 SUBSYSTEM(5)
+void barcode_test(void) {
+    assert(priority==20 && tests==0u);++tests;
+}
 int vehicle_task_start(void) { assert(priority==1 && starts==5u);return E_OK; }
 ER tk_chg_pri(ID id,PRI pri) {
     assert(APP_TEST && id==TSK_SELF && pri==20 && starts==5u && tests==0u);
@@ -46,7 +51,7 @@ int main(int argc,char **argv) {
 #if APP_TEST
     assert(priority_calls==1u);
     if (fail_priority) assert(priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==1u);
-#if APP_IMU_STREAM
+#if APP_IMU_STREAM || APP_BARCODE_CAPTURE
     else {
         assert(priority == 20 && tests == 1u && reports == 0u);
         assert(watchdog_tests == 0u && aborts == 0u);

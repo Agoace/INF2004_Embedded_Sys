@@ -25,6 +25,9 @@
 #include "app.h"
 #include "platform/drv_time.h"
 #include "vehicle/vehicle_task.h"
+#if APP_BARCODE_CAPTURE
+#include "subsystem3/barcode_test.h"
+#endif
 #include "platform/app_task.h"
 #if TM_MQTT
 #include "platform/idle_meter.h"
@@ -96,7 +99,10 @@ EXPORT INT usermain(void)
     CHECK(test_priority, "TEST runner priority 20");
     if (test_priority >= E_OK) {
         tm_printf((UB *)"[TEST] === test run start (runner priority 20) ===\n");
-#if APP_IMU_STREAM
+#if APP_BARCODE_CAPTURE
+        /* Exclusive hand-push capture: no driving or destructive tests. */
+        barcode_test();
+#elif APP_IMU_STREAM
         /* Operator-only S4 stream: no S2 command or destructive reset test. */
         subsystem4_test();
 #else
@@ -109,7 +115,7 @@ EXPORT INT usermain(void)
         /* Destructive reset check follows every other subsystem test. */
         subsystem2_watchdog_test();
         tm_printf((UB *)"[TEST] === test run end ===\n");
-#endif /* APP_IMU_STREAM */
+#endif /* exclusive capture / IMU stream / ordinary TEST */
     } else {
         tm_printf((UB *)"[TEST] ABORT: cannot set runner priority 20; tests "
                         "not run\n");

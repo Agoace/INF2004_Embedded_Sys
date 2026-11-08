@@ -1,6 +1,10 @@
 /*
  * line_service.c - application telemetry and service interface.
  */
+#if APP_BARCODE_CAPTURE
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
+#endif
 #include "subsystem3.h"
 
 /* Task timing and resource limits. */
@@ -8,6 +12,9 @@
 #define LINE_TASK_PRIORITY 11
 
 #include "line_service.h"
+#if APP_BARCODE_CAPTURE
+#include "barcode_capture.h"
+#endif
 #include "../platform/drv_time.h"
 static ID mutex;
 static ID task_id;
@@ -95,6 +102,13 @@ static void line_task(INT code, void *ctx)
                 snapshot.sample_max_us = cost;
             }
             (void)tk_unl_mtx(mutex);
+#if APP_BARCODE_CAPTURE
+            /* Bounded TEST-only copy, never a second acquisition consumer.
+             * No decoder, print or motion lock in this priority-11 path. */
+            const uint32_t capture_start = drv_time_us();
+            barcode_capture_observe(sample.us, sample.raw[2]);
+            barcode_capture_cost(drv_time_us() - capture_start);
+#endif
         }
     }
 }
