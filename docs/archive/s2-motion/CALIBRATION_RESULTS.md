@@ -12,12 +12,12 @@ Last updated: 2026-10-30
 
 | Value | Result | Source |
 | --- | --- | --- |
-| Track (wheel contact to wheel contact) | 111 mm | Operator, 2026-10-30; [bypass steering](../archive/OBSTACLE_BYPASS.md#steering) |
-| Servo axis to rear axle | 65 mm | Operator, 2026-10-30; [bypass steering](../archive/OBSTACLE_BYPASS.md#steering) |
-| Wheel diameter | 65 mm | Operator, 2026-10-30; [bypass steering](../archive/OBSTACLE_BYPASS.md#steering) |
-| Width (widest point) | 160 mm | Operator, 2026-10-30; [bypass steering](../archive/OBSTACLE_BYPASS.md#steering). Includes the barcode reader mount on the left side (operator, 2026-10-30 follow-up) |
-| Overall length | 190 mm | Operator, 2026-10-30; [bypass steering](../archive/OBSTACLE_BYPASS.md#steering) |
-| Sensor face to robot front | About 58 mm | [Ultrasonic run 7](../s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset): echo mean 57.9 mm, not a ruler measurement; the short-range echo read about 11 mm high |
+| Track (wheel contact to wheel contact) | 111 mm | Operator, 2026-10-30; [bypass steering](../OBSTACLE_BYPASS.md#steering) |
+| Servo axis to rear axle | 65 mm | Operator, 2026-10-30; [bypass steering](../OBSTACLE_BYPASS.md#steering) |
+| Wheel diameter | 65 mm | Operator, 2026-10-30; [bypass steering](../OBSTACLE_BYPASS.md#steering) |
+| Width (widest point) | 160 mm | Operator, 2026-10-30; [bypass steering](../OBSTACLE_BYPASS.md#steering). Includes the barcode reader mount on the left side (operator, 2026-10-30 follow-up) |
+| Overall length | 190 mm | Operator, 2026-10-30; [bypass steering](../OBSTACLE_BYPASS.md#steering) |
+| Sensor face to robot front | About 58 mm | [Ultrasonic run 7](../../s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset): echo mean 57.9 mm, not a ruler measurement; the short-range echo read about 11 mm high |
 | Line sensor position | At the very front of the robot | Operator statement, 2026-10-30 session follow-up |
 | Rear axle to line sensors | 123 mm = 65 + 58 mm | Calculated from the offsets and the line sensor position above; used as `line_ahead_mm` since v1.5 |
 | Front-corner circle (rear axle centre to front corner) | 146.7 mm = sqrt(123² + 80²) mm | Calculated from the front offset and half the width above; the detour code uses `sweep_mm` 150 |
@@ -99,7 +99,7 @@ The scan confirms power, ground, SDA, SCL, and I²C communication. The DRDY line
 - A changing-target test is still useful to confirm the sensor response range.
 - 2026-10-27, `line_test` spin calibration on the track: the line reads
   higher than the floor. Floor and line values differ by sensor: L 191/3424,
-  C 185/2615, R 202/1645. See [Normalised line position](../s3-line-barcode/LINE_POSITION.md#bench-test).
+  C 185/2615, R 202/1645. See [Normalised line position](../../s3-line-barcode/LINE_POSITION.md#bench-test).
   These labels follow `ir_module_pins.h`. The robot's own left sensor is
   GP28 and its right sensor is GP26, so "L" here is the physical right.
 
@@ -128,7 +128,7 @@ The behavior test confirmed a positional servo, not a continuous-rotation servo.
   right and above 1500 µs turns it left, seen from behind. The mount touches
   the robot at about 1040 µs (41° right) and 1960 µs (41° left). The scan
   uses ±30°; `src/servo.c` clamps to 1100–1900 µs. See
-  [Servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits).
+  [Servo obstacle scan](../../s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits).
 
 A simple angle mapping is:
 

@@ -23,7 +23,7 @@ Check `arm-none-eabi-gcc --version` and the SDK path before building. The
 current SDK source/header list is in
 [app_sdk_hw.mk](../../build_make/app_sdk_hw.mk); do not add SDK startup,
 IRQ registration, time initialization or a second runtime. See
-[SDK hardware subset](../s2-motion/DUTY_MAP.md).
+[SDK hardware subset](../s2-motion/MOTION.md#sdk-hardware-subset).
 
 ## Build profiles
 
@@ -84,7 +84,7 @@ The image name includes its options:
 Use the tracked `.example` headers as shapes, not credentials. In a fresh
 worktree, copy private settings privately and apply `chmod 600`; do not
 print or commit their values. The broker default `0.0.0.0` builds but does
-not connect. [OPERATION.md](../s1-telemetry/OPERATION.md)
+not connect. [OPERATION.md](../s1-telemetry/OPERATION.md#private-settings)
 has first-time token setup. UF2/ELF files embed credentials; do not publish
 them or attach them to public evidence. Do not replace existing secrets.
 

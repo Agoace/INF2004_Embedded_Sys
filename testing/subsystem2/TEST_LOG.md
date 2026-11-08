@@ -157,7 +157,7 @@ Application initialization now sets 12 cycles, waits for RUNNING, and
 checks the TIMER/kernel ratio before enabling motion. The fixed image
 passed S0-U01 after a cold power-on. Test every kernel image after a cold
 power-on, not only after a flash. See the
-[motor record](../../docs/s2-motion/MOTOR_CONTROLLER.md#cold-power-timer-source).
+[motor record](../../docs/archive/s2-motion/MOTOR_CONTROLLER.md#cold-power-timer-source).
 
 ### B4: floor, cold VIN power-on
 
@@ -205,7 +205,7 @@ Assessment, agreed with the operator on 2026-11-06:
 Source: saved B3 console summary `build/steer_logs/text_ede2.txt`, boot
 `ede2`, 2026-11-04, floor, VIN. This ignored local log is not committed.
 Only its measured values are copied here. The design record is
-[Motor controller](../../docs/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin).
+[Motor controller](../../docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin).
 The numeric heading below uses the exact console cdeg, not the rounded
 values in the design table. Compare `abs(B4 - B3) <= 0.05 * abs(B3)` for
 each nonzero mean speed, including the slow spin steps.

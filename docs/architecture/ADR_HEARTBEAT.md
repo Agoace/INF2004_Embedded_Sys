@@ -4,7 +4,7 @@
 | --- | --- |
 | Status | Accepted, 2026-11-04 (operator: option B); revised 2026-11-04: owner is a separate platform module (decision 7) |
 | Scope | Timing of all modules on core 0 |
-| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [motor controller](../s2-motion/MOTOR_CONTROLLER.md), [interrupt conventions](INTERRUPT_CONVENTIONS.md), [control architecture](CONTROL_ARCHITECTURE.md) |
+| Related | [ADR: motor controller](ADR_MOTOR_CONTROLLER.md), [motor controller](../s2-motion/MOTION.md), [interrupt conventions](INTERRUPT_CONVENTIONS.md), [control architecture](CONTROL_ARCHITECTURE.md) |
 
 ## Context
 

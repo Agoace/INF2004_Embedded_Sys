@@ -392,7 +392,7 @@ pico_enable_stdio_uart(heartbeat_test 0)
 pico_add_extra_outputs(heartbeat_test)
 
 # Motor controller (core + Pico layer) with the heartbeat, for any target
-# that drives the robot through the motor controller (docs/s2-motion/MOTOR_CONTROLLER.md).
+# that drives the robot through the motor controller (docs/s2-motion/MOTION.md).
 add_library(motor_ctl_pico STATIC
     app_program/subsystem2/motor_ctl.c
     src/motor_ctl_pico.c

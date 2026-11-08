@@ -183,7 +183,7 @@ heading turns left. Record units explicitly. The viewer may show degrees.
 
 ### Geometry
 
-Use the main [robot geometry record](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry):
+Use the main [robot geometry record](../archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry):
 
 | Model value | Source and qualification |
 | --- | --- |
@@ -277,7 +277,7 @@ measure the actual board layout.
 ### Motors, counts, and coast
 
 Use separate left and right speed curves. The initial reference is the
-[5 V VIN unloaded speed table](../s2-motion/CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin):
+[5 V VIN unloaded speed table](../s2-motion/HARDWARE.md#unloaded-motor-speed-at-5-v-vin):
 
 | Duty % | Left RPM (motor 1) | Right RPM (motor 2) |
 | ---: | ---: | ---: |
@@ -297,7 +297,7 @@ and check them mechanically. The record's historical RPM used 2540 counts
 for motor 1 and 2539 for motor 2. Apply its correction factors 2540/2535 and
 2539/2535 once. Keep that correction in model metadata.
 
-The [minimum unloaded duty record](../s2-motion/CALIBRATION_RESULTS.md#minimum-unloaded-motor-duty)
+The [minimum unloaded duty record](../archive/s2-motion/CALIBRATION_RESULTS.md#minimum-unloaded-motor-duty)
 reports VIN movement at 6 % left and 7 % right; it recommends 8 % common
 minimum and a 10 % start kick. The [loaded steering record](../s3-line-barcode/LINE_STEERING.md#how-it-works)
 uses about 12 % as the loaded start threshold. Do not implement a start
@@ -310,7 +310,7 @@ points; clamp duties to ±100. Reverse uses the same magnitude initially,
 which is another unmeasured assumption.
 
 Wheel speed = corrected RPM × 204.204 / 60 mm/s. Use 2535 counts per wheel
-turn, from [shared encoder calibration](../s2-motion/CALIBRATION_RESULTS.md#current-shared-calibration)
+turn, from [shared encoder calibration](../archive/s2-motion/CALIBRATION_RESULTS.md#current-shared-calibration)
 and the firmware wheel circumference in
 [`obstacle_detour.h`](../../app_program/subsystem5/obstacle_detour.h). Accumulate fractional counts
 and publish signed integer counts, forward positive on both sides.
@@ -319,7 +319,7 @@ Integrate differential drive: centre speed = (vL + vR)/2; turn rate =
 
 Use a configurable first-order speed response for acceleration and coast;
 a zero command must not force speed instantly to zero. The
-[coast measurements](../s2-motion/MOTOR_ROTATION_DRIFT.md#coast-and-jog-measurements) give
+[coast measurements](../archive/s2-motion/MOTOR_ROTATION_DRIFT.md#coast-and-jog-measurements) give
 27–28 counts left and 23 right at 10 % duty, wheels lifted, USB supply.
 They are not loaded coast values. Set response times from explicit scenario
 parameters; fit an unloaded reference profile to those distances, and sweep
@@ -391,7 +391,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
 
 - Keep `servo_set_pulse_us` return/clamp behaviour: 1100–1900 µs, centre
   1500 µs, positive angle left. Use angle = (pulse − 1500) × 90/1000 degrees
-  ([servo record](../s2-motion/CALIBRATION_RESULTS.md#servo), `servo.h`).
+  ([servo record](../archive/s2-motion/CALIBRATION_RESULTS.md#servo), `servo.h`).
 - Initially move to the commanded angle without a separate mechanical
   delay. Real scan/detour settle waits remain in the firmware. A configurable
   slew model can follow later; no measured slew rate is available here.

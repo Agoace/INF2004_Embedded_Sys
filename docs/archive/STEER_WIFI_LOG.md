@@ -13,7 +13,7 @@ backup.
 
 The track is away from the PC. A run that ends with a power cut saves no
 flash log, and USB must stay disconnected while the motors run
-([USB power safety](../s2-motion/USB_POWER_SAFETY.md)).
+([USB power safety](s2-motion/USB_POWER_SAFETY.md)).
 
 ## Network
 

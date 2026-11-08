@@ -41,12 +41,8 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S2 — Motion
 
-- [CALIBRATION_RESULTS.md](s2-motion/CALIBRATION_RESULTS.md) — confirmed wiring, geometry, sensors, servo limits and motor calibration.
-- [DUTY_MAP.md](s2-motion/DUTY_MAP.md) — loaded floor mapping from duty to wheel speed.
-- [HEARTBEAT.md](s2-motion/HEARTBEAT.md) — original bare-metal time-base implementation and bench tests.
-- [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md) — controller interface, robot settings, kernel layer and approved SDK subset.
-- [MOTOR_ROTATION_DRIFT.md](s2-motion/MOTOR_ROTATION_DRIFT.md) — 50-revolution encoder measurements and alignment evidence.
-- [USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md) — shared USB current limit, motor-test procedure and bounded exception.
+- [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
+- [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
 
 ## S3 — Line and barcode
 
@@ -101,7 +97,6 @@ only link/path/anchor repairs follow the move.
 - [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
 - [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
 
-
 ### S1 originals
 
 - [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
@@ -109,6 +104,14 @@ only link/path/anchor repairs follow the move.
 - [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
 - [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
 
+### S2 originals
+
+- [CALIBRATION_RESULTS.md](archive/s2-motion/CALIBRATION_RESULTS.md) — full historical source, with its measured values and original limits.
+- [DUTY_MAP.md](archive/s2-motion/DUTY_MAP.md) — full historical source, with its measured values and original limits.
+- [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md) — full historical source, with its measured values and original limits.
+- [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md) — full historical source, with its measured values and original limits.
+- [MOTOR_ROTATION_DRIFT.md](archive/s2-motion/MOTOR_ROTATION_DRIFT.md) — full historical source, with its measured values and original limits.
+- [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; retained evidence, not a current procedure.
 
 ## Original-template reference exceptions
 

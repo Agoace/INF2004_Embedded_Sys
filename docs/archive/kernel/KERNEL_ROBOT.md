@@ -23,7 +23,7 @@ on the next boot without repeating it. Read the
 Normal GP21 starts spin calibration, waits 1 s, then drives for at most
 90 s. GP21 during calibration/run latches ESTOP. GP20 requests a saved RAM
 dump only while idle. Do not reset before saving. Use VIN without USB for
-track work; see [USB power safety](../../s2-motion/USB_POWER_SAFETY.md).
+track work; see [USB power safety](../s2-motion/USB_POWER_SAFETY.md).
 
 ## Selection and ownership
 

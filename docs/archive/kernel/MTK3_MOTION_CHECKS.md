@@ -98,7 +98,7 @@ and bench task. No kernel capacity/configuration value was changed.
 ## SDK link result and boundaries
 
 The exhaustive include/source list and repeat commands are in
-[Motor controller — SDK hardware subset](../../s2-motion/MOTOR_CONTROLLER.md#sdk-hardware-subset)
+[Motor controller — SDK hardware subset](../s2-motion/MOTOR_CONTROLLER.md#sdk-hardware-subset)
 and [`build_make/app_sdk_hw.mk`](../../../build_make/app_sdk_hw.mk).
 
 - PWM and resets: inline SDK functions, no .c library source required.

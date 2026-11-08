@@ -22,7 +22,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [architecture/](architecture/) | Shared contracts, decisions, CR1 interpretation and branch layout. |
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
-| [s2-motion/](s2-motion/) | Motor control, calibration and USB power safety. |
+| [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
 | [s3-line-barcode/](s3-line-barcode/) | Line position, steering, barcode ideas and line-run evidence. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
 | [s5-obstacle/](s5-obstacle/) | Ultrasonic sensing, scanning and detour evidence. |
@@ -31,7 +31,8 @@ record once. Use these topic directories before choosing a source entry below:
 
 The detailed entries below retain source and test navigation. Archive links do
 not imply current hardware acceptance. Follow the root README for current
-robot builds; the development record also retains older CMake bench examples.
+robot orientation; [kernel/BUILD.md](kernel/BUILD.md) is the current Make guide.
+The archived development record retains older CMake bench examples.
 
 | Content | Location |
 | --- | --- |
@@ -40,10 +41,10 @@ robot builds; the development record also retains older CMake bench examples.
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
-| Calibration record | [docs/s2-motion/CALIBRATION_RESULTS.md](s2-motion/CALIBRATION_RESULTS.md) |
-| Motor rotation drift record | [docs/s2-motion/MOTOR_ROTATION_DRIFT.md](s2-motion/MOTOR_ROTATION_DRIFT.md) |
+| Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
+| Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Interrupt and polling conventions | [docs/architecture/INTERRUPT_CONVENTIONS.md](architecture/INTERRUPT_CONVENTIONS.md) |
-| USB power safety | [docs/s2-motion/USB_POWER_SAFETY.md](s2-motion/USB_POWER_SAFETY.md) |
+| Obsolete USB power safety (archive only) | [docs/archive/s2-motion/USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) |
 | Archived UDP bench dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/OPERATION.md](s1-telemetry/OPERATION.md) |
 | Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
@@ -63,9 +64,9 @@ robot builds; the development record also retains older CMake bench examples.
 | Vehicle Controller line run | [docs/s3-line-barcode/VC_LINE_RUN.md](s3-line-barcode/VC_LINE_RUN.md) — modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
 | Vehicle Controller detour run (physical detour completed; see revision-specific results) | [docs/s5-obstacle/VC_DETOUR_RUN.md](s5-obstacle/VC_DETOUR_RUN.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
 | Line steering in mm/s | [docs/s3-line-barcode/LINE_STEER_MM.md](s3-line-barcode/LINE_STEER_MM.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
-| Duty map record | [docs/s2-motion/DUTY_MAP.md](s2-motion/DUTY_MAP.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
-| Heartbeat record | [docs/s2-motion/HEARTBEAT.md](s2-motion/HEARTBEAT.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
-| Motor controller record | [docs/s2-motion/MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
+| Duty map record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md) — bench [`src/duty_map_bench.c`](../src/duty_map_bench.c) |
+| Heartbeat record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md) — core [`src/heartbeat.c`](../src/heartbeat.c), Pico layer [`src/heartbeat_pico.c`](../src/heartbeat_pico.c), bench [`src/heartbeat_test.c`](../src/heartbeat_test.c), test [`tests/test_heartbeat.c`](../tests/test_heartbeat.c) |
+| Motor controller record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md) — core [`app_program/subsystem2/motor_ctl.c`](../app_program/subsystem2/motor_ctl.c), Pico layer [`src/motor_ctl_pico.c`](../src/motor_ctl_pico.c), floor bench [`src/motor_ctl_bench.c`](../src/motor_ctl_bench.c), settings [`app_program/subsystem2/motor_ctl_robot.h`](../app_program/subsystem2/motor_ctl_robot.h), test [`tests/test_motor_ctl.c`](../tests/test_motor_ctl.c) |
 | Superseded preliminary Vehicle Controller record | [docs/archive/VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) |
 | Two-sensor line tracing (locked design) | [docs/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md](s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) |
 | Normalised line position record | [docs/s3-line-barcode/LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md) |
@@ -104,7 +105,7 @@ robot builds; the development record also retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](s2-motion/MOTION.md#limits-tests-and-full-evidence), [HEARTBEAT.md](s2-motion/MOTION.md#limits-tests-and-full-evidence), [VEHICLE_STATE_MACHINE.md](architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | IR line detection and barcode reader | [`src/robocar_ir_sensors.c`](../src/robocar_ir_sensors.c), [`src/line_detector.c`](../src/line_detector.c), [`src/barcode_reader.c`](../src/barcode_reader.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
@@ -182,11 +183,11 @@ vehicle task described below.
 
 - [`build_make/app_sdk_hw.mk`](../build_make/app_sdk_hw.mk) — explicit SDK hardware header/source subset; no SDK startup/runtime.
 - [`build_make/mtkernel_3/app_program/subdir.mk`](../build_make/mtkernel_3/app_program/subdir.mk) — application hook that includes the fragment.
-- [Motor controller — SDK subset](s2-motion/MOTOR_CONTROLLER.md#sdk-hardware-subset) — exhaustive paths, sources and APIs that must not be used.
+- [Motor controller — SDK subset](s2-motion/MOTION.md#sdk-hardware-subset) — exhaustive paths, sources and APIs that must not be used.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
 
-- [μT-Kernel motion bring-up checks](archive/kernel/MTK3_MOTION_CHECKS.md) — candidate revisions, SDK link proof, sizes, IRQ priority and hardware checks still not run.
+- [μT-Kernel motion bring-up checks](archive/kernel/MTK3_MOTION_CHECKS.md) — archived candidate revisions, SDK proof, sizes and then-open hardware checks.
 
 ## Kernel line acquisition
 
@@ -218,26 +219,26 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
-- [Kernel robot design](kernel/KERNEL.md) — five-task/object and plan-vs-port tables; freshness, deadlines, KR1 bits and revision-scoped validation.
+- [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
 - [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
 
 - [`app_program/platform/drv_watchdog.c`](../app_program/platform/drv_watchdog.c) and [`drv_watchdog_hw.c`](../app_program/platform/drv_watchdog_hw.c) — kernel startup/feed guard and SDK-only hardware/reset snapshot.
 - [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
-- [Kernel hardware watchdog](kernel/KERNEL.md) — ownership, SDK subset, reset classification and two-boot S2-U05 procedure.
+- [Kernel hardware watchdog](kernel/KERNEL.md) — motion-only feeding, startup, reset classification and S2-U05 procedure.
 
 ## Application task stacks
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
-- [Application task stacks](kernel/KERNEL.md) — sizes, ownership and measurement limits.
+- [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 
 - [`app_program/subsystem1/telemetry.c`](../app_program/subsystem1/telemetry.c) — priority-30 RAM log/dump owner; value messages via `mbf_telemetry`, `TMO_POL` producer sends.
-- [Kernel telemetry](s1-telemetry/TELEMETRY.md) — RAM ownership, local loss policy and current MQTT boundary.
+- [Kernel telemetry](s1-telemetry/TELEMETRY.md) — boards/queues, RAM ownership, local loss policy and current MQTT boundary.
 
 ## Approved template deviations
 
@@ -256,7 +257,7 @@ vehicle task described below.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
-- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load record](kernel/KERNEL.md).
+- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load](kernel/KERNEL.md#cpu-load).
 
 - [Design](s1-telemetry/TELEMETRY.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/OPERATION.md).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.

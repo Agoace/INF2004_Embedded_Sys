@@ -1,16 +1,16 @@
 # Motor controller
 
 The only owner of the motor PWM, the servo PWM and the wheel encoders. The
-decision and its reasons: [ADR: motor controller](../architecture/ADR_MOTOR_CONTROLLER.md).
+decision and its reasons: [ADR: motor controller](../../architecture/ADR_MOTOR_CONTROLLER.md).
 Branch: `mtk3-motion`.
 
 ## Status
 
 | Step | What | State |
 | --- | --- | --- |
-| 1 | Pure core [`app_program/subsystem2/motor_ctl.c`](../../app_program/subsystem2/motor_ctl.c), [`app_program/subsystem2/motor_ctl.h`](../../app_program/subsystem2/motor_ctl.h); robot settings [`app_program/subsystem2/motor_ctl_robot.h`](../../app_program/subsystem2/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../../tests/test_motor_ctl.c) | Done 2026-11-04 |
-| 2 | Pico layer [`src/motor_ctl_pico.c`](../../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](../architecture/ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
-| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`). Run B3: rise limit 8 (after line run P5) |
+| 1 | Pure core [`app_program/subsystem2/motor_ctl.c`](../../../app_program/subsystem2/motor_ctl.c), [`app_program/subsystem2/motor_ctl.h`](../../../app_program/subsystem2/motor_ctl.h); robot settings [`app_program/subsystem2/motor_ctl_robot.h`](../../../app_program/subsystem2/motor_ctl_robot.h); host test [`tests/test_motor_ctl.c`](../../../tests/test_motor_ctl.c) | Done 2026-11-04 |
+| 2 | Pico layer [`src/motor_ctl_pico.c`](../../../src/motor_ctl_pico.c), [`src/motor_ctl_pico.h`](../../../src/motor_ctl_pico.h): PWM, encoder interrupt, servo; hooks `mc_tick()` into the [heartbeat](HEARTBEAT.md) every 10 ms (the heartbeat owns the timer and the watchdog: [ADR: heartbeat](../../architecture/ADR_HEARTBEAT.md)). CMake library `motor_ctl_pico` | Done 2026-11-04: strict ARM compile clean; not yet run on hardware (step 3) |
+| 3 | Floor bench target `motor_ctl_bench` ([`src/motor_ctl_bench.c`](../../../src/motor_ctl_bench.c)): step response, both directions, slow turn; tune P, I and feed-forward | Done 2026-11-04: runs B1 and B2; settings of B2 kept (`1cf08a1`). Run B3: rise limit 8 (after line run P5) |
 | 4 | Callers move to wheel speeds (line steering, detour, scan, search) | Not started; one branch each |
 
 ## Interface
@@ -33,7 +33,7 @@ Adapted from Motion (Buddy 2), `origin/motor-line-manager`,
 `src/motion/motion_control.c`, `wheel_control()`. Intent parts not copied:
 steer mixing, calm mode, FOLLOW state, move completion, command queue.
 
-| Part | Rule | Setting ([`motor_ctl_robot.h`](../../app_program/subsystem2/motor_ctl_robot.h)) |
+| Part | Rule | Setting ([`motor_ctl_robot.h`](../../../app_program/subsystem2/motor_ctl_robot.h)) |
 | --- | --- | --- |
 | Feed-forward | offset + slope × set point, **per wheel and per direction** | Offset / slope (‰, ‰ per count/tick): L fwd 48 / 9.66, L rev 59 / 8.89, R fwd 56 / 9.39, R rev 62 / 8.67. Fit to floor bench run B1 (2026-11-04). Step 1 used a rough fit to the track logs (offset 85–90, slope 9.0–12.0) |
 | P | kp × (set point − measured) | 6.0 ‰ per count/tick (Motion 3.0 at 20 ms, scaled) |
@@ -50,7 +50,7 @@ repository measured 111 mm.
 
 Servo: 1500 µs centre, 1100–1900 µs (±36°), 11.1 µs per degree. Settle
 estimate 42 ms + 3.6 ms per degree, fitted to the scan settle times
-(150 ms for 30°, 60 ms for 5°; [servo obstacle scan](../s5-obstacle/OBSTACLE_SCAN.md)).
+(150 ms for 30°, 60 ms for 5°; [servo obstacle scan](../../s5-obstacle/OBSTACLE_SCAN.md)).
 
 ## Pico layer
 
@@ -173,7 +173,7 @@ within 3° of the target). Options not taken are under *Ideas*.
 ### Run B3 (2026-11-04, boot ede2, rise limit 8 counts/tick per tick, floor, VIN)
 
 Change from B2: the rise limit 2 → 8 counts/tick per tick (line run P5,
-[Vehicle Controller line run](../s3-line-barcode/VC_LINE_RUN.md)). Same step list. Log
+[Vehicle Controller line run](../../s3-line-barcode/VC_LINE_RUN.md)). Same step list. Log
 `build/steer_logs/text_ede2.txt`. All 17 steps done, no fault; the same
 rows 7–15 lost over Wi-Fi.
 
@@ -262,11 +262,11 @@ Pico compile check: `arm-none-eabi-gcc` with `-Wall -Wextra -Wconversion
 ## μT-Kernel layer
 
 Step 1 of the kernel bring-up uses `mtk3-motion`, merged only into
-`mtk3-staging`. Code: [`motion.c`](../../app_program/subsystem2/motion.c),
-[`motion.h`](../../app_program/subsystem2/motion.h), hardware adapter
-[`drv_motor_hw.c`](../../app_program/subsystem2/drv_motor_hw.c), floor bench
-[`motion_bench.c`](../../app_program/subsystem2/motion_bench.c). Robot settings
-are in [`motor_ctl_robot.h`](../../app_program/subsystem2/motor_ctl_robot.h).
+`mtk3-staging`. Code: [`motion.c`](../../../app_program/subsystem2/motion.c),
+[`motion.h`](../../../app_program/subsystem2/motion.h), hardware adapter
+[`drv_motor_hw.c`](../../../app_program/subsystem2/drv_motor_hw.c), floor bench
+[`motion_bench.c`](../../../app_program/subsystem2/motion_bench.c). Robot settings
+are in [`motor_ctl_robot.h`](../../../app_program/subsystem2/motor_ctl_robot.h).
 The pure `motor_ctl.[ch]` and its tuning values are unchanged.
 
 ### Decision: T first, H only if needed
@@ -346,7 +346,7 @@ reset level 0; GPIO is below USB and above SysTick/PendSV level 3.
 ### Bench and tests
 
 The bench task has priority 11 on core 0 and now requires `BENCH=1`.
-The default normal image selects the [kernel robot program](../kernel/KERNEL.md)
+The default normal image selects the [kernel robot program](../kernel/KERNEL_ROBOT.md)
 instead; only one task owns the buttons and tick notification slot. GP21 arms a run after 1 s;
 press again to ESTOP. GP20 prints the saved log. Buttons use pull-ups,
 active low, polled every 20 ms. The B3 step list is unchanged and the RAM
@@ -373,14 +373,14 @@ start) passed functionally: 2110 rows, 0 faults, task gap 9952..10046 us,
 speeds and duty close to B3. Its strict B3 limits were missed on slow
 speeds and on heading, within run-to-run spread; straight steps drifted less
 than B3. U04 remains **not run**. See exact measurements and the B3 means in
-[`testing/subsystem2/TEST_LOG.md`](../../testing/subsystem2/TEST_LOG.md).
+[`testing/subsystem2/TEST_LOG.md`](../../../testing/subsystem2/TEST_LOG.md).
 Host doubles check the dispatcher, core affinity, mutex ownership, wake
 accounting, encoder signs, stale stop and immediate ESTOP ordering; they
 do not measure hardware timing or physical safety.
 
 ### Hardware watchdog
 
-The [watchdog record](../kernel/KERNEL.md) defines the motion-only 100 ms
+The [watchdog record](../kernel/KERNEL_WATCHDOG.md) defines the motion-only 100 ms
 hardware watchdog, startup prerequisites, reset classification and pending
 S2-U05 two-boot test. It supplements the stale-command stop. A failed
 motion initialization does not start it; motor PWM remains zero.
@@ -418,7 +418,7 @@ than 2%. It first waits for a kernel tick boundary to reduce 10 ms time
 quantization. It measures the actual kernel interval; `tk_dly_tsk()` adds
 one `TIMER_PERIOD`, so its argument is not the measured duration.
 S0-U01 uses a nominal 1 s window and a 1% limit, printing both measurements;
-see [the platform test log](../../testing/subsystem1/TEST_LOG.md). The updated
+see [the platform test log](../../../testing/subsystem1/TEST_LOG.md). The updated
 image has not yet passed this cold-power hardware test.
 
 The template Wi-Fi `time_us_64()` in
@@ -439,7 +439,7 @@ The operator found the defect on 2026-11-06 after cold VIN power-on:
 were only 233..235 us. The nominal 500 ms rest lasted about 21 s, followed
 by an unexpected forward step; the 2400-row log filled early. The ignored
 local log is `build/mtk_logs/usb_console.txt`. Earlier post-flash success
-is not cold-power validation. See the [S2 hardware record](../../testing/subsystem2/TEST_LOG.md).
+is not cold-power validation. See the [S2 hardware record](../../../testing/subsystem2/TEST_LOG.md).
 
 ### SDK hardware subset
 
@@ -450,8 +450,8 @@ bare-metal adapter. It also uses GPIO input/pull/read helpers. No hand-written
 PWM/GPIO register setup remains in this adapter. The opposite motor pin
 is cleared before applying duty, as in the bare-metal source.
 
-The app-owned [`build_make/app_sdk_hw.mk`](../../build_make/app_sdk_hw.mk)
-is included by [`the application build hook`](../../build_make/mtkernel_3/app_program/subdir.mk).
+The app-owned [`build_make/app_sdk_hw.mk`](../../../build_make/app_sdk_hw.mk)
+is included by [`the application build hook`](../../../build_make/mtkernel_3/app_program/subdir.mk).
 No kernel source changes. Robot selection adds `BENCH` to the profile,
 image name and C flags in `build_make/pico_rp2040.mk`; the SDK source hook
 stays app-owned. `PICO_SDK_PATH` is
@@ -495,7 +495,7 @@ uses it as well as the retained SDK link proof. Source added for
 fragment reuses the template's existing `mtkernel_3/cyw43/gpio.o`, not a
 duplicate copy. No PWM/resets .c files exist: the selected APIs are inline.
 Timer, clocks and I2C .c files are not added. The TEST-only
-[IMU adapter](../s4-imu/IMU.md) uses I2C0 registers and adds the hardware_i2c
+[IMU adapter](../../s4-imu/IMU.md) uses I2C0 registers and adds the hardware_i2c
 header path; TEST links newlib libm for static pitch/roll. Source added:
 `src/rp2_common/hardware_ticks/ticks.c`; its RP2040 `tick_start()` only
 writes the tick register and needs no SDK runtime. Also added:
@@ -532,9 +532,9 @@ headers keep vendor diagnostics separate; the application still passes
 
 #### Repeat the link-only proof
 
-The source is [`tests/probes/sdk_hw_link_probe.c`](../../tests/probes/sdk_hw_link_probe.c).
+The source is [`tests/probes/sdk_hw_link_probe.c`](../../../tests/probes/sdk_hw_link_probe.c).
 It is not in the application wildcard and is never called. After a full
-build, use [`scripts/check-sdk-hw-link.py`](../../scripts/check-sdk-hw-link.py)
+build, use [`scripts/check-sdk-hw-link.py`](../../../scripts/check-sdk-hw-link.py)
 before changing the object profile:
 
 ```sh

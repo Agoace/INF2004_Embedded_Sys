@@ -163,7 +163,7 @@ TEST builds run lifted-wheel subsystem checks with neither button task.
 Robot settings move from `src/` to S2. Pure modules still have no kernel
 or SDK includes. New kernel-side adapters include no SDK headers; new
 `*_hw.c` adapters include no kernel headers. GPIO IRQ 13 has one core-0
-owner and priority 1. See [Motor controller](../s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer)
+owner and priority 1. See [Motor controller](../archive/s2-motion/MOTOR_CONTROLLER.md#μt-kernel-layer)
 and TEAM.md. No on-target test is marked as passed by a build.
 
 ## Kernel robot port
