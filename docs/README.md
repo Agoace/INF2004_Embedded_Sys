@@ -29,6 +29,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
+- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — static RAM by group at `cr1-pre-imu`, dynamic estimate, steps for a RAM shortage and the CR1 order.
 
 ## S1 — Telemetry
 

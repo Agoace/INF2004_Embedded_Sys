@@ -213,6 +213,7 @@ vehicle task described below.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
+- [RAM budget](kernel/RAM_BUDGET.md) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
 - [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
