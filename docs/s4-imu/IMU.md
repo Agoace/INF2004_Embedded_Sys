@@ -6,8 +6,9 @@ Step 3 adds a report-only hump detector on top of step 2d (`0207b54`).
 It counts humps from the roll height during a run and reports the highest
 one: USB line at run end, GP20 DUMP line, live MQTT event kind 9 and
 summary v3. It never changes motor commands or navigation. See
-[step 3 hump report](#step-3-hump-report). Step 3 is synthetic-fixture
-evidence only; its hardware checks H0..H9 are **Not run**.
+[step 3 hump report](#step-3-hump-report). Step 3 H1 is hardware PASS on
+`1480b37` (STREAM, three RIGHT-wheel drives). H0 and H2..H9 are **Not run**;
+ROBOT stack high-water still requires H0.
 
 Step 2d extends `8c5d679` (step 2c), which extends `75ff329` (step 2b),
 originally based on `b569adc`. Step 2d changes ONLY the accelerometer input:
@@ -995,7 +996,28 @@ headers in a separate copy; generated firmware and proof ELFs removed.
 
 RAM detail: [IMU step 3](../kernel/RAM_BUDGET.md#imu-step-3-measured-delta).
 
-### Hardware checks (all Not run)
+### Step 3 H1 hardware result
+
+Operator-supplied results on `1480b37`, 2026-11-09: H1 PASS, floor,
+10 mm RIGHT-wheel hump, 100 mm/s, 600 mm, three GP21 drives. Image:
+`mtk3pico_smp0_usb_cdc_test_imu_stream.uf2`. The private log was not read.
+
+- `[S4_HUMP]` peak_0.1mm: 99 / 113 / 105 (9.9 / 11.3 / 10.5 mm).
+  Count 1 each; flags 01; gated 0; long 0. Drive 3 had no GP20 MARK;
+  GP21 resets run totals, so no MARK is needed for the hump result.
+- DIAG: faults 0; read_us 1262/max 1588, work_us 2730/max 3288,
+  core_us 1067/max 1598; missed 0. FIFO empty/overrun/backlog/bad 0;
+  mean 3.913 samples per poll.
+- STACK in this STREAM image: imu_task high-water 1448/2048 B,
+  free 600 B (dfade14: 752 B used); sonar 320/2048 B;
+  telemetry 464/4096 B. The IMU exceeds the required 256 B free margin.
+  **ROBOT-image stack high-water still requires H0.**
+
+No separate flat-only result was supplied. H1 confirms event counting;
+drive 2 at 11.3 mm does not support a blanket 9..11 mm height claim.
+See [H1 record](../../testing/subsystem4/TEST_LOG.md#step-3-hump-report-h1-hardware-on-1480b37).
+
+### Hardware checks (H1 PASS; others Not run)
 
 Use the MQTT robot image unless the row says STREAM. Record the USB
 run-end line, the summary and the `[S4_DIAG]` or health timing.
@@ -1003,7 +1025,7 @@ run-end line, the summary and the `[S4_DIAG]` or health timing.
 | ID | Check | Pass condition |
 | --- | --- | --- |
 | H0 | MQTT LINE run, no hump: CPU, Wi-Fi gap, overruns | count 0, flags 01; overruns 0; core_us/work_us change vs step 2d recorded |
-| H1 | STREAM floor repeat, 10 mm RIGHT hump, 100 mm/s, 3 drives + 1 flat | `[S4_HUMP]` count 1 and peak near 9.4 mm (fixture) per hump drive; flat count 0 |
+| H1 | STREAM floor repeat, 10 mm RIGHT hump, 100 mm/s | PASS on 1480b37: count 1 each; peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only result not supplied |
 | H2 | LINE run over the 10 mm hump on a straight | count 1, side right, one kind 9 event, summary matches USB line |
 | H3 | Curves and SEARCH, no hump | count 0; record `gated` and flags |
 | H4 | Hump right after a curve | count 1; record flag CURVE and peak |

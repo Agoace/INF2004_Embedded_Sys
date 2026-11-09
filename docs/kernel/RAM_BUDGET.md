@@ -258,8 +258,11 @@ Strict ARM local frames (`-fstack-usage`, before -> after): IMU `sample`
 `imu_hump_try_read` 80 B, `imu_core_step` 144 B, `imu_hump_step` 48 B;
 MQTT `vehicle_task` 792 -> 848 B, `telemetry_task` 264 -> 280 B; TEST
 `subsystem4_test` 776 -> 816 B. These are frames, not total stack bounds.
-The IMU stack is 2048 B and its last physical high-water (752 B) was on
-dfade14, before these larger frames: measure it in H0.
+H1 on `1480b37`, image `mtk3pico_smp0_usb_cdc_test_imu_stream.uf2`,
+measured IMU high-water 1448/2048 B, free 600 B (dfade14: 752 B used).
+Sonar used 320/2048 B; telemetry used 464/4096 B. These operator-supplied
+STREAM results exceed the 256 B free IMU margin; ROBOT-image stack
+high-water still requires H0.
 See [IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
 
 ## Steps if the RAM becomes too small

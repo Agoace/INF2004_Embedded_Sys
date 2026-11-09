@@ -190,7 +190,7 @@ vehicle task described below.
 
 ## IMU task and hump report
 
-- [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, hardware list H0..H9 Not run); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
+- [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; H0/H2..H9 Not run); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
 - [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure guarded calibration, compensated pitch/roll, support-quality peaks and secondary slope integral; no driving decisions or packed fields.
 - [`imu_hump.c`](../app_program/subsystem4/imu_hump.c), [`imu_hump.h`](../app_program/subsystem4/imu_hump.h) — pure step 3 hump detector: 100 ms mean, ON/OFF travel, curve/speed gates, run epochs, stale-safe run summary; report only.
 - [`imu_support.c`](../app_program/subsystem4/imu_support.c), [`imu_settings.h`](../app_program/subsystem4/imu_settings.h) — pure alternative support hypotheses; WB80/T111, forward60/height130, refresh1degree, consistency2mm settings.
@@ -207,7 +207,7 @@ vehicle task described below.
 - [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; `[S4_FIFO]` counters, raw capture dump after a confirmed GP21 stop, `[S4_HUMP]` per drive; not a bus owner.
 - [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, hump detector and corrected/filtered core fixtures, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
 - [RAM budget](kernel/RAM_BUDGET.md#imu-step-3-measured-delta) — measured 5116 B MQTT delta including 2048 B stack (+416 B step 3, +272 B step 2d); 7888 B raw capture in IMU_STREAM only; step 2d hardware work_us average 2699 us (about 27 %), stack high-water not supplied.
-- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and the step 3 H0..H9 list (Not run); absent-device/cold-power/MQTT-TEST gates still pending.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and step 3 H1 STREAM hardware PASS on 1480b37 (H0/H2..H9 Not run); absent-device/cold-power/MQTT-TEST gates still pending.
 
 ## Kernel ultrasonic acquisition
 
