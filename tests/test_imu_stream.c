@@ -29,6 +29,10 @@ static unsigned int estop_calls;
 static unsigned int drive_stops;
 static unsigned int last_reason;
 static unsigned int failed_stops;
+static uint32_t test_epoch;
+static unsigned int run_starts;
+static unsigned int hump_lines;
+static unsigned int hump_peak;
 
 uint32_t drv_time_us(void) { return wakes * 20000u; }
 int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
@@ -113,6 +117,14 @@ int motion_stop(void)
 void imu_hw_mark_init(void) { ++marker_inits; }
 bool imu_hw_mark_down(void) { return wakes >= 3u && wakes <= 8u; }
 uint32_t imu_request_mark(void) { return ++requests; }
+uint32_t imu_test_run(bool active)
+{
+    if (((test_epoch & 1u) != 0u) != active) {
+        ++test_epoch;
+        run_starts += active ? 1u : 0u;
+    }
+    return test_epoch;
+}
 /* Fake capture handoff: armed at drive start, frozen at the stop request,
  * then the observer must dump ONE batch per wake and release once. */
 static unsigned int capture_state; /* 0 idle, 1 armed, 2 frozen */
@@ -205,6 +217,11 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     acknowledged = requests; /* Acknowledge on the following observer poll. */
     out->value.valid = true;
     out->value.motion_valid = true;
+    /* One closed 10.5 mm RIGHT event in the current GP21 run. */
+    out->value.hump = (imu_hump_output_t){
+        .run_epoch = test_epoch, .running = (test_epoch & 1u) != 0u,
+        .valid_samples = 5u, .max_peak_mm = 10.5f, .count = 1u,
+        .flags = IMU_HUMP_FLAG_IMPLEMENTED};
     return E_OK;
 }
 void app_task_report(void) { ++stack_reports; }
@@ -227,6 +244,13 @@ int tm_printf(const UB *format, ...)
             ++drive_stops;
         }
         va_end(args);
+    } else if (strncmp(text, "[S4_HUMP]", 9u) == 0) {
+        va_list args;
+
+        va_start(args, format);
+        hump_peak = va_arg(args, unsigned int);
+        va_end(args);
+        ++hump_lines;
     } else if (strncmp(text, "[S4_RAW] %lu", 12u) == 0) {
         ++raw_lines;
     } else if (strncmp(text, "[S4_RAW_END]", 12u) == 0) {
@@ -286,6 +310,11 @@ int main(int argc, char **argv)
         }
 
         assert(last_reason == expected);
+        /* One run, one result line; the IMU run ends with the drive. */
+        assert(run_starts == 1u && hump_lines == 1u);
+        assert((test_epoch & 1u) == 0u);
+        /* The last good copy is at most one 20 ms wake old: fresh. */
+        assert(hump_peak == 105u);
         if (capture_mode()) {
             /* Dump starts only after the confirmed stop, never in a drive. */
             assert(capture_requests == 1u && capture_stops == 1u);

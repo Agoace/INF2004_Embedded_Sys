@@ -12,6 +12,7 @@
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
 #include "../subsystem2/motion_diag.h"
+#include "../vehicle/vehicle_task.h"
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
@@ -168,6 +169,15 @@ static void dump(void)
               (unsigned long)info.sampled, (unsigned long)info.missed,
               (unsigned long)info.dropped, (unsigned int)info.raw_bc,
               (unsigned long)info.isr_max_us, (unsigned long)info.line_max_us);
+    imu_hump_summary_t hump;
+    if (vehicle_hump_try_read(&hump) == E_OK) {
+        tm_printf((UB *)"[robot] hump peak_0.1mm %u count %u flags %02x "
+                        "gated %u\n",
+                  (unsigned int)hump.peak_01mm, (unsigned int)hump.count,
+                  (unsigned int)hump.flags, (unsigned int)hump.gated);
+    } else {
+        tm_printf((UB *)"[robot] hump no finished run\n");
+    }
     app_task_report();
     for (uint32_t i = 0u; i < st.rows; ++i) {
         tm_printf((UB *)"KR %lu ", (unsigned long)i);

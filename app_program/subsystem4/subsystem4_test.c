@@ -85,10 +85,37 @@ static void report(const imu_snapshot_t *snapshot)
     tm_printf((UB *)" eligible %u corrected_roll_ddeg %ld",
               (unsigned int)v->support_peak_eligible,
               (long)v->corrected_roll_ddeg);
+    tm_printf((UB *)" hump_state %u hump_count %u hump_gated %u "
+              "hump_flags %02x",
+              (unsigned int)v->hump.state, (unsigned int)v->hump.count,
+              (unsigned int)v->hump.gated_starts,
+              (unsigned int)v->hump.flags);
+    print_mm("hump_avg_mm", v->hump.smoothed_mm);
+    print_mm("hump_event_mm", v->hump.event_peak_mm);
+    print_mm("hump_max_mm", v->hump.max_peak_mm);
     tm_printf((UB *)"\n");
 }
 
 #if APP_IMU_STREAM
+static uint32_t hump_epoch;
+static imu_hump_report_t hump_last;
+static bool have_hump_last;
+
+/* One run result line, taken like the robot summary from the last good
+ * copy: an open confirmed event counts; a stale or other-run copy prints
+ * unavailable. */
+static void hump_report(void)
+{
+    const imu_hump_summary_t h = imu_hump_summarize(&hump_last,
+        have_hump_last, hump_epoch, drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+
+    tm_printf((UB *)"[S4_HUMP] peak_0.1mm %u count %u flags %02x "
+              "gated %u long %u\n",
+              (unsigned int)h.peak_01mm, (unsigned int)h.count,
+              (unsigned int)h.flags, (unsigned int)h.gated,
+              (unsigned int)hump_last.hump.long_rejects);
+}
+
 static imu_drive_stats_t vibration;
 static uint32_t vibration_stamp;
 static bool have_vibration_stamp;
@@ -159,6 +186,12 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
         (motor_ok && ((uint32_t)(now - stamp) > 30000u ||
                      motor.faults != 0u || !motor.watchdog_armed));
     const bool was_active = job->active;
+
+    if (observed) {
+        hump_last.hump = s->value.hump;
+        hump_last.timestamp_ms = s->timestamp_ms;
+        have_hump_last = true;
+    }
     const int16_t speed = imu_drive_step(job, drv_time_ms(),
         observed ? s->value.travel_mm : 0.0f, press, fault);
 
@@ -168,6 +201,7 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
         }
     }
     if (!was_active && job->active) {
+        hump_epoch = imu_test_run(true);
         imu_drive_stats_reset(&vibration);
         have_vibration_stamp = false;
         if (imu_capture_request()) {
@@ -204,6 +238,8 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
         print_mm("travel_mm", job->distance_mm);
         tm_printf((UB *)"\n");
         if (was_active && !job->active) {
+            hump_report();
+            (void)imu_test_run(false);
             imu_capture_stop_request();
             vibration_report();
         }
@@ -318,7 +354,8 @@ EXPORT void subsystem4_test(void)
               "GP21: equal 100 mm/s, 600 mm /10 s limit; "
               "second press or ANY fault stops. GP20 MARK unchanged.\n");
     tm_printf((UB *)"[TEST] IMU_STREAM: 50 Hz until power-off; "
-              "GP20 MARK resets height/peak/distance on next IMU tick. "
+              "GP20 MARK resets height/peak/distance on next IMU tick; "
+              "hump totals reset at each GP21 drive start. "
               "Other tests/destructive watchdog reset skipped.\n");
 #endif
     tm_printf((UB *)"[TEST] S4 observe only; no gyro. +X right +Y forward "
@@ -326,7 +363,8 @@ EXPORT void subsystem4_test(void)
               "Zero duty is COAST (both bridge inputs low), not braking.\n");
     tm_printf((UB *)"[TEST] S4 GP0/1 I2C: remove UART adapter. "
               "Angles ddeg=0.1 degree; signed relative height in mm. "
-              "No terrain detection, MQTT/KR1 fields or driving action.\n");
+              "Hump events report only: no MQTT/KR1 field or driving "
+              "action.\n");
     runner = tk_get_tid();
     cyclic = tk_cre_cyc(&config);
     if (cyclic < E_OK || tk_sta_cyc(cyclic) < E_OK) {

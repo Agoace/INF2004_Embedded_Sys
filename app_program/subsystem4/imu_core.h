@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "imu_settings.h"
 #include "imu_roll.h"
+#include "imu_hump.h"
 
 #define IMU_STILL_MS 1000u
 #define IMU_STILL_MIN_SAMPLES 100u
@@ -22,6 +23,7 @@ typedef struct {
     uint32_t now_ms;
     uint32_t travel_ms;      /* Timestamp of the encoder observation. */
     uint32_t calibration_epoch; /* Odd during the whole line spin routine. */
+    uint32_t run_epoch;      /* Odd during a vehicle run or GP21 TEST drive. */
     bool accel_valid;
     bool motion_valid;
     bool wheels_still;       /* BOTH wheel counts unchanged, zero duty. */
@@ -40,6 +42,7 @@ typedef struct {
     float lateral_fake_mm_s2;
     float forward_fake_mm_s2;
     imu_roll_output_t roll_only; /* PRIMARY, pitch quality never gates. */
+    imu_hump_output_t hump;  /* Step 3 run events; MARK never resets. */
     float left_mm;           /* Step2b caster-flat diagnostic. */
     float right_mm;          /* Step2b full-model diagnostic. */
     float caster_mm;         /* Wheels-flat alternative, not simultaneous. */
@@ -79,6 +82,7 @@ typedef struct {
 typedef struct {
     imu_core_output_t output;
     imu_roll_t roll_estimator;
+    imu_hump_t hump_detector;
     float mean[3];
     float m2[3];
     float minimum[3];
@@ -119,7 +123,8 @@ void imu_core_init(imu_core_t *core);
  * Never bridges a bad/old encoder interval with a later tilt sample. */
 void imu_core_step(imu_core_t *core, const imu_core_input_t *input);
 /* MARK resets integral/support peaks. Calibration resets integral only;
- * support peaks persist until MARK (or fresh boot), not a driving START. */
+ * support peaks persist until MARK (or fresh boot), not a driving START.
+ * Hump totals follow run_epoch only; MARK and calibration keep them. */
 void imu_core_mark(imu_core_t *core);
 
 #endif

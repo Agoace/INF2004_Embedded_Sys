@@ -874,7 +874,7 @@ class BatchTwoTests(unittest.TestCase):
         frame = bytearray(self.samples["robot/event"])
         frame[1] = 7
         self.assertEqual(wire.decode("robot/event", frame)["kind"], 7)
-        for kind in (0, 8):
+        for kind in (0, 8, 9, 10):  # kinds 8 and 9 need event v2
             frame[1] = kind
             with self.assertRaises(ValueError):
                 wire.decode("robot/event", frame)
@@ -942,7 +942,7 @@ class BatchTwoTests(unittest.TestCase):
 
     def test_recorder_subscribes_to_the_new_topics_with_qos(self):
         self.assertEqual(wire.SIZES["state"], 76)
-        self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (36, 48))
+        self.assertEqual((wire.SIZES["detour"], wire.SIZES["summary"]), (36, 52))
         self.assertEqual(cli.SUBSCRIBE_QOS, {"log": 1, "status": 1, "summary": 1, "barcode": 1})
 
 
@@ -1024,6 +1024,51 @@ class RebootWireTests(unittest.TestCase):
         old_summary[1], old_summary[3] = 0, 13
         with self.assertRaises(ValueError):
             wire.decode("robot/summary", old_summary)
+
+    def test_hump_summary_v3_and_event_kind_9_c_fixtures(self):
+        outputs = {}
+        for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
+            topic, encoded = line.split()
+            outputs[topic] = bytes.fromhex(encoded)
+        frame = outputs["dash/summary_hump"]
+        summary = wire.decode("robot/summary", frame)
+        self.assertEqual((len(frame), summary["version"], summary["boot_id"]),
+                         (52, 3, 0x44332211))
+        self.assertEqual((summary["hump_peak"], summary["hump_count"], summary["hump_gated"]),
+                         (108, 2, 1))
+        self.assertEqual({k: summary[k] for k in wire.HUMP_FLAGS},
+                         dict(hump_implemented=1, hump_imu_fault=0, hump_open_at_stop=1,
+                              hump_curve_gated=0, hump_long_rejected=0, hump_left=0))
+        self.assertEqual(summary["barcode_hump_implemented"], 1)  # v3: barcode only
+        # The v2 prefix is unchanged: drop the v3 tail and the frame is a v2 frame.
+        v2 = wire.decode("robot/summary", b"\x02" + frame[1:48])
+        self.assertEqual({k: v for k, v in summary.items()
+                          if k not in ("version", "hump_count", "hump_gated", *wire.HUMP_FLAGS)},
+                         {k: v for k, v in v2.items() if k != "version"})
+        none = wire.decode("robot/summary", outputs["dash/summary_hump_unavailable"])
+        self.assertEqual((none["hump_peak"], none["hump_count"], none["hump_imu_fault"]),
+                         (wire.HUMP_PEAK_NONE, 0, 1))
+        for bad in (frame[:-1], frame + b"\0", b"\x03" + frame[1:48]):
+            with self.assertRaises(ValueError):
+                wire.decode("robot/summary", bad)
+        reserved = bytearray(frame)
+        reserved[50] |= 0x40
+        with self.assertRaises(ValueError):
+            wire.decode("robot/summary", reserved)
+        event = wire.decode("robot/event", outputs["dash/event_hump"])
+        self.assertEqual((event["kind"], event["from"], event["to"], event["word"],
+                          event["detail"]), (9, 0, 0, 108, 3))
+        left = wire.decode("robot/event", outputs["dash/event_hump_left"])
+        self.assertEqual((left["word"], left["detail"] & 0x7F, left["detail"] >> 7), (250, 4, 1))
+        for offset, value in ((2, 1), (3, 1), (12, 0xFF), (14, 0x80)):
+            changed = bytearray(outputs["dash/event_hump"])
+            changed[offset] = value
+            if offset == 12:
+                changed[13] = 0xFF  # unavailable peak is never an event
+            with self.subTest(offset=offset), self.assertRaises(ValueError):
+                wire.decode("robot/event", changed)
+        self.assertIn("hump_count", wire.csv_fields())
+        self.assertIn("hump_left", wire.csv_fields())
 
     def test_heartbeat_v3_unavailable_mask_and_total(self):
         frame = bytearray(108)
@@ -1107,7 +1152,7 @@ class RebootLogTests(unittest.TestCase):
             self.assertEqual((begin["boot_id"], begin["dump_id"], begin["generation"],
                               begin["rows_total"]), (boot, 7, 2, 1))
             expected = {"state": 76, "heartbeat": 108, "status": 6,
-                        "status_offline": 6, "summary": 48, "detour": 36,
+                        "status_offline": 6, "summary": 52, "detour": 36,
                         "event": 20, "sonar": 36, "obstacle": 24}
             for name, size in expected.items():
                 topic = "robot/status" if name.startswith("status") else "robot/" + name

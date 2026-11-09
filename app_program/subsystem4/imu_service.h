@@ -1,4 +1,5 @@
-/* Observer-pulled IMU board. No driving, MQTT or KR1 interface. */
+/* Observer-pulled IMU boards. No driving, MQTT or KR1 interface; the
+ * vehicle reads only the small hump board, never waiting. */
 #ifndef IMU_SERVICE_H
 #define IMU_SERVICE_H
 
@@ -29,6 +30,13 @@ int imu_service_start(void);
 /* One bounded board copy. E_PAR null, E_OBJ inactive, E_TMOUT busy/empty.
  * Failed reads leave the caller's output unchanged. */
 int imu_snapshot_try_read(imu_snapshot_t *out);
+/* Bounded copy of the newest hump board; same returns as the snapshot.
+ * timestamp_ms is the last real IMU observation; check age before use. */
+int imu_hump_try_read(imu_hump_report_t *out);
+/* TEST GP21 drive boundary (single TEST writer): active=true makes the
+ * run epoch odd, false makes it even. Returns the new epoch; other images
+ * return 0 and use vehicle_run_epoch(). */
+uint32_t imu_test_run(bool active);
 /* Single operator/TEST requester. Applied by the writer on its next tick;
  * the returned sequence is acknowledged in snapshot.marks. */
 uint32_t imu_request_mark(void);

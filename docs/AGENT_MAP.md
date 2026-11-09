@@ -188,25 +188,26 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
-## Observe-only IMU task
+## IMU task and hump report
 
-- [GY-511 IMU record](s4-imu/IMU.md) — step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
+- [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; H0/H2..H9 Not run); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
 - [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure guarded calibration, compensated pitch/roll, support-quality peaks and secondary slope integral; no driving decisions or packed fields.
+- [`imu_hump.c`](../app_program/subsystem4/imu_hump.c), [`imu_hump.h`](../app_program/subsystem4/imu_hump.h) — pure step 3 hump detector: 100 ms mean, ON/OFF travel, curve/speed gates, run epochs, stale-safe run summary; report only.
 - [`imu_support.c`](../app_program/subsystem4/imu_support.c), [`imu_settings.h`](../app_program/subsystem4/imu_settings.h) — pure alternative support hypotheses; WB80/T111, forward60/height130, refresh1degree, consistency2mm settings.
 - [`imu_drive.c`](../app_program/subsystem4/imu_drive.c) — pure bounded GP21 job and per-drive Welford stats; TEST reporter owns stop-pending/retries, no height-dependent driving.
 - [`imu_roll.c`](../app_program/subsystem4/imu_roll.c), [`imu_roll.h`](../app_program/subsystem4/imu_roll.h) — roll-only height, mean10/median20 maxima, wide diagnostic pitch ratio; fixtures compare15/20/31 windows and explicit crest/noise tradeoffs.
-- [`imu_service.c`](../app_program/subsystem4/imu_service.c), [`imu_service.h`](../app_program/subsystem4/imu_service.h) — robot/TEST task14 and own 10 ms cyclic; bounded motion-count read, calibration-epoch guard, sole snapshot writer, acknowledged MARK, EMPTY-batch skip and IMU_STREAM capture handoff; BENCH excluded.
-- [`vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — atomic calibration epoch covers the unchanged line spin/pause/abort/home routine, also without MQTT.
+- [`imu_service.c`](../app_program/subsystem4/imu_service.c), [`imu_service.h`](../app_program/subsystem4/imu_service.h) — robot/TEST task14 and own 10 ms cyclic; bounded motion-count read, calibration-epoch guard, sole snapshot and hump board writer, acknowledged MARK, EMPTY-batch skip and IMU_STREAM capture handoff; BENCH excluded.
+- [`vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — atomic calibration epoch covers the unchanged line spin/pause/abort/home routine, also without MQTT; atomic run epoch, no-wait hump copy, live kind 9, run-end hump summary and USB line.
 - [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM.
 - [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — robot/TEST SDK register layer, bounded I2C0 on GP0/GP1, shared 2 ms read-cycle deadline, bursts up to 48 B, UART-conflict guard; no SDK runtime ownership.
 - [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, single-pass FIFO status/burst read, backlog/overrun reset, counted faults with paced retries.
 - [`imu_fifo.c`](../app_program/subsystem4/imu_fifo.c) — pure FIFO_SRC decode, raw word decode and HR batch mean.
 - [`imu_capture.c`](../app_program/subsystem4/imu_capture.c) — pure fixed 800-sample/256-batch TEST raw capture storage; storage and handoff exist only in IMU_STREAM.
 - [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, identity mounting table and static pitch/roll.
-- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; `[S4_FIFO]` counters, raw capture dump after a confirmed GP21 stop; not a bus owner.
-- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
-- [RAM budget](kernel/RAM_BUDGET.md#imu-step-2d-measured-delta) — measured 4700 B MQTT delta including 2048 B stack (+272 B over step 2c); 7888 B raw capture in IMU_STREAM only; step 2d hardware work_us average 2699 us (about 27 %), stack high-water not supplied.
-- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS) and step 2d floor PASS for the 10 mm hump only; absent-device/cold-power/MQTT-TEST gates still pending.
+- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; `[S4_FIFO]` counters, raw capture dump after a confirmed GP21 stop, `[S4_HUMP]` per drive; not a bus owner.
+- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, hump detector and corrected/filtered core fixtures, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
+- [RAM budget](kernel/RAM_BUDGET.md#imu-step-3-measured-delta) — measured 5116 B MQTT delta including 2048 B stack (+416 B step 3, +272 B step 2d); 7888 B raw capture in IMU_STREAM only; step 2d hardware work_us average 2699 us (about 27 %), stack high-water not supplied.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and step 3 H1 STREAM hardware PASS on 1480b37 (H0/H2..H9 Not run); absent-device/cold-power/MQTT-TEST gates still pending.
 
 ## Kernel ultrasonic acquisition
 
@@ -219,7 +220,7 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
-- [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
+- [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
 - [RAM budget](kernel/RAM_BUDGET.md) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.

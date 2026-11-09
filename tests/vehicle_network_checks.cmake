@@ -9,11 +9,13 @@ host_test(test_vehicle_network_policy tests/test_vehicle_network_policy.c
 host_test(test_vehicle_network_task tests/test_vehicle_network_task.c
     app_program/vehicle/vehicle_task.c app_program/vehicle/vehicle_log.c
     app_program/vehicle/vehicle_network_policy.c app_program/vehicle/obstacle_report.c app_program/vehicle/run_stats.c
-    app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c ${vehicle_sm_source} ${line_position_source}
+    app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c
+    app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
     ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
     ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
 if(TARGET test_vehicle_network_task)
     target_include_directories(test_vehicle_network_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_link_libraries(test_vehicle_network_task PRIVATE m)
     target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
     add_test(NAME test_vehicle_network_uncalibrated COMMAND test_vehicle_network_task uncalibrated)
     add_test(NAME test_vehicle_network_estop_priority COMMAND test_vehicle_network_task estop)

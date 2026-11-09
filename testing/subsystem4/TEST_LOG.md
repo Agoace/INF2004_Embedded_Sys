@@ -198,6 +198,50 @@ only.** Other heights, a mat surface and curves are **Not run**. The
 mean 3.913 samples per poll means a sensor rate near 391 Hz against the
 kernel tick (derived, not a separate measurement).
 
+### Step 3 hump report: H1 hardware on 1480b37
+
+Step 3 adds the report-only hump detector; see
+[IMU step 3](../../docs/s4-imu/IMU.md#step-3-hump-report).
+H1 PASS on `1480b37`, 2026-11-09, image
+`mtk3pico_smp0_usb_cdc_test_imu_stream.uf2`. These are operator-supplied
+hardware results. The private log
+`build/mtk_logs/s4_step3_h1_20261109_191034.txt` was not read or copied.
+
+Setup: floor, 10 mm hump under the RIGHT wheel, three GP21 drives at
+100 mm/s for 600 mm. The operator omitted GP20 before drive 3; GP20 is
+not needed for hump totals because GP21 starts a new run and resets them.
+No separate flat-only drive result was supplied.
+
+| Drive | `[S4_HUMP]` peak_0.1mm | Count | Flags | Gated | Long |
+| --- | ---: | ---: | --- | ---: | ---: |
+| 1 | 99 (9.9 mm) | 1 | 01 | 0 | 0 |
+| 2 | 113 (11.3 mm) | 1 | 01 | 0 | 0 |
+| 3 | 105 (10.5 mm) | 1 | 01 | 0 | 0 |
+
+| Check | Hardware result |
+| --- | --- |
+| DIAG | faults 0; read_us 1262, max 1588; work_us 2730, max 3288; core_us 1067, max 1598; missed 0 |
+| FIFO | empty, overrun, backlog and bad all 0; mean 3.913 samples per poll |
+| STACK, STREAM image above | imu_task 1448/2048 B used, 600 B free (dfade14: 752 B used); sonar 320/2048 B; telemetry 464/4096 B |
+
+The IMU stack has more than the required 256 B margin in this STREAM
+image. This does not validate the ROBOT image: its stack high-water,
+MQTT load and timing still require H0. H1 confirms one event per drive;
+11.3 mm in drive 2 is recorded, not hidden by a 9..11 mm height claim.
+
+| ID | Check | Result |
+| --- | --- | --- |
+| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Not run |
+| H1 | STREAM floor repeat over the 10 mm RIGHT hump: `[S4_HUMP]` | PASS on 1480b37: count 1 each, peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only drive not supplied |
+| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | Not run |
+| H3 | Curves and SEARCH, no hump: count 0, record `gated` | Not run |
+| H4 | Hump right after a curve: count, CURVE flag | Not run |
+| H5 | Course mat, no hump: count 0 | Not run |
+| H6 | Other hump heights: peak against height and speed | Not run |
+| H7 | LEFT-wheel hump: side LEFT (bonus) | Not run |
+| H8 | GP21 stop on the hump: OPEN flag, counted | Not run |
+| H9 | Broker down during the run: USB and DUMP lines, summary after reconnect | Not run |
+
 ### S4-U04 procedure
 
 1. With operator approval, use the step-2 image and save its exact revision

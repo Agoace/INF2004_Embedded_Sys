@@ -1,5 +1,5 @@
 /* Observe-only bias/filter/height ideas from Jaison, b2a6bb6.
- * No events, thresholds for terrain, kernel calls or driving outputs. */
+ * Hump events report only. No kernel calls or driving outputs. */
 #include "imu_core.h"
 #include "imu_support.h"
 #include <math.h>
@@ -62,7 +62,28 @@ void imu_core_init(imu_core_t *core)
 {
     if (core != NULL) {
         memset(core, 0, sizeof(*core));
+        imu_hump_init(&core->hump_detector);
     }
+}
+
+/* Feed one observation to the hump detector. valid=false still applies
+ * run boundaries and marks a fault inside a run. */
+static void hump(imu_core_t *core, const imu_core_input_t *in, float sine,
+                 float ds, bool valid)
+{
+    imu_core_output_t *out = &core->output;
+    const imu_hump_input_t h = {
+        .height_mm = IMU_TRACK_MM * sine,
+        .travel_mm = ds,
+        .speed_mm_s = out->speed_mm_s,
+        .yaw_rate_rad_s = out->yaw_rate_rad_s,
+        .lateral_mg = out->lateral_fake_mm_s2 / MG_TO_MM_S2,
+        .run_epoch = in->run_epoch,
+        .valid = valid,
+        .motion_valid = out->motion_valid};
+
+    imu_hump_step(&core->hump_detector, &h);
+    out->hump = core->hump_detector.output;
 }
 
 /* Candidate bias is the stationary mean minus level gravity. Check the
@@ -347,6 +368,7 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
         break_motion(core);
         core->have_filter = false;
         reset_support_window(core);
+        hump(core, in, 0.0f, 0.0f, false);
         return;
     }
     ++out->valid_samples;
@@ -403,15 +425,23 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
     out->corrected_roll_ddeg = (int32_t)(core->corrected_roll_rad *
                                        RAD_TO_DDEG);
     const float pitch_sine = sinf(core->corrected_rad);
+    const float corrected_roll_sine = sinf(core->corrected_roll_rad);
+    const float roll_sine = sinf(core->roll_rad);
 
-    support(core, pitch_sine, sinf(core->corrected_roll_rad));
+    support(core, pitch_sine, corrected_roll_sine);
     /* Match the operator's roll-only offline model: bias-corrected roll
      * LPF, NOT yaw-corrected roll. Keep both corrected axes for diagnostics. */
-    imu_roll_step(&core->roll_estimator, sinf(core->roll_rad),
+    imu_roll_step(&core->roll_estimator, roll_sine,
                    core->corrected_rad, IMU_TRACK_MM, IMU_WHEELBASE_MM,
                    IMU_ROLL_PITCH_TOLERANCE_DEG / 57.2957795f,
                    out->calibrated && out->motion_valid);
     out->roll_only = core->roll_estimator.output;
+    /* Step 3 events: the yaw-corrected roll removes the encoder v*omega and
+     * lever-arm terms on curves; FILTERED is the step 2d primary input. */
+    const float hump_sine = IMU_HUMP_SOURCE == IMU_HUMP_SOURCE_FILTERED
+                                ? roll_sine : corrected_roll_sine;
+
+    hump(core, in, hump_sine, ds, out->calibrated && sample_time);
     if (out->calibrated && sample_time && distinct) {
         out->height_mm += pitch_sine * ds;
         out->peak_mm = fmaxf(out->peak_mm, out->height_mm);

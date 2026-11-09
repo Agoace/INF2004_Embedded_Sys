@@ -43,10 +43,11 @@ button.armed { background:var(--warn); color:#000; }
 #panel-line { grid-column:2; grid-row:1; }
 #panel-wheels { grid-column:3; grid-row:1; }
 #panel-path { grid-column:1; grid-row:2; }
-#panel-summary { grid-column:2 / 4; grid-row:2; }
+#panel-summary { grid-column:2; grid-row:2; }
+#panel-hump { grid-column:3; grid-row:2; }
 #panel-ultrasonic { order:1; } #panel-line { order:2; } #panel-wheels { order:3; }
-#panel-path { order:4; } #panel-summary { order:5; }
-#health { grid-column:1 / -1; min-width:0; order:6; }
+#panel-path { order:4; } #panel-summary { order:5; } #panel-hump { order:6; }
+#health { grid-column:1 / -1; min-width:0; order:7; }
 #health summary { cursor:pointer; font-weight:700; padding:12px; }
 #health-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; }
 #health-grid > .panel { order:2; } #health-grid > #panel-health { order:1; }
@@ -58,7 +59,7 @@ button.armed { background:var(--warn); color:#000; }
 .panel.paused { filter:grayscale(1); opacity:.6; }
 @media(max-width:800px) {
   #grid { grid-template-columns:minmax(0,1fr); padding:10px; gap:10px; }
-  #panel-ultrasonic, #panel-line, #panel-wheels, #panel-path, #panel-summary {
+  #panel-ultrasonic, #panel-line, #panel-wheels, #panel-path, #panel-summary, #panel-hump {
     grid-column:1; grid-row:auto; }
   header { gap:6px; padding:8px; } #buttons { width:100%; margin:0; gap:6px; }
   #buttons button { padding:8px; } #buttons #estop { margin-left:auto; padding:10px 20px; }
@@ -369,7 +370,7 @@ function panelNode(panel) {
       '<div class="note"></div><div class="visual-summary"></div>' +
       '<canvas hidden></canvas><div class="legend"></div><table class="facts"></table>' +
       '<table class="rows" hidden></table><div class="items"></div>';
-    const primary = ["ultrasonic", "line", "wheels", "summary"].includes(panel.id);
+    const primary = ["ultrasonic", "line", "wheels", "summary", "hump"].includes(panel.id);
     document.getElementById(primary ? "grid" : "health-grid").appendChild(node);
   }
   return node;
@@ -399,7 +400,8 @@ function renderPanel(panel) {
   const node = panelNode(panel);
   node.classList.toggle("stale", panel.stale);
   node.classList.toggle("paused", Boolean(panel.paused));
-  const titles = {ultrasonic:"ULTRASONIC", line:"LINE", wheels:"DRIVE", summary:"LAST RUN"};
+  const titles = {ultrasonic:"ULTRASONIC", line:"LINE", wheels:"DRIVE", summary:"LAST RUN",
+                  hump:"HIGHEST HUMP"};
   text(node.querySelector(".title"), titles[panel.id] || panel.title);
   text(node.querySelector(".age"), panel.id === "path" ? (panel.paused ? "idle (paused)" : "live rows")
        : panel.placeholder ? "placeholder"

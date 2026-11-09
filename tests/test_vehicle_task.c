@@ -1,6 +1,7 @@
 /* Host scheduler: service-only inputs, calibration, stop, deadline and telemetry. */
 #include <assert.h>
 #include <setjmp.h>
+#include <stdarg.h>
 #include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/vehicle/vehicle_task.h"
@@ -8,6 +9,7 @@
 #include "../app_program/subsystem3/line_service.h"
 #include "../app_program/subsystem5/sonar_service.h"
 #include "../app_program/subsystem1/telemetry.h"
+#include "../app_program/subsystem4/imu_service.h"
 static FP entry;static jmp_buf done;static uint32_t now;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
 static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,sonar_stale;
@@ -50,7 +52,25 @@ ER tk_slp_tsk(TMO t) {
     return E_OK;
 }
 INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
-int tm_printf(const UB *f,...) { (void)f;++prints;return 0; }
+/* Fresh IMU hump board of the current run: one closed 10.8 mm event. */
+static unsigned int hump_reads,hump_lines,hump_none;static uint32_t run_seen;
+int imu_hump_try_read(imu_hump_report_t *r) {
+    const uint32_t e=vehicle_run_epoch();
+    ++hump_reads;if (e&1u) run_seen=e;
+    *r=(imu_hump_report_t){.timestamp_ms=stale ? 0u : now};
+    r->hump=(imu_hump_output_t){.run_epoch=e,.running=(e&1u)!=0u,.valid_samples=1u,
+        .count=1u,.max_peak_mm=10.8f,.last_peak_mm=10.8f,.flags=IMU_HUMP_FLAG_IMPLEMENTED};
+    return E_OK;
+}
+int tm_printf(const UB *f,...) {
+    va_list a;va_start(a,f);
+    if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
+        const unsigned int mm=va_arg(a,unsigned int),tenth=va_arg(a,unsigned int);
+        assert(mm==10u && tenth==8u);++hump_lines;
+    } else if (!strncmp((const char *)f,"[robot] hump unavailable",24u)) ++hump_none;
+    else ++prints;
+    va_end(a);return 0;
+}
 uint32_t drv_time_ms(void) { return now; }
 uint32_t drv_time_us(void) { return now*1000u; }
 int line_snapshot_read(line_snapshot_t *s,bool consume) {
@@ -121,7 +141,9 @@ int main(int argc,char **argv) {
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
-    assert(vehicle_calibration_epoch() == 0u);
+    assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
+    imu_hump_summary_t last;assert(vehicle_hump_try_read(&last)==E_NOEXS);
+    assert(vehicle_hump_try_read(NULL)==E_PAR);
     assert(vehicle_task_start()==E_OBJ && starts==0u);watchdog_ready=true;
     assert(vehicle_task_start()==E_OBJ && starts==0u);services_ready=true;
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
@@ -130,6 +152,15 @@ int main(int argc,char **argv) {
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
     assert(vehicle_calibration_epoch() >= 2u);
     assert((vehicle_calibration_epoch() & 1u) == 0u);
+    /* The run epoch is odd only inside a run; each finished run prints one
+     * hump line from a fresh same-run board, else "unavailable". */
+    if (!overrun && !sonar_stale) {
+        assert(run_seen!=0u && (vehicle_run_epoch()&1u)==0u && hump_reads>0u);
+        assert(vehicle_hump_try_read(&last)==E_OK);
+        if (stale) assert(hump_none>=1u && last.peak_01mm==IMU_HUMP_PEAK_NONE);
+        else assert(hump_lines==1u && hump_none==0u && last.peak_01mm==108u &&
+                    last.count==1u && last.flags==IMU_HUMP_FLAG_IMPLEMENTED);
+    }
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
     else if (sonar_stale) assert(sonar_timeouts>0u);
