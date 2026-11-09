@@ -25,12 +25,21 @@ foreach(case IN ITEMS button_stop stop_retry motion_fault sensor_fault
         missed_wake moving_start timeout capacity held
         line_busy line_busy_twice line_busy_start line_age_jitter line_stale
         line_invalid line_raw line_read_error motor_busy motor_busy_twice
-        motor_read_error watchdog_start watchdog_lost line_stale_start)
+        motor_read_error watchdog_start watchdog_lost line_stale_start
+        dump_press dump_held motor_busy_phase)
     add_test(NAME test_barcode_${case} COMMAND test_barcode_test ${case})
 endforeach()
 host_test(test_barcode_packed tests/test_barcode_packed.c
     app_program/subsystem3/barcode.c)
 target_link_libraries(test_barcode_packed PRIVATE m)
+host_test(test_barcode_real tests/test_barcode_real.c
+    app_program/subsystem3/barcode.c)
+target_link_libraries(test_barcode_real PRIVATE m)
+host_test(test_barcode_blur tests/test_barcode_blur.c
+    app_program/subsystem3/barcode.c)
+target_link_libraries(test_barcode_blur PRIVATE m)
+target_compile_definitions(test_barcode_real PRIVATE
+    BC_FIXTURE="${REPO}/tests/fixtures/barcode_large_f_forward.csv")
 host_test(test_barcode_hw tests/test_barcode_hw.c
     app_program/subsystem3/barcode_hw.c)
 target_include_directories(test_barcode_hw BEFORE PRIVATE

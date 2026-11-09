@@ -33,6 +33,12 @@ static bool failed_stop;
 static bool start_refused;
 static unsigned int fault_reports;
 static unsigned int busy_reads;
+static unsigned int dump_notices;
+static unsigned int ignored_notices;
+static uint32_t dump_start_ms;
+static uint32_t ready_ms;
+static bool dump_active;
+static bool ready_inhibited;
 static jmp_buf finished;
 
 static bool mode(const char *name)
@@ -44,12 +50,13 @@ static bool normal_case(void)
 {
     return mode("normal") || mode("line_busy") || mode("line_busy_twice") ||
            mode("line_busy_start") || mode("line_age_jitter") ||
-           mode("motor_busy") || mode("motor_busy_twice");
+           mode("motor_busy") || mode("motor_busy_twice") ||
+           mode("motor_busy_phase") || mode("dump_press") || mode("dump_held");
 }
 
 static uint16_t optical(void)
 {
-    int64_t x = position_scaled / 12414 - 110000;
+    int64_t x = position_scaled / 12414 - 80000;
     if (x < 0) {
         return 160u;
     }
@@ -151,7 +158,8 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
     if (starts == 1u) {
         const uint32_t elapsed = now - first_drive_ms;
         if ((mode("motor_busy") && elapsed >= 100u && elapsed < 110u) ||
-            (mode("motor_busy_twice") && elapsed >= 100u && elapsed < 120u)) {
+            (mode("motor_busy_twice") && elapsed >= 100u && elapsed < 120u) ||
+            (mode("motor_busy_phase") && elapsed >= 30u && elapsed < 50u)) {
             ++busy_reads;
             return E_TMOUT;
         }
@@ -177,6 +185,10 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
         out->faults = 1u;
     }
     *stamp = now / 10u * 10000u;
+    if (mode("motor_busy_phase") && starts == 1u &&
+        now - first_drive_ms == 20u) {
+        --*stamp; /* A 19.999 ms interval just misses the 20 ms retention. */
+    }
     if (mode("stale_motor") && starts > 0u && now - first_drive_ms >= 100u &&
         now - first_drive_ms < 300u) {
         *stamp -= 40000u;
@@ -256,6 +268,15 @@ bool barcode_hw_button_down(void)
 bool barcode_hw_drive_down(void)
 {
     assert(button_ready);
+    if (mode("dump_press") && dump_active && dumps == 0u &&
+        ((now >= dump_start_ms + 50u && now < dump_start_ms + 110u) ||
+         (now >= dump_start_ms + 200u && now < dump_start_ms + 260u))) {
+        return true;
+    }
+    if (mode("dump_held") && dump_start_ms > 0u &&
+        (ready_ms == 0u || now < ready_ms + 60u)) {
+        return true;
+    }
     if (now < 200u) {
         return true; /* A button held at boot cannot start motion. */
     }
@@ -463,10 +484,32 @@ int tm_printf(const UB *format, ...)
         assert(command == 0 && !barcode_capture_active() && ranges == 3u);
         ++results;
     }
+    if (strstr(text, "[BC] DUMP ") != NULL) {
+        assert(command == 0 && !barcode_capture_active());
+        assert(strstr(text, "rows ~") && strstr(text, "GP21 ignored"));
+        ++dump_notices;
+        dump_active = true;
+        dump_start_ms = now;
+    }
+    if (strstr(text, "ignored: dump in progress") != NULL) {
+        assert(dump_active && (mode("dump_press") || mode("dump_held")));
+        ++ignored_notices;
+        assert(ignored_notices == 1u);
+    }
     if (strstr(text, "[BC_DUMP] BEGIN") != NULL) {
         assert(command == 0 && sampled_speed == 0 && !barcode_capture_active());
         assert(results == (dumps + 1u) * 2u);
         adc_rows = 0u;
+        if (mode("motor_busy_phase") && dumps == 0u) {
+            size_t count;
+            const barcode_motion_t *motor = barcode_capture_motors(&count);
+            bool phase_gap = false;
+            for (size_t i = 1u; i < count; ++i) {
+                phase_gap =
+                    phase_gap || motor[i].us - motor[i - 1u].us == 50000u;
+            }
+            assert(phase_gap); /* Legitimate retained gap, not stale data. */
+        }
     }
     if (strncmp(text, "BC_ADC,", 7u) == 0 &&
         strncmp(text, "BC_ADC,index", 12u) != 0) {
@@ -475,32 +518,46 @@ int tm_printf(const UB *format, ...)
     }
     if (strstr(text, "[BC_DUMP] END") != NULL) {
         ++dumps;
+        dump_active = false;
         assert(adc_rows > 0u && stop_calls > 2u);
     }
     if (strstr(text, "[BC] STOP CONFIRMED; next") != NULL && dumps > 0u) {
-        assert(command == 0 && !barcode_capture_active());
+        ready_inhibited = strstr(text, "inhibited 1") != NULL;
+    }
+    if ((strstr(text, "[BC] READY:") || strstr(text, "[BC] NOT READY:")) &&
+        dumps > 0u) {
+        assert(command == 0 && !barcode_capture_active() && !dump_active);
         if (normal_case() && dumps == 1u) {
-            assert(strstr(text, "inhibited 0") != NULL && frames == 2u);
-            second_press_ms = now + 100u;
+            assert(!ready_inhibited && frames == 2u);
+            assert(strstr(text, "GP21 = BACKWARD") != NULL);
+            ready_ms = now;
+            second_press_ms = now + (mode("dump_held") ? 150u : 100u);
         } else if (mode("held")) {
             held_done_ms = now;
         } else {
             if (normal_case()) {
                 assert(fault_reports == 0u);
-                if (!mode("normal") && !mode("line_age_jitter")) {
+                if (!mode("normal") && !mode("line_age_jitter") &&
+                    !mode("dump_press") && !mode("dump_held")) {
                     assert(busy_reads == ((mode("line_busy_twice") ||
-                                           mode("motor_busy_twice"))
+                                           mode("motor_busy_twice") ||
+                                           mode("motor_busy_phase"))
                                               ? 2u
                                               : 1u));
                 }
                 assert(dumps == 2u && starts == 2u && frames == 4u);
+                assert(dump_notices == 2u);
+                assert(strstr(text, "GP21 = FORWARD") != NULL);
+                if (mode("dump_press") || mode("dump_held")) {
+                    assert(ignored_notices == 1u);
+                }
                 assert(position_scaled / 12414 >= -2000 &&
                        position_scaled / 12414 <= 2000);
             } else if (mode("stop_retry")) {
                 assert(estop_calls >= 5u && failed_stop);
-                assert(strstr(text, "inhibited 1") != NULL);
+                assert(ready_inhibited);
             } else if (!mode("button_stop")) {
-                assert(strstr(text, "inhibited 1") != NULL);
+                assert(ready_inhibited);
             }
             longjmp(finished, 1);
         }

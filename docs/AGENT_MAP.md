@@ -203,14 +203,20 @@ vehicle task described below.
   [`barcode_drive.h`](../app_program/subsystem3/barcode_drive.h) — pure
   forward/backward distance/time bounds and fault/start inhibition.
 - [`barcode_settings.h`](../app_program/subsystem3/barcode_settings.h) —
-  600 mm / 100 mm/s defaults; distance target clamps to <=620 mm.
+  430 mm / 100 mm/s defaults; short-map target clamps to <=450 mm.
 - [`tests/barcode_checks.cmake`](../tests/barcode_checks.cmake) — strict
   decoder, packed frames, capture, drive/limit, GPIO and observer tests;
   [`tests/barcode_stubs/`](../tests/barcode_stubs/) supplies core-0 doubles.
+- [Real-capture regression](../tests/test_barcode_real.c) uses the
+  [public-safe CSV](../tests/fixtures/barcode_large_f_forward.csv); both
+  methods decode F from forward and reversed replay.
+- [Blur cases](../tests/test_barcode_blur.c) test partial narrow peaks and
+  bar/space bias for all 43 symbols; these are not measured small-print data.
 - [B1b contract](s3-line-barcode/BARCODE.md) and
   [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — B1 contrast
-  passed; hand-push procedure failed. Initial B1b lifted trial stopped on
-  FAULT; retest pending. Normal routing does not use the decoder.
+  passed; hand-push procedure failed. Lifted forward passed on 45040c7;
+  backward and new optical/short-map hardware checks remain pending.
+  Normal routing does not use the decoder.
 
 ## TEST-only IMU acquisition
 

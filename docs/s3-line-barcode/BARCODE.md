@@ -3,14 +3,21 @@
 ## Scope and evidence
 
 B1b runs an operator-requested straight pass over **one barcode sheet**.
-GP21 starts 600 mm forward at 100 mm/s; after confirmed stop and a complete
-dump, a new press starts 600 mm backward. Swap the 2x F and 141 mm F sheets
+GP21 starts 430 mm forward at 100 mm/s; after confirmed stop and a complete
+dump, a new press starts 430 mm backward. Swap the 2x F and 141 mm F sheets
 between runs, while stopped. Do not place both sheets in one run. The
-requested distance is clamped at compile time to **at most 620 mm**.
+requested distance is clamped at compile time to **at most 450 mm**.
+The operator shortened the map: 430 mm leaves 20 mm margin for coast
+(about 3 mm observed at 100 mm/s). The old 600/620 settings are superseded.
+The first floor capture also reached unrelated dark floor after ~450 mm.
 
 This is not barcode-controlled navigation. A decoded command is data only;
 no barcode changes the Vehicle Controller route. Normal LINE behaviour is
-unchanged. B1b powered hardware acceptance is **Not run**.
+unchanged. On `45040c7`, lifted forward travel passed at 603 mm under the
+OLD 600 mm setting; backward is pending. The first floor 2x F pass reached
+602 mm without a motion fault, but old optical rules gave NO_FRAME. Its
+approved raw capture now passes a host replay; new powered decode and
+430/450 mm checks are **Not run**.
 
 On B1 `70caef0`, the operator proved static contrast: white paper 151..170,
 floor 155..172, black bar 1334..1660. Black is HIGH; floor looks like white.
@@ -62,19 +69,22 @@ Settings live in
 
 | Setting | Default / bound |
 | --- | --- |
-| `BARCODE_PASS_DISTANCE_MM` | 600 mm; actual target clamps to <=620 mm |
+| `BARCODE_PASS_DISTANCE_MM` | 430 mm; actual target clamps to <=450 mm |
 | Minimum requested distance | 50 mm; smaller/negative settings fail build |
 | `BARCODE_PASS_SPEED_MM_S` | 100 mm/s; permitted 25..200 mm/s |
 | Encoder geometry | 12414 counts/m |
-| Motion deadline | Ceiling(distance / speed in ms) + 3000 ms; 9000 default |
+| Motion deadline | Ceiling(distance / speed in ms) + 3000; 7300 ms default |
 | ADC retention | Every 2 raw samples by default; actual u16 time deltas |
-| Motion retention | Every 30 ms by default, using real source timestamps |
+| Motion retention | Every 20 ms by default, using real source timestamps |
 
 Retention intervals are derived from deadline plus 2 s storage margin.
-At 600 mm / 25 mm/s, the deadline is 27 s, ADC retention 5 ms, motion 60 ms;
+At 430 mm / 25 mm/s, deadline is 20.2 s, ADC retention 4 ms, motion 50 ms;
 capacity still covers the longer pass. This is decimation, not averaging
 or min/max compression. Raw 1 kHz gaps are checked even on skipped records.
-A skipped brief signal is not reconstructed or guessed.
+A skipped brief signal is not reconstructed or guessed. Decoder motion-gap
+allowance is retention period +30 ms (50 ms by default): two allowed busy
+polls plus source/poll phase can defer a retained observation that far.
+This does not relax the independent 30 ms live-board age bound.
 
 ## Driven procedure
 
@@ -92,22 +102,30 @@ coast; verify actual travel before using the available floor space.
    until all three ranges complete. Ranges do not automatically certify
    narrow-bar visibility.
 3. Lifted check: with VIN present and wheels free, press/release GP21.
-   Check equal positive wheel requests, the 600 mm bound and confirmed
+   Check equal positive wheel requests, the 430 mm target and confirmed
    zero duty/low measured speed. Save the dump. Press/release again for
    negative requests. Test a GP21 early stop. Do not call this a barcode
    or floor-distance PASS. Reboot before floor work to restore FORWARD.
 4. Floor check: place **one** F sheet, bars across travel; use the 2x copy
    first. Align the left-front sensor, not an assumed axle/body offset,
    before the white margin. The entire printed frame and white quiet
-   zones must fit within the one <=620 mm run. Keep extra space for coast.
+   zones must fit within the 430 mm run (hard target limit 450 mm). A 2x F
+   needs at least 58 mm white/floor quiet margin on EACH end. Position it
+   accordingly, for example about 70 mm leading margin; do not rely on
+   coasting to complete a quiet zone. Keep extra physical space for coast.
 5. Press/release GP21. Capture arms at drive start. The task requests equal
    100/100 mm/s through motion APIs; there is no automatic line correction.
    Another fresh GP21 press requests stop. GP20 has no effect while moving.
 6. At distance/deadline/fault, the task repeatedly requests stop. Capture
    stays active until stop is confirmed. Only then does it freeze, decode
    TIME and DISTANCE independently, and print the complete dump.
-7. Save `[BC_DUMP] END` and verify all row counts. No pass restarts by itself.
-   A new GP21 press after the dump starts BACKWARD, then FORWARD alternately.
+7. Save `[BC_DUMP] END` and verify all row counts. Full dump stays enabled:
+   it can take tens of seconds (about 40 s on the first 600 mm lifted pass).
+   Before output, `[BC] DUMP n rows ~X s: GP21 ignored until READY` gives an
+   estimate, not a timeout. A new press during the dump prints one ignored
+   notice per dump; it never queues a start. Wait for
+   `[BC] READY: GP21 = BACKWARD` (then FORWARD alternately), release GP21
+   and press again. Fault inhibition prints NOT READY instead.
    A press held through a dump must be released before another can start.
 8. After both directions, swap to the 141 mm F sheet while stopped and
    repeat. Keep one sheet per run. After an early stop, reposition safely
@@ -124,7 +142,7 @@ fallback), then two distinct fresh post-request motion snapshots with zero
 duty and both measured speeds within +/-10 mm/s. These are encoder-based
 observations, not independent physical brake verification. Retries continue
 if snapshots/API confirmation are unavailable. Final wheel travel includes
-observed coast; above 620 mm sets OVERRUN and inhibits another pass.
+observed coast; above 450 mm sets OVERRUN and inhibits another pass.
 
 ## Snapshot health and fault diagnostics
 
@@ -177,7 +195,7 @@ diagnosis. This health-policy fix needs a new lifted-wheels retest.
 | Storage | Current B1b bytes / limit |
 | --- | --- |
 | ADC records | 6144 x 4 = 24576; about 12.288 s at default 2 ms |
-| Motion records | 512 x 12 = 6144; about 15.36 s at default 30 ms |
+| Motion records | 512 x 12 = 6144; about 10.24 s at default 20 ms |
 | Capture arrays | 30720 = 30 KiB, exclusive profile only |
 | Decoder workspace + report | 1760 + 64 = 1824 ARM bytes; assert <=2048 |
 | Arrays + decoder/report | 32544 bytes; owner boards/counters are extra |
@@ -186,8 +204,8 @@ diagnosis. This health-policy fix needs a new lifted-wheels retest.
 RAM is from this B1b software-validation image descended from `70caef0`,
 not runtime free heap or stack evidence. Arrays, decoder and owner state
 remain below about 40 KiB. Owner boards/state are static because the TEST
-initial task has only a 1 KiB stack. Compiler function frames are 304 bytes
-for the owner, 296 for decoder step and 112 for character classification;
+initial task has only a 1 KiB stack. Compiler function frames are 320 bytes
+for the owner, 304 for decoder step and 144 for character classification;
 these are not a complete call-graph or measured high-water proof. No
 kernel stack setting was changed. Normal images allocate none of these
 capture arrays/workspaces. Runtime stack use remains a hardware check.
@@ -217,11 +235,21 @@ and requests a checked stop; freezing remains the drive owner's decision.
 
 `capture_dropped` counts rejected retention slots, not deliberately skipped
 1 kHz samples. OVERRUN compares encoder counts before integer-mm rounding
-and latches an observed crossing of the 620 mm limit, including stop retries.
+and latches an observed crossing of the 450 mm limit, including stop retries.
 Raw loss rejects both decode methods before frame emission. Missing,
 gapped, non-monotonic or overflowing motion rejects DISTANCE; TIME remains
 separate. USB/frame printing occurs only after stop and freeze. Measured
 elapsed cost includes preemption; frame-output steps also include output.
+
+### Dump speed proposal — not enabled
+
+Keep the full dump for optical tests. A requested 1 ms task delay can round
+to a kernel tick, which helps explain the observed long dump. Removing
+per-row yields blindly is unsafe for evidence: the USB TX ring is 4096
+bytes and drops output when full; USB priority 21 is below this TEST owner.
+A future opt-in summary-only setting (full remains default), or bounded
+batches with TX occupancy/drop checks and measured host draining, can be
+faster. Neither change is enabled here; row-count verification stays required.
 
 ## Decoder rules and fixtures
 
@@ -230,20 +258,41 @@ Sources: [`barcode.h`](../../app_program/subsystem3/barcode.h),
 [`barcode_drive.c`](../../app_program/subsystem3/barcode_drive.c).
 The drive bounds are independent of the pure decoder and of subsystem 4.
 
-The decoder learns min/max over the frozen profile, requires default
-contrast >=64 ADC counts, and uses 40%/60% hysteresis. Both polarities and
-read directions are tested. This handles the observed black-HIGH polarity
-without a fixed sensor threshold. Optical blur and clipping can still fail.
+The decoder learns min/max over the frozen profile and requires contrast
+>=64 ADC counts. For the measured black-HIGH sensor, rising threshold is
+min + max(32 counts, 10% of span); falling threshold is min + max(16 counts,
+6% of span). The former 40%/60% band missed partial-contrast narrow bars.
+The 32-count minimum rising margin exceeds the supplied stationary white
+spread; hysteresis avoids repeated switching near one level. This is an
+optical signal rule, not a requested-letter search or confidence score.
+
+For the real capture min 150/max 1989, a retained narrow-bar peak must reach
+333.9 (integer ADC >=334), with falling level 260.34. Actual 2x narrow peaks
+600–900 exceed it. Roughly halving their contrast predicts ~375–525 for the
+141 mm print if response scales with width. The synthetic small-print test
+uses peaks 350 and rejects peaks 320 under this same worst-case span.
+This is NOT a physical small-print PASS: overlapping views, elevated white
+valleys or peaks below threshold can still make it unreadable. At lower
+full contrast the required rise is smaller, but never below 32 counts.
+Full-contrast polarity tests remain; partial-contrast tuning is for the
+observed black-HIGH input. No missing bar is invented.
 
 Ordinary Code 39 has 43 data symbols plus framing `*`, nine alternating
-elements with exactly three wide. Require wide/narrow mean ratio 1.6..3.4,
-class separation >=1.4, bounded class spread, narrow character gaps and
-white quiet zones >=10 narrow widths on both ends. Up to 16 data symbols
+elements with exactly three wide, ranked as the three widest of nine.
+Compute separate narrow bar/space means. Their half-difference estimates
+edge bias: add it to measured bars and subtract it from measured spaces.
+Require absolute bias <=80% of the common physical narrow estimate, then
+require corrected wide/narrow ratio 1.6..3.4, class separation >=1.4 and
+bounded within-class spread. This removes the observed bar shrink / space
+growth without changing the selected mask to force a letter. Inter-character
+gaps use the narrow-space reference; white quiet zones use ten physical
+narrow widths on both ends. Up to 16 data symbols
 and 192 alternating runs fit. No extended ASCII or checksum is implemented.
 
 Only exactly one A/B/C/D maps to LEFT/RIGHT/STRAIGHT/UTURN. Other valid
 strings, including F and Z, decode with NONE. Quality is REJECTED or DECODED;
-separation is the minimum-wide / maximum-narrow ratio in per mille, not a
+separation is the corrected minimum-wide / maximum-narrow ratio, per mille,
+not a
 confidence probability. Rejection reasons
 cover loss, contrast, widths/pattern, quiet zones, truncation, capacity,
 ambiguity and motion. No noise repair guesses a letter. Each incremental
@@ -262,6 +311,12 @@ step processes <=32 records or one possible frame, then the TEST task yields.
 Expected physical result: **F, DECODED, NO command**, independently for each
 method. A differing or unreadable result is not a navigation instruction.
 At 100 mm/s, narrow bars last about 29/58 ms, giving about 14/29 retained
-samples. Host fixtures are ideal widths, not sensor traces. Quiet margins,
-physical drift, footprint, stop distance and powered decoding remain to be
+samples. Most host fixtures are synthetic. The approved public-safe
+[real trace](../../tests/fixtures/barcode_large_f_forward.csv)
+is a real 3080-ADC/180-motor trace; its 15 old BC_RUN rows are not used to
+classify the new result. Both width methods decode F/NONE from the whole
+capture and its reversed replay, including the unrelated dark tail. Its
+<=430 mm prefix also passes both methods; the frame spans about 73–348 mm.
+Reversed replay is not a backward hardware PASS. Quiet margins, physical
+drift, footprint, new stop distance and powered decoding remain to be
 measured. [LINE](LINE.md) and [BUILD](../kernel/BUILD.md) retain normal rules.

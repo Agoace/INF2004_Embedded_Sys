@@ -63,7 +63,7 @@ typedef enum {
 
 typedef struct {
     char text[BC_MAX_PAYLOAD + 1u];
-    uint16_t separation_permille; /* min wide / max narrow; not probability */
+    uint16_t separation_permille; /* bias-corrected ratio; not probability */
     uint16_t frames;
     uint8_t length;
     uint8_t directions; /* bit 0 normal print order, bit 1 reverse */
@@ -137,6 +137,7 @@ bool barcode_step(barcode_workspace_t *workspace);
 
 extern const barcode_config_t barcode_default_config;
 /* Full ordinary Code 39 alphabet (not extended/ASCII shift encoding).
+ * Partial-contrast levels target the measured black-HIGH optics.
  * Width methods are independent: both are always reported. Only a SINGLE
  * A/B/C/D maps to a command value; other valid strings decode with NONE.
  * A command value is data, never an instruction to the vehicle.

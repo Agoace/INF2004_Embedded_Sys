@@ -215,7 +215,7 @@ bytes. This avoids the former 624-byte owner frame, but does not constitute
 complete call-graph or runtime high-water proof. No template stack change
 was made. Powered timing/stack acceptance is still Not run.
 
-## B1b powered procedure — first lifted trial failed
+## B1b powered checks — revision-scoped
 
 Use the [current contract](../../docs/s3-line-barcode/BARCODE.md) for the
 full button, settings, loss and output rules. Do not use B1 hand-push
@@ -227,8 +227,8 @@ make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
 
 | ID | Physical check | Status |
 | --- | --- | --- |
-| S3-B1b-01 | VIN, lifted wheels: both directions / GP21 | FAIL; see below |
-| S3-B1b-02 | One 2x F sheet, floor forward/backward 600 mm passes | Not run |
+| S3-B1b-01 | VIN, lifted wheels | Forward PASS; backward not run |
+| S3-B1b-02 | One 2x F sheet, floor | 45040c7 forward NO_FRAME; see below |
 | S3-B1b-03 | Swap to one 141 mm F sheet, both directions | Not run |
 | S3-B1b-04 | Stop/coast distance and fault-inhibited restart | Not run |
 | S3-B1b-05 | Cost, loss, USB integrity and runtime stack | Not run |
@@ -300,21 +300,117 @@ remain unaccepted.
 3. Reboot to restore FORWARD. Place one 2x F sheet, bars across travel; align
    the front-left sensor before its white margin. Leave quiet zones and
    coast room within the available run space. Do not use the old 85 cm
-   two-sheet layout. Requested target must not exceed 620 mm; default is
-   600 mm, about 6 s at 100 mm/s before acceleration/stop allowance.
+   two-sheet layout. Current target must not exceed 450 mm; default is
+   430 mm, about 4.3 s at 100 mm/s before acceleration/stop allowance.
+   The 2x F quiet margins each need >=58 mm, within that 430 mm path.
 4. After fresh contrast ranges, GP21 starts capture and the forward pass.
    Freeze/decode/dump must wait for confirmed stop. Save TIME and DISTANCE,
    each `[BC_FRAME]` entry/exit position, final left/right travel, all raw
    ADC/motion/run rows and counters. Expected: F, DECODED, command NONE.
-5. Save `[BC_DUMP] END` and verify row counts before pressing GP21 again for
-   backward. No automatic restart or queued press during a dump is allowed.
+5. Save `[BC_DUMP] END`, verify row counts, and wait for READY before GP21
+   backward. Full output can take tens of seconds. One notice explains a
+   press ignored during the dump; it never queues a start.
    If stopped early, reposition before another full-distance run. Swap to
    the 141 mm F sheet only while idle and repeat; one sheet per run.
 6. Any fault/deadline/capacity stops and inhibits restart. Stop API success
    alone is not enough: retries continue until fresh zero-duty/low-speed
    snapshots confirm it. No dump/rearm while pending. If wheels still move,
-   remove VIN. Record coast/stop distance; >620 mm reports OVERRUN. Encoder
+   remove VIN. Record coast/stop distance; >450 mm reports OVERRUN. Encoder
    slip/coast mean the target clamp is not an independent physical ruler.
 7. Record new copy/decoder/line/ISR cost, missed/dropped/gap/overflow and
    observer counters, USB integrity and stack high-water. Do not carry B1's
    1010/113 us observations into this powered image as a PASS.
+
+### Supplied 45040c7 lifted forward PASS
+
+Main supplied contrast PASS: FLOOR 151–169, WHITE_PAPER 151–168 and
+BLACK_BAR 1335–1576. With VIN on and wheels lifted, forward finished at
+DISTANCE, travel 603 mm (left/right 603/603), without FAULT. The complete
+dump had 3030 ADC and 179 motor rows, then next BACKWARD / inhibited 0.
+This passes the FORWARD part of S3-B1b-01 under the old 600 mm target.
+Backward has not run. It is not proof of floor stop distance or optics.
+
+The dump took about 40 s. GP21 was silently ignored during output, which
+made the operator think backward had failed. That was a UI problem, not
+a reported command refusal or fault. Current output announces estimated
+row count/time, warns once on an arriving dump-time press, then prints
+READY with the next direction. Held/ignored presses cannot queue a start.
+Full raw output remains the default; no faster batching is enabled.
+
+### Supplied first floor 2x F capture and optical correction
+
+The old image drove forward 602 mm without a fault. Contrast was 1839;
+only 15 runs survived the old thresholds, so both methods gave NO_FRAME.
+Main approved its extracted ADC/MOTOR/RUN CSV as public-safe fixture data;
+that extraction, not the private console log, was read and copied into
+`tests/fixtures/barcode_large_f_forward.csv`. It contains 3080 ADC and
+180 motor rows. The 15 old BC_RUN rows are not decoder training input.
+SHA256:
+`a10e86e72b88944aeb310e1ce2d7a7a5e6c9f3fe22764e6c4d607d2ff667de0f`
+
+Supplied analysis: full black about 1500, white about 150; 5.8 mm narrow
+bars peak only 600–900 and appear 2–3 mm wide near the old middle level.
+White spaces grow while bars shrink by about 3 mm per edge pair. Lower
+levels recover the full star/F/star sequence. Dark floor starts after
+about 450 mm; it also raises the learned full-range maximum.
+
+The corrected detector uses a 10% rise / 6% fall band above learned min,
+with minimum margins 32/16 ADC counts to exceed measured white jitter.
+For this trace (150..1989), rise is 333.9 and fall 260.34; a retained peak
+must be at least 334. That is below the measured 2x peaks and below a
+linear half-width estimate for the smaller print. Synthetic 141 mm cases
+pass at peak 350, and reject peak 320 under the same full contrast.
+Physical 141 mm peaks/valleys remain unmeasured; no missing bar is guessed.
+
+Each character still selects exactly the three widest of nine. Separate
+narrow bar/space means estimate additive blur bias. The corrected widths
+must retain strict ratio/separation/spread bounds; no requested letter
+changes a mask. Character gaps use the space reference, quiet zones the
+physical narrow estimate. Full-contrast polarity tests remain; partial-
+contrast tuning is for the measured black-HIGH sensor.
+
+Host replay of the WHOLE real trace now gives F / DECODED / NONE from
+both TIME and DISTANCE, forward and reversed (34 measured runs). The
+forward frame spans about 73–348 mm. The 2220-ADC prefix ending at the
+last encoder observation below 430 mm also decodes F by both methods,
+without the dark tail. Reversed replay is not a backward hardware test.
+New powered decoding
+still needs retest; a software replay is not a new physical PASS.
+
+### Short-map operator change and software validation
+
+The operator's map now permits at most 450 mm travel. Current default is
+430 mm at 100 mm/s, compile-time clamp 450; the lifted ~3 mm overrun leaves
+margin at this default. The old 600/620 settings above are historical.
+Default deadline is 7.3 s, retention ADC 2 ms / motion 20 ms, sized for
+deadline plus 2 s. At 25 mm/s: deadline 20.2 s, retention 4/50 ms.
+Motion decoder gap allowance is period +30 ms, accounting for two allowed
+busy polls and source/poll phase; live-board age still must be <=30 ms.
+The raw dump remains full. Its estimate uses the observed ~40 s / 3209
+rows; host drain/tick rounding can make actual time differ. Faster output
+is proposed, not enabled: opt-in summaries or measured, back-pressure-aware
+batches. Blindly removing yields risks the 4096-byte USB TX ring dropping
+bytes before lower-priority USB can drain it.
+
+| Current software check | Result |
+| --- | --- |
+| Full strict host suite | PASS: 173/173 |
+| Real capture, both methods and reversed order | PASS: F / NONE |
+| Synthetic small-print partial peaks / color bias | PASS: 43 x 2 directions |
+| Below-minimum peak | PASS: rejects 320 under 150..1989 span |
+| Existing table / rejects / fault diagnostics | PASS, retained |
+| Dump presses / held through READY | PASS: no queued start, one warning |
+| Distance / deadline / 450.1 mm overrun | PASS |
+| Two busy polls with source/poll phase | PASS: valid 50 ms retained gap |
+| Clang ASan/UBSan | PASS: decoder units and 32 owner paths |
+| Warning-free firmware / SDK proofs | PASS: nine profiles |
+| Strict ARM compiles | PASS: 63 |
+| Static RAM / decoder workspace+report | 152620 / 1824 bytes |
+| Owner / decoder-step / character compiler frames | 320 / 304 / 144 bytes |
+| Docs / columns / template ledger | PASS; template count 8 |
+
+No new firmware was flashed by this worker. Repeat lifted forward/backward
+at 430 mm, then one properly placed 2x F sheet. Wait for READY, not just
+STOP CONFIRMED or the start of the dump. Backward hardware, corrected
+powered decode, 141 mm optics, physical 450 mm map margin, runtime stack/
+timing and normal LINE regression remain pending.

@@ -182,7 +182,10 @@ static void decode(bool lost)
     const barcode_motion_t *motors = barcode_capture_motors(&m);
     barcode_config_t config = barcode_default_config;
     config.max_gap_us = barcode_drive_adc_ms(&settings) * 1000u + 1500u;
-    config.motion_gap_us = barcode_drive_motor_ms(&settings) * 1000u + 20000u;
+    /* Two busy polls plus a source/poll phase offset can delay retention
+     * by three owner periods; this is not a fabricated source timestamp. */
+    config.motion_gap_us = barcode_drive_motor_ms(&settings) * 1000u +
+                           BC_HEALTH_READ_LIMIT * 10000u;
     if (barcode_capture_motor_overflow() != 0u) {
         config.counts_per_m = 0u;
     }
@@ -218,6 +221,17 @@ static void decode(bool lost)
     result("DISTANCE", &decoded.distance);
 }
 
+static void dump_button(bool *previous, bool *notified)
+{
+    const bool down = barcode_hw_drive_down();
+    if (down && !*previous && !*notified) {
+        tm_printf(
+            (UB *)"[BC] GP21 ignored: dump in progress; wait for READY\n");
+        *notified = true;
+    }
+    *previous = down;
+}
+
 static void dump(void)
 {
     size_t n;
@@ -225,6 +239,13 @@ static void dump(void)
     const barcode_packed_t *rows = barcode_capture_rows(&n);
     const barcode_motion_t *motors = barcode_capture_motors(&m);
     uint32_t us = barcode_capture_origin();
+    bool previous = barcode_hw_drive_down();
+    bool notified = false;
+    const unsigned long total = (unsigned long)(n + m + decoded.runs);
+    /* First hardware dump: ~40 s / 3209 rows, including tick rounding.
+     * Estimate only; a slow/disconnected host can take longer. */
+    tm_printf((UB *)"[BC] DUMP %lu rows ~%lu s: GP21 ignored until READY\n",
+              total, (total * 13u + 999u) / 1000u);
     tm_printf((UB *)"[BC_DUMP] BEGIN adc %lu motor %lu origin_us %lu "
                     "adc_keep_ms %lu motor_keep_ms %lu; verify row counts\n",
               (unsigned long)n, (unsigned long)m, (unsigned long)us,
@@ -232,6 +253,7 @@ static void dump(void)
               (unsigned long)barcode_drive_motor_ms(&settings));
     tm_printf((UB *)"BC_ADC,index,us,raw_bc,raw_flags,delta_us\n");
     for (size_t i = 0u; i < n; ++i) {
+        dump_button(&previous, &notified);
         us += rows[i].delta_us;
         tm_printf((UB *)"BC_ADC,%lu,%lu,%u,%u,%u\n", (unsigned long)i,
                   (unsigned long)us,
@@ -242,6 +264,7 @@ static void dump(void)
     }
     tm_printf((UB *)"BC_MOTOR,index,us,left_counts,right_counts\n");
     for (size_t i = 0u; i < m; ++i) {
+        dump_button(&previous, &notified);
         tm_printf((UB *)"BC_MOTOR,%lu,%lu,%ld,%ld\n", (unsigned long)i,
                   (unsigned long)motors[i].us, (long)motors[i].left,
                   (long)motors[i].right);
@@ -251,6 +274,7 @@ static void dump(void)
     }
     tm_printf((UB *)"BC_RUN,index,time_us,distance_um_or_INT32_MIN\n");
     for (size_t i = 0u; i < decoded.runs; ++i) {
+        dump_button(&previous, &notified);
         const float um = workspace.distance_mm[i] * 1000.0f;
         const int32_t distance = decoded.distance.reason != BC_MOTION &&
                                          um > -2147483648.0f &&
@@ -361,7 +385,8 @@ static void frozen_report(const barcode_drive_t *job,
                       barcode_capture_gaps() != 0u ||
                       barcode_capture_dropped() != 0u || barcode_capture_full();
     tm_printf((UB *)"[BC_DRIVE] STOP CONFIRMED direction %s reason %s "
-                    "travel_mm %ld left_mm %ld right_mm %ld; frozen dump\n",
+                    "travel_mm %ld left_mm %ld right_mm %ld; decoding; "
+                    "GP21 ignored until READY\n",
               job->backward ? "BACKWARD" : "FORWARD",
               barcode_drive_reason_name(job->reason), (long)job->travel_mm,
               (long)job->wheel_mm[0], (long)job->wheel_mm[1]);
@@ -493,6 +518,15 @@ void barcode_test(void)
                                 "Save dump. GP20 ranges / GP21 pass.\n",
                           job.next_backward ? "BACKWARD" : "FORWARD",
                           (unsigned int)job.inhibited);
+                if (stage == 3u) {
+                    if (job.inhibited) {
+                        tm_printf((UB *)"[BC] NOT READY: GP21 inhibited; "
+                                        "reboot after fault\n");
+                    } else {
+                        tm_printf((UB *)"[BC] READY: GP21 = %s\n",
+                                  job.next_backward ? "BACKWARD" : "FORWARD");
+                    }
+                }
             }
             continue;
         }

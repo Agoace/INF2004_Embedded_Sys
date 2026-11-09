@@ -286,8 +286,8 @@ The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
 
 Barcode B1b has a pure Code 39 decoder and an exclusive driven TEST
-profile: VIN is required; GP21 runs 600 mm forward/backward (target clamp
-620 mm), with checked stop before decode/dump. Use one F sheet per run.
+profile: VIN is required; GP21 runs 430 mm forward/backward (target clamp
+450 mm), with checked stop before decode/dump. Use one F sheet per run.
 It does not change robot routing; powered decode checks are Not run.
 See [Barcode B1b and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
 

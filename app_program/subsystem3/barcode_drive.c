@@ -22,7 +22,7 @@ uint32_t barcode_drive_timeout_ms(const barcode_drive_config_t *config)
 {
     if (config == NULL || config->speed_mm_s < 25u ||
         config->speed_mm_s > 200u || config->distance_mm < 50u ||
-        config->distance_mm > 620u) {
+        config->distance_mm > 450u) {
         return 0u;
     }
     return (config->distance_mm * 1000u + config->speed_mm_s - 1u) /
@@ -33,7 +33,7 @@ uint32_t barcode_drive_timeout_ms(const barcode_drive_config_t *config)
 bool barcode_drive_config_valid(const barcode_drive_config_t *config)
 {
     return config != NULL && config->distance_mm >= 50u &&
-           config->distance_mm <= 620u && config->speed_mm_s >= 25u &&
+           config->distance_mm <= 450u && config->speed_mm_s >= 25u &&
            config->speed_mm_s <= 200u && config->counts_per_m > 0u &&
            config->counts_per_m <= 1000000u &&
            barcode_drive_timeout_ms(config) <= 55000u;
@@ -77,7 +77,7 @@ void barcode_drive_observe(barcode_drive_t *job,
     for (unsigned int i = 0u; i < 2u; ++i) {
         const int64_t movement =
             (int64_t)delta32(counts[i], job->origin[i]) * direction;
-        if (movement * 1000 > (int64_t)620 * config->counts_per_m) {
+        if (movement * 1000 > (int64_t)450 * config->counts_per_m) {
             job->overrun = true;
         }
         const int64_t mm = movement * 1000 / config->counts_per_m;
@@ -115,7 +115,7 @@ int16_t barcode_drive_step(barcode_drive_t *job,
                    barcode_drive_timeout_ms(config)) {
             barcode_drive_cancel(job, BC_DRIVE_TIMEOUT);
         } else if (job->travel_mm >= (int32_t)config->distance_mm ||
-                   lm >= 620 || rm >= 620) {
+                   lm >= 450 || rm >= 450) {
             barcode_drive_cancel(job, BC_DRIVE_DISTANCE);
         }
     } else if (press && !job->inhibited) {

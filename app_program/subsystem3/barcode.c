@@ -87,10 +87,12 @@ static float width(const float *runs, size_t count, size_t i, bool reverse)
     return fabsf(runs[reverse ? count - 1u - i : i]);
 }
 
-/* Sort nine widths; require separated, internally consistent classes. */
+/* Rank three wide elements, then remove a bounded bar/space edge bias.
+ * Blur subtracts width from bars and adds it to spaces. Derive that bias
+ * from the two narrow means, never from a requested letter or symbol. */
 static char character(const float *runs, size_t count, size_t start,
-                      bool reverse, float *narrow, uint16_t *separation,
-                      barcode_reason_t *reason)
+                      bool reverse, float *narrow, float *space_narrow,
+                      uint16_t *separation, barcode_reason_t *reason)
 {
     float sorted[9];
     for (size_t i = 0u; i < 9u; ++i) {
@@ -106,33 +108,64 @@ static char character(const float *runs, size_t count, size_t start,
         }
         sorted[j] = v;
     }
-    float small = 0.0f;
-    float large = 0.0f;
-    for (size_t i = 0u; i < 9u; ++i) {
-        if (i < 6u) {
-            small += sorted[i];
-        } else {
-            large += sorted[i];
-        }
-    }
-    small /= 6.0f;
-    large /= 3.0f;
-    if (large / small < BC_WIDE_MIN || large / small > BC_WIDE_MAX ||
-        sorted[6] / sorted[5] < BC_SPLIT_MIN || sorted[0] < small * 0.65f ||
-        sorted[5] > small * 1.5f || sorted[6] < large * 0.65f ||
-        sorted[8] > large * 1.5f) {
+    /* A tie at the split does not identify exactly three wide elements. */
+    if (sorted[6] <= sorted[5]) {
         *reason = BC_WIDTH;
         return '\0';
     }
     const float threshold = (sorted[5] + sorted[6]) * 0.5f;
     uint16_t mask = 0u;
+    float narrow_sum[2] = {0.0f, 0.0f};
+    unsigned int narrow_count[2] = {0u, 0u};
     for (size_t i = 0u; i < 9u; ++i) {
-        if (width(runs, count, start + i, reverse) > threshold) {
+        const float v = width(runs, count, start + i, reverse);
+        if (v > threshold) {
             mask |= (uint16_t)(UINT16_C(0x0100) >> i);
+        } else {
+            narrow_sum[i & 1u] += v;
+            ++narrow_count[i & 1u];
         }
     }
-    *narrow = small;
-    const float ratio = sorted[6] / sorted[5] * 1000.0f;
+    if (narrow_count[0] == 0u || narrow_count[1] == 0u) {
+        *reason = BC_WIDTH;
+        return '\0';
+    }
+    const float bar = narrow_sum[0] / (float)narrow_count[0];
+    const float space = narrow_sum[1] / (float)narrow_count[1];
+    const float physical = (bar + space) * 0.5f;
+    const float bias = (space - bar) * 0.5f;
+    if (fabsf(bias) > physical * 0.8f) {
+        *reason = BC_WIDTH;
+        return '\0';
+    }
+    float sum[2] = {0.0f, 0.0f};
+    float minimum[2] = {INFINITY, INFINITY};
+    float maximum[2] = {0.0f, 0.0f};
+    for (size_t i = 0u; i < 9u; ++i) {
+        const unsigned int wide =
+            (mask & (uint16_t)(UINT16_C(0x0100) >> i)) != 0u ? 1u : 0u;
+        const float corrected = width(runs, count, start + i, reverse) +
+                                ((i & 1u) == 0u ? bias : -bias);
+        sum[wide] += corrected;
+        if (corrected < minimum[wide]) {
+            minimum[wide] = corrected;
+        }
+        if (corrected > maximum[wide]) {
+            maximum[wide] = corrected;
+        }
+    }
+    const float small = sum[0] / 6.0f;
+    const float large = sum[1] / 3.0f;
+    if (small <= 0.0f || large / small < BC_WIDE_MIN ||
+        large / small > BC_WIDE_MAX || minimum[1] / maximum[0] < BC_SPLIT_MIN ||
+        minimum[0] < small * 0.65f || maximum[0] > small * 1.5f ||
+        minimum[1] < large * 0.65f || maximum[1] > large * 1.5f) {
+        *reason = BC_WIDTH;
+        return '\0';
+    }
+    *narrow = physical;
+    *space_narrow = space;
+    const float ratio = minimum[1] / maximum[0] * 1000.0f;
     *separation = (uint16_t)(ratio < 65535.0f ? ratio : 65535.0f);
     for (size_t i = 0u; i < sizeof(alphabet) - 1u; ++i) {
         if (patterns[i] == mask) {
@@ -201,9 +234,11 @@ static void scan(const float *runs, size_t count, bool first_high,
         return;
     }
     float narrow;
+    float space_narrow;
     uint16_t separation;
     barcode_reason_t why = BC_NO_FRAME;
-    char c = character(runs, count, start, reverse, &narrow, &separation, &why);
+    char c = character(runs, count, start, reverse, &narrow, &space_narrow,
+                       &separation, &why);
     if (c != '*') {
         return;
     }
@@ -219,12 +254,13 @@ static void scan(const float *runs, size_t count, bool first_high,
     bool complete = false;
     while (at + 10u < count) {
         const float gap = width(runs, count, at, reverse);
-        if (gap < narrow * 0.5f || gap > narrow * 1.8f) {
+        if (gap < space_narrow * 0.5f || gap > space_narrow * 1.8f) {
             why = BC_WIDTH;
             break;
         }
         ++at;
-        c = character(runs, count, at, reverse, &narrow, &separation, &why);
+        c = character(runs, count, at, reverse, &narrow, &space_narrow,
+                      &separation, &why);
         if (c == '\0') {
             break;
         }
@@ -464,8 +500,13 @@ bool barcode_step(barcode_workspace_t *workspace)
                     d.phase = DONE;
                     break;
                 }
-                d.low = (float)r->minimum + (float)r->contrast * 0.4f;
-                d.high = (float)r->minimum + (float)r->contrast * 0.6f;
+                /* Narrow bars have only partial contrast. Keep a 32-count
+                 * rise margin (above observed white jitter), 16-count fall,
+                 * and 10%/6% full-span levels for high-contrast captures. */
+                d.low = (float)r->minimum +
+                        fmaxf(16.0f, (float)r->contrast * 0.06f);
+                d.high = (float)r->minimum +
+                         fmaxf(32.0f, (float)r->contrast * 0.10f);
                 d.current_us = d.reader.origin;
                 const barcode_sample_t first = next_sample(&d, 0u);
                 d.first_high = (float)first.raw >= (d.low + d.high) * 0.5f;

@@ -70,11 +70,12 @@ TEST=1, SMP=0, WIFI=none, NET=none and MQTT=0; BENCH and IMU_STREAM are
 rejected. It skips ordinary subsystem tests and the automatic S2 steps,
 but **GP21 now drives in this image**. VIN is required. Lift both wheels
 for the first check. GP20 records floor/white/black ranges; after those,
-GP21 starts a 600 mm forward pass at 100 mm/s, then a fresh press after
+GP21 starts a 430 mm forward pass at 100 mm/s, then a fresh press after
 the complete dump starts a backward pass. Use only one sheet per run;
 swap the 2x F and 141 mm F sheets while stopped. Settings are in
 [`barcode_settings.h`](../../app_program/subsystem3/barcode_settings.h);
-the target is clamped to <=620 mm. A press while moving requests stop.
+the target is clamped to <=450 mm for the operator's shorter map. A press
+while moving requests stop.
 Faults/deadline/capacity stop and inhibit restart. No dump/rearm occurs
 until stop API success and two fresh zero-duty/low-speed snapshots.
 Busy snapshot reads use the last coherent board for at most two failed
@@ -83,7 +84,10 @@ cause bits, read/age values, motor faults/watchdog and actual wake rc.
 A false watchdog flag has no startup grace; it must be armed to command.
 Capture uses 6144 four-byte decimated records, about 12.3 s at default
 2 ms, plus 512 motion records. The TEST runner reports each frame and
-both width methods after freeze. Read the
+both width methods after freeze. Full dumps can take tens of seconds:
+wait for READY before GP21; presses during the dump are ignored with one
+notice. Partial-contrast optical rules and the approved real-capture host
+fixture are documented in the barcode contract. Read the
 [B1b procedure, stop limits and RAM](../s3-line-barcode/BARCODE.md) first.
 
 ### Profile identity
