@@ -64,6 +64,11 @@ static bool step_open;
 static uint32_t calibration_epoch;
 /* Single writer; odd from run start until the hump values are taken. */
 static uint32_t run_epoch;
+static uint32_t line_run_epoch;
+static imu_hump_diag_report_t diag_copy;
+static bool have_diag_copy;
+static imu_hump_diag_report_t run_diag;
+static APP_BOARD(imu_hump_diag_report_t) run_diag_board;
 /* Newest IMU hump board copy and the result of the last finished run. */
 static imu_hump_report_t hump_copy;
 static bool have_hump_copy;
@@ -463,8 +468,19 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
  * Copy the IMU hump board once. Never waits: a busy board keeps the last
  * copy, whose IMU timestamp decides later whether it is still usable.
  */
+static void diagnostic_read(void)
+{
+    imu_hump_diag_report_t r;
+
+    if (imu_hump_diag_try_read(&r) == E_OK) {
+        diag_copy = r;
+        have_diag_copy = true;
+    }
+}
+
 static void hump_read(void)
 {
+    diagnostic_read();
     imu_hump_report_t r;
     if (imu_hump_try_read(&r) == E_OK) {
         hump_copy = r;
@@ -506,8 +522,16 @@ static void hump_finish(uint32_t epoch)
     hump_read();
     run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
                                   drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+    run_diag = diag_copy;
+    imu_hump_diag_finish(&run_diag, epoch, drv_time_ms(),
+        have_diag_copy && have_hump_copy &&
+        diag_copy.timestamp_ms == hump_copy.timestamp_ms &&
+        run_hump.peak_01mm != IMU_HUMP_PEAK_NONE);
+    app_board_publish(&run_diag_board.sequence, run_diag_board.words,
+                      &run_diag, sizeof(run_diag));
     app_board_publish(&run_hump_board.sequence, run_hump_board.words,
                       &run_hump, sizeof(run_hump));
+    __atomic_store_n(&line_run_epoch, 0u, __ATOMIC_SEQ_CST);
     __atomic_store_n(&run_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
 }
 
@@ -917,7 +941,7 @@ static void run_once(void)
     vsm_reset(&vsm);
     read_line();
     line_event = VC_EVENT_NONE;
-    run_start = drv_time_ms();
+    __atomic_store_n(&run_start, drv_time_ms(), __ATOMIC_SEQ_CST);
     const uint32_t epoch =
         __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST) | 1u;
     __atomic_store_n(&run_epoch, epoch, __ATOMIC_SEQ_CST);
@@ -928,6 +952,7 @@ static void run_once(void)
 #endif
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
+    __atomic_store_n(&line_run_epoch, epoch, __ATOMIC_SEQ_CST);
     ++generation;
     uint8_t mode = SONAR_MODE_UNSET;
     uint16_t interval = 0u;
@@ -1037,6 +1062,9 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        __atomic_store_n(&line_run_epoch,
+            vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE
+                ? epoch : 0u, __ATOMIC_SEQ_CST);
         motion_diag_phase(MOTION_DIAG_RUN | ((uint32_t)vsm.running << 8u));
         if (vsm.state != state_before || vsm.running != module_before) {
             event(
@@ -1119,6 +1147,7 @@ static void run_once(void)
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
     hump_print();
+    imu_hump_diag_print(&run_diag);
 }
 
 /*
@@ -1330,6 +1359,44 @@ uint32_t vehicle_run_epoch(void)
     return __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST);
 #else
     return 0u;
+#endif
+}
+
+uint32_t vehicle_run_start_ms(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&run_start, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+uint32_t vehicle_line_run_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&line_run_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out)
+{
+    if (out == NULL) {
+        return E_PAR;
+    }
+#if !APP_TEST && !APP_BENCH
+    imu_hump_diag_report_t value;
+    if (!app_board_try_read(&run_diag_board.sequence, run_diag_board.words,
+                            &value, sizeof(value))) {
+        const uint32_t sequence =
+            __atomic_load_n(&run_diag_board.sequence, __ATOMIC_SEQ_CST);
+        return sequence == 0u ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+#else
+    return E_NOEXS;
 #endif
 }
 

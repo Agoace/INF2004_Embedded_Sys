@@ -6,6 +6,7 @@
 #include "imu_core.h"
 #include "imu_probe.h"
 #include "imu_capture.h"
+#include "imu_hump_diag.h"
 
 typedef struct {
     imu_core_output_t value;
@@ -33,6 +34,8 @@ int imu_snapshot_try_read(imu_snapshot_t *out);
 /* Bounded copy of the newest hump board; same returns as the snapshot.
  * timestamp_ms is the last real IMU observation; check age before use. */
 int imu_hump_try_read(imu_hump_report_t *out);
+/* Diagnostic C observation board; same bounded-copy contract. */
+int imu_hump_diag_try_read(imu_hump_diag_report_t *out);
 /* TEST GP21 drive boundary (single TEST writer): active=true makes the
  * run epoch odd, false makes it even. Returns the new epoch; other images
  * return 0 and use vehicle_run_epoch(). */

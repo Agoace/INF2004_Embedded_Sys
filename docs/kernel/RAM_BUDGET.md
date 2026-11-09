@@ -57,7 +57,7 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **5116 B** in MQTT, including 2048 B stack; step 3 below |
+| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **5888 B** in MQTT, including 2048 B stack; diagnostic C below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
@@ -261,9 +261,58 @@ MQTT `vehicle_task` 792 -> 848 B, `telemetry_task` 264 -> 280 B; TEST
 H1 on `1480b37`, image `mtk3pico_smp0_usb_cdc_test_imu_stream.uf2`,
 measured IMU high-water 1448/2048 B, free 600 B (dfade14: 752 B used).
 Sonar used 320/2048 B; telemetry used 464/4096 B. These operator-supplied
-STREAM results exceed the 256 B free IMU margin; ROBOT-image stack
-high-water still requires H0.
+STREAM results exceed the 256 B free IMU margin. Same-boot robot image
+`d51d27b` later measured IMU 1456/2048 B (592 B free); see diagnostic C
+below for the new frames and required repeat.
 See [IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
+
+## IMU diagnostic C measured delta
+
+Public example settings, same ARM toolchain, base `d51d27b`. No new image
+was flashed. MQTT static RAM is 190672 B (data 904 + bss 189768), +772 B.
+Main RAM not statically reserved is 71472 B; MQTT text grows 4692 B.
+
+| New storage (MQTT ELF symbols) | Bytes |
+| --- | ---: |
+| Pure diagnostic state `hump_diag`: 10 observations, current/winning records, counters | 380 |
+| Service writer `diag_value` and observation `diag_board` | 72 + 76 |
+| Vehicle `diag_copy`, `run_diag`, `run_diag_board` | 72 + 72 + 76 |
+| Vehicle `have_diag_copy`, `line_run_epoch` | 1 + 4 |
+| Reused roll heights, travel delta and validity retained in core | 16 |
+| Alignment | 3 |
+
+The 10-observation diagnostic window is OUTSIDE core's rollback copy and
+outside the normal snapshot. No telemetry message, DUMP row or MQTT wire
+structure grows. The 72 B report board has one writer and bounded readers.
+
+| Profile | text | data | bss | bss change vs d51d27b |
+| --- | ---: | ---: | ---: | ---: |
+| Default | 339244 | 760 | 131748 | +772 |
+| Robot | 92372 | 688 | 125212 | +772 |
+| BENCH | 41982 | 148 | 95460 | 0 |
+| MQTT | 403848 | 904 | 189768 | +772 |
+| TEST | 84692 | 688 | 124332 | +544 |
+| MQTT-TEST | 392044 | 904 | 188492 | +552 |
+| STREAM | 82892 | 688 | 132164 | +624 |
+
+Strict ARM local frames: `sample` 944 -> 1000 B (STREAM 952 -> 1016 B),
+core step unchanged 144 B, diagnostic step 56 B plus latch 16 B; diagnostic
+board read 96 B. MQTT vehicle 848 -> 872 B; telemetry 280 -> 352 B;
+STREAM observer unchanged 816 B; diagnostic USB printer 168 B. The print
+runs after STOP or on the larger telemetry/observer stack, not on IMU.
+
+Operator supplied robot `d51d27b` high-water 1456/2048 B, free 592 B;
+STREAM on 1480b37 used 1448 B. The extra robot sample frame is 56 B; the
+new diagnostic branch (56 + 16 B) is smaller than the existing 144 B core
+step frame. A frame-only estimate leaves about 536 B free, above 256 B.
+This is NOT a whole-call-tree bound or measured high-water for diagnostic
+C: repeat the named `[stack] imu_task` check on the new image before
+acceptance. No stack/queue reduction is used.
+
+Heartbeat stack_min_free 272 B in the d51d27b session was idle_meter
+(size 512, high-water 240), not IMU. See all named stacks and the shared
+barcode-sensor scrape condition in
+[H0/H2-short](../../testing/subsystem4/TEST_LOG.md#step-3-h0-and-h2-short-on-d51d27b).
 
 ## Steps if the RAM becomes too small
 

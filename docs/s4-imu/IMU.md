@@ -7,8 +7,10 @@ It counts humps from the roll height during a run and reports the highest
 one: USB line at run end, GP20 DUMP line, live MQTT event kind 9 and
 summary v3. It never changes motor commands or navigation. See
 [step 3 hump report](#step-3-hump-report). Step 3 H1 is hardware PASS on
-`1480b37` (STREAM, three RIGHT-wheel drives). H0 and H2..H9 are **Not run**;
-ROBOT stack high-water still requires H0.
+`1480b37` (STREAM, three RIGHT-wheel drives). H0/H2-short on `d51d27b`
+counted correctly but LINE height over-read by 29..55 %. Robot IMU stack
+free was 592 B. Diagnostic C adds peak context, not a correction; its
+hardware result and H3..H9 remain **Not run**.
 
 Step 2d extends `8c5d679` (step 2c), which extends `75ff329` (step 2b),
 originally based on `b569adc`. Step 2d changes ONLY the accelerometer input:
@@ -1011,22 +1013,134 @@ Operator-supplied results on `1480b37`, 2026-11-09: H1 PASS, floor,
 - STACK in this STREAM image: imu_task high-water 1448/2048 B,
   free 600 B (dfade14: 752 B used); sonar 320/2048 B;
   telemetry 464/4096 B. The IMU exceeds the required 256 B free margin.
-  **ROBOT-image stack high-water still requires H0.**
+  The later ROBOT reading on `d51d27b` is 1456/2048 B, free 592 B.
+  Diagnostic C needs a new named stack reading.
 
 No separate flat-only result was supplied. H1 confirms event counting;
 drive 2 at 11.3 mm does not support a blanket 9..11 mm height claim.
 See [H1 record](../../testing/subsystem4/TEST_LOG.md#step-3-hump-report-h1-hardware-on-1480b37).
 
-### Hardware checks (H1 PASS; others Not run)
+### LINE short-course result on d51d27b
+
+Operator-supplied hardware evidence, 2026-11-09. MQTT robot image, seven
+runs on two tiles at about 146 mm/s. Runs 1/5/6/7 crossed the 10 mm RIGHT
+hump: peaks 14.0/12.9/13.6/15.5 mm, one count each. Flat runs 2/3/4 had
+zero humps. IMU fault, long and left flags were zero throughout. Thus
+counting passed these trials, but height over-read by 29..55 %: **not a
+height PASS**. The operator pressed dashboard ESTOP after the line ended
+and SEARCH began; stop_reason 2 means MQTT ESTOP, not line end.
+
+Run 7 had CURVE|OPEN: a gate froze an ACTIVE peak at least once, and the
+event had not completed its below-OFF travel at STOP. The summary counts
+it by virtual closure, explaining the missing kind 9. A kind 9 time is
+closure time, not peak time. Neither CURVE nor OPEN locates the error.
+
+Same boot, GP20 after USB reconnect: robot IMU high-water 1456/2048 B,
+free 592 B. Heartbeat minimum free 272 B was the 512 B idle_meter stack,
+not IMU. Heartbeat has no individual IMU-stack field; GP20 calls
+`app_task_report()` and prints the named `[stack] imu_task ...` line.
+It measures the boot's high-water, not just the last run, and excludes
+Wi-Fi/USB template stacks from the application minimum.
+Full summaries, timing/network values and all named stacks:
+[H0/H2-short record](../../testing/subsystem4/TEST_LOG.md#step-3-h0-and-h2-short-on-d51d27b).
+
+Shared condition (operator-confirmed): the front-LEFT barcode sensor,
+about 5.5 mm above the floor, scraped on the 10 mm hump in ALL earlier
+floor drives, including step 2d and H1 STREAM. Their 10..11 mm values
+already include this contact. Contact can change support/pivot geometry
+and add drag/yaw, but does not alone explain the LINE/STREAM difference.
+Record it in each trial. LINE zigzags slightly while climbing; STREAM
+commands equal wheel speeds. Compensation lag remains a hypothesis:
+100 ms encoder windows and the filtered yaw derivative can lag accel
+transients. For scale only, 10 rad/s^2 at the 60 mm lever is about 61 mg,
+roughly 6.8 mm apparent roll height at track 111 mm (small-angle estimate).
+The 40 mg gate is a gate on estimated compensation, NOT an error bound;
+filtered transients can persist after it clears. No tuning is applied.
+
+### Diagnostic C: peak context
+
+`imu_hump_diag.c` is a pure observer of the existing detector output.
+The service calls it once after the final core step/calibration replay.
+Its bounded window is separate from core's rollback copy and normal
+snapshot. It adds no sine computation, IRQ, wait or driving decision.
+The default source and all thresholds are unchanged; MQTT/wire and DUMP
+rows are unchanged.
+
+- Keep the context of each increase of a CANDIDATE/ACTIVE event peak.
+  Equal peaks keep the first instant. Only confirmed events can become
+  the run winner; cancelled candidates and LONG events cannot replace it.
+  A confirmed ACTIVE event is included at STOP just like the summary.
+- Paired signed corrected and uncorrected filtered-roll heights are means
+  of the SAME 10 observations. The highest SELECTED source wins; this is
+  not an independent highest uncorrected peak.
+- Record epoch, elapsed ms from run start, accumulated absolute encoder
+  travel from the first run observation, speed, yaw rate, yaw acceleration,
+  lateral compensation, side, gate at the peak and gate OR over its
+  window, plus window maxima of |yaw|, |yaw acceleration| and |lateral|.
+  The instant is the LAST observation of the peak window, not the time
+  of every acceleration sample in it. Travel includes the first observed
+  encoder interval (up to a tick across the run boundary).
+- Retain run-wide max |lateral| and |yaw acceleration| only while the
+  sampled navigation module is active LINE. SEARCH/SCAN/DETOUR do not
+  contribute. `line_samples` shows whether this measurement exists;
+  it is 0 in STREAM (which has no LINE module). LINE context is updated
+  on navigation transitions; it is not a measurement of wheel contact.
+- An invalid/gap observation clears the parallel window. EMPTY FIFO does
+  not step it or refresh its board. A new run clears winners and run
+  maxima, not the height window, matching the detector.
+- One bounded diagnostic board is read by the vehicle. End-of-run data
+  must match the hump board's timestamp and run, be at most 50 ms old,
+  and have a usable hump summary; else `valid=0` and all values clear.
+  A separate last-run board serves GP20 without increasing INFO/rows.
+  STREAM uses the same age/run rules. Busy reads retain the last copy.
+
+One `[S4_HUMP_DIAG]` USB line is printed after STOP, in robot and STREAM,
+and repeated at GP20 DUMP. It has no float printf fields:
+
+| Fields | Units / meaning |
+| --- | --- |
+| `epoch`, `valid`, `peak_valid` | Run epoch; usable run data; a confirmed winning peak exists |
+| `peak_ms`, `travel_mm` | Peak window endpoint from run start; encoder path in whole mm |
+| `corrected_0.1mm`, `filtered_0.1mm` | Signed simultaneous 100 ms mean heights, 0.1 mm |
+| `speed_mm_s`, `yaw_mrad_s`, `yaw_accel_mrad_s2`, `lateral_mg` | Signed motion/compensation at the peak window endpoint |
+| `win_yaw_mrad_s`, `win_yaw_accel_mrad_s2`, `win_lateral_mg` | Maximum magnitudes over that window |
+| `gate`, `win_gate`, `left` | Gate mask at the endpoint / OR over the window; LEFT=1 |
+| `line_samples`, `line_lateral_mg`, `line_yaw_accel_mrad_s2` | LINE-only sample count and run-wide maximum magnitudes |
+
+Gate bits: motion invalid 0x01, lateral 0x02, yaw 0x04, speed 0x08.
+Low speed blocks starts only; an ACTIVE peak can legitimately have bit
+0x08. `peak_valid=0` means no confirmed peak, NOT a measured zero-height
+peak. `valid=1, peak_valid=0` can still report LINE-wide maxima.
+
+Software-only checks: 169/169 host and Clang address/undefined/float-cast
+tests pass; recorder 68/68, dashboard 185/185. The new test checks paired
+windows, gate history, first-peak ties, lower/higher events, LEFT, rejected
+candidates/LONG, virtual/actual STOP, epoch reset, invalid-window reset,
+LINE-only maxima, timestamp wrap/staleness, and integer output units.
+Service/vehicle/STREAM/DUMP tests check bounded reads and end-run output.
+Seven clean profiles have no warnings; 126 strict ARM compilations and
+7 SDK retained-link proofs pass. Template deviations remain 8.
+RAM +772 B MQTT; sample frame 944 -> 1000 B (STREAM 952 -> 1016 B).
+See [RAM and stack evidence](../kernel/RAM_BUDGET.md#imu-diagnostic-c-measured-delta).
+New physical timing and stack high-water are **Not run**.
+
+Approved comparison: earlier hump with at least 200 mm of flat line
+AFTER clearance before SEARCH/stop (3 hump + 2 flat). Use diagnostic C
+and record contact, summary and named stack lines. Keep at least 256 B
+IMU free margin; rerun the named stack check on this image. If the cause
+remains unclear, separately approve STREAM at 146 versus 100 mm/s. A
+steering drive is a later separately approved test, not part of C.
+
+### Hardware checks (H1 PASS; H0/H2 partial)
 
 Use the MQTT robot image unless the row says STREAM. Record the USB
 run-end line, the summary and the `[S4_DIAG]` or health timing.
 
 | ID | Check | Pass condition |
 | --- | --- | --- |
-| H0 | MQTT LINE run, no hump: CPU, Wi-Fi gap, overruns | count 0, flags 01; overruns 0; core_us/work_us change vs step 2d recorded |
+| H0 | MQTT LINE run, no hump: CPU, Wi-Fi gap, overruns | Partial on d51d27b: 3 flat runs, count 0; overruns/missed 0; IMU free 592 B. CPU/network baseline and diagnostic C stack check still needed |
 | H1 | STREAM floor repeat, 10 mm RIGHT hump, 100 mm/s | PASS on 1480b37: count 1 each; peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only result not supplied |
-| H2 | LINE run over the 10 mm hump on a straight | count 1, side right, one kind 9 event, summary matches USB line |
+| H2 | LINE run over the 10 mm hump on a straight | Partial on d51d27b: 4 humps counted once each; peaks 12.9..15.5 mm, not a height PASS; diagnostic C repeat pending |
 | H3 | Curves and SEARCH, no hump | count 0; record `gated` and flags |
 | H4 | Hump right after a curve | count 1; record flag CURVE and peak |
 | H5 | Course mat, no hump | count 0 (mat texture is not in the fixtures) |

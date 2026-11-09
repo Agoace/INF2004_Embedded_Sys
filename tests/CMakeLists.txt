@@ -190,3 +190,22 @@ target_compile_definitions(test_timing_test_hooks PRIVATE APP_TEST=1)
 add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priority_failure)
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
+
+host_test(test_imu_hump_diag tests/test_imu_hump_diag.c
+    app_program/subsystem4/imu_hump.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_hump_diag_print.c)
+target_include_directories(test_imu_hump_diag BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_link_libraries(test_imu_hump_diag PRIVATE m)
+foreach(test IN ITEMS test_imu_service test_imu_capture_service
+        test_imu_stream test_vehicle_task test_vehicle_network_task)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+endforeach()
+foreach(test IN ITEMS test_imu_stream test_vehicle_task
+        test_vehicle_network_task test_telemetry test_telemetry_log)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
+    target_link_libraries(${test} PRIVATE m)
+endforeach()

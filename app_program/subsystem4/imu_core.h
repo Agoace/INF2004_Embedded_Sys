@@ -83,6 +83,11 @@ typedef struct {
     imu_core_output_t output;
     imu_roll_t roll_estimator;
     imu_hump_t hump_detector;
+    /* Diagnostic inputs retained without recomputing either roll sine. */
+    float hump_corrected_mm;
+    float hump_filtered_mm;
+    float hump_travel_mm;
+    bool hump_valid;
     float mean[3];
     float m2[3];
     float minimum[3];

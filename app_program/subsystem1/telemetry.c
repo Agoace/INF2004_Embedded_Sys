@@ -178,6 +178,10 @@ static void dump(void)
     } else {
         tm_printf((UB *)"[robot] hump no finished run\n");
     }
+    imu_hump_diag_report_t diag;
+    if (vehicle_hump_diag_try_read(&diag) == E_OK) {
+        imu_hump_diag_print(&diag);
+    }
     app_task_report();
     for (uint32_t i = 0u; i < st.rows; ++i) {
         tm_printf((UB *)"KR %lu ", (unsigned long)i);

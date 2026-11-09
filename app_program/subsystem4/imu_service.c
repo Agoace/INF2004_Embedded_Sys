@@ -24,6 +24,10 @@ static imu_snapshot_t value;
 static APP_BOARD(imu_snapshot_t) board;
 static imu_hump_report_t hump_value;
 static APP_BOARD(imu_hump_report_t) hump_board;
+/* Keep diagnostic windows OUT of core's rollback copy and snapshot. */
+static imu_hump_diag_t hump_diag;
+static imu_hump_diag_report_t diag_value;
+static APP_BOARD(imu_hump_diag_report_t) diag_board;
 static uint32_t mark_requests;
 static uint32_t wake_lost;
 static uint32_t previous_us;
@@ -39,6 +43,7 @@ static const mc_config_t motion_config = MC_ROBOT_CONFIG;
 #if APP_TEST
 /* TEST GP21 drive boundary; single TEST writer, odd while driving. */
 static uint32_t test_run_epoch;
+static uint32_t test_run_start_ms;
 #endif
 
 #if APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
@@ -143,6 +148,38 @@ static uint32_t run_epoch(void)
 #endif
 }
 
+/* Once after the final computation/replay. No speculative latch. */
+static void diagnostic_tick(const imu_core_input_t *input)
+{
+#if APP_TEST
+    const uint32_t started = __atomic_load_n(&test_run_start_ms,
+                                             __ATOMIC_SEQ_CST);
+    const bool line = false;
+#else
+    const uint32_t started = vehicle_run_start_ms();
+    const bool line = vehicle_line_run_epoch() == input->run_epoch;
+#endif
+    const imu_hump_diag_input_t in = {
+        .hump = &core.output.hump,
+        .corrected_mm = core.hump_corrected_mm,
+        .filtered_mm = core.hump_filtered_mm,
+        .travel_mm = core.hump_travel_mm,
+        .speed_mm_s = core.output.speed_mm_s,
+        .yaw_rad_s = core.output.yaw_rate_rad_s,
+        .yaw_accel_rad_s2 = core.output.yaw_accel_rad_s2,
+        .lateral_mg = core.output.lateral_fake_mm_s2 / 9.80665f,
+        .now_ms = input->now_ms, .run_start_ms = started,
+        .valid = core.hump_valid, .motion_valid = core.output.motion_valid,
+        .line_active = line};
+
+    imu_hump_diag_step(&hump_diag, &in, &diag_value);
+    if (run_epoch() != input->run_epoch) {
+        diag_value.valid = false;
+    }
+    app_board_publish(&diag_board.sequence, diag_board.words,
+                      &diag_value, sizeof(diag_value));
+}
+
 static void sample(void)
 {
     const uint32_t started = drv_time_us();
@@ -189,6 +226,9 @@ static void sample(void)
          * not an interval of travel collected before the press. */
         imu_core_mark(&core);
         value.marks = requested;
+    }
+    if (!empty) {
+        diagnostic_tick(&input);
     }
     const uint32_t ended = drv_time_us();
     const uint32_t compute = ended - compute_start;
@@ -324,6 +364,24 @@ int imu_hump_try_read(imu_hump_report_t *out)
     return E_OK;
 }
 
+int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
+{
+    imu_hump_diag_report_t scratch;
+
+    if (out == NULL) {
+        return E_PAR;
+    }
+    if (!running) {
+        return E_OBJ;
+    }
+    if (!app_board_try_read(&diag_board.sequence, diag_board.words,
+                            &scratch, sizeof(scratch))) {
+        return E_TMOUT;
+    }
+    *out = scratch;
+    return E_OK;
+}
+
 uint32_t imu_test_run(bool active)
 {
 #if APP_TEST
@@ -332,6 +390,10 @@ uint32_t imu_test_run(bool active)
     const uint32_t next = ((epoch & 1u) != 0u) == active ? epoch
                                                          : epoch + 1u;
 
+    if (active && next != epoch) {
+        __atomic_store_n(&test_run_start_ms, drv_time_ms(),
+                         __ATOMIC_SEQ_CST);
+    }
     __atomic_store_n(&test_run_epoch, next, __ATOMIC_SEQ_CST);
     return next;
 #else
@@ -363,6 +425,10 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     return out == NULL ? E_PAR : E_OBJ;
 }
 int imu_hump_try_read(imu_hump_report_t *out)
+{
+    return out == NULL ? E_PAR : E_OBJ;
+}
+int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
 }

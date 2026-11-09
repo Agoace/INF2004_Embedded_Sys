@@ -8,7 +8,7 @@
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
 static bool full;static int irq_off;static unsigned int kr,ve,bytes,reports;
-static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none;
+static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
 ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==30 && core==1u);entry=f;return 7; }
 ER tk_snd_mbf(ID id,const void *m,INT size,TMO timeout) {
@@ -30,11 +30,16 @@ int vehicle_hump_try_read(imu_hump_summary_t *out) {
     if (hump_result==E_OK) *out=(imu_hump_summary_t){.peak_01mm=108u,.count=2u,.flags=0x05u,.gated=3u};
     return hump_result;
 }
+int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
+    if (hump_result==E_OK) *out=(imu_hump_diag_report_t){.valid=true};
+    return hump_result;
+}
 int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
     if (!strcmp((const char *)fmt,"KR %lu ")) ++kr;
     if (!strcmp((const char *)fmt,"VE %lu %u %u %u %u\n")) ++ve;
     if (!strcmp((const char *)fmt,"[robot] hump no finished run\n")) ++hump_none;
+    if (!strncmp((const char *)fmt,"[S4_HUMP_DIAG]",14u)) ++diag_lines;
     if (!strncmp((const char *)fmt,"[robot] hump peak_0.1mm",23u)) {
         const unsigned int peak=va_arg(a,unsigned int),count=va_arg(a,unsigned int);
         const unsigned int flags=va_arg(a,unsigned int),gated=va_arg(a,unsigned int);
@@ -71,6 +76,6 @@ int main(void) {
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
-    assert(hump_none==1u && hump_lines==1u && kr==4u && ve==2u);
+    assert(hump_none==1u && hump_lines==1u && diag_lines==1u && kr==4u && ve==2u);
     return 0;
 }

@@ -62,12 +62,21 @@ int imu_hump_try_read(imu_hump_report_t *r) {
         .count=1u,.max_peak_mm=10.8f,.last_peak_mm=10.8f,.flags=IMU_HUMP_FLAG_IMPLEMENTED};
     return E_OK;
 }
+static unsigned int diag_lines;
+int imu_hump_diag_try_read(imu_hump_diag_report_t *r) {
+    *r=(imu_hump_diag_report_t){.run_epoch=vehicle_run_epoch(),
+        .timestamp_ms=stale ? 0u : now,.valid=true};
+    r->peak=(imu_hump_peak_diag_t){.valid=true,.corrected_mm=10.8f,
+        .filtered_mm=9.9f,.ms=100u};
+    return E_OK;
+}
 int tm_printf(const UB *f,...) {
     va_list a;va_start(a,f);
     if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
         const unsigned int mm=va_arg(a,unsigned int),tenth=va_arg(a,unsigned int);
         assert(mm==10u && tenth==8u);++hump_lines;
     } else if (!strncmp((const char *)f,"[robot] hump unavailable",24u)) ++hump_none;
+    else if (!strncmp((const char *)f,"[S4_HUMP_DIAG]",14u)) ++diag_lines;
     else ++prints;
     va_end(a);return 0;
 }
@@ -144,6 +153,10 @@ int main(int argc,char **argv) {
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
     imu_hump_summary_t last;assert(vehicle_hump_try_read(&last)==E_NOEXS);
     assert(vehicle_hump_try_read(NULL)==E_PAR);
+    imu_hump_diag_report_t diag;
+    assert(vehicle_hump_diag_try_read(NULL)==E_PAR);
+    assert(vehicle_hump_diag_try_read(&diag)==E_NOEXS);
+    assert(vehicle_run_start_ms()==0u && vehicle_line_run_epoch()==0u);
     assert(vehicle_task_start()==E_OBJ && starts==0u);watchdog_ready=true;
     assert(vehicle_task_start()==E_OBJ && starts==0u);services_ready=true;
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
@@ -157,6 +170,10 @@ int main(int argc,char **argv) {
     if (!overrun && !sonar_stale) {
         assert(run_seen!=0u && (vehicle_run_epoch()&1u)==0u && hump_reads>0u);
         assert(vehicle_hump_try_read(&last)==E_OK);
+        assert(vehicle_hump_diag_try_read(&diag)==E_OK && diag_lines>=1u);
+        assert(vehicle_line_run_epoch()==0u);
+        assert(diag.valid==!stale && diag.peak.valid==!stale);
+        if (!stale) assert(diag.peak.corrected_mm==10.8f && diag.peak.ms==100u);
         if (stale) assert(hump_none>=1u && last.peak_01mm==IMU_HUMP_PEAK_NONE);
         else assert(hump_lines==1u && hump_none==0u && last.peak_01mm==108u &&
                     last.count==1u && last.flags==IMU_HUMP_FLAG_IMPLEMENTED);

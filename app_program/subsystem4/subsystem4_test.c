@@ -100,6 +100,8 @@ static void report(const imu_snapshot_t *snapshot)
 static uint32_t hump_epoch;
 static imu_hump_report_t hump_last;
 static bool have_hump_last;
+static imu_hump_diag_report_t diag_last;
+static bool have_diag_last;
 
 /* One run result line, taken like the robot summary from the last good
  * copy: an open confirmed event counts; a stale or other-run copy prints
@@ -114,6 +116,11 @@ static void hump_report(void)
               (unsigned int)h.peak_01mm, (unsigned int)h.count,
               (unsigned int)h.flags, (unsigned int)h.gated,
               (unsigned int)hump_last.hump.long_rejects);
+    imu_hump_diag_finish(&diag_last, hump_epoch, drv_time_ms(),
+        have_diag_last && have_hump_last &&
+        diag_last.timestamp_ms == hump_last.timestamp_ms &&
+        h.peak_01mm != IMU_HUMP_PEAK_NONE);
+    imu_hump_diag_print(&diag_last);
 }
 
 static imu_drive_stats_t vibration;
@@ -191,6 +198,9 @@ static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
         hump_last.hump = s->value.hump;
         hump_last.timestamp_ms = s->timestamp_ms;
         have_hump_last = true;
+        if (imu_hump_diag_try_read(&diag_last) == E_OK) {
+            have_diag_last = true;
+        }
     }
     const int16_t speed = imu_drive_step(job, drv_time_ms(),
         observed ? s->value.travel_mm : 0.0f, press, fault);

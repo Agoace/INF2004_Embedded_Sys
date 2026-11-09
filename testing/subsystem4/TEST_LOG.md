@@ -225,15 +225,15 @@ No separate flat-only drive result was supplied.
 | STACK, STREAM image above | imu_task 1448/2048 B used, 600 B free (dfade14: 752 B used); sonar 320/2048 B; telemetry 464/4096 B |
 
 The IMU stack has more than the required 256 B margin in this STREAM
-image. This does not validate the ROBOT image: its stack high-water,
-MQTT load and timing still require H0. H1 confirms one event per drive;
+image. This did not validate the ROBOT image; its later named stack
+reading is recorded below with H0/H2-short. H1 confirms one event per drive;
 11.3 mm in drive 2 is recorded, not hidden by a 9..11 mm height claim.
 
 | ID | Check | Result |
 | --- | --- | --- |
-| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Not run |
+| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Partial on d51d27b: 3 flat runs, no false humps; named robot IMU stack free 592 B; timing/network baseline still needed |
 | H1 | STREAM floor repeat over the 10 mm RIGHT hump: `[S4_HUMP]` | PASS on 1480b37: count 1 each, peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only drive not supplied |
-| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | Not run |
+| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | Short course on d51d27b: 4/4 counted; 12.9..15.5 mm over-read; not a height PASS |
 | H3 | Curves and SEARCH, no hump: count 0, record `gated` | Not run |
 | H4 | Hump right after a curve: count, CURVE flag | Not run |
 | H5 | Course mat, no hump: count 0 | Not run |
@@ -241,6 +241,77 @@ MQTT load and timing still require H0. H1 confirms one event per drive;
 | H7 | LEFT-wheel hump: side LEFT (bonus) | Not run |
 | H8 | GP21 stop on the hump: OPEN flag, counted | Not run |
 | H9 | Broker down during the run: USB and DUMP lines, summary after reconnect | Not run |
+
+### Step 3 H0 and H2-short on d51d27b
+
+Operator-supplied hardware evidence, 2026-11-09. MQTT robot image
+`mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2`, revision `d51d27b`. Seven
+runs on two tiles, LINE about 146 mm/s. USB was unplugged during the
+runs; values came from the MQTT recorder. The operator confirmed the
+order: 1 hump, 3 flat, 3 hump. The robot entered SEARCH at the line end;
+the operator then pressed dashboard ESTOP (stop_reason 2, stop_source 2).
+The line end itself is not stop_reason 2.
+
+| Run | Object | Distance mm | Duration ms | Peak 0.1 mm | Count | Gated | Flags |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | --- |
+| 1 | 10 mm RIGHT hump | 440 | 3170 | 140 | 1 | 4 | 09 (implemented, curve) |
+| 2 | Flat | 412 | 2950 | 0 | 0 | 3 | 01 |
+| 3 | Flat | 431 | 3190 | 0 | 0 | 2 | 01 |
+| 4 | Flat | 416 | 2950 | 0 | 0 | 0 | 01 |
+| 5 | 10 mm RIGHT hump | 408 | 2950 | 129 | 1 | 1 | 01 |
+| 6 | 10 mm RIGHT hump | 447 | 3250 | 136 | 1 | 2 | 01 |
+| 7 | 10 mm RIGHT hump | 469 | 4111 | 155 | 1 | 4 | 0d (implemented, curve, open) |
+
+IMU fault, long and left flags were zero throughout. Kind 9 words
+140/129/136, detail 1, arrived at run-relative 2980/2630/3200 ms for
+runs 1/5/6. Run 7 had no kind 9: its ACTIVE event was virtually closed
+only in the end summary (OPEN), not as a live event. These event times
+are closure times, not the instants of the height peaks.
+
+- Three flat runs: no false alarms. Four hump runs: one count each, but
+  height 12.9..15.5 mm for the 10 mm object, about 29..55 % high.
+  **Not a height PASS.** STREAM at 100 mm/s gave 9.9/11.3/10.5 mm.
+- Heartbeat: cpu_load 411..637 permille, vehicle_overruns 0,
+  motion_missed 0, stack_min_free 272..328 B; wifi_poll_gap_max up to
+  280190 us, publish_ok 1071, publish_failed 1196. No comparable baseline
+  was supplied: no CPU/network acceptance is inferred from these counts.
+- Same boot, USB reconnected and GP20 DUMP: hump peak 155, count 1,
+  flags 0d, gated 4 (run 7). KR1 diagnostics: overruns 0, lost_wakes 0,
+  faults 4 (`MC_FAULT_ESTOP`, dashboard ESTOP), gap 9971..10026 us.
+
+| Task, same robot boot | Stack B | High-water B | Free B |
+| --- | ---: | ---: | ---: |
+| motion | 3072 | 440 | 2632 |
+| line | 2048 | 288 | 1760 |
+| sonar | 2048 | 368 | 1680 |
+| imu | 2048 | 1456 | 592 |
+| vehicle | 4096 | 1504 | 2592 |
+| telemetry | 4096 | 728 | 3368 |
+| health | 2048 | 568 | 1480 |
+| idle_meter | 512 | 240 | 272 |
+
+Heartbeat stack_min_free 272 B was idle_meter, not IMU. The named robot
+IMU stack margin (592 B) exceeds 256 B on d51d27b; diagnostic C requires
+a new measurement. Stack marks cover the boot, not one run.
+
+### Shared floor-test condition and diagnostic C
+
+Operator confirmation: the front-LEFT barcode sensor (about 5.5 mm above
+the floor) scraped on the 10 mm hump in ALL earlier floor drives,
+including step 2d and H1 STREAM. Their 10..11 mm results already include
+the scrape. Record contact in each trial. It can change support geometry
+or add drag/yaw, but is not by itself the difference between STREAM and
+LINE. In LINE the robot also zigzags slightly while it climbs (operator
+observation); STREAM commands equal wheel speeds.
+
+Compensation lag is a hypothesis, not measured evidence. The 100 ms
+encoder window and filtered yaw derivative can lag accelerometer
+transients. Diagnostic C records paired heights and motion at the actual
+selected peak; see [diagnostic C](../../docs/s4-imu/IMU.md#diagnostic-c-peak-context).
+The approved comparison leaves at least 200 mm of flat line after the
+hump before SEARCH/stop (3 hump + 2 flat trials). That comparison and
+hardware tests of diagnostic C are Not run. Keep corrected as the default;
+do not tune thresholds from these short trials.
 
 ### S4-U04 procedure
 

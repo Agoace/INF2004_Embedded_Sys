@@ -82,6 +82,8 @@ static void hump(imu_core_t *core, const imu_core_input_t *in, float sine,
         .valid = valid,
         .motion_valid = out->motion_valid};
 
+    core->hump_travel_mm = ds;
+    core->hump_valid = valid;
     imu_hump_step(&core->hump_detector, &h);
     out->hump = core->hump_detector.output;
 }
@@ -441,6 +443,8 @@ void imu_core_step(imu_core_t *core, const imu_core_input_t *in)
     const float hump_sine = IMU_HUMP_SOURCE == IMU_HUMP_SOURCE_FILTERED
                                 ? roll_sine : corrected_roll_sine;
 
+    core->hump_corrected_mm = IMU_TRACK_MM * corrected_roll_sine;
+    core->hump_filtered_mm = IMU_TRACK_MM * roll_sine;
     hump(core, in, hump_sine, ds, out->calibrated && sample_time);
     if (out->calibrated && sample_time && distinct) {
         out->height_mm += pitch_sine * ds;

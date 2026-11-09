@@ -68,7 +68,7 @@ remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 | Sonar | 256-byte request message buffer; copied requests with generation, ID, angle, not-before time and deadline; result mutex and event flag |
 | Telemetry | 4096-byte message buffer, by-value messages, no producer wait; array owner is telemetry30 |
 | Network | Bounded read-only boards, event/command queues; never a control mutex or PWM writer |
-| IMU | Bounded motion-count copy, own snapshot and hump boards; atomic vehicle calibration and run epochs; vehicle reads the hump board without a wait; no motion mutex or commands |
+| IMU | Bounded motion-count copy, own snapshot/hump/diagnostic boards; atomic vehicle calibration, run and LINE epochs; vehicle reads without a wait; diagnostic context prints after STOP/DUMP only; no motion mutex or commands |
 
 Only core 0 enables ADC/GPIO interrupts. GPIO IRQ13 is interrupt priority 1;
 ADC TIMER alarm0 uses 2; USB IRQ5 keeps 0; SysTick/PendSV use 3. These are
@@ -206,7 +206,7 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [app_task.c](../../app_program/platform/app_task.c),
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
-- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-3-measured-delta)
+- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-diagnostic-c-measured-delta)
   and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),

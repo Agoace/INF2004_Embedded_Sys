@@ -33,6 +33,14 @@ static uint32_t test_epoch;
 static unsigned int run_starts;
 static unsigned int hump_lines;
 static unsigned int hump_peak;
+static unsigned int diag_lines;
+
+int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
+{
+    *out = (imu_hump_diag_report_t){.run_epoch = test_epoch,
+        .timestamp_ms = wakes * 20u, .valid = true};
+    return E_OK;
+}
 
 uint32_t drv_time_us(void) { return wakes * 20000u; }
 int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
@@ -251,6 +259,8 @@ int tm_printf(const UB *format, ...)
         hump_peak = va_arg(args, unsigned int);
         va_end(args);
         ++hump_lines;
+    } else if (strncmp(text, "[S4_HUMP_DIAG]", 14u) == 0) {
+        ++diag_lines;
     } else if (strncmp(text, "[S4_RAW] %lu", 12u) == 0) {
         ++raw_lines;
     } else if (strncmp(text, "[S4_RAW_END]", 12u) == 0) {
@@ -311,7 +321,7 @@ int main(int argc, char **argv)
 
         assert(last_reason == expected);
         /* One run, one result line; the IMU run ends with the drive. */
-        assert(run_starts == 1u && hump_lines == 1u);
+        assert(run_starts == 1u && hump_lines == 1u && diag_lines == 1u);
         assert((test_epoch & 1u) == 0u);
         /* The last good copy is at most one 20 ms wake old: fresh. */
         assert(hump_peak == 105u);

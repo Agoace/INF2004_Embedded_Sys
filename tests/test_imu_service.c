@@ -199,6 +199,13 @@ int main(int argc, char **argv)
     saved = out;
     imu_hump_report_t hump;
     imu_hump_report_t hump_saved;
+    imu_hump_diag_report_t diag;
+    imu_hump_diag_report_t diag_saved;
+
+    memset(&diag, 0xa5, sizeof(diag));
+    diag_saved = diag;
+    assert(imu_hump_diag_try_read(NULL) == E_PAR);
+    assert(imu_hump_diag_try_read(&diag) == E_OBJ);
 
     memset(&hump, 0xa5, sizeof(hump));
     hump_saved = hump;
@@ -234,6 +241,8 @@ int main(int argc, char **argv)
     assert(memcmp(&out, &saved, sizeof(out)) == 0);
     assert(imu_hump_try_read(&hump) == E_TMOUT);
     assert(memcmp(&hump, &hump_saved, sizeof(hump)) == 0);
+    assert(imu_hump_diag_try_read(&diag) == E_TMOUT);
+    assert(memcmp(&diag, &diag_saved, sizeof(diag)) == 0);
     if (argc > 1 && strcmp(argv[1], "fifo_empty") == 0) {
         run(103u);
         saved = read_snapshot();
@@ -246,6 +255,8 @@ int main(int argc, char **argv)
         out = read_snapshot();
         /* No new observation: the hump copy ages so readers reject it. */
         assert(read_hump().timestamp_ms == hump.timestamp_ms);
+        assert(imu_hump_diag_try_read(&diag) == E_OK);
+        assert(diag.timestamp_ms == hump.timestamp_ms);
         assert(drv_time_ms() - hump.timestamp_ms > 20u);
         assert(out.timestamp_us == saved.timestamp_us);
         assert(out.value.samples == saved.value.samples);
@@ -335,6 +346,13 @@ int main(int argc, char **argv)
     assert(hump.hump.running && hump.hump.run_epoch == 1u);
     assert(hump.hump.flags == IMU_HUMP_FLAG_IMPLEMENTED);
     assert(hump.hump.valid_samples == 2u);
+    assert(imu_hump_diag_try_read(&diag) == E_OK);
+    assert(diag.valid && diag.run_epoch == 1u && diag.line_samples == 0u);
+    assert(diag.timestamp_ms == hump.timestamp_ms);
+    diag_saved = diag;
+    corrupt_read = true;
+    assert(imu_hump_diag_try_read(&diag) == E_TMOUT);
+    assert(memcmp(&diag, &diag_saved, sizeof(diag)) == 0);
     assert(imu_test_run(false) == 2u && imu_test_run(false) == 2u);
     run(1u);
     hump = read_hump();
