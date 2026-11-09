@@ -1,5 +1,24 @@
 #ifndef BARCODE_TEST_H
 #define BARCODE_TEST_H
-/* Exclusive TEST capture loop; no GP21 handler and no speed commands. */
+#include <stdint.h>
+/* Exclusive GP21 driven TEST; never called by normal routing. */
+#define BC_HEALTH_MAX_AGE_US  30000u
+#define BC_HEALTH_READ_LIMIT  3u
+#define BC_FAULT_WAKE         UINT32_C(0x0001)
+#define BC_FAULT_QUEUED       UINT32_C(0x0002)
+#define BC_FAULT_MOTOR_READ   UINT32_C(0x0004)
+#define BC_FAULT_MOTOR_AGE    UINT32_C(0x0008)
+#define BC_FAULT_LINE_READ    UINT32_C(0x0010)
+#define BC_FAULT_LINE_AGE     UINT32_C(0x0020)
+#define BC_FAULT_LINE_INVALID UINT32_C(0x0040)
+#define BC_FAULT_LINE_RAW     UINT32_C(0x0080)
+#define BC_FAULT_MOTOR_FLAGS  UINT32_C(0x0100)
+#define BC_FAULT_WATCHDOG     UINT32_C(0x0200)
+#define BC_FAULT_ACQUISITION  UINT32_C(0x0400)
+#define BC_FAULT_ADC_GAP      UINT32_C(0x0800)
+#define BC_FAULT_MOTION_FULL  UINT32_C(0x1000)
+#define BC_FAULT_START_MOVING UINT32_C(0x2000)
+#define BC_FAULT_CONFIG       UINT32_C(0x4000)
+#define BC_FAULT_INHIBITED    UINT32_C(0x8000)
 void barcode_test(void);
 #endif

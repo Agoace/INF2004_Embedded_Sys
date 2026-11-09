@@ -77,6 +77,10 @@ swap the 2x F and 141 mm F sheets while stopped. Settings are in
 the target is clamped to <=620 mm. A press while moving requests stop.
 Faults/deadline/capacity stop and inhibit restart. No dump/rearm occurs
 until stop API success and two fresh zero-duty/low-speed snapshots.
+Busy snapshot reads use the last coherent board for at most two failed
+10 ms polls; three failures or source age >30 ms stops. BC_FAULT records
+cause bits, read/age values, motor faults/watchdog and actual wake rc.
+A false watchdog flag has no startup grace; it must be armed to command.
 Capture uses 6144 four-byte decimated records, about 12.3 s at default
 2 ms, plus 512 motion records. The TEST runner reports each frame and
 both width methods after freeze. Read the

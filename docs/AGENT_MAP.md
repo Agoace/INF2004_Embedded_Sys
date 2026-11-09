@@ -197,7 +197,8 @@ vehicle task described below.
   packed/decimated ADC and motion capture; O(1) line-task copy and ranges.
 - [`barcode_test.c`](../app_program/subsystem3/barcode_test.c) and
   [`barcode_hw.c`](../app_program/subsystem3/barcode_hw.c) — priority-20
-  TEST observer; GP20 ranges, GP21 driven pass; checked stop then dump.
+  TEST observer; GP20 ranges, GP21 pass; checked stop then dump, bounded
+  coherent-board retries and detailed fault masks.
 - [`barcode_drive.c`](../app_program/subsystem3/barcode_drive.c) and
   [`barcode_drive.h`](../app_program/subsystem3/barcode_drive.h) — pure
   forward/backward distance/time bounds and fault/start inhibition.
@@ -208,8 +209,8 @@ vehicle task described below.
   [`tests/barcode_stubs/`](../tests/barcode_stubs/) supplies core-0 doubles.
 - [B1b contract](s3-line-barcode/BARCODE.md) and
   [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — B1 contrast
-  passed; hand-push procedure failed. Powered B1b tests remain Not run;
-  normal robot routing does not use the decoder.
+  passed; hand-push procedure failed. Initial B1b lifted trial stopped on
+  FAULT; retest pending. Normal routing does not use the decoder.
 
 ## TEST-only IMU acquisition
 

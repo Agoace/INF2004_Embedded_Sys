@@ -31,11 +31,20 @@ static bool button_ready;
 static bool injected;
 static bool failed_stop;
 static bool start_refused;
+static unsigned int fault_reports;
+static unsigned int busy_reads;
 static jmp_buf finished;
 
 static bool mode(const char *name)
 {
     return strcmp(scenario, name) == 0;
+}
+
+static bool normal_case(void)
+{
+    return mode("normal") || mode("line_busy") || mode("line_busy_twice") ||
+           mode("line_busy_start") || mode("line_age_jitter") ||
+           mode("motor_busy") || mode("motor_busy_twice");
 }
 
 static uint16_t optical(void)
@@ -139,6 +148,17 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
         now - first_drive_ms < 300u) {
         return E_TMOUT;
     }
+    if (starts == 1u) {
+        const uint32_t elapsed = now - first_drive_ms;
+        if ((mode("motor_busy") && elapsed >= 100u && elapsed < 110u) ||
+            (mode("motor_busy_twice") && elapsed >= 100u && elapsed < 120u)) {
+            ++busy_reads;
+            return E_TMOUT;
+        }
+        if (mode("motor_read_error") && elapsed >= 100u && elapsed < 300u) {
+            return E_SYS;
+        }
+    }
     memset(out, 0, sizeof(*out));
     out->counts[0] = (int32_t)(position_scaled / 1000000);
     out->counts[1] = out->counts[0];
@@ -146,7 +166,9 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *stamp)
     out->speed_mm_s[1] = sampled_speed;
     out->duty_permille[0] = sampled_speed == 0 ? 0 : 200;
     out->duty_permille[1] = out->duty_permille[0];
-    out->watchdog_armed = true;
+    out->watchdog_armed =
+        !(mode("watchdog_start") && starts == 0u && now >= 3800u) &&
+        !(mode("watchdog_lost") && starts > 0u && now - first_drive_ms >= 10u);
     if (mode("moving_start") && starts == 0u && now >= 3800u && now < 3900u) {
         out->speed_mm_s[0] = 20;
         out->speed_mm_s[1] = 20;
@@ -167,10 +189,37 @@ int line_snapshot_try_read(line_snapshot_t *out)
     if (mode("sensor_fault") && starts > 0u && now - first_drive_ms >= 100u) {
         return E_TMOUT;
     }
+    if (mode("line_busy_start") && starts == 0u && now >= 3830u &&
+        now < 3840u) {
+        ++busy_reads;
+        return E_TMOUT;
+    }
+    if (starts == 1u) {
+        const uint32_t elapsed = now - first_drive_ms;
+        if ((mode("line_busy") && elapsed >= 100u && elapsed < 110u) ||
+            (mode("line_busy_twice") && elapsed >= 100u && elapsed < 120u)) {
+            ++busy_reads;
+            return E_TMOUT;
+        }
+        if (mode("line_read_error") && elapsed >= 100u) {
+            return E_SYS;
+        }
+    }
     memset(out, 0, sizeof(*out));
     out->timestamp_us = drv_time_us();
-    out->valid = true;
-    out->raw_bc = optical();
+    out->valid =
+        !(mode("line_invalid") && starts > 0u && now - first_drive_ms >= 100u);
+    out->raw_bc =
+        mode("line_raw") && starts > 0u && now - first_drive_ms >= 100u
+            ? 4096u
+            : optical();
+    if (mode("line_age_jitter")) {
+        out->timestamp_us -= 10000u; /* Old 5 ms gate was too strict. */
+    }
+    if ((mode("line_stale") && starts > 0u && now - first_drive_ms >= 100u) ||
+        (mode("line_stale_start") && starts == 0u && now >= 3830u)) {
+        out->timestamp_us -= BC_HEALTH_MAX_AGE_US + 1u;
+    }
     return E_OK;
 }
 
@@ -294,6 +343,13 @@ ER tk_dly_tsk(RELTIM ms)
     return E_OK;
 }
 
+static long diagnostic_value(const char *text, const char *key)
+{
+    const char *at = strstr(text, key);
+    assert(at != NULL);
+    return strtol(at + strlen(key), NULL, 0);
+}
+
 int tm_printf(const UB *format, ...)
 {
     char text[640];
@@ -301,13 +357,98 @@ int tm_printf(const UB *format, ...)
     va_start(args, format);
     (void)vsnprintf(text, sizeof(text), (const char *)format, args);
     va_end(args);
+    if (strstr(text, "[BC_FAULT]") != NULL) {
+        ++fault_reports;
+        assert(stop_calls > 2u || starts == 0u);
+        const char *at = strstr(text, "mask 0x");
+        assert(at != NULL);
+        const uint32_t mask = (uint32_t)strtoul(at + 7, NULL, 16);
+        uint32_t expected = 0u;
+        if (mode("sensor_fault") || mode("line_read_error")) {
+            expected = BC_FAULT_LINE_READ;
+        } else if (mode("missing_motor") || mode("motor_read_error")) {
+            expected = BC_FAULT_MOTOR_READ;
+        } else if (mode("stale_motor")) {
+            expected = BC_FAULT_MOTOR_AGE;
+        } else if (mode("motion_fault")) {
+            expected = BC_FAULT_MOTOR_FLAGS;
+        } else if (mode("wake_fault")) {
+            expected = BC_FAULT_WAKE;
+        } else if (mode("missed_wake")) {
+            expected = BC_FAULT_QUEUED;
+        } else if (mode("acquisition_loss")) {
+            expected = BC_FAULT_ACQUISITION;
+        } else if (mode("line_stale") || mode("line_stale_start")) {
+            expected = BC_FAULT_LINE_AGE;
+        } else if (mode("line_invalid")) {
+            expected = BC_FAULT_LINE_INVALID;
+        } else if (mode("line_raw")) {
+            expected = BC_FAULT_LINE_RAW;
+        } else if (mode("watchdog_start") || mode("watchdog_lost")) {
+            expected = BC_FAULT_WATCHDOG;
+        } else if (mode("moving_start")) {
+            expected = BC_FAULT_START_MOVING;
+        } else if (mode("capacity")) {
+            expected = BC_FAULT_ADC_GAP;
+        }
+        assert(expected != 0u && (mask & expected) != 0u);
+        assert(strstr(text, "line_rc ") && strstr(text, "line_age_us ") &&
+               strstr(text, "motor_faults ") && strstr(text, "wake_rc ") &&
+               strstr(text, "watchdog_armed "));
+        if (mode("sensor_fault") || mode("missing_motor")) {
+            assert(now - first_drive_ms == 120u); /* Three failed reads. */
+        }
+        if (mode("line_stale") || mode("line_read_error") ||
+            mode("line_invalid") || mode("line_raw")) {
+            assert(now - first_drive_ms == 100u);
+        }
+        if (mode("sensor_fault")) {
+            assert(diagnostic_value(text, "line_rc ") == E_TMOUT);
+            assert(diagnostic_value(text, "line_fail ") == 3);
+        }
+        if (mode("missing_motor")) {
+            assert(diagnostic_value(text, "motor_rc ") == E_TMOUT);
+            assert(diagnostic_value(text, "motor_fail ") == 3);
+        }
+        if (mode("line_stale") || mode("line_stale_start")) {
+            assert(diagnostic_value(text, "line_rc ") == E_OK);
+            assert(diagnostic_value(text, "line_age_us ") == 30001);
+        }
+        if (mode("line_invalid")) {
+            assert(diagnostic_value(text, "line_valid ") == 0);
+        }
+        if (mode("line_raw")) {
+            assert(diagnostic_value(text, "raw_bc ") == 4096);
+        }
+        if (mode("line_read_error")) {
+            assert(diagnostic_value(text, "line_rc ") == E_SYS);
+        }
+        if (mode("motor_read_error")) {
+            assert(diagnostic_value(text, "motor_rc ") == E_SYS);
+        }
+        if (mode("motion_fault")) {
+            assert(diagnostic_value(text, "motor_faults ") == 1);
+        }
+        if (mode("wake_fault")) {
+            assert(diagnostic_value(text, "wake_rc ") == E_TMOUT);
+        }
+        if (mode("watchdog_start") || mode("watchdog_lost")) {
+            assert(diagnostic_value(text, "watchdog_armed ") == 0);
+        }
+        if (mode("watchdog_lost")) {
+            assert(now - first_drive_ms == 10u);
+            assert(strstr(text, "watchdog_armed 0") != NULL);
+        }
+    }
     if (strstr(text, "START REFUSED") != NULL) {
         start_refused = true;
     }
-    if (mode("moving_start") && start_refused &&
-        strstr(text, "[BC] STOP CONFIRMED; next") != NULL) {
+    if ((mode("moving_start") || mode("watchdog_start") ||
+         mode("line_stale_start")) &&
+        start_refused && strstr(text, "[BC] STOP CONFIRMED; next") != NULL) {
         assert(starts == 0u && command == 0 && stop_calls > 2u);
         assert(strstr(text, "inhibited 1") != NULL && dumps == 0u);
+        assert(fault_reports == 1u);
         longjmp(finished, 1);
     }
     if (strstr(text, "[BC_RANGE]") != NULL) {
@@ -338,13 +479,20 @@ int tm_printf(const UB *format, ...)
     }
     if (strstr(text, "[BC] STOP CONFIRMED; next") != NULL && dumps > 0u) {
         assert(command == 0 && !barcode_capture_active());
-        if (mode("normal") && dumps == 1u) {
+        if (normal_case() && dumps == 1u) {
             assert(strstr(text, "inhibited 0") != NULL && frames == 2u);
             second_press_ms = now + 100u;
         } else if (mode("held")) {
             held_done_ms = now;
         } else {
-            if (mode("normal")) {
+            if (normal_case()) {
+                assert(fault_reports == 0u);
+                if (!mode("normal") && !mode("line_age_jitter")) {
+                    assert(busy_reads == ((mode("line_busy_twice") ||
+                                           mode("motor_busy_twice"))
+                                              ? 2u
+                                              : 1u));
+                }
                 assert(dumps == 2u && starts == 2u && frames == 4u);
                 assert(position_scaled / 12414 >= -2000 &&
                        position_scaled / 12414 <= 2000);

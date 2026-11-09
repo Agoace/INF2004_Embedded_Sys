@@ -126,6 +126,52 @@ observations, not independent physical brake verification. Retries continue
 if snapshots/API confirmation are unavailable. Final wheel travel includes
 observed coast; above 620 mm sets OVERRUN and inhibits another pass.
 
+## Snapshot health and fault diagnostics
+
+Line publishes after each queued 1 ms ADC sample; motion publishes after
+its 10 ms control tick. A sequence-guarded read can return E_TMOUT if a
+higher-priority writer interrupts the copy. One busy read is not a sensor
+fault. The TEST owner retains the last successful coherent board and
+retries on its next 10 ms tick. It never uses a partially copied board.
+
+For BOTH boards, three consecutive failed reads or source age >30000 us
+stops the pass. A successful read resets that board's failure count. An
+error other than E_TMOUT, invalid line data, raw ADC above 4095, motor fault
+or false watchdog flag stops immediately. Without any successful board,
+start is refused. Cached source timestamps are not advanced or restamped.
+This replaces the former one-read / 5000 us line check only in this TEST.
+Stop confirmation still needs distinct fresh post-request zero snapshots.
+
+The watchdog is armed before speed commands: `motion_set_speed()` refuses
+an unarmed controller, and does not clear the flag. No artificial arming
+grace is added. A coherent false watchdog flag remains a real fault.
+
+After the stop API request, every FAULT transition and every START REFUSED
+prints `[BC_FAULT]`. The row has mask, line read rc/age/valid/raw/failure
+count, motor read rc/age/failure count/faults/watchdog flag, actual sleep
+wake rc and queued wakes. Ages are source ages; UINT32_MAX means no good
+board yet. A mask can contain multiple causes. API return values use signed
+decimal; zero is E_OK. Preserve the full row for any failed retest.
+
+| Mask bit (hex) | Cause |
+| --- | --- |
+| 0001 / 0002 | Sleep/cyclic error / queued owner wakes |
+| 0004 / 0008 | Motor read failure / motor source too old |
+| 0010 / 0020 | Line read failure / line source too old |
+| 0040 / 0080 | Line not valid / ADC above 4095 |
+| 0100 / 0200 | Motor fault flags / watchdog not armed |
+| 0400 / 0800 | Acquisition missed/dropped delta / capture ADC gap |
+| 1000 / 2000 | Motion buffer overflow / moving at start |
+| 4000 / 8000 | Invalid settings / restart already inhibited |
+
+The corrected image prints `health_age_limit_us 30000 read_fail_limit 3;
+BC_FAULT masks enabled` at startup. Verify this before the lifted retest.
+
+The first lifted trial of `afcdea2` passed contrast but stopped at FAULT
+before the wheels turned. That image did not print a cause mask; its root
+cause is not established. Busy-copy rejection is a candidate, not a proven
+diagnosis. This health-policy fix needs a new lifted-wheels retest.
+
 ## Capture, RAM and diagnostics
 
 | Storage | Current B1b bytes / limit |
@@ -135,12 +181,12 @@ observed coast; above 620 mm sets OVERRUN and inhibits another pass.
 | Capture arrays | 30720 = 30 KiB, exclusive profile only |
 | Decoder workspace + report | 1760 + 64 = 1824 ARM bytes; assert <=2048 |
 | Arrays + decoder/report | 32544 bytes; owner boards/counters are extra |
-| Whole image static RAM | data 152 + BSS 152204 = 152356 bytes |
+| Whole image static RAM | data 152 + BSS 152468 = 152620 bytes |
 
 RAM is from this B1b software-validation image descended from `70caef0`,
 not runtime free heap or stack evidence. Arrays, decoder and owner state
 remain below about 40 KiB. Owner boards/state are static because the TEST
-initial task has only a 1 KiB stack. Compiler function frames are 280 bytes
+initial task has only a 1 KiB stack. Compiler function frames are 304 bytes
 for the owner, 296 for decoder step and 112 for character classification;
 these are not a complete call-graph or measured high-water proof. No
 kernel stack setting was changed. Normal images allocate none of these

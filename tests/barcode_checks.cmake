@@ -22,7 +22,10 @@ target_compile_definitions(test_barcode_test PRIVATE
 target_link_libraries(test_barcode_test PRIVATE m)
 foreach(case IN ITEMS button_stop stop_retry motion_fault sensor_fault
         command_fail missing_motor stale_motor acquisition_loss wake_fault
-        missed_wake moving_start timeout capacity held)
+        missed_wake moving_start timeout capacity held
+        line_busy line_busy_twice line_busy_start line_age_jitter line_stale
+        line_invalid line_raw line_read_error motor_busy motor_busy_twice
+        motor_read_error watchdog_start watchdog_lost line_stale_start)
     add_test(NAME test_barcode_${case} COMMAND test_barcode_test ${case})
 endforeach()
 host_test(test_barcode_packed tests/test_barcode_packed.c

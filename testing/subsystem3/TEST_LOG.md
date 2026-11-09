@@ -155,7 +155,7 @@ adc_full 1 on every capture. These are measured values for that B1 image,
 not timing or powered-decoding acceptance for B1b. Stack checks and normal
 LINE regression remain Not run.
 
-## B1b software validation — exclusive driven profile
+## B1b software validation — `afcdea2` exclusive driven profile
 
 This source change descends from B1 `70caef0`. It does not include a powered
 hardware PASS. The final operator plan uses **one sheet per run**, swapped
@@ -215,7 +215,7 @@ bytes. This avoids the former 624-byte owner frame, but does not constitute
 complete call-graph or runtime high-water proof. No template stack change
 was made. Powered timing/stack acceptance is still Not run.
 
-## B1b powered procedure — Not run
+## B1b powered procedure — first lifted trial failed
 
 Use the [current contract](../../docs/s3-line-barcode/BARCODE.md) for the
 full button, settings, loss and output rules. Do not use B1 hand-push
@@ -227,11 +227,66 @@ make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
 
 | ID | Physical check | Status |
 | --- | --- | --- |
-| S3-B1b-01 | VIN, lifted wheels: both directions and GP21 stop | Not run |
+| S3-B1b-01 | VIN, lifted wheels: both directions / GP21 | FAIL; see below |
 | S3-B1b-02 | One 2x F sheet, floor forward/backward 600 mm passes | Not run |
 | S3-B1b-03 | Swap to one 141 mm F sheet, both directions | Not run |
 | S3-B1b-04 | Stop/coast distance and fault-inhibited restart | Not run |
 | S3-B1b-05 | Cost, loss, USB integrity and runtime stack | Not run |
+
+### Supplied first lifted trial — `afcdea2`, 2026-11-09 about 18:05
+
+Facts supplied by Main; the private hardware log was not read.
+VIN was on and wheels lifted. Contrast PASS: FLOOR 152–170,
+WHITE_PAPER 158–174, BLACK_BAR 1206–1492. GP21 accepted FORWARD,
+then within about 30 ms reported STOP UNCONFIRMED, STOP CONFIRMED /
+FAULT / travel_mm 0, and inhibited 1. Wheels never turned. Dump contained
+15 ADC and three motor rows. Missed/dropped, gaps, full, capture drops,
+motor misses/overflow and observer misses were all zero.
+
+This is a health-guard failure before powered movement, not a decoder
+verdict or a stop-distance PASS. The old image did not report the condition
+that set FAULT. Root cause remains unknown. A sequence-copy collision was
+incorrectly fatal and is one candidate. Line normally publishes every
+1 ms; motion every 10 ms. The watchdog flag is armed before commands and
+is not cleared by motion_set_speed; no startup grace is justified by that
+code. The first STOP UNCONFIRMED notice alone does not prove API failure.
+
+### Snapshot-health and fault-diagnostic correction
+
+The TEST owner now caches only successful coherent board copies. A busy
+E_TMOUT read retries on the next 10 ms tick. Fault after three consecutive
+failed reads or source age above 30000 us, whichever applies first. Other
+read errors, invalid/raw-out-of-range line data, motor faults and false
+watchdog flag remain immediate faults. Source stamps are never fabricated.
+Stop confirmation still requires two distinct fresh zero snapshots.
+
+Every FAULT transition and START REFUSED prints BC_FAULT with cause mask,
+line rc/age/valid/raw/failure count, motor rc/age/failure count/faults,
+watchdog flag, actual wake rc and queued wakes. Stop is requested before
+printing. See the [mask table](../../docs/s3-line-barcode/BARCODE.md).
+
+| Correction check | Result |
+| --- | --- |
+| Full strict host suite | PASS: 168/168 |
+| Actual owner paths | PASS: 29, including 14 new health cases |
+| Busy copies | PASS: one/two busy reads, both boards, busy at start |
+| Line freshness | PASS: 10 ms accepted; >30 ms stops/refuses |
+| Bad line state | PASS: invalid, raw above 4095, hard read errors |
+| Watchdog false | PASS: refuses start or stops at first active tick |
+| Failure diagnostics | PASS: expected cause bits and values present |
+| Clang ASan/UBSan | PASS: all 29 owner paths |
+| Firmware / SDK proofs | PASS: nine warning-free profiles |
+| Strict ARM application compiles | PASS: 63 |
+| Static capture image RAM | data 152 + BSS 152468 = 152620 bytes |
+| Owner / diagnostic compiler frames | 304 / 56 bytes |
+| Decoder workspace/report and arrays | Unchanged: 1824 and 30720 bytes |
+| Docs / whitespace / template ledger | PASS; template count 8 |
+
+No flash or powered retest was performed by this worker. Replug/reboot to
+clear inhibition, repeat contrast and lifted-wheel forward/backward/GP21
+checks before floor work. Save BC_FAULT if it stops. Actual physical
+stop/coast, decoding, runtime stack/timing and normal LINE regression
+remain unaccepted.
 
 1. Verify `_test_barcode_capture` and the B1b DRIVEN banner. VIN is required.
    Open GP28 VBAT jumper, leave GP7/IMU wiring unchanged, clear the mechanism

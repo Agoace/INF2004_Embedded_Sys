@@ -39,6 +39,102 @@ static bool motor_read(motion_status_t *value, uint32_t *stamp)
            drv_time_us() - *stamp <= 30000u;
 }
 
+typedef struct {
+    int motor_rc;
+    int line_rc;
+    uint32_t motor_age_us;
+    uint32_t line_age_us;
+    unsigned int motor_fail;
+    unsigned int line_fail;
+    bool motor_seen;
+    bool line_seen;
+} health_t;
+
+static health_t health;
+
+/* E_TMOUT is a sequence-copy collision, not a sensor fault. Keep only the
+ * last coherent board, bounded by age and three consecutive failed reads.
+ * Read into static scratch so a failed call cannot damage the cached view. */
+static uint32_t read_health(motion_status_t *motor, uint32_t *stamp,
+                            line_snapshot_t *line, ER wake_rc, INT queued)
+{
+    static motion_status_t next_motor;
+    static line_snapshot_t next_line;
+    uint32_t next_stamp = 0u;
+    health.motor_rc = motion_snapshot_try_read(&next_motor, &next_stamp);
+    health.line_rc = line_snapshot_try_read(&next_line);
+    if (health.motor_rc == E_OK) {
+        *motor = next_motor;
+        *stamp = next_stamp;
+        health.motor_seen = true;
+        health.motor_fail = 0u;
+    } else if (health.motor_fail < BC_HEALTH_READ_LIMIT) {
+        ++health.motor_fail;
+    }
+    if (health.line_rc == E_OK) {
+        *line = next_line;
+        health.line_seen = true;
+        health.line_fail = 0u;
+    } else if (health.line_fail < BC_HEALTH_READ_LIMIT) {
+        ++health.line_fail;
+    }
+    const uint32_t now = drv_time_us();
+    health.motor_age_us = health.motor_seen ? now - *stamp : UINT32_MAX;
+    health.line_age_us =
+        health.line_seen ? now - line->timestamp_us : UINT32_MAX;
+    uint32_t mask = 0u;
+    if (wake_rc < E_OK) {
+        mask |= BC_FAULT_WAKE;
+    }
+    if (queued > 0) {
+        mask |= BC_FAULT_QUEUED;
+    }
+    if (!health.motor_seen || health.motor_fail >= BC_HEALTH_READ_LIMIT ||
+        (health.motor_rc != E_OK && health.motor_rc != E_TMOUT)) {
+        mask |= BC_FAULT_MOTOR_READ;
+    }
+    if (health.motor_age_us > BC_HEALTH_MAX_AGE_US) {
+        mask |= BC_FAULT_MOTOR_AGE;
+    }
+    if (!health.line_seen || health.line_fail >= BC_HEALTH_READ_LIMIT ||
+        (health.line_rc != E_OK && health.line_rc != E_TMOUT)) {
+        mask |= BC_FAULT_LINE_READ;
+    }
+    if (health.line_age_us > BC_HEALTH_MAX_AGE_US) {
+        mask |= BC_FAULT_LINE_AGE;
+    }
+    if (!line->valid) {
+        mask |= BC_FAULT_LINE_INVALID;
+    }
+    if (line->raw_bc > 4095u) {
+        mask |= BC_FAULT_LINE_RAW;
+    }
+    if (motor->faults != 0u) {
+        mask |= BC_FAULT_MOTOR_FLAGS;
+    }
+    /* motion_set_speed requires the already-armed global flag and never
+     * clears it. A coherent false flag is NOT an arming grace period. */
+    if (!motor->watchdog_armed) {
+        mask |= BC_FAULT_WATCHDOG;
+    }
+    return mask;
+}
+
+static void fault_report(uint32_t mask, const motion_status_t *motor,
+                         const line_snapshot_t *line, ER wake_rc, INT queued)
+{
+    tm_printf((UB *)"[BC_FAULT] mask 0x%08lx line_rc %ld line_age_us %lu "
+                    "line_valid %u raw_bc %u line_fail %u motor_rc %ld "
+                    "motor_age_us %lu motor_fail %u motor_faults 0x%08lx "
+                    "watchdog_armed %u wake_rc %ld queued %ld\n",
+              (unsigned long)mask, (long)health.line_rc,
+              (unsigned long)health.line_age_us, (unsigned int)line->valid,
+              (unsigned int)line->raw_bc, health.line_fail,
+              (long)health.motor_rc, (unsigned long)health.motor_age_us,
+              health.motor_fail, (unsigned long)motor->faults,
+              (unsigned int)motor->watchdog_armed, (long)wake_rc, (long)queued);
+}
+
 static void motor_sample(const motion_status_t *value, uint32_t stamp,
                          bool force)
 {
@@ -324,6 +420,9 @@ void barcode_test(void)
     static motion_status_t motor;
     static line_snapshot_t line;
     initial = (drv_line_stats_t){0};
+    health = (health_t){0};
+    static uint32_t stamp;
+    stamp = 0u;
     tm_printf(
         (UB *)"[BC] B1b DRIVEN TEST ONLY: VIN REQUIRED. Lift wheels "
               "for first GP21 check. One F sheet per run; swap when idle.\n");
@@ -336,24 +435,30 @@ void barcode_test(void)
         (unsigned long)barcode_drive_timeout_ms(&settings),
         (unsigned long)barcode_drive_adc_ms(&settings),
         (unsigned long)barcode_drive_motor_ms(&settings));
+    tm_printf((UB *)"[BC] health_age_limit_us %lu read_fail_limit %u; "
+                    "BC_FAULT masks enabled\n",
+              (unsigned long)BC_HEALTH_MAX_AGE_US,
+              (unsigned int)BC_HEALTH_READ_LIMIT);
     for (;;) {
-        const bool wake_fault = !cyclic_ok || tk_slp_tsk(100u) < E_OK;
-        if (wake_fault) {
+        const ER wake_rc = cyclic_ok ? tk_slp_tsk(100u) : E_SYS;
+        if (wake_rc < E_OK) {
             (void)tk_dly_tsk(10u);
         }
         const INT missed = tk_can_wup(TSK_SELF);
         const bool range_press = press(&range_button, barcode_hw_button_down());
         const bool drive_press = press(&drive_button, barcode_hw_drive_down());
-        motor = (motion_status_t){0};
-        uint32_t stamp = 0u;
-        const bool motor_ok = motor_read(&motor, &stamp);
+        uint32_t fault_mask =
+            read_health(&motor, &stamp, &line, wake_rc, missed);
+        const bool motor_ok =
+            (fault_mask & (BC_FAULT_MOTOR_READ | BC_FAULT_MOTOR_AGE)) == 0u;
         drv_line_stats(&current);
         if (capturing) {
             if (motor_ok) {
                 motor_sample(&motor, stamp, false);
                 barcode_drive_observe(&job, &settings, motor.counts[0],
                                       motor.counts[1]);
-            } else {
+            }
+            if (!motor_ok || health.motor_rc != E_OK) {
                 ++motor_misses;
             }
             if (missed > 0) {
@@ -392,20 +497,19 @@ void barcode_test(void)
             continue;
         }
         if (job.active) {
-            const bool line_ok = line_snapshot_try_read(&line) == E_OK &&
-                                 line.valid &&
-                                 drv_time_us() - line.timestamp_us <= 5000u &&
-                                 line.raw_bc <= 4095u;
-            const bool fault = wake_fault || missed > 0 || !motor_ok ||
-                               !line_ok || motor.faults != 0u ||
-                               !motor.watchdog_armed ||
-                               current.missed != initial.missed ||
-                               current.dropped != initial.dropped ||
-                               barcode_capture_gaps() != 0u ||
-                               barcode_capture_motor_overflow() != 0u;
+            if (current.missed != initial.missed ||
+                current.dropped != initial.dropped) {
+                fault_mask |= BC_FAULT_ACQUISITION;
+            }
+            if (barcode_capture_gaps() != 0u) {
+                fault_mask |= BC_FAULT_ADC_GAP;
+            }
+            if (barcode_capture_motor_overflow() != 0u) {
+                fault_mask |= BC_FAULT_MOTION_FULL;
+            }
             const int16_t speed = barcode_drive_step(
                 &job, &settings, drv_time_ms(), motor.counts[0],
-                motor.counts[1], drive_press, fault);
+                motor.counts[1], drive_press, fault_mask != 0u);
             if (barcode_capture_full() || barcode_capture_dropped() != 0u) {
                 barcode_drive_cancel(&job, BC_DRIVE_CAPACITY);
             }
@@ -415,6 +519,10 @@ void barcode_test(void)
             if (!job.active) {
                 stop = (stop_t){.pending = true};
                 (void)confirm_stop(&stop, &motor, motor_ok, stamp);
+                /* Stop request precedes diagnostics, even on API failure. */
+                if (fault_mask != 0u) {
+                    fault_report(fault_mask, &motor, &line, wake_rc, missed);
+                }
                 /* Even immediate API success needs later zero snapshots. */
             }
             continue;
@@ -447,24 +555,27 @@ void barcode_test(void)
             continue;
         }
         if (drive_press) {
-            const bool line_ok = line_snapshot_try_read(&line) == E_OK &&
-                                 line.valid &&
-                                 drv_time_us() - line.timestamp_us <= 5000u &&
-                                 line.raw_bc <= 4095u;
-            const bool fault =
-                wake_fault || missed > 0 || !motor_ok || !line_ok ||
-                motor.faults != 0u || !motor.watchdog_armed ||
-                motor.duty_permille[0] != 0 || motor.duty_permille[1] != 0 ||
+            if (motor.duty_permille[0] != 0 || motor.duty_permille[1] != 0 ||
                 motor.speed_mm_s[0] < -10 || motor.speed_mm_s[0] > 10 ||
-                motor.speed_mm_s[1] < -10 || motor.speed_mm_s[1] > 10;
+                motor.speed_mm_s[1] < -10 || motor.speed_mm_s[1] > 10) {
+                fault_mask |= BC_FAULT_START_MOVING;
+            }
+            if (!configuration_ok) {
+                fault_mask |= BC_FAULT_CONFIG;
+            }
+            if (job.inhibited) {
+                fault_mask |= BC_FAULT_INHIBITED;
+            }
             const int16_t speed = barcode_drive_step(
                 &job, &settings, drv_time_ms(), motor.counts[0],
-                motor.counts[1], true, fault);
+                motor.counts[1], true, fault_mask != 0u);
             if (!job.active) {
+                stop = (stop_t){.pending = true};
+                (void)confirm_stop(&stop, &motor, motor_ok, stamp);
+                fault_report(fault_mask, &motor, &line, wake_rc, missed);
                 tm_printf((UB *)"[BC_DRIVE] START REFUSED reason %s; reboot "
                                 "after a fault, never bypass it\n",
                           barcode_drive_reason_name(job.reason));
-                stop = (stop_t){.pending = true};
                 continue;
             }
             initial = current;
