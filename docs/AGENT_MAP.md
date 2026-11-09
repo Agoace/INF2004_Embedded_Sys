@@ -23,7 +23,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
-| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH and TEST barcode B1b. |
+| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH and TEST barcode B1c. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
@@ -105,7 +105,7 @@ The archived development record retains older CMake bench examples.
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
 | Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
-| Barcode B1b | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
+| Barcode B1c | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
 | Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |
@@ -188,11 +188,15 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
-## TEST-only barcode B1b
+## TEST-only barcode B1c
 
 - [`barcode.c`](../app_program/subsystem3/barcode.c) and
   [`barcode.h`](../app_program/subsystem3/barcode.h) — pure incremental
   Code 39, both width methods/directions, command values only.
+- [`barcode_peak.c`](../app_program/subsystem3/barcode_peak.c) and
+  [`barcode_peak.h`](../app_program/subsystem3/barcode_peak.h) — separate
+  bounded PEAK TIME/DISTANCE path, white-return lobes, framing-star bands,
+  geometric spaces and conflict rejection. WIDTH remains unchanged.
 - [`barcode_capture.c`](../app_program/subsystem3/barcode_capture.c) —
   packed/decimated ADC and motion capture; O(1) line-task copy and ranges.
 - [`barcode_test.c`](../app_program/subsystem3/barcode_test.c) and
@@ -212,10 +216,17 @@ vehicle task described below.
   methods decode F from forward and reversed replay.
 - [Blur cases](../tests/test_barcode_blur.c) test partial narrow peaks and
   bar/space bias for all 43 symbols; these are not measured small-print data.
-- [B1b contract](s3-line-barcode/BARCODE.md) and
+- [PEAK units](../tests/test_barcode_peak.c) cover all 43 symbols,
+  directions/sizes, noise, synthetic 18 mm line and failure/conflict guards.
+  [Four real captures](../tests/test_barcode_peak_real.c) under
+  [fixtures](../tests/fixtures/) cover large/small F, both native axes,
+  raw/packed and reversed replay; all quiet crops must reject.
+- [B1c contract](s3-line-barcode/BARCODE.md) and
   [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — B1 contrast
   passed; hand-push procedure failed. Lifted forward passed on 45040c7;
-  backward and new optical/short-map hardware checks remain pending.
+  0cd2c03 passed lifted/large F in both directions at 433 mm observed,
+  but small F failed WIDTH. B1c PEAK has host evidence, not powered proof.
+  The mount cannot go below 5.5 mm; it touches a 10 mm hump.
   Normal routing does not use the decoder.
 
 ## TEST-only IMU acquisition

@@ -285,11 +285,13 @@ and pass the lifted-wheel checks before floor work. R5 has not run.
 The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
 
-Barcode B1b has a pure Code 39 decoder and an exclusive driven TEST
-profile: VIN is required; GP21 runs 430 mm forward/backward (target clamp
-450 mm), with checked stop before decode/dump. Use one F sheet per run.
-It does not change robot routing; powered decode checks are Not run.
-See [Barcode B1b and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
+Barcode B1c keeps Code 39 WIDTH and adds a separate PEAK observation path.
+In its exclusive TEST, VIN is required; GP21 runs 430 mm forward/backward
+(target clamp 450 mm), with checked stop before decode/dump. Use one F
+sheet per run. Large F passed WIDTH on 0cd2c03; course-size F failed.
+B1c PEAK passes real-capture host tests; powered B1c checks are Not run.
+No barcode controls routing. The 5.5 mm sensor mount cannot go lower.
+See [Barcode B1c and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
 
 ## Local template changes
 

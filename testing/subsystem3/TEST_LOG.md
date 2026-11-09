@@ -227,11 +227,11 @@ make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
 
 | ID | Physical check | Status |
 | --- | --- | --- |
-| S3-B1b-01 | VIN, lifted wheels | Forward PASS; backward not run |
-| S3-B1b-02 | One 2x F sheet, floor | 45040c7 forward NO_FRAME; see below |
-| S3-B1b-03 | Swap to one 141 mm F sheet, both directions | Not run |
-| S3-B1b-04 | Stop/coast distance and fault-inhibited restart | Not run |
-| S3-B1b-05 | Cost, loss, USB integrity and runtime stack | Not run |
+| S3-B1b-01 | VIN, lifted wheels | 0cd2c03 PASS, both directions |
+| S3-B1b-02 | One 2x F sheet, floor | 0cd2c03 F both; back cable caveat |
+| S3-B1b-03 | One 141 mm F sheet | 0cd2c03 FAIL: NO_FRAME both ways |
+| S3-B1b-04 | Stop/coast and inhibition | 433 mm observed; faults pending |
+| S3-B1b-05 | Cost, loss, USB and stack | Loss/dump PASS; stack pending |
 
 ### Supplied first lifted trial — `afcdea2`, 2026-11-09 about 18:05
 
@@ -414,3 +414,117 @@ at 430 mm, then one properly placed 2x F sheet. Wait for READY, not just
 STOP CONFIRMED or the start of the dump. Backward hardware, corrected
 powered decode, 141 mm optics, physical 450 mm map margin, runtime stack/
 timing and normal LINE regression remain pending.
+
+## B1c — supplied 0cd2c03 hardware and peak-path candidate
+
+This section supersedes the preceding pending statuses for the old image,
+not its revision-scoped evidence. Main supplied all hardware facts below;
+this worker read only the four approved extracted CSVs, not private logs.
+
+### 0cd2c03: six powered passes at 430 mm / 100 mm/s
+
+Contrast: FLOOR 152..170, WHITE 151..169, BLACK 1576..1716. All six passes
+reported STOP CONFIRMED / DISTANCE at observed encoder travel 433 mm;
+wheel endpoints were within 437/429 mm. BC_STATS loss/fault counters were
+all zero. READY/ignored notices worked; complete dumps took 31–33 s.
+These are encoder observations, not an independent physical ruler test.
+
+| Pass | Supplied result |
+| --- | --- |
+| Lifted forward / backward | NO_FRAME both; air 1170..1290, expected |
+| Large F forward | F / OK both WIDTH methods, separation 2699/2719 |
+| Large F backward | F / OK both, dirs 2; drove over own USB cable |
+| Course-size F forward / backward | NO_FRAME both WIDTH methods; 13 runs |
+
+The cable-contaminated backward trace is useful stress data, not a clean
+backward floor acceptance. Repeat with the cable clear. All 15 small-print
+bars are present as local peaks; the nine narrow peaks are only about
+200–234 raw with prominence 29–70, while six wide bars are about 1140–1323.
+The earlier linear half-width response prediction was wrong. Lowering the
+WIDTH threshold alone does not solve its bar-width distortion.
+
+**Recorded mechanical constraint:** the sensor is at its lowest possible
+5.5 mm height and already touches the floor on the 10 mm hump. The proposed
+lower-height test is ruled out. B1c must use this height; no mount, GPIO,
+subsystem 4, line steering or vehicle-routing change is included.
+
+### Approved real fixtures and analysis
+
+Copies under `tests/fixtures/` are byte-for-byte approved extractions;
+old BC_RUN rows are not used for classification. SHA256 per file:
+
+- `barcode_430_large_fwd.csv`
+  `0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5`
+- `barcode_430_large_back_cable.csv`
+  `56a8eba819cc6229b6e4b17b0611b8bc6fc7ceab05b791cb7c2e32ad570df634`
+- `barcode_430_small_fwd.csv`
+  `4df870325f12efb9aa9a0550d703ced1bbe46775f085f3768ed3fcb54e76f9f6`
+- `barcode_430_small_back.csv`
+  `79f465c82c98adef42b58362fe6c9eadcde6305fde92d1e962bb7e6128cdcb5f`
+
+Offline 1 mm mean-ADC analysis used source-stamped wheel interpolation at
+12414 counts/m. Quiet SD used bins 5..25 and 410..430 relative to capture
+start. Peak prominence used a +/-4 mm maximum and +/-6 mm minimum.
+
+| Trace | Quiet SD | Narrow raw / prominence | Wide raw / prominence |
+| --- | --- | --- | --- |
+| Large forward | 1.6–2.2 | 401–1105 / 238–944 | 1376–1793 / 1210–1551 |
+| Large back/cable | 1.3–2.4 | 396–904 / 229–743 | 1354–1805 / 466–1586 |
+| Small forward | 1.6–2.1 | 200–234 / 35–70 | 1203–1295 / 1036–1127 |
+| Small backward | 1.7–1.8 | 199–213 / 29–52 | 1138–1323 / 969–1149 |
+
+Across 792 quiet bins (12 mm barcode guard), none of 86 local maxima reached
+20 prominence; largest was 10.9. This does not establish a field error rate.
+Naive local maxima give 16 peaks on each large trace. The extra pair is a
+single wide lobe: intervening valleys ~1432/915, unlike real white valleys
+~156–179. White-return merging preserves the small neighbours 5–6 mm apart.
+The implemented noise estimate is conservative max(SD, 1.4826 MAD), so it
+can differ from the offline SD table. Merged-lobe prominence also includes
+white flanks to avoid rejecting flat wide tops.
+
+### B1c candidate software evidence — not a powered PASS
+
+WIDTH is unchanged except standard-table accessors. PEAK runs sequentially
+after checked stop/freeze, on independent TIME and DISTANCE axes. Both
+framing stars anchor amplitude bands; physical space widths come from
+centre gaps and a bounded ordinary Code 39 model, not shrunken analog bar
+widths. Whole-capture conflicts within/across paths produce AMBIGUOUS.
+No selected payload controls a vehicle action. See the barcode contract for
+baseline gates, geometric bounds, capacity and one-bin quiet uncertainty.
+
+| Software check | Result |
+| --- | --- |
+| Full strict host suite | PASS: 175/175 |
+| Four real captures, both axes, raw/packed, reversed | PASS: F / NONE |
+| Large WIDTH unchanged / small WIDTH unchanged | PASS: F / NO_FRAME |
+| Whole quiet prefixes/suffixes on both paths | PASS: no frame |
+| All 43 symbols, two sizes and both directions | PASS: synthetic |
+| Noise, split/flat lobes, drift, 25/200 mm/s, speed change | PASS: synthetic |
+| 18 mm line, paper/floor, air/all-black | PASS: synthetic rejection |
+| Missing/extra/weak/merged bars, bad geometry/stars/quiet | PASS: rejection |
+| 16 symbols / 90 bars, overlength/capacity, clock/count wrap | PASS |
+| ADC loss, absent/stale/reversed motion, independent TIME | PASS |
+| Competing real-shaped payloads / cross-path conflict | PASS: AMBIGUOUS |
+| Clang ASan/UBSan | PASS: both new units and 32 owner paths |
+| Warning-free firmware / SDK profiles | PASS: nine |
+| Strict ARM compile invocations | PASS: 72 |
+| Primary barcode storage / whole image static RAM | 38600 / 158676 bytes |
+| Barcode object static sections before GC/padding | 39474 bytes |
+| Owner / PEAK driver compiler frames | 328 / 64 bytes |
+| PEAK step / star / model compiler frames | 176 / 80 / 96 bytes |
+| WIDTH step / character compiler frames | 304 / 144 bytes |
+
+Compiler frames are not runtime stack/IRQ proof. A noinline PEAK driver
+keeps new locals out of the WIDTH call chain on the 1 KiB TEST task. Primary
+storage has an assert <=40000 bytes; small owner/capture counters are extra.
+No kernel stack or template setting was changed. Normal images exclude
+all barcode workspace symbols. Full raw dump and its pacing remain intact.
+
+Retest using the exact B1c image: verify B1c WIDTH+PEAK startup, perform GP20
+ranges, then lifted forward/backward. Clear the USB cable before floor
+work. Use one large F then one course-size F sheet, both directions. Save
+all WIDTH, PEAK, SELECTED, PEAK_META/COST, stats and complete raw output;
+wait for READY. Obtain the requested real line-only and paper-only passes.
+B1c powered decode, real line/paper negatives, clean backward floor,
+runtime timing/high-water, physical map-margin and normal LINE checks are
+**Not run**. No worker push or flash was made.

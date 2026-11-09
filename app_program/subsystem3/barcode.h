@@ -152,5 +152,8 @@ void barcode_decode(const barcode_sample_t *samples, size_t sample_count,
                     const barcode_motion_t *motion, size_t motion_count,
                     const barcode_config_t *config,
                     barcode_workspace_t *workspace, barcode_report_t *report);
+/* Standard table access, shared by independent observation paths. */
+char barcode_symbol(uint16_t mask);
+uint16_t barcode_pattern(char symbol);
 const char *barcode_reason_name(barcode_reason_t reason);
 #endif

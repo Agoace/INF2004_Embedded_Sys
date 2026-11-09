@@ -480,6 +480,13 @@ int tm_printf(const UB *format, ...)
         assert(strstr(text, "text \"F\" cmd 0") != NULL);
         ++frames;
     }
+    if (strstr(text, "[BC_PEAK_FRAME]") != NULL ||
+        strstr(text, "[BC_PEAK_META]") != NULL ||
+        strstr(text, "[BC_PEAK_COST]") != NULL ||
+        strstr(text, "[BC_SELECT]") != NULL) {
+        assert(command == 0 && sampled_speed == 0 &&
+               !barcode_capture_active() && ranges == 3u);
+    }
     if (strstr(text, "[BC_RESULT]") != NULL) {
         assert(command == 0 && !barcode_capture_active() && ranges == 3u);
         ++results;
@@ -498,7 +505,7 @@ int tm_printf(const UB *format, ...)
     }
     if (strstr(text, "[BC_DUMP] BEGIN") != NULL) {
         assert(command == 0 && sampled_speed == 0 && !barcode_capture_active());
-        assert(results == (dumps + 1u) * 2u);
+        assert(results == (dumps + 1u) * 5u);
         adc_rows = 0u;
         if (mode("motor_busy_phase") && dumps == 0u) {
             size_t count;

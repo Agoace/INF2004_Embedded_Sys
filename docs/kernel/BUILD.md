@@ -84,11 +84,15 @@ cause bits, read/age values, motor faults/watchdog and actual wake rc.
 A false watchdog flag has no startup grace; it must be armed to command.
 Capture uses 6144 four-byte decimated records, about 12.3 s at default
 2 ms, plus 512 motion records. The TEST runner reports each frame and
-both width methods after freeze. Full dumps can take tens of seconds:
+WIDTH and B1c PEAK on independent TIME/DISTANCE axes after freeze.
+All accepted payloads must agree; conflicts give AMBIGUOUS. B1c PEAK has
+host replay evidence, not powered acceptance. Its sensor remains at the
+5.5 mm mechanical minimum; it touches the floor on a 10 mm hump.
+Full dumps can take tens of seconds:
 wait for READY before GP21; presses during the dump are ignored with one
 notice. Partial-contrast optical rules and the approved real-capture host
-fixture are documented in the barcode contract. Read the
-[B1b procedure, stop limits and RAM](../s3-line-barcode/BARCODE.md) first.
+fixtures are documented in the barcode contract. Read the
+[B1c procedure, stop limits and RAM](../s3-line-barcode/BARCODE.md) first.
 
 ### Profile identity
 

@@ -14,7 +14,8 @@ add_test(NAME test_barcode_priority_failure
 host_test(test_barcode_test tests/test_barcode_test.c
     app_program/subsystem3/barcode_test.c
     app_program/subsystem3/barcode_capture.c app_program/subsystem3/barcode.c
-    app_program/subsystem3/barcode_drive.c)
+    app_program/subsystem3/barcode_drive.c
+    app_program/subsystem3/barcode_peak.c)
 target_include_directories(test_barcode_test BEFORE PRIVATE
     "${REPO}/tests/barcode_stubs" "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_barcode_test PRIVATE
@@ -40,6 +41,14 @@ host_test(test_barcode_blur tests/test_barcode_blur.c
 target_link_libraries(test_barcode_blur PRIVATE m)
 target_compile_definitions(test_barcode_real PRIVATE
     BC_FIXTURE="${REPO}/tests/fixtures/barcode_large_f_forward.csv")
+host_test(test_barcode_peak tests/test_barcode_peak.c
+    app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
+target_link_libraries(test_barcode_peak PRIVATE m)
+host_test(test_barcode_peak_real tests/test_barcode_peak_real.c
+    app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
+target_link_libraries(test_barcode_peak_real PRIVATE m)
+target_compile_definitions(test_barcode_peak_real PRIVATE
+    BC_FIXTURES="${REPO}/tests/fixtures")
 host_test(test_barcode_hw tests/test_barcode_hw.c
     app_program/subsystem3/barcode_hw.c)
 target_include_directories(test_barcode_hw BEFORE PRIVATE

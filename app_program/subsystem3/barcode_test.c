@@ -5,6 +5,7 @@
 #include "barcode_test.h"
 #if APP_BARCODE_CAPTURE
 #include "barcode.h"
+#include "barcode_peak.h"
 #include "barcode_capture.h"
 #include "barcode_drive.h"
 #include "barcode_hw.h"
@@ -23,6 +24,19 @@ static const barcode_drive_config_t settings = {
 static ID runner;
 static barcode_workspace_t workspace;
 static barcode_report_t decoded;
+static barcode_peak_workspace_t peak_workspace;
+static barcode_peak_report_t peak_report;
+static barcode_result_t selected;
+static uint16_t white_minimum;
+static uint16_t white_maximum;
+_Static_assert(sizeof(peak_workspace) + sizeof(peak_report) +
+                       sizeof(workspace) + sizeof(decoded) + sizeof(selected) +
+                       sizeof(barcode_config_t) +
+                       sizeof(barcode_peak_config_t) +
+                       BC_MAX_SAMPLES * sizeof(barcode_packed_t) +
+                       BC_MAX_MOTION * sizeof(barcode_motion_t) <=
+                   40000u,
+               "Barcode primary storage exceeds 40,000 bytes");
 static uint32_t motor_misses;
 static uint32_t last_motor_us;
 static uint32_t frame_count[2];
@@ -174,13 +188,92 @@ static void frame_result(const barcode_frame_t *frame, void *context)
               (unsigned int)frame->value.separation_permille);
 }
 
+static void peak_frame(const barcode_frame_t *frame, void *context)
+{
+    (void)context;
+    tm_printf((UB *)"[BC_PEAK_FRAME] %s text \"%s\" dirs %u start_us %lu "
+                    "end_us %lu start_um %ld end_um %ld\n",
+              frame->distance_method ? "DISTANCE" : "TIME", frame->value.text,
+              (unsigned int)frame->value.directions,
+              (unsigned long)frame->start_us, (unsigned long)frame->end_us,
+              (long)frame->start_um, (long)frame->end_um);
+}
+
+static void peak_meta(const char *name, const barcode_peak_method_t *r)
+{
+    /* Kernel printf does not support floats. All values are milli-counts,
+     * except geometry error (permille of the fitted physical narrow). */
+    tm_printf((UB *)"[BC_PEAK_META] %s peaks %u baseline_milli %lu "
+                    "noise_milli %lu gate_milli %lu min_prom_milli %lu "
+                    "band_margin_milli %lu geometry_permille %lu\n",
+              name, (unsigned int)r->peaks,
+              (unsigned long)(r->baseline * 1000.0f),
+              (unsigned long)(r->noise_sd * 1000.0f),
+              (unsigned long)(r->threshold * 1000.0f),
+              (unsigned long)(r->minimum_prominence * 1000.0f),
+              (unsigned long)(r->amplitude_margin * 1000.0f),
+              (unsigned long)(r->geometry_error * 1000.0f));
+}
+
+/* Keep PEAK-only locals out of the WIDTH call chain on the 1 KiB task. */
+static void __attribute__((noinline))
+decode_peaks(bool lost, const barcode_config_t *config)
+{
+    size_t n, m;
+    const barcode_packed_t *rows = barcode_capture_rows(&n);
+    const barcode_motion_t *motors = barcode_capture_motors(&m);
+    static barcode_peak_config_t peak_config;
+    peak_config.capture = *config;
+    peak_config.speed_mm_s = BARCODE_PASS_SPEED_MM_S;
+    peak_config.white_min = white_minimum;
+    peak_config.white_max = white_maximum;
+    barcode_peak_begin(NULL, lost ? 0u : n, rows, barcode_capture_origin(),
+                       motors, m, &peak_config, &peak_workspace, &peak_report);
+    barcode_peak_sink(&peak_workspace, peak_frame, NULL);
+    uint32_t maximum = 0u, total = 0u;
+    bool done;
+    do {
+        const uint32_t start = drv_time_us();
+        done = barcode_peak_step(&peak_workspace);
+        const uint32_t cost = drv_time_us() - start;
+        total += cost;
+        if (cost > maximum) {
+            maximum = cost;
+        }
+        (void)tk_dly_tsk(1u);
+        (void)tk_can_wup(TSK_SELF);
+    } while (!done);
+    if (lost) {
+        peak_report.time.value = (barcode_result_t){.reason = BC_SAMPLE_LOSS};
+        peak_report.distance.value = peak_report.time.value;
+    }
+    peak_meta("TIME", &peak_report.time);
+    peak_meta("DISTANCE", &peak_report.distance);
+    result("PEAK_TIME", &peak_report.time.value);
+    result("PEAK_DISTANCE", &peak_report.distance.value);
+    barcode_peak_select(&decoded, &peak_report, &selected);
+    result("SELECTED", &selected);
+    const char *choice = selected.reason == BC_AMBIGUOUS  ? "CONFLICT"
+                         : !selected.decoded              ? "NONE"
+                         : decoded.time.decoded           ? "WIDTH_TIME"
+                         : decoded.distance.decoded       ? "WIDTH_DISTANCE"
+                         : peak_report.time.value.decoded ? "PEAK_TIME"
+                                                          : "PEAK_DISTANCE";
+    tm_printf((UB *)"[BC_SELECT] %s; accepted payloads must agree; data only\n",
+              choice);
+    tm_printf((UB *)"[BC_PEAK_COST] step_max_us %lu total_us %lu\n",
+              (unsigned long)maximum, (unsigned long)total);
+}
+
 static void decode(bool lost)
 {
     size_t n;
     size_t m;
     const barcode_packed_t *rows = barcode_capture_rows(&n);
     const barcode_motion_t *motors = barcode_capture_motors(&m);
-    barcode_config_t config = barcode_default_config;
+    /* One owner, after freeze; keep parameters off the 1 KiB task stack. */
+    static barcode_config_t config;
+    config = barcode_default_config;
     config.max_gap_us = barcode_drive_adc_ms(&settings) * 1000u + 1500u;
     /* Two busy polls plus a source/poll phase offset can delay retention
      * by three owner periods; this is not a fabricated source timestamp. */
@@ -219,6 +312,7 @@ static void decode(bool lost)
               (unsigned long)maximum, (unsigned long)total);
     result("TIME", &decoded.time);
     result("DISTANCE", &decoded.distance);
+    decode_peaks(lost, &config);
 }
 
 static void dump_button(bool *previous, bool *notified)
@@ -449,7 +543,7 @@ void barcode_test(void)
     static uint32_t stamp;
     stamp = 0u;
     tm_printf(
-        (UB *)"[BC] B1b DRIVEN TEST ONLY: VIN REQUIRED. Lift wheels "
+        (UB *)"[BC] B1c WIDTH+PEAK TEST ONLY: VIN REQUIRED. Lift wheels "
               "for first GP21 check. One F sheet per run; swap when idle.\n");
     tm_printf((UB *)"[BC] GP20: floor/white/black ranges, then redo ranges. "
                     "GP21: forward, then backward; while moving = STOP.\n");
@@ -581,6 +675,17 @@ void barcode_test(void)
                           (unsigned int)range.minimum,
                           (unsigned int)range.maximum);
                 if (range.samples >= 500u) {
+                    if (stage == 0u) {
+                        white_minimum = range.minimum;
+                        white_maximum = range.maximum;
+                    } else if (stage == 1u) {
+                        if (range.minimum < white_minimum) {
+                            white_minimum = range.minimum;
+                        }
+                        if (range.maximum > white_maximum) {
+                            white_maximum = range.maximum;
+                        }
+                    }
                     ++stage;
                 }
                 tm_printf((UB *)"[BC] next %s\n",

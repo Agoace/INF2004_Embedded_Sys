@@ -21,6 +21,26 @@ static const uint16_t patterns[] = {
 _Static_assert(sizeof(patterns) / sizeof(patterns[0]) == sizeof(alphabet) - 1u,
                "Code 39 alphabet/table mismatch");
 
+char barcode_symbol(uint16_t mask)
+{
+    for (size_t i = 0u; i < sizeof(alphabet) - 1u; ++i) {
+        if (patterns[i] == mask) {
+            return alphabet[i];
+        }
+    }
+    return '\0';
+}
+
+uint16_t barcode_pattern(char symbol)
+{
+    for (size_t i = 0u; i < sizeof(alphabet) - 1u; ++i) {
+        if (alphabet[i] == symbol) {
+            return patterns[i];
+        }
+    }
+    return 0u;
+}
+
 static int32_t delta32(uint32_t current, uint32_t previous)
 {
     const uint32_t bits = current - previous;
