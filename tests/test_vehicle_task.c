@@ -61,9 +61,28 @@ int line_snapshot_read(line_snapshot_t *s,bool consume) {
     if (consume) line_event=VC_EVENT_NONE;
     return E_OK;
 }
-int line_calibration_begin(void) { lp_calib_begin(&line);calibrating=true;return E_OK; }
-lp_calib_result_t line_calibration_end(void) { unsigned int bad;calibrating=false;peak=0u;return lp_calib_end(&line,&bad); }
-int line_calibration_abort(void) { calibrating=false;return E_OK; }
+int line_calibration_begin(void)
+{
+    assert((vehicle_calibration_epoch() & 1u) != 0u);
+    lp_calib_begin(&line);
+    calibrating = true;
+    return E_OK;
+}
+lp_calib_result_t line_calibration_end(void)
+{
+    unsigned int bad;
+
+    assert((vehicle_calibration_epoch() & 1u) != 0u);
+    calibrating = false;
+    peak = 0u;
+    return lp_calib_end(&line, &bad);
+}
+int line_calibration_abort(void)
+{
+    assert((vehicle_calibration_epoch() & 1u) != 0u);
+    calibrating = false;
+    return E_OK;
+}
 int sonar_result_read(sonar_snapshot_t *s,bool *fresh) { *s=echo_snapshot;*fresh=echo_fresh;echo_fresh=false;return E_OK; }
 int sonar_request(const sonar_request_t *r) {
     assert(r->mode<=SONAR_ACK);++requests;
@@ -102,12 +121,15 @@ int main(int argc,char **argv) {
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
+    assert(vehicle_calibration_epoch() == 0u);
     assert(vehicle_task_start()==E_OBJ && starts==0u);watchdog_ready=true;
     assert(vehicle_task_start()==E_OBJ && starts==0u);services_ready=true;
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
     line_error=E_OK;assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
+    assert(vehicle_calibration_epoch() >= 2u);
+    assert((vehicle_calibration_epoch() & 1u) == 0u);
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
     else if (sonar_stale) assert(sonar_timeouts>0u);

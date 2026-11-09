@@ -195,7 +195,7 @@ exhaustive include/source list, invoked by the
 Selected runtime-free GPIO/PWM/reset/ADC/tick/watchdog operations are allowed.
 ADC, ticks and watchdog source files are compiled; radio-off adds GPIO,
 radio builds reuse the template GPIO object. PWM/reset operations are inline.
-The TEST-only IMU uses I2C0 registers and the I2C header path, not SDK I2C
+The robot/TEST IMU observer uses I2C0 registers and the I2C header path, not SDK I2C
 runtime; TEST links libm for tilt calculation.
 
 Do not add SDK crt0, stdlib/runtime initialization, IRQ registration, time,

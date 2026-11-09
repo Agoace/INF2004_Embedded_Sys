@@ -22,7 +22,7 @@
 
 /* ---------------------------------------------------------------------
  *  Task priorities: 1 is the highest. Motion 10 is the highest periodic
- *  task; line 11, sonar 12 (or bench 11), vehicle 13, Wi-Fi and TEST 20,
+ *  task; line 11, sonar 12 (or bench 11), vehicle 13, IMU 14, Wi-Fi/TEST 20,
  *  kernel USB console 21, telemetry 30, health 31, CPU meter 32.
  *  USB is below every driving task. See TEAM.md for ownership.
  * --------------------------------------------------------------------- */

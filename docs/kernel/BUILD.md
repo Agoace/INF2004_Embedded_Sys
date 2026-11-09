@@ -53,8 +53,10 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
 
-For the TEST-only IMU, use USB console and `CRASH_REPORT=0` because GP0/GP1
-belong to I2C0. Follow [IMU operation](../s4-imu/IMU.md#continuous-operator-stream).
+Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
+GP0/GP1 belong to I2C0. BENCH has no IMU task. Follow the current
+[50 Hz support/GP21 procedure](../s4-imu/IMU.md#step-2d-current-procedure).
+The GP21 drive trial requires VIN and a lifted-wheel stop check first.
 It is not the full TEST suite or a navigation feature.
 
 The profile marker prevents reuse of objects with different options. For a
