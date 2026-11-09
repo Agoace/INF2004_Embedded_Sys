@@ -37,7 +37,7 @@ int main(void) {
     assert(line_service_start()==E_OBJ);
     assert(line_snapshot_read(&s,false)==E_OK && !s.valid);
 #if APP_BARCODE_CAPTURE
-    barcode_capture_begin();
+    barcode_capture_begin(1u);
 #endif
     assert(line_calibration_begin()==E_OK);
     for (unsigned int i=0u;i<16u;++i) sample(i%2u ? 3500u : 500u);
@@ -58,9 +58,9 @@ int main(void) {
 #if APP_BARCODE_CAPTURE
     barcode_capture_freeze();
     size_t count;
-    const barcode_sample_t *rows = barcode_capture_rows(&count);
-    assert(count == 18u && rows[0].raw == 4095u);
-    assert(rows[count - 1u].raw == 4095u && rows[count - 1u].flags == 0u);
+    const barcode_packed_t *rows = barcode_capture_rows(&count);
+    assert(count == 18u && rows[0].raw_flags == 4095u);
+    assert(rows[count - 1u].raw_flags == 4095u);
     assert(barcode_capture_max_us() > 0u && !held);
 #endif
     assert(line_tracking_reset()==E_OK);

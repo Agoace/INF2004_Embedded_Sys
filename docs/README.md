@@ -45,8 +45,8 @@ not current acceptance reports. Local course originals are not public records.
 ## S3 — Line and barcode
 
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
-- [BARCODE.md](s3-line-barcode/BARCODE.md) — B1 pure Code 39 decoder and
-  exclusive hand-push capture; no robot commands or physical decode PASS.
+- [BARCODE.md](s3-line-barcode/BARCODE.md) — pure Code 39 and B1b driven
+  TEST capture; one sheet, 600 mm passes, checked stop, no barcode routing.
 
 ## S4 — IMU
 

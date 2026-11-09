@@ -23,7 +23,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
-| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH and TEST barcode B1. |
+| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH and TEST barcode B1b. |
 | [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
@@ -105,7 +105,7 @@ The archived development record retains older CMake bench examples.
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
 | Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
-| Barcode B1 | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
+| Barcode B1b | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
 | Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |
@@ -188,22 +188,28 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
-## TEST-only barcode B1
+## TEST-only barcode B1b
 
 - [`barcode.c`](../app_program/subsystem3/barcode.c) and
   [`barcode.h`](../app_program/subsystem3/barcode.h) — pure incremental
   Code 39, both width methods/directions, command values only.
 - [`barcode_capture.c`](../app_program/subsystem3/barcode_capture.c) —
-  exclusive static ADC/motion capture; O(1) line-task copy and range checks.
+  packed/decimated ADC and motion capture; O(1) line-task copy and ranges.
 - [`barcode_test.c`](../app_program/subsystem3/barcode_test.c) and
   [`barcode_hw.c`](../app_program/subsystem3/barcode_hw.c) — priority-20
-  TEST observer, GP20 arm/freeze, frozen decode/dump; no GP7/GP21 handling.
+  TEST observer; GP20 ranges, GP21 driven pass; checked stop then dump.
+- [`barcode_drive.c`](../app_program/subsystem3/barcode_drive.c) and
+  [`barcode_drive.h`](../app_program/subsystem3/barcode_drive.h) — pure
+  forward/backward distance/time bounds and fault/start inhibition.
+- [`barcode_settings.h`](../app_program/subsystem3/barcode_settings.h) —
+  600 mm / 100 mm/s defaults; distance target clamps to <=620 mm.
 - [`tests/barcode_checks.cmake`](../tests/barcode_checks.cmake) — strict
-  decoder, capture, exclusive runner and real observer/glue host tests;
+  decoder, packed frames, capture, drive/limit, GPIO and observer tests;
   [`tests/barcode_stubs/`](../tests/barcode_stubs/) supplies core-0 doubles.
-- [B1 contract](s3-line-barcode/BARCODE.md) and
-  [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — physical F
-  passes remain Not run; normal robot routing does not use the decoder.
+- [B1b contract](s3-line-barcode/BARCODE.md) and
+  [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — B1 contrast
+  passed; hand-push procedure failed. Powered B1b tests remain Not run;
+  normal robot routing does not use the decoder.
 
 ## TEST-only IMU acquisition
 

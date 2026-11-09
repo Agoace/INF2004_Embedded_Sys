@@ -1,9 +1,9 @@
-/* No ADC, GPIO, kernel or driving calls. Not allocated in other images. */
+/* One core-0 line-task writer; no ADC, GPIO, kernel or driving calls. */
 #include "barcode_capture.h"
 #if APP_BARCODE_CAPTURE
 #include <stddef.h>
 
-static barcode_sample_t rows[BC_MAX_SAMPLES];
+static barcode_packed_t rows[BC_MAX_SAMPLES];
 static barcode_motion_t motors[BC_MAX_MOTION];
 static uint32_t row_count;
 static uint32_t motor_count;
@@ -14,9 +14,17 @@ static uint32_t range_count;
 static uint32_t range_minmax;
 static uint32_t full;
 static uint32_t gaps;
+static uint32_t dropped;
 static uint32_t motor_overflow;
+static uint32_t origin;
+static uint32_t previous_raw_us;
+static uint32_t previous_kept_us;
+static uint32_t decimation;
+static uint32_t phase;
+static bool raw_seen;
+static bool pending_gap;
 
-_Static_assert(sizeof(rows) == 32768u, "ADC capture budget changed");
+_Static_assert(sizeof(rows) == 24576u, "ADC capture budget changed");
 _Static_assert(sizeof(motors) == 6144u, "motion capture budget changed");
 
 void barcode_range_begin(void)
@@ -29,8 +37,7 @@ void barcode_range_begin(void)
 
 void barcode_range_end(barcode_range_t *out)
 {
-    /* Core 0, reader below writer priority: a preempting writer completes
-     * before this task resumes, and no later writer enters this range. */
+    /* The higher-priority core-0 writer completes before this task resumes. */
     __atomic_store_n(&ranging, 0u, __ATOMIC_SEQ_CST);
     if (out != NULL) {
         const uint32_t bits = __atomic_load_n(&range_minmax, __ATOMIC_SEQ_CST);
@@ -41,14 +48,21 @@ void barcode_range_end(barcode_range_t *out)
     }
 }
 
-void barcode_capture_begin(void)
+void barcode_capture_begin(uint32_t keep_every_ms)
 {
     barcode_capture_freeze();
     __atomic_store_n(&row_count, 0u, __ATOMIC_SEQ_CST);
     motor_count = 0u;
     motor_overflow = 0u;
+    decimation =
+        keep_every_ms > 0u && keep_every_ms <= 60u ? keep_every_ms : 1u;
+    phase = 0u;
+    raw_seen = false;
+    pending_gap = false;
+    origin = 0u;
     __atomic_store_n(&full, 0u, __ATOMIC_SEQ_CST);
     __atomic_store_n(&gaps, 0u, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&dropped, 0u, __ATOMIC_SEQ_CST);
     __atomic_store_n(&maximum_us, 0u, __ATOMIC_SEQ_CST);
     __atomic_store_n(&active, 1u, __ATOMIC_SEQ_CST);
 }
@@ -63,6 +77,12 @@ bool barcode_capture_active(void)
     return __atomic_load_n(&active, __ATOMIC_SEQ_CST) != 0u;
 }
 
+static void increment(uint32_t *value)
+{
+    const uint32_t n = __atomic_load_n(value, __ATOMIC_SEQ_CST);
+    __atomic_store_n(value, n + 1u, __ATOMIC_SEQ_CST);
+}
+
 void barcode_capture_observe(uint32_t us, uint16_t raw)
 {
     if (__atomic_load_n(&ranging, __ATOMIC_SEQ_CST) != 0u) {
@@ -71,29 +91,45 @@ void barcode_capture_observe(uint32_t us, uint16_t raw)
         const uint16_t high = (uint16_t)(bits >> 16u);
         const uint32_t next = (uint32_t)(raw < low ? raw : low) |
                               ((uint32_t)(raw > high ? raw : high) << 16u);
-        const uint32_t n = __atomic_load_n(&range_count, __ATOMIC_SEQ_CST);
         __atomic_store_n(&range_minmax, next, __ATOMIC_SEQ_CST);
-        __atomic_store_n(&range_count, n + 1u, __ATOMIC_SEQ_CST);
+        increment(&range_count);
     }
     if (!barcode_capture_active()) {
         return;
     }
-    const uint32_t index = __atomic_load_n(&row_count, __ATOMIC_SEQ_CST);
-    if (index >= BC_MAX_SAMPLES) {
-        barcode_capture_freeze();
+    const uint32_t dt = us - previous_raw_us;
+    if ((raw_seen && (dt == 0u || dt > 1500u)) || raw > 4095u) {
+        pending_gap = true;
+        increment(&gaps);
+    }
+    previous_raw_us = us;
+    raw_seen = true;
+    if (phase > 0u) {
+        --phase;
         return;
     }
-    const bool gap = index > 0u && (us - rows[index - 1u].us == 0u ||
-                                    us - rows[index - 1u].us > 1500u);
-    if (gap) {
-        const uint32_t n = __atomic_load_n(&gaps, __ATOMIC_SEQ_CST);
-        __atomic_store_n(&gaps, n + 1u, __ATOMIC_SEQ_CST);
+    phase = decimation - 1u;
+    const uint32_t index = __atomic_load_n(&row_count, __ATOMIC_SEQ_CST);
+    if (index >= BC_MAX_SAMPLES) {
+        increment(&dropped);
+        return; /* Full requests a stop; only its owner may freeze. */
     }
-    rows[index] = (barcode_sample_t){us, raw, gap ? BC_SAMPLE_GAP : 0u};
+    const uint32_t delta = index == 0u ? 0u : us - previous_kept_us;
+    if (delta > UINT16_MAX) {
+        pending_gap = true;
+        increment(&gaps);
+    }
+    if (index == 0u) {
+        origin = us;
+    }
+    rows[index] = (barcode_packed_t){
+        (uint16_t)((raw & BC_PACKED_RAW) | (pending_gap ? BC_PACKED_GAP : 0u)),
+        (uint16_t)(delta <= UINT16_MAX ? delta : UINT16_MAX)};
+    pending_gap = false;
+    previous_kept_us = us;
     __atomic_store_n(&row_count, index + 1u, __ATOMIC_SEQ_CST);
     if (index + 1u == BC_MAX_SAMPLES) {
         __atomic_store_n(&full, 1u, __ATOMIC_SEQ_CST);
-        barcode_capture_freeze();
     }
 }
 
@@ -132,12 +168,22 @@ uint32_t barcode_capture_gaps(void)
     return __atomic_load_n(&gaps, __ATOMIC_SEQ_CST);
 }
 
+uint32_t barcode_capture_dropped(void)
+{
+    return __atomic_load_n(&dropped, __ATOMIC_SEQ_CST);
+}
+
+uint32_t barcode_capture_origin(void)
+{
+    return origin; /* Read only after freeze, on core 0. */
+}
+
 uint32_t barcode_capture_motor_overflow(void)
 {
     return motor_overflow;
 }
 
-const barcode_sample_t *barcode_capture_rows(size_t *count)
+const barcode_packed_t *barcode_capture_rows(size_t *count)
 {
     if (count != NULL) {
         *count = __atomic_load_n(&row_count, __ATOMIC_SEQ_CST);

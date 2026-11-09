@@ -41,6 +41,8 @@ def main():
     expected = f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}-test{test}-bench{bench}-diag{diag}"
     stream = int("-DAPP_IMU_STREAM=1" in flags)
     expected += f"-imu_stream{stream}"
+    capture = int("-DAPP_BARCODE_CAPTURE=1" in flags)
+    expected += f"-barcode_capture{capture}"
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
         parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")

@@ -33,7 +33,8 @@ telemetry uses a separate bounded, non-consuming board read. Sampling
 continues while the robot is idle. Only `BARCODE_CAPTURE=1` adds an O(1)
 raw copy after mutex release in task context, never in the ISR. The TEST
 runner decodes after freeze; normal LINE behaviour is unchanged. See the
-[barcode B1 contract](BARCODE.md).
+[barcode B1b contract](BARCODE.md). Its exclusive TEST profile alone uses
+GP21 for bounded driven passes; normal LINE and robot buttons are unchanged.
 
 ### Pair-mode position
 

@@ -1,152 +1,221 @@
-# Analog barcode B1: TEST-only observation
+# Analog barcode B1b: exclusive driven TEST
 
-## Scope
+## Scope and evidence
 
-B1 implements a pure ordinary Code 39 decoder and an exclusive hand-push
-capture profile. It does not send commands to the Vehicle Controller or
-change normal LINE behaviour. Physical decoding is **Not run**.
+B1b runs an operator-requested straight pass over **one barcode sheet**.
+GP21 starts 600 mm forward at 100 mm/s; after confirmed stop and a complete
+dump, a new press starts 600 mm backward. Swap the 2x F and 141 mm F sheets
+between runs, while stopped. Do not place both sheets in one run. The
+requested distance is clamped at compile time to **at most 620 mm**.
 
-The [requirements summary](../project-requirements/README.md) points to the
-local course originals. They remain ignored; do not publish their pages.
-The reference branch `origin/ziven-barcode-algo` is reference only. This
-implementation uses the standard Code 39 table, not the old GP7 reader.
+This is not barcode-controlled navigation. A decoded command is data only;
+no barcode changes the Vehicle Controller route. Normal LINE behaviour is
+unchanged. B1b powered hardware acceptance is **Not run**.
+
+On B1 `70caef0`, the operator proved static contrast: white paper 151..170,
+floor 155..172, black bar 1334..1660. Black is HIGH; floor looks like white.
+The first contrast round was misplaced (the supposed white read about
+1500); use the corrected ranges, not that round. Nine hand-push captures
+failed the procedure: bars entered only in the last 0.2..0.5 s of the
+4.1 s window, or did not enter it. None decoded. Encoder travel was only
+0..70 mm because back-driven wheels slip. This is **not a decoder verdict**.
+See [S3 TEST_LOG](../../testing/subsystem3/TEST_LOG.md) for evidence scope.
+
+The [requirements summary](../project-requirements/README.md) points to local
+course originals; do not publish their pages. `origin/ziven-barcode-algo`
+is reference only. The pure decoder uses the standard Code 39 table.
 
 ## Input and ownership
 
 | Item | Contract |
 | --- | --- |
-| Analog input | GP28/ADC2, existing 1 kHz acquisition, eight conversions |
+| GP28 / ADC2 | Existing 1 kHz, eight conversions; VBAT jumper stays open |
 | `raw_bc` | Third ADC value, never a third line-control input |
-| VBAT sense jumper | Keep open; otherwise VIN/2 enters GP28 |
-| GP7 | GY-511 INT1 wire now; barcode code never configures GP7 |
-| GP20 | Arm/freeze button in this profile only; release then press |
-| GP21 | No barcode handling; do not use it to start a capture |
-| Line task | Priority 11; O(1) copy after releasing its mutex, outside ISR |
-| TEST runner | Priority 20; coherent motion observations every 10 ms |
-| Decoder | TEST runner, after freeze, bounded steps with 1 ms sleeps |
-| ADC ownership | Unchanged; no new setup or second `drv_line_take()` reader |
+| GP7 | GY-511 INT1 wire; barcode code never configures it |
+| GP20 | Record FLOOR / WHITE_PAPER / BLACK_BAR; redo when idle |
+| GP21 | Fresh press starts a pass; while moving, fresh press stops |
+| Line task | Priority 11; O(1) capture copy after mutex release, outside ISR |
+| TEST runner | Priority 20; bounded drive observation every 10 ms |
+| Decoder / dump | Incremental TEST work only after confirmed stop/freeze |
+| ADC ownership | No new setup or second `drv_line_take()` consumer |
 
-At about 5.5 mm or more above the floor, the view can cover multiple narrow
-bars. Slower motion does not remove optical blur. Keep the fixed left-front
-mount clear of ramps. Measure its position before any later sensor-point
-turn correction; B1 does not implement that correction.
+At about 5.5 mm or more above the floor, optical blur can cover several
+narrow bars. Slower travel does not remove that blur. Keep the fixed
+left-front sensor clear of ramps. Equal wheel requests are not heading
+control; measure drift and keep the bars across the sensor's travel path.
+No sensor-offset/turn correction or normal steering change is implemented.
 
-## Pure decoder contract
-
-Sources: [`barcode.h`](../../app_program/subsystem3/barcode.h) and
-[`barcode.c`](../../app_program/subsystem3/barcode.c).
-
-- Learn low/high from the complete frozen analog profile. Require at least
-  64 ADC counts of contrast by default; this is a software setting, not a
-  measured optical acceptance threshold. Hysteresis switches at 40%/60%
-  of that span. Both analog polarities are tried.
-- Measure every alternating run in microseconds and encoder millimetres.
-  Decode each method separately and report both; never substitute one
-  silently for the other. Motion uses bracketed source timestamps, wheel
-  mean counts and 12414 counts/m. No extrapolation is permitted.
-- Distance rejects missing/gapped motion or a movement reversal. The
-  straight-wheel estimate has no sensor-offset or turn correction. A
-  hand-push result is not distance calibration: back-driven wheels slip.
-- Recognize all 43 standard data symbols plus framing `*`, in either read
-  direction. This is not extended ASCII Code 39 and has no checksum.
-- Each character has nine elements and exactly three wide elements.
-  Require wide/narrow mean ratio 1.6..3.4, separated classes (at least 1.4),
-  bounded spread, a narrow inter-character gap and white quiet zones of
-  at least ten narrow widths before and after a complete frame.
-- Report a string of up to 16 data symbols. Only exactly one A/B/C/D maps
-  to LEFT/RIGHT/STRAIGHT/UTURN. F, Z and all other valid strings produce
-  `BC_CMD_NONE`. Conflicting complete frames reject as ambiguous.
-- Quality is an enum: REJECTED or DECODED. Separation is the smallest
-  wide / largest narrow ratio in per mille, not a confidence probability.
-  Reject reasons distinguish contrast, loss, width, pattern, quiet zone,
-  truncation, capacity, ambiguity and unavailable motion.
-- Sample flags, non-increasing time or an ADC gap above the configured
-  3 ms limit reject both methods. Capture flags gaps above 1.5 ms, so
-  that stricter profile rule also rejects. No glitch is repaired by guess.
-- `barcode_begin()` / `barcode_step()` process at most 32 input records or
-  one possible frame per step. The synchronous helper is for host tools;
-  the TEST task yields between steps. Inputs stay immutable until done.
-
-No result authorizes a turn. Future robot routing needs separate physical
-validation, copy agreement and explicit Vehicle Controller integration.
-Time widths are useful for straight hand-push contrast/geometry checks,
-not proof of correct widths during weaving or changing speed. Distance
-and time can disagree; both results remain visible, with no combined vote.
-
-## Exclusive capture profile
+## Build and settings
 
 ```sh
 make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
 ```
 
-The profile rejects BENCH, IMU_STREAM, SMP, Wi-Fi, network and MQTT
-combinations. Use USB console and CRASH_REPORT=0 for the connected robot.
-It skips all ordinary subsystem tests, including the S2 driving steps and
-watchdog-reset test. It requests stop before capture and never requests
-speed. Zero duty is coast, not a physical wheel brake. First pass is
-**HAND PUSH STRAIGHT**, not a powered drive test.
+Select `mtk3pico_smp0_usb_cdc_test_barcode_capture.uf2` and verify the
+**B1b DRIVEN TEST ONLY** banner. Use USB console and CRASH_REPORT=0 on the
+connected robot. BENCH, IMU_STREAM, SMP, Wi-Fi, network and MQTT combinations
+are rejected. Ordinary subsystem tests and the destructive reset test are
+skipped. This profile alone has the GP21 barcode-pass client.
 
-1. Start terminal recording. Verify the full `_test_barcode_capture` image
-   name and the hand-push banner. Check the VBAT jumper and mount clearance.
-2. Place FLOOR, WHITE_PAPER, then BLACK_BAR under the installed sensor.
-   At each prompt, press GP20 to record the **next** one-second range while
-   stationary. Save each `[BC_RANGE]` sample count and raw minimum/maximum.
-   No range is an automatic contrast PASS.
-3. Place the robot before the 2x F print, with enough white margin for a
-   quiet zone. Press GP20 and push straight across the full frame within
-   about 4.1 s. Release GP20; another press freezes early. Capacity also
-   freezes automatically. Leave white visible after the last bar.
-4. Wait for both frozen results and the complete USB dump. Save BEGIN/END
-   row counts, ADC rows, motion rows and run widths. A new GP20 press after
-   the dump starts a new pass and replaces the old data.
-5. Repeat in reverse print direction, then use the course-size F copy.
-   If contrast or width separation fails, retain the raw profile and report
-   unreadable. Do not lower thresholds until a letter appears.
+Settings live in
+[`barcode_settings.h`](../../app_program/subsystem3/barcode_settings.h):
 
-| Storage | Bytes / limit |
+| Setting | Default / bound |
 | --- | --- |
-| ADC | 4096 x 8 = 32768; 1 kHz, about 4.1 s |
-| Motion | 512 x 12 = 6144; source-stamped 10 ms observations |
-| Decoder workspace | 1728, including incremental state; ARM report adds 64 |
-| Capture arrays | 38912 = 38 KiB; static, exclusive profile only |
-| Whole capture image static RAM | 159964 = data 152 + BSS 159812 |
+| `BARCODE_PASS_DISTANCE_MM` | 600 mm; actual target clamps to <=620 mm |
+| Minimum requested distance | 50 mm; smaller/negative settings fail build |
+| `BARCODE_PASS_SPEED_MM_S` | 100 mm/s; permitted 25..200 mm/s |
+| Encoder geometry | 12414 counts/m |
+| Motion deadline | Ceiling(distance / speed in ms) + 3000 ms; 9000 default |
+| ADC retention | Every 2 raw samples by default; actual u16 time deltas |
+| Motion retention | Every 30 ms by default, using real source timestamps |
 
-Workspace plus report uses 1792 ARM bytes (1816 on the host); an assert
-checks the 2 KiB limit.
-At most 192 alternating runs are retained (enough for 16 payload symbols).
-Static RAM is from the software-validation image based on `b569adc`, not a
-runtime free-heap measurement. Dynamic kernel objects/stacks still need
-hardware checks. Normal images do not allocate the capture arrays/workspace.
+Retention intervals are derived from deadline plus 2 s storage margin.
+At 600 mm / 25 mm/s, the deadline is 27 s, ADC retention 5 ms, motion 60 ms;
+capacity still covers the longer pass. This is decimation, not averaging
+or min/max compression. Raw 1 kHz gaps are checked even on skipped records.
+A skipped brief signal is not reconstructed or guessed.
 
-`BC_STATS` reports acquisition missed/dropped deltas, ADC gaps, ADC full,
-motion overflow/missing reads, observer missed wakes, line-copy maximum
-elapsed microseconds, decoder step maximum and decoder total. ADC full is
-an intentional freeze, not overwrite. Motion overflow is separately counted.
-`BC_RUN` lists time_us and signed distance_um; INT32_MIN means unavailable
-or out of output range. USB dump output is paced after capture freeze.
-Check row counts: transport loss is not repaired. Elapsed costs include
-preemption and are upper bounds, not measured CPU-only time.
+## Driven procedure
 
-## Fixtures and evidence
+**VIN is required. Lift both wheels for the first GP21 check.** Clear the
+mechanism, keep access to VIN removal, and do not treat zero duty as a
+physical brake. Hardware stop distance, drift and stack/timing checks are
+not yet accepted. A target clamp is not a guarantee against wheel slip or
+coast; verify actual travel before using the available floor space.
 
-| Item | Known value / expected result |
+1. Flash the exact profile, start terminal recording, and wait for initial
+   `STOP CONFIRMED`. A held GP21 at boot does not start motion.
+2. With the robot stationary, place FLOOR under the sensor and press GP20.
+   Record the **next** one-second range. Repeat for WHITE_PAPER and BLACK_BAR
+   at the prompts. Save minimum, maximum and sample count. GP21 is disabled
+   until all three ranges complete. Ranges do not automatically certify
+   narrow-bar visibility.
+3. Lifted check: with VIN present and wheels free, press/release GP21.
+   Check equal positive wheel requests, the 600 mm bound and confirmed
+   zero duty/low measured speed. Save the dump. Press/release again for
+   negative requests. Test a GP21 early stop. Do not call this a barcode
+   or floor-distance PASS. Reboot before floor work to restore FORWARD.
+4. Floor check: place **one** F sheet, bars across travel; use the 2x copy
+   first. Align the left-front sensor, not an assumed axle/body offset,
+   before the white margin. The entire printed frame and white quiet
+   zones must fit within the one <=620 mm run. Keep extra space for coast.
+5. Press/release GP21. Capture arms at drive start. The task requests equal
+   100/100 mm/s through motion APIs; there is no automatic line correction.
+   Another fresh GP21 press requests stop. GP20 has no effect while moving.
+6. At distance/deadline/fault, the task repeatedly requests stop. Capture
+   stays active until stop is confirmed. Only then does it freeze, decode
+   TIME and DISTANCE independently, and print the complete dump.
+7. Save `[BC_DUMP] END` and verify all row counts. No pass restarts by itself.
+   A new GP21 press after the dump starts BACKWARD, then FORWARD alternately.
+   A press held through a dump must be released before another can start.
+8. After both directions, swap to the 141 mm F sheet while stopped and
+   repeat. Keep one sheet per run. After an early stop, reposition safely
+   before another full-distance pass; do not assume the car is at an end.
+
+Motion/sensor/command faults, observer wake faults, wrong encoder direction,
+wheel travel difference >100 mm, capture capacity and timeout stop the job
+and inhibit further starts until reboot. A stop-API failure also inhibits
+restart, even if the fallback succeeds. Remove VIN if wheels keep moving.
+No dump or rearm is permitted while stop remains unconfirmed.
+
+Stop confirmation requires successful `motion_stop()` (or `motion_estop()`
+fallback), then two distinct fresh post-request motion snapshots with zero
+duty and both measured speeds within +/-10 mm/s. These are encoder-based
+observations, not independent physical brake verification. Retries continue
+if snapshots/API confirmation are unavailable. Final wheel travel includes
+observed coast; above 620 mm sets OVERRUN and inhibits another pass.
+
+## Capture, RAM and diagnostics
+
+| Storage | Current B1b bytes / limit |
 | --- | --- |
-| Course samples | Standard `*A*` and `*Z*`; not the operator's F print |
-| Operator print | Photo plus ruler confirmed standard `*F*`, no command |
-| Course-size F | About 141 mm total; narrow 2.9 mm, wide 8.7 mm |
-| 2x F, first physical test | About 285 mm; narrow 5.8 mm, wide 17.5 mm |
-| `*` elements | `nwnnwnwnn` |
-| F / Z elements | `nnwnwwnnn` / `nwwnwnnnn`; two gaps differ |
-| A elements | `wnnnnwnnw` |
-| Track reference | Barcode-to-line gap 20 mm; line width 18 mm |
-| Earlier GP28 floor evidence | `3f889a1`: 178..230 and 196..217 only |
-| New host tests | Standard table, both methods/directions/polarities pass |
-| Contrast and physical F passes | Not run; no optical or timing PASS |
+| ADC records | 6144 x 4 = 24576; about 12.288 s at default 2 ms |
+| Motion records | 512 x 12 = 6144; about 15.36 s at default 30 ms |
+| Capture arrays | 30720 = 30 KiB, exclusive profile only |
+| Decoder workspace + report | 1760 + 64 = 1824 ARM bytes; assert <=2048 |
+| Arrays + decoder/report | 32544 bytes; owner boards/counters are extra |
+| Whole image static RAM | data 152 + BSS 152204 = 152356 bytes |
 
-Host F fixtures use ideal widths near the supplied ruler values, not a
-captured sensor trace. At 100 mm/s, 2.9/5.8 mm narrow bars last 29/58 ms;
-these calculations do not prove optical resolution. Quiet-zone margins
-must be checked on the actual print. A nearby line can truncate a margin.
-Voting across course copies, steering changes and powered trials remain
-outside B1. See [S3 TEST_LOG](../../testing/subsystem3/TEST_LOG.md),
-[LINE](LINE.md) and [build profiles](../kernel/BUILD.md).
+RAM is from this B1b software-validation image descended from `70caef0`,
+not runtime free heap or stack evidence. Arrays, decoder and owner state
+remain below about 40 KiB. Owner boards/state are static because the TEST
+initial task has only a 1 KiB stack. Compiler function frames are 280 bytes
+for the owner, 296 for decoder step and 112 for character classification;
+these are not a complete call-graph or measured high-water proof. No
+kernel stack setting was changed. Normal images allocate none of these
+capture arrays/workspaces. Runtime stack use remains a hardware check.
+
+The four-byte ADC record has u16 raw/flags (bits 0..11 ADC, bit 15 loss,
+12..14 reserved zero) and a u16 microsecond delta from the prior retained
+sample. First delta is zero; one u32 origin reconstructs wrap-safe time.
+Delta overflow marks loss; no time is silently invented. Raw gaps >1.5 ms
+mark loss even on decimated ticks. Capacity stops appends without overwrite
+and requests a checked stop; freezing remains the drive owner's decision.
+
+- `[BC_FRAME]`: one row per complete frame **per width method**, string,
+  command/quality/direction, entry/exit timestamps and encoder position in
+  micrometres relative to capture start. INT32_MIN position means absent.
+  The same physical F normally appears once in TIME and once in DISTANCE.
+  Frames can be in search order; sort wrap-safe (timestamp - origin_us)
+  offsets for travel order.
+- `[BC_RESULT]`: whole-capture summary. Differing frame strings make this
+  summary ambiguous; individual frame reports remain separate. No vote or
+  barcode-controlled driving is implemented.
+- `[BC_STATS]` / `[BC_LINE]`: missed/dropped ADC deltas, raw gaps, full,
+  capture drops, motion misses/overflow, observer misses, copy maximum,
+  ISR and line cost. `[BC_META]` adds decoder step/total elapsed cost.
+- `BC_ADC`, `BC_MOTOR`, `BC_RUN`: retained raw values/time deltas, coherent
+  source-stamped counts and run widths in time/distance. Verify BEGIN/END
+  counts; paced USB output does not repair transport loss.
+
+`capture_dropped` counts rejected retention slots, not deliberately skipped
+1 kHz samples. OVERRUN compares encoder counts before integer-mm rounding
+and latches an observed crossing of the 620 mm limit, including stop retries.
+Raw loss rejects both decode methods before frame emission. Missing,
+gapped, non-monotonic or overflowing motion rejects DISTANCE; TIME remains
+separate. USB/frame printing occurs only after stop and freeze. Measured
+elapsed cost includes preemption; frame-output steps also include output.
+
+## Decoder rules and fixtures
+
+Sources: [`barcode.h`](../../app_program/subsystem3/barcode.h),
+[`barcode.c`](../../app_program/subsystem3/barcode.c),
+[`barcode_drive.c`](../../app_program/subsystem3/barcode_drive.c).
+The drive bounds are independent of the pure decoder and of subsystem 4.
+
+The decoder learns min/max over the frozen profile, requires default
+contrast >=64 ADC counts, and uses 40%/60% hysteresis. Both polarities and
+read directions are tested. This handles the observed black-HIGH polarity
+without a fixed sensor threshold. Optical blur and clipping can still fail.
+
+Ordinary Code 39 has 43 data symbols plus framing `*`, nine alternating
+elements with exactly three wide. Require wide/narrow mean ratio 1.6..3.4,
+class separation >=1.4, bounded class spread, narrow character gaps and
+white quiet zones >=10 narrow widths on both ends. Up to 16 data symbols
+and 192 alternating runs fit. No extended ASCII or checksum is implemented.
+
+Only exactly one A/B/C/D maps to LEFT/RIGHT/STRAIGHT/UTURN. Other valid
+strings, including F and Z, decode with NONE. Quality is REJECTED or DECODED;
+separation is the minimum-wide / maximum-narrow ratio in per mille, not a
+confidence probability. Rejection reasons
+cover loss, contrast, widths/pattern, quiet zones, truncation, capacity,
+ambiguity and motion. No noise repair guesses a letter. Each incremental
+step processes <=32 records or one possible frame, then the TEST task yields.
+
+| Fixture | Known value / expected result |
+| --- | --- |
+| Course samples | Standard `*A*` and `*Z*`, not the operator's F sheet |
+| Operator sheet | Photo plus ruler confirms standard `*F*`; command NONE |
+| 2x F, first floor test | About 285 mm; narrow 5.8 mm, wide 17.5 mm |
+| Course-size F | About 141 mm; narrow 2.9 mm, wide 8.7 mm |
+| `*` / F | `nwnnwnwnn` / `nnwnwwnnn` |
+| Z / A | `nwwnwnnnn` / `wnnnnwnnw` |
+| Track reference | 20 mm barcode-to-line gap, 18 mm line width |
+
+Expected physical result: **F, DECODED, NO command**, independently for each
+method. A differing or unreadable result is not a navigation instruction.
+At 100 mm/s, narrow bars last about 29/58 ms, giving about 14/29 retained
+samples. Host fixtures are ideal widths, not sensor traces. Quiet margins,
+physical drift, footprint, stop distance and powered decoding remain to be
+measured. [LINE](LINE.md) and [BUILD](../kernel/BUILD.md) retain normal rules.

@@ -8,10 +8,9 @@
 #define BC_WIDE_MAX       3.4f
 #define BC_SPLIT_MIN      1.4f
 #define BC_QUIET_NARROW   10.0f
-#define BC_MOTION_GAP_US  30000u
-#define BC_CAPTURE_MAX_US 10000000u
+#define BC_CAPTURE_MAX_US 60000000u
 
-const barcode_config_t barcode_default_config = {64u, 3000u, 12414u};
+const barcode_config_t barcode_default_config = {64u, 3000u, 12414u, 30000u};
 static const char alphabet[] = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ-. $/+%*";
 static const uint16_t patterns[] = {
     0x034u, 0x121u, 0x061u, 0x160u, 0x031u, 0x130u, 0x070u, 0x025u, 0x124u,
@@ -194,7 +193,7 @@ static void accept(barcode_result_t *out, const barcode_result_t *candidate,
 
 static void scan(const float *runs, size_t count, bool first_high,
                  bool white_high, bool reverse, size_t start,
-                 barcode_result_t *out)
+                 barcode_result_t *out, barcode_result_t *frame, size_t *stop)
 {
     const size_t real = reverse ? count - 1u - start : start;
     const bool high = first_high != ((real & 1u) != 0u);
@@ -250,6 +249,14 @@ static void scan(const float *runs, size_t count, bool first_high,
     }
     if (complete) {
         accept(out, &candidate, reverse);
+        candidate.decoded = true;
+        candidate.quality = BC_QUALITY_DECODED;
+        candidate.reason = BC_OK;
+        candidate.command = command(&candidate);
+        candidate.frames = 1u;
+        candidate.directions = reverse ? 2u : 1u;
+        *frame = candidate;
+        *stop = at;
     } else if (!out->decoded && out->reason != BC_AMBIGUOUS &&
                out->reason != BC_PAYLOAD_LIMIT) {
         out->reason = why == BC_NO_FRAME ? BC_TRUNCATED : why;
@@ -272,6 +279,9 @@ typedef enum {
 
 typedef struct {
     const barcode_sample_t *samples;
+    const barcode_packed_t *packed;
+    barcode_frame_sink_t sink;
+    void *sink_context;
     barcode_report_t *report;
     barcode_config_t config;
     motion_reader_t reader;
@@ -279,6 +289,7 @@ typedef struct {
     size_t index;
     size_t runs;
     uint32_t run_us;
+    uint32_t current_us;
     float low;
     float high;
     float previous_position;
@@ -308,7 +319,8 @@ void barcode_begin(const barcode_sample_t *samples, size_t sample_count,
     }
     if (report != NULL && samples != NULL && config != NULL &&
         sample_count >= 2u && sample_count <= BC_MAX_SAMPLES &&
-        config->min_contrast != 0u && config->max_gap_us != 0u) {
+        config->min_contrast != 0u && config->max_gap_us != 0u &&
+        config->motion_gap_us != 0u) {
         d.samples = samples;
         d.count = sample_count;
         d.config = *config;
@@ -326,6 +338,93 @@ void barcode_begin(const barcode_sample_t *samples, size_t sample_count,
     memcpy(workspace->state.bytes, &d, sizeof(d));
 }
 
+void barcode_begin_packed(const barcode_packed_t *samples, size_t count,
+                          uint32_t origin_us, const barcode_motion_t *motion,
+                          size_t motion_count, const barcode_config_t *config,
+                          barcode_workspace_t *workspace,
+                          barcode_report_t *report)
+{
+    /* Reuse common argument/configuration validation, then replace the seed
+     * view with the immutable packed source before any step can run. */
+    const barcode_sample_t seed[2] = {{origin_us, 0u, 0u}, {origin_us, 0u, 0u}};
+    barcode_begin(
+        samples != NULL && count >= 2u && count <= BC_MAX_SAMPLES ? seed : NULL,
+        2u, motion, motion_count, config, workspace, report);
+    if (workspace != NULL) {
+        decoder_t d;
+        memcpy(&d, workspace->state.bytes, sizeof(d));
+        if (d.phase != DONE) {
+            d.samples = NULL;
+            d.packed = samples;
+            d.count = count;
+            d.current_us = origin_us;
+            memcpy(workspace->state.bytes, &d, sizeof(d));
+        }
+    }
+}
+
+void barcode_frame_sink(barcode_workspace_t *workspace,
+                        barcode_frame_sink_t sink, void *context)
+{
+    if (workspace != NULL) {
+        decoder_t d;
+        memcpy(&d, workspace->state.bytes, sizeof(d));
+        d.sink = sink;
+        d.sink_context = context;
+        memcpy(workspace->state.bytes, &d, sizeof(d));
+    }
+}
+
+static barcode_sample_t next_sample(decoder_t *d, size_t index)
+{
+    if (d->packed == NULL) {
+        d->current_us = d->samples[index].us;
+        return d->samples[index];
+    }
+    const barcode_packed_t row = d->packed[index];
+    d->current_us =
+        index == 0u ? d->reader.origin : d->current_us + row.delta_us;
+    return (barcode_sample_t){
+        d->current_us, (uint16_t)(row.raw_flags & BC_PACKED_RAW),
+        (uint16_t)(((row.raw_flags & UINT16_C(0xf000)) != 0u ||
+                    (index == 0u && row.delta_us != 0u))
+                       ? BC_SAMPLE_GAP
+                       : 0u)};
+}
+
+static int32_t micrometres(float mm, bool valid)
+{
+    const float um = mm * 1000.0f;
+    return valid && um > -2147483648.0f && um < 2147483648.0f ? (int32_t)um
+                                                              : INT32_MIN;
+}
+
+static void emit_frame(decoder_t *d, const barcode_workspace_t *workspace,
+                       const barcode_result_t *value, size_t start, size_t stop,
+                       bool distance)
+{
+    const bool reverse = (d->mode & 1u) != 0u;
+    const size_t first = reverse ? d->runs - stop : start;
+    const size_t end = reverse ? d->runs - start : stop;
+    uint32_t us = d->reader.origin;
+    float mm = 0.0f;
+    barcode_frame_t frame = {.value = *value, .distance_method = distance};
+    for (size_t i = 0u; i <= end; ++i) {
+        if (i == first) {
+            frame.start_us = us;
+            frame.start_um = micrometres(mm, d->distance_ok);
+        }
+        if (i == end) {
+            frame.end_us = us;
+            frame.end_um = micrometres(mm, d->distance_ok);
+            break;
+        }
+        us += (uint32_t)workspace->time_us[i];
+        mm += workspace->distance_mm[i];
+    }
+    d->sink(&frame, d->sink_context);
+}
+
 /* Returns after at most 32 records, or one candidate frame. All loops have
  * fixed limits; the TEST caller sleeps between steps. */
 bool barcode_step(barcode_workspace_t *workspace)
@@ -337,22 +436,26 @@ bool barcode_step(barcode_workspace_t *workspace)
     memcpy(&d, workspace->state.bytes, sizeof(d));
     barcode_report_t *r = d.report;
     for (unsigned int budget = 0u; budget < 32u && d.phase != DONE; ++budget) {
-        const barcode_sample_t *s = d.samples;
         const size_t i = d.index;
+        const uint32_t previous_us = d.current_us;
+        barcode_sample_t v = {0};
+        if (d.phase == VALIDATE || d.phase == RUNS) {
+            v = next_sample(&d, i);
+        }
         if (d.phase == VALIDATE) {
-            const uint32_t dt = i == 0u ? 1u : s[i].us - s[i - 1u].us;
-            if (s[i].flags != 0u || s[i].raw > 4095u || dt == 0u ||
+            const uint32_t dt = i == 0u ? 1u : v.us - previous_us;
+            if (v.flags != 0u || v.raw > 4095u || dt == 0u ||
                 dt > d.config.max_gap_us ||
-                s[i].us - s[0].us > BC_CAPTURE_MAX_US) {
+                v.us - d.reader.origin > BC_CAPTURE_MAX_US) {
                 reject(r, BC_SAMPLE_LOSS);
                 d.phase = DONE;
                 break;
             }
-            if (s[i].raw < r->minimum) {
-                r->minimum = s[i].raw;
+            if (v.raw < r->minimum) {
+                r->minimum = v.raw;
             }
-            if (s[i].raw > r->maximum) {
-                r->maximum = s[i].raw;
+            if (v.raw > r->maximum) {
+                r->maximum = v.raw;
             }
             if (++d.index == d.count) {
                 r->contrast = r->maximum - r->minimum;
@@ -363,7 +466,9 @@ bool barcode_step(barcode_workspace_t *workspace)
                 }
                 d.low = (float)r->minimum + (float)r->contrast * 0.4f;
                 d.high = (float)r->minimum + (float)r->contrast * 0.6f;
-                d.first_high = (float)s[0].raw >= (d.low + d.high) * 0.5f;
+                d.current_us = d.reader.origin;
+                const barcode_sample_t first = next_sample(&d, 0u);
+                d.first_high = (float)first.raw >= (d.low + d.high) * 0.5f;
                 d.level = d.first_high;
                 d.phase = MOTION;
                 d.index = 1u;
@@ -372,41 +477,40 @@ bool barcode_step(barcode_workspace_t *workspace)
             if (d.reader.ready && i < d.reader.count) {
                 const uint32_t dt =
                     d.reader.rows[i].us - d.reader.rows[i - 1u].us;
-                if (dt == 0u || dt > BC_MOTION_GAP_US) {
+                if (dt == 0u || dt > d.config.motion_gap_us) {
                     d.reader.ready = false;
                 }
                 ++d.index;
             } else {
                 d.distance_ok =
-                    position(&d.reader, s[0].us, &d.previous_position);
+                    position(&d.reader, d.reader.origin, &d.previous_position);
                 d.run_position = d.previous_position;
-                d.run_us = s[0].us;
+                d.run_us = d.reader.origin;
                 d.index = 1u;
                 d.phase = RUNS;
             }
         } else if (d.phase == RUNS) {
             float x = d.previous_position;
-            const bool positioned = position(&d.reader, s[i].us, &x);
+            const bool positioned = position(&d.reader, v.us, &x);
             d.distance_ok = d.distance_ok && positioned;
             const bool next =
-                d.level ? (float)s[i].raw > d.low : (float)s[i].raw >= d.high;
+                d.level ? (float)v.raw > d.low : (float)v.raw >= d.high;
             if (next != d.level) {
                 if (d.runs >= BC_MAX_RUNS - 1u) {
                     reject(r, BC_RUN_LIMIT);
                     d.phase = DONE;
                     break;
                 }
-                workspace->time_us[d.runs] = (float)(s[i].us - d.run_us);
+                workspace->time_us[d.runs] = (float)(v.us - d.run_us);
                 workspace->distance_mm[d.runs] = x - d.run_position;
                 ++d.runs;
-                d.run_us = s[i].us;
+                d.run_us = v.us;
                 d.run_position = x;
                 d.level = next;
             }
             d.previous_position = x;
             if (++d.index == d.count) {
-                workspace->time_us[d.runs] =
-                    (float)(s[d.count - 1u].us - d.run_us);
+                workspace->time_us[d.runs] = (float)(v.us - d.run_us);
                 workspace->distance_mm[d.runs] = x - d.run_position;
                 r->runs = (uint16_t)++d.runs;
                 reject(r, BC_NO_FRAME);
@@ -418,10 +522,15 @@ bool barcode_step(barcode_workspace_t *workspace)
             /* Modes: two methods x two polarities x two directions. */
             const bool distance = (d.mode & 4u) != 0u;
             if (!distance || d.distance_ok) {
+                barcode_result_t frame = {0};
+                size_t stop = 0u;
                 scan(distance ? workspace->distance_mm : workspace->time_us,
                      d.runs, d.first_high, (d.mode & 2u) != 0u,
-                     (d.mode & 1u) != 0u, i,
-                     distance ? &r->distance : &r->time);
+                     (d.mode & 1u) != 0u, i, distance ? &r->distance : &r->time,
+                     &frame, &stop);
+                if (frame.decoded && d.sink != NULL) {
+                    emit_frame(&d, workspace, &frame, i, stop, distance);
+                }
             }
             if (++d.index + 9u >= d.runs) {
                 d.index = 1u;

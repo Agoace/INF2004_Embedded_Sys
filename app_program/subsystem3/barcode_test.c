@@ -1,4 +1,4 @@
-/* TEST runner below motion/sensors. No ADC IRQ work or driving client. */
+/* Exclusive operator pass. TEST20 only; normal robot has no call path. */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
 #include "../app.h"
@@ -6,7 +6,9 @@
 #if APP_BARCODE_CAPTURE
 #include "barcode.h"
 #include "barcode_capture.h"
+#include "barcode_drive.h"
 #include "barcode_hw.h"
+#include "barcode_settings.h"
 #include "drv_line.h"
 #include "line_service.h"
 #include "../platform/drv_time.h"
@@ -16,12 +18,14 @@
 #error "BARCODE_CAPTURE requires exclusive single-core, non-MQTT TEST"
 #endif
 
+static const barcode_drive_config_t settings = {
+    BARCODE_BOUNDED_DISTANCE_MM, BARCODE_PASS_SPEED_MM_S, BARCODE_COUNTS_PER_M};
 static ID runner;
 static barcode_workspace_t workspace;
 static barcode_report_t decoded;
 static uint32_t motor_misses;
-static uint32_t decode_max_us;
-static uint32_t decode_total_us;
+static uint32_t last_motor_us;
+static uint32_t frame_count[2];
 
 static void release(void *context)
 {
@@ -29,49 +33,78 @@ static void release(void *context)
     (void)tk_wup_tsk(runner);
 }
 
-static void motor_sample(void)
+static bool motor_read(motion_status_t *value, uint32_t *stamp)
 {
-    motion_status_t value;
-    uint32_t stamp;
-    if (motion_snapshot_try_read(&value, &stamp) != E_OK ||
-        (uint32_t)(drv_time_us() - stamp) > 30000u) {
-        ++motor_misses;
-        return;
-    }
-    const barcode_motion_t row = {stamp, value.counts[0], value.counts[1]};
-    barcode_capture_motor(&row);
+    return motion_snapshot_try_read(value, stamp) == E_OK &&
+           drv_time_us() - *stamp <= 30000u;
 }
 
-static void result(const char *stage, const char *method,
-                   const barcode_result_t *r)
+static void motor_sample(const motion_status_t *value, uint32_t stamp,
+                         bool force)
 {
-    tm_printf((UB *)"[BC_RESULT] %s %s decoded %u text \"%s\" cmd %u "
-                    "reason %s quality %u dirs %u frames %u "
-                    "separation_permille %u\n",
-              stage, method, (unsigned int)r->decoded, r->text,
+    if (force ||
+        stamp - last_motor_us >= barcode_drive_motor_ms(&settings) * 1000u) {
+        const barcode_motion_t row = {stamp, value->counts[0],
+                                      value->counts[1]};
+        barcode_capture_motor(&row);
+        last_motor_us = stamp;
+    }
+}
+
+static void result(const char *method, const barcode_result_t *r)
+{
+    tm_printf((UB *)"[BC_RESULT] FROZEN %s decoded %u text \"%s\" cmd %u "
+                    "reason %s quality %u dirs %u frames %u separation %u\n",
+              method, (unsigned int)r->decoded, r->text,
               (unsigned int)r->command, barcode_reason_name(r->reason),
               (unsigned int)r->quality, (unsigned int)r->directions,
               (unsigned int)r->frames, (unsigned int)r->separation_permille);
+}
+
+static void frame_result(const barcode_frame_t *frame, void *context)
+{
+    (void)context;
+    const unsigned int method = frame->distance_method ? 1u : 0u;
+    ++frame_count[method];
+    tm_printf((UB *)"[BC_FRAME] %s index %lu text \"%s\" cmd %u quality %u "
+                    "dirs %u start_us %lu end_us %lu start_um %ld end_um %ld "
+                    "separation %u\n",
+              method ? "DISTANCE" : "TIME", (unsigned long)frame_count[method],
+              frame->value.text, (unsigned int)frame->value.command,
+              (unsigned int)frame->value.quality,
+              (unsigned int)frame->value.directions,
+              (unsigned long)frame->start_us, (unsigned long)frame->end_us,
+              (long)frame->start_um, (long)frame->end_um,
+              (unsigned int)frame->value.separation_permille);
 }
 
 static void decode(bool lost)
 {
     size_t n;
     size_t m;
-    const barcode_sample_t *rows = barcode_capture_rows(&n);
+    const barcode_packed_t *rows = barcode_capture_rows(&n);
     const barcode_motion_t *motors = barcode_capture_motors(&m);
-    barcode_begin(rows, n, motors, m, &barcode_default_config, &workspace,
-                  &decoded);
-    decode_max_us = 0u;
-    decode_total_us = 0u;
+    barcode_config_t config = barcode_default_config;
+    config.max_gap_us = barcode_drive_adc_ms(&settings) * 1000u + 1500u;
+    config.motion_gap_us = barcode_drive_motor_ms(&settings) * 1000u + 20000u;
+    if (barcode_capture_motor_overflow() != 0u) {
+        config.counts_per_m = 0u;
+    }
+    barcode_begin_packed(lost ? NULL : rows, n, barcode_capture_origin(),
+                         motors, m, &config, &workspace, &decoded);
+    frame_count[0] = 0u;
+    frame_count[1] = 0u;
+    barcode_frame_sink(&workspace, frame_result, NULL);
+    uint32_t maximum = 0u;
+    uint32_t total = 0u;
     bool done;
     do {
         const uint32_t start = drv_time_us();
         done = barcode_step(&workspace);
         const uint32_t cost = drv_time_us() - start;
-        decode_total_us += cost;
-        if (cost > decode_max_us) {
-            decode_max_us = cost;
+        total += cost;
+        if (cost > maximum) {
+            maximum = cost;
         }
         (void)tk_dly_tsk(1u);
         (void)tk_can_wup(TSK_SELF);
@@ -79,32 +112,37 @@ static void decode(bool lost)
     if (lost) {
         decoded.time = (barcode_result_t){.reason = BC_SAMPLE_LOSS};
         decoded.distance = decoded.time;
-    } else if (barcode_capture_motor_overflow() != 0u) {
-        decoded.distance = (barcode_result_t){.reason = BC_MOTION};
     }
-    tm_printf((UB *)"[BC_META] raw %u..%u contrast %u runs %u\n",
+    tm_printf((UB *)"[BC_META] raw %u..%u contrast %u runs %u "
+                    "decode_step_max_us %lu decode_total_us %lu\n",
               (unsigned int)decoded.minimum, (unsigned int)decoded.maximum,
-              (unsigned int)decoded.contrast, (unsigned int)decoded.runs);
-    result("FROZEN", "TIME", &decoded.time);
-    result("FROZEN", "DISTANCE", &decoded.distance);
+              (unsigned int)decoded.contrast, (unsigned int)decoded.runs,
+              (unsigned long)maximum, (unsigned long)total);
+    result("TIME", &decoded.time);
+    result("DISTANCE", &decoded.distance);
 }
 
 static void dump(void)
 {
     size_t n;
     size_t m;
-    const barcode_sample_t *rows = barcode_capture_rows(&n);
+    const barcode_packed_t *rows = barcode_capture_rows(&n);
     const barcode_motion_t *motors = barcode_capture_motors(&m);
-    tm_printf((UB *)"[BC_DUMP] BEGIN adc %lu motor %lu; verify row counts\n",
-              (unsigned long)n, (unsigned long)m);
-    tm_printf((UB *)"BC_ADC,index,us,raw_bc,flags\n");
+    uint32_t us = barcode_capture_origin();
+    tm_printf((UB *)"[BC_DUMP] BEGIN adc %lu motor %lu origin_us %lu "
+                    "adc_keep_ms %lu motor_keep_ms %lu; verify row counts\n",
+              (unsigned long)n, (unsigned long)m, (unsigned long)us,
+              (unsigned long)barcode_drive_adc_ms(&settings),
+              (unsigned long)barcode_drive_motor_ms(&settings));
+    tm_printf((UB *)"BC_ADC,index,us,raw_bc,raw_flags,delta_us\n");
     for (size_t i = 0u; i < n; ++i) {
-        tm_printf((UB *)"BC_ADC,%lu,%lu,%u,%u\n", (unsigned long)i,
-                  (unsigned long)rows[i].us, (unsigned int)rows[i].raw,
-                  (unsigned int)rows[i].flags);
-        if (i % 16u == 15u) {
-            (void)tk_dly_tsk(1u);
-        }
+        us += rows[i].delta_us;
+        tm_printf((UB *)"BC_ADC,%lu,%lu,%u,%u,%u\n", (unsigned long)i,
+                  (unsigned long)us,
+                  (unsigned int)(rows[i].raw_flags & BC_PACKED_RAW),
+                  (unsigned int)(rows[i].raw_flags & UINT16_C(0xf000)),
+                  (unsigned int)rows[i].delta_us);
+        (void)tk_dly_tsk(1u); /* Stopped: let lower-priority USB drain. */
     }
     tm_printf((UB *)"BC_MOTOR,index,us,left_counts,right_counts\n");
     for (size_t i = 0u; i < m; ++i) {
@@ -140,9 +178,13 @@ typedef struct {
     bool armed;
 } button_t;
 
-static bool press(button_t *button)
+static button_t button_init(bool down)
 {
-    const bool down = barcode_hw_button_down();
+    return (button_t){drv_time_ms(), down, down, !down};
+}
+
+static bool press(button_t *button, bool down)
+{
     const uint32_t now = drv_time_ms();
     if (down != button->sample) {
         button->sample = down;
@@ -163,59 +205,229 @@ static bool press(button_t *button)
     return true;
 }
 
+typedef struct {
+    bool pending;
+    bool accepted;
+    bool used_estop;
+    uint32_t after_us;
+    uint32_t last_stamp;
+    uint32_t last_notice_ms;
+    unsigned int settled;
+} stop_t;
+
+/* Adapted from the checked stop_pending idea in the IMU stream, not linked
+ * to S4. API success alone is not a stopped-wheel observation: require two
+ * distinct fresh post-request snapshots with zero duty and speed <=10. */
+static bool confirm_stop(stop_t *stop, const motion_status_t *motor, bool valid,
+                         uint32_t stamp)
+{
+    bool accepted = motion_stop() >= E_OK;
+    if (!accepted) {
+        accepted = motion_estop() >= E_OK;
+        stop->used_estop = true;
+    }
+    if (accepted && !stop->accepted) {
+        stop->after_us = drv_time_us();
+        stop->accepted = true;
+    } else if (!accepted) {
+        stop->accepted = false;
+        stop->settled = 0u;
+    }
+    if (stop->accepted && valid && stamp != stop->last_stamp &&
+        stamp != stop->after_us &&
+        stamp - stop->after_us < UINT32_C(0x80000000)) {
+        stop->last_stamp = stamp;
+        const bool zero =
+            motor->duty_permille[0] == 0 && motor->duty_permille[1] == 0 &&
+            motor->speed_mm_s[0] >= -10 && motor->speed_mm_s[0] <= 10 &&
+            motor->speed_mm_s[1] >= -10 && motor->speed_mm_s[1] <= 10;
+        stop->settled = zero ? stop->settled + 1u : 0u;
+        if (stop->settled >= 2u) {
+            stop->pending = false;
+            return true;
+        }
+    }
+    if (drv_time_ms() - stop->last_notice_ms >= 1000u) {
+        stop->last_notice_ms = drv_time_ms();
+        tm_printf((UB *)"[BC_DRIVE] STOP UNCONFIRMED; retrying. "
+                        "Remove VIN if wheels move. No rearm or dump.\n");
+    }
+    return false;
+}
+
+static void frozen_report(const barcode_drive_t *job,
+                          const drv_line_stats_t *initial,
+                          const drv_line_stats_t *current,
+                          uint32_t observer_misses)
+{
+    const bool lost = current->missed != initial->missed ||
+                      current->dropped != initial->dropped ||
+                      barcode_capture_gaps() != 0u ||
+                      barcode_capture_dropped() != 0u || barcode_capture_full();
+    tm_printf((UB *)"[BC_DRIVE] STOP CONFIRMED direction %s reason %s "
+                    "travel_mm %ld left_mm %ld right_mm %ld; frozen dump\n",
+              job->backward ? "BACKWARD" : "FORWARD",
+              barcode_drive_reason_name(job->reason), (long)job->travel_mm,
+              (long)job->wheel_mm[0], (long)job->wheel_mm[1]);
+    decode(lost);
+    tm_printf((UB *)"[BC_STATS] missed %lu dropped %lu gaps %lu adc_full %u "
+                    "capture_dropped %lu motor_misses %lu motion_overflow %lu "
+                    "observer_misses %lu hook_max_us %lu\n",
+              (unsigned long)(current->missed - initial->missed),
+              (unsigned long)(current->dropped - initial->dropped),
+              (unsigned long)barcode_capture_gaps(),
+              (unsigned int)barcode_capture_full(),
+              (unsigned long)barcode_capture_dropped(),
+              (unsigned long)motor_misses,
+              (unsigned long)barcode_capture_motor_overflow(),
+              (unsigned long)observer_misses,
+              (unsigned long)barcode_capture_max_us());
+    static line_snapshot_t line;
+    if (line_snapshot_try_read(&line) == E_OK) {
+        tm_printf(
+            (UB *)"[BC_LINE] isr_max_us %lu isr_total_us %lu "
+                  "line_sample_max_us %lu line_total_us %lu processed %lu\n",
+            (unsigned long)current->isr_max_us, (unsigned long)current->isr_us,
+            (unsigned long)line.sample_max_us, (unsigned long)line.cpu_us,
+            (unsigned long)line.processed);
+    }
+    dump();
+}
+
 void barcode_test(void)
 {
     static const char *const names[] = {"FLOOR", "WHITE_PAPER", "BLACK_BAR"};
-    T_CCYC config = {
-        .cycatr = TA_HLNG, .cychdr = (FP)release, .cyctim = 10u, .cycphs = 10u};
-    if (motion_stop() < E_OK) {
-        (void)motion_estop();
-        tm_printf((UB *)"[BC] ABORT: cannot confirm initial motor stop\n");
-        return;
-    }
+    const bool configuration_ok = barcode_drive_config_valid(&settings);
     barcode_hw_button_init();
-    const bool held = barcode_hw_button_down();
-    button_t button = {.sample = held, .stable = held, .armed = !held};
+    /* Initial TEST task has only 1 KiB stack. Keep owner buffers static;
+     * no new task or template stack-size deviation is needed. */
+    static button_t range_button;
+    static button_t drive_button;
+    range_button = button_init(barcode_hw_button_down());
+    drive_button = button_init(barcode_hw_drive_down());
     runner = tk_get_tid();
+    static const T_CCYC config = {
+        .cycatr = TA_HLNG, .cychdr = (FP)release, .cyctim = 10u, .cycphs = 10u};
     const ID cyclic = tk_cre_cyc(&config);
-    if (cyclic < E_OK || tk_sta_cyc(cyclic) < E_OK) {
-        if (cyclic >= E_OK) {
-            (void)tk_del_cyc(cyclic);
-        }
-        tm_printf((UB *)"[BC] ABORT: cannot start observer cyclic\n");
-        return;
-    }
-    tm_printf((UB *)"[BC] HAND PUSH ONLY. No GP21 or speed commands. "
-                    "USB powers encoders; zero duty is coast, not brake.\n");
-    tm_printf((UB *)"[BC] Place FLOOR; GP20 records NEXT 1s. Then place "
-                    "WHITE_PAPER/BLACK_BAR and press for each. Hold still.\n");
-    tm_printf((UB *)"[BC] Next GP20 arms 4096 ms capture; press again to "
-                    "freeze. Push straight over 2x print first.\n");
-    tm_printf(
-        (UB *)"[BC] Both width methods reported; hand-push encoder "
-              "slip is NOT a distance calibration. Commands are data only.\n");
-    unsigned int stage = 0u;
+    const bool cyclic_ok = cyclic > 0 && tk_sta_cyc(cyclic) >= E_OK;
+    static barcode_drive_t job;
+    static stop_t stop;
+    job = (barcode_drive_t){.inhibited = !configuration_ok};
+    stop = (stop_t){.pending = true};
     bool capturing = false;
-    uint32_t live_ms = 0u;
-    uint32_t observer_misses = 0u;
-    uint32_t last_live = drv_time_ms();
-    drv_line_stats_t initial = {0};
     bool range_pending = false;
     uint32_t range_ms = 0u;
+    uint32_t observer_misses = 0u;
+    unsigned int stage = 0u;
+    static drv_line_stats_t initial;
+    static drv_line_stats_t current;
+    static motion_status_t motor;
+    static line_snapshot_t line;
+    initial = (drv_line_stats_t){0};
+    tm_printf(
+        (UB *)"[BC] B1b DRIVEN TEST ONLY: VIN REQUIRED. Lift wheels "
+              "for first GP21 check. One F sheet per run; swap when idle.\n");
+    tm_printf((UB *)"[BC] GP20: floor/white/black ranges, then redo ranges. "
+                    "GP21: forward, then backward; while moving = STOP.\n");
+    tm_printf(
+        (UB *)"[BC] pass_mm %lu speed_mm_s %lu timeout_ms %lu "
+              "adc_keep_ms %lu motor_keep_ms %lu; commands are data only\n",
+        (unsigned long)settings.distance_mm, (unsigned long)settings.speed_mm_s,
+        (unsigned long)barcode_drive_timeout_ms(&settings),
+        (unsigned long)barcode_drive_adc_ms(&settings),
+        (unsigned long)barcode_drive_motor_ms(&settings));
     for (;;) {
-        if (tk_slp_tsk(100u) < E_OK) {
-            barcode_capture_freeze();
-            tm_printf((UB *)"[BC] ABORT: observer wake timeout\n");
-            break;
+        const bool wake_fault = !cyclic_ok || tk_slp_tsk(100u) < E_OK;
+        if (wake_fault) {
+            (void)tk_dly_tsk(10u);
         }
         const INT missed = tk_can_wup(TSK_SELF);
-        const bool pushed = press(&button);
-        if (stage < 3u) {
-            if (pushed && !range_pending) {
+        const bool range_press = press(&range_button, barcode_hw_button_down());
+        const bool drive_press = press(&drive_button, barcode_hw_drive_down());
+        motor = (motion_status_t){0};
+        uint32_t stamp = 0u;
+        const bool motor_ok = motor_read(&motor, &stamp);
+        drv_line_stats(&current);
+        if (capturing) {
+            if (motor_ok) {
+                motor_sample(&motor, stamp, false);
+                barcode_drive_observe(&job, &settings, motor.counts[0],
+                                      motor.counts[1]);
+            } else {
+                ++motor_misses;
+            }
+            if (missed > 0) {
+                observer_misses += (uint32_t)missed;
+            }
+        }
+        if (stop.pending) {
+            if (confirm_stop(&stop, &motor, motor_ok, stamp)) {
+                job.inhibited = job.inhibited || stop.used_estop || !cyclic_ok;
+                if (capturing) {
+                    barcode_drive_observe(&job, &settings, motor.counts[0],
+                                          motor.counts[1]);
+                    barcode_capture_freeze();
+                    (void)tk_dly_tsk(20u);
+                    if (motor_read(&motor, &stamp)) {
+                        motor_sample(&motor, stamp, true);
+                        barcode_drive_observe(&job, &settings, motor.counts[0],
+                                              motor.counts[1]);
+                    } else {
+                        ++motor_misses;
+                    }
+                    if (job.overrun) {
+                        barcode_drive_cancel(&job, BC_DRIVE_OVERRUN);
+                    }
+                    frozen_report(&job, &initial, &current, observer_misses);
+                    capturing = false;
+                    (void)tk_can_wup(TSK_SELF);
+                    drive_button = button_init(barcode_hw_drive_down());
+                    range_button = button_init(barcode_hw_button_down());
+                }
+                tm_printf((UB *)"[BC] STOP CONFIRMED; next %s; inhibited %u. "
+                                "Save dump. GP20 ranges / GP21 pass.\n",
+                          job.next_backward ? "BACKWARD" : "FORWARD",
+                          (unsigned int)job.inhibited);
+            }
+            continue;
+        }
+        if (job.active) {
+            const bool line_ok = line_snapshot_try_read(&line) == E_OK &&
+                                 line.valid &&
+                                 drv_time_us() - line.timestamp_us <= 5000u &&
+                                 line.raw_bc <= 4095u;
+            const bool fault = wake_fault || missed > 0 || !motor_ok ||
+                               !line_ok || motor.faults != 0u ||
+                               !motor.watchdog_armed ||
+                               current.missed != initial.missed ||
+                               current.dropped != initial.dropped ||
+                               barcode_capture_gaps() != 0u ||
+                               barcode_capture_motor_overflow() != 0u;
+            const int16_t speed = barcode_drive_step(
+                &job, &settings, drv_time_ms(), motor.counts[0],
+                motor.counts[1], drive_press, fault);
+            if (barcode_capture_full() || barcode_capture_dropped() != 0u) {
+                barcode_drive_cancel(&job, BC_DRIVE_CAPACITY);
+            }
+            if (job.active && motion_set_speed(speed, speed) < E_OK) {
+                barcode_drive_cancel(&job, BC_DRIVE_COMMAND);
+            }
+            if (!job.active) {
+                stop = (stop_t){.pending = true};
+                (void)confirm_stop(&stop, &motor, motor_ok, stamp);
+                /* Even immediate API success needs later zero snapshots. */
+            }
+            continue;
+        }
+        if (stage < 3u || (range_press && !range_pending)) {
+            if (stage == 3u) {
+                stage = 0u;
+            }
+            if (range_press && !range_pending) {
                 barcode_range_begin();
                 range_ms = drv_time_ms();
                 range_pending = true;
-                tm_printf((UB *)"[BC] measuring %s; hold still for 1s\n",
+                tm_printf((UB *)"[BC] measuring %s for NEXT 1s; hold still\n",
                           names[stage]);
             }
             if (range_pending && drv_time_ms() - range_ms >= 1000u) {
@@ -229,91 +441,44 @@ void barcode_test(void)
                 if (range.samples >= 500u) {
                     ++stage;
                 }
-                if (stage < 3u) {
-                    tm_printf((UB *)"[BC] place %s; GP20 records NEXT 1s\n",
-                              names[stage]);
-                } else {
-                    tm_printf(
-                        (UB *)"[BC] contrast ranges recorded; "
-                              "GP20 arms pass (no automatic contrast PASS)\n");
-                }
+                tm_printf((UB *)"[BC] next %s\n",
+                          stage < 3u ? names[stage] : "GP21 driven pass");
             }
-        } else if (!capturing && pushed) {
-            barcode_capture_begin();
-            drv_line_stats(&initial);
-            motor_misses = 0u;
-            observer_misses = 0u;
-            motor_sample();
-            live_ms = drv_time_ms();
-            capturing = true;
-            tm_printf((UB *)"[BC] CAPTURE armed; hand push now\n");
-        } else if (capturing) {
-            motor_sample();
-            if (missed > 0) {
-                observer_misses += (uint32_t)missed;
-            }
-            if (pushed) {
-                barcode_capture_freeze();
-            }
-            drv_line_stats_t current;
-            drv_line_stats(&current);
-            const bool lost = current.missed != initial.missed ||
-                              current.dropped != initial.dropped;
-            if (!barcode_capture_active()) {
-                /* Keep the final ADC endpoint bracketed without inventing
-                 * future encoder motion. Capture storage stays frozen. */
-                (void)tk_dly_tsk(20u);
-                motor_sample();
-                barcode_capture_freeze();
-                decode(lost);
-                tm_printf((UB *)"[BC_STATS] missed %lu dropped %lu "
-                                "motor_misses %lu observer_misses %lu "
-                                "hook_max_us %lu elapsed_ms %lu "
-                                "decode_step_max_us %lu decode_total_us %lu "
-                                "adc_full %u motion_overflow %lu gaps %lu\n",
-                          (unsigned long)(current.missed - initial.missed),
-                          (unsigned long)(current.dropped - initial.dropped),
-                          (unsigned long)motor_misses,
-                          (unsigned long)observer_misses,
-                          (unsigned long)barcode_capture_max_us(),
-                          (unsigned long)(drv_time_ms() - live_ms),
-                          (unsigned long)decode_max_us,
-                          (unsigned long)decode_total_us,
-                          (unsigned int)barcode_capture_full(),
-                          (unsigned long)barcode_capture_motor_overflow(),
-                          (unsigned long)barcode_capture_gaps());
-                line_snapshot_t line;
-                if (line_snapshot_try_read(&line) == E_OK) {
-                    tm_printf((UB *)"[BC_LINE] isr_max_us %lu "
-                                    "isr_total_us %lu line_sample_max_us %lu "
-                                    "line_total_us %lu processed %lu\n",
-                              (unsigned long)current.isr_max_us,
-                              (unsigned long)current.isr_us,
-                              (unsigned long)line.sample_max_us,
-                              (unsigned long)line.cpu_us,
-                              (unsigned long)line.processed);
-                }
-                dump();
-                /* Dump deliberately yields; those queued observer wakes
-                 * are not acquisition loss for the next hand-push pass. */
-                (void)tk_can_wup(TSK_SELF);
-                capturing = false;
-                tm_printf((UB *)"[BC] frozen; GP20 starts NEW pass. "
-                                "Save complete dump before rearming.\n");
-            }
+            continue;
         }
-        if (!capturing && drv_time_ms() - last_live >= 1000u) {
-            line_snapshot_t line;
-            if (line_snapshot_try_read(&line) == E_OK) {
-                tm_printf((UB *)"[BC_RAW] raw_bc %u; phase %u\n",
-                          (unsigned int)line.raw_bc, stage);
+        if (drive_press) {
+            const bool line_ok = line_snapshot_try_read(&line) == E_OK &&
+                                 line.valid &&
+                                 drv_time_us() - line.timestamp_us <= 5000u &&
+                                 line.raw_bc <= 4095u;
+            const bool fault =
+                wake_fault || missed > 0 || !motor_ok || !line_ok ||
+                motor.faults != 0u || !motor.watchdog_armed ||
+                motor.duty_permille[0] != 0 || motor.duty_permille[1] != 0 ||
+                motor.speed_mm_s[0] < -10 || motor.speed_mm_s[0] > 10 ||
+                motor.speed_mm_s[1] < -10 || motor.speed_mm_s[1] > 10;
+            const int16_t speed = barcode_drive_step(
+                &job, &settings, drv_time_ms(), motor.counts[0],
+                motor.counts[1], true, fault);
+            if (!job.active) {
+                tm_printf((UB *)"[BC_DRIVE] START REFUSED reason %s; reboot "
+                                "after a fault, never bypass it\n",
+                          barcode_drive_reason_name(job.reason));
+                stop = (stop_t){.pending = true};
+                continue;
             }
-            last_live = drv_time_ms();
+            initial = current;
+            observer_misses = 0u;
+            motor_misses = 0u;
+            barcode_capture_begin(barcode_drive_adc_ms(&settings));
+            motor_sample(&motor, stamp, true);
+            capturing = true;
+            if (motion_set_speed(speed, speed) < E_OK) {
+                barcode_drive_cancel(&job, BC_DRIVE_COMMAND);
+                stop = (stop_t){.pending = true};
+                (void)confirm_stop(&stop, &motor, motor_ok, stamp);
+            }
         }
     }
-    barcode_range_end(NULL);
-    (void)tk_stp_cyc(cyclic);
-    (void)tk_del_cyc(cyclic);
-    (void)tk_can_wup(TSK_SELF);
 }
 #endif

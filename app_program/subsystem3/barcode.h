@@ -5,11 +5,20 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define BC_MAX_SAMPLES 4096u
+#define BC_MAX_SAMPLES 6144u
 #define BC_MAX_MOTION  512u
 #define BC_MAX_PAYLOAD 16u
 #define BC_MAX_RUNS    192u
 #define BC_SAMPLE_GAP  UINT16_C(0x0001)
+#define BC_PACKED_RAW  UINT16_C(0x0fff)
+#define BC_PACKED_GAP  UINT16_C(0x8000)
+
+typedef struct {
+    uint16_t raw_flags; /* bits 0..11 ADC, bit 15 gap, bits 12..14 zero */
+    uint16_t delta_us;  /* from previous retained sample; first is zero */
+} barcode_packed_t;
+
+_Static_assert(sizeof(barcode_packed_t) == 4u, "Packed ADC record changed");
 
 typedef struct {
     uint32_t us;
@@ -74,16 +83,29 @@ typedef struct {
 } barcode_report_t;
 
 typedef struct {
+    barcode_result_t value;
+    uint32_t start_us;
+    uint32_t end_us;
+    int32_t
+        start_um; /* capture-relative encoder position, INT32_MIN if absent */
+    int32_t end_um;
+    bool distance_method;
+} barcode_frame_t;
+
+typedef void (*barcode_frame_sink_t)(const barcode_frame_t *, void *);
+
+typedef struct {
     uint16_t min_contrast;
     uint32_t max_gap_us;
     uint32_t counts_per_m;
+    uint32_t motion_gap_us;
 } barcode_config_t;
 
 /* Incremental state is caller-owned and opaque to users. The union gives
  * the private state pointer/float alignment; access uses memcpy. */
 typedef union {
     max_align_t alignment;
-    unsigned char bytes[192];
+    unsigned char bytes[224];
 } barcode_state_t;
 
 typedef struct {
@@ -102,6 +124,15 @@ void barcode_begin(const barcode_sample_t *samples, size_t sample_count,
                    const barcode_motion_t *motion, size_t motion_count,
                    const barcode_config_t *config,
                    barcode_workspace_t *workspace, barcode_report_t *report);
+void barcode_begin_packed(const barcode_packed_t *samples, size_t count,
+                          uint32_t origin_us, const barcode_motion_t *motion,
+                          size_t motion_count, const barcode_config_t *config,
+                          barcode_workspace_t *workspace,
+                          barcode_report_t *report);
+/* Set after begin and before step. Sink runs once per complete frame/method,
+ * only in caller context. No input mutation or vehicle action is permitted. */
+void barcode_frame_sink(barcode_workspace_t *workspace,
+                        barcode_frame_sink_t sink, void *context);
 bool barcode_step(barcode_workspace_t *workspace);
 
 extern const barcode_config_t barcode_default_config;
@@ -109,7 +140,8 @@ extern const barcode_config_t barcode_default_config;
  * Width methods are independent: both are always reported. Only a SINGLE
  * A/B/C/D maps to a command value; other valid strings decode with NONE.
  * A command value is data, never an instruction to the vehicle.
- * Distances interpolate bracketed, coherent 10 ms encoder observations.
+ * Distances interpolate bracketed, source-stamped encoder observations;
+ * config.motion_gap_us bounds their permitted source-time gap.
  * No extrapolation, missing/gapped motion, or direction reversal is accepted
  * for the distance result. Hand-push slip remains unmeasured even on BC_OK.
  * Complete frames need 10 narrow-width white quiet zones at both ends.

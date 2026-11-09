@@ -34,8 +34,8 @@ including any higher-priority preemption, an upper bound on CPU cost.
 
 ## B1 barcode software validation
 
-Validation base: staging `b569adc`, on `mtk3-line`. This section describes
-this B1 source change, not a physical run of the earlier line image.
+Tested source: B1 `70caef0`, based on staging `b569adc`, on `mtk3-line`.
+These software results do not certify the later B1b powered profile.
 
 | Check | Result |
 | --- | --- |
@@ -78,21 +78,18 @@ The operator's photo and ruler confirm F, not Z: two gaps differ from Z.
 Expected physical result is **F, DECODED, NO command**. Course samples are
 standard A and Z; they do not change the operator print's expected letter.
 
-## B1 physical procedure — Not run
+## B1 hand-push procedure and operator follow-up
 
-Use the [B1 contract](../../docs/s3-line-barcode/BARCODE.md) for the full
-settings, output fields, quiet-zone limits and no-command rule.
-
-```sh
-make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
-```
+The procedure below is historical, for `70caef0` only. Do not apply its
+buttons to the current B1b image: GP21 now drives in that exclusive profile.
+Use the [current B1b contract](../../docs/s3-line-barcode/BARCODE.md).
 
 | ID | Check | Status |
 | --- | --- | --- |
-| S3-B1-01 | Stationary contrast ranges | Not run |
-| S3-B1-02 | 2x F, straight hand push | Not run |
-| S3-B1-03 | Reverse order and course-size F | Not run |
-| S3-B1-04 | Loss, timestamps, dump counts and timing | Not run |
+| S3-B1-01 | Stationary contrast ranges | PASS; corrected placement |
+| S3-B1-02 | 2x F, straight hand push | FAIL; capture-window procedure |
+| S3-B1-03 | Reverse order and course-size F | FAIL; capture-window procedure |
+| S3-B1-04 | Loss, timestamps, dump counts and timing | Partial evidence below |
 | S3-B1-05 | Normal LINE regression | Not run |
 
 1. **S3-B1-01:** At installed height, GP20 records FLOOR, WHITE_PAPER and
@@ -129,4 +126,140 @@ wheels slip. Time widths are therefore required for this first contrast
 and geometry check, but changing push speed can distort them too. Keep
 both results and reject disagreement rather than calling it a command.
 No powered trial, weaving correction, copy vote or robot routing is part
-of B1. Contrast, physical decoding, stack use and timing remain Not run.
+of B1. These checks were Not run at the initial software validation.
+
+### Operator evidence on B1 `70caef0`
+
+Supplied by Main after nine hand-push captures; private logs were not read
+or copied by this worker. The operator confirmed good static contrast:
+
+| Surface | Corrected `raw_bc` range |
+| --- | --- |
+| White paper | 151..170 |
+| Floor | 155..172 |
+| Black bar | 1334..1660 |
+
+Black is HIGH; floor reads like white. The **first** contrast round had
+incorrect placement: the supposed white read about 1500. Do not use that
+round as white evidence. S3-B1-01 PASS covers the corrected contrast only,
+not a narrow-bar resolution or decoding claim.
+
+All nine captures failed to decode: CONTRAST when no bars were observed,
+or NO_FRAME/MOTION. Bars arrived only during the last 0.2..0.5 s of the
+4.1 s window because the push started too late. Encoder travel was 0..70 mm,
+consistent with hand-push slip. S3-B1-02/03 are **procedure FAIL**, not a
+verdict on the decoder. Print/direction coverage is not separately proven.
+
+Observed: decode_step_max_us up to 1010; isr_max_us 113; missed/dropped 0;
+adc_full 1 on every capture. These are measured values for that B1 image,
+not timing or powered-decoding acceptance for B1b. Stack checks and normal
+LINE regression remain Not run.
+
+## B1b software validation — exclusive driven profile
+
+This source change descends from B1 `70caef0`. It does not include a powered
+hardware PASS. The final operator plan uses **one sheet per run**, swapped
+between runs: default 600 mm forward/backward, target clamp <=620 mm. The
+earlier two-sheet / 850 mm proposal is not implemented.
+
+| Check | Software result |
+| --- | --- |
+| Full strict host suite | PASS: 154/154 |
+| Original standard table | PASS: all 43 data symbols, polarities/directions |
+| Packed records / frame reports | PASS: both methods, wrap, positions/loss |
+| Multiple host frames | PASS: independent F/Z frames; ambiguous summary |
+| Late frame | PASS: frame after 5 s, beyond the old hand-push window |
+| Drive bounds | PASS: forward/backward, distance, timeout, direction faults |
+| Compile-time clamp | PASS: requested 850 maps to 620; default stays 600 |
+| Longer slow pass | PASS: 600/25 settings derive 27 s deadline, 5/60 ms |
+| Actual TEST observer | PASS: 15 normal/fault/button/stop-retry paths |
+| GPIO adapter | PASS: only GP20/GP21 inputs; GP7 never configured |
+| Line hook / exclusive runner | PASS: raw copy and ordinary-path checks |
+| Clang ASan/UBSan | PASS: decoder, packed, capture, drive, observer paths |
+| Firmware profiles | PASS: nine warning-free profiles, as listed for B1 |
+| Strict ARM app compile | PASS: 63 invocations, warnings as errors |
+| SDK hardware link proof | PASS: nine profiles; probe ELFs never flashed |
+| SDK profile mismatch | PASS: incorrect BARCODE_CAPTURE flag is rejected |
+| Static image RAM | data 152 + BSS 152204 = 152356 bytes |
+| Capture arrays | ADC 24576 + motion 6144 = 30720 bytes |
+| ARM decoder workspace/report | 1760 + 64 = 1824 bytes, assert <=2048 |
+| Normal radio-off ELF | No barcode/capture/drive workspace symbols |
+| Docs / template / columns / whitespace | PASS; template deviations remain 8 |
+
+The observer tests cover a full forward/backward synthetic F crossing;
+GP21 early stop; delayed stop API confirmation; command, motor, stale or
+missing board, sensor, acquisition and wake faults; timeout; capacity and
+held buttons, and refusal to start from a non-stopped snapshot. No dump
+is allowed while the simulated drive is active or
+stop is unconfirmed. GP21 before range completion and GP20 while driving
+cannot start another job. Forward/backward frame positions are independent
+of the whole-capture summary. Multiple frames are a host robustness test,
+not a request to place two sheets in the physical run.
+
+Capture is now 6144 four-byte raw/flags + microsecond-delta records, with
+default 2 ms decimation (12.288 s), plus 512 source-stamped motion records
+at default 30 ms. Intervals derive from deadline plus 2 s margin, including
+slower settings. No extra ADC consumer/ISR setup or normal LINE actuation
+was added. At capacity, appends stop without overwrite, but freeze waits
+for the checked stop. Raw gaps are checked even on skipped records.
+
+The SDK checker was extended to include BARCODE_CAPTURE in its profile
+identity. Build settings used only the tracked Wi-Fi example temporarily;
+no real settings were copied or retained. No image or link probe was
+flashed by this worker. Clang sanitizer builds for the TEST print double
+use the normal warning set; GCC host/ARM strict checks include -Wformat=2.
+
+Initial task stack is 1 KiB. Owner boards/state were moved to static RAM;
+compiler function frames are owner 280, decoder step 296, character 112
+bytes. This avoids the former 624-byte owner frame, but does not constitute
+complete call-graph or runtime high-water proof. No template stack change
+was made. Powered timing/stack acceptance is still Not run.
+
+## B1b powered procedure — Not run
+
+Use the [current contract](../../docs/s3-line-barcode/BARCODE.md) for the
+full button, settings, loss and output rules. Do not use B1 hand-push
+button instructions on this image.
+
+```sh
+make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
+```
+
+| ID | Physical check | Status |
+| --- | --- | --- |
+| S3-B1b-01 | VIN, lifted wheels: both directions and GP21 stop | Not run |
+| S3-B1b-02 | One 2x F sheet, floor forward/backward 600 mm passes | Not run |
+| S3-B1b-03 | Swap to one 141 mm F sheet, both directions | Not run |
+| S3-B1b-04 | Stop/coast distance and fault-inhibited restart | Not run |
+| S3-B1b-05 | Cost, loss, USB integrity and runtime stack | Not run |
+
+1. Verify `_test_barcode_capture` and the B1b DRIVEN banner. VIN is required.
+   Open GP28 VBAT jumper, leave GP7/IMU wiring unchanged, clear the mechanism
+   and lift wheels. Keep VIN removal available. Wait for initial confirmed
+   stop. Redo GP20 floor/white/black ranges at the actual installed height.
+2. Lifted: GP21 starts forward; release it. Check positive equal requests,
+   bounded travel/deadline, then zero duty and speed <=10 mm/s in two fresh
+   post-stop source snapshots. Wait for the full dump. A new GP21 press
+   starts backward. Also check a fresh press while moving requests stop.
+   No lifted run proves optical geometry or physical floor distance.
+3. Reboot to restore FORWARD. Place one 2x F sheet, bars across travel; align
+   the front-left sensor before its white margin. Leave quiet zones and
+   coast room within the available run space. Do not use the old 85 cm
+   two-sheet layout. Requested target must not exceed 620 mm; default is
+   600 mm, about 6 s at 100 mm/s before acceleration/stop allowance.
+4. After fresh contrast ranges, GP21 starts capture and the forward pass.
+   Freeze/decode/dump must wait for confirmed stop. Save TIME and DISTANCE,
+   each `[BC_FRAME]` entry/exit position, final left/right travel, all raw
+   ADC/motion/run rows and counters. Expected: F, DECODED, command NONE.
+5. Save `[BC_DUMP] END` and verify row counts before pressing GP21 again for
+   backward. No automatic restart or queued press during a dump is allowed.
+   If stopped early, reposition before another full-distance run. Swap to
+   the 141 mm F sheet only while idle and repeat; one sheet per run.
+6. Any fault/deadline/capacity stops and inhibits restart. Stop API success
+   alone is not enough: retries continue until fresh zero-duty/low-speed
+   snapshots confirm it. No dump/rearm while pending. If wheels still move,
+   remove VIN. Record coast/stop distance; >620 mm reports OVERRUN. Encoder
+   slip/coast mean the target clamp is not an independent physical ruler.
+7. Record new copy/decoder/line/ISR cost, missed/dropped/gap/overflow and
+   observer counters, USB integrity and stack high-water. Do not carry B1's
+   1010/113 us observations into this powered image as a PASS.
