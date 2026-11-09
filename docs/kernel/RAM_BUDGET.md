@@ -304,10 +304,18 @@ runs after STOP or on the larger telemetry/observer stack, not on IMU.
 Operator supplied robot `d51d27b` high-water 1456/2048 B, free 592 B;
 STREAM on 1480b37 used 1448 B. The extra robot sample frame is 56 B; the
 new diagnostic branch (56 + 16 B) is smaller than the existing 144 B core
-step frame. A frame-only estimate leaves about 536 B free, above 256 B.
-This is NOT a whole-call-tree bound or measured high-water for diagnostic
-C: repeat the named `[stack] imu_task` check on the new image before
-acceptance. No stack/queue reduction is used.
+step frame. The initial frame-only estimate was about 536 B free.
+
+Diagnostic C hardware on `29d57de`, boot `1600432639`, measured IMU
+free 536 B initially (high-water 1512/2048 B), then free 480 B after
+hump runs (high-water 1568/2048 B). The remaining policy margin is
+480 - 256 = 224 B. Hump runs exercise event/latch paths beyond the flat
+case. The observed 56 B increase matches the diagnostic-step frame,
+but does not prove the exact deepest call chain or interrupt contribution.
+High-water is cumulative since task start; frame sizes are not whole-stack
+bounds. No stack/queue reduction is used. Further trace/filter changes
+are deferred; future changes require a new named stack measurement.
+See [hardware record](../../testing/subsystem4/TEST_LOG.md#diagnostic-c-hardware-on-29d57de).
 
 Heartbeat stack_min_free 272 B in the d51d27b session was idle_meter
 (size 512, high-water 240), not IMU. See all named stacks and the shared

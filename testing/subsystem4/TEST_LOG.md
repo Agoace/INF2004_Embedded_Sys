@@ -231,10 +231,10 @@ reading is recorded below with H0/H2-short. H1 confirms one event per drive;
 
 | ID | Check | Result |
 | --- | --- | --- |
-| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Partial on d51d27b: 3 flat runs, no false humps; named robot IMU stack free 592 B; timing/network baseline still needed |
+| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Partial: 5 flat runs across d51d27b/29d57de, no false humps; diagnostic C IMU free 480 B; timing/network baseline still needed |
 | H1 | STREAM floor repeat over the 10 mm RIGHT hump: `[S4_HUMP]` | PASS on 1480b37: count 1 each, peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only drive not supplied |
-| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | Short course on d51d27b: 4/4 counted; 12.9..15.5 mm over-read; not a height PASS |
-| H3 | Curves and SEARCH, no hump: count 0, record `gated` | Not run |
+| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | 9/9 counted across d51d27b/29d57de; uncorrected 11.5/12.4 mm accepted as good enough; corrected +4..6 mm under investigation |
+| H3 | Full circuit, curves and SEARCH, no false hump: count 0, record `gated` | Not run; PRIORITY acceptance test when the full circuit is available |
 | H4 | Hump right after a curve: count, CURVE flag | Not run |
 | H5 | Course mat, no hump: count 0 | Not run |
 | H6 | Other hump heights: peak against height and speed | Not run |
@@ -291,8 +291,8 @@ are closure times, not the instants of the height peaks.
 | idle_meter | 512 | 240 | 272 |
 
 Heartbeat stack_min_free 272 B was idle_meter, not IMU. The named robot
-IMU stack margin (592 B) exceeds 256 B on d51d27b; diagnostic C requires
-a new measurement. Stack marks cover the boot, not one run.
+IMU stack margin (592 B) exceeds 256 B on d51d27b; the later diagnostic C
+measurement is below. Stack marks cover the boot, not one run.
 
 ### Shared floor-test condition and diagnostic C
 
@@ -310,8 +310,80 @@ transients. Diagnostic C records paired heights and motion at the actual
 selected peak; see [diagnostic C](../../docs/s4-imu/IMU.md#diagnostic-c-peak-context).
 The approved comparison leaves at least 200 mm of flat line after the
 hump before SEARCH/stop (3 hump + 2 flat trials). That comparison and
-hardware tests of diagnostic C are Not run. Keep corrected as the default;
-do not tune thresholds from these short trials.
+diagnostic C results are below. Further accuracy work is now deferred by
+the operator; keep corrected as the default and thresholds unchanged.
+
+### Diagnostic C hardware on 29d57de
+
+Operator-supplied evidence, boot ID `1600432639`, MQTT robot image
+`29d57de`, LINE mode, 10 mm RIGHT-wheel hump. Measured speed at the two
+captured hump peaks was about 120 mm/s. Seven runs: five hump, two flat.
+The operator confirmed the wheel had physically cleared the hump before
+STOP in ALL five hump runs. The private recordings were not opened.
+
+| Run | Surface | Peak 0.1 mm | Count | Gated starts | CURVE | OPEN |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | Hump | 163 | 1 | 6 | 1 | 1 |
+| 2 | Hump | 151 | 1 | 4 | 1 | 0 |
+| 3 | Hump | 152 | 1 | 2 | 0 | 1 |
+| 4 | Flat | 0 | 0 | Not supplied | Not supplied | Not supplied |
+| 5 | Flat | 0 | 0 | Not supplied | Not supplied | Not supplied |
+| 6 | Hump | 147 | 1 | 5 | 0 | 0 |
+| 7 | Hump | 140 | 1 | 2 | 1 | 1 |
+
+USB was unplugged at run end for runs 1..3, so their diagnostic lines
+were lost. Only runs 4..7 have diagnostic lines; do not infer peak motion
+for runs 1..3 from another run.
+
+| Diagnostic field | Run 6 | Run 7 |
+| --- | ---: | ---: |
+| peak_ms / travel_mm | 1942 / 252 | 1852 / 232 |
+| corrected_0.1mm / filtered_0.1mm | 147 / 124 | 140 / 115 |
+| speed_mm_s | 122 | 118 |
+| yaw_mrad_s / yaw_accel_mrad_s2 | 160 / -1379 | -87 / -3127 |
+| lateral_mg | 6 | 20 |
+| win_yaw_mrad_s / win_yaw_accel_mrad_s2 | 1241 / 8056 | 1168 / 6301 |
+| win_lateral_mg | 66 | 46 |
+| gate / win_gate | 00 / 02 | Endpoint mask not supplied; listed motion within limits / 02 |
+| line_lateral_mg / line_yaw_accel_mrad_s2 | 66 / 8056 | 46 / 6301 |
+
+Flat runs 4/5: run-wide LINE max |lateral| 36/61 mg and max |yaw
+acceleration| 4667/7507 mrad/s^2, respectively; no hump events.
+Zigzag/steering therefore occurs even on flat LINE, not only on a hump.
+
+Findings (hardware observations, not a proven compensation diagnosis):
+
+- Compensation adds 2.3/2.5 mm to the paired mean at the accepted peaks.
+  This is consistent with the lag hypothesis, not proof of its cause.
+- Both peak windows include lateral-gated samples (46..66 mg, win_gate
+  02), despite no curve gate at the accepted endpoint. The current rule
+  gates the endpoint only; its LPF/mean retains earlier gated content.
+- Uncorrected heights remain 11.5..12.4 mm: still +1.5..2.4 mm above
+  the object, so compensation does not explain all the error.
+- OPEN means the signal had not completed continuous below-OFF travel at
+  STOP, NOT that the wheel was still on the hump. Physical clearance was
+  confirmed by the operator; filtering/steering can keep the signal open.
+- Named IMU stack: free 536 B initially (high-water 1512/2048), then
+  free 480 B after hump runs (high-water 1568/2048). This leaves 224 B
+  above the 256 B free policy. C's sample frame is 1000 B; the new
+  diagnostic step/latch frames are 56/16 B. Hump paths exercise latching
+  and event processing that flat paths may not reach. The 56 B observed
+  increase is consistent with the diagnostic-step frame, but not proof
+  of the exact deepest call chain or interrupt contribution.
+
+**Operator correction:** UNCORRECTED (filtered-roll) LINE readings
+11.5/12.4 mm (about +1.5..2.5 mm high) are ACCEPTED as good enough.
+CORRECTED +4..6 mm remains under investigation with the deferred trace
+plan. Default stays CORRECTED; no default switch. Detection
+across the two robot sessions is **9/9 humps** (4 on d51d27b + 5 here),
+with **0 false humps in 5 flat runs** (3 + 2). This does not establish
+no false humps on the full circuit. H3 (curves + SEARCH, full circuit) is
+now the priority acceptance test when that circuit is available: compare
+BOTH sources with two identified images. H3 and
+H4..H9 remain **Not run**. This hardware-record commit changes no code or thresholds.
+
+Accuracy follow-up is deferred; see
+[deferred plan](../../docs/s4-imu/IMU.md#deferred-accuracy-follow-up).
 
 ### S4-U04 procedure
 
