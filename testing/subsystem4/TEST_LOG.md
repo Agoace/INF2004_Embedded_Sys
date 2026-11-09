@@ -47,7 +47,7 @@ S4-U03's old raw-stream PASS does not imply that these checks pass.
 | ID | Check | Result |
 | --- | --- | --- |
 | S4-U04 | Stationary LEVEL support, motor noise, guarded refresh, timing/stack/CPU and fault checks | **Partial on dfade14**, stationary hand-push session below; powered noise and step-2b checks Not run |
-| S4-U05 | Three hand pushes and later driven RIGHT-wheel hump trials | Hand-push finding/offline analysis below; **not height acceptance**. Step-2b driven trials Not run |
+| S4-U05 | Three hand pushes and later driven RIGHT-wheel hump trials | Hand-push finding/offline analysis below; step 2b/2c driven trials were not height acceptance. **Driven PASS on 0207b54 (step 2d) for the 10 mm RIGHT-wheel hump only**; see [step 2d hardware](#step-2d-hardware-on-0207b54) |
 | S4-U06 | Later zero-duty hand pushes over measured 5 mm and 20 mm humps; record geometry, speed, trace and error, no detection/minimum-height threshold | **Not run** |
 
 ### dfade14 hand-push hardware and offline analysis
@@ -160,18 +160,43 @@ plateau. Investigate the three unexplained step 2 resets before treating
 any trial as reliable. Do not substitute offline gated peaks for a
 firmware/hardware PASS.
 
-### Step 2d pending hardware
+### Step 2d hardware on 0207b54
 
-Software only on the step 2d commit; see
-[step 2d procedure](../../docs/s4-imu/IMU.md#step-2d-current-procedure).
+Operator-supplied numbers only (2026-11-09, IMU_STREAM image, floor, VIN).
+Private log name `build/mtk_logs/s4_step2d_floor_20261109_173321.txt`
+was NOT opened or copied. An earlier attempt the same day was lost: the
+USB logger died when the laptop rebooted. Only its drive-3 end values were
+seen (peak 10.76 mm, plateau 10.14 mm); they are not part of this result.
+
+Setup: 10 mm triangular hump (195 mm long) under the RIGHT wheel, three
+GP21 drives at 100 mm/s for 600 mm, LEVEL start. Drives 1 and 2 had GP20
+MARK before them. Drive 3 had NO GP20 MARK, so its values come OFFLINE
+from the stream, not from firmware maxima.
+
+| Drive | Mean peak mm (firmware unless noted) | Plateau (200 ms median max) mm |
+| --- | ---: | ---: |
+| 1 | 10.93 | 10.72 firmware |
+| 2 | 10.85 | 10.20 firmware; offline 9.92 |
+| 3 | 10.44 (offline) | 10.31 offline |
 
 | Check | Result |
 | --- | --- |
-| Readbacks ctrl1 77, ctrl5 40, fifo_ctrl 80; samples per poll mean/min/max; empty/overrun/backlog/bad/reset counts | **Not run** |
-| `read_us`/`work_us`/`core_us` average and maximum against the 2 ms cycle deadline; gaps; IMU14/TEST20 stack high-water | **Not run** |
-| Raw 400 Hz capture: FULL 800 samples, continuous triplets (burst rollback), 10-bit or 12-bit FIFO words | **Not run** |
-| Flat 600 mm drive: roll height sd and median false peak versus step 2c | **Not run** |
-| Three 10 mm RIGHT-wheel hump drives, LEVEL start, GP20 before each | **Not run** |
+| Flat stretches 50..225 mm and 450..600 mm | `roll_zR` sd 0.50..0.68 mm, largest single sample 1.2 mm, offline 200 ms median max 0.6 mm. Step 2c: sd 1.6..2.7 mm, false peak 5.7 mm |
+| `[S4_VIB]` whole-drive std, hump included | Pitch 1.38..1.54 degrees, roll 1.67..1.72 degrees (step 2c pitch 2.95..4.14, roll 1.80..2.05) |
+| `[S4_FIFO]` | ctrl1 77, ctrl5 40, fifo_ctrl 80; polls 45000, samples 176085, mean 3.913 per poll, min 3, max 6; empty, overrun, backlog, bad and reset all 0 |
+| `[S4_DIAG]` | reads 45000, faults 0; read_us average 1315, max 1610 (2 ms deadline held); work_us average 2699, max 3224; core_us average 1164, max 1430; gap max 18.4 ms; missed 0; still std_mg 2/2/2 |
+| CPU | work_us average is about 27 % of core 0 wall time (step 2b: 1562 us, about 16 %). Most of the increase is busy-wait I2C. FOLLOW-UP item; not exclusive CPU time |
+| Raw capture | Three captures of about 781 samples at 400 Hz. Every raw word is a multiple of 64: the FIFO keeps 10-bit data, so one count is 4 mg (**hardware-confirmed**) |
+| Raw spectrum, offline, first 0.5 s skipped | sd X about 76..85 mg, Y 170..181 mg, Z 100..132 mg; share below 3 Hz about 0 % (X, Y); main lines near 25 Hz (X, Y) and 85..97 Hz (Y, Z). The 4-sample boxcar lowers sd X by about 40 %, Y by about 50 % |
+| IMU14/TEST20 stack high-water | Not supplied |
+
+Operator conclusion: aliasing of the roughly 90 Hz motor/gear vibration
+into the 100 Hz samples was the main step 2c error. Step 2d removes it.
+The hump target of 9..11 mm and the flat target of less than +/-1 mm are
+met on the floor. **S4-U05 driven PASS for the 10 mm RIGHT-wheel hump
+only.** Other heights, a mat surface and curves are **Not run**. The
+mean 3.913 samples per poll means a sensor rate near 391 Hz against the
+kernel tick (derived, not a separate measurement).
 
 ### S4-U04 procedure
 

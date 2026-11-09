@@ -215,10 +215,15 @@ storage or code. The 2048 B IMU static stack is unchanged.
 Strict ARM local frames (`-fstack-usage`, IMU_STREAM): IMU `sample` 800 B
 (step 2c 784 B), `imu_probe_read` 128 B including the 48 B burst buffer,
 `imu_hw_read` 40 B; TEST observer `subsystem4_test` 776 B, snapshot read
-488 B. These are frames, not total stack bounds. Physical high-water,
-`work_us` and CPU are **Not run**. Estimated bus read is about 1.1 ms per
-10 ms at 4 samples, up to about 1.6 ms at 8, versus about 0.56 ms before;
+488 B. These are frames, not total stack bounds. The estimate was a bus
+read of about 1.1 ms per 10 ms at 4 samples, versus about 0.56 ms before;
 see [IMU step 2d](../s4-imu/IMU.md#read-path-and-the-2-ms-deadline).
+Floor hardware on `0207b54` measured read_us average 1315/max 1610 us,
+work_us average 2699/max 3224 us (about 27 % of core 0 wall time; step 2b
+1562 us), core_us 1164/1430 us, 3.913 samples per poll and zero faults.
+The increase is mostly busy-wait I2C: a follow-up item. Physical stack
+high-water was not supplied. See
+[step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-hardware-on-0207b54).
 
 ## Steps if the RAM becomes too small
 

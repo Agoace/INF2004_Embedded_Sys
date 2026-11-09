@@ -18,7 +18,10 @@ are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
 not merged. Its event system, terrain thresholds and minimum-height policy
 were not ported. The LSM303DLHC has no gyro; no gyro result is claimed.
 
-**Hardware step 2d is Not run.** Step 2c hardware ran on `8c5d679`:
+**Step 2d floor hardware PASS on `0207b54` for the 10 mm RIGHT-wheel hump
+only:** driven peaks 10.93/10.85/10.44 mm, flat roll height sd
+0.50..0.68 mm. See [step 2d hardware result](#step-2d-hardware-result).
+Step 2c hardware ran on `8c5d679`:
 driven hump peaks 16.8/13.1/12.4 mm over the 10 mm hump, so it is NOT a
 height PASS. See [step 2c results](../../testing/subsystem4/TEST_LOG.md#step-2c-hardware-on-8c5d679).
 Step 2b static RIGHT-wheel/lifted-drive
@@ -598,12 +601,13 @@ rows are RELATED-DEVICE facts. No PDF is committed.
 | Stream mode overwrites the oldest set when full | AN3308 9.3.3 | Related device |
 | A burst read rolls back from 0x2D to 0x28 | AN3308 9.5 | Related device |
 | I2C cost: about 29 clocks to start plus 9 per byte | AN3308 9.5 | Related device |
-| LIS3DH FIFO stores 10-bit samples | AN3308 9.1 | Related device; LSM303DLHC HR FIFO width unknown |
+| LIS3DH FIFO stores 10-bit samples | AN3308 9.1 | Related device; **hardware-confirmed on 0207b54**: every LSM303DLHC raw word is a multiple of 64 |
 
-Nothing in this table is hardware-verified for step 2d. The capture below
-can check burst rollback (continuous XYZ triplets near 1 g on Z), sample
-rate (about 4 per 10 ms) and FIFO resolution (if all raw words are a
-multiple of 64, the FIFO keeps 10 bits, so one count is 4 mg).
+Only the FIFO width is separately hardware-confirmed. The step 2d floor
+run (readbacks 77/40/80, 3.913 samples per poll, zero resets, plausible
+captures) is consistent with the other rows but does not test each one.
+The 10-bit FIFO means one raw count is 4 mg; the batch mean of about 4
+samples gives a finer, fractional mg value.
 
 ### Read path and the 2 ms deadline
 
@@ -754,8 +758,8 @@ it includes preemption, so it is not exclusive CPU time.
    passed by the sensor). Do not tune windows from one run.
 6. Record `polls`, `samples`, `min`/`max`, `empty`, `overrun`, `backlog`,
    `reset`, faults/timeouts, `read_us`/`work_us`/`core_us` maxima, gaps
-   and both stack high-water marks. Pending:
-   [step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-pending-hardware).
+   and both stack high-water marks. Results:
+   [step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-hardware-on-0207b54).
 
 ## Step 2d software validation
 
@@ -791,6 +795,36 @@ headers in a separate copy; generated firmware and proof ELFs removed.
 
 See [RAM evidence](../kernel/RAM_BUDGET.md#imu-step-2d-measured-delta).
 These are software gates, not physical noise, timing or accuracy results.
+
+## Step 2d hardware result
+
+Floor run on 2026-11-09, `0207b54` IMU_STREAM image: 10 mm triangular
+hump under the RIGHT wheel, three GP21 drives at 100 mm/s for 600 mm.
+Drive 3 had no GP20 MARK, so its values are offline. An earlier attempt
+that day was lost with the USB logger; it is not part of this result.
+Full numbers: [S4 step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-hardware-on-0207b54).
+
+| Result | Step 2c (8c5d679) | Step 2d (0207b54) |
+| --- | --- | --- |
+| Hump peak, 10 mm object | 16.8/13.1/12.4 mm | 10.93/10.85/10.44 mm (drive 3 offline) |
+| Plateau (200 ms median max) | Not a PASS | 10.72/10.20 mm firmware; 10.31 mm offline (drive 3) |
+| Flat roll height sd | 1.6..2.7 mm | 0.50..0.68 mm, max single 1.2 mm |
+| Flat median false peak | up to 5.7 mm | 0.6 mm (offline) |
+| FIFO faults/resets | n/a | 0 in 45000 polls; 3.913 samples per poll, min 3, max 6 |
+| read_us / work_us average (max) | n/a / 1562 us in step 2b | 1315 (1610) / 2699 (3224) us |
+
+Operator conclusion: the main step 2c error was roughly 90 Hz motor/gear
+vibration aliased into 100 Hz samples. The raw captures show lines near
+25 Hz and 85..97 Hz; the 4-sample mean lowers raw sd by about 40 % (X)
+and 50 % (Y). The 9..11 mm hump and <+/-1 mm flat targets are met on the
+floor. **S4-U05 driven PASS for the 10 mm RIGHT-wheel hump only.** Other
+heights, a mat and curves are Not run. The datasheet concern that 400 Hz
+passes more 11..44 Hz content did not prevent these results.
+
+Follow-up: work_us is about 27 % of core 0 wall time, mostly busy-wait
+I2C at priority 14. Reduce it (for example an interrupt- or DMA-driven
+transfer, or fewer bytes per cycle) in a separately approved step. Stack
+high-water was not supplied.
 
 ## Historical steps 0 and 1
 
