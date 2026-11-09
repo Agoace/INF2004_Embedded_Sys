@@ -194,9 +194,11 @@ the next plain `make` goes back to the defaults.
 | `TEST` | **`0`**, `1` | `1` compiles every `subsystemN_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
 
-Robot/TEST images now run the observe-only GY-511 task at 100 Hz, with no
-driving action or MQTT/KR1 IMU field. Step 2d reads the 400 Hz sensor FIFO
-and feeds the mean of each 10 ms batch. They require USB and `CRASH_REPORT=0`;
+Robot/TEST images now run the GY-511 task at 100 Hz, with no driving
+action and no KR1 IMU field. Step 2d reads the 400 Hz sensor FIFO and feeds
+the mean of each 10 ms batch. Step 3 reports humps only: a USB line at run
+end, a GP20 DUMP line, MQTT event kind 9 and summary v3; see
+[step 3 hump report](docs/s4-imu/IMU.md#step-3-hump-report). They require USB and `CRASH_REPORT=0`;
 UART-conflict builds are rejected. BENCH has no IMU task. For the 50 Hz
 RIGHT-wheel roll-only stream (legacy full-model diagnostics retained),
 use `TEST=1 IMU_STREAM=1` with

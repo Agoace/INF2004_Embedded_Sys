@@ -32,10 +32,11 @@
 #include "vehicle_board.h"
 #include "obstacle_report.h"
 #include "run_stats.h"
+#include "../platform/app_board.h"
+#include "../subsystem4/imu_service.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
 #include "../subsystem1/network_queue.h"
-#include "../platform/app_board.h"
 #include "../subsystem2/motor_ctl_robot.h"
 #endif
 #if TM_WIFI_CYW43
@@ -61,6 +62,13 @@ static bool step_open;
 /* Single writer; odd throughout line calibration, even otherwise.
  * Observer only. No IMU result can affect navigation or motion. */
 static uint32_t calibration_epoch;
+/* Single writer; odd from run start until the hump values are taken. */
+static uint32_t run_epoch;
+/* Newest IMU hump board copy and the result of the last finished run. */
+static imu_hump_report_t hump_copy;
+static bool have_hump_copy;
+static imu_hump_summary_t run_hump;
+static APP_BOARD(imu_hump_summary_t) run_hump_board;
 static uint32_t wake_lost;
 static uint32_t overruns;
 static uint32_t response_max_us;
@@ -226,6 +234,10 @@ static void publish_run_summary(void)
                    vsm.fault_detail, &summary, &aborted)) {
         publish_detour(&aborted);
     }
+    summary.hump_peak = run_hump.peak_01mm;
+    summary.hump_count = run_hump.count;
+    summary.hump_flags = run_hump.flags;
+    summary.hump_gated = run_hump.gated;
     app_board_publish(&summary_board.sequence, summary_board.words, &summary,
                       sizeof(summary));
 }
@@ -445,6 +457,79 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
                                        .from = from,
                                        .to = to};
     (void)send(&m);
+}
+
+/*
+ * Copy the IMU hump board once. Never waits: a busy board keeps the last
+ * copy, whose IMU timestamp decides later whether it is still usable.
+ */
+static void hump_read(void)
+{
+    imu_hump_report_t r;
+    if (imu_hump_try_read(&r) == E_OK) {
+        hump_copy = r;
+        have_hump_copy = true;
+    }
+}
+
+#if TM_MQTT
+static uint16_t hump_emitted;
+#endif
+
+/*
+ * Observe the hump board during a run. With MQTT, each newly closed event
+ * of THIS run from a fresh copy becomes one live HUMP event (kind 9).
+ */
+static void hump_poll(uint32_t epoch)
+{
+    hump_read();
+#if TM_MQTT
+    const imu_hump_output_t *h = &hump_copy.hump;
+    if (!have_hump_copy || h->run_epoch != epoch || h->count == hump_emitted ||
+        drv_time_ms() - hump_copy.timestamp_ms > IMU_HUMP_MAX_AGE_MS) {
+        return;
+    }
+    hump_emitted = h->count;
+    live_event(RM_EVENT_HUMP, 0u, 0u, imu_hump_tenths(h->last_peak_mm),
+               imu_hump_detail(h->count, h->last_left));
+#else
+    (void)epoch;
+#endif
+}
+
+/*
+ * Take the run's hump values, then end the IMU run. A stale, busy-only or
+ * other-run copy gives the unavailable value, never an old number.
+ */
+static void hump_finish(uint32_t epoch)
+{
+    hump_read();
+    run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
+                                  drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+    app_board_publish(&run_hump_board.sequence, run_hump_board.words,
+                      &run_hump, sizeof(run_hump));
+    __atomic_store_n(&run_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
+}
+
+/*
+ * Print the run's hump result once on the USB console.
+ */
+static void hump_print(void)
+{
+    const imu_hump_summary_t *h = &run_hump;
+    if (h->peak_01mm == IMU_HUMP_PEAK_NONE) {
+        tm_printf((UB *)"[robot] hump unavailable flags %02x\n",
+                  (unsigned int)h->flags);
+        return;
+    }
+    tm_printf((UB *)"[robot] hump highest_mm %u.%u side %s count %u "
+                    "flags %02x gated %u\n",
+              (unsigned int)(h->peak_01mm / 10u),
+              (unsigned int)(h->peak_01mm % 10u),
+              h->count == 0u ? "none"
+              : (h->flags & IMU_HUMP_FLAG_LEFT) != 0u ? "left" : "right",
+              (unsigned int)h->count, (unsigned int)h->flags,
+              (unsigned int)h->gated);
 }
 
 /*
@@ -833,7 +918,11 @@ static void run_once(void)
     read_line();
     line_event = VC_EVENT_NONE;
     run_start = drv_time_ms();
+    const uint32_t epoch =
+        __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST) | 1u;
+    __atomic_store_n(&run_epoch, epoch, __ATOMIC_SEQ_CST);
 #if TM_MQTT
+    hump_emitted = 0u;
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
 #endif
@@ -856,6 +945,7 @@ static void run_once(void)
         if (!wait_tick()) {
             break;
         }
+        hump_poll(epoch);
         const uint32_t now = drv_time_ms();
         sonar_snapshot_t sonar = {0};
         bool fresh = false;
@@ -1018,6 +1108,7 @@ static void run_once(void)
             break;
         }
     }
+    hump_finish(epoch);
     event(4u, vsm.state, vsm.running, vsm.fault_detail);
 #if TM_MQTT
     publish_run_summary();
@@ -1027,6 +1118,7 @@ static void run_once(void)
     vsm_stop(&vsm);
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
+    hump_print();
 }
 
 /*
@@ -1208,6 +1300,14 @@ int vehicle_task_start(void)
 
 _Static_assert(VR_BYTES == TELEMETRY_BYTES && VR_ROWS == TELEMETRY_ROWS,
                "KR1 storage contract");
+#if TM_MQTT
+_Static_assert(RM_HUMP_FLAGS_MASK == IMU_HUMP_FLAGS_MASK &&
+               RM_HUMP_IMPLEMENTED == IMU_HUMP_FLAG_IMPLEMENTED &&
+               RM_HUMP_LEFT == IMU_HUMP_FLAG_LEFT &&
+               RM_HUMP_PEAK_NONE == IMU_HUMP_PEAK_NONE &&
+               RM_HUMP_DETAIL_LEFT == IMU_HUMP_DETAIL_LEFT,
+               "summary v3 hump contract");
+#endif
 #else
 int vehicle_task_start(void)
 {
@@ -1221,6 +1321,35 @@ uint32_t vehicle_calibration_epoch(void)
     return __atomic_load_n(&calibration_epoch, __ATOMIC_SEQ_CST);
 #else
     return 0u;
+#endif
+}
+
+uint32_t vehicle_run_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+int vehicle_hump_try_read(imu_hump_summary_t *out)
+{
+    if (!out) {
+        return E_PAR;
+    }
+#if !APP_TEST && !APP_BENCH
+    imu_hump_summary_t value;
+    if (!app_board_try_read(&run_hump_board.sequence, run_hump_board.words,
+                            &value, sizeof(value))) {
+        const uint32_t sequence =
+            __atomic_load_n(&run_hump_board.sequence, __ATOMIC_SEQ_CST);
+        return sequence == 0u ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+#else
+    return E_NOEXS;
 #endif
 }
 

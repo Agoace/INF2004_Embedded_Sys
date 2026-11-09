@@ -24,7 +24,8 @@ echo interrupt -> sonar12 -------+-> vehicle13 -> motion commands
                     +-----------------+          next motor tick
                                       |
                                       +-> RAM queue -> telemetry30
-10 ms IMU cyclic -> IMU14 -> read-only board -> TEST20 USB observer
+10 ms IMU cyclic -> IMU14 -> read-only boards -> TEST20 USB observer
+                               hump board -> vehicle13 (run result)
 read-only network boards -> Wi-Fi20 -> broker; health31 -> health board
 USB21 drains the console; idle_meter32 estimates unused core-0 time
 ```
@@ -42,7 +43,7 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 | line | 11 | Each 1 ms ADC acquisition; filter, learned line values and snapshot | 2048 |
 | sonar | 12 | Request/edge wake; 10 ms deadline cyclic; trigger and result service | 2048 |
 | vehicle | 13 | After each completed motion tick; buttons, calibration, modules and commands | 4096 |
-| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO batch/count reads, pure observe-only core and board | 2048 |
+| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO batch/count reads, pure core, report-only hump detector, snapshot and hump boards | 2048 |
 | Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8192 with lwIP (template-owned) |
 | TEST runner | 20 | Initial task after startup; no normal vehicle/bench task | Initial task stack |
 | USB console | 21 | IRQ wake or 10 ms fallback; console drain | 2048 UP / 4096 SMP (template-owned) |
@@ -67,7 +68,7 @@ remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 | Sonar | 256-byte request message buffer; copied requests with generation, ID, angle, not-before time and deadline; result mutex and event flag |
 | Telemetry | 4096-byte message buffer, by-value messages, no producer wait; array owner is telemetry30 |
 | Network | Bounded read-only boards, event/command queues; never a control mutex or PWM writer |
-| IMU | Bounded motion-count copy and own snapshot board; atomic vehicle calibration epoch, no motion mutex or commands |
+| IMU | Bounded motion-count copy, own snapshot and hump boards; atomic vehicle calibration and run epochs; vehicle reads the hump board without a wait; no motion mutex or commands |
 
 Only core 0 enables ADC/GPIO interrupts. GPIO IRQ13 is interrupt priority 1;
 ADC TIMER alarm0 uses 2; USB IRQ5 keeps 0; SysTick/PendSV use 3. These are
@@ -205,7 +206,7 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [app_task.c](../../app_program/platform/app_task.c),
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
-- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-2d-measured-delta)
+- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](RAM_BUDGET.md#imu-step-3-measured-delta)
   and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),

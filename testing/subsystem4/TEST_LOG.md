@@ -198,6 +198,26 @@ only.** Other heights, a mat surface and curves are **Not run**. The
 mean 3.913 samples per poll means a sensor rate near 391 Hz against the
 kernel tick (derived, not a separate measurement).
 
+### Step 3 hump report: pending hardware
+
+Step 3 on branch `mtk3-imu` (after `5f33a35`) adds the report-only hump
+detector. Its evidence is synthetic fixtures and builds
+only; see [IMU step 3](../../docs/s4-imu/IMU.md#step-3-hump-report).
+No step 3 image was flashed.
+
+| ID | Check | Result |
+| --- | --- | --- |
+| H0 | MQTT LINE run, no hump: core_us/work_us, Wi-Fi gap, overruns, IMU stack high-water | Not run |
+| H1 | STREAM floor repeat over the 10 mm RIGHT hump (3 drives) and 1 flat drive: `[S4_HUMP]` | Not run |
+| H2 | LINE run over the 10 mm hump on a straight: USB line, kind 9, summary v3 | Not run |
+| H3 | Curves and SEARCH, no hump: count 0, record `gated` | Not run |
+| H4 | Hump right after a curve: count, CURVE flag | Not run |
+| H5 | Course mat, no hump: count 0 | Not run |
+| H6 | Other hump heights: peak against height and speed | Not run |
+| H7 | LEFT-wheel hump: side LEFT (bonus) | Not run |
+| H8 | GP21 stop on the hump: OPEN flag, counted | Not run |
+| H9 | Broker down during the run: USB and DUMP lines, summary after reconnect | Not run |
+
 ### S4-U04 procedure
 
 1. With operator approval, use the step-2 image and save its exact revision

@@ -115,11 +115,12 @@ if(TARGET test_motion_task_bench)
 endif()
 
 host_test(test_vehicle_task tests/test_vehicle_task.c app_program/vehicle/vehicle_task.c
-    app_program/vehicle/vehicle_log.c ${vehicle_sm_source} ${line_position_source}
+    app_program/vehicle/vehicle_log.c app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
     ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
     ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
 if(TARGET test_vehicle_task)
     target_include_directories(test_vehicle_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_link_libraries(test_vehicle_task PRIVATE m)
 endif()
 
 host_test(test_watchdog tests/test_watchdog.c app_program/platform/drv_watchdog.c)

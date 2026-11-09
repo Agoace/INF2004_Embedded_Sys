@@ -208,6 +208,26 @@ static void test_detour_summary(void)
     assert(summary_bytes[34] == 41u && summary_bytes[36] == 9u && summary_bytes[37] == 4u);
     assert(summary_bytes[38] == 2u && summary_bytes[39] == 1u);
     assert(summary_bytes[40] == 7u && summary_bytes[41] == 8u && summary_bytes[42] == 0x0bu && summary_bytes[43] == 0x0au);
+    /* v3: boot ID stays at 44; hump count/flags/gated follow at 48..51. */
+    assert(RM_SUMMARY_VERSION == 3u && RM_SUMMARY_SIZE == 52u);
+    for (unsigned int i = 44u; i < 52u; ++i) assert(summary_bytes[i] == 0u);
+    summary.boot_id = 0x44332211u; summary.hump_count = 0x0201u;
+    summary.hump_flags = 0xffu; summary.hump_gated = 0xfeu;
+    rm_pack_summary(summary_bytes, &summary);
+    assert(summary_bytes[44] == 0x11u && summary_bytes[47] == 0x44u);
+    assert(summary_bytes[48] == 1u && summary_bytes[49] == 2u);
+    assert(summary_bytes[50] == RM_HUMP_FLAGS_MASK && summary_bytes[51] == 0xfeu);
+    summary.flags = (uint8_t)(RM_SUMMARY_BARCODE_IMPLEMENTED | RM_SUMMARY_SPEED_ERROR_VALID);
+    summary.barcode_ok = 0u; summary.barcode_failed = 0u; summary.hump_peak = 108u;
+    summary.hump_count = 2u; summary.hump_gated = 1u;
+    summary.hump_flags = (uint8_t)(RM_HUMP_IMPLEMENTED | RM_HUMP_OPEN_AT_STOP);
+    rm_pack_summary(summary_bytes, &summary);
+    emit_named("summary_hump", summary_bytes, RM_SUMMARY_SIZE);
+    summary.hump_peak = RM_HUMP_PEAK_NONE; summary.hump_count = 0u; summary.hump_gated = 0u;
+    summary.hump_flags = (uint8_t)(RM_HUMP_IMPLEMENTED | RM_HUMP_IMU_FAULT);
+    rm_pack_summary(summary_bytes, &summary);
+    emit_named("summary_hump_unavailable", summary_bytes, RM_SUMMARY_SIZE);
+    summary.boot_id = 0u; summary.hump_flags = 0u;
     summary.flags = RM_SUMMARY_SPEED_ERROR_VALID;
     summary.barcode_ok = 0u; summary.barcode_failed = 0u; summary.hump_peak = RM_SUMMARY_NONE_U16;
     rm_pack_summary(summary_bytes, &summary);
@@ -261,6 +281,16 @@ static void test_detour_summary(void)
     rm_pack_event(event_bytes, &junction);
     assert(event_bytes[1] == 7u);
     emit_named("event_junction", event_bytes, RM_EVENT_SIZE);
+    /* Kind 9 HUMP: 10.8 mm, event 3, RIGHT; then 25.0 mm, event 4, LEFT. */
+    rm_event_t hump = {.kind = RM_EVENT_HUMP, .sequence = 21u,
+        .uptime_ms = 13000u, .word = 108u, .detail = 3u};
+    rm_pack_event(event_bytes, &hump);
+    assert(event_bytes[1] == 9u && event_bytes[12] == 108u && event_bytes[14] == 3u);
+    emit_named("event_hump", event_bytes, RM_EVENT_SIZE);
+    hump.sequence = 22u; hump.word = 250u;
+    hump.detail = (uint8_t)(4u | RM_HUMP_DETAIL_LEFT);
+    rm_pack_event(event_bytes, &hump);
+    emit_named("event_hump_left", event_bytes, RM_EVENT_SIZE);
 }
 #include "mqtt_boot_fixtures.h"
 /* Idle publication mode: state v5 mode word and heartbeat v4 flag bit 6.

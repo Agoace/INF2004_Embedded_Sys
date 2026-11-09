@@ -7,7 +7,7 @@ The pure C codec is [mqtt_wire.h](../../app_program/subsystem1/mqtt_wire.h) and
 client is [mqtt_robot.py](../../scripts/mqtt_robot.py). No codec function uses
 kernel, radio, or TCP/IP headers. The sonar service has no MQTT dependency.
 
-Each message starts with its topic version: state `5`, heartbeat `4`, other
+Each message starts with its topic version: state `5`, heartbeat `4`, summary `3`, other
 implemented observations `2`, and commands `1`. Integers use little-endian byte order.
 Signed fields use two's-complement representation. Offsets below are in bytes,
 from zero. Wire messages do not use C structure layout or C bit-fields.
@@ -25,7 +25,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/cmd` | 22 | Command, QoS 1, not retained; token policy below |
 | `robot/obstacle` | 24 | Completed scan profile, QoS 0, not retained |
 | `robot/detour` | 36 | Finished detour, QoS 0, not retained |
-| `robot/summary` | 48 | End-of-run totals, QoS 1, retained |
+| `robot/summary` | 52 | End-of-run totals (v3), QoS 1, retained |
 | `robot/status` | 6 | Online/offline and last will, QoS 1, retained |
 | `robot/barcode` | 20 | Reserved; not implemented |
 | `robot/imu` | 12 | Reserved; 4-byte header plus 8-byte snapshot; not implemented |
@@ -200,7 +200,8 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 | 16 | u32 | Boot ID (live event v2; embedded log event v1 stays 16 bytes) |
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
-6 command decision; 7 JUNCTION (reserved, not emitted); 8 SCAN_RETRY. For
+6 command decision; 7 JUNCTION (reserved, not emitted); 8 SCAN_RETRY;
+9 HUMP (event v2 only). For
 kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
 or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
 reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, detail is 0 accepted, 1 not idle,
@@ -210,6 +211,13 @@ commands reach the vehicle and produce these events. Bad tokens, malformed
 commands, and full command queues increment `command_lost` without a vehicle
 event. Valid ESTOP requests are accepted in every state; repeated requests
 can coalesce when the dedicated ESTOP queue is already full.
+For kind 9, from and to are 0, the word is the peak of that hump in
+0.1 mm (never 65535), detail bits 0–6 are the hump number in this run
+(1–127, saturating) and detail bit 7 is set for a LEFT-wheel hump. A
+LEFT hump is not proven on hardware. The vehicle sends kind 9 live only,
+once for each newly closed hump of the current run, and only from a fresh
+IMU copy. The RAM log does not keep kind 9. See
+[IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
 The vehicle is the sole producer. It assigns a monotonic
 sequence before enqueue, so dropped events cause sequence gaps. Live events
 use uptime and flags zero. RAM-log event bodies use run-relative time,
@@ -350,8 +358,8 @@ without network service can overwrite older summaries; run-ID gaps show this.
 
 | Offset | Type | Field |
 | --- | --- | --- |
-| 0 | u8 | Version 2 |
-| 1 | u8 | Flags: barcode/hump implemented bit 0 (zero), speed error valid bit 1, detour aborted bit 2; v2 bits 3–7 saturating SCAN reattempts 0–31 |
+| 0 | u8 | Version 3 |
+| 1 | u8 | Flags: barcode implemented bit 0 (zero; v1/v2 meant barcode or hump), speed error valid bit 1, detour aborted bit 2; v2+ bits 3–7 saturating SCAN reattempts 0–31 |
 | 2 | u8 | Stop source: unknown 0, GP21 1, MQTT 2, fault 3, limit 4 |
 | 3 | u8 | Stop reason, below |
 | 4 | u32 | Run ID since boot |
@@ -365,8 +373,18 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | 36 | u8 | OR of motion fault bits seen |
 | 37, 38 | u8, u16 | Shell fault and detail, existing `vsm_fault_t` contract |
 | 40, 41 | u8 each | Reserved barcode success/failure counts (zero) |
-| 42 | u16 | Reserved hump peak (65535 unavailable; units not implemented) |
-| 44 | u32 | Boot ID (summary v2; v1 has 44 bytes) |
+| 42 | u16 | Highest hump peak, 0.1 mm (v3); 0 no hump; 65535 unavailable. v1/v2: reserved 65535 |
+| 44 | u32 | Boot ID (summary v2+; v1 has 44 bytes) |
+| 48 | u16 | Hump count in this run (v3; v2 has 48 bytes) |
+| 50 | u8 | Hump flags (v3): implemented 0, IMU fault 1, open at stop 2, curve gated 3, too long rejected 4, highest hump LEFT 5; bits 6–7 zero |
+| 51 | u8 | Hump starts blocked by a gate (v3), saturating at 255 |
+
+Hump fields (v3) come from the IMU hump detector at run end. Peak 65535
+means the IMU copy was missing, from another run, older than 50 ms, or had
+no valid sample; then the count is 0 and flags have bits 0 and 1 set. A
+missing value is never replaced by an old number. Flag bit 2 means a
+confirmed hump was still open at STOP and was counted. Barcode work takes
+the next summary version (v4); v3 keeps no reserved barcode bytes.
 
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;

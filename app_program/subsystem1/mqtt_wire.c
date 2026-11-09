@@ -240,6 +240,10 @@ void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v)
         BARCODE_OK_OFFSET = 40,
         BARCODE_FAILED_OFFSET = 41,
         HUMP_PEAK_OFFSET = 42,
+        BOOT_ID_OFFSET = 44,
+        HUMP_COUNT_OFFSET = 48,
+        HUMP_FLAGS_OFFSET = 50,
+        HUMP_GATED_OFFSET = 51,
     };
 
     memset(out, 0, RM_SUMMARY_SIZE);
@@ -264,7 +268,10 @@ void rm_pack_summary(uint8_t out[RM_SUMMARY_SIZE], const rm_summary_t *v)
     out[BARCODE_OK_OFFSET] = v->barcode_ok;
     out[BARCODE_FAILED_OFFSET] = v->barcode_failed;
     put16(out + HUMP_PEAK_OFFSET, v->hump_peak);
-    put32(out + RM_SUMMARY_SIZE - sizeof(uint32_t), v->boot_id);
+    put32(out + BOOT_ID_OFFSET, v->boot_id);
+    put16(out + HUMP_COUNT_OFFSET, v->hump_count);
+    out[HUMP_FLAGS_OFFSET] = (uint8_t)(v->hump_flags & RM_HUMP_FLAGS_MASK);
+    out[HUMP_GATED_OFFSET] = v->hump_gated;
 }
 
 /*

@@ -11,6 +11,7 @@
 #undef main
 #include "../app_program/vehicle/vehicle_board.h"
 #include "../app_program/subsystem1/robot_network.h"
+#include "../app_program/vehicle/run_stats.h"
 static unsigned int mode,irq_off,network_events,network_lost,dump_requests,command_losses;
 static robot_command_t ordinary[8],estop_slot;
 static unsigned int command_head,command_tail;
@@ -18,11 +19,17 @@ static bool have_estop,injected,verified_dump,verified_priority;
 static unsigned int rows_at_dump,rows_after_stop;
 static uint32_t stopped_at;
 static bool rejected_uncalibrated;
+static unsigned int hump_events;
 void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
 void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;
+    if (event->kind==RM_EVENT_HUMP) {
+        /* Live only, inside the run, once per new event: 10.8 mm, #1, RIGHT. */
+        assert(event->from==0u && event->to==0u && event->word==108u && event->detail==1u);
+        assert((vehicle_run_epoch()&1u)!=0u);++hump_events;
+    }
     return E_TMOUT; /* Network queue failure must not stop the vehicle. */
 }
 int robot_command_pop(robot_command_t *out) {
@@ -78,5 +85,14 @@ int main(int argc,char **argv) {
     if (mode==1u) assert(rejected_uncalibrated && line_drives==0u && rows==0u && estops==0u && asked[0]==0 && asked[1]==0);
     else if (mode==2u) assert(verified_priority && command_losses==1u && estops==1u);
     else assert(verified_dump && dump_requests==1u && line_drives>0u && rows>0u && estops==1u);
+    if (mode==1u) assert(hump_events==0u);
+    else {
+        rm_summary_t summary;assert(vehicle_summary_try_read(&summary)==E_OK);
+        /* ESTOP may end the run before its first hump poll; the summary
+         * still takes one final fresh board read. */
+        assert(hump_events==(mode==0u ? 1u : hump_events) && hump_events<=1u);
+        assert(summary.hump_peak==108u && summary.hump_count==1u);
+        assert(summary.hump_flags==RM_HUMP_IMPLEMENTED && summary.hump_gated==0u);
+    }
     return 0;
 }

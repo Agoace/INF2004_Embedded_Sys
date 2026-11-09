@@ -18,16 +18,28 @@ foreach(window 15 20 31)
 endforeach()
 host_test(test_imu_core tests/test_imu_core.c
     app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
-    app_program/subsystem4/imu_roll.c)
+    app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
 target_link_libraries(test_imu_core PRIVATE m)
 host_test(test_imu_core_benchmark tests/test_imu_core_benchmark.c
     app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
-    app_program/subsystem4/imu_roll.c)
+    app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
 target_compile_options(test_imu_core_benchmark PRIVATE -Os)
 target_link_libraries(test_imu_core_benchmark PRIVATE m)
+host_test(test_imu_hump tests/test_imu_hump.c
+    app_program/subsystem4/imu_hump.c)
+target_link_libraries(test_imu_hump PRIVATE m)
+foreach(source corrected filtered)
+    host_test(test_imu_hump_core_${source} tests/test_imu_hump_core.c
+        app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+        app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
+    target_link_libraries(test_imu_hump_core_${source} PRIVATE m)
+endforeach()
+target_compile_definitions(test_imu_hump_core_filtered PRIVATE
+    IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
 host_test(test_imu_service tests/test_imu_service.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
-    app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c)
+    app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
+    app_program/subsystem4/imu_hump.c)
 target_include_directories(test_imu_service BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_service PRIVATE APP_TEST=1 APP_BENCH=0)
@@ -37,6 +49,7 @@ target_link_libraries(test_imu_service PRIVATE m)
 host_test(test_imu_capture_service tests/test_imu_service.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
+    app_program/subsystem4/imu_hump.c
     app_program/subsystem4/imu_capture.c)
 target_include_directories(test_imu_capture_service BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
@@ -59,7 +72,7 @@ target_include_directories(test_imu_bench BEFORE PRIVATE
 target_compile_definitions(test_imu_bench PRIVATE APP_BENCH=1)
 host_test(test_imu_stream tests/test_imu_stream.c
     app_program/subsystem4/subsystem4_test.c app_program/subsystem4/imu_mark.c
-    app_program/subsystem4/imu_drive.c)
+    app_program/subsystem4/imu_drive.c app_program/subsystem4/imu_hump.c)
 target_include_directories(test_imu_stream BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_imu_stream PRIVATE

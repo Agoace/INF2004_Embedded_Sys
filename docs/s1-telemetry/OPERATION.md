@@ -149,7 +149,7 @@ check even if a button was briefly enabled from old page data.
 | --- | --- |
 | Header | Robot ONLINE, RUN/IDLE/FAULT, active LINE > SCAN > DETOUR > SEARCH; CAL/START/DUMP and large red ESTOP |
 | 1 | ULTRASONIC (largest), LINE L/C bars and position, DRIVE requested/measured L/R speed |
-| 2 | RUN PATH and LAST RUN (time, distance, detours, line losses, stop reason text) |
+| 2 | RUN PATH, LAST RUN (time, distance, detours, line losses, stop reason text) and HIGHEST HUMP |
 | 3 | Collapsible HEALTH: CPU, Wi-Fi, timing, counters, full original detail panels |
 
 Below800 px the same cards stack. State panels turn stale after 1 s (2.5 s idle);
@@ -182,6 +182,16 @@ a box/obstacle model.
 LINE bars use0=floor, 1000=line; the -100..+100 slider clips only its drawing.
 DRIVE uses blue requested/green measured signed mm/s bars, capped at±500;
 text retains full values. Wheel duty is percent from wire permille.
+
+### Highest hump
+
+HIGHEST HUMP shows the summary v3 hump result of the last run: peak in mm,
+wheel side, hump count and warning flags. During a run a newer live kind 9
+event shows the last hump so far. A LEFT-wheel hump is labelled `left
+wheel (not proven)`. Peak 65535 shows `unavailable (no fresh IMU data)`;
+a v1/v2 summary shows `not reported (summary vN firmware)`. A new run or a
+new boot clears the live value. The detector and its limits are in
+[IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
 
 ### Run path and retained history
 

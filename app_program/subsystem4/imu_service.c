@@ -22,6 +22,8 @@ static imu_core_t core;
 static imu_probe_t probe;
 static imu_snapshot_t value;
 static APP_BOARD(imu_snapshot_t) board;
+static imu_hump_report_t hump_value;
+static APP_BOARD(imu_hump_report_t) hump_board;
 static uint32_t mark_requests;
 static uint32_t wake_lost;
 static uint32_t previous_us;
@@ -34,6 +36,10 @@ static bool wheels_still;
 static float travel_mm;
 static float yaw_rad;
 static const mc_config_t motion_config = MC_ROBOT_CONFIG;
+#if APP_TEST
+/* TEST GP21 drive boundary; single TEST writer, odd while driving. */
+static uint32_t test_run_epoch;
+#endif
 
 #if APP_TEST && APP_IMU_STREAM && IMU_CAPTURE_ENABLE
 #define CAP_IDLE 0u
@@ -128,6 +134,15 @@ static void encoder_input(imu_core_input_t *input)
                           status.duty_permille[1] == 0;
 }
 
+static uint32_t run_epoch(void)
+{
+#if APP_TEST
+    return __atomic_load_n(&test_run_epoch, __ATOMIC_SEQ_CST);
+#else
+    return vehicle_run_epoch();
+#endif
+}
+
 static void sample(void)
 {
     const uint32_t started = drv_time_us();
@@ -145,6 +160,7 @@ static void sample(void)
     input.calibration_epoch = vehicle_calibration_epoch();
     input.calibration_allowed = epoch == input.calibration_epoch &&
                                 (epoch & 1u) == 0u;
+    input.run_epoch = run_epoch();
     const uint32_t compute_start = drv_time_us();
     const uint32_t requested = __atomic_load_n(&mark_requests,
                                                __ATOMIC_SEQ_CST);
@@ -189,6 +205,12 @@ static void sample(void)
     if (!empty) {
         value.timestamp_us = ended;
         value.timestamp_ms = input.now_ms;
+        /* Only a real observation refreshes the hump board time, so a
+         * stalled sensor makes the copy stale for every reader. */
+        hump_value.hump = core.output.hump;
+        hump_value.timestamp_ms = input.now_ms;
+        app_board_publish(&hump_board.sequence, hump_board.words,
+                          &hump_value, sizeof(hump_value));
     }
     value.compute_last_us = compute;
     value.compute_total_us += compute;
@@ -284,6 +306,40 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     return E_OK;
 }
 
+int imu_hump_try_read(imu_hump_report_t *out)
+{
+    imu_hump_report_t scratch;
+
+    if (out == NULL) {
+        return E_PAR;
+    }
+    if (!running) {
+        return E_OBJ;
+    }
+    if (!app_board_try_read(&hump_board.sequence, hump_board.words,
+                             &scratch, sizeof(scratch))) {
+        return E_TMOUT;
+    }
+    *out = scratch;
+    return E_OK;
+}
+
+uint32_t imu_test_run(bool active)
+{
+#if APP_TEST
+    const uint32_t epoch = __atomic_load_n(&test_run_epoch,
+                                           __ATOMIC_SEQ_CST);
+    const uint32_t next = ((epoch & 1u) != 0u) == active ? epoch
+                                                         : epoch + 1u;
+
+    __atomic_store_n(&test_run_epoch, next, __ATOMIC_SEQ_CST);
+    return next;
+#else
+    (void)active;
+    return 0u;
+#endif
+}
+
 uint32_t imu_request_mark(void)
 {
     const uint32_t next = __atomic_load_n(&mark_requests, __ATOMIC_SEQ_CST)
@@ -305,6 +361,15 @@ int imu_service_start(void)
 int imu_snapshot_try_read(imu_snapshot_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
+}
+int imu_hump_try_read(imu_hump_report_t *out)
+{
+    return out == NULL ? E_PAR : E_OBJ;
+}
+uint32_t imu_test_run(bool active)
+{
+    (void)active;
+    return 0u;
 }
 uint32_t imu_request_mark(void)
 {

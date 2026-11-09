@@ -57,7 +57,7 @@ it for a decision (open item below).
 
 | Module | RAM use | Estimate | Measured |
 | --- | --- | ---: | --- |
-| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **4700 B** in MQTT, including 2048 B stack; step 2d below |
+| IMU (subsystem 4) | Static stack, bias/support/roll state, snapshot and libm state | about 3 KB | **5116 B** in MQTT, including 2048 B stack; step 3 below |
 | Barcode, edge list | Task or line-task work, about 30 bar widths | about 3 KB | Not yet |
 | Barcode, raw capture | 141 mm at about 100 mm/s, 1 ms samples, 2 B each | about 6 KB | Not yet |
 
@@ -224,6 +224,43 @@ work_us average 2699/max 3224 us (about 27 % of core 0 wall time; step 2b
 The increase is mostly busy-wait I2C: a follow-up item. Physical stack
 high-water was not supplied. See
 [step 2d hardware](../../testing/subsystem4/TEST_LOG.md#step-2d-hardware-on-0207b54).
+
+## IMU step 3 measured delta
+
+Same public example settings and toolchain as step 2d; no firmware flashed.
+
+| MQTT static RAM | Bytes | Delta |
+| --- | ---: | ---: |
+| Original b569adc baseline | 184784 | reference |
+| Step 2d 0207b54 | 189484 | +4700 |
+| Step 3: data 904 + bss 188996 | 189900 | **+5116 original; +416 step 2d** |
+
+Main RAM not statically reserved: 72244 B. MQTT text grows 3620 B. The
+2048 B IMU stack is unchanged.
+
+| Step 3 item (MQTT ELF symbols) | Bytes |
+| --- | ---: |
+| Detector state in `core` (10-sample window, sum, counters) plus its 44 B output | 148 |
+| Hump output inside the snapshot `value` and its board copy | 88 |
+| IMU hump board (52) and its writer copy `hump_value` (48) | 100 |
+| Vehicle last good copy `hump_copy` and its flag | 49 |
+| Run result `run_hump` (6) and its DUMP board `run_hump_board` (12) | 18 |
+| Summary board growth (summary 48 to 52 B) | 4 |
+| `run_epoch`, `hump_emitted`, alignment | 9 |
+
+The snapshot holds the hump output because `imu_core_output_t` holds it;
+88 B can be removed later if the snapshot copies only selected fields.
+The GP20 DUMP line reads the 12 B run board; `telemetry_info_t` does not
+grow, so the telemetry message queue keeps its size. DUMP rows stay 16 B.
+
+Strict ARM local frames (`-fstack-usage`, before -> after): IMU `sample`
+792 -> 944 B (STREAM 800 -> 952 B), `imu_snapshot_try_read` 488 -> 528 B,
+`imu_hump_try_read` 80 B, `imu_core_step` 144 B, `imu_hump_step` 48 B;
+MQTT `vehicle_task` 792 -> 848 B, `telemetry_task` 264 -> 280 B; TEST
+`subsystem4_test` 776 -> 816 B. These are frames, not total stack bounds.
+The IMU stack is 2048 B and its last physical high-water (752 B) was on
+dfade14, before these larger frames: measure it in H0.
+See [IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
 
 ## Steps if the RAM becomes too small
 

@@ -1,14 +1,20 @@
-# GY-511 IMU: roll-only observer, step 2d FIFO input
+# GY-511 IMU: roll-only observer, step 3 hump report
 
 ## Current scope
+
+Step 3 adds a report-only hump detector on top of step 2d (`0207b54`).
+It counts humps from the roll height during a run and reports the highest
+one: USB line at run end, GP20 DUMP line, live MQTT event kind 9 and
+summary v3. It never changes motor commands or navigation. See
+[step 3 hump report](#step-3-hump-report). Step 3 is synthetic-fixture
+evidence only; its hardware checks H0..H9 are **Not run**.
 
 Step 2d extends `8c5d679` (step 2c), which extends `75ff329` (step 2b),
 originally based on `b569adc`. Step 2d changes ONLY the accelerometer input:
 400 Hz FIFO samples are averaged into each 10 ms observation. See
 [step 2d FIFO input](#step-2d-fifo-input). Robot and
-TEST run an IMU observer; BENCH does not. The observer has no motor commands,
-terrain states, height-detection thresholds, climb events, MQTT or KR1
-fields. It cannot change normal driving. The explicit exception is a
+TEST run an IMU observer; BENCH does not. The observer has no motor
+commands and no KR1 fields. It cannot change normal driving. The explicit exception is a
 separate operator-triggered GP21 straight-drive job in IMU_STREAM only;
 its stop policy is described below. CR1 packing is deferred.
 
@@ -47,6 +53,7 @@ See [S4 results and pending tests](../../testing/subsystem4/TEST_LOG.md#observe-
 | File | Role |
 | --- | --- |
 | [imu_core.h](../../app_program/subsystem4/imu_core.h), [imu_core.c](../../app_program/subsystem4/imu_core.c) | Pure state, calibration, angles, filters and relative height; no SDK/kernel headers |
+| [imu_hump.h](../../app_program/subsystem4/imu_hump.h), [imu_hump.c](../../app_program/subsystem4/imu_hump.c) | Step 3 pure hump detector and run summary; no SDK/kernel headers |
 | [imu_service.c](../../app_program/subsystem4/imu_service.c) | Core-0 task14, own 10 ms cyclic, probe/motion observations and sole snapshot writer |
 | [imu_service.h](../../app_program/subsystem4/imu_service.h) | `imu_snapshot_try_read()` and acknowledged operator MARK request |
 | [imu_hw.c](../../app_program/subsystem4/imu_hw.c) | Bounded I2C register adapter only; still no SDK runtime/IRQ/clock owner |
@@ -825,6 +832,186 @@ Follow-up: work_us is about 27 % of core 0 wall time, mostly busy-wait
 I2C at priority 14. Reduce it (for example an interrupt- or DMA-driven
 transfer, or fewer bytes per cycle) in a separately approved step. Stack
 high-water was not supplied.
+
+## Step 3 hump report
+
+Report only. The detector counts humps and gives the highest one. It
+never changes a motor command, a navigation state or a stop decision.
+All numbers in this section are synthetic fixtures or build results,
+**not hardware results**, unless a line says otherwise.
+
+### Decisions (approved D1..D5)
+
+| ID | Decision |
+| --- | --- |
+| D1 | Course humps always hit the RIGHT drive wheel (operator fact). RIGHT is the primary side. A LEFT event is an unproven bonus with a side flag. No full-width estimator. |
+| D2 | Thresholds below. Default source is the corrected roll height, plus the curve gate. `IMU_HUMP_SOURCE` selects the filtered roll as a fallback. Event peak is the highest 100 ms mean. |
+| D3 | Event v2 gets kind 9. Summary v3 is 52 B with hump peak (0.1 mm), count, flags and gated count. No reserved barcode bytes: barcode takes v4. |
+| D4 | No core_us trim in this step (see [CPU](#cpu-and-the-d4-decision)). |
+| D5 | One USB line at run end, one GP20 DUMP line. DUMP rows do not grow. |
+
+### Data path
+
+```text
+IMU task14 (10 ms) --> imu_core --> imu_hump_step --> hump board (52 B)
+     ^ run_epoch (atomic)                                    |
+     |                                    vehicle task13 copy (no wait)
+vehicle run start: epoch odd             |-- live event kind 9 (MQTT)
+vehicle run end:   summarize, epoch even |-- summary v3 (MQTT)
+                                         |-- USB "[robot] hump ..." line
+                                         '-- run board --> GP20 DUMP line
+```
+
+- `vehicle_run_epoch()` is odd during a run. The vehicle makes it odd at
+  run start and even (+1) at run end, after it takes the summary. TEST
+  images use `imu_test_run(true/false)` around the GP21 STREAM drive.
+- An odd new epoch starts a run: totals clear; the 100 ms mean continues.
+  An even epoch ends the run: a confirmed open event closes with OPEN.
+- The IMU publishes the hump board only on a real observation. The board
+  time is the IMU observation time, so a stalled sensor makes every copy
+  old. A busy board keeps the reader's last copy.
+- At run end the vehicle summarizes its last good copy. The copy must be
+  from this run and at most 50 ms old (`IMU_HUMP_MAX_AGE_MS`), else the
+  result is unavailable: peak 65535, count 0, flags IMPLEMENTED|FAULT.
+  A stale copy never gives a value.
+- No task waits: the vehicle reads with `imu_hump_try_read()` (E_PAR,
+  E_OBJ, E_TMOUT or E_OK) and keeps going.
+
+### Detector
+
+Input each 10 ms: source height (RIGHT wheel up is +), encoder travel,
+speed, encoder yaw rate, encoder fake lateral acceleration, validity.
+
+| Setting | Value | Use |
+| --- | ---: | --- |
+| `IMU_HUMP_ON_MM` | 3.0 mm | Start level of the 100 ms mean, either sign |
+| `IMU_HUMP_OFF_MM` | 1.5 mm | End level, same side as the start |
+| `IMU_HUMP_ON_TRAVEL_MM` | 30 mm | Travel above ON before an event is confirmed |
+| `IMU_HUMP_OFF_TRAVEL_MM` | 30 mm | Continuous travel below OFF that ends an event |
+| `IMU_HUMP_MAX_TRAVEL_MM` | 600 mm | Longer events are slopes: rejected, flag LONG |
+| `IMU_HUMP_GATE_LATERAL_MG` | 40 mg | Curve gate on encoder lateral acceleration |
+| `IMU_HUMP_GATE_YAW_RAD_S` | 1.5 rad/s | Curve gate on encoder yaw rate |
+| `IMU_HUMP_MIN_SPEED_MM_S` | 30 mm/s | Slower motion cannot start an event |
+| `IMU_HUMP_MAX_AGE_MS` | 50 ms | Maximum copy age for the run result and live event |
+| `IMU_HUMP_SOURCE` | 1 corrected | 2 = filtered roll fallback |
+
+States: IDLE, CANDIDATE (above ON, travel counting), ACTIVE (confirmed),
+LONG (rejected, waits for the mean to stay below OFF for 30 mm).
+
+- A gate (curve, invalid motion or low speed) blocks a start. It is
+  counted once for each ON crossing (`gated`); the count resets after the
+  mean drops below OFF.
+- A curve or invalid motion during an ACTIVE event freezes its peak and
+  sets flag CURVE. Low speed does not freeze a peak.
+- An invalid accel sample or a sample gap clears the mean window and sets
+  flag FAULT during a run.
+- Side: a negative mean is a LEFT event. Its magnitude is used.
+
+| Flag bit | Name | Meaning |
+| ---: | --- | --- |
+| 0 | IMPLEMENTED | Always set by step 3 firmware |
+| 1 | FAULT | Invalid/gap sample in the run, or result unavailable |
+| 2 | OPEN | A confirmed event was still open at STOP; it is counted |
+| 3 | CURVE | A curve gate froze an event peak |
+| 4 | LONG | An event exceeded 600 mm and was not counted |
+| 5 | LEFT | The highest event is LEFT (unproven side) |
+
+### Outputs
+
+| Output | Format | Image |
+| --- | --- | --- |
+| USB at run end | `[robot] hump highest_mm 9.4 side right count 1 flags 01 gated 0`, or `[robot] hump unavailable flags 03` | Robot, MQTT |
+| GP20 DUMP, after the counts line | `[robot] hump peak_0.1mm 94 count 1 flags 01 gated 0`, or `[robot] hump no finished run` | Robot, MQTT |
+| Live MQTT | Event kind 9: word peak 0.1 mm, detail number + LEFT bit 7 | MQTT |
+| Summary | v3 bytes 42, 48, 50, 51; [MQTT wire](../s1-telemetry/MQTT_WIRE.md#run-summary) | MQTT |
+| TEST STREAM | `[S4_HUMP] peak_0.1mm .. count .. flags .. gated .. long ..` after each GP21 drive. The 50 Hz `[S4]` line adds `hump_state`, counts, flags and `hump_avg_mm`/`hump_event_mm`/`hump_max_mm` | IMU_STREAM (`[S4]` also TEST) |
+
+`python3 scripts/robot_log_decode.py --hump LOG` writes
+`source,peak_mm,side,count,flags,gated` from the run-end, DUMP and STREAM
+lines. The dashboard shows a HIGHEST HUMP card; see
+[operation](../s1-telemetry/OPERATION.md#highest-hump).
+
+### Fixture results (synthetic, not hardware)
+
+Hump fixture: noise-free height profile 10 mm high and 195 mm long (two
+ramps and a 5 mm crest) under the RIGHT wheel. The flat cases add white
+noise at the step 2d flat sd; real floor noise is correlated, so H1 and H5
+must confirm the false-count margin. Event peak is the highest 100 ms mean, so it
+is lower than the 10 mm object at higher speed.
+
+| Case | Result |
+| --- | --- |
+| 10 mm hump at 100 / 146 / 300 / 460 mm/s | peak 9.426 / 9.065 / 7.910 / 6.896 mm, count 1 |
+| Flat 30 s, uniform white noise sd 0.68 mm (step 2d max) / sd 2.0 mm, one 12 mm single spike every 5 s | highest mean 1.635 / 2.479 mm, below ON 3.0, count 0 |
+| 30 mg curve (300 mm/s, 1.0 rad/s), no hump | corrected mean 0.001 mm, count 0; filtered mean -3.394 mm and a false event |
+| 10 mm hump on that 30 mg curve, 300 mm/s, full core | count 1, peak 7.699 mm |
+| Two humps at 146 mm/s | touching humps merge into one; a 20 mm flat gap gives two (ramps below OFF add about 28 mm) |
+| Long slope | rejected with flag LONG, not counted |
+
+The 30 mg curve case is why the corrected roll is the default. Speed
+attenuation at 300..460 mm/s is a property of the 100 ms mean; check it on
+hardware (H2, H6) before a height pass/fail rule uses it.
+
+### CPU and the D4 decision
+
+Host `-Os` throughput only, not RP2040 timing: imu_core_step 117..130 ns
+before (step 2d) and 130..135 ns after step 3 (1e6 updates). Compiling out
+the step 2b support diagnostics saves about 8..10 ns on the host. Both are
+near host noise. Step 2d hardware core_us is 1164 us average, so the
+detector is expected to add a small part (estimate 20..40 us on target).
+**Decision: no trim now.** H0 measures `core_us`/`work_us` with step 3;
+a ROBOT-only compile-out of the step 2b diagnostics stays available as a
+separate commit if H0 shows a need.
+
+### Step 3 software validation
+
+Local only: no push, flash, broker or hardware. Public example settings
+headers in a separate copy; generated firmware and proof ELFs removed.
+
+- 168/168 host tests pass (44 IMU). New: `test_imu_hump` (helpers, speeds,
+  heights, side, flat noise, chatter and spacing, long slope, gates, run
+  lifecycle, unavailable cases), `test_imu_hump_core_corrected` and
+  `_filtered` (full core curve cases). Updated: service (hump board torn
+  read, E_PAR/E_OBJ, FIFO-empty ageing, run epochs, fault), vehicle (run
+  epochs, USB line), telemetry (DUMP line), network task (kind 9), wire
+  (summary v3 and event fixtures), STREAM observer (`[S4_HUMP]`).
+- Clang address/undefined/float-cast sanitizers pass all 168 tests.
+- Recorder 68/68 and dashboard 185/185 pass.
+- Seven clean `make -j4 --output-sync=target` builds have zero warnings.
+  15 related units per profile pass `-Wall -Wextra -Wconversion -Wshadow
+  -Wformat=2 -Werror` (105 compilations). Seven SDK retained-link proofs
+  pass; no `__atomic_*` helper is linked.
+- Template deviations stay 8 against c3b0954.
+
+| Clean profile | text | data | bss | text / bss vs step 2d |
+| --- | ---: | ---: | ---: | ---: |
+| Default SMP1 USB/Wi-Fi | 334556 | 760 | 130976 | +3296 / +416 |
+| Robot SMP0 no radio | 87636 | 688 | 124440 | +3296 / +416 |
+| BENCH SMP0 no radio | 41982 | 148 | 95460 | 0 / 0 |
+| MQTT SMP0 | 399156 | 904 | 188996 | +3620 / +416 |
+| TEST SMP0 no radio | 80712 | 688 | 123788 | +2180 / +344 |
+| MQTT-TEST SMP0 | 388060 | 904 | 187940 | +2260 / +336 |
+| IMU_STREAM SMP0 no radio | 78564 | 688 | 131540 | +2812 / +400 |
+
+RAM detail: [IMU step 3](../kernel/RAM_BUDGET.md#imu-step-3-measured-delta).
+
+### Hardware checks (all Not run)
+
+Use the MQTT robot image unless the row says STREAM. Record the USB
+run-end line, the summary and the `[S4_DIAG]` or health timing.
+
+| ID | Check | Pass condition |
+| --- | --- | --- |
+| H0 | MQTT LINE run, no hump: CPU, Wi-Fi gap, overruns | count 0, flags 01; overruns 0; core_us/work_us change vs step 2d recorded |
+| H1 | STREAM floor repeat, 10 mm RIGHT hump, 100 mm/s, 3 drives + 1 flat | `[S4_HUMP]` count 1 and peak near 9.4 mm (fixture) per hump drive; flat count 0 |
+| H2 | LINE run over the 10 mm hump on a straight | count 1, side right, one kind 9 event, summary matches USB line |
+| H3 | Curves and SEARCH, no hump | count 0; record `gated` and flags |
+| H4 | Hump right after a curve | count 1; record flag CURVE and peak |
+| H5 | Course mat, no hump | count 0 (mat texture is not in the fixtures) |
+| H6 | Other hump heights | peak against object height; record the speed loss |
+| H7 | LEFT-wheel hump | side left, flag LEFT (bonus; not required) |
+| H8 | Stop on the hump (GP21) | flag OPEN, the hump is counted |
+| H9 | Broker down during the run | USB line and DUMP line still correct; summary after reconnect |
 
 ## Historical steps 0 and 1
 
