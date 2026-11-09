@@ -322,6 +322,15 @@ Heartbeat stack_min_free 272 B in the d51d27b session was idle_meter
 barcode-sensor scrape condition in
 [H0/H2-short](../../testing/subsystem4/TEST_LOG.md#step-3-h0-and-h2-short-on-d51d27b).
 
+## H3 source-label build delta
+
+Source-labelled MQTT images retain data 904 + bss 189768 = 190672 B for
+either source (no RAM growth). Text is 403988 B corrected / 403984 B
+filtered, versus 403848 B on diagnostic C: +140 / +136 B. Strict ARM
+IMU sample remains 1000 B; vehicle is 880 B (+8), telemetry 360 B (+8),
+initial task 24 B. Named stack readings for these images are pending H3.
+See [source builds](BUILD.md#h3-source-comparison-images).
+
 ## Steps if the RAM becomes too small
 
 Use the steps in this order. Stop when there is sufficient RAM. Measure

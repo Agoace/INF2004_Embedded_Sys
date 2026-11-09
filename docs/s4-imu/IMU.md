@@ -1214,6 +1214,46 @@ approved for implementation now. Preserve detection results first.
    apply a speed correction derived from one hump or tune against only
    successful detections.
 
+### H3 selectable source builds
+
+H3 remains **Not run**. The recorded 9/9 counts used the corrected default;
+the paired uncorrected heights are not a filtered-source detection trial.
+Compare two images on the same fuller circuit,
+including curves and SEARCH, with no humps for the false-alarm check.
+Keep default corrected; do not silently switch source after accepting
+uncorrected height. Build from the repository root:
+
+```sh
+cd build_make
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=1 -j4 --output-sync=target
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=2 -j4 --output-sync=target
+```
+
+Source 1 = corrected (default), source 2 = filtered roll. The images are
+`mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2` and
+`mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_humpfilt.uf2`. Invalid/empty values
+are rejected by Make; the header also rejects invalid direct C defines.
+`PROFILE_ID` includes the source to force fresh objects when it changes.
+Boot prints `[S4] hump_source N NAME` once; robot run-end/DUMP and STREAM
+`[S4_HUMP]` lines append `source N NAME`. The USB hump CSV decoder accepts
+both old lines and labelled lines without changing its CSV columns.
+MQTT/wire is unchanged: bind recorder sessions to the filename/boot label.
+See [build guide](../kernel/BUILD.md#h3-source-comparison-images) and
+[H3 procedure](../../testing/subsystem4/TEST_LOG.md#h3-two-image-comparison-plan).
+
+Software validation: 171/171 host and Clang address/undefined/float-cast
+tests pass; recorder 68/68, dashboard 185/185. Existing corrected/filtered
+core fixtures run both source values. Added Make option validation,
+suffix/profile/default/object-invalidation checks in an isolated tree,
+a filtered startup-label test and result-line/CSV-label checks. Both MQTT
+robot images build with zero warnings; 16 strict ARM compilations and
+2 retained SDK link proofs pass. Template deviations remain 8. Public
+example settings only; no source-comparison hardware run or flash here.
+Static MQTT RAM stays 190672 B for both. Text: corrected 403988 B,
+filtered 403984 B. IMU sample remains 1000 B; vehicle frame 880 B,
+telemetry 360 B, initial task 24 B. Source labels do not increase the
+IMU frame; new physical H3 stack readings remain required.
+
 ### Hardware checks (H1 PASS; uncorrected LINE height accepted)
 
 Use the MQTT robot image unless the row says STREAM. Record the USB
@@ -1224,7 +1264,7 @@ run-end line, the summary and the `[S4_DIAG]` or health timing.
 | H0 | MQTT LINE run, no hump: CPU, Wi-Fi gap, overruns | Partial: 5 flat robot runs, count 0; diagnostic C IMU free 480 B. CPU/network baseline still needed |
 | H1 | STREAM floor repeat, 10 mm RIGHT hump, 100 mm/s | PASS on 1480b37: count 1 each; peaks 9.9/11.3/10.5 mm, flags 01, gated/long 0; separate flat-only result not supplied |
 | H2 | LINE run over the 10 mm hump on a straight | 9/9 counted across d51d27b/29d57de; uncorrected 11.5/12.4 mm accepted; corrected +4..6 mm under investigation |
-| H3 | Full circuit, curves and SEARCH, no false hump | Not run; PRIORITY acceptance test when the full circuit is available; require count 0, record `gated` and flags |
+| H3 | Full circuit, curves and SEARCH, no false hump | Not run; PRIORITY two-image comparison when the full circuit is available; require count 0, record source, `gated` and flags |
 | H4 | Hump right after a curve | Not run; count 1; record flag CURVE and peak |
 | H5 | Course mat, no hump | Not run; count 0 (mat texture is not in the fixtures) |
 | H6 | Other hump heights | Not run; peak against object height; record the speed loss |

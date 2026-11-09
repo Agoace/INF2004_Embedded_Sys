@@ -39,6 +39,14 @@ assert csv_hump == ["source,peak_mm,side,count,flags,gated",
                     "run_end,10.8,right,2,05,1", "run_end,unavailable,,,03,",
                     "dump,25.0,left,3,21,0", "dump,unavailable,,,03,",
                     "stream,0.0,none,0,01,2"], csv_hump
+# Source-labelled images retain the existing hump CSV fields.
+for source in ("1 corrected", "2 filtered"):
+    labelled = "\n".join(line + f" source {source}" if line.startswith(
+        ("[robot] hump", "[S4_HUMP]")) else line for line in capture.splitlines())
+    got = subprocess.check_output(
+        [sys.executable, str(root / "scripts/robot_log_decode.py"), "--hump"],
+        input=labelled, text=True).splitlines()
+    assert got == csv_hump, got
 ref = (root / "src/vc_line_test.c").read_text()
 first = ref.index("static const lt_config_t LINE_CFG")
 last = ref.index("typedef enum {\n    STOP_BUTTON", first)

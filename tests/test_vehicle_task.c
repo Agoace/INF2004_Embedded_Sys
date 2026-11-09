@@ -75,6 +75,10 @@ int tm_printf(const UB *f,...) {
     if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
         const unsigned int mm=va_arg(a,unsigned int),tenth=va_arg(a,unsigned int);
         assert(mm==10u && tenth==8u);++hump_lines;
+        (void)va_arg(a,const char *);
+        for (unsigned int i=0u;i<3u;++i) (void)va_arg(a,unsigned int);
+        assert(va_arg(a,unsigned int)==IMU_HUMP_SOURCE);
+        assert(!strcmp(va_arg(a,const char *),IMU_HUMP_SOURCE_NAME));
     } else if (!strncmp((const char *)f,"[robot] hump unavailable",24u)) ++hump_none;
     else if (!strncmp((const char *)f,"[S4_HUMP_DIAG]",14u)) ++diag_lines;
     else ++prints;

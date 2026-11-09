@@ -34,15 +34,17 @@ def decode(payload):
 
 HUMP_NONE = 65535
 HUMP_LEFT = 0x20
+# Optional source suffix preserves older captures and the CSV contract.
+HUMP_SOURCE = r"(?: source (?:1 corrected|2 filtered))?\s*"
 # Run end, run end without data, GP20 DUMP and STREAM GP21 drive lines.
 HUMP_LINES = (
     ("run_end", re.compile(r"\[robot\] hump highest_mm (\d+)\.(\d) side (\w+) count (\d+) "
-                           r"flags ([0-9a-f]{2}) gated (\d+)\s*")),
-    ("run_end", re.compile(r"\[robot\] hump unavailable flags ([0-9a-f]{2})\s*")),
+                           r"flags ([0-9a-f]{2}) gated (\d+)" + HUMP_SOURCE)),
+    ("run_end", re.compile(r"\[robot\] hump unavailable flags ([0-9a-f]{2})" + HUMP_SOURCE)),
     ("dump", re.compile(r"\[robot\] hump peak_0\.1mm (\d+) count (\d+) "
-                        r"flags ([0-9a-f]{2}) gated (\d+)\s*")),
+                        r"flags ([0-9a-f]{2}) gated (\d+)" + HUMP_SOURCE)),
     ("stream", re.compile(r"\[S4_HUMP\] peak_0\.1mm (\d+) count (\d+) "
-                          r"flags ([0-9a-f]{2}) gated (\d+) long \d+\s*")))
+                          r"flags ([0-9a-f]{2}) gated (\d+) long \d+" + HUMP_SOURCE)))
 
 
 def decode_hump(line):

@@ -5,6 +5,7 @@
 #include <tk/tkernel.h>
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/vehicle/vehicle_task.h"
+#include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
 static bool full;static int irq_off;static unsigned int kr,ve,bytes,reports;
@@ -38,12 +39,14 @@ int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
     if (!strcmp((const char *)fmt,"KR %lu ")) ++kr;
     if (!strcmp((const char *)fmt,"VE %lu %u %u %u %u\n")) ++ve;
-    if (!strcmp((const char *)fmt,"[robot] hump no finished run\n")) ++hump_none;
+    if (!strncmp((const char *)fmt,"[robot] hump no finished run",28u)) ++hump_none;
     if (!strncmp((const char *)fmt,"[S4_HUMP_DIAG]",14u)) ++diag_lines;
     if (!strncmp((const char *)fmt,"[robot] hump peak_0.1mm",23u)) {
         const unsigned int peak=va_arg(a,unsigned int),count=va_arg(a,unsigned int);
         const unsigned int flags=va_arg(a,unsigned int),gated=va_arg(a,unsigned int);
         assert(peak==108u && count==2u && flags==5u && gated==3u);++hump_lines;
+        assert(va_arg(a,unsigned int)==IMU_HUMP_SOURCE);
+        assert(!strcmp(va_arg(a,const char *),IMU_HUMP_SOURCE_NAME));
     }
     if (!strcmp((const char *)fmt,"%02x")) {
         const unsigned int v=va_arg(a,unsigned int);

@@ -542,18 +542,20 @@ static void hump_print(void)
 {
     const imu_hump_summary_t *h = &run_hump;
     if (h->peak_01mm == IMU_HUMP_PEAK_NONE) {
-        tm_printf((UB *)"[robot] hump unavailable flags %02x\n",
-                  (unsigned int)h->flags);
+        tm_printf((UB *)"[robot] hump unavailable flags %02x "
+                  "source %u %s\n", (unsigned int)h->flags,
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
         return;
     }
     tm_printf((UB *)"[robot] hump highest_mm %u.%u side %s count %u "
-                    "flags %02x gated %u\n",
+                    "flags %02x gated %u source %u %s\n",
               (unsigned int)(h->peak_01mm / 10u),
               (unsigned int)(h->peak_01mm % 10u),
               h->count == 0u ? "none"
               : (h->flags & IMU_HUMP_FLAG_LEFT) != 0u ? "left" : "right",
               (unsigned int)h->count, (unsigned int)h->flags,
-              (unsigned int)h->gated);
+              (unsigned int)h->gated, (unsigned int)IMU_HUMP_SOURCE,
+              IMU_HUMP_SOURCE_NAME);
 }
 
 /*

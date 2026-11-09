@@ -191,6 +191,15 @@ add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priorit
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
 
+add_test(NAME test_imu_source_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_imu_source_make.py")
+host_test(test_production_runner_filtered tests/test_test_runner.c
+    app_program/app_main.c)
+target_include_directories(test_production_runner_filtered BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_production_runner_filtered PRIVATE
+    IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
+
 host_test(test_imu_hump_diag tests/test_imu_hump_diag.c
     app_program/subsystem4/imu_hump.c
     app_program/subsystem4/imu_hump_diag.c

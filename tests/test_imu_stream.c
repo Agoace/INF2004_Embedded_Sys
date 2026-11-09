@@ -257,6 +257,12 @@ int tm_printf(const UB *format, ...)
 
         va_start(args, format);
         hump_peak = va_arg(args, unsigned int);
+        for (unsigned int i = 0u; i < 4u; ++i) {
+            (void)va_arg(args, unsigned int);
+        }
+        assert(va_arg(args, unsigned int) == IMU_HUMP_SOURCE);
+        assert(strcmp(va_arg(args, const char *),
+                       IMU_HUMP_SOURCE_NAME) == 0);
         va_end(args);
         ++hump_lines;
     } else if (strncmp(text, "[S4_HUMP_DIAG]", 14u) == 0) {

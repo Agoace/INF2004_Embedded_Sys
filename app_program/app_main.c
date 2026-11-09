@@ -26,6 +26,7 @@
 #include "platform/drv_time.h"
 #include "vehicle/vehicle_task.h"
 #include "platform/app_task.h"
+#include "subsystem4/imu_settings.h"
 #if TM_MQTT
 #include "platform/idle_meter.h"
 #include "platform/boot_id.h"
@@ -60,6 +61,10 @@ EXPORT INT usermain(void)
     CHECK(boot_id_init(), "boot observation ID (noncritical)");
 #endif
 
+#if !APP_BENCH
+    tm_printf((UB *)"[S4] hump_source %u %s\n",
+              (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+#endif
     /* tk_ref_ver: ask the kernel who it is */
     tk_ref_ver(&ver);
     tm_printf((UB *)"\n=== micro T-Kernel on Raspberry Pi Pico W"

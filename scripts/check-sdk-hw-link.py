@@ -40,7 +40,11 @@ def main():
     diag = int("-DAPP_DIAG=1" in flags)
     expected = f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}-test{test}-bench{bench}-diag{diag}"
     stream = int("-DAPP_IMU_STREAM=1" in flags)
-    expected += f"-imu_stream{stream}"
+    source = next((flag.split("=", 1)[1] for flag in flags
+                   if flag.startswith("-DIMU_HUMP_SOURCE=")), "1")
+    if source not in ("1", "2"):
+        parser.error("log has an invalid IMU_HUMP_SOURCE")
+    expected += f"-imu_stream{stream}-hump_source{source}"
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
         parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")

@@ -107,6 +107,16 @@ endif
 IMU_STREAM_SUFFIX := _imu_stream
 endif
 
+# Hump source: 1 corrected (default), 2 filtered roll for H3 comparison.
+IMU_HUMP_SOURCE ?= 1
+ifeq ($(IMU_HUMP_SOURCE),1)
+IMU_HUMP_SOURCE_SUFFIX :=
+else ifeq ($(IMU_HUMP_SOURCE),2)
+IMU_HUMP_SOURCE_SUFFIX := _humpfilt
+else
+$(error Unknown IMU_HUMP_SOURCE '$(IMU_HUMP_SOURCE)'; use 1 or 2)
+endif
+
 # DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
 # It changes timing. Default 0 compiles the diagnostic paths out.
 DIAG ?= 0
@@ -152,7 +162,7 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -214,6 +224,7 @@ ASFLAGS += -DCNF_SMP=1
 endif
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
+CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -246,7 +257,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

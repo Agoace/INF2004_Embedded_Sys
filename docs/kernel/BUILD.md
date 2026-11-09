@@ -52,6 +52,7 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `DIAG` | 0; 1 adds fixed motion timing captures, printed at GP20 |
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
+| `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
 GP0/GP1 belong to I2C0. BENCH has no IMU task. Follow the current
@@ -73,6 +74,34 @@ The image name includes its options:
 | MQTT TEST | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_test.uf2` |
 | MQTT DIAG | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_diag.uf2` |
 | Default | `mtk3pico_smp1_usb_cdc_wifi.uf2` |
+
+### H3 source comparison images
+
+The operator accepts uncorrected height 11.5/12.4 mm as good enough, not
+the corrected +4..6 mm over-read. The default remains corrected. Compare
+both sources for FALSE humps on a fuller circuit (curves + SEARCH):
+
+```sh
+cd build_make
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=1 -j4 --output-sync=target
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=2 -j4 --output-sync=target
+```
+
+| Source | MQTT robot image under `build_make/` |
+| --- | --- |
+| 1, corrected (default) | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2` |
+| 2, filtered roll | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_humpfilt.uf2` |
+
+Both files can coexist. The source is in `PROFILE_ID`, so switching it
+invalidates old objects even without `make clean`. It is passed as
+`-DIMU_HUMP_SOURCE=1` or `=2`; use numeric values, not C macro names in
+the Make option. The non-default suffix applies to other profiles too.
+Boot prints `[S4] hump_source 1 corrected` or `2 filtered` once (not
+BENCH). Run-end, GP20 DUMP and `[S4_HUMP]` lines end with
+`source 1 corrected` or `source 2 filtered`. Record the boot line and
+filename for every H3 session. MQTT payloads do not identify the source;
+do not mix sessions/images in a source comparison.
+See [H3 plan](../../testing/subsystem4/TEST_LOG.md#h3-two-image-comparison-plan).
 
 ## Private settings
 

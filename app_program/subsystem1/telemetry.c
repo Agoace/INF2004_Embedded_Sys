@@ -13,6 +13,7 @@
 #include "../platform/drv_time.h"
 #include "../subsystem2/motion_diag.h"
 #include "../vehicle/vehicle_task.h"
+#include "../subsystem4/imu_settings.h"
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
@@ -172,11 +173,13 @@ static void dump(void)
     imu_hump_summary_t hump;
     if (vehicle_hump_try_read(&hump) == E_OK) {
         tm_printf((UB *)"[robot] hump peak_0.1mm %u count %u flags %02x "
-                        "gated %u\n",
+                        "gated %u source %u %s\n",
                   (unsigned int)hump.peak_01mm, (unsigned int)hump.count,
-                  (unsigned int)hump.flags, (unsigned int)hump.gated);
+                  (unsigned int)hump.flags, (unsigned int)hump.gated,
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
     } else {
-        tm_printf((UB *)"[robot] hump no finished run\n");
+        tm_printf((UB *)"[robot] hump no finished run source %u %s\n",
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
     }
     imu_hump_diag_report_t diag;
     if (vehicle_hump_diag_try_read(&diag) == E_OK) {

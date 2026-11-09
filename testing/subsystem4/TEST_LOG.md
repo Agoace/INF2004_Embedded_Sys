@@ -385,6 +385,38 @@ H4..H9 remain **Not run**. This hardware-record commit changes no code or thresh
 Accuracy follow-up is deferred; see
 [deferred plan](../../docs/s4-imu/IMU.md#deferred-accuracy-follow-up).
 
+### H3 two-image comparison plan
+
+**Not run; priority acceptance test.** On a fuller circuit compare curves
+and SEARCH with NO hump, using both MQTT robot images. The operator
+accepts uncorrected 11.5/12.4 mm height, but false-hump behaviour of that
+source is not established. The recorded 9/9 detections used the corrected
+default, not a separate filtered-source trial. Default stays corrected. Keep all thresholds
+and the diagnostic C capture unchanged; do not implement deferred trace
+or window-gate work in this comparison.
+
+| Source | Image |
+| --- | --- |
+| 1 corrected (default) | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt.uf2` |
+| 2 filtered roll | `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_humpfilt.uf2` |
+
+Use [build commands](../../docs/kernel/BUILD.md#h3-source-comparison-images).
+Record filename, `[S4] hump_source N NAME` boot line, boot ID, each run
+ID, source-labelled hump lines, summary/count/gates, and named stack
+lines. Keep USB attached at run end; reconnecting later cannot recover a
+lost peak diagnostic unless GP20 still holds that last run. Use comparable
+speed, path, contact and stop/SEARCH conditions for both images. Require
+zero false events/counts; record misses on any separate known-hump controls
+without conflating those controls with the no-hump circuit test. Preserve
+the 256 B free-stack policy. MQTT fields are unchanged and do not encode
+the source; do not combine unidentified sessions. H4..H9 remain Not run.
+
+Local source-option checks: host 171/171, sanitizers 171/171; both MQTT
+robot builds warning-free, 16 strict ARM compilations, 2 SDK link proofs.
+No H3 image was flashed by the worker. Public example build artifacts do
+not contain the operator's broker settings; rebuild configured images
+before hardware use.
+
 ### S4-U04 procedure
 
 1. With operator approval, use the step-2 image and save its exact revision

@@ -34,6 +34,13 @@
 #ifndef IMU_HUMP_SOURCE
 #define IMU_HUMP_SOURCE IMU_HUMP_SOURCE_CORRECTED
 #endif
+#if IMU_HUMP_SOURCE == IMU_HUMP_SOURCE_CORRECTED
+#define IMU_HUMP_SOURCE_NAME "corrected"
+#elif IMU_HUMP_SOURCE == IMU_HUMP_SOURCE_FILTERED
+#define IMU_HUMP_SOURCE_NAME "filtered"
+#else
+#error "IMU_HUMP_SOURCE must be 1 (corrected) or 2 (filtered)"
+#endif
 #ifndef IMU_HUMP_ON_MM
 #define IMU_HUMP_ON_MM 3.0f
 #endif

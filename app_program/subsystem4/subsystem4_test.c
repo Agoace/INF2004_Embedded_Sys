@@ -112,10 +112,11 @@ static void hump_report(void)
         have_hump_last, hump_epoch, drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
 
     tm_printf((UB *)"[S4_HUMP] peak_0.1mm %u count %u flags %02x "
-              "gated %u long %u\n",
+              "gated %u long %u source %u %s\n",
               (unsigned int)h.peak_01mm, (unsigned int)h.count,
               (unsigned int)h.flags, (unsigned int)h.gated,
-              (unsigned int)hump_last.hump.long_rejects);
+              (unsigned int)hump_last.hump.long_rejects,
+              (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
     imu_hump_diag_finish(&diag_last, hump_epoch, drv_time_ms(),
         have_diag_last && have_hump_last &&
         diag_last.timestamp_ms == hump_last.timestamp_ms &&
