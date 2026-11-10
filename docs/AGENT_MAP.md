@@ -257,7 +257,8 @@ vehicle task described below.
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c)
   owns static stacks and high-water reports. The bench stack and slot exist
-  only with `APP_BENCH`; other task stack allocations are unchanged.
+  only with `APP_BENCH`. The MQTT idle-meter stack is now 768 B after
+  the approved margin correction; other task stack sizes are unchanged.
   [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
   and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
   separates this saving from minimum-bit packing.

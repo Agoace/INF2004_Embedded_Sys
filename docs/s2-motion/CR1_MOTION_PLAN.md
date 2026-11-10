@@ -3,7 +3,9 @@
 ## Status
 
 A1 observation packing is approved and implemented. Baseline:
-`cr1-baseline` (`168d705`). Software checks pass; hardware is Not run.
+`cr1-baseline` (`168d705`). Software checks pass. The A1/B1 hardware gate
+passed on 2026-11-10 with the pre-existing idle-stack margin note; its
+approved stack increase is not yet retested on hardware.
 See [the evidence record](../architecture/CR1_EVIDENCE.md).
 Merge current `mtk3-staging` before the module round. Approval and hardware
 acceptance are separate gates. Do not move to sonar before motion closes.
@@ -251,6 +253,8 @@ Before and after each approved motion substep:
    deadlines, stale/fault behavior, or loss of required motion precision.
    Agree a numerical work-time regression limit before the run.
 
-No flash or push is authorized. Hardware and final timing acceptance are
-**Not run**. A1 software validation is complete. Resolve the persistent
-state ownership/range questions before declaring motion complete.
+No helper flash or push is authorized. The A1/B1 hardware gate passed on
+2026-11-10 with the idle-stack note in the evidence record. The enlarged
+idle stack is not yet retested on hardware. Main reviews and merges this
+round; do not advance CR1 until instructed. Persistent controller changes
+and A2 remain future work, not part of this gate result.

@@ -104,13 +104,18 @@ not add its normal 128-byte allowance.
 
 | Reserve/use | Bytes | Meaning |
 | --- | ---: | --- |
-| Six original regions, including exclusive bench | 19456 | Reserved even when some tasks do not start |
-| IMU region, not BENCH | 2048 | Static reserve in robot/TEST, physical high-water pending |
-| MQTT extra health + idle meter | 2560 | 2048 +512 |
-| All registered regions in MQTT image | 24064 | Includes IMU and the inactive bench region |
-| Active normal robot, no MQTT | 17408 | Six task stacks, including IMU |
-| Active normal MQTT robot | 19968 | Six tasks + health + idle meter |
+| BENCH registered regions | 19456 | Bench present; IMU absent |
+| IMU region, not BENCH | 2048 | Robot/TEST only |
+| MQTT extra health + idle meter | 2816 | 2048 + 768 |
+| All registered regions in MQTT image | 20224 | No inactive bench reserve |
+| Active normal robot, no MQTT | 17408 | Six stacks, including IMU |
+| Active normal MQTT robot | 20224 | Six tasks + health + idle meter |
 | Low-margin threshold | 256 | Untouched bytes required per active application stack |
+
+The A1/B1 hardware gate on 2026-11-10 measured idle-meter use 296/512 B,
+leaving only 216 B. The approved safety correction increases that reserve
+to 768 B. The enlarged stack's target high-water is not yet measured.
+See [the gate record](../../testing/subsystem2/TEST_LOG.md).
 
 `app_task_stacks()` scans the fill pattern from the low end and keeps the
 largest observed use. TEST and GP20 print size, high-water use and remaining

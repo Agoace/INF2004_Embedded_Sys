@@ -85,7 +85,7 @@ int main(void) {
     expected_id = 13;
     assert(app_task_start((FP)entry, 31, 1u, "health_task") == 13);
     expected_priority = 32;
-    expected_size = 512;
+    expected_size = 768;
     expected_id = 14;
     assert(app_task_start((FP)entry, 32, 1u, "idle_meter") == 14);
     app_stack_t all[8];

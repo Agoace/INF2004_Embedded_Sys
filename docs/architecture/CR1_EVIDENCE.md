@@ -12,7 +12,9 @@ module change. Merge current staging into the helper branch first.
 The local course original was read. It is not part of this record or Git.
 The [motion plan](../s2-motion/CR1_MOTION_PLAN.md) records the approved
 A1 substep. Controller packing and derived-copy removal are not approved.
-Hardware correctness and timing for changed representations: **Not run**.
+A1/B1 hardware gate: **PASS 2026-11-10**, with the pre-existing idle-stack
+margin exception below. The later idle-stack increase is not yet retested
+on hardware. Main's review/merge and further CR1 work are still pending.
 
 ## Shared-access design rule
 
@@ -243,7 +245,8 @@ following order. Do not edit lecturer `lwipopts.h` or `sys_arch.h`.
 | Package | Candidate | Saving | Status |
 | --- | --- | --- | --- |
 | B1 | Omit non-BENCH stack/slot | 4112 B MQTT | Software passed |
-| B2 | Right-size measured task stacks | Not measured | Deferred |
+| B2 safety | Increase idle stack to 768 B | -256 B (cost) | Approved |
+| B2 remaining | Right-size other measured stacks | Not measured | Deferred |
 | B3 | Change run-log capacity/rate | Not approved | Deferred |
 | B4 | Keep immutable tables in flash | Not measured | Deferred |
 | B5 | Remove duplicate stored copies | Not measured | Deferred |
@@ -265,7 +268,8 @@ reduce a stack until the operator approves that task's coverage and size.
 
 Removing stored derived fields is recorded in B5, not as minimum-bit
 packing. The motion plan separates that saving from packing the retained
-board fields. B1 only is approved; B2..B5 remain deferred.
+board fields. B1 and the specific idle-stack safety increase are approved;
+other B2 work and B3..B5 remain deferred.
 
 ## B1: omit the inactive bench stack and slot
 
@@ -315,8 +319,63 @@ TEST) check slot lookup, duplicate start, stack size/alignment, high-water,
 missing BENCH/IMU/health names as appropriate, and all retained slots.
 The BENCH test checks its unchanged 4096 B stack. All nine profiles pass
 strict ARM warnings for app_task, motion and motion_pack. No template or
-private setting changed. Hardware and all-load stack/timing checks remain
-**Not run**; no image was flashed.
+private setting changed. At software validation, hardware was Not run;
+the later operator A1/B1 gate result is recorded above. All-load coverage
+beyond that result is still untested; the helper did not flash an image.
+
+## B2 safety correction: idle-meter stack margin
+
+Operator approved on 2026-11-10, after the A1/B1 hardware gate. Increase
+only `IDLE_STACK_WORDS` from 64 to 96: 512 -> 768 B. This is a RAM cost,
+not a packing saving or a general stack reduction. MQTT-only allocation
+is unchanged in scope; no other stack size or slot changes.
+
+Hardware at `d2d71a0` used 296/512 B, leaving 216 B, below the 256 B free
+policy. Staging `168d705` had 240 B free the same day: the policy shortfall
+predates CR1. Interrupt frames use the stack of the running task, and the
+lowest-priority idle meter runs about 55 percent of the time. A larger
+reserve is required even though the idle-meter loop itself is small.
+At the observed use, 768 B would leave 472 B. This is a calculation, not
+a measured high-water result for the enlarged stack.
+
+| MQTT measurement | B1 before | Idle correction | Delta |
+| --- | ---: | ---: | ---: |
+| text | 404764 | 404764 | 0 |
+| data | 888 | 888 | 0 |
+| bss | 185664 | 185920 | +256 |
+| **Static RAM** | **186552** | **186808** | **+256** |
+| Platform linked inputs | 20261 | 20517 | +256 |
+| Idle-meter stack | 512 | 768 | +256 |
+
+ARM public-example MQTT build and the map parser confirm the +256 B
+change. Net baseline-to-current static saving is now 3864 B:
+A1 8 B + B1 4112 B - idle safety reserve 256 B. All messages and motion
+representations are unchanged. Strict host suite: 176/176 pass, including
+the MQTT slot test updated to require 768 B. Clang ASan/UBSan also passes
+176/176 with leak checks and halt-on-UB. No hardware was flashed by the
+helper. Target high-water for the enlarged stack remains **Not run**.
+
+## A1/B1 hardware result: 2026-11-10
+
+Operator-supplied result: **PASS**, with the idle-stack margin exception
+and correction above. Tested code `mtk3-cr1 d2d71a0`: configured hotspot
+MQTT robot plus BENCH. MQTT lifted checks and short LINE were OK. Task
+gap was 9970..10025 us, lost wakes/overruns/lost telemetry all zero,
+line samples 62030 with zero missed; fault 4 was the deliberate ESTOP.
+Motion stack use was 488/3072 B, free 2584 B: +48 B against the earlier
+440 B, matching the compiler-local frame increase. IMU free was 552 B.
+All named stacks except idle_meter retained at least 256 B free.
+
+BENCH rest/forward150/reverse150/forward300 had correct speed signs:
+about +150/-150/+325 mm/s. GP21 stop latched fault `0x04`;
+`motion_bench` was present at 568/4096 B. Tick maximum was 241 us,
+gap 9980..10013 us, late/missed wakes zero and USB dropped zero.
+
+See [the hardware gate record](../../testing/subsystem2/TEST_LOG.md) for
+all named stack values, operator procedure and the local USB/MQTT log
+names. These results do not extend to untested detour, barcode, future A2
+or the enlarged idle stack. Main reviews/merges this motion round; no
+sonar planning or other CR1 advance is authorized yet.
 
 ## A1: compact motion observation board
 
@@ -391,9 +450,9 @@ Software evidence:
 | MQTT filtered | 404776 | 904 | 189760 |
 | MQTT DIAG | 405912 | 904 | 189872 |
 
-No image was flashed. Hardware work/gap timing, loaded MQTT/USB behavior,
-watchdog behavior and named stack high-water remain **Not run**. Host
-checks and smaller RAM are not evidence of acceptable target timing.
+The helper did not flash an image. The later operator hardware result is
+recorded above and is limited to its stated runs. Host checks and smaller
+RAM alone are not evidence of acceptable target timing.
 
 ## A2 planned: shared 16-bit modular encoder values
 
@@ -425,7 +484,7 @@ separately. A MQTT wire change requires a separate decision.
 
 | Module | RAM after | Message after | Software | Hardware/timing |
 | --- | --- | --- | --- | --- |
-| Motion A1 | 190664 B total | Board 64 B | Passed | Not run |
+| Motion A1 | 190664 B total | Board 64 B | Passed | PASS, idle note |
 | Sonar/obstacle | Pending | Pending | Not started | Not run |
 | IMU | Pending | Pending | Not started | Not run |
 | Telemetry/faults | Pending | Pending | Not started | Not run |

@@ -20,7 +20,7 @@
 #define TELEMETRY_STACK_WORDS 512
 #define BENCH_STACK_WORDS     512
 #define HEALTH_STACK_WORDS    256
-#define IDLE_STACK_WORDS      64
+#define IDLE_STACK_WORDS      96
 #define STACK_LOW_MARGIN      256u
 
 static uint64_t motion_stack[MOTION_STACK_WORDS];
