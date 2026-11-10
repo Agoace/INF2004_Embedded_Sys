@@ -52,6 +52,9 @@ static line_snapshot_t sensor;
 static lt_t lt;
 static jl_t junction_line;
 static uint8_t junction_reported;
+#if TM_MQTT
+static uint8_t junction_angles_reported;
+#endif
 static ls_t ls;
 static ss_t ss;
 static dr_t dr;
@@ -809,6 +812,26 @@ static watched_t watched[4];
 static void junction_observe(void)
 {
     const ja_t *action = &junction_line.action;
+#if TM_MQTT
+    if (action->phase == JA_PENDING && junction_reported != JA_PENDING) {
+        junction_angles_reported = 0u;
+    }
+    const uint8_t marks = action->result.marks;
+    const uint8_t command = action->result.command;
+    if ((marks & JA_MARK_FIRST) != 0u &&
+        (junction_angles_reported & JA_MARK_FIRST) == 0u) {
+        live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE,
+            (uint16_t)(int16_t)action->result.first_line_cdeg,
+            (uint8_t)(RM_JUNCTION_FIRST | command));
+    }
+    if ((marks & JA_MARK_ACCEPTED) != 0u &&
+        (junction_angles_reported & JA_MARK_ACCEPTED) == 0u) {
+        live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE,
+            (uint16_t)(int16_t)action->result.accepted_line_cdeg,
+            (uint8_t)(RM_JUNCTION_ACCEPTED | command));
+    }
+    junction_angles_reported = marks;
+#endif
     if (action->phase == junction_reported) {
         return;
     }
@@ -993,7 +1016,7 @@ static void run_once(void)
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
 #endif
-    ja_init(&junction_line.action, &JUNCTION_CFG, epoch);
+    ja_init(&junction_line.action, SEARCH_CFG.speed_mm_s, epoch);
     junction_reported = JA_IDLE;
     const uint32_t read_age_ms = JUNCTION_TEST_CMD != 0
         ? (drv_time_us() - initial_stamp) / 1000u : 0u;
@@ -1093,7 +1116,6 @@ static void run_once(void)
         junction_line.sample = (ja_sample_t){
             .line_stamp = sensor.timestamp_us,
             .line_age_ms = (drv_time_us() - sensor.timestamp_us) / 1000u,
-            .speed_mm_s = {s.speed_mm_s[0], s.speed_mm_s[1]},
             .valid = sensor.valid
         };
         if (vc_event_type(line_event) == VC_EVENT_LINE_LOST) {
@@ -1130,7 +1152,7 @@ static void run_once(void)
         junction_observe();
         __atomic_store_n(&line_run_epoch,
             vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE &&
-                    !ja_active(&junction_line.action)
+                    !ja_searching(&junction_line.action)
                 ? epoch : 0u, __ATOMIC_SEQ_CST);
         motion_diag_phase(MOTION_DIAG_RUN | ((uint32_t)vsm.running << 8u));
         if (vsm.state != state_before || vsm.running != module_before) {
@@ -1172,7 +1194,7 @@ static void run_once(void)
             } else {
                 if (vsm.fault == VSM_FAULT_FAILED &&
                     vsm.fault_detail > JA_FAIL_BASE &&
-                    vsm.fault_detail <= JA_FAIL_BASE + JA_SETTLE_LIMIT) {
+                    vsm.fault_detail <= JA_FAIL_BASE + JA_TOTAL_LIMIT) {
                     set_reason(RM_STOP_SHELL,
                         ja_reason_name((uint8_t)(vsm.fault_detail -
                                                   JA_FAIL_BASE)));
@@ -1235,7 +1257,7 @@ static void vehicle_task(INT code, void *ctx)
     (void)code;
     (void)ctx;
     lt_init(&lt, &LINE_CFG);
-    jl_init(&junction_line, &lt, &JUNCTION_CFG);
+    jl_init(&junction_line, &lt, SEARCH_CFG.speed_mm_s);
     ls_init(&ls, &SEARCH_CFG);
     ss_init(&ss, &SCAN_CFG);
     dr_init(&dr, &DETOUR_CFG);

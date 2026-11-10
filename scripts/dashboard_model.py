@@ -321,9 +321,15 @@ class DashboardModel:
                     and pending["opcode"] == opcode and now >= pending["sent"]):
                 pending["result"] = event
         elif kind == robot_wire.EVENT_JUNCTION and fields["version"] >= 2:
-            command = "ABCD"[(fields["word"] & 0xFF) - 1]
-            phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
-            event["text"] = (f"JUNCTION {command}: {phase}, reason {fields['detail']}")
+            if "junction_angle" in fields:
+                command = "ABCD"[fields["junction_command"] - 1]
+                angle = fields["junction_angle_cdeg"] / 100
+                event["text"] = (f"JUNCTION {command}: {fields['junction_angle']} line"
+                                 f" at {angle:.2f} deg")
+            else:
+                command = "ABCD"[(fields["word"] & 0xFF) - 1]
+                phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
+                event["text"] = (f"JUNCTION {command}: {phase}, reason {fields['detail']}")
         elif kind == robot_wire.EVENT_SCAN_RETRY:
             attempt = fields["word"] & 0xFF
             self.scan_retry = attempt

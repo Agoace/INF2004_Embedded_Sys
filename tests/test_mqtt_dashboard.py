@@ -1214,11 +1214,18 @@ class BatchTwoCFixtureTests(ModelCase):
 
     def test_c_junction_event(self):
         self.feed("event_junction")
-        self.assertIn("#20 JUNCTION B: approach", self.panel("events")["items"][0]["text"])
+        self.assertIn("#20 JUNCTION B: bar clear", self.panel("events")["items"][0]["text"])
         self.assertEqual(self.model.discarded, 0)
 
 
 class JunctionActionDashboardTests(ModelCase):
+    def test_line_angle_labels(self):
+        for name in ("first", "accepted"):
+            self.feed(f"event_junction_{name}")
+            self.assertIn(f"JUNCTION B: {name} line at -33.00 deg",
+                          self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
+
     def test_all_commands_and_terminal_reason(self):
         for number, command in enumerate("ABCD", 1):
             frame = bytearray(SAMPLES["event_junction"])

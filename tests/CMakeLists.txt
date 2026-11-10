@@ -253,6 +253,10 @@ foreach(command IN ITEMS A B C D)
     target_link_libraries(${test} PRIVATE m)
     add_test(NAME ${test} COMMAND ${test} junction)
 endforeach()
+foreach(command A B C D)
+    add_test(NAME test_vehicle_junction_${command}_estop
+        COMMAND test_vehicle_junction_${command} junctionstop)
+endforeach()
 add_test(NAME test_vehicle_junction_start_busy
     COMMAND test_vehicle_junction_A junctionbusy)
 add_test(NAME test_vehicle_junction_start_stale

@@ -755,10 +755,13 @@ class BatchTwoTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.samples = {}
+        cls.dash = {}
         for line in subprocess.check_output([sys.argv[1]], text=True).splitlines():
             topic, encoded = line.split()
             if topic in ("robot/state", "robot/heartbeat", "robot/event"):
                 cls.samples[topic] = bytes.fromhex(encoded)
+            if topic.startswith("dash/"):
+                cls.dash[topic.removeprefix("dash/")] = bytes.fromhex(encoded)
 
     def test_state_v3_fields_and_signs(self):
         frame = state_v3_frame(self.samples["robot/state"])
@@ -884,6 +887,25 @@ class BatchTwoTests(unittest.TestCase):
             changed[offset] = bad
             with self.assertRaises(ValueError):
                 wire.decode("robot/event", changed)
+
+    def test_junction_angle_variants(self):
+        for name in ("first", "accepted"):
+            result = wire.decode("robot/event", self.dash[f"event_junction_{name}"])
+            self.assertEqual((result["junction_angle"], result["junction_command"],
+                              result["junction_angle_cdeg"]), (name, 2, -3300))
+            self.assertLessEqual(result.keys(), set(wire.csv_fields()))
+        frame = bytearray(self.dash["event_junction_first"])
+        for tag in (0x40, 0x80):
+            for command, angle in ((1, 3300), (2, -3300), (4, 18000)):
+                frame[14] = tag | command
+                struct.pack_into("<h", frame, 12, angle)
+                self.assertEqual(wire.decode("robot/event", frame)["junction_angle_cdeg"], angle)
+        for command, angle in ((0, 0), (3, 0), (5, 0), (1, -1), (2, 1),
+                               (1, 15000), (2, -15000), (4, 27000), (4, -1)):
+            frame[14] = 0x80 | command
+            struct.pack_into("<h", frame, 12, angle)
+            with self.assertRaises(ValueError):
+                wire.decode("robot/event", frame)
 
     def test_legacy_reserved_junction_is_accepted_and_kind_8_is_not(self):
         frame = bytearray(b"\x01" + self.samples["robot/event"][1:16])

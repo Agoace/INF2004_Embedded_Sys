@@ -6,12 +6,6 @@
 #include "../subsystem3/line_search.h"
 #include "../subsystem5/servo_scan.h"
 #include "../subsystem5/detour_run.h"
-#include "junction_action.h"
-/* B2a-only geometry. Ruler verification remains J0, not a LINE retune. */
-static const ja_config_t JUNCTION_CFG = {
-    .axle_to_sensors_mm = JA_AXLE_TO_SENSORS_MM,
-    .cross_width_mm = JA_CROSS_WIDTH_MM
-};
 static const lt_config_t LINE_CFG = {
     .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
               .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},

@@ -106,8 +106,9 @@ See [H3 plan](../../testing/subsystem4/TEST_LOG.md#h3-two-image-comparison-plan)
 
 ### B2a fake junction images
 
-Use `JUNCTION_TEST_CMD=NONE|A|B|C|D`. A/B turn left/right90, C crosses
-straight, D turns LEFT180. The fake command is latched once at normal vehicle
+Use `JUNCTION_TEST_CMD=NONE|A|B|C|D`. A/B force SEARCH left/right to the
+first new arm; D skips the first LEFT arm and accepts the second. C follows
+normal LINE across, with only its detector suppressed for160 mm. The fake command is latched once at normal vehicle
 START; TEST/BENCH have no such START. NONE leaves LINE decisions unchanged.
 The option is included in the object-profile marker and passed to C as0..4.
 
@@ -120,12 +121,13 @@ done
 ```
 
 NONE retains the normal MQTT filename. The other images end in
-`_jtestA.uf2` through `_jtestD.uf2`. Boot prints a FAKE command/geometry label;
+`_jtestA.uf2` through `_jtestD.uf2`. Boot prints a FAKE command/forced-corner clearance label;
 a kind7 phase event and telemetry-owned `[JUNCTION]` USB line report the job.
 No barcode decoder or summary version is added. Use NONE for H3 IMU circuit
 comparisons. Read the [design](../architecture/JUNCTION_ACTION.md) and
 [validation/J0–J6 procedure](JUNCTION_VALIDATION.md) before an authorized test.
-Physical junction accuracy and false-positive rejection remain **Not run**.
+NONE crossed `+` on `eb18004` (operator-supplied J1 PASS). Redesigned
+command accuracy and pending-command barcode rejection remain **Not run**.
 
 ## Private settings
 

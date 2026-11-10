@@ -2,17 +2,19 @@
 
 ## B2a junction delta
 
-B2a adds **280 B static RAM** against matching public-config `168d705`
-single-core MQTT builds: data904 B + BSS190048 B =190952 B, versus190672 B.
-The LINE adapter is188 B, saved telemetry result48 B, source board28 B,
-source sequence/ACK/busy12 B and observed phase1 B, plus alignment. The
-telemetry message remains116 B, INFO108 B, MBF4096 B. No new task or stack.
+The forced-corner redesign adds **284 B static RAM** against matching public
+`168d705` single-core MQTT: data904+BSS190052=190956 B, versus190672 B.
+This is4 B above old B2a `eb18004` (280 B delta). LINE adapter184 B,
+saved result52 B, source board28 B, source sequence/ACK/busy12 B and observed
+phase/angle marks2 B plus alignment. Telemetry remains116 B, INFO108 B,
+MBF4096 B. No new task or stack.
 
-Vehicle compiler frame grows from880 B to NONE1000 B or fake-command992 B;
-telemetry remains360 B. New nested frames include observer144 B, pure action
-128 B, wrapper40 B and formatter96 B. IMU sample remains1000 B. These are
-not whole-stack bounds. New-image named stack checks must retain at least
-256 B free, including IMU; hardware J0–J6 are Not run. See the
+Vehicle compiler frame grows from880 B to992 B for all five MQTT images;
+telemetry remains360 B. Nested frames: observer152 B, pure action136 B,
+wrapper72 B, formatter104 B. IMU sample remains1000 B. These are not whole-
+stack bounds. New-image named stack checks must retain at least256 B free,
+including IMU; redesigned hardware gates are Not run. Old J1 NONE cross
+PASS does not establish new-image stack acceptance. See the
 [full measurements and procedure](JUNCTION_VALIDATION.md#ram-and-stack).
 
 ## What it is

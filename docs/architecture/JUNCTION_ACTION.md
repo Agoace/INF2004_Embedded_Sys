@@ -1,207 +1,191 @@
-# B2a — One command at the next junction
+# B2a — Forced corner at the next junction
 
 ## Scope and approval
 
-The operator approved this design through Main_Worker. B2a uses a fake
-build-time command. It does not decode a barcode. B2b source agreement is
-pending with the barcode owner; do not treat the draft below as that agreement.
+The operator approved this redesign on 2026-11-10 through Main_Worker.
+It replaces the blind bridge and axle-centred encoder turn in `eb18004`.
+B2a uses a fake START command, not a live barcode decoder. B2b agreement with
+the barcode owner is still pending. No barcode source file is changed.
 
 | Command | Action |
 | --- | --- |
-| NONE | No command. Run the unchanged LINE module. |
-| A | Move the axle to the cross centre; turn LEFT 90 degrees. |
-| B | Move the axle to the cross centre; turn RIGHT 90 degrees. |
-| C | Drive straight across; ignore side arms during the bridge. |
-| D | Move the axle to the cross centre; turn LEFT 180 degrees. |
+| NONE | Run unchanged LINE. No detector or action. |
+| A | Follow LINE past the bar; SEARCH LEFT; accept the first new line. |
+| B | Follow LINE past the bar; SEARCH RIGHT; accept the first new line. |
+| C | Follow LINE throughout; suppress only the junction detector for160 mm. |
+| D | SEARCH LEFT; skip the first new line; accept the second incoming stem. |
 
-A command is latched once at START, not on each LINE restart. It is consumed
-when the junction is confirmed. Failure never retries the consumed command.
-STOP cancels an unfinished command. START starts a new run and command.
+A command is latched once at START, not on LINE restart. Confirmation consumes
+it even if the job fails. Failure never retries it. STOP cancels unfinished
+work. A natural non-LINE handoff cancels an unconsumed pending command at once.
+A/B/D private SEARCH stays inside the LINE wrapper; it does not cancel itself.
 
 ## Ownership and entry points
 
-- `app_program/vehicle/junction_action.{h,c}` is the pure detector/action job.
-- `junction_line.{h,c}` wraps the original `lt_*` LINE module.
-- `junction_source.{h,c}` is the B2a fake producer and bounded source board.
-- `junction_print.c` prints a saved result in the telemetry task.
-- `vehicle_task.c` supplies coherent motion counts and fresh line data.
-- `tests/test_junction.c` tests the pure job and the no-command comparison.
-- `tests/test_vehicle_task.c` runs A/B/C/D through the real vehicle glue.
+- `app_program/vehicle/junction_action.{h,c}`: pure detector and job.
+- `junction_line.{h,c}`: adapter around unchanged `lt_*` and `ls_*`.
+- `junction_source.{h,c}`: fake START producer and bounded source board.
+- `junction_print.c`: telemetry-owned saved completion and GP20 DUMP.
+- `vehicle_task.c`: coherent counts, fresh line input and live events.
+- `tests/test_junction.c`: detector, job, safety and LINE comparison fixtures.
+- `tests/test_vehicle_task.c`: real task glue with service/motion doubles.
 
-No global module number is added. The shell remains in LINE during an action;
-KR1 module 5 still means SCAN reverse. The adapter delegates unchanged LINE
-start/step calls when no action owns the wheels. LINE position, trace, steering,
-SEARCH, SCAN and DETOUR source/settings are not changed. The original LINE
-obstacle/lost-line outcomes win before a junction is claimed. Detection is
-suspended outside LINE; an unconsumed command can remain pending across those
-routes. B2a does **not** establish the correct command policy across a detour
-that passes an intersection. B2b must settle that policy before such a trial.
-
-Only the vehicle glue calls motion APIs. The action returns wheel-speed values
-and never accesses PWM, GPIO or interrupts. There is no new task, wait or
-allocation. Existing motion faults, ESTOP, deadline and sensor/service checks
-remain authoritative. A claimed action stops on obstacle or sonar failure;
-it cannot start a detour in the middle of a turn.
-
-The LINE-only IMU diagnostic epoch is zero while the action owns the wheels.
-This excludes intentional junction spins from the LINE-only motion maxima;
-it changes no IMU detector or motor decision.
+There is no new module ID. KR1 module5 still means SCAN reverse. LINE,
+SEARCH, SCAN and DETOUR files/settings are unchanged. Only vehicle glue
+commands motion; no job waits, tasks, allocation, PWM, GPIO or IRQ changes.
+Before claim, normal LINE outcomes and routes win. During a claimed job,
+line loss during LINE travel, obstacle, sensor fault or deadline causes an
+explicit stop, not a detour or blind fallback. Existing ESTOP and motion
+faults remain authoritative. The LINE-only IMU diagnostic epoch is excluded
+only during private SEARCH; normal LINE travel in C/bar clearance remains
+LINE. IMU still cannot command navigation or motors.
 
 ## Draft B2b source contract
 
-The action consumer does one bounded board read each vehicle tick. A failed
-read leaves its output unchanged. It never waits for the producer. B2a's sole
-writer is the vehicle task at START. Its coherent read counts/time come from
-a bounded motion-board read, at most10 ms old; a busy/stale read aborts START
-without waiting. A live backend must replace that producer,
-not write concurrently with it. `junction_source_start()` is a fake-backend
-entry point, **not** a safe multi-producer live publication API.
+`ja_command_t` remains a24-byte value, not a wire packet:
 
-`ja_command_t` is a 24-byte value, not a wire packet:
-
-| Offset | C member | Meaning |
+| Offset | Member | Meaning |
 | --- | --- | --- |
-| 0 | `uint32_t epoch` | Current odd run epoch. Other runs are rejected. |
-| 4 | `uint32_t sequence` | Nonzero producer sequence; wrap skips zero. |
-| 8 | `uint32_t read_ms` | Time of the coherent observation at the read. |
-| 12 | `int32_t read_counts[2]` | LEFT/RIGHT counts from that same observation. |
-| 20 | `uint8_t command` | 1 A, 2 B, 3 C, 4 D; 0 NONE is not a pending job. |
-| 21 | `uint8_t valid` | Exactly 1 for a command. |
-| 22 | `uint8_t source` | 1 fake; 2 reserved for the later live barcode source. |
-| 23 | `uint8_t reserved` | Must be zero. |
+| 0 | `uint32_t epoch` | Current odd run epoch. |
+| 4 | `uint32_t sequence` | Nonzero producer sequence; skip zero at wrap. |
+| 8 | `uint32_t read_ms` | Coherent observation time. |
+| 12 | `int32_t read_counts[2]` | Coherent LEFT/RIGHT encoder counts. |
+| 20 | `uint8_t command` | A/B/C/D =1/2/3/4. |
+| 21 | `uint8_t valid` | Exactly1. |
+| 22 | `uint8_t source` | Fake1; future live barcode2. |
+| 23 | `uint8_t reserved` | Zero. |
 
-Both counts are kept instead of an absolute mean: one wheel can wrap while the
-other does not. Compute short travel from modular per-wheel differences, then
-average. Use a single coherent motion observation; do not invent travel from
-nominal speed. `read_ms` and counts are source evidence, not permission to
-execute a junction that was already partly observed when the command arrived.
-The consumer needs a new clear forward baseline, then a new black edge.
+The consumer performs one bounded read per tick. A failed read leaves its
+output unchanged; it never waits. B2a's sole writer is vehicle START, using a
+bounded motion-board read at most10 ms old. A busy/stale START read fails
+without waiting or starting a run. A live backend must replace that producer,
+not write concurrently. `junction_source_start()` is not a multi-producer API.
 
-The consumer rejects an invalid command, other epoch, consumed/old sequence,
-replacement while a command is pending, or a command during an active action.
-It exposes `junction_source_acknowledged()` and `junction_source_busy()`.
-The consumer sets busy before publishing a consumed-sequence acknowledgement;
-an active action is still busy after its source record is consumed. A live
-producer must check busy again after reading ACK, without waiting, and must
-also reject an unacknowledged slot. The real producer must honour
-both slot occupancy and action-busy state, report a rejected/lost replacement,
-and have one writer with a defined START/STOP handshake. It must not overwrite
-an unacknowledged earlier command or repeatedly publish a decoded barcode.
-A sequence gap must remain less than half the 32-bit range. Source age, delayed
-publication and the detour policy still need B2b agreement. No live decoder,
-producer concurrency protocol or barcode file is implemented here.
+Keep both counts: average short modular per-wheel differences, not absolute
+wrapped counters. Read time/counts are evidence, not permission to execute an
+already occupied cross. Each new command still needs a clear forward baseline.
+Invalid commands, wrong runs, consumed/old sequences and replacement during
+pending/active work are rejected. Sequence gaps must be less than half the
+32-bit range. STOP/new START cancels the old job.
+
+The consumer exposes busy and consumed-sequence ACK. Set busy BEFORE ACK;
+a claimed action remains busy after consumption. A live producer must check
+busy again after reading ACK and reject an unacknowledged occupied slot. It
+must have one writer and a defined START/STOP handshake, reject/report lost
+replacement, and not republish the same decoded barcode repeatedly. Source
+age, delayed publication and concurrency still require B2b agreement. The
+consumer's natural non-LINE cancellation policy is now fixed by this redesign;
+it does not supply the missing live-source handshake or summary integration.
 
 ## Junction detection
 
-The detector is armed only by a pending command in LINE. It requires valid,
-calibrated, fresh input and forward encoder travel. A stationary, reverse or
-duplicate observation cannot accumulate distance. A new command or LINE entry
-needs 6 mm of clear forward line before it can recognise a new cross.
+Detection is unchanged: pending command, active LINE, calibrated fresh samples,
+forward encoder motion, existing pair junction bit AND both channels>=700,
+continuously for6 mm (about75 mean counts). A new command needs6 mm clear
+forward baseline before a new black edge. A threshold ramp to the pair's
+1250-sum junction flag does not erase an already clear approach. Noise,
+nonqualifying, stationary, reverse or duplicate samples cannot accumulate a
+candidate. Save the first qualified edge; confirmation latency is not added.
 
-A candidate requires the existing pair junction bit **and** both normalized
-channels at least 700/1000 continuously for **6 mm**, about 75 mean counts.
-Any nonqualifying observation resets the candidate. The first qualifying
-observation records the edge count; confirmation does not move that origin.
-At the retained 146 mm/s LINE setting, 6 mm is about 41 ms. It rejects isolated
-flashes but fits within an 18 mm stroke, with a nominal 12 mm margin. Sampling,
-optical threshold position and steering still require physical checks.
+The measured pair spacing is14.5 mm, height about9 mm. Inferred21 mm optical
+spacing is not a physical measurement. Barcode white gap20 mm gives only
+5.5 mm ideal point-sensor margin; yaw, footprint and drift defeat that model.
+The141 mm barcode length is not an exclusion rule. A wide bar can pass N=6.
+A pending-command barcode-only hardware pass is mandatory; synthetic fixtures
+are not proof of physical rejection.
 
-Measured line-sensor spacing is 14.5 mm, at about 9 mm above the floor. An
-inferred optical spacing of about 21 mm is not a replacement measurement.
-The barcode's 20 mm white edge gap exceeds the measured point separation by
-5.5 mm. Ideal point sensors therefore cannot sit on barcode ink and main-line
-ink across that gap at the same time. Wide optical spots, yaw, drift onto the
-barcode or a wide bar can still violate that simple model. The 141 mm barcode
-length is **not** a safe time/travel exclusion rule. N alone does not reject a
-wide black bar. A barcode-only pass with a pending command is mandatory; the
-host noise fixtures are not that hardware proof.
-
-## Action phases and bounds
-
-Geometry defaults are parameters in `junction_action.h`, used by both boot
-labels and `JUNCTION_CFG`. Axle-to-front-sensor distance is **123 mm**, derived
-from uncertain earlier offsets; the operator estimated about 120 mm. Verify
-with a ruler in J0. With an 18 mm cross, the axle target is 123+9 = **132 mm**
-from the first qualified edge, about 1639 counts. Neither the 6 mm confirmation
-nor its latency is added again. Optical edge position and braking can shift
-the pivot; the formula is not a measured calibration.
+## Phases and bounds
 
 ```text
-pending -> new cross -> approach -> settle -> 90/180 turn -> settle
-                                                      -> reacquire -> LINE
-                   C -> straight bridge -------------------------> LINE
-Any action fault -> zero command -> existing shell FAULT/STOP
+pending -> confirmed C -> normal LINE for160 mm -> done
+        -> confirmed A/B/D -> LINE past bar -> private SEARCH
+          A/B: white -> first new line -> LINE + done
+          D:   white -> skip first -> white -> second -> LINE + done
+fault -> explicit zero command -> existing shell FAULT/STOP
 ```
 
-| Leg | Initial setting | Failure bound |
-| --- | --- | --- |
-| Approach | Equal 100 mm/s; 62 mm/s in last 20 mm | 3 s; target+30 mm; reverse >2 mm; wheel difference >12 mm |
-| C bridge | Equal 100 mm/s; suppress junctions for 160 mm from edge | 3 s; exit+30 mm; fresh stable outgoing line required |
-| Settle | Zero speed; both measured speeds at most 20 mm/s for 100 ms | 500 ms |
-| Turn | Opposite 80 mm/s; 62 mm/s in last 15 degrees | 4 s for 90; 6 s for 180; target+20 degrees; mean translation >15 mm |
-| Reacquire | Fresh centred, nonjunction LINE evidence for 30 ms; otherwise bounded pure SEARCH | 3 s; hard nominal +/-15 degrees; mean translation >15 mm |
-| Moving wheel | Progress in its commanded direction | 500 ms without progress, per wheel |
-| Whole job | Tick-driven, including settle/search | 10 s for A/B/C; 12 s for D |
+Bar clearance requires33 mm from the saved edge AND two fresh consecutive
+nonjunction/not-both-black observations.33 rounds up18 mm stroke plus14.5 mm
+spacing as an initial clearance allowance for skew/optical exit. The spacing
+is lateral, not a measured longitudinal offset; this sum is a starting safety
+allowance, not an exact projection for arbitrary yaw. Verify the actual exit
+on hardware. Approximate123 mm sensor radius then leaves the axle roughly
+100 mm behind centre, with side-arm contact roughly30–40 degrees. Neither
+that geometry nor the contact estimate is used as a turn endpoint.
 
-The whole-job cap can end a job before all individual worst-case leg budgets
-expire. Stale input also stops a job; vehicle's existing 10 ms line-age check
-is stricter than the pure job's 50 ms guard. Bounds are starting values, not
-hardware acceptance. C's 160 mm exit is 132 mm to axle centre plus 28 mm; a
-new command still needs a clear baseline. Closely spaced crosses need separate
-course validation; do not shorten suppression without evidence.
+Continue the original LINE controller on every bar-clear/C tick; never force
+equal wheel speeds. C completes only after160 mm from first edge, fresh line
+level evidence and uninterrupted LINE operation. Only its detector is disarmed.
+No extra junction hold is added: J1 showed the existing LINE can cross `+`.
+Pair mode does not use the old three-sensor junction-hold implementation.
 
-The differential scale is **24.05 (right-left) counts/degree**, not per wheel.
-90 degrees needs about 2165 differential counts, 180 needs 4329. An ideal
-in-place spin moves each wheel about 1082 or 2165 counts. LEFT is positive.
-The 111 mm track and 12414 counts/m are unchanged. Slip remains unmeasured.
+Private SEARCH uses unchanged `ls_*` at `SEARCH_CFG.speed_mm_s`=131 mm/s.
+Reject all old/global FOUND events. Require both normalized channels<300 for
+20 ms of fresh observations, then a later fresh channel>=500. These are local
+qualified FOUND events for `ls_*`; do not edit global line state. A/B accept
+the first such line. D records/skips it, requires a new white interval, then
+accepts the second only at>=120 degrees. An earlier apparent second line
+fails rather than being mistaken for the incoming stem. Resume LINE at once;
+no settle, taper, centring pass, axle approach or requested-angle endpoint.
+DONE marks line handoff, NOT final physical arm alignment.
 
-Old LINE_FOUND events during the spin cannot finish the turn. The nominal
-encoder angle must be reached and settled first. Reacquisition uses fresh
-nonjunction LINE level evidence, not only an event edge: existing SEEN/CENTRED
-plus both normalized readings at least300. The extra level check rejects weak
-floor that can retain CENTRED during the LOST grace period. If lost, the unchanged
-pure `ls_*` helper sweeps around the **requested** heading with virtual bounded
-counts. This avoids its legacy signed subtraction on absolute wrapped counts.
-The commanded extent is +/-12 degrees, inside a hard +/-15 degree cap; 3 degrees
-is reserved for reversal/coast. A failed reacquisition stops, not a wider SEARCH
-or blind LINE resume. A centred weak pair after LOST may need the bounded sweep
-to produce the normal 50% FOUND evidence before it can be accepted.
+| Guard | Bound |
+| --- | --- |
+| Bar exit |70 mm maximum from edge;1.5 s after confirmation |
+| C exit |160 mm minimum;3 s after confirmation; no line loss |
+| A/B SEARCH | Stop at150 degrees or4 s without a qualifying line |
+| D SEARCH | Second line>=120; stop at270 degrees or6 s |
+| Private helper extent |160/280 degrees, beyond the hard limit; never reverse sweep |
+| Whole A/B/C job |6 s after confirmation |
+| Whole D job |8 s after confirmation |
+| Spin wheel stall |500 ms without progress in commanded direction, per wheel |
+| Spin direction/translation | Wrong direction beyond3 degrees; mean translation>15 mm |
+| Sample age | Pure guard50 ms; vehicle10 ms check remains stricter |
+
+Whole-job caps can preempt leg budgets. All time differences are unsigned;
+counts use short signed modular deltas and64-bit intermediate arithmetic.
+The unchanged scale24.05 differential counts/degree is used ONLY for safety
+windows and measured reports, not as a turn target. LEFT angle is positive;
+RIGHT negative. Pass small relative virtual counts to `ls_*`, never absolute
+wrapped counts. Its extent lies beyond our stop window so its ordinary
+opposite-direction sweep is unreachable. Safety bounds are not accuracy proof.
 
 ## Reports and failures
 
-Event kind **7** is live-only, existing event v2 size 20 bytes. From/to are
-both LINE=1. Word low byte is command 1..4; high byte is phase:
+Kind7 remains live-only event v2,20 bytes, from/to LINE=1. Phase packets keep
+word low byte command1..4, high byte phase; detail reason0..12:
 
-| Phase | Name |
+| Phase | Current meaning |
 | --- | --- |
-| 1 | pending |
-| 2 | confirmed junction / approach |
-| 3 | approach settle |
-| 4 | turn |
-| 5 | turn settle |
-| 6 | reacquire |
-| 7 | done |
-| 8 | failed |
-| 9 | unused at STOP |
-| 10 | C straight bridge |
+|1 | pending |
+|2 | LINE to bar clearance |
+|3/5 | Legacy settle phases; decoded but never emitted now |
+|4 | SEARCH first new line |
+|6 | D skipped first; SEARCH second new line |
+|7 | done / LINE handoff |
+|8 | failed |
+|9 | unused/cancelled before confirmation, including natural non-LINE handoff |
+|10 | C normal LINE with detector suppressed |
 
-Detail is reason: 0 OK, 1 cancelled, 2 stale, 3 stall, 4 approach limit,
-5 turn limit, 6 no outgoing line, 7 obstacle, 8 sonar fault, 9 reverse,
-10 wheel imbalance, 11 whole-job limit, 12 settle limit. A job failure returns
-`VSM_OUT_FAILED` with payload `0xb20 + reason`. The existing shell stop reason
-and fault detail carry it; no summary version or byte is added. The dashboard
-names the action phase. Legacy event-v1 reserved kind7 records remain readable.
-The wire event has no fake/live source field: preserve the boot/source label.
+Two new angle variants preserve the same event size: detail=`0x80|command`
+for first line, `0x40|command` for accepted line. Word is signed16-bit
+centidegrees. A/B emit both; D emits first at skip and accepted at second;
+C emits neither. Angle events precede their phase event and do not enter
+RAM logs/summary. Queue loss can remove any live event. Keep USB and revision
+identity too. Old `eb18004` phase2 meant blind approach,4 encoder turn,
+6 reacquisition,10 blind bridge; retain tested revision when reading history.
+Legacy v1 reserved kind7 remains readable. No version/summary change.
 
-A 48-byte result is copied non-blocking to the telemetry task, which prints
-one `[JUNCTION]` line after completion/cancellation and repeats it on GP20 DUMP.
-It contains source, command, epoch/sequence, phase/reason, edge/centre/final
-counts, final turn in centidegrees and job time. Centre counts for C are the
-observed passage of the axle target, not a stopped pivot. `marks` bits 0/1/2
-identify valid edge/centre/final counts; a zero count can itself be valid. This does not grow
-the telemetry message size, KR1 row, INFO structure or summary. Live event and
-USB queue loss remain non-critical; a full queue can lose a result. BEGIN
-clears the telemetry-owned saved result. B2b owns the later summary integration.
+Reasons:0 OK,1 cancel,2 stale,3 stall,4 travel/exit limit,5 search window,
+6 missing/early line,7 obstacle,8 sonar fault,9 reverse,10 wheel imbalance,
+11 whole-job limit,12 legacy settle only. Failure uses `0xb20+reason` and the
+existing shell fault path. No source identity is added to live packets.
 
-See [validation and J0–J6 procedure](../kernel/JUNCTION_VALIDATION.md) for
-build commands, software evidence, resource measurements and physical gates.
+The52-byte result includes source, run/sequence, phase/reason, edge/search/
+final counts, first/accepted angles and elapsed time. Marks bits0/1/2 validate
+the count groups; bits3/4 validate first/accepted angles (zero can be valid).
+Telemetry prints it once and repeats on GP20 DUMP. BEGIN clears the saved
+result. Nonblocking queue failure can lose the saved result. Message116 B,
+INFO108 B, KR1 and summaryv3 stay unchanged. B2b owns later barcode summary work.
+
+See [validation and J0–J6](../kernel/JUNCTION_VALIDATION.md).

@@ -11,7 +11,7 @@ typedef struct {
     ja_sample_t sample;
 } jl_t;
 
-void jl_init(jl_t *line, lt_t *original, const ja_config_t *config);
+void jl_init(jl_t *line, lt_t *original, int16_t search_speed_mm_s);
 void jl_start(void *ctx, uint16_t payload, uint32_t now_ms);
 vsm_outcome_t jl_step(void *ctx, const vsm_inputs_t *in, uint32_t now_ms,
                        vsm_drive_t *drive);

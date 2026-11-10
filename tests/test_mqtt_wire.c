@@ -274,7 +274,7 @@ static void test_detour_summary(void)
     beat.cpu_load_permille = 0x0123u;
     rm_pack_heartbeat(heartbeat_bytes, &beat);
     emit_named("heartbeat_v2", heartbeat_bytes, RM_HEARTBEAT_SIZE);
-    /* Live event 7: B/right, confirmed junction -> approach. */
+    /* Live event7: B/right, confirmed junction -> LINE bar clearance. */
     const rm_event_t junction = {.kind = RM_EVENT_JUNCTION, .from = 1u,
         .to = 1u, .sequence = 20u, .uptime_ms = 12000u,
         .word = 0x0202u, .detail = 0u};
@@ -282,6 +282,14 @@ static void test_detour_summary(void)
     rm_pack_event(event_bytes, &junction);
     assert(event_bytes[1] == 7u);
     emit_named("event_junction", event_bytes, RM_EVENT_SIZE);
+    rm_event_t angle = junction;
+    angle.word = (uint16_t)(int16_t)-3300;
+    angle.detail = RM_JUNCTION_FIRST | 2u;
+    rm_pack_event(event_bytes, &angle);
+    emit_named("event_junction_first", event_bytes, RM_EVENT_SIZE);
+    angle.detail = RM_JUNCTION_ACCEPTED | 2u;
+    rm_pack_event(event_bytes, &angle);
+    emit_named("event_junction_accepted", event_bytes, RM_EVENT_SIZE);
     /* Kind 9 HUMP: 10.8 mm, event 3, RIGHT; then 25.0 mm, event 4, LEFT. */
     rm_event_t hump = {.kind = RM_EVENT_HUMP, .sequence = 21u,
         .uptime_ms = 13000u, .word = 108u, .detail = 3u};

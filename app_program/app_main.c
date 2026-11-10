@@ -64,10 +64,11 @@ EXPORT INT usermain(void)
 #endif
 
 #if !APP_BENCH && !APP_TEST
-    tm_printf((UB *)"[JUNCTION] source FAKE cmd %s axle_mm %u "
-                    "cross_mm %u N_mm %u black_min %u D LEFT180\n",
-              JUNCTION_TEST_CMD_NAME, JA_AXLE_TO_SENSORS_MM,
-              JA_CROSS_WIDTH_MM, JA_CONFIRM_MM, JA_BLACK_MIN);
+    tm_printf((UB *)"[JUNCTION] source FAKE cmd %s forced_corner "
+                    "bar_clear_mm %u N_mm %u black_min %u "
+                    "D skip_first_left\n",
+              JUNCTION_TEST_CMD_NAME, JA_BAR_CLEAR_MM, JA_CONFIRM_MM,
+              JA_BLACK_MIN);
 #endif
 #if !APP_BENCH
     tm_printf((UB *)"[S4] hump_source %u %s\n",

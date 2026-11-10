@@ -212,8 +212,15 @@ commands, and full command queues increment `command_lost` without a vehicle
 event. Valid ESTOP requests are accepted in every state; repeated requests
 can coalesce when the dedicated ESTOP queue is already full.
 For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
-(A/B/C/D); high byte is phase1..10. Detail is reason0..12. It is live-only,
-never stored in the RAM event log. The [junction design](../architecture/JUNCTION_ACTION.md#reports-and-failures)
+(A/B/C/D); high byte is phase1..10. Detail is reason0..12. Two angle
+variants instead use detail=`0x80|command` (first line) or `0x40|command`
+(accepted line), with word signed16-bit centidegrees, LEFT positive.
+A/B emit both; D first is the skipped arm and accepted is the second;
+C emits neither. Recorder CSV adds `junction_angle`, `junction_command` and
+`junction_angle_cdeg` columns; raw word/detail remain available. All variants
+are live-only, never stored in the RAM event log.
+Keep the tested revision: the forced-corner redesign reuses phase2/4/6/10
+with new meanings; old `eb18004` packets had blind-travel/encoder-turn phases. The [junction design](../architecture/JUNCTION_ACTION.md#reports-and-failures)
 lists phases and reasons. Event-v1 reserved kind7 stays readable as legacy
 input. No source identity is carried here: retain the boot/USB FAKE label.
 B2a changes no summary layout; later barcode integration owns summaryv4.
