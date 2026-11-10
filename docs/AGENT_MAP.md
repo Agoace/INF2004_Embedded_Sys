@@ -255,7 +255,12 @@ vehicle task described below.
 
 ## Application task stacks
 
-- [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
+- [`app_program/platform/app_task.c`](../app_program/platform/app_task.c)
+  owns static stacks and high-water reports. The bench stack and slot exist
+  only with `APP_BENCH`; other task stack allocations are unchanged.
+  [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
+  and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
+  separates this saving from minimum-bit packing.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.

@@ -3,7 +3,8 @@
 ## Status and scope
 
 Baseline: tag `cr1-baseline`, commit `168d705`. A1 implements compact
-motion observation storage; its software checks pass. Module order:
+motion observation storage; B1 removes the inactive bench stack/slot.
+Their software checks pass. Module order:
 motion, sonar/obstacle, IMU, telemetry/MQTT and shared faults, then
 line/barcode and vehicle. Obtain approval before each
 module change. Merge current staging into the helper branch first.
@@ -241,21 +242,18 @@ following order. Do not edit lecturer `lwipopts.h` or `sys_arch.h`.
 
 | Package | Candidate | Saving | Status |
 | --- | --- | --- | --- |
-| B1 | Do not reserve bench stack in non-BENCH | About 4096 B | Proposed |
+| B1 | Omit non-BENCH stack/slot | 4112 B MQTT | Software passed |
 | B2 | Right-size measured task stacks | Not measured | Deferred |
 | B3 | Change run-log capacity/rate | Not approved | Deferred |
 | B4 | Keep immutable tables in flash | Not measured | Deferred |
 | B5 | Remove duplicate stored copies | Not measured | Deferred |
 
-B1 proposal: put both `bench_stack` and its `slots[]` entry under
-`#if APP_BENCH`, leaving the other slot names and task-start lookup
-unchanged. BENCH keeps the same 4096 B allocation and name. Non-BENCH
-`app_task_start(..., "motion_bench")` returns `E_PAR`, not a pointer to
-another stack. Test robot, TEST, MQTT and BENCH compilation, plus explicit
-slot lookup tests for both conditional configurations. Measure the linked
-delta: removing the slot may also remove metadata/string bytes, so 4096 B
-is not necessarily the complete image difference. Do not implement B1
-inside a motion A commit.
+B1 is approved and implemented in a separate commit after A1. Both
+`bench_stack` and its `slots[]` entry are under `#if APP_BENCH`. Other
+slot names and task-start lookup are unchanged. BENCH keeps the same
+4096 B allocation and name. Non-BENCH
+`app_task_start(..., "motion_bench")` returns `E_PAR`, not another stack.
+See the B1 measurements below.
 
 B2 proposed margin: round each allocation up to 8 B after adding
 `max(256 B, ceil(worst_observed_use / 4))` to the worst measured use.
@@ -267,7 +265,58 @@ reduce a stack until the operator approves that task's coverage and size.
 
 Removing stored derived fields is recorded in B5, not as minimum-bit
 packing. The motion plan separates that saving from packing the retained
-board fields. No B package is authorized by this record.
+board fields. B1 only is approved; B2..B5 remain deferred.
+
+## B1: omit the inactive bench stack and slot
+
+Baseline for this package: A1 (`08319f1`), not `cr1-baseline`. The only
+firmware change is conditional stack and slot allocation in
+`app_program/platform/app_task.c`. No remaining stack is resized.
+
+| MQTT measurement | A1 before | B1 after | Delta |
+| --- | ---: | ---: | ---: |
+| text | 404780 | 404764 | -16 |
+| data | 904 | 888 | -16 |
+| bss | 189760 | 185664 | -4096 |
+| **Static RAM** | **190664** | **186552** | **-4112** |
+| Platform linked inputs | 24377 | 20261 | -4116 |
+| bench_stack | 4096 | 0 | -4096 |
+| S2 linked inputs | 281 | 281 | 0 |
+| Motion board | 64 | 64 | 0 |
+| All messages and MQTT payloads | A1 sizes | Unchanged | 0 |
+
+The deleted slot is 20 B. Removing stack plus slot saves 4116 input bytes;
+link alignment increases by 4 B (155 -> 159), so net MQTT static saving is
+4112 B. Do not claim 4116 B as the linked MQTT total, or combine the A1
+8 B saving with B1. Net baseline-to-current saving is 4120 B: A1 8 plus
+B1 4112. Main RAM not statically reserved is now 75592 B, before dynamic
+kernel allocations.
+
+| B1 profile | text | data | bss | Static delta vs A1 |
+| --- | ---: | ---: | ---: | ---: |
+| Default | 340164 | 736 | 127644 | -4120 |
+| Robot | 93292 | 672 | 121108 | -4112 |
+| BENCH | 42370 | 148 | 95452 | 0 |
+| MQTT | 404764 | 888 | 185664 | -4112 |
+| TEST | 85556 | 672 | 120228 | -4112 |
+| MQTT-TEST | 392900 | 888 | 184388 | -4112 |
+| IMU_STREAM | 83780 | 672 | 128060 | -4112 |
+| MQTT filtered | 404760 | 888 | 185664 | -4112 |
+| MQTT DIAG | 405896 | 888 | 185776 | -4112 |
+
+All nine firmware profiles build with zero warnings. The map confirms
+4096 B `bench_stack` only in BENCH and no such allocation in the other
+eight profiles. BENCH text/data/bss exactly match A1. ARM `sizeof` output
+for every listed message and board exactly matches A1.
+
+Strict host suite: 176/176 pass. Clang ASan/UBSan with leak checks and
+halt-on-UB: 176/176 pass. Four app-task variants (normal, BENCH, MQTT,
+TEST) check slot lookup, duplicate start, stack size/alignment, high-water,
+missing BENCH/IMU/health names as appropriate, and all retained slots.
+The BENCH test checks its unchanged 4096 B stack. All nine profiles pass
+strict ARM warnings for app_task, motion and motion_pack. No template or
+private setting changed. Hardware and all-load stack/timing checks remain
+**Not run**; no image was flashed.
 
 ## A1: compact motion observation board
 

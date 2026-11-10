@@ -305,7 +305,8 @@ The barcode work is not started. The ideas for it are in
 [CR1 evidence](docs/architecture/CR1_EVIDENCE.md) records baseline RAM,
 board/queue and binary MQTT sizes. The
 [motion plan](docs/s2-motion/CR1_MOTION_PLAN.md) records approved motion
-board packing (8 B saved). Software checks pass; hardware is Not run.
+board packing (8 B saved). A separate change removes the inactive bench
+stack/slot (4112 B saved in MQTT). Software checks pass; hardware is Not run.
 Changes proceed one module at a time; sizes are not hardware acceptance.
 
 ## Local template changes

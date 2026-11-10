@@ -31,9 +31,10 @@ These are linked map input sizes, excluding alignment and platform stacks.
 | **S2 total** | **289** |
 
 The platform also reserves a 3072 B motion stack. Do not reduce it.
-The 4096 B inactive bench stack belongs to platform, not S2, and is outside
-this change. `mc_config_t` is 58 B: its static constant is in flash, but
-`mc_t` also holds a RAM copy. Each `mc_wheel_t` is 36 B. Hardware output
+At baseline, the inactive 4096 B bench stack belongs to platform, not S2.
+The separate approved B1 commit omits it and its slot in non-BENCH builds;
+it is not counted in A1. `mc_config_t` is 58 B: its static constant is in
+flash, but `mc_t` also holds a RAM copy. Each `mc_wheel_t` is 36 B. Hardware output
 `mc_output_t` is a 6 B transient. Public `motion_status_t` is 64 B; the
 board adds time (4 B) and sequence (4 B), for 72 B.
 
