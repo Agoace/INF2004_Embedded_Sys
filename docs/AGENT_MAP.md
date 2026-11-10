@@ -214,6 +214,12 @@ vehicle task described below.
   observe GP28 during the existing spin, with fallback 320/240.
   No live decoder or actions are added.
 
+- [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md):
+  [`barcode_live_source.h`](../app_program/subsystem3/barcode_live_source.h)
+  and [`barcode_live_source.c`](../app_program/subsystem3/barcode_live_source.c)
+  define the 40 B record and 20 B control, coherent getters and board ownership;
+  no decoder feeding or actions are enabled by this interface step.
+
 ## TEST-only barcode B1c
 
 - [`barcode.c`](../app_program/subsystem3/barcode.c) and

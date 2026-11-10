@@ -1,3 +1,10 @@
+host_test(test_barcode_live_source tests/test_barcode_live_source.c
+    app_program/subsystem3/barcode_live_source.c)
+target_include_directories(test_barcode_live_source BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_live_source PRIVATE
+    BC_LIVE_SOURCE_HOST_TEST=1)
+
 host_test(test_barcode tests/test_barcode.c
     app_program/subsystem3/barcode.c)
 target_link_libraries(test_barcode PRIVATE m)
