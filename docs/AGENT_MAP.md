@@ -68,6 +68,18 @@ The archived development record retains older CMake bench examples.
 | Week 6 design-review diagrams | [`design-review/`](../design-review) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) |
 
+## CR1 measurement and planning
+
+- [CR1 evidence](architecture/CR1_EVIDENCE.md) records the `168d705`
+  baseline, ARM message sizes and the single-writer publication rule.
+- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) is awaiting approval; it
+  separates board packing from controller ownership changes.
+- [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
+  [`test_ram_report.py`](../tests/test_ram_report.py) tests its parser.
+- [`message_sizes.py`](../scripts/message_sizes.py) compiles an ARM size
+  probe for public boards, queue values and MQTT payload constants.
+  Update its manifest when an interface is added.
+
 ## Implementation locations
 
 | Area | Start here |

@@ -22,6 +22,8 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
+- [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
+  and MQTT sizes, measurement tools and shared-access rule.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
 - [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
@@ -41,6 +43,8 @@ not current acceptance reports. Local course originals are not public records.
 
 - [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
 - [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
+- [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
+  proposed board packing, ownership limits and approval gates.
 
 ## S3 — Line and barcode
 

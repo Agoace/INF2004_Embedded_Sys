@@ -103,6 +103,8 @@ if(TARGET test_vehicle_log)
         "${REPO}/tests/test_robot_contract.py" "$<TARGET_FILE:test_vehicle_log>")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_ram_report COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_ram_report.py")
 add_test(NAME test_task_priorities COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_task_priorities.py")
 # The two button owners are mutually exclusive build modes.
