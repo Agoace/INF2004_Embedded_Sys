@@ -1,3 +1,25 @@
+host_test(test_barcode_live_feed tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_live_source.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_include_directories(test_barcode_live_feed BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_link_libraries(test_barcode_live_feed PRIVATE m)
+add_test(NAME test_barcode_live_feed_race COMMAND test_barcode_live_feed race)
+
+host_test(test_barcode_live_producer tests/test_barcode_live_producer.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_link_libraries(test_barcode_live_producer PRIVATE m)
+foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
+        revision cut_change cut_equal disabled loss missed generation
+        motor_fault motor_old raw_clip clock read_fail ack no_ack busy_ack
+        us_wrap ms_wrap count_wrap old_epoch_ack old_epoch_no_ack sequence_wrap
+        nonletter)
+    add_test(NAME test_barcode_producer_${case}
+        COMMAND test_barcode_live_producer ${case})
+endforeach()
+
 host_test(test_barcode_window_real tests/test_barcode_window_real.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_compile_definitions(test_barcode_window_real PRIVATE
@@ -112,7 +134,11 @@ target_compile_definitions(test_barcode_line_copy PRIVATE
 if(TARGET test_line_service)
     target_sources(test_line_service PRIVATE
         "${REPO}/app_program/subsystem3/barcode_calibration.c"
-        "${REPO}/app_program/subsystem3/barcode_live_source.c")
+        "${REPO}/app_program/subsystem3/barcode_live_source.c"
+        "${REPO}/app_program/subsystem3/barcode_live_producer.c"
+        "${REPO}/app_program/subsystem3/barcode_window.c"
+        "${REPO}/app_program/subsystem3/barcode.c")
+    target_link_libraries(test_line_service PRIVATE m)
 endif()
 host_test(test_barcode_calibration tests/test_barcode_calibration.c
     app_program/subsystem3/barcode_calibration.c)

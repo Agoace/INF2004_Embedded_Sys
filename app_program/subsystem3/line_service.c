@@ -25,6 +25,9 @@ static line_snapshot_t snapshot;
 #include "../platform/app_board.h"
 static APP_BOARD(line_snapshot_t) board;
 static barcode_calibration_t barcode_calibration;
+#if !APP_TEST && !APP_BENCH
+static barcode_cal_report_t live_calibration;
+#endif
 static APP_BOARD(barcode_cal_report_t) barcode_calibration_board;
 
 /* Publish only lifecycle boundaries, not another per-sample board. */
@@ -158,6 +161,11 @@ static void line_task(INT code, void *ctx)
             ++snapshot.sequence;
             ++snapshot.processed;
             drv_line_stats(&snapshot.acquisition);
+#if !APP_TEST && !APP_BENCH
+            live_calibration = barcode_calibration.report;
+            const uint32_t missed = snapshot.acquisition.missed;
+            const uint32_t dropped = snapshot.acquisition.dropped;
+#endif
             publish_line();
             const uint32_t cost = drv_time_us() - start;
             snapshot.cpu_us += cost;
@@ -165,6 +173,12 @@ static void line_task(INT code, void *ctx)
                 snapshot.sample_max_us = cost;
             }
             (void)tk_unl_mtx(mutex);
+#if !APP_TEST && !APP_BENCH
+            /* Same acquisition owner, every GP28 sample. No decoder work,
+             * motion wait, logging or extra board work inside LINE mutex. */
+            barcode_live_source_sample(sample.us, sample.raw[2],
+                                       &live_calibration, missed, dropped);
+#endif
 #if APP_BARCODE_CAPTURE
             /* Bounded TEST-only copy, never a second acquisition consumer.
              * No decoder, print or motion lock in this priority-11 path. */

@@ -2,6 +2,7 @@
 #ifndef BARCODE_LIVE_SOURCE_H
 #define BARCODE_LIVE_SOURCE_H
 #include <stdint.h>
+#include "barcode_calibration.h"
 
 #define BC_LIVE_VERSION 1u
 #define BC_LIVE_SOURCE 2u
@@ -22,7 +23,7 @@
 
 typedef struct {
     uint32_t epoch;
-    uint32_t sequence;
+    uint32_t sequence; /* Boot-lifetime advance, skip0; never reset on RUN. */
     uint32_t read_ms;
     int32_t read_counts[2];
     uint8_t command; /* 0 NONE, 1 LEFT, 2 RIGHT, 3 STRAIGHT, 4 UTURN. */
@@ -43,6 +44,7 @@ typedef struct {
  * original first-edge/route cut times. Source captures at FIRST BAR START,
  * rejects start<=cut and any changed epoch/revision through publication.
  * ACK is terminal retirement/consumer ownership, NOT completed execution.
+ * Old-epoch slots are ACKed/rejected, never admitted; serials do not reset.
  * mode0 (BUSY/disabled) must precede or share the accepting ACK publication.
  * mode2 requires measured/approved offset; shadow/unverified stays valid0.
  * First source read or scheduling pause: require publication PROGRESS before
@@ -76,7 +78,7 @@ _Static_assert(sizeof(barcode_live_control_t) == 20u, "Live control ABI");
  * Does NOT write the vehicle control board. No reader may reset either board.
  * Record read: E_OBJ before init; E_PAR null; E_TMOUT on interrupted copy;
  * E_OK on success. Failed copies leave output unchanged. No wait/consume.
- * Source remains an INVALID shadow observation until producer integration. */
+ * Initial integration publishes SHADOW/valid0 observations only. */
 int barcode_live_source_init(void);
 int barcode_live_source_try_read(barcode_live_record_t *out);
 /* Vehicle is the sole caller/writer. S3 never calls this to reset control. */
@@ -84,4 +86,10 @@ int barcode_live_control_publish(const barcode_live_control_t *control);
 /* S3 read; optional publication tag is unchanged on failure. */
 int barcode_live_control_try_read(barcode_live_control_t *out,
                                   uint32_t *publication_tag);
+/* LINE-task sole caller, after releasing its mutex. TEST/BENCH are no-ops. */
+void barcode_live_source_sample(uint32_t us, uint16_t raw,
+                                const barcode_cal_report_t *calibration,
+                                uint32_t missed, uint32_t dropped);
+/* One stopped USB/DUMP consumer; coherent bounded rows, no LINE lock. */
+void barcode_live_source_dump(void);
 #endif

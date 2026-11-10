@@ -217,8 +217,11 @@ vehicle task described below.
 - [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md):
   [`barcode_live_source.h`](../app_program/subsystem3/barcode_live_source.h)
   and [`barcode_live_source.c`](../app_program/subsystem3/barcode_live_source.c)
-  define the 40 B record and 20 B control, coherent getters and board ownership;
-  no decoder feeding or actions are enabled by this interface step.
+  define the 40 B record and 20 B control, coherent getters and board ownership.
+  [SHADOW producer](s3-line-barcode/LIVE_PRODUCER.md),
+  [`barcode_live_producer.h`](../app_program/subsystem3/barcode_live_producer.h)
+  and [`barcode_live_producer.c`](../app_program/subsystem3/barcode_live_producer.c)
+  bind the LINE feed, context/ACK policy and stopped DUMP; no live actions.
 
 - [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
@@ -226,7 +229,9 @@ vehicle task described below.
   the pure forward-distance window and one mapping table; synthetic tests in
   [`test_barcode_window.c`](../tests/test_barcode_window.c), original-fixture
   tests in [`test_barcode_window_real.c`](../tests/test_barcode_window_real.c).
-  Feed/control/slot integration remains pending; no live actions are enabled.
+  SHADOW feed tests: [`test_barcode_live_feed.c`](../tests/test_barcode_live_feed.c)
+  and [`test_barcode_live_producer.c`](../tests/test_barcode_live_producer.c).
+  Vehicle merge, stack/CPU and offset hardware acceptance remain pending.
 
 ## TEST-only barcode B1c
 

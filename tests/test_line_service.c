@@ -5,12 +5,21 @@
 #include <tk/tkernel.h>
 #include "../app_program/subsystem3/line_service.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
+#include "../app_program/subsystem2/motion.h"
+
 #if APP_BARCODE_CAPTURE
 #include "../app_program/subsystem3/barcode_capture.h"
 #endif
 static FP entry;static jmp_buf end;static unsigned int sleeps;
 static bool available;static uint32_t clock_us;static uint16_t value=500u;
 static int held;static unsigned int listens;
+int motion_snapshot_try_read(motion_status_t *status, uint32_t *us)
+{
+    assert(!held);
+    (void)status;
+    (void)us;
+    return E_OBJ;
+}
 static uint16_t barcode_raw = 4095u;
 static unsigned int calibration_logs;
 static unsigned long logged_minimum;
