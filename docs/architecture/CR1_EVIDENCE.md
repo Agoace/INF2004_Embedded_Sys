@@ -2,13 +2,15 @@
 
 ## Status and scope
 
-Baseline: tag `cr1-baseline`, commit `168d705`. No CR1 firmware change has
-been made. Module order: motion, sonar/obstacle, IMU, telemetry/MQTT and
-shared faults, then line/barcode and vehicle. Obtain approval before each
+Baseline: tag `cr1-baseline`, commit `168d705`. A1 implements compact
+motion observation storage; its software checks pass. Module order:
+motion, sonar/obstacle, IMU, telemetry/MQTT and shared faults, then
+line/barcode and vehicle. Obtain approval before each
 module change. Merge current staging into the helper branch first.
 
 The local course original was read. It is not part of this record or Git.
-The [motion plan](../s2-motion/CR1_MOTION_PLAN.md) is awaiting approval.
+The [motion plan](../s2-motion/CR1_MOTION_PLAN.md) records the approved
+A1 substep. Controller packing and derived-copy removal are not approved.
 Hardware correctness and timing for changed representations: **Not run**.
 
 ## Shared-access design rule
@@ -222,8 +224,8 @@ the 12 B internal telemetry event and the 20 B live MQTT event.
 ## Separate savings categories
 
 Keep category A and category B in separate commits. Step 0 is measurement
-only: neither category has a measured after result yet. Measure each
-package against its immediate parent, as well as the frozen baseline;
+only. A1 has the measured result below; B results use a separate row.
+Measure each package against its immediate parent and the frozen baseline;
 otherwise later merges can hide the source of a RAM change.
 
 ### A: CR1 minimum-bit savings
@@ -267,11 +269,114 @@ Removing stored derived fields is recorded in B5, not as minimum-bit
 packing. The motion plan separates that saving from packing the retained
 board fields. No B package is authorized by this record.
 
+## A1: compact motion observation board
+
+Approved scope: observation storage only. The controller, API mutex,
+ISR counts, task stacks, MQTT formats and derived fields are unchanged.
+Faults are four **independent bits**: all 16 combinations are representable,
+not four enum alternatives. Motion is the sole packed-board writer.
+Atomic word publication and sequence validation stay in `app_board`;
+readers unpack only a successful local copy. No shared packed RMW is added.
+
+| MQTT robot measurement | Before | A1 after | Delta |
+| --- | ---: | ---: | ---: |
+| text | 403988 | 404780 | +792 |
+| data | 904 | 904 | 0 |
+| bss | 189768 | 189760 | -8 |
+| **Static RAM** | **190672** | **190664** | **-8** |
+| S2 linked inputs | 289 | 281 | -8 |
+| Observation board including sequence | 72 | 64 | -8 |
+| Decoded public motion_status_t | 64 | 64 | 0 |
+| Stored payload excluding sequence | 68 | 60 | -8 |
+| All queue and MQTT payload sizes | Baseline above | Unchanged | 0 |
+
+The ARM size probe now reports `motion_packed_t` (60 B) and its 64 B
+board instead of reconstructing the retired native wrapper. The map
+parser reports static 190664 B and S2 281 B. Other groups are unchanged.
+This is a storage saving, not a change to output precision or log rate.
+
+The 15-word payload stores 458 logical bits; 22 unused bits are zero.
+Words 0..11 hold counts L/R, travel L/R, heading, ticks, work maximum,
+gap minimum/maximum, late/missed wakes and timestamp (32 bits each).
+Word 12 holds two signed 16-bit speeds. Word 13 holds two 11-bit biased
+duties and a 7-bit angle code. Word 14 holds a separate 7-bit pulse code,
+one settled bit, four independent fault bits and one watchdog bit. The
+[source header](../../app_program/subsystem2/motion_pack.h) gives offsets;
+the [motion table](../s2-motion/CR1_MOTION_PLAN.md) gives ranges and owners.
+No B5 duplicate removal is counted in this A1 result.
+
+Software evidence:
+
+- Strict host suite: 173/173 pass.
+- Clang ASan/UBSan suite: 173/173 pass, leak checks and halt-on-UB enabled.
+  System GCC sanitizer runtimes are absent; Clang provides the working
+  sanitizer build. The ordinary GCC strict suite also passes.
+- Exhaustive round trips cover both duty signs, all 73 angles and pulse
+  codes independently, all 16 fault combinations and all four Boolean
+  combinations, and all signed-16 speeds. Every 32-bit field has zero,
+  signed endpoint or unsigned endpoint fixtures. Invalid ranges, unused
+  codes/bits and null pointers preserve outputs.
+- Compact-board tests inject a complete new publication after each of
+  the 15 payload-word loads. Torn copies are rejected, cached output and
+  time stay unchanged, and the next bounded read returns the new value.
+  Generic board tests retain odd/zero sequence and sequence-wrap checks.
+- Nine firmware profiles build with zero warnings: default, robot, BENCH,
+  MQTT, TEST, MQTT-TEST, IMU_STREAM, MQTT filtered source and MQTT DIAG.
+  Each uses public example settings and `make -j4 --output-sync=target`.
+- Motion and codec pass strict ARM warnings in all nine profiles:
+  `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`.
+- MQTT ARM local frames: motion task 168 -> 216 B; snapshot reader
+  104 -> 96 B; new pack 72 B and unpack 160 B. These are local compiler
+  frames, not whole-stack bounds. No static stack was reduced. Measure
+  both motion and caller stack high-water on the target before acceptance.
+
+| A1 profile | text | data | bss |
+| --- | ---: | ---: | ---: |
+| Default | 340188 | 760 | 131740 |
+| Robot | 93316 | 688 | 125204 |
+| BENCH | 42370 | 148 | 95452 |
+| MQTT | 404780 | 904 | 189760 |
+| TEST | 85580 | 688 | 124324 |
+| MQTT-TEST | 392916 | 904 | 188484 |
+| IMU_STREAM | 83804 | 688 | 132156 |
+| MQTT filtered | 404776 | 904 | 189760 |
+| MQTT DIAG | 405912 | 904 | 189872 |
+
+No image was flashed. Hardware work/gap timing, loaded MQTT/USB behavior,
+watchdog behavior and named stack high-water remain **Not run**. Host
+checks and smaller RAM are not evidence of acceptable target timing.
+
+## A2 planned: shared 16-bit modular encoder values
+
+Idea approved; **do not start yet**. Wait for A1/B1 completion and the
+barcode (`mtk3-line`) and B2a (`mtk3-vehicle`) merges. A2 touches their
+files. The motion owner keeps private full 32-bit totals. Only the shared
+counts become 16-bit wrapping values. This is not implemented by A1.
+
+Safety bound: 1000 mm/s, or 12414 counts/s. Measured floor 100-percent
+speeds were about 770..807 mm/s and still rising, with wheelies; the
+controller uses an 80-percent duty cap and a 460 mm/s command cap. See
+[the archived duty map](../archive/s2-motion/DUTY_MAP.md).
+
+The critical bound is distance, not elapsed time: each wheel's difference
+from a retained origin must stay below 32768 counts, about 2.64 m. Audit
+and document each maximum span: detour, reverse scan, search spin, vehicle
+home moves and line-trace junction `straight_from`. Change subtraction
+users only after coordination. Subtract per-wheel counts before averaging
+or scaling. In particular, do not average wrapping totals then subtract.
+
+Require one host wrap test for each user: IMU, run_stats, line_trace,
+line_search, servo_scan, detour/obstacle_detour, vehicle home moves and
+odometry. Locked line tracing (`line-tracing-2sensor-v1`) needs proof of
+identical host behavior and a hardware run. Cosmetic USB/MQTT/dashboard
+counts can show wrapped values or run distance; choose that presentation
+separately. A MQTT wire change requires a separate decision.
+
 ## After and acceptance (category A)
 
 | Module | RAM after | Message after | Software | Hardware/timing |
 | --- | --- | --- | --- | --- |
-| Motion | Pending | Pending | Plan only | Not run |
+| Motion A1 | 190664 B total | Board 64 B | Passed | Not run |
 | Sonar/obstacle | Pending | Pending | Not started | Not run |
 | IMU | Pending | Pending | Not started | Not run |
 | Telemetry/faults | Pending | Pending | Not started | Not run |

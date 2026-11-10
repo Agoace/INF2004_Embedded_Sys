@@ -44,7 +44,7 @@ not current acceptance reports. Local course originals are not public records.
 - [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
 - [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
 - [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
-  proposed board packing, ownership limits and approval gates.
+  approved A1 board packing, ownership limits and approval gates.
 
 ## S3 — Line and barcode
 

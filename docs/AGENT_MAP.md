@@ -72,8 +72,14 @@ The archived development record retains older CMake bench examples.
 
 - [CR1 evidence](architecture/CR1_EVIDENCE.md) records the `168d705`
   baseline, ARM message sizes and the single-writer publication rule.
-- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) is awaiting approval; it
-  separates board packing from controller ownership changes.
+- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) records approved A1 packing;
+  controller ownership changes and derived-copy removal remain separate.
+- [`motion_pack.h`](../app_program/subsystem2/motion_pack.h) and
+  [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
+  60 B motion payload, published in a 64 B sequence/word board. Its sole
+  writer is motion; decoded public APIs are unchanged.
+- [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
+  reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
   [`test_ram_report.py`](../tests/test_ram_report.py) tests its parser.
 - [`message_sizes.py`](../scripts/message_sizes.py) compiles an ARM size

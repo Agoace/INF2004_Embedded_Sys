@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # header, sizeof types, wire-size macros
 ENTRIES = [
     ("subsystem2/motion.h", ["motion_status_t"], []),
+    ("subsystem2/motion_pack.h", ["motion_packed_t"], []),
     ("subsystem2/motor_ctl.h",
      ["mc_config_t", "mc_wheel_t", "mc_t", "mc_output_t"], []),
     ("subsystem3/drv_line.h", ["drv_line_sample_t"], []),
@@ -52,21 +53,17 @@ def measure(cc, nm):
         for name in types + macros:
             expr = f"sizeof({name})" if name in types else name
             expressions.append((expr, "app_program/" + header))
-    # Private wrappers have one value and one u32 timestamp. The public
-    # APP_BOARD stores ceil(value/4) words plus a sequence word.
-    for name in ["motion_status_t", "rm_heartbeat_t"]:
-        expressions.append((f"sizeof({name}) + sizeof(uint32_t)",
-                            "app_program/" + ("subsystem2/motion.c" if
-                            name == "motion_status_t" else
-                            "subsystem1/robot_health.c")))
-    board_types = ["motion_status_t", "line_snapshot_t", "imu_snapshot_t",
+    # Health has one value and one u32 timestamp. Motion's compact payload
+    # already contains time. APP_BOARD adds a sequence and word padding.
+    expressions.append(("sizeof(rm_heartbeat_t) + sizeof(uint32_t)",
+                        "app_program/subsystem1/robot_health.c"))
+    board_types = ["motion_packed_t", "line_snapshot_t", "imu_snapshot_t",
                    "imu_hump_report_t", "imu_hump_diag_report_t",
                    "imu_hump_summary_t", "vehicle_snapshot_t",
                    "rm_obstacle_t", "rm_detour_t", "rm_summary_t",
                    "telemetry_log_index_t"]
     for name in board_types:
-        extra = " + 4" if name == "motion_status_t" else ""
-        expressions.append((f"4 + ((sizeof({name}){extra} + 3) / 4) * 4",
+        expressions.append((f"4 + ((sizeof({name}) + 3) / 4) * 4",
                             "app_program/platform/app_board.h"))
     expressions.append(("4 + sizeof(rm_heartbeat_t) + 4",
                         "app_program/subsystem1/robot_health.c"))

@@ -2,8 +2,9 @@
 
 ## Status
 
-**Plan only; no motion source change.** Baseline: `cr1-baseline`
-(`168d705`). See [the evidence record](../architecture/CR1_EVIDENCE.md).
+A1 observation packing is approved and implemented. Baseline:
+`cr1-baseline` (`168d705`). Software checks pass; hardware is Not run.
+See [the evidence record](../architecture/CR1_EVIDENCE.md).
 Merge current `mtk3-staging` before the module round. Approval and hardware
 acceptance are separate gates. Do not move to sonar before motion closes.
 
@@ -50,7 +51,7 @@ read-modify-write under `DI`/`EI`; it protects only one core. Give separate
 writers separate words, or use the ISR-to-task queue/board path. The
 RP2040 has no data cache; preserve the existing board barriers.
 
-## Proposed first substep: motion observation board
+## Approved A1 substep: motion observation board
 
 Keep existing public API signatures and decoded temporary structures.
 Replace only the stored observation payload with explicit masks/shifts.
@@ -108,15 +109,15 @@ and clamping rules, not a new formula. Keep all derivation outside the
 publication critical path where possible; measure reader cost too.
 
 Category A retains all fields: 458 logical bits (58 B, 60 B aligned),
-plus the 4 B sequence. Board storage: **72 -> 64 B**, expected saving
-**8 B**. S2 input allocation would be **289 -> 281 B** if nothing else
-changes. Actual linked total may differ due to alignment. Public decoded
-status stays 64 B. MQTT and queue sizes stay unchanged in this substep.
+plus the 4 B sequence. Measured board storage: **72 -> 64 B**, saving
+**8 B**. Measured S2 input allocation: **289 -> 281 B**; MQTT image RAM:
+**190672 -> 190664 B**. Public decoded status stays 64 B. MQTT and queue
+sizes stay unchanged in this substep.
 
 A later B5 commit could remove the derived values: 355 bits (45 B, 48 B
 aligned), plus sequence, for **64 -> 52 B**, another **12 B**. Do not
-combine these changes or count the 12 B as minimum-bit packing. Both
-figures are proposals, not measured after results.
+combine these changes or count the 12 B as minimum-bit packing. The
+B5 figures remain proposals, not measured after results.
 
 ## Persistent controller and ISR inventory
 
@@ -200,6 +201,29 @@ all four motion conditions now; no separate task may edit bits in the
 motion-owned published fault word. S1 will combine per-owner words into
 the shared fault mask as its sole writer.
 
+## Future A2: wrapping shared counts
+
+The operator approved the idea, not an immediate source change. Start only
+after A1/B1 and the barcode/B2a merges. Keep private totals 32-bit in the
+motion owner and publish only a 16-bit modular count. Use 1000 mm/s or
+12414 counts/s as the safety bound; measured 100-percent floor speeds
+were about 770..807 mm/s and still rising. The current robot command cap
+is 460 mm/s with 80-percent maximum duty.
+
+For each stored origin, prove a per-wheel span below 32768 counts
+(about 2.64 m). This is a distance constraint, not a timer constraint.
+Audit detour, scan reverse, search spin, vehicle home moves and junction
+`straight_from`. Compute per-wheel modular differences first; then average
+or scale. Rework line_trace's average-total-then-subtract calculation only
+with coordination and locked-line host equivalence plus a hardware run.
+
+Add one wrap test per user: IMU, run_stats, line_trace, line_search,
+servo_scan, detour/obstacle_detour, vehicle_task home moves and odometry.
+USB DUMP/MQTT/dashboard count displays are cosmetic; propose wrapped
+values or run distance separately. MQTT wire changes need a new decision.
+See the A2 section of [the evidence record](../architecture/CR1_EVIDENCE.md).
+No A2 or other-module source change is part of A1/B1.
+
 ## Tests and acceptance
 
 Before and after each approved motion substep:
@@ -227,5 +251,5 @@ Before and after each approved motion substep:
    Agree a numerical work-time regression limit before the run.
 
 No flash or push is authorized. Hardware and final timing acceptance are
-**Not run**. Approve the small board substep first; resolve the persistent
+**Not run**. A1 software validation is complete. Resolve the persistent
 state ownership/range questions before declaring motion complete.
