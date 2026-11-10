@@ -81,7 +81,7 @@ host_test(test_barcode_calibration tests/test_barcode_calibration.c
     app_program/subsystem3/barcode_calibration.c)
 foreach(case IN ITEMS white_only air dark spike white_short black_short bounds
         aborted no_data gap duplicate reverse_stamp wrap clipping capacity
-        restart terminal)
+        restart terminal dark_line cap)
     add_test(NAME test_barcode_calibration_${case}
         COMMAND test_barcode_calibration ${case})
 endforeach()

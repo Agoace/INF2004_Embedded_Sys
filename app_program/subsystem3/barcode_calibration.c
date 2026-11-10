@@ -111,16 +111,22 @@ void barcode_calibration_end(barcode_calibration_t *state, bool completed)
     }
     if (!completed) {
         report->mode = BC_CAL_ABORTED;
-    } else if ((report->faults & (CAL_FATAL_MASK | BC_CAL_NO_WHITE)) != 0u) {
+    } else if ((report->faults & CAL_FATAL_MASK) != 0u ||
+               report->samples == 0u) {
         report->mode = BC_CAL_INVALID;
-    } else if ((report->faults & BC_CAL_NO_BLACK) != 0u) {
+    } else if ((report->faults & BC_CAL_NO_WHITE) != 0u) {
         report->mode = BC_CAL_FALLBACK;
     } else {
-        const uint32_t span = report->black_mean - report->white_mean;
-        const uint32_t rise = span / 10u;
-        const uint32_t fall = span * 6u / 100u;
-        report->rise = report->white_mean + (rise > 32u ? rise : 32u);
-        report->fall = report->white_mean + (fall > 16u ? fall : 16u);
+        /* Mat paint and paper ink have different IR reflectance. High
+         * evidence is diagnostic only, never the barcode threshold scale. */
+        report->rise = report->white_mean + 150u;
+        if (report->rise > 350u) {
+            report->rise = 350u;
+        }
+        report->fall = report->white_mean + 75u;
+        if (report->fall > report->rise - 75u) {
+            report->fall = report->rise - 75u;
+        }
         report->mode = BC_CAL_LEARNED;
     }
 }

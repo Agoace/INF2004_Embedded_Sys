@@ -121,7 +121,7 @@ int main(void) {
     assert(calibration.samples == 27u && calibration_logs == 6u);
     assert(calibration.minimum == 160u && calibration.maximum == 1200u);
     assert(logged_minimum == 160u && logged_maximum == 1200u);
-    assert(calibration.rise == 264u && calibration.fall == 222u);
+    assert(calibration.rise == 310u && calibration.fall == 235u);
     assert(line_snapshot_read(&s, false) == E_OK);
     assert(s.raw_bc == 1200u && s.raw[2] == 0u && s.line.cal_max[2] == 0u);
     sample(500u);
@@ -137,8 +137,8 @@ int main(void) {
     }
     assert(line_calibration_end() == LP_CALIB_OK);
     assert(line_barcode_calibration_try_read(&calibration) == E_OK);
-    assert(calibration.mode == BC_CAL_FALLBACK);
-    assert(calibration.rise == 320u && calibration.fall == 240u);
+    assert(calibration.mode == BC_CAL_LEARNED);
+    assert(calibration.rise == 310u && calibration.fall == 235u);
     assert(calibration.black_samples == 0u && calibration_logs == 8u);
 
     assert(line_calibration_begin() == E_OK);
@@ -148,7 +148,9 @@ int main(void) {
     }
     assert(line_calibration_end() == LP_CALIB_OK);
     assert(line_barcode_calibration_try_read(&calibration) == E_OK);
-    assert(calibration.mode == BC_CAL_INVALID && calibration_logs == 10u);
+    assert(calibration.mode == BC_CAL_FALLBACK && calibration_logs == 10u);
+    assert(calibration.white_samples == 0u && calibration.white_mean == 0u);
+    assert(calibration.rise == 320u && calibration.fall == 240u);
     assert((calibration.faults & BC_CAL_NO_WHITE) != 0u);
 
     /* A failed pair calibration still reports GP28 evidence, not readiness. */

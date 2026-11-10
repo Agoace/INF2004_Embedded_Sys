@@ -35,19 +35,20 @@ int main(int argc, char **argv)
         assert(state.report.white_mean == 160u);
         assert(state.report.black_mean == 1200u);
         assert(state.report.black_hold_us == 10000u);
-        assert(state.report.rise == 264u && state.report.fall == 222u);
+        assert(state.report.rise == 310u && state.report.fall == 235u);
         assert(state.report.faults == 0u);
     } else if (strcmp(name, "white_only") == 0) {
         (void)feed(&state, us, 64u, 160u);
         barcode_calibration_end(&state, true);
-        assert(state.report.mode == BC_CAL_FALLBACK);
-        assert(state.report.rise == 320u && state.report.fall == 240u);
+        assert(state.report.mode == BC_CAL_LEARNED);
+        assert(state.report.rise == 310u && state.report.fall == 235u);
         assert(state.report.faults == BC_CAL_NO_BLACK);
     } else if (strcmp(name, "air") == 0 || strcmp(name, "dark") == 0) {
         const uint16_t raw = strcmp(name, "air") == 0 ? 1200u : 1000u;
         (void)feed(&state, us, 64u, raw);
         barcode_calibration_end(&state, true);
-        assert(state.report.mode == BC_CAL_INVALID);
+        assert(state.report.mode == BC_CAL_FALLBACK);
+        assert(state.report.rise == 320u && state.report.fall == 240u);
         assert(state.report.white_samples == 0u);
         assert((state.report.faults & BC_CAL_NO_WHITE) != 0u);
     } else if (strcmp(name, "spike") == 0) {
@@ -57,19 +58,21 @@ int main(int argc, char **argv)
         barcode_calibration_end(&state, true);
         assert(state.report.maximum == 1800u);
         assert(state.report.white_mean == 165u);
-        assert(state.report.mode == BC_CAL_FALLBACK);
+        assert(state.report.mode == BC_CAL_LEARNED);
+        assert(state.report.rise == 315u && state.report.fall == 240u);
         assert(state.report.black_hold_us == 0u);
     } else if (strcmp(name, "white_short") == 0) {
         us = feed(&state, us, 15u, 160u);
         (void)feed(&state, us, 11u, 1200u);
         barcode_calibration_end(&state, true);
-        assert(state.report.mode == BC_CAL_INVALID);
+        assert(state.report.mode == BC_CAL_FALLBACK);
+        assert(state.report.rise == 320u && state.report.fall == 240u);
         assert((state.report.faults & BC_CAL_NO_WHITE) != 0u);
     } else if (strcmp(name, "black_short") == 0) {
         us = feed(&state, us, 16u, 160u);
         (void)feed(&state, us, 10u, 1200u);
         barcode_calibration_end(&state, true);
-        assert(state.report.mode == BC_CAL_FALLBACK);
+        assert(state.report.mode == BC_CAL_LEARNED);
         assert(state.report.black_hold_us == 9000u);
     } else if (strcmp(name, "bounds") == 0) {
         us = feed(&state, us, 16u, 120u);
@@ -80,6 +83,23 @@ int main(int argc, char **argv)
         assert(state.report.mode == BC_CAL_LEARNED);
         assert(state.report.white_samples == 32u);
         assert(state.report.black_samples == 11u);
+    } else if (strcmp(name, "dark_line") == 0) {
+        const uint16_t highs[] = {1000u, 2700u, 3178u};
+        for (unsigned int i = 0u; i < 3u; ++i) {
+            barcode_calibration_begin(&state);
+            us = feed(&state, us, 32u, 167u);
+            us = feed(&state, us, 16u, highs[i]);
+            barcode_calibration_end(&state, true);
+            assert(state.report.mode == BC_CAL_LEARNED);
+            assert(state.report.maximum == highs[i]);
+            assert(state.report.rise == 317u && state.report.fall == 242u);
+        }
+    } else if (strcmp(name, "cap") == 0) {
+        us = feed(&state, us, 32u, 220u);
+        (void)feed(&state, us, 16u, 3178u);
+        barcode_calibration_end(&state, true);
+        assert(state.report.mode == BC_CAL_LEARNED);
+        assert(state.report.rise == 350u && state.report.fall == 275u);
     } else if (strcmp(name, "aborted") == 0) {
         us = feed(&state, us, 16u, 160u);
         (void)feed(&state, us, 11u, 1200u);
@@ -137,7 +157,7 @@ int main(int argc, char **argv)
         assert(state.report.rise == 320u && state.report.fall == 240u);
         (void)feed(&state, us, 16u, 160u);
         barcode_calibration_end(&state, true);
-        assert(state.report.mode == BC_CAL_FALLBACK);
+        assert(state.report.mode == BC_CAL_LEARNED);
         assert(state.report.black_samples == 0u);
         state.report.generation = UINT32_MAX;
         barcode_calibration_begin(&state);
