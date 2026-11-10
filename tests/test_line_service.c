@@ -4,6 +4,7 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/subsystem3/line_service.h"
+#include "../app_program/subsystem3/barcode_live_source.h"
 #if APP_BARCODE_CAPTURE
 #include "../app_program/subsystem3/barcode_capture.h"
 #endif
@@ -55,6 +56,8 @@ static void sample(uint16_t v) {
     assert(!held);
 }
 int main(void) {
+    barcode_live_record_t live;
+    assert(barcode_live_source_try_read(&live) == E_OBJ);
     barcode_cal_report_t calibration = {.samples = 123u};
     assert(line_barcode_calibration_try_read(0) == E_PAR);
     assert(line_barcode_calibration_try_read(&calibration) == E_OBJ);
@@ -63,6 +66,11 @@ int main(void) {
     line_snapshot_t s;assert(line_snapshot_read(&s,false)==E_OBJ && !line_service_running());
     assert(line_service_init()==E_OK && line_service_start()==E_OK && listens==1u && line_service_running());
     assert(line_service_start()==E_OBJ);
+    assert(barcode_live_source_try_read(&live) == E_OK);
+    assert(live.valid == 0u && live.flags == BC_LIVE_SHADOW);
+    barcode_live_control_t control = {.epoch = 123u};
+    assert(barcode_live_control_try_read(&control, NULL) == E_TMOUT);
+    assert(control.epoch == 123u); /* S3 init never writes vehicle control. */
     assert(line_barcode_calibration_try_read(&calibration) == E_OK);
     assert(calibration.mode == BC_CAL_IDLE && calibration.samples == 0u);
     assert(line_snapshot_read(&s,false)==E_OK && !s.valid);

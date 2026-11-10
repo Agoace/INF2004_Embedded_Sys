@@ -220,6 +220,14 @@ vehicle task described below.
   define the 40 B record and 20 B control, coherent getters and board ownership;
   no decoder feeding or actions are enabled by this interface step.
 
+- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
+  [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
+  [`barcode_window.c`](../app_program/subsystem3/barcode_window.c) provide
+  the pure forward-distance window and one mapping table; synthetic tests in
+  [`test_barcode_window.c`](../tests/test_barcode_window.c), original-fixture
+  tests in [`test_barcode_window_real.c`](../tests/test_barcode_window_real.c).
+  Feed/control/slot integration remains pending; no live actions are enabled.
+
 ## TEST-only barcode B1c
 
 - [`barcode.c`](../app_program/subsystem3/barcode.c) and
