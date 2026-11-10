@@ -2,9 +2,10 @@
 
 ## Status and ownership
 
-This commit supplies the canonical header and boards for parallel vehicle
-work. It does NOT feed the live reader, publish decoded frames, initialize a
-new task or enable actions. The initial record has valid=0 and SHADOW set.
+The canonical header and boards were introduced in7177edd. The
+[SHADOW producer](LIVE_PRODUCER.md) now connects the existing LINE task to
+these boards. No new task or live action is enabled. Initial and produced
+records have valid=0 and SHADOW set.
 
 - Header/source: `app_program/subsystem3/barcode_live_source.{h,c}`.
 - Record writer/reset owner: S3 producer only.
@@ -22,7 +23,7 @@ Record is 40 B, its sequence board is 44 B. Control is 20 B, its board is
 | Record byte offset | Field |
 | --- | --- |
 | 0 | uint32 epoch |
-| 4 | uint32 sequence, nonzero per producer epoch |
+| 4 | uint32 sequence, nonzero boot-lifetime advance; skip zero |
 | 8 | uint32 read_ms |
 | 12, 16 | int32 read_counts[2] |
 | 20 | uint8 command: NONE/LEFT/RIGHT/STRAIGHT/UTURN = 0/1/2/3/4 |
@@ -79,6 +80,8 @@ same-stripe offset check. Accepted pending may survive approved short SEARCH;
 partial barcode windows may not. No course-gap/pending-distance expiry exists.
 
 ACK is terminal slot retirement, not proof that a command executed.
+Serial NEVER resets on epoch/STOP/route/ACK/window changes. Vehicle rejects
+and terminally ACKs old-epoch slots; an old ACK cannot free the next serial.
 For accepted pending, mode0/BUSY must precede or be coherent with the ACK.
 Shadow/NONE/rejected records are also retired and never reoffered. S3 must
 recheck mode after ACK; no queued replay of a card seen while BUSY.
@@ -98,7 +101,7 @@ and optional tag unchanged. Init does not reset an existing control/record.
 No production API lets the vehicle write the record.
 
 Record delivery age and control-staleness limits are BOTH 50 ms, fail closed.
-The raw getters prove coherence only. The later producer must first observe
+The raw getters prove coherence only. The producer must first observe
 publication progress before trusting eligible control. After a scheduling
 pause it must qualify progress again, rather than treat an old first read as
 fresh. A local wall-clock progress watchdog and fresh ADC/motor evidence are
@@ -113,7 +116,7 @@ BUSY+ACK, heartbeat tag progress, invalid mode, interleaved record/control
 publication and idempotent init. Record injection exists only in the host
 build; production exports no record setter.
 
-The full strict host suite passes 262/262 at this ABI stage. Source lifecycle,
-freshness watchdog, revision admission and slot-retirement behavior are later
-producer/adapter tests, NOT implemented by the mechanical getters. No hardware
-or live-action acceptance is claimed.
+The full strict host suite passed262/262 at the ABI stage. Source lifecycle,
+freshness watchdog, revision admission and slot retirement are implemented
+and tested separately in the [producer](LIVE_PRODUCER.md), NOT by these
+mechanical getters. No hardware or live-action acceptance is claimed.

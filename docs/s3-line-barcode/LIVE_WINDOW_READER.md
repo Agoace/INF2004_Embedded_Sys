@@ -4,9 +4,10 @@
 
 `barcode_window.{h,c}` is a pure, single-owner streaming reader. It does not
 read hardware, create tasks, publish commands or call vehicle actions.
-The ROBOT sample feed and source slot/control handling are NOT connected yet.
-[The canonical boards](LIVE_SOURCE_CONTRACT.md) are initialized by S3 before
-tasks, with an invalid SHADOW record. Vehicle alone will publish control.
+The ROBOT feed and slot/control policy are now connected by the
+[SHADOW producer](LIVE_PRODUCER.md). [The canonical boards](LIVE_SOURCE_CONTRACT.md)
+are initialized by S3 before tasks, with an invalid SHADOW record.
+Vehicle alone publishes control. No live action is enabled.
 
 This step supplies the reader and tests for later integration, not an on-robot
 live-read acceptance result. Small-print work remains deferred. Existing
@@ -119,7 +120,7 @@ SHADOW and the unverified 150 mm guard cannot enable a real action.
 
 ## Evidence and limits
 
-- Strict host and Clang ASan/UBSan: 297/297, including 35 window test cases.
+- At step3: strict host and Clang ASan/UBSan297/297, including35 window cases.
 - All 43 data symbols in both print orders, across default/custom/invalid/
   unconfirmed tables; all 26 uppercase letters decode in forward motion.
 - Every missing bar and merged space, added edge, malformed gap, multi-letter,
@@ -138,9 +139,9 @@ SHADOW and the unverified 150 mm guard cannot enable a real action.
 - ARM context is 988 B, result 64 B; context assertion is at most 2048 B.
   One forced-retention LINK-ONLY probe adds exactly 988 B RAM and 5264 B text
   including the probe wrapper. No frozen TEST workspace is pulled in.
-- Actual current firmware does NOT allocate that reader context yet. S3's
-  invalid-record startup adds 48 B RAM / 152 B text in a matched-profile
-  relink against `7177edd`. Future feed/producer state still needs budgeting.
+- At step3, the context was not allocated. Invalid-record startup added48 B
+  RAM /152 B text in a matched-profile relink against7177edd. The subsequent
+  [producer record](LIVE_PRODUCER.md) budgets the actual connected state.
 - Compiler frames: model 176 B, begin 128 B, rearm 88 B, step 128 B.
   These are individual frames, not complete call-chain/runtime stack proof.
   CPU target remains below about 2% average and 1 ms task slices; NOT measured.
@@ -148,5 +149,6 @@ SHADOW and the unverified 150 mm guard cannot enable a real action.
 Artifacts and link-only probes are under `build/b2b-validation/`.
 Never flash `step3-RETAINED-NOT-FOR-FLASH.elf`. Public-example Wi-Fi builds
 are validation artifacts, not configured operator images. No push/flash was
-performed. Hardware live reading, same-stripe offset bound, producer heartbeat/
-revision/slot policy and vehicle admission remain integration gates.
+performed. Hardware live reading, same-stripe offset bound, measured stack/CPU
+and vehicle admission remain integration gates. Producer heartbeat/revision/
+slot policy is covered in the subsequent producer record.
