@@ -20,7 +20,20 @@ static telemetry_stats_t stats;
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
+/* S3 supplies the strong, bounded stopped dump in its producer commit. */
+void barcode_live_source_dump(void) __attribute__((weak));
+void barcode_live_source_dump(void)
+{
+}
+
+static void dump_barcode_source(void)
+{
+    barcode_live_source_dump();
+}
+
 static ja_result_t last_junction;
+static jlive_report_t last_source;
+static jlive_counts_t last_source_counts;
 static uint32_t loss_base;
 #if TM_MQTT
 #include "../platform/app_board.h"
@@ -232,6 +245,8 @@ static void telemetry_task(INT code, void *ctx)
         switch (m.kind) {
         case TELEMETRY_BEGIN:
             last_junction = (ja_result_t){0};
+            last_source = (jlive_report_t){0};
+            last_source_counts = (jlive_counts_t){0};
             stats.rows = 0u;
             stats.events = 0u;
             stats.storage_full = false;
@@ -271,6 +286,17 @@ static void telemetry_task(INT code, void *ctx)
             last_junction = m.data.junction;
             ja_print(&last_junction);
             break;
+        case TELEMETRY_JUNCTION_SOURCE:
+            last_source = m.data.junction_source;
+            jlive_print(&last_source);
+            break;
+        case TELEMETRY_JUNCTION_COUNTS:
+            last_source_counts = m.data.junction_counts;
+            jlive_print_counts(&last_source_counts);
+            break;
+        case TELEMETRY_BARCODE_DUMP:
+            dump_barcode_source();
+            break;
         case TELEMETRY_DUMP:
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
@@ -278,6 +304,9 @@ static void telemetry_task(INT code, void *ctx)
             motion_diag_print();
             dump();
             ja_print(&last_junction);
+            jlive_print(&last_source);
+            jlive_print_counts(&last_source_counts);
+            dump_barcode_source();
             motion_diag_dump(0);
             break;
         default:
@@ -338,7 +367,7 @@ int telemetry_send(const telemetry_message_t *message)
     if (mbf_telemetry <= 0 || task <= 0) {
         return E_OBJ;
     }
-    if (!message || message->kind > TELEMETRY_JUNCTION) {
+    if (!message || message->kind > TELEMETRY_JUNCTION_COUNTS) {
         return E_PAR;
     }
     telemetry_message_t m = *message;

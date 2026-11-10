@@ -36,6 +36,21 @@
 #endif
 
 #include "vehicle/junction_source.h"
+#include "subsystem3/barcode_window.h"
+
+#if !APP_BENCH && !APP_TEST
+static void barcode_table_print(void)
+{
+    tm_printf((UB *)"[BARCODE_TABLE] id %lu confirmed %u ",
+              (unsigned long)barcode_window_mapping_id(),
+              (unsigned int)barcode_window_table_confirmed());
+    for (unsigned int i = 0u; i < 26u; ++i) {
+        tm_printf((UB *)"%c=%u%s", (int)('A' + i),
+                  (unsigned int)barcode_window_table_entry(i),
+                  i == 25u ? "\n" : " ");
+    }
+}
+#endif
 
 /* TEST work runs below motion/sensors and above telemetry (30). */
 #define TEST_RUNNER_PRIORITY 20
@@ -67,11 +82,19 @@ EXPORT INT usermain(void)
 #endif
 
 #if !APP_BENCH && !APP_TEST
+#if JUNCTION_TEST_CMD != 0
     tm_printf((UB *)"[JUNCTION] source FAKE cmd %s forced_corner "
                     "bar_clear_mm %u N_mm %u black_min %u "
                     "D skip_first_left\n",
               JUNCTION_TEST_CMD_NAME, JA_BAR_CLEAR_MM, JA_CONFIRM_MM,
               JA_BLACK_MIN);
+#else
+    tm_printf((UB *)"[JUNCTION] source BARCODE %s measured_clear_mm %u "
+                    "shadow_clear_mm 150 UNVERIFIED delivery_max_ms 50\n",
+              BARCODE_LIVE_ENABLE ? "LIVE" : "SHADOW",
+              (unsigned int)BARCODE_MEASURED_CLEAR_MM);
+#endif
+    barcode_table_print(); /* Once at boot, before tasks or LINE locks. */
 #endif
 #if !APP_BENCH
     tm_printf((UB *)"[S4] hump_source %u %s\n",

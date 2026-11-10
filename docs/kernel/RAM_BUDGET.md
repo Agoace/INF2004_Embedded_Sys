@@ -1,5 +1,32 @@
 # RAM budget
 
+## B2b STEP4a/4b SHADOW delta
+
+Matched public-example single-core MQTT builds measure:
+
+| Revision | data | BSS | Static RAM |
+| --- | ---: | ---: | ---: |
+| Staging `235af44`, rebuilt | 888 | 186204 | 187092 |
+| `2cd44cd` plus STEP4a | 888 | 190108 | 190996 |
+| Combined delta | 0 | +3904 | **+3904 B** |
+
+This includes S3 producer/window/retained diagnostics, not only the vehicle
+adapter. The conservative4a account is state184 + raw cache84 + count cache36
++ two S3 boards68 + owner flags/alignment8 = **380 B**, below384 B. S3 owns
+the separate producer cost; do not count shared boards twice. See its
+[full-hook3448 B account](../s3-line-barcode/LIVE_PRODUCER.md#cr1-memory-and-compiled-stack).
+No new task, stack, heap or wait is added. Message116 B, INFO108 B and
+MBF4096 B stay fixed; the ARM size probe and compile-time assertions check them.
+
+Normal compiler frames: vehicle1000 B, observer168 B, live read96 B, source
+wrapper64 B, telemetry368 B, strong S3 DUMP96 B. S3's application decode
+chain sums544 B on LINE's2048 B stack. These exclude complete library,
+RTOS/interrupt and alternate paths. New-image named-task free margins of at
+least256 B and actual CPU/deadline checks are still required. S3 planning
+targets are about2% average and below1 ms per source slice, not measurements.
+[Validation](JUNCTION_VALIDATION.md#b2b-step4a-software-candidate) records all
+nine public builds,783 strict ARM units, SDK probes and remaining gates.
+
 ## B2a junction delta
 
 The forced-corner redesign adds **284 B static RAM** against matching public

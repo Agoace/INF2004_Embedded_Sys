@@ -117,7 +117,7 @@ else
 $(error Unknown IMU_HUMP_SOURCE '$(IMU_HUMP_SOURCE)'; use 1 or 2)
 endif
 
-# B2a: fake command is latched once at START. NONE preserves normal LINE.
+# A-D retain the fake START backend; NONE selects the live shadow reader.
 JUNCTION_TEST_CMD ?= NONE
 ifeq ($(JUNCTION_TEST_CMD),NONE)
 JUNCTION_TEST_CMD_ID := 0
@@ -134,6 +134,29 @@ $(error Unknown JUNCTION_TEST_CMD '$(JUNCTION_TEST_CMD)'; use NONE/A/B/C/D)
 endif
 ifneq ($(JUNCTION_TEST_CMD),NONE)
 JUNCTION_SUFFIX := _jtest$(JUNCTION_TEST_CMD)
+endif
+
+# Live actions require explicit permission AND an operator-measured bound.
+# The separate 150 mm shadow estimate is not a measured bound.
+BARCODE_LIVE_ENABLE ?= 0
+BARCODE_MEASURED_CLEAR_MM ?= 0
+ifneq ($(BARCODE_LIVE_ENABLE),0)
+ifneq ($(BARCODE_LIVE_ENABLE),1)
+$(error BARCODE_LIVE_ENABLE must be 0 or 1)
+endif
+endif
+BARCODE_CLEAR_VALID := $(shell printf '%s\n' '$(BARCODE_MEASURED_CLEAR_MM)' | grep -Eq '^(0|[1-9][0-9]*)$$' && test '$(BARCODE_MEASURED_CLEAR_MM)' -le 65535 && echo yes)
+ifneq ($(BARCODE_CLEAR_VALID),yes)
+$(error BARCODE_MEASURED_CLEAR_MM must be an integer from 0 to 65535)
+endif
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+ifeq ($(BARCODE_MEASURED_CLEAR_MM),0)
+$(error Live actions need a nonzero operator-measured clear bound; shadow 150 mm is unverified)
+endif
+ifneq ($(JUNCTION_TEST_CMD),NONE)
+$(error Fake JUNCTION_TEST_CMD and live actions are mutually exclusive)
+endif
+JUNCTION_SUFFIX := _bclive
 endif
 
 # DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
@@ -265,6 +288,8 @@ CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
 CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
 CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
 CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
+CFLAGS  += -DBARCODE_LIVE_ENABLE=$(BARCODE_LIVE_ENABLE)
+CFLAGS  += -DBARCODE_MEASURED_CLEAR_MM=$(BARCODE_MEASURED_CLEAR_MM)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -303,6 +328,8 @@ PROFILE_ID := $(PROFILE_ID)-diag$(DIAG)-imu_stream$(IMU_STREAM)
 PROFILE_ID := $(PROFILE_ID)-hump_source$(IMU_HUMP_SOURCE)
 PROFILE_ID := $(PROFILE_ID)-junction$(JUNCTION_TEST_CMD_ID)
 PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
+PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
+PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

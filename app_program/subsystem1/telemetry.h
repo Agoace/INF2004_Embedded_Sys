@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "../vehicle/junction_action.h"
+#include "../vehicle/junction_live.h"
 #define TELEMETRY_ROWS   4501u
 #define TELEMETRY_BYTES  16u
 #define TELEMETRY_EVENTS 512u
@@ -44,7 +45,10 @@ typedef enum {
     TELEMETRY_EVENT,
     TELEMETRY_INFO,
     TELEMETRY_DUMP,
-    TELEMETRY_JUNCTION
+    TELEMETRY_JUNCTION,
+    TELEMETRY_JUNCTION_SOURCE,
+    TELEMETRY_BARCODE_DUMP,
+    TELEMETRY_JUNCTION_COUNTS
 } telemetry_kind_t;
 
 typedef struct {
@@ -56,8 +60,12 @@ typedef struct {
         telemetry_event_t event;
         telemetry_info_t info;
         ja_result_t junction;
+        jlive_report_t junction_source;
+        jlive_counts_t junction_counts;
     } data;
 } telemetry_message_t;
+_Static_assert(sizeof(telemetry_info_t) == 108u, "Preserve INFO size");
+_Static_assert(sizeof(telemetry_message_t) == 116u, "Preserve queue size");
 
 typedef struct {
     uint32_t lost;

@@ -1,14 +1,92 @@
-# B2a validation and junction trials
+# Junction validation — B2a closure and B2b SHADOW
 
 ## Status
 
 **B2a CLOSED**, as reported by Main_Worker after the `50426ae` A regression.
 All3 runs reached DONE. The worker did not push or flash. Evidence below is
 specific to its tested revision; closure does not invent missing heading,
-stack or recovery-path measurements. B2b is not authorized here: its proposed
-40-byte record with junction-encounter generation awaits operator approval
-and the contract from Main_Worker. See the
-[design](../architecture/JUNCTION_ACTION.md) for ownership and thresholds.
+stack or recovery-path measurements. Main approved B2b STEP4a/4b SHADOW
+integration, not live actions. The final40 B/20 B record/control contract,
+50 ms delivery/control limits and10 ms LINE-age refusal are approved.
+See the [fixed consumer](../architecture/JUNCTION_ACTION.md) and
+[live adapter](../architecture/JUNCTION_LIVE_ADAPTER.md).
+
+## B2b STEP4a software candidate
+
+Dependencies were merged with Main approval: `e43a1ca` brings `7177edd`,
+`711f4a5` brings STEP3 `366ec9a`, and `2cd44cd` brings STEP4b `ce58874`.
+Each clean merge passed its full host suite before restoring saved4a WIP:
+262,297 and329 tests respectively. Test-only Clang fixture fixes are merged
+as `2be2ca7`, `b7c9f1f` and `5aa6f05`, each with a clean329-test checkpoint;
+production code is unchanged. Integrated GCC host and full Clang
+ASan/UBSan/float-cast-overflow suites both pass363/363 with leak detection.
+No global warning flags were weakened.
+
+New cases cover malformed/coherent records, current/old epoch, age/cut/revision,
+route/encounter/motion guards, first-edge cancellation without a clear baseline,
+control heartbeat, clear-guard retention without expiry, reason counters,
+fieldwise adapter copy, serial wrap and STOP/START slot races. An ACK for X
+cannot free X+1, and a delayed action result cannot regress a newer live ACK.
+Telemetry tests prove separate strong-object override of the weak DUMP hook,
+value-copy counters and stopped repeat without new KR1/VE rows.
+
+Nine public-example profiles pass with zero compiler warnings: NONE, A, B, C,
+D, NO_WIFI, TEST, BENCH and SMP1. All use live enable0 and measured bound0.
+Strict ARM checks pass87/87 application units per profile,783 total. All nine
+SDK link/manifest probes pass. The SDK profile parser now validates the live
+permission/bound keys. A full first compile log is required: an incremental
+log is not a complete SDK proof. No live-action firmware was built.
+
+| Matched public single-core MQTT | text | data | BSS | Static RAM |
+| --- | ---: | ---: | ---: | ---: |
+| Rebuilt staging `235af44` | 409856 | 888 | 186204 | 187092 |
+| `2cd44cd` plus STEP4a | 425492 | 888 | 190108 | 190996 |
+| Delta | +15636 | 0 | +3904 | **+3904 B** |
+
+Both use the same public example headers. The worker did not open real
+credentials or private hardware logs. Retained logs are
+`build/b2b235-baseline-build.log`, `build/firmware-4a-*.log`,
+`build/b2b4a-builds.log` and `build/proof-4a-*.log`. Proof outputs remain
+outside the isolated source tree. Images/maps remain under
+`build/public-firmware/build_make/`; older public artifacts are backed up.
+
+ARM ABI probe: live state184 B, raw telemetry cache84 B, count cache36 B,
+record/control boards68 B and owner flags/alignment allowance8 B give a
+conservative **380 B**4a accounting, below the384 B ceiling. No new task,
+heap or wait. The integrated3904 B delta includes the separate S3 producer,
+window and retained diagnostic rows; it is not a4a-only380 B delta.
+Message116 B and INFO108 B are compile-time assertions. KR1/summaryv3 stay fixed.
+The normal ELF has a strong `T barcode_live_source_dump`, not the empty weak
+fallback. The26-entry boot table is read from S3 getters, not copied.
+
+### Stack and CPU estimates, not hardware acceptance
+
+Compiler frames in the normal SHADOW profile: vehicle1000 B, junction
+observer168 B, source read64 B, live read96 B, live tick64 B, telemetry368 B,
+live formatter48 B, count formatter40 B and strong S3 DUMP96 B. The source
+read/retire application path sums1000+64+96+20=1180 B; this excludes RTOS,
+interrupt, library and other vehicle paths and is not a whole-stack bound.
+S3's longest application decoder chain is88+80+72+128+176=544 B on the
+2048 B LINE stack. Existing stack sizes are unchanged. Every named task
+must still show at least256 B free on the new hardware image.
+
+Vehicle work is bounded: one40 B read plus a20 B heartbeat per10 ms tick,
+with additional publications only for state changes and terminal retirement.
+The basic payload traffic is about6 kB/s, not a CPU timing measurement.
+S3's planning targets remain about2% average and less than1 ms per source
+slice. Use `[BC_CPU]`, `[BC_CPU_ELIGIBLE]` and heartbeat CPU load; no source
+CPU percentage or deadline margin has yet been measured on this candidate.
+
+### First SHADOW hardware gate — Not run
+
+Main builds the configured operator image. The worker does not flash or push.
+Use NONE/enable0/bound0. Confirm SHADOW boot and the official table, normal
+LINE/SEARCH, decoded source2 evidence and **no action offer/kind7 job**.
+After STOP, collect reason-keyed counts, maximum record/control ages, original
+frame-end/pair-edge evidence, S3 source CPU rows and all named stack margins.
+GP20 repeats the stopped reports outside LINE mutex; it is not a mid-run job
+completion trigger. Physical barcode rejection, offset/clearance and final
+heading acceptance remain separate. Corrected/filtered IMU H3 is still pending.
 
 ## Operator-supplied evidence — 2026-11-10
 

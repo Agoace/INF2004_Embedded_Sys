@@ -36,6 +36,7 @@ ENTRIES = [
      ["TELEMETRY_BYTES"]),
     ("subsystem1/robot_network.h", ["robot_command_t"], []),
     ("vehicle/vehicle_board.h", ["vehicle_snapshot_t"], []),
+    ("vehicle/junction_live.h", ["jlive_t", "jlive_report_t", "jlive_counts_t"], []),
     ("subsystem1/mqtt_wire.h",
      ["rm_state_t", "rm_sonar_t", "rm_obstacle_t", "rm_detour_t",
       "rm_event_t", "rm_summary_t", "rm_heartbeat_t", "rm_command_t",

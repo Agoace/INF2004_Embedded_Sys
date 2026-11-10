@@ -307,11 +307,14 @@ B1c PEAK passes real-capture host tests; powered B1c checks are Not run.
 No barcode controls routing. The 5.5 mm sensor mount cannot go lower.
 See [Barcode B1c and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
 
-Live barcode decoding is not implemented. B2a can execute one fake A/B/C/D
-command at the next `+` junction; the default is NONE and keeps normal LINE.
-See [junction actions](docs/architecture/JUNCTION_ACTION.md) and the
-[unrun hardware procedure](docs/kernel/JUNCTION_VALIDATION.md).
-Barcode input ideas remain in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
+B2b decodes GP28 in SHADOW: the default NONE image reads source2 but never
+commands motion from a decoded letter. The150 mm label is unverified, not
+an action bound. Exclusive fake A/B/C/D images keep the B2a consumer; B2a is
+closed at `50426ae`. Live-action permission and SHADOW hardware checks remain
+separate gates. See the [live adapter](docs/architecture/JUNCTION_LIVE_ADAPTER.md),
+[junction actions](docs/architecture/JUNCTION_ACTION.md) and
+[revision-scoped validation](docs/kernel/JUNCTION_VALIDATION.md).
+B1c remains in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
 
 ## CR1 data representation
 
