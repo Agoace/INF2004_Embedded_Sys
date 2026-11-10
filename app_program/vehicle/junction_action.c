@@ -5,7 +5,6 @@
 #define JA_LINE_MAX_AGE_MS 50u
 #define JA_CLEAR_MM 6u
 #define JA_BAR_MS 1500u
-#define JA_CROSS_MS 3000u
 #define JA_STALL_MS 500u
 #define JA_WHITE_MS 20u
 #define JA_SPIN_TRANSLATION_MM 15u
@@ -286,9 +285,24 @@ static void search_step(ja_t *s, const vsm_inputs_t *in, bool fresh,
     }
 }
 
+/* C is a distance marker, not a second controller. The vehicle also
+ * calls this after normal SEARCH ticks, while the LINE wrapper is absent. */
+void ja_cross_progress(ja_t *s, const int32_t counts[2], uint32_t now)
+{
+    if (s->phase == JA_CROSS &&
+        mean_from(counts, s->result.edge_counts) >=
+            mm_counts(JA_CROSS_EXIT_MM)) {
+        ja_abort(s, counts, now, JA_OK);
+    }
+}
+
 bool ja_step(ja_t *s, const vsm_inputs_t *in, const ja_sample_t *sample,
              uint32_t now, vsm_drive_t *drive)
 {
+    if (s->phase == JA_CROSS) {
+        ja_cross_progress(s, in->counts, now);
+        return false;
+    }
     if (s->phase != JA_PENDING && !ja_active(s)) {
         return false;
     }
@@ -319,21 +333,15 @@ bool ja_step(ja_t *s, const vsm_inputs_t *in, const ja_sample_t *sample,
             return false;
         }
     }
+    if (s->phase == JA_CROSS) {
+        return false;
+    }
     const bool uturn = s->result.command == JA_UTURN;
     if (now - s->start_ms >= (uturn ? 8000u : 6000u)) {
         ja_abort(s, in->counts, now, JA_TOTAL_LIMIT);
-    } else if (s->phase == JA_CROSS || s->phase == JA_BAR_CLEAR) {
+    } else if (s->phase == JA_BAR_CLEAR) {
         const int64_t travel = mean_from(in->counts, s->result.edge_counts);
-        if (s->phase == JA_CROSS) {
-            if (now - s->start_ms >= JA_CROSS_MS) {
-                ja_abort(s, in->counts, now, JA_TRAVEL_LIMIT);
-            } else if (travel >= mm_counts(JA_CROSS_EXIT_MM) && fresh &&
-                       lp_line_seen(in->line) &&
-                       (in->line->norm[0] >= LP_PERMILLE(LP_LOST_PCT) ||
-                        in->line->norm[1] >= LP_PERMILLE(LP_LOST_PCT))) {
-                ja_abort(s, in->counts, now, JA_OK);
-            }
-        } else if (travel > mm_counts(JA_BAR_MAX_MM) ||
+        if (travel > mm_counts(JA_BAR_MAX_MM) ||
                    now - s->start_ms >= JA_BAR_MS) {
             ja_abort(s, in->counts, now, JA_TRAVEL_LIMIT);
         } else if (fresh) {

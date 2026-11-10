@@ -115,6 +115,8 @@ bool ja_step(ja_t *state, const vsm_inputs_t *in,
              vsm_drive_t *drive);
 void ja_abort(ja_t *state, const int32_t counts[2], uint32_t now_ms,
                uint8_t reason);
+/* Call after a successful normal LINE/SEARCH tick; never commands motion. */
+void ja_cross_progress(ja_t *state, const int32_t counts[2], uint32_t now_ms);
 void ja_finish(ja_t *state, const int32_t counts[2], uint32_t now_ms);
 const char *ja_reason_name(uint8_t reason);
 void ja_print(const ja_result_t *result);

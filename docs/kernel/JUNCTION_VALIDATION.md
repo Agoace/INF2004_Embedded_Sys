@@ -3,8 +3,8 @@
 ## Status
 
 The 2026-11-10 forced-corner redesign replaces `eb18004` blind travel and
-encoder-target turns. The worker did not push or flash. All redesigned
-hardware gates remain **Not run**. Historical operator evidence is separated
+encoder-target turns. The worker did not push or flash. The new C-route fix has hardware status **Not run**. Historical operator
+evidence on `eb18004` and `7648081` is separated
 below; it is not a PASS for the new images. See the
 [design](../architecture/JUNCTION_ACTION.md) for ownership and thresholds.
 
@@ -31,15 +31,30 @@ Old J2 did **not** pass. Do not tune locked LINE to compensate for blind
 travel. That travel,132 mm approach, settle and nominal90/180-degree endpoint
 have been removed.
 
+### Operator-supplied `7648081` J2 C x3
+
+Session: `robot-mqtt-20261110-140557.csv`, boot1318100973, supplied by
+Main_Worker. The worker did not open the log. Detector/pending/phase10
+confirmed3/3. Run3 reached phase7 DONE in about1.1 s, then normal LINE used
+two short LINE -> SEARCH -> LINE recoveries: operator PASS. Runs1/2 stopped
+phase8 reason6 after about0.9/0.7 s. The operator reported an angled approach
+and brief line loss after the cross. Thus J2 was not3/3 successful.
+
+The operator approved a C-only correction: permit the normal SEARCH route
+during C; keep the detector disarmed across handoffs; complete at160 mm in
+LINE or SEARCH. Remove C-local line-level/time failure gates so ordinary
+SEARCH failure/stop stays authoritative. A/B/D remain unchanged for J3–J5
+trials on `7648081`. New C hardware results are not supplied yet.
+
 ## Software evidence
 
-Checks below apply to the redesign based on `eb18004`, with public example
+Checks below apply to the C-route fix based on `7648081`, with public example
 settings in an isolated copy; Main must rebuild device-configured images.
 
 | Check | Result |
 | --- | --- |
-| Strict host C/Python suite |183/183 passed |
-| Clang ASan/UBSan/float-cast-overflow |183/183 passed |
+| Strict host C/Python suite |184/184 passed |
+| Clang ASan/UBSan/float-cast-overflow |184/184 passed |
 | Recorder / dashboard Python tests |70 /187 passed, included above |
 | Firmware | Nine warning-free profiles |
 | Strict ARM application compilation |675/675 (75 units x9 profiles) |
@@ -76,7 +91,11 @@ credential-bearing image or log.
 - Detector: clear baseline, already-on-cross START, threshold ramp, exact700,
   short ink spans, weak channel, stop/reverse and stale observations.
 - C: real LINE steering outputs, not equal wheel commands;160 mm detector
-  suppression, side-arm observations cannot re-fire, loss fails claimed C.
+  suppression and side-arm observations cannot re-fire. Loss returns the
+  original LINE_LOST route while keeping the consumed C job/origin. Real
+  shell fixtures cover SEARCH -> LINE, completion in SEARCH without taking
+  over its drive, and normal SEARCH failure with LS_FAIL_NOT_FOUND (not a
+  junction fault). Final C cancellation cannot change that shell cause.
 - Bar clearance:33 mm plus two fresh observations, duplicate suppression and
   a renewed black observation resetting the exit count;70 mm/1.5 s bounds.
 - A/B: forward-arm/stale FOUND rejected until fresh white20 ms; exact300 does
@@ -108,13 +127,15 @@ Matching public-config single-core MQTT, GNU Arm14.3, SDK2.3.0:
 | --- | ---: | ---: | ---: | ---: |
 | `168d705` |403988 |904 |189768 |190672 |
 | Old B2a `eb18004` NONE |410244 |904 |190048 |190952 |
-| Redesign NONE |408816 |904 |190052 |190956 |
-| Redesign A |408876 |904 |190052 |190956 |
-| Redesign B |408872 |904 |190052 |190956 |
-| Redesign C |408876 |904 |190052 |190956 |
-| Redesign D |408872 |904 |190052 |190956 |
+| `7648081` NONE |408816 |904 |190052 |190956 |
+| C-route fix NONE |409012 |904 |190052 |190956 |
+| C-route fix A |409076 |904 |190052 |190956 |
+| C-route fix B |409072 |904 |190052 |190956 |
+| C-route fix C |409076 |904 |190052 |190956 |
+| C-route fix D |409072 |904 |190052 |190956 |
 
-Redesign adds **284 B** versus `168d705`, **4 B** versus `eb18004`, within
+C-route fix adds **zero RAM** versus `7648081`: **284 B** versus `168d705`,
+**4 B** versus `eb18004`, within
 the approved320 B estimate. LINE adapter184 B; result52 B; source record24 B,
 board28 B; source sequence/ACK/busy12 B; observed phase/angle marks2 B plus
 alignment. Telemetry message116 B, INFO108 B, MBF4096 B and task stacks stay
@@ -126,6 +147,7 @@ unchanged. No allocation or task is added.
 | Telemetry entry |360 |360 |360 |
 | Junction observer |— |144 |152 |
 | Pure action step |— |128 |136 |
+| C progress observer |— |— |24 |
 | LINE wrapper step |— |40 |72 |
 | USB formatter |— |96 |104 |
 | IMU sample |1000 |1000 |1000 |
@@ -149,7 +171,7 @@ wall collision or hard wheel restraint as a stall test.
 | --- | --- | --- |
 | J0 | Verify pair spacing/height, normalized floor/line/bar contrast and pending-command barcode-only rejection. Capture33 mm/two-fresh exit evidence, white20 ms and >=500 return. Lifted A/B/D direction and ESTOP checks. No axle/pivot ruler target is required. |Not run |
 | J1 | NONE plain-line/`+` baseline with zero kind7 and zero losses on the new image. Old `eb18004` cross passed; repeat after redesign. |Not run |
-| J2 | C x6: normal LINE steering through bar/side arms, no private SEARCH,160 mm detector suppression, DONE only with line retained. No blind equal-speed bridge. Record losses and actual speed. |Not run |
+| J2 | Repeat C with angled approaches and brief loss: normal LINE -> SEARCH -> LINE, detector suppressed160 mm across handoffs, DONE in LINE or SEARCH. No private SEARCH or blind bridge. Verify the straight outgoing course is retained after recovery; DONE during SEARCH alone is not PASS. Record normal SEARCH failure/stop if recovery fails. `7648081` results above are not acceptance of this fix. |Not run |
 | J3 | A x3: white rejects forward stem; first LEFT arm found; normal LINE swings onto that arm. Measure final heading on the arm and record first/accepted SEARCH angles. |Not run |
 | J4 | B x3: same checks on RIGHT arm. |Not run |
 | J5 | D x3: first LEFT arm skipped; re-white; second incoming stem>=120 degrees accepted; LINE runs back. Record both angles and final heading. |Not run |

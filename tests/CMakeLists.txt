@@ -222,6 +222,7 @@ endforeach()
 set(junction_sources app_program/vehicle/junction_action.c
     app_program/vehicle/junction_source.c)
 host_test(test_junction tests/test_junction.c ${junction_sources}
+    app_program/vehicle/vehicle_sm.c
     app_program/vehicle/junction_line.c ${line_search_source}
     ${line_trace_source} ${line_steer_source} ${line_position_source}
     ${obstacle_source})
@@ -257,6 +258,8 @@ foreach(command A B C D)
     add_test(NAME test_vehicle_junction_${command}_estop
         COMMAND test_vehicle_junction_${command} junctionstop)
 endforeach()
+add_test(NAME test_vehicle_junction_C_recovery
+    COMMAND test_vehicle_junction_C junctionrecover)
 add_test(NAME test_vehicle_junction_start_busy
     COMMAND test_vehicle_junction_A junctionbusy)
 add_test(NAME test_vehicle_junction_start_stale

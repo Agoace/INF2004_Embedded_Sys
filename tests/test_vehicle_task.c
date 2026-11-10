@@ -11,7 +11,7 @@
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/subsystem4/imu_service.h"
 #include "../app_program/vehicle/junction_source.h"
-static bool junction_mode,junction_started,junction_stop;static int32_t junction_origin;
+static bool junction_mode,junction_started,junction_stop,junction_recover;static int32_t junction_origin;
 static unsigned int junction_results,spins;static ja_result_t junction_result;
 static bool spin_started;static int32_t spin_origin[2];
 static unsigned int junction_start_fail,snapshot_reads;
@@ -41,7 +41,7 @@ ER tk_slp_tsk(TMO t) {
             if (!junction_started) {junction_started=true;junction_origin=mean;}
             const int32_t travel=mean-junction_origin;
             raw[0]=raw[1]=travel>=300 && travel<524 ? 3500u : 1700u;
-            if (spin_started && junction_results==0u) {
+            if (spin_started && junction_results==0u && JUNCTION_TEST_CMD!=JA_STRAIGHT) {
                 const int32_t angle=((counts[1]-spin_origin[1])-(counts[0]-spin_origin[0]))*10000/2405;
                 const int32_t target=JUNCTION_TEST_CMD==JA_UTURN ? 18000 :
                     (JUNCTION_TEST_CMD==JA_RIGHT ? -3300 : 3300);
@@ -53,6 +53,9 @@ ER tk_slp_tsk(TMO t) {
                 if (error<500) raw[0]=raw[1]=2300u;
                 else if (error<700) {raw[0]=2300u;raw[1]=1100u;}
                 else raw[0]=raw[1]=500u; /* White before each new line. */
+            }
+            if (junction_recover && travel>=900 && junction_results==0u) {
+                raw[0]=raw[1]=spins>=3u ? 2600u : 500u;
             }
         }
         if (calibrating) lp_calib_add(&line,raw);
@@ -178,7 +181,9 @@ int motion_clear_faults(void) { return E_OK; }
 int motion_set_speed(int16_t l,int16_t r) {
     if (l>0 && r>0) ++line_drives;
     if (junction_mode && (vehicle_run_epoch()&1u) && l*r<0) {
-        assert(vehicle_line_run_epoch()==0u && junction_source_busy());++spins;
+        assert(vehicle_line_run_epoch()==0u);
+        if (junction_results==0u) assert(junction_source_busy());
+        ++spins;
         if (!spin_started) {
             spin_started=true;spin_origin[0]=counts[0];spin_origin[1]=counts[1];
         }
@@ -192,7 +197,8 @@ int motion_estop(void) { ++estops;return motion_stop(); }
 int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_OK; }
 int main(int argc,char **argv) {
     junction_stop=argc>1 && !strcmp(argv[1],"junctionstop");
-    junction_mode=junction_stop || (argc>1 && !strcmp(argv[1],"junction"));
+    junction_recover=argc>1 && !strcmp(argv[1],"junctionrecover");
+    junction_mode=junction_stop || junction_recover || (argc>1 && !strcmp(argv[1],"junction"));
     junction_start_fail=argc>1 && !strcmp(argv[1],"junctionbusy") ? 1u :
         (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
@@ -242,7 +248,7 @@ int main(int argc,char **argv) {
             else assert(first==accepted && (JUNCTION_TEST_CMD==JA_RIGHT ? accepted<0 : accepted>0));
         }
         assert(junction_source_acknowledged()==junction_result.sequence);
-        assert(JUNCTION_TEST_CMD==JA_STRAIGHT ? spins==0u : spins>0u);
+        assert(JUNCTION_TEST_CMD==JA_STRAIGHT && !junction_recover ? spins==0u : spins>0u);
     } else assert(junction_results==0u);
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);

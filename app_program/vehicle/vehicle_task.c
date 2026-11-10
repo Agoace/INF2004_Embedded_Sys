@@ -1149,6 +1149,10 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        if (vsm.state == VSM_RUNNING &&
+            (vsm.running == VSM_MOD_LINE || vsm.running == VSM_MOD_SEARCH)) {
+            ja_cross_progress(&junction_line.action, s.counts, now);
+        }
         junction_observe();
         __atomic_store_n(&line_run_epoch,
             vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE &&

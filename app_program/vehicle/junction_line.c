@@ -28,6 +28,11 @@ vsm_outcome_t jl_step(void *ctx, const vsm_inputs_t *in, uint32_t now,
     if (!ja_searching(action)) {
         out = lt_step(line->line, in, now, drive);
         if (vsm_outcome_type(out) != VSM_OUT_RUNNING) {
+            if (action->phase == JA_CROSS &&
+                vsm_outcome_type(out) == VSM_OUT_LINE_LOST) {
+                /* Preserve C's origin/disarm across the ordinary route. */
+                return out;
+            }
             if (ja_active(action)) {
                 const vsm_outcome_type_t type = vsm_outcome_type(out);
                 ja_abort(action, in->counts, now,

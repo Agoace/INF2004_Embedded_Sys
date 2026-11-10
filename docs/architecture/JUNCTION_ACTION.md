@@ -12,7 +12,7 @@ the barcode owner is still pending. No barcode source file is changed.
 | NONE | Run unchanged LINE. No detector or action. |
 | A | Follow LINE past the bar; SEARCH LEFT; accept the first new line. |
 | B | Follow LINE past the bar; SEARCH RIGHT; accept the first new line. |
-| C | Follow LINE throughout; suppress only the junction detector for160 mm. |
+| C | Use normal LINE/SEARCH routes; keep the detector disarmed for160 mm. |
 | D | SEARCH LEFT; skip the first new line; accept the second incoming stem. |
 
 A command is latched once at START, not on LINE restart. Confirmation consumes
@@ -33,9 +33,11 @@ A/B/D private SEARCH stays inside the LINE wrapper; it does not cancel itself.
 There is no new module ID. KR1 module5 still means SCAN reverse. LINE,
 SEARCH, SCAN and DETOUR files/settings are unchanged. Only vehicle glue
 commands motion; no job waits, tasks, allocation, PWM, GPIO or IRQ changes.
-Before claim, normal LINE outcomes and routes win. During a claimed job,
-line loss during LINE travel, obstacle, sensor fault or deadline causes an
-explicit stop, not a detour or blind fallback. Existing ESTOP and motion
+Before claim, normal LINE outcomes and routes win. Claimed A/B/D jobs still
+stop on line loss, obstacle, sensor fault or deadline. C line loss uses the
+normal LINE -> SEARCH -> LINE route, not a junction failure. Normal SEARCH
+outcomes/failures remain authoritative. Claimed C's existing LINE obstacle/
+sonar fault handling is unchanged. Existing ESTOP and motion
 faults remain authoritative. The LINE-only IMU diagnostic epoch is excluded
 only during private SEARCH; normal LINE travel in C/bar clearance remains
 LINE. IMU still cannot command navigation or motors.
@@ -97,7 +99,7 @@ are not proof of physical rejection.
 ## Phases and bounds
 
 ```text
-pending -> confirmed C -> normal LINE for160 mm -> done
+pending -> confirmed C -> normal LINE / natural SEARCH for160 mm -> done
         -> confirmed A/B/D -> LINE past bar -> private SEARCH
           A/B: white -> first new line -> LINE + done
           D:   white -> skip first -> white -> second -> LINE + done
@@ -114,8 +116,16 @@ on hardware. Approximate123 mm sensor radius then leaves the axle roughly
 that geometry nor the contact estimate is used as a turn endpoint.
 
 Continue the original LINE controller on every bar-clear/C tick; never force
-equal wheel speeds. C completes only after160 mm from first edge, fresh line
-level evidence and uninterrupted LINE operation. Only its detector is disarmed.
+equal wheel speeds. C is a progress marker: complete at160 mm net mean
+encoder displacement from the first edge in either normal LINE or SEARCH.
+Keep that origin, consumed command and detector disarm across every handoff;
+a spin does not accumulate absolute wheel travel toward160 mm. Only the
+junction detector is disarmed. No fresh line-level condition or C-local
+3/6-second deadline may preempt normal SEARCH. Existing vehicle safety and
+run limits remain authoritative. The observer runs only while the shell is
+RUNNING in LINE/SEARCH: a normal SEARCH failure/stop wins even on a tick
+that reaches160 mm. Final run cancellation can emit a cancelled C result,
+but does not replace the normal shell failure with a junction reason.
 No extra junction hold is added: J1 showed the existing LINE can cross `+`.
 Pair mode does not use the old three-sensor junction-hold implementation.
 
@@ -132,15 +142,15 @@ DONE marks line handoff, NOT final physical arm alignment.
 | Guard | Bound |
 | --- | --- |
 | Bar exit |70 mm maximum from edge;1.5 s after confirmation |
-| C exit |160 mm minimum;3 s after confirmation; no line loss |
+| C completion |160 mm from first edge in normal LINE or SEARCH; no C-local timeout |
 | A/B SEARCH | Stop at150 degrees or4 s without a qualifying line |
 | D SEARCH | Second line>=120; stop at270 degrees or6 s |
 | Private helper extent |160/280 degrees, beyond the hard limit; never reverse sweep |
-| Whole A/B/C job |6 s after confirmation |
+| Whole A/B job |6 s after confirmation |
 | Whole D job |8 s after confirmation |
 | Spin wheel stall |500 ms without progress in commanded direction, per wheel |
 | Spin direction/translation | Wrong direction beyond3 degrees; mean translation>15 mm |
-| Sample age | Pure guard50 ms; vehicle10 ms check remains stricter |
+| Sample age | A/B/D pure guard50 ms; vehicle10 ms checks apply to all commands |
 
 Whole-job caps can preempt leg budgets. All time differences are unsigned;
 counts use short signed modular deltas and64-bit intermediate arithmetic.
@@ -152,7 +162,9 @@ opposite-direction sweep is unreachable. Safety bounds are not accuracy proof.
 
 ## Reports and failures
 
-Kind7 remains live-only event v2,20 bytes, from/to LINE=1. Phase packets keep
+Kind7 remains live-only event v2,20 bytes, from/to LINE=1 (job owner,
+not a module handoff; C can complete while actual module is SEARCH).
+Phase packets keep
 word low byte command1..4, high byte phase; detail reason0..12:
 
 | Phase | Current meaning |
@@ -162,10 +174,10 @@ word low byte command1..4, high byte phase; detail reason0..12:
 |3/5 | Legacy settle phases; decoded but never emitted now |
 |4 | SEARCH first new line |
 |6 | D skipped first; SEARCH second new line |
-|7 | done / LINE handoff |
+|7 | C distance complete (possibly still SEARCH); A/B/D LINE handoff |
 |8 | failed |
 |9 | unused/cancelled before confirmation, including natural non-LINE handoff |
-|10 | C normal LINE with detector suppressed |
+|10 | C normal LINE/SEARCH progress marker with detector suppressed |
 
 Two new angle variants preserve the same event size: detail=`0x80|command`
 for first line, `0x40|command` for accepted line. Word is signed16-bit

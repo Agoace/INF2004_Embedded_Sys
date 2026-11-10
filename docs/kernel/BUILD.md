@@ -108,7 +108,8 @@ See [H3 plan](../../testing/subsystem4/TEST_LOG.md#h3-two-image-comparison-plan)
 
 Use `JUNCTION_TEST_CMD=NONE|A|B|C|D`. A/B force SEARCH left/right to the
 first new arm; D skips the first LEFT arm and accepts the second. C follows
-normal LINE across, with only its detector suppressed for160 mm. The fake command is latched once at normal vehicle
+normal LINE/SEARCH routes, with only its detector suppressed for160 mm
+from the first edge across natural SEARCH handoffs. The fake command is latched once at normal vehicle
 START; TEST/BENCH have no such START. NONE leaves LINE decisions unchanged.
 The option is included in the object-profile marker and passed to C as0..4.
 

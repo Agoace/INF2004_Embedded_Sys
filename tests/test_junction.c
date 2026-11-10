@@ -142,7 +142,7 @@ static void failures(void) {
     init(&f,JA_LEFT);claim(&f);(void)tick(&f,1000,1000);
     assert(f.action.result.reason==JA_TRAVEL_LIMIT);
     init(&f,JA_STRAIGHT);claim(&f);f.now+=3000u;(void)tick(&f,1,1);
-    assert(f.action.result.reason==JA_TRAVEL_LIMIT);
+    assert(f.action.phase==JA_CROSS); /*normal SEARCH may outlast3s*/
     init(&f,JA_LEFT);claim(&f);f.sample.valid=false;(void)tick(&f,1,1);
     assert(f.action.result.reason==JA_STALE);
     init(&f,JA_LEFT);begin(&f);ja_finish(&f.action,f.in.counts,f.now);
@@ -171,8 +171,13 @@ static void wrapper(void) {
     assert(j.action.phase==JA_UNUSED);
     init(&f,JA_STRAIGHT);claim(&f);j.action=f.action;
     f.in.line_event=vc_event(VC_EVENT_LINE_LOST,0u);
-    assert(vsm_outcome_type(jl_step(&j,&f.in,20u,&d))==VSM_OUT_FAILED);
-    assert(j.action.result.reason==JA_NO_LINE); /*claimed C cannot hide loss*/
+    assert(vsm_outcome_type(jl_step(&j,&f.in,20u,&d))==VSM_OUT_LINE_LOST);
+    assert(j.action.phase==JA_CROSS && j.action.result.reason==JA_OK);
+    const int32_t edge=j.action.result.edge_counts[0];
+    jl_start(&j,0u,30u);assert(j.action.result.edge_counts[0]==edge);
+    f.in.counts[0]=edge+1987;f.in.counts[1]=edge+1987;
+    ja_cross_progress(&j.action,f.in.counts,40u);
+    assert(j.action.phase==JA_DONE); /*also works with no LINE sample*/
     /* NONE delegates the exact old outcome/drive on all positions. */
     ja_init(&j.action,131,1u);lt_start(&a,0u,0u);jl_start(&j,0u,0u);
     f.in.line_event=VC_EVENT_NONE;
@@ -181,6 +186,49 @@ static void wrapper(void) {
         vsm_inputs_t in=f.in;in.line=&copy;vsm_drive_t da={0},db={0};
         assert(lt_step(&a,&in,i,&da)==jl_step(&j,&f.in,i,&db));
         assert(!memcmp(&da,&db,sizeof(da)));
+    }
+}
+static void cross_routes(void) {
+    for (unsigned int mode=0u;mode<3u;++mode) {
+        fixture_t f;init(&f,JA_STRAIGHT);claim(&f);line(&f,false);
+        lt_t original;lt_init(&original,&LINE);jl_t j;jl_init(&j,&original,131);
+        j.action=f.action;j.sample=f.sample;const int32_t edge=j.action.result.edge_counts[0];
+        ls_t search;const ls_config_t cfg={.speed_mm_s=131,.turn_counts=312};ls_init(&search,&cfg);
+        vsm_t v;vsm_init(&v,VSM_DEFAULT_ROUTES,VSM_DEFAULT_ROUTE_COUNT);
+        assert(vsm_set_module(&v,VSM_MOD_LINE,jl_module(&j)));
+        assert(vsm_set_module(&v,VSM_MOD_SEARCH,ls_module(&search)));
+        assert(vsm_start(&v,VSM_MOD_LINE,0u,100u));
+        f.in.counts[0]=f.in.counts[1]=edge+(mode==1u ? 1980 : 900);
+        f.in.line_event=vc_event(VC_EVENT_LINE_LOST,VC_LINE_SIDE_LEFT);
+        f.lp.norm[0]=f.lp.norm[1]=0u;
+        vsm_drive_t d=vsm_step(&v,&f.in,0u,110u);
+        assert(v.state==VSM_RUNNING && v.running==VSM_MOD_SEARCH && j.action.phase==JA_CROSS);
+        assert(d.left_mm_s==-131 && d.right_mm_s==131);
+        const int32_t start[2]={f.in.counts[0],f.in.counts[1]};f.in.line_event=VC_EVENT_NONE;
+        if (mode==1u) {
+            f.in.counts[0]+=9;f.in.counts[1]+=11;
+            d=vsm_step(&v,&f.in,0u,120u);ja_cross_progress(&j.action,f.in.counts,120u);
+            assert(j.action.phase==JA_DONE && v.running==VSM_MOD_SEARCH && v.state==VSM_RUNNING);
+            assert(d.left_mm_s==-131 && d.right_mm_s==131); /*no takeover/stop*/
+        } else if (mode==2u) {
+            f.in.counts[0]=start[0]-313;f.in.counts[1]=start[1]+313;
+            (void)vsm_step(&v,&f.in,0u,120u);assert(search.step==1u);
+            f.in.counts[0]=start[0]+313+1090;f.in.counts[1]=start[1]-313+1090;
+            d=vsm_step(&v,&f.in,0u,130u);
+            if (v.state==VSM_RUNNING) ja_cross_progress(&j.action,f.in.counts,130u);
+            assert(v.state==VSM_FAULT && v.fault==VSM_FAULT_FAILED && v.fault_detail==LS_FAIL_NOT_FOUND);
+            assert(d.action==VSM_ACT_STOP && j.action.phase==JA_CROSS);
+            ja_finish(&j.action,f.in.counts,130u);
+            assert(j.action.result.reason==JA_CANCELLED && v.fault_detail==LS_FAIL_NOT_FOUND);
+        } else {
+            line(&f,false);f.in.line_event=vc_event(VC_EVENT_LINE_FOUND,0u);
+            (void)vsm_step(&v,&f.in,0u,9000u);
+            assert(v.state==VSM_RUNNING && v.running==VSM_MOD_LINE && j.action.phase==JA_CROSS);
+            assert(j.action.result.edge_counts[0]==edge && !j.action.command.valid);
+            f.in.line_event=VC_EVENT_NONE;f.in.counts[0]=f.in.counts[1]=edge+1987;
+            (void)vsm_step(&v,&f.in,0u,9010u);ja_cross_progress(&j.action,f.in.counts,9010u);
+            assert(j.action.phase==JA_DONE && v.running==VSM_MOD_LINE);
+        }
     }
 }
 static void fresh_gates(void) {
@@ -259,5 +307,5 @@ static void unchanged_line(void) {
 int main(void) {
     _Static_assert(sizeof(ja_command_t)==24u,"source unchanged");
     _Static_assert(sizeof(ja_result_t)==52u,"bounded result");
-    detector();commands(false);commands(true);failures();wrapper();fresh_gates();source();unchanged_line();return 0;
+    detector();commands(false);commands(true);failures();wrapper();cross_routes();fresh_gates();source();unchanged_line();return 0;
 }
