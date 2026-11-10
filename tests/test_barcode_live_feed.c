@@ -17,6 +17,7 @@ static unsigned int used;
 #if defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wmissing-format-attribute"
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
 #endif
 int tm_printf(const UB *format, ...)
 {
