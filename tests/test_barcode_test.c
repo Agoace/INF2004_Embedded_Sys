@@ -425,6 +425,13 @@ static long diagnostic_value(const char *text, const char *key)
     return strtol(at + strlen(key), NULL, 0);
 }
 
+/* RTOS unsigned-byte format ABI cannot take printf's char-format
+ * attribute; keep forwarding exceptions local to this host stub. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-format-attribute"
+#pragma clang diagnostic ignored "-Wformat-nonliteral"
+#endif
 int tm_printf(const UB *format, ...)
 {
     char text[640];
@@ -640,6 +647,9 @@ int tm_printf(const UB *format, ...)
     }
     return 0;
 }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 int main(int argc, char **argv)
 {
