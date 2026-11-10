@@ -23,7 +23,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
-| [s3-line-barcode/](s3-line-barcode/) | Current kernel LINE/SEARCH and analog barcode ideas; originals in archive/s3-line-barcode/. |
+| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
@@ -123,7 +123,7 @@ The archived development record retains older CMake bench examples.
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
 | Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
-| Barcode input/ideas, not a robot decoder | [BARCODE.md](s3-line-barcode/BARCODE.md) — analog GP28, course geometry and validation still required. |
+| Barcode B1c | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
 | Simulator clock, scenario, and trace | [`sim/core/runtime.c`](../sim/core/runtime.c), [`sim/core/scenario.py`](../sim/core/scenario.py), [`sim/core/protocol.py`](../sim/core/protocol.py), [`sim/core/runner.py`](../sim/core/runner.py) |
@@ -206,6 +206,62 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
+- [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md):
+  [`barcode_calibration.h`](../app_program/subsystem3/barcode_calibration.h),
+  [`barcode_calibration.c`](../app_program/subsystem3/barcode_calibration.c),
+  the [`line_service.c`](../app_program/subsystem3/line_service.c) calibration
+  board and [`test_barcode_calibration.c`](../tests/test_barcode_calibration.c)
+  observe GP28 during the existing spin, with fallback 320/240.
+  No live decoder or actions are added.
+
+- [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md):
+  [`barcode_live_source.h`](../app_program/subsystem3/barcode_live_source.h)
+  and [`barcode_live_source.c`](../app_program/subsystem3/barcode_live_source.c)
+  define the 40 B record and 20 B control, coherent getters and board ownership;
+  no decoder feeding or actions are enabled by this interface step.
+
+## TEST-only barcode B1c
+
+- [`barcode.c`](../app_program/subsystem3/barcode.c) and
+  [`barcode.h`](../app_program/subsystem3/barcode.h) — pure incremental
+  Code 39, both width methods/directions, command values only.
+- [`barcode_peak.c`](../app_program/subsystem3/barcode_peak.c) and
+  [`barcode_peak.h`](../app_program/subsystem3/barcode_peak.h) — separate
+  bounded PEAK TIME/DISTANCE path, white-return lobes, framing-star bands,
+  geometric spaces and conflict rejection. WIDTH remains unchanged.
+- [`barcode_capture.c`](../app_program/subsystem3/barcode_capture.c) —
+  packed/decimated ADC and motion capture; O(1) line-task copy and ranges.
+- [`barcode_test.c`](../app_program/subsystem3/barcode_test.c) and
+  [`barcode_hw.c`](../app_program/subsystem3/barcode_hw.c) — priority-20
+  TEST observer; GP20 ranges, GP21 pass; checked stop/freeze then wait for
+  terminal DTR + 1 s before report/dump, bounded coherent-board retries and
+  detailed fault masks. [USB wait](s3-line-barcode/USB_CAPTURE_WAIT.md).
+- [`barcode_drive.c`](../app_program/subsystem3/barcode_drive.c) and
+  [`barcode_drive.h`](../app_program/subsystem3/barcode_drive.h) — pure
+  forward/backward distance/time bounds and fault/start inhibition.
+- [`barcode_settings.h`](../app_program/subsystem3/barcode_settings.h) —
+  430 mm / 100 mm/s defaults; short-map target clamps to <=450 mm.
+- [`tests/barcode_checks.cmake`](../tests/barcode_checks.cmake) — strict
+  decoder, packed frames, capture, drive/limit, GPIO and observer tests;
+  [`tests/barcode_stubs/`](../tests/barcode_stubs/) supplies core-0 doubles.
+- [Real-capture regression](../tests/test_barcode_real.c) uses the
+  [public-safe CSV](../tests/fixtures/barcode_large_f_forward.csv); both
+  methods decode F from forward and reversed replay.
+- [Blur cases](../tests/test_barcode_blur.c) test partial narrow peaks and
+  bar/space bias for all 43 symbols; these are not measured small-print data.
+- [PEAK units](../tests/test_barcode_peak.c) cover all 43 symbols,
+  directions/sizes, noise, synthetic 18 mm line and failure/conflict guards.
+  [Four real captures](../tests/test_barcode_peak_real.c) under
+  [fixtures](../tests/fixtures/) cover large/small F, both native axes,
+  raw/packed and reversed replay; all quiet crops must reject.
+- [B1c contract](s3-line-barcode/BARCODE.md) and
+  [S3 procedures/results](../testing/subsystem3/TEST_LOG.md) — B1 contrast
+  passed; hand-push procedure failed. Lifted forward passed on 45040c7;
+  0cd2c03 passed lifted/large F in both directions at 433 mm observed,
+  but small F failed WIDTH. B1c PEAK has host evidence, not powered proof.
+  The mount cannot go below 5.5 mm; it touches a 10 mm hump.
+  Normal routing does not use the decoder.
+
 ## IMU task and hump report
 
 - [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; diagnostic C hardware on 29d57de, uncorrected LINE height accepted, corrected over-read under investigation (9/9 humps, 0 false in 5 flat); full-circuit no-false-hump H3 is priority and Not run; accuracy follow-up deferred); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
@@ -269,7 +325,9 @@ vehicle task described below.
   separates this saving from minimum-bit packing.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
 
-- [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
+- [`line_service.c`](../app_program/subsystem3/line_service.c) — priority-11
+  line task, inherited-mutex snapshot and calibration owner; `raw_bc` is
+  sampled, with an O(1) copy only in BARCODE_CAPTURE.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 

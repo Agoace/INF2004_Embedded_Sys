@@ -156,6 +156,21 @@ ifeq ($(TEST),1)
 TEST_SUFFIX := _test
 endif
 
+# Exclusive analog barcode capture: no lwIP RAM or other subsystem tests.
+BARCODE_CAPTURE ?= 0
+ifneq ($(filter $(BARCODE_CAPTURE),0 1),$(BARCODE_CAPTURE))
+$(error Unknown BARCODE_CAPTURE '$(BARCODE_CAPTURE)'; use 0 or 1)
+endif
+ifeq ($(BARCODE_CAPTURE),1)
+BARCODE_MODE := $(TEST):$(BENCH):$(IMU_STREAM):$(SMP)
+BARCODE_MODE := $(BARCODE_MODE):$(WIFI):$(NET):$(MQTT)
+ifneq ($(BARCODE_MODE),1:0:0:0:none:none:0)
+$(error BARCODE_CAPTURE=1 requires TEST=1 BENCH=0 IMU_STREAM=0 \
+SMP=0 WIFI=none NET=none MQTT=0)
+endif
+BARCODE_CAPTURE_SUFFIX := _barcode_capture
+endif
+
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
 # GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
 # the last messages and the kernel's crash report after a crash, when the
@@ -181,7 +196,11 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(BARCODE_CAPTURE_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -245,6 +264,7 @@ CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
 CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
 CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
+CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -277,7 +297,12 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)-junction$(JUNCTION_TEST_CMD_ID)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)
+PROFILE_ID := $(PROFILE_ID)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)
+PROFILE_ID := $(PROFILE_ID)-diag$(DIAG)-imu_stream$(IMU_STREAM)
+PROFILE_ID := $(PROFILE_ID)-hump_source$(IMU_HUMP_SOURCE)
+PROFILE_ID := $(PROFILE_ID)-junction$(JUNCTION_TEST_CMD_ID)
+PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

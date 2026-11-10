@@ -52,6 +52,7 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `DIAG` | 0; 1 adds fixed motion timing captures, printed at GP20 |
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
+| `BARCODE_CAPTURE` | 0; 1 selects B1b driven TEST capture; VIN required |
 | `JUNCTION_TEST_CMD` | NONE (default), A/B/C/D; fake command latched at vehicle START; other values rejected; fake images add `_jtestA`..`_jtestD` |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
@@ -60,6 +61,44 @@ GP0/GP1 belong to I2C0. BENCH has no IMU task. Follow the current
 [50 Hz support/GP21 procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 The GP21 drive trial requires VIN and a lifted-wheel stop check first.
 It is not the full TEST suite or a navigation feature.
+
+### Barcode B1b driven TEST image
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
+```
+
+The filename is `mtk3pico_smp0_usb_cdc_test_barcode_capture.uf2`. Use USB
+console and CRASH_REPORT=0 on the connected robot. This profile requires
+TEST=1, SMP=0, WIFI=none, NET=none and MQTT=0; BENCH and IMU_STREAM are
+rejected. It skips ordinary subsystem tests and the automatic S2 steps,
+but **GP21 now drives in this image**. VIN is required. Lift both wheels
+for the first check. GP20 records floor/white/black ranges; after those,
+GP21 starts a 430 mm forward pass at 100 mm/s, then a fresh press after
+the complete dump starts a backward pass. Use only one sheet per run;
+swap the 2x F and 141 mm F sheets while stopped. Settings are in
+[`barcode_settings.h`](../../app_program/subsystem3/barcode_settings.h);
+the target is clamped to <=450 mm for the operator's shorter map. A press
+while moving requests stop.
+Faults/deadline/capacity stop and inhibit restart. No dump/rearm occurs
+until stop API success and two fresh zero-duty/low-speed snapshots.
+Busy snapshot reads use the last coherent board for at most two failed
+10 ms polls; three failures or source age >30 ms stops. BC_FAULT records
+cause bits, read/age values, motor faults/watchdog and actual wake rc.
+A false watchdog flag has no startup grace; it must be armed to command.
+Capture uses 6144 four-byte decimated records, about 12.3 s at default
+2 ms, plus 512 motion records. The TEST runner reports each frame and
+WIDTH and B1c PEAK on independent TIME/DISTANCE axes after freeze.
+All accepted payloads must agree; conflicts give AMBIGUOUS. B1c PEAK has
+host replay evidence, not powered acceptance. Its sensor remains at the
+5.5 mm mechanical minimum; it touches the floor on a 10 mm hump.
+Full dumps can take tens of seconds:
+wait for READY before GP21; presses during the dump are ignored with one
+notice. Partial-contrast optical rules and the approved real-capture host
+fixtures are documented in the barcode contract. Read the
+[B1c procedure, stop limits and RAM](../s3-line-barcode/BARCODE.md) first.
+
+### Profile identity
 
 The profile marker prevents reuse of objects with different options. For a
 fully clean validation, use `make clean` with the same profile options,
