@@ -23,6 +23,66 @@ static bool calibrating;
 static line_snapshot_t snapshot;
 #include "../platform/app_board.h"
 static APP_BOARD(line_snapshot_t) board;
+static barcode_calibration_t barcode_calibration;
+static APP_BOARD(barcode_cal_report_t) barcode_calibration_board;
+
+/* Publish only lifecycle boundaries, not another per-sample board. */
+static void publish_barcode_calibration(void)
+{
+    app_board_publish(&barcode_calibration_board.sequence,
+                      barcode_calibration_board.words,
+                      &barcode_calibration.report,
+                      sizeof(barcode_calibration.report));
+}
+
+/* A separate board leaves the existing LINE snapshot and wire sizes intact. */
+int line_barcode_calibration_try_read(barcode_cal_report_t *out)
+{
+    if (!out) {
+        return E_PAR;
+    }
+    if (!ready) {
+        return E_OBJ;
+    }
+    barcode_cal_report_t report;
+    if (!app_board_try_read(&barcode_calibration_board.sequence,
+                           barcode_calibration_board.words, &report,
+                           sizeof(report))) {
+        return E_TMOUT;
+    }
+    *out = report;
+    return E_OK;
+}
+
+/* Called after unlocking, by the calibration caller, not acquisition/ISR. */
+static void log_barcode_calibration(const barcode_cal_report_t *report)
+{
+    const char *mode = "INVALID";
+    if (report->mode == BC_CAL_LEARNED) {
+        mode = "LEARNED";
+    } else if (report->mode == BC_CAL_FALLBACK) {
+        mode = "FALLBACK";
+    } else if (report->mode == BC_CAL_ABORTED) {
+        mode = "ABORTED";
+    }
+    tm_printf((UB *)"[BC_CAL] gen %lu samples %lu GP28 %lu..%lu "
+              "mode %s faults %02lx\n",
+              (unsigned long)report->generation,
+              (unsigned long)report->samples,
+              (unsigned long)report->minimum,
+              (unsigned long)report->maximum, mode,
+              (unsigned long)report->faults);
+    tm_printf((UB *)"[BC_CAL] white %lu/%lu black %lu/%lu hold_us %lu "
+              "gap_us %lu rise %lu fall %lu; shadow only\n",
+              (unsigned long)report->white_mean,
+              (unsigned long)report->white_samples,
+              (unsigned long)report->black_mean,
+              (unsigned long)report->black_samples,
+              (unsigned long)report->black_hold_us,
+              (unsigned long)report->max_gap_us,
+              (unsigned long)report->rise,
+              (unsigned long)report->fall);
+}
 
 /*
  * Publish the latest line result for bounded network reads.
@@ -76,6 +136,8 @@ static void line_task(INT code, void *ctx)
             snapshot.raw_bc = sample.raw[2];
             if (calibrating) {
                 lp_calib_add(&snapshot.line, snapshot.raw);
+                barcode_calibration_add(&barcode_calibration, sample.us,
+                                        sample.raw[2]);
             } else {
                 const uint32_t ms =
                     drv_time_ms() -
@@ -134,6 +196,7 @@ int line_service_init(void)
     if (er >= E_OK) {
         ready = true;
         publish_line();
+        publish_barcode_calibration();
     }
     return er;
 }
@@ -203,6 +266,8 @@ int line_calibration_begin(void)
     }
     drv_line_flush();
     lp_calib_begin(&snapshot.line);
+    barcode_calibration_begin(&barcode_calibration);
+    publish_barcode_calibration();
     calibrating = true;
     snapshot.event = VC_EVENT_NONE;
     snapshot.norm_peak = 0u;
@@ -221,10 +286,14 @@ lp_calib_result_t line_calibration_end(void)
     }
     unsigned int bad = 0u;
     const lp_calib_result_t result = lp_calib_end(&snapshot.line, &bad);
+    barcode_calibration_end(&barcode_calibration, result == LP_CALIB_OK);
+    const barcode_cal_report_t report = barcode_calibration.report;
+    publish_barcode_calibration();
     calibrating = false;
     snapshot.norm_peak = 0u;
     publish_line();
     (void)tk_unl_mtx(mutex);
+    log_barcode_calibration(&report);
     return result;
 }
 
@@ -240,11 +309,16 @@ int line_calibration_abort(void)
     if (er < 0) {
         return (int)er;
     }
+    barcode_calibration_end(&barcode_calibration, false);
+    const barcode_cal_report_t report = barcode_calibration.report;
+    publish_barcode_calibration();
     calibrating = false;
     snapshot.norm_peak = 0u;
     snapshot.event = VC_EVENT_NONE;
     publish_line();
-    return (int)tk_unl_mtx(mutex);
+    const ER unlock = tk_unl_mtx(mutex);
+    log_barcode_calibration(&report);
+    return (int)unlock;
 }
 
 /*

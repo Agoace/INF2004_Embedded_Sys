@@ -64,9 +64,24 @@ target_compile_definitions(test_barcode_drive_clamp PRIVATE
     BARCODE_PASS_DISTANCE_MM=850u EXPECT_CLAMP=1)
 host_test(test_barcode_line_copy tests/test_line_service.c
     app_program/subsystem3/line_service.c
+    app_program/subsystem3/barcode_calibration.c
     app_program/subsystem3/line_position.c
     app_program/subsystem3/barcode_capture.c)
 target_include_directories(test_barcode_line_copy BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_barcode_line_copy PRIVATE
     APP_TEST=1 APP_BARCODE_CAPTURE=1)
+
+# Keep the common LINE owner linked in both normal and capture host profiles.
+if(TARGET test_line_service)
+    target_sources(test_line_service PRIVATE
+        "${REPO}/app_program/subsystem3/barcode_calibration.c")
+endif()
+host_test(test_barcode_calibration tests/test_barcode_calibration.c
+    app_program/subsystem3/barcode_calibration.c)
+foreach(case IN ITEMS white_only air dark spike white_short black_short bounds
+        aborted no_data gap duplicate reverse_stamp wrap clipping capacity
+        restart terminal)
+    add_test(NAME test_barcode_calibration_${case}
+        COMMAND test_barcode_calibration ${case})
+endforeach()

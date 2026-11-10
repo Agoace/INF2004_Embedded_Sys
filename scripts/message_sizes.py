@@ -21,6 +21,7 @@ ENTRIES = [
      ["mc_config_t", "mc_wheel_t", "mc_t", "mc_output_t"], []),
     ("subsystem3/drv_line.h", ["drv_line_sample_t"], []),
     ("subsystem3/line_service.h", ["line_snapshot_t"], []),
+    ("subsystem3/barcode_calibration.h", ["barcode_cal_report_t"], []),
     ("subsystem4/imu_service.h", ["imu_snapshot_t"], []),
     ("subsystem4/imu_hump.h",
      ["imu_hump_report_t", "imu_hump_summary_t"], []),
@@ -58,6 +59,7 @@ def measure(cc, nm):
     expressions.append(("sizeof(rm_heartbeat_t) + sizeof(uint32_t)",
                         "app_program/subsystem1/robot_health.c"))
     board_types = ["motion_packed_t", "line_snapshot_t", "imu_snapshot_t",
+                   "barcode_cal_report_t",
                    "imu_hump_report_t", "imu_hump_diag_report_t",
                    "imu_hump_summary_t", "vehicle_snapshot_t",
                    "rm_obstacle_t", "rm_detour_t", "rm_summary_t",

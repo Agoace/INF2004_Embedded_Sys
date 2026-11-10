@@ -36,6 +36,11 @@ runner decodes after freeze; normal LINE behaviour is unchanged. See the
 [barcode B1b contract](BARCODE.md). Its exclusive TEST profile alone uses
 GP21 for bounded driven passes; normal LINE and robot buttons are unchanged.
 
+The existing spin also collects [GP28 evidence](LIVE_CALIBRATION.md) on
+its separate report board. End/abort logs show GP28 min/max and learned or
+320/240 fallback thresholds. This observation does not change pair calibration,
+buttons or routing, and does not add a live barcode decoder.
+
 ### Pair-mode position
 
 Let L and C be normalized readings in 0–1000, with target 0. Negative

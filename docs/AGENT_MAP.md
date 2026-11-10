@@ -206,6 +206,14 @@ vehicle task described below.
 - [`tests/test_drv_line.c`](../tests/test_drv_line.c) — scheduling, queue, drop and error doubles.
 - [`testing/subsystem3/TEST_LOG.md`](../testing/subsystem3/TEST_LOG.md) — S3-U01 rate and range test.
 
+- [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md):
+  [`barcode_calibration.h`](../app_program/subsystem3/barcode_calibration.h),
+  [`barcode_calibration.c`](../app_program/subsystem3/barcode_calibration.c),
+  the [`line_service.c`](../app_program/subsystem3/line_service.c) calibration
+  board and [`test_barcode_calibration.c`](../tests/test_barcode_calibration.c)
+  observe GP28 during the existing spin, with fallback 320/240.
+  No live decoder or actions are added.
+
 ## TEST-only barcode B1c
 
 - [`barcode.c`](../app_program/subsystem3/barcode.c) and
