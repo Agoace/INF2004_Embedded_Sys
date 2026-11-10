@@ -17,6 +17,65 @@ from a cold VIN power-on.
 | B4-lifted | USB after flash, wheels lifted, same 17-step list | Functional check: all steps complete, 0 faults/skipped rows, maximum gap ≤11000 us; not a floor speed/heading match | PASS: 2110 rows, 0 skipped/faults, gap 9958..10041 us, max 119 us, 0 late/missed |
 | B4 | Floor/VIN run, same 17-step B3 list. Leave USB unplugged during the run. GP21 starts after 1 s; GP21 again stops. After the run, connect USB, open the terminal and press GP20. Save the summary and MB rows | Second-half speed within ±5% of each signed B3 mean below; step heading change within ±100 cdeg of B3; no faults; maximum task gap ≤11000 us. Dump delta of `tm_usb_dropped` 0; no skipped log rows | Functional PASS; strict speed and heading limits missed (see the B4 record). Run-to-run spread, not a defect |
 
+## CR1 A1 + B1 hardware gate — Not run
+
+Code revision: `9fa1f02` (A1 `08319f1`, B1 `9fa1f02`). Use two images:
+
+```sh
+make -C build_make -j4 --output-sync=target \
+    SMP=0 WIFI=cyw43 NET=lwip MQTT=1
+make -C build_make -j4 --output-sync=target \
+    SMP=0 WIFI=none BENCH=1
+```
+
+These are the normal MQTT robot and radio-off BENCH images, not TEST or
+DIAG images. Record the exact flashed revision/profile, boot ID, supply,
+surface and saved USB/MQTT logs. Use the existing private-settings runbook;
+do not put settings or tokens in the test record. Cold-power each image.
+
+1. **BENCH, wheels lifted:** GP20 must print status. Turn each wheel
+   forward/backward by hand; its count must increase/decrease correctly.
+   GP21 must start the existing step list. Check forward, reverse and
+   servo motion; during active drive press GP21 again. Both wheels must
+   stop at once and stay stopped. GP20 must still dump the bench log and
+   named stacks, including `motion_bench` at 4096 B. This checks that B1
+   did not remove or misassign the BENCH slot.
+2. **MQTT robot, wheels lifted:** keep GP21 accessible. Check boot/network
+   connection and GP20 DUMP. On a GP21 calibration/start cycle, check the
+   expected wheel directions and stop with GP21 during active motion.
+   Both wheels must stop and remain stopped. No unexpected fault/reset;
+   the deliberate ESTOP fault `0x04` is expected only after the stop.
+3. **MQTT robot, normal LINE run:** only after both lifted checks pass,
+   use the usual clear line track and normal calibration/start procedure.
+   Keep access to GP21; run LINE, then stop with GP21. Confirm normal
+   tracking and stopping, with no new stall, stale-command fault or reset.
+   Do not add a new detour, hump or barcode acceptance claim to this run.
+4. **GP20 DUMP, same boot:** save all KR1 rows/events, the header and named
+   stacks after the lifted check and again after LINE/DUMP. Record motion
+   high-water against the earlier **440/3072 B** (2632 B free), from the
+   [prior stack record](../subsystem4/TEST_LOG.md). An increase is allowed;
+   record its size, do not resize a stack. Every active named stack must
+   retain at least 256 B free. MQTT must not start `motion_bench`.
+5. **Timing/log check:** record the DUMP header's task gap, lost wakes,
+   vehicle overruns and response maximum; decode KR1 for continuous 20 ms
+   rows and correct signed speeds/servo values. Require gap 9000..11000 us,
+   missed wakes 0, overruns 0, telemetry loss 0 and USB dump-drop delta 0.
+   Save BENCH tick-work maximum and late-wake counts; late must be 0.
+   Lifetime counters include startup: do not erase an outlier or label it
+   a per-run value. Hold the gate for review if any limit is missed.
+6. **Dashboard/MQTT check:** state v5 (76 B) and heartbeat v4 (108 B) must
+   still decode without errors. Check speed/duty signs, encoder counts,
+   travel/heading, servo angle and fault displays through drive/stop.
+   Check heartbeat boot ID, stack free, late/missed wakes, vehicle overrun
+   and loss fields. Values must remain coherent and update at the existing
+   RUN/IDLE rates, with no new persistent stale/unavailable condition.
+
+**PASS** requires both images and every check above, with saved evidence.
+The 440 B stack value is a comparison, not a new size limit. A build/host
+PASS does not close this gate. Main reviews the logs, records measured
+values and merges the motion round before any sonar planning starts.
+Status: **Not run**; no hardware acceptance or merge is implied.
+
 ## STEP 8 operator follow-up — 2026-11-07
 
 Earlier STEP 8 Wi-Fi TEST: S0-U01 cold-power TIMER error 0; S2-U01 Wi-Fi
