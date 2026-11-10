@@ -117,6 +117,25 @@ else
 $(error Unknown IMU_HUMP_SOURCE '$(IMU_HUMP_SOURCE)'; use 1 or 2)
 endif
 
+# B2a: fake command is latched once at START. NONE preserves normal LINE.
+JUNCTION_TEST_CMD ?= NONE
+ifeq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_TEST_CMD_ID := 0
+else ifeq ($(JUNCTION_TEST_CMD),A)
+JUNCTION_TEST_CMD_ID := 1
+else ifeq ($(JUNCTION_TEST_CMD),B)
+JUNCTION_TEST_CMD_ID := 2
+else ifeq ($(JUNCTION_TEST_CMD),C)
+JUNCTION_TEST_CMD_ID := 3
+else ifeq ($(JUNCTION_TEST_CMD),D)
+JUNCTION_TEST_CMD_ID := 4
+else
+$(error Unknown JUNCTION_TEST_CMD '$(JUNCTION_TEST_CMD)'; use NONE/A/B/C/D)
+endif
+ifneq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_SUFFIX := _jtest$(JUNCTION_TEST_CMD)
+endif
+
 # DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
 # It changes timing. Default 0 compiles the diagnostic paths out.
 DIAG ?= 0
@@ -162,7 +181,7 @@ endif
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -225,6 +244,7 @@ endif
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
 CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
+CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -257,7 +277,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)-junction$(JUNCTION_TEST_CMD_ID)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

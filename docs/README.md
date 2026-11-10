@@ -22,6 +22,7 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
+- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — B2a fake START command, pure junction detector/LINE wrapper, bounded A/B/C/D job, draft B2b source contract and live event7.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
 - [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
@@ -29,6 +30,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
+- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a software checks, public-config image builds, measured +280 B RAM, compiler frames and J0–J6 physical procedure; hardware Not run.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — measured step2/2b/2c deltas from b569adc, supplied step2b timing and pending current stack/CPU checks; shortage/CR1 order.
 
 ## S1 — Telemetry

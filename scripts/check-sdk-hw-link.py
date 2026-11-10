@@ -44,7 +44,11 @@ def main():
                    if flag.startswith("-DIMU_HUMP_SOURCE=")), "1")
     if source not in ("1", "2"):
         parser.error("log has an invalid IMU_HUMP_SOURCE")
-    expected += f"-imu_stream{stream}-hump_source{source}"
+    junction = next((flag.split("=", 1)[1] for flag in flags
+                     if flag.startswith("-DJUNCTION_TEST_CMD=")), "0")
+    if junction not in ("0", "1", "2", "3", "4"):
+        parser.error("log has an invalid JUNCTION_TEST_CMD")
+    expected += f"-imu_stream{stream}-hump_source{source}-junction{junction}"
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
         parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")

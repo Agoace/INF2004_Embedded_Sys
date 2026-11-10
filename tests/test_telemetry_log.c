@@ -63,6 +63,7 @@ int main(void) {
     opened=untouched;
     assert(telemetry_log_open(&opened)==E_TMOUT && !change_log_guard && memcmp(&opened,&untouched,sizeof(opened))==0);
     message.kind=TELEMETRY_BEGIN;send_message(&message);
+    assert(last_junction.command==JA_NONE);
     assert(telemetry_log_open(&opened)==E_OK && opened.generation==highwater.generation+1u && opened.rows==0u && opened.events==0u);
     assert(telemetry_log_row(highwater.generation,0u,row)==E_OBJ);
     assert(telemetry_log_event(highwater.generation,0u,&event)==E_OBJ);

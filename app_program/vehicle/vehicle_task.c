@@ -29,6 +29,8 @@
 #include "vehicle_inputs.h"
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
+#include "junction_line.h"
+#include "junction_source.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
 #include "run_stats.h"
@@ -48,6 +50,8 @@
 static lp_t lp;
 static line_snapshot_t sensor;
 static lt_t lt;
+static jl_t junction_line;
+static uint8_t junction_reported;
 static ls_t ls;
 static ss_t ss;
 static dr_t dr;
@@ -801,6 +805,34 @@ typedef struct {
 
 static watched_t watched[4];
 
+/* Live only: never add junction phase events to the RAM event log. */
+static void junction_observe(void)
+{
+    const ja_t *action = &junction_line.action;
+    if (action->phase == junction_reported) {
+        return;
+    }
+    junction_reported = action->phase;
+    /* Set busy before ACK: a consumed command still owns the action job. */
+    junction_source_set_busy(action->phase == JA_PENDING ||
+                               ja_active(action));
+#if TM_MQTT
+    const uint16_t word = (uint16_t)(action->result.command |
+                                      ((uint16_t)action->phase << 8u));
+    live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE, word,
+               action->result.reason);
+#endif
+    if (action->consumed != 0u) {
+        junction_source_acknowledge(action->consumed);
+    }
+    if (action->phase == JA_DONE || action->phase == JA_FAILED ||
+        action->phase == JA_UNUSED) {
+        telemetry_message_t m = {.kind = TELEMETRY_JUNCTION};
+        m.data.junction = action->result;
+        (void)telemetry_send(&m);
+    }
+}
+
 /*
  * Start a navigation module and observe detour entry when enabled.
  */
@@ -943,6 +975,15 @@ static void run_once(void)
     vsm_reset(&vsm);
     read_line();
     line_event = VC_EVENT_NONE;
+    motion_status_t initial = {0};
+    uint32_t initial_stamp = 0u;
+    if (JUNCTION_TEST_CMD != 0 &&
+        (motion_snapshot_try_read(&initial, &initial_stamp) < E_OK ||
+         drv_time_us() - initial_stamp > VEHICLE_RESPONSE_LIMIT_US)) {
+        set_reason(RM_STOP_MOTION_STATUS, "junction START motion snapshot");
+        return;
+    }
+    int32_t final_counts[2] = {initial.counts[0], initial.counts[1]};
     __atomic_store_n(&run_start, drv_time_ms(), __ATOMIC_SEQ_CST);
     const uint32_t epoch =
         __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST) | 1u;
@@ -952,6 +993,17 @@ static void run_once(void)
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
 #endif
+    ja_init(&junction_line.action, &JUNCTION_CFG, epoch);
+    junction_reported = JA_IDLE;
+    const uint32_t read_age_ms = JUNCTION_TEST_CMD != 0
+        ? (drv_time_us() - initial_stamp) / 1000u : 0u;
+    junction_source_start(JUNCTION_TEST_CMD, epoch, run_start - read_age_ms,
+                            initial.counts);
+    ja_command_t command;
+    if (junction_source_read(&command)) {
+        (void)ja_offer(&junction_line.action, &command);
+    }
+    junction_observe();
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
     __atomic_store_n(&line_run_epoch, epoch, __ATOMIC_SEQ_CST);
@@ -1033,6 +1085,17 @@ static void run_once(void)
             set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
             break;
         }
+        if (junction_source_read(&command)) {
+            (void)ja_offer(&junction_line.action, &command);
+        }
+        final_counts[0] = s.counts[0];
+        final_counts[1] = s.counts[1];
+        junction_line.sample = (ja_sample_t){
+            .line_stamp = sensor.timestamp_us,
+            .line_age_ms = (drv_time_us() - sensor.timestamp_us) / 1000u,
+            .speed_mm_s = {s.speed_mm_s[0], s.speed_mm_s[1]},
+            .valid = sensor.valid
+        };
         if (vc_event_type(line_event) == VC_EVENT_LINE_LOST) {
             pending_bits |= 1u;
         }
@@ -1064,8 +1127,10 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        junction_observe();
         __atomic_store_n(&line_run_epoch,
-            vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE
+            vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE &&
+                    !ja_active(&junction_line.action)
                 ? epoch : 0u, __ATOMIC_SEQ_CST);
         motion_diag_phase(MOTION_DIAG_RUN | ((uint32_t)vsm.running << 8u));
         if (vsm.state != state_before || vsm.running != module_before) {
@@ -1105,7 +1170,15 @@ static void run_once(void)
                 set_reason(RM_STOP_SCAN_REVERSE_TIMEOUT,
                            "scan reverse timed out");
             } else {
-                set_reason(RM_STOP_SHELL, "shell left RUNNING");
+                if (vsm.fault == VSM_FAULT_FAILED &&
+                    vsm.fault_detail > JA_FAIL_BASE &&
+                    vsm.fault_detail <= JA_FAIL_BASE + JA_SETTLE_LIMIT) {
+                    set_reason(RM_STOP_SHELL,
+                        ja_reason_name((uint8_t)(vsm.fault_detail -
+                                                  JA_FAIL_BASE)));
+                } else {
+                    set_reason(RM_STOP_SHELL, "shell left RUNNING");
+                }
             }
             break;
         }
@@ -1138,6 +1211,8 @@ static void run_once(void)
             break;
         }
     }
+    ja_finish(&junction_line.action, final_counts, drv_time_ms());
+    junction_observe();
     hump_finish(epoch);
     event(4u, vsm.state, vsm.running, vsm.fault_detail);
 #if TM_MQTT
@@ -1160,6 +1235,7 @@ static void vehicle_task(INT code, void *ctx)
     (void)code;
     (void)ctx;
     lt_init(&lt, &LINE_CFG);
+    jl_init(&junction_line, &lt, &JUNCTION_CFG);
     ls_init(&ls, &SEARCH_CFG);
     ss_init(&ss, &SCAN_CFG);
     dr_init(&dr, &DETOUR_CFG);
@@ -1173,7 +1249,7 @@ static void vehicle_task(INT code, void *ctx)
     }
 #endif
     vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
-    install(0u, VSM_MOD_LINE, lt_module(&lt));
+    install(0u, VSM_MOD_LINE, jl_module(&junction_line));
     install(1u, VSM_MOD_SEARCH, ls_module(&ls));
 #if TM_MQTT
     install(2u, VSM_MOD_SCAN,

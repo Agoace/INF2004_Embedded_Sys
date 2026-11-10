@@ -40,7 +40,10 @@ HUMP_PEAK_NONE = 0xFFFF  # summary hump_peak unit: 0.1 mm (v3)
 # Summary v3 byte 50; bits 6..7 are reserved.
 HUMP_FLAGS = ("hump_implemented", "hump_imu_fault", "hump_open_at_stop",
               "hump_curve_gated", "hump_long_rejected", "hump_left")
-EVENT_JUNCTION = 7  # reserved, not emitted yet
+EVENT_JUNCTION = 7  # live B2a action phases, event v2
+JUNCTION_PHASES = {1: "pending", 2: "approach", 3: "settle", 4: "turn",
+                   5: "turn settle", 6: "reacquire", 7: "done", 8: "failed",
+                   9: "unused", 10: "cross"}
 EVENT_SCAN_RETRY = 8
 EVENT_HUMP = 9  # word: peak 0.1 mm; detail bits 0..6 number, bit 7 LEFT
 SCAN_RETRY_PHASES = {1: "reverse_begin", 2: "reverse_end", 3: "rescan_begin"}
@@ -167,6 +170,10 @@ def decode(topic, data):
     elif name == "event":
         _require(1 <= data[1] <= EVENT_HUMP and (data[15] & 0xFE) == 0,
                  "event kind or reserved flags")
+        if data[1] == EVENT_JUNCTION and data[0] >= 2:
+            _require(data[0] >= 2 and data[2] == data[3] == 1 and
+                     data[12] in (1, 2, 3, 4) and data[13] in JUNCTION_PHASES and
+                     data[14] <= 12, "junction event")
         if data[1] == EVENT_SCAN_RETRY:
             _require(data[0] >= 2 and data[2] == data[3] == 3 and
                      data[14] in SCAN_RETRY_PHASES and data[12] in (1, 2) and data[13] == 1,

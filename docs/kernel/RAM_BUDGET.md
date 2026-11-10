@@ -1,5 +1,20 @@
 # RAM budget
 
+## B2a junction delta
+
+B2a adds **280 B static RAM** against matching public-config `168d705`
+single-core MQTT builds: data904 B + BSS190048 B =190952 B, versus190672 B.
+The LINE adapter is188 B, saved telemetry result48 B, source board28 B,
+source sequence/ACK/busy12 B and observed phase1 B, plus alignment. The
+telemetry message remains116 B, INFO108 B, MBF4096 B. No new task or stack.
+
+Vehicle compiler frame grows from880 B to NONE1000 B or fake-command992 B;
+telemetry remains360 B. New nested frames include observer144 B, pure action
+128 B, wrapper40 B and formatter96 B. IMU sample remains1000 B. These are
+not whole-stack bounds. New-image named stack checks must retain at least
+256 B free, including IMU; hardware J0–J6 are Not run. See the
+[full measurements and procedure](JUNCTION_VALIDATION.md#ram-and-stack).
+
 ## What it is
 
 This record shows how the robot program uses the RP2040 RAM. It also gives

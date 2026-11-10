@@ -220,6 +220,11 @@ vehicle task described below.
 
 ## Kernel robot integration
 
+- [Junction action design](architecture/JUNCTION_ACTION.md) — B2a only: fake command at START, pure detector/action, LINE wrapper (no new module number), draft B2b source record and live event7; no barcode decoder or summary change.
+- [`junction_action.c`](../app_program/vehicle/junction_action.c) and [`junction_action.h`](../app_program/vehicle/junction_action.h) — pure distance/encoder action; [`junction_line.c`](../app_program/vehicle/junction_line.c) and [`junction_line.h`](../app_program/vehicle/junction_line.h) delegate to locked LINE when no command owns the wheels.
+- [`junction_source.c`](../app_program/vehicle/junction_source.c) and [`junction_source.h`](../app_program/vehicle/junction_source.h) — single-writer fake source board, bounded read, consumer busy/ACK; [`junction_print.c`](../app_program/vehicle/junction_print.c) is the telemetry-owned USB formatter.
+- [`test_junction.c`](../tests/test_junction.c) and [`test_junction_make.py`](../tests/test_junction_make.py) — pure action/no-command comparison and Make option/profile tests. [Validation and J0–J6](kernel/JUNCTION_VALIDATION.md) records software checks, resource delta and hardware Not run.
+
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.

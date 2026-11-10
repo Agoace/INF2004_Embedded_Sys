@@ -52,6 +52,7 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `DIAG` | 0; 1 adds fixed motion timing captures, printed at GP20 |
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
+| `JUNCTION_TEST_CMD` | NONE (default), A/B/C/D; fake command latched at vehicle START; other values rejected; fake images add `_jtestA`..`_jtestD` |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
@@ -83,8 +84,8 @@ both sources for FALSE humps on a fuller circuit (curves + SEARCH):
 
 ```sh
 cd build_make
-make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=1 -j4 --output-sync=target
-make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=2 -j4 --output-sync=target
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=1 JUNCTION_TEST_CMD=NONE -j4 --output-sync=target
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 IMU_HUMP_SOURCE=2 JUNCTION_TEST_CMD=NONE -j4 --output-sync=target
 ```
 
 | Source | MQTT robot image under `build_make/` |
@@ -102,6 +103,29 @@ BENCH). Run-end, GP20 DUMP and `[S4_HUMP]` lines end with
 filename for every H3 session. MQTT payloads do not identify the source;
 do not mix sessions/images in a source comparison.
 See [H3 plan](../../testing/subsystem4/TEST_LOG.md#h3-two-image-comparison-plan).
+
+### B2a fake junction images
+
+Use `JUNCTION_TEST_CMD=NONE|A|B|C|D`. A/B turn left/right90, C crosses
+straight, D turns LEFT180. The fake command is latched once at normal vehicle
+START; TEST/BENCH have no such START. NONE leaves LINE decisions unchanged.
+The option is included in the object-profile marker and passed to C as0..4.
+
+```sh
+cd build_make
+for cmd in NONE A B C D; do
+    make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 JUNCTION_TEST_CMD=$cmd \
+        -j4 --output-sync=target
+done
+```
+
+NONE retains the normal MQTT filename. The other images end in
+`_jtestA.uf2` through `_jtestD.uf2`. Boot prints a FAKE command/geometry label;
+a kind7 phase event and telemetry-owned `[JUNCTION]` USB line report the job.
+No barcode decoder or summary version is added. Use NONE for H3 IMU circuit
+comparisons. Read the [design](../architecture/JUNCTION_ACTION.md) and
+[validation/J0–J6 procedure](JUNCTION_VALIDATION.md) before an authorized test.
+Physical junction accuracy and false-positive rejection remain **Not run**.
 
 ## Private settings
 

@@ -187,6 +187,11 @@ enum {
     RM_SUMMARY_SCAN_REATTEMPT_MASK = 0xf8
 };
 
+/* Live-only JUNCTION/ACTION, v2: from/to LINE, word low byte A..D
+ * (1..4), high byte ja_phase_t (1..10), detail ja_reason_t (0..12).
+ * No source identity in the wire event: use boot/USB source labels. */
+#define RM_EVENT_JUNCTION 7u
+
 /* robot/event kind 9 (HUMP), event v2 layout: from/to 0, word = event peak
  * in 0.1 mm, detail bits 0-6 = event number in the run (saturates at 127),
  * bit 7 = LEFT wheel. Live only; never stored in the RAM log. */

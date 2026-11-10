@@ -1146,8 +1146,8 @@ class CpuAndJunctionTests(ModelCase):
         self.assertEqual(self.model.snapshot()["discarded"], 1)
         self.assertIsNone(self.model.heartbeat)
 
-    def test_junction_event_is_listed_with_its_reserved_name(self):
-        frame = bytearray(SAMPLES["event_run_end"])
+    def test_legacy_junction_event_is_listed_with_its_reserved_name(self):
+        frame = bytearray(b"\x01" + SAMPLES["event_run_end"][1:16])
         frame[1] = 7
         self.model.ingest("robot/event", bytes(frame))
         self.assertEqual(self.model.snapshot()["discarded"], 0)
@@ -1160,7 +1160,7 @@ class CpuAndJunctionTests(ModelCase):
         self.assertEqual(len(self.panel("events")["items"]), 1)
 
     def test_junction_event_does_not_touch_command_decisions(self):
-        frame = bytearray(SAMPLES["event_start_ok"])
+        frame = bytearray(SAMPLES["event_junction"])
         frame[1] = 7
         self.model.ingest("robot/event", bytes(frame))
         self.assertIsNone(self.model.last_decision)
@@ -1214,8 +1214,20 @@ class BatchTwoCFixtureTests(ModelCase):
 
     def test_c_junction_event(self):
         self.feed("event_junction")
-        self.assertIn("#20 junction (reserved)", self.panel("events")["items"][0]["text"])
+        self.assertIn("#20 JUNCTION B: approach", self.panel("events")["items"][0]["text"])
         self.assertEqual(self.model.discarded, 0)
+
+
+class JunctionActionDashboardTests(ModelCase):
+    def test_all_commands_and_terminal_reason(self):
+        for number, command in enumerate("ABCD", 1):
+            frame = bytearray(SAMPLES["event_junction"])
+            frame[12:15] = bytes((number, 8, 6))
+            self.model.ingest("robot/event", bytes(frame))
+            self.assertIn(f"JUNCTION {command}: failed, reason 6",
+                          self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
+        self.assertIsNone(self.model.last_decision)
 
 
 class ScanRetryDashboardTests(ModelCase):

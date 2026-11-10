@@ -605,7 +605,7 @@ class NewTopicTests(unittest.TestCase):
             frame = self.dash["heartbeat_v2" + suffix]
             self.assertEqual(wire.decode("robot/heartbeat", frame)["cpu_load_permille"], cpu)
         junction = wire.decode("robot/event", self.dash["event_junction"])
-        self.assertEqual((junction["kind"], junction["sequence"], junction["word"]), (7, 20, 2))
+        self.assertEqual((junction["kind"], junction["sequence"], junction["word"]), (7, 20, 0x0202))
 
     def test_c_packed_obstacle_and_status(self):
         result = wire.decode("robot/obstacle", self.dash["obstacle"])
@@ -870,8 +870,23 @@ class BatchTwoTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             wire.decode("robot/obstacle", obstacle_frame(flags=0x40 | 0x10))
 
-    def test_event_junction_is_accepted_and_kind_8_is_not(self):
-        frame = bytearray(self.samples["robot/event"])
+    def test_live_junction_commands_phases_and_reserved_values(self):
+        frame = bytearray(20)
+        frame[0:4] = bytes((2, 7, 1, 1))
+        for command in range(1, 5):
+            for phase in range(1, 11):
+                frame[12:15] = bytes((command, phase, 0))
+                result = wire.decode("robot/event", frame)
+                self.assertEqual(result["word"], command | (phase << 8))
+        for offset, bad in ((12, 0), (12, 5), (13, 0), (13, 11),
+                            (14, 13), (2, 0), (3, 5)):
+            changed = bytearray(frame)
+            changed[offset] = bad
+            with self.assertRaises(ValueError):
+                wire.decode("robot/event", changed)
+
+    def test_legacy_reserved_junction_is_accepted_and_kind_8_is_not(self):
+        frame = bytearray(b"\x01" + self.samples["robot/event"][1:16])
         frame[1] = 7
         self.assertEqual(wire.decode("robot/event", frame)["kind"], 7)
         for kind in (0, 8, 9, 10):  # kinds 8 and 9 need event v2

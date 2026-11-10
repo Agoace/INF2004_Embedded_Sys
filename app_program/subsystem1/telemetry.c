@@ -20,6 +20,7 @@ static telemetry_stats_t stats;
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
+static ja_result_t last_junction;
 static uint32_t loss_base;
 #if TM_MQTT
 #include "../platform/app_board.h"
@@ -230,6 +231,7 @@ static void telemetry_task(INT code, void *ctx)
         }
         switch (m.kind) {
         case TELEMETRY_BEGIN:
+            last_junction = (ja_result_t){0};
             stats.rows = 0u;
             stats.events = 0u;
             stats.storage_full = false;
@@ -265,12 +267,17 @@ static void telemetry_task(INT code, void *ctx)
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
             break;
+        case TELEMETRY_JUNCTION:
+            last_junction = m.data.junction;
+            ja_print(&last_junction);
+            break;
         case TELEMETRY_DUMP:
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
             motion_diag_dump(1);
             motion_diag_print();
             dump();
+            ja_print(&last_junction);
             motion_diag_dump(0);
             break;
         default:
@@ -331,7 +338,7 @@ int telemetry_send(const telemetry_message_t *message)
     if (mbf_telemetry <= 0 || task <= 0) {
         return E_OBJ;
     }
-    if (!message || message->kind > TELEMETRY_DUMP) {
+    if (!message || message->kind > TELEMETRY_JUNCTION) {
         return E_PAR;
     }
     telemetry_message_t m = *message;

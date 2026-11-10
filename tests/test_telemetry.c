@@ -9,7 +9,7 @@
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
 static bool full;static int irq_off;static unsigned int kr,ve,bytes,reports;
-static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines;
+static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
 ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==30 && core==1u);entry=f;return 7; }
 ER tk_snd_mbf(ID id,const void *m,INT size,TMO timeout) {
@@ -37,6 +37,10 @@ int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
 }
 int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
+    if (!strncmp((const char *)fmt,"[JUNCTION]",10u)) {
+        assert(!strcmp(va_arg(a,const char *),"FAKE"));
+        assert(!strcmp(va_arg(a,const char *),"B"));++junction_lines;
+    }
     if (!strcmp((const char *)fmt,"KR %lu ")) ++kr;
     if (!strcmp((const char *)fmt,"VE %lu %u %u %u %u\n")) ++ve;
     if (!strncmp((const char *)fmt,"[robot] hump no finished run",28u)) ++hump_none;
@@ -80,5 +84,11 @@ int main(void) {
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(hump_none==1u && hump_lines==1u && diag_lines==1u && kr==4u && ve==2u);
+    assert(junction_lines==0u);
+    m.kind=TELEMETRY_JUNCTION;
+    m.data.junction=(ja_result_t){.command=JA_RIGHT,.phase=JA_DONE,.source=1u};
+    assert(telemetry_send(&m)==E_OK);pump();assert(junction_lines==1u);
+    m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
+    assert(junction_lines==2u); /* Saved result repeats at GP20, no VE row. */
     return 0;
 }

@@ -274,9 +274,10 @@ static void test_detour_summary(void)
     beat.cpu_load_permille = 0x0123u;
     rm_pack_heartbeat(heartbeat_bytes, &beat);
     emit_named("heartbeat_v2", heartbeat_bytes, RM_HEARTBEAT_SIZE);
-    /* Event kind 7 (JUNCTION) is reserved: the packer carries any kind. */
-    const rm_event_t junction = {.kind = 7u, .from = 1u, .to = 1u, .sequence = 20u,
-        .uptime_ms = 12000u, .word = 2u, .detail = 0u};
+    /* Live event 7: B/right, confirmed junction -> approach. */
+    const rm_event_t junction = {.kind = RM_EVENT_JUNCTION, .from = 1u,
+        .to = 1u, .sequence = 20u, .uptime_ms = 12000u,
+        .word = 0x0202u, .detail = 0u};
     uint8_t event_bytes[RM_EVENT_SIZE];
     rm_pack_event(event_bytes, &junction);
     assert(event_bytes[1] == 7u);

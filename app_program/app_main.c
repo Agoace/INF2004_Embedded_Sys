@@ -32,6 +32,8 @@
 #include "platform/boot_id.h"
 #endif
 
+#include "vehicle/junction_source.h"
+
 /* TEST work runs below motion/sensors and above telemetry (30). */
 #define TEST_RUNNER_PRIORITY 20
 
@@ -61,6 +63,12 @@ EXPORT INT usermain(void)
     CHECK(boot_id_init(), "boot observation ID (noncritical)");
 #endif
 
+#if !APP_BENCH && !APP_TEST
+    tm_printf((UB *)"[JUNCTION] source FAKE cmd %s axle_mm %u "
+                    "cross_mm %u N_mm %u black_min %u D LEFT180\n",
+              JUNCTION_TEST_CMD_NAME, JA_AXLE_TO_SENSORS_MM,
+              JA_CROSS_WIDTH_MM, JA_CONFIRM_MM, JA_BLACK_MIN);
+#endif
 #if !APP_BENCH
     tm_printf((UB *)"[S4] hump_source %u %s\n",
               (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);

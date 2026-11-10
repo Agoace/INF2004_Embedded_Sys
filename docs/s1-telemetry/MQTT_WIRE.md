@@ -200,7 +200,7 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 | 16 | u32 | Boot ID (live event v2; embedded log event v1 stays 16 bytes) |
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
-6 command decision; 7 JUNCTION (reserved, not emitted); 8 SCAN_RETRY;
+6 command decision; 7 JUNCTION/ACTION (B2a, live-only); 8 SCAN_RETRY;
 9 HUMP (event v2 only). For
 kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
 or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
@@ -211,6 +211,13 @@ commands reach the vehicle and produce these events. Bad tokens, malformed
 commands, and full command queues increment `command_lost` without a vehicle
 event. Valid ESTOP requests are accepted in every state; repeated requests
 can coalesce when the dedicated ESTOP queue is already full.
+For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
+(A/B/C/D); high byte is phase1..10. Detail is reason0..12. It is live-only,
+never stored in the RAM event log. The [junction design](../architecture/JUNCTION_ACTION.md#reports-and-failures)
+lists phases and reasons. Event-v1 reserved kind7 stays readable as legacy
+input. No source identity is carried here: retain the boot/USB FAKE label.
+B2a changes no summary layout; later barcode integration owns summaryv4.
+
 For kind 9, from and to are 0, the word is the peak of that hump in
 0.1 mm (never 65535), detail bits 0–6 are the hump number in this run
 (1–127, saturating) and detail bit 7 is set for a LEFT-wheel hump. A

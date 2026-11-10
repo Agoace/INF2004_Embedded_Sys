@@ -297,8 +297,11 @@ and pass the lifted-wheel checks before floor work. R5 has not run.
 The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
 
-The barcode work is not started. The ideas for it are in
-[Barcode reading ideas](docs/s3-line-barcode/BARCODE.md).
+Live barcode decoding is not implemented. B2a can execute one fake A/B/C/D
+command at the next `+` junction; the default is NONE and keeps normal LINE.
+See [junction actions](docs/architecture/JUNCTION_ACTION.md) and the
+[unrun hardware procedure](docs/kernel/JUNCTION_VALIDATION.md).
+Barcode input ideas remain in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
 
 ## Local template changes
 

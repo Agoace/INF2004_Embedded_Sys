@@ -10,6 +10,11 @@
 #include "../app_program/subsystem5/sonar_service.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/subsystem4/imu_service.h"
+#include "../app_program/vehicle/junction_source.h"
+static bool junction_mode,junction_started;static int32_t junction_origin;
+static unsigned int junction_results,spins;static ja_result_t junction_result;
+static bool spin_started;static int32_t spin_origin[2];
+static unsigned int junction_start_fail,snapshot_reads;
 static FP entry;static jmp_buf done;static uint32_t now;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
 static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,sonar_stale;
@@ -31,6 +36,25 @@ ER tk_slp_tsk(TMO t) {
     for (unsigned int i=0u;i<10u;++i) {
         const uint32_t ms=now-9u+i;
         raw[0]=(ms/20u)%2u ? 500u : 3500u;raw[1]=(ms/30u)%2u ? 500u : 3500u;raw[2]=0u;
+        if (junction_mode && (vehicle_run_epoch()&1u)) {
+            const int32_t mean=(counts[0]+counts[1])/2;
+            if (!junction_started) {junction_started=true;junction_origin=mean;}
+            const int32_t travel=mean-junction_origin;
+            raw[0]=raw[1]=travel>=300 && travel<524 ? 3500u : 1700u;
+            if (spin_started && junction_results==0u) {
+                const int32_t angle=((counts[1]-spin_origin[1])-(counts[0]-spin_origin[0]))*10000/2405;
+                const int32_t target=JUNCTION_TEST_CMD==JA_UTURN ? 18000 :
+                    (JUNCTION_TEST_CMD==JA_RIGHT ? -9000 : 9000);
+                int32_t error=angle-target;if (error<0) error=-error;
+                if (JUNCTION_TEST_CMD==JA_UTURN) {
+                    int32_t old=angle-9000;if (old<0) old=-old;
+                    if (old<error) error=old; /* Ignore intermediate '+' arm. */
+                }
+                if (error<200) raw[0]=raw[1]=1700u;
+                else if (error<500) {raw[0]=2300u;raw[1]=1100u;}
+                else raw[0]=raw[1]=500u; /* Real LOST during the encoder turn. */
+            }
+        }
         if (calibrating) lp_calib_add(&line,raw);
         else {
             const vc_event_t e=lp_update(&line,raw,ms);
@@ -48,7 +72,7 @@ ER tk_slp_tsk(TMO t) {
         echo_snapshot.status=SONAR_ECHO;echo_fresh=true;await_ack=true;
         next_ping=now+sonar_command.interval_ms;
     }
-    if (now>=8000u) longjmp(done,1);
+    if (now>=(junction_mode ? 16000u : 8000u)) longjmp(done,1);
     return E_OK;
 }
 INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
@@ -125,7 +149,10 @@ int sonar_request(const sonar_request_t *r) {
 }
 void telemetry_stats(telemetry_stats_t *s) { *s=(telemetry_stats_t){0}; }
 int telemetry_send(const telemetry_message_t *m) {
-    assert(m->kind<=TELEMETRY_DUMP);
+    assert(m->kind<=TELEMETRY_JUNCTION);
+    if (m->kind==TELEMETRY_JUNCTION) {
+        assert(!junction_source_busy());++junction_results;junction_result=m->data.junction;
+    }
     if (m->kind==TELEMETRY_ROW) ++rows;
     if (m->kind==TELEMETRY_INFO && m->data.info.overruns>max_overruns) max_overruns=m->data.info.overruns;
     if (m->kind==TELEMETRY_INFO && !strcmp(m->data.info.reason,"sonar watch stale")) ++sonar_timeouts;
@@ -133,16 +160,26 @@ int telemetry_send(const telemetry_message_t *m) {
 }
 void drv_motor_hw_buttons_init(void) { }
 bool drv_motor_hw_button_down(unsigned int pin) {
-    return pin==21u && ((now>=20u && now<50u) || (!sonar_stale && now>=5000u && now<5050u));
+    return pin==21u && ((now>=20u && now<50u) || (!sonar_stale && now>=(junction_mode ? 12000u : 5000u) && now<(junction_mode ? 12050u : 5050u)));
 }
 int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
     *s=(motion_status_t){0};s->watchdog_armed=watchdog_ready;s->ticks=now/10u;
     s->counts[0]=counts[0];s->counts[1]=counts[1];return E_OK;
 }
+int motion_snapshot_try_read(motion_status_t *s,uint32_t *stamp) {
+    ++snapshot_reads;if (junction_start_fail==1u) return E_TMOUT;
+    *stamp=now*1000u-(junction_start_fail==2u ? 11000u : 0u);return motion_status(s);
+}
 int motion_clear_faults(void) { return E_OK; }
 int motion_set_speed(int16_t l,int16_t r) {
     if (l>0 && r>0) ++line_drives;
+    if (junction_mode && (vehicle_run_epoch()&1u) && l*r<0) {
+        assert(vehicle_line_run_epoch()==0u && junction_source_busy());++spins;
+        if (!spin_started) {
+            spin_started=true;spin_origin[0]=counts[0];spin_origin[1]=counts[1];
+        }
+    }
     asked[0]=l;asked[1]=r;
     if (overrun && (l!=0 || r!=0)) now+=11u;
     return E_OK;
@@ -151,6 +188,9 @@ int motion_stop(void) { asked[0]=asked[1]=0;return E_OK; }
 int motion_estop(void) { ++estops;return motion_stop(); }
 int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_OK; }
 int main(int argc,char **argv) {
+    junction_mode=argc>1 && !strcmp(argv[1],"junction");
+    junction_start_fail=argc>1 && !strcmp(argv[1],"junctionbusy") ? 1u :
+        (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
@@ -169,6 +209,10 @@ int main(int argc,char **argv) {
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
     assert(vehicle_calibration_epoch() >= 2u);
     assert((vehicle_calibration_epoch() & 1u) == 0u);
+    if (junction_start_fail) {
+        assert(snapshot_reads>0u && vehicle_run_epoch()==0u && run_seen==0u);
+        assert(junction_results==0u && !junction_source_busy());return 0;
+    }
     /* The run epoch is odd only inside a run; each finished run prints one
      * hump line from a fresh same-run board, else "unavailable". */
     if (!overrun && !sonar_stale) {
@@ -182,6 +226,13 @@ int main(int argc,char **argv) {
         else assert(hump_lines==1u && hump_none==0u && last.peak_01mm==108u &&
                     last.count==1u && last.flags==IMU_HUMP_FLAG_IMPLEMENTED);
     }
+    if (junction_mode) {
+        assert(junction_started && junction_results==1u);
+        assert(junction_result.command==JUNCTION_TEST_CMD && junction_result.source==1u);
+        assert(junction_result.phase==JA_DONE && junction_result.claimed==1u);
+        assert(junction_source_acknowledged()==junction_result.sequence);
+        assert(JUNCTION_TEST_CMD==JA_STRAIGHT ? spins==0u : spins>0u);
+    } else assert(junction_results==0u);
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
     else if (sonar_stale) assert(sonar_timeouts>0u);

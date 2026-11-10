@@ -320,6 +320,10 @@ class DashboardModel:
             if (pending is not None and pending["result"] is None
                     and pending["opcode"] == opcode and now >= pending["sent"]):
                 pending["result"] = event
+        elif kind == robot_wire.EVENT_JUNCTION and fields["version"] >= 2:
+            command = "ABCD"[(fields["word"] & 0xFF) - 1]
+            phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
+            event["text"] = (f"JUNCTION {command}: {phase}, reason {fields['detail']}")
         elif kind == robot_wire.EVENT_SCAN_RETRY:
             attempt = fields["word"] & 0xFF
             self.scan_retry = attempt

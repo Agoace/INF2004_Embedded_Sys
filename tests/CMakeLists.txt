@@ -218,3 +218,42 @@ foreach(test IN ITEMS test_imu_stream test_vehicle_task
         "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
     target_link_libraries(${test} PRIVATE m)
 endforeach()
+
+set(junction_sources app_program/vehicle/junction_action.c
+    app_program/vehicle/junction_source.c)
+host_test(test_junction tests/test_junction.c ${junction_sources}
+    app_program/vehicle/junction_line.c ${line_search_source}
+    ${line_trace_source} ${line_steer_source} ${line_position_source}
+    ${obstacle_source})
+foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
+    foreach(source IN LISTS junction_sources)
+        target_sources(${test} PRIVATE "${REPO}/${source}")
+    endforeach()
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/vehicle/junction_line.c")
+endforeach()
+foreach(test IN ITEMS test_telemetry test_telemetry_log)
+    foreach(source IN LISTS junction_sources)
+        target_sources(${test} PRIVATE "${REPO}/${source}")
+    endforeach()
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/vehicle/junction_print.c"
+        "${REPO}/${line_search_source}" "${REPO}/${obstacle_source}")
+endforeach()
+add_test(NAME test_junction_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_junction_make.py")
+get_target_property(vehicle_test_sources test_vehicle_task SOURCES)
+set(junction_id 0)
+foreach(command IN ITEMS A B C D)
+    math(EXPR junction_id "${junction_id} + 1")
+    set(test test_vehicle_junction_${command})
+    add_executable(${test} ${vehicle_test_sources})
+    target_include_directories(${test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(${test} PRIVATE JUNCTION_TEST_CMD=${junction_id})
+    target_link_libraries(${test} PRIVATE m)
+    add_test(NAME ${test} COMMAND ${test} junction)
+endforeach()
+add_test(NAME test_vehicle_junction_start_busy
+    COMMAND test_vehicle_junction_A junctionbusy)
+add_test(NAME test_vehicle_junction_start_stale
+    COMMAND test_vehicle_junction_A junctionstale)
