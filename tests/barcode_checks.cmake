@@ -1,3 +1,31 @@
+host_test(test_barcode_window_real tests/test_barcode_window_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_window_real PRIVATE
+    BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_window_real PRIVATE m)
+
+foreach(window_target IN ITEMS test_barcode_window test_barcode_window_map
+        test_barcode_window_invalid_map test_barcode_window_unconfirmed)
+    host_test(${window_target} tests/test_barcode_window.c
+        app_program/subsystem3/barcode_window.c
+        app_program/subsystem3/barcode.c)
+    target_link_libraries(${window_target} PRIVATE m)
+endforeach()
+target_compile_definitions(test_barcode_window_map PRIVATE
+    BW_MAP_VALUES=1,2,3,4,0,3,4,1,2,3,4,0,1,2,3,4,0,1,2,3,4,0,1,2,3,4
+    BW_MAP_POLICY_ID=2u)
+target_compile_definitions(test_barcode_window_invalid_map PRIVATE
+    BW_MAP_VALUES=255 BW_MAP_POLICY_ID=3u)
+target_compile_definitions(test_barcode_window_unconfirmed PRIVATE
+    BW_MAP_CONFIRMED=0)
+foreach(case IN ITEMS normal variable wrap two_ms freeze tracking short_quiet
+        immutable missing merged calibration queue brackets leading short_tail
+        gap extra multi small air reversal motor_fault motor_gap sample_gap
+        adc_fault paper flat_dark line_only alias one_missing)
+    add_test(NAME test_barcode_window_${case}
+        COMMAND test_barcode_window ${case})
+endforeach()
+
 host_test(test_barcode_live_source tests/test_barcode_live_source.c
     app_program/subsystem3/barcode_live_source.c)
 target_include_directories(test_barcode_live_source BEFORE PRIVATE
@@ -72,6 +100,7 @@ target_compile_definitions(test_barcode_drive_clamp PRIVATE
 host_test(test_barcode_line_copy tests/test_line_service.c
     app_program/subsystem3/line_service.c
     app_program/subsystem3/barcode_calibration.c
+    app_program/subsystem3/barcode_live_source.c
     app_program/subsystem3/line_position.c
     app_program/subsystem3/barcode_capture.c)
 target_include_directories(test_barcode_line_copy BEFORE PRIVATE
@@ -82,7 +111,8 @@ target_compile_definitions(test_barcode_line_copy PRIVATE
 # Keep the common LINE owner linked in both normal and capture host profiles.
 if(TARGET test_line_service)
     target_sources(test_line_service PRIVATE
-        "${REPO}/app_program/subsystem3/barcode_calibration.c")
+        "${REPO}/app_program/subsystem3/barcode_calibration.c"
+        "${REPO}/app_program/subsystem3/barcode_live_source.c")
 endif()
 host_test(test_barcode_calibration tests/test_barcode_calibration.c
     app_program/subsystem3/barcode_calibration.c)

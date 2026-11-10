@@ -12,6 +12,7 @@
 #define LINE_TASK_PRIORITY 11
 
 #include "line_service.h"
+#include "barcode_live_source.h"
 #if APP_BARCODE_CAPTURE
 #include "barcode_capture.h"
 #endif
@@ -194,6 +195,12 @@ int line_service_init(void)
     lp_set_pair(&snapshot.line, true, 0);
     const int er = drv_line_init();
     if (er >= E_OK) {
+        /* S3 initializes its invalid shadow record before either task runs.
+         * Vehicle remains the sole future control-board writer. */
+        const int source = barcode_live_source_init();
+        if (source < E_OK) {
+            return source;
+        }
         ready = true;
         publish_line();
         publish_barcode_calibration();
