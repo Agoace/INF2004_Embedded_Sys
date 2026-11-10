@@ -32,8 +32,9 @@ endforeach()
 
 host_test(test_cpu_load tests/test_cpu_load.c app_program/platform/cpu_load.c)
 host_test(test_motion_diag tests/test_motion_diag.c)
-host_test(test_motion_task_diag tests/test_motion_task.c app_program/subsystem2/motion.c
-    app_program/subsystem2/motor_ctl.c app_program/subsystem2/subsystem2.c)
+host_test(test_motion_task_diag tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
 if(TARGET test_motion_task_diag)
     target_include_directories(test_motion_task_diag BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_task_diag PRIVATE APP_DIAG=1)

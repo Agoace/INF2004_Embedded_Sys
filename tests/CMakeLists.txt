@@ -66,7 +66,11 @@ host_test(module_detour host-tests/test_detour.c ${detour_run_source} ${obstacle
 # Kernel-side glue tests use explicit host doubles, never real kernel headers.
 host_test(test_motion_task tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
-    app_program/subsystem2/subsystem2.c)
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
+host_test(test_motion_pack tests/test_motion_pack.c
+    app_program/subsystem2/motion_pack.c)
+target_include_directories(test_motion_pack BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
 host_test(test_gpio_irq tests/test_gpio_irq.c app_program/platform/drv_gpio_irq.c)
 foreach(test IN ITEMS test_motion_task test_gpio_irq)
     if(TARGET ${test})
@@ -103,12 +107,14 @@ if(TARGET test_vehicle_log)
         "${REPO}/tests/test_robot_contract.py" "$<TARGET_FILE:test_vehicle_log>")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_ram_report COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_ram_report.py")
 add_test(NAME test_task_priorities COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_task_priorities.py")
 # The two button owners are mutually exclusive build modes.
 host_test(test_motion_task_bench tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
-    app_program/subsystem2/subsystem2.c)
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
 if(TARGET test_motion_task_bench)
     target_include_directories(test_motion_task_bench BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_task_bench PRIVATE APP_BENCH=1)
@@ -139,17 +145,27 @@ if(TARGET test_motion_task)
     add_test(NAME test_motion_start_cyclic_failure COMMAND test_motion_task cyclic)
     add_test(NAME test_motion_start_watchdog_failure COMMAND test_motion_task watchdog)
 endif()
-host_test(test_motion_watchdog tests/test_motion_task.c app_program/subsystem2/motion.c
-    app_program/subsystem2/motor_ctl.c app_program/subsystem2/subsystem2.c)
+host_test(test_motion_watchdog tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
 if(TARGET test_motion_watchdog)
     target_include_directories(test_motion_watchdog BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_watchdog PRIVATE APP_TEST=1 APP_BENCH=1)
 endif()
 
-host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
-if(TARGET test_app_task)
-    target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
-endif()
+foreach(mode IN ITEMS normal bench mqtt test)
+    set(target test_app_task_${mode})
+    host_test(${target} tests/test_app_task.c app_program/platform/app_task.c)
+    target_include_directories(${target} BEFORE PRIVATE
+        "${REPO}/tests/mtk_stubs")
+    if(mode STREQUAL "bench")
+        target_compile_definitions(${target} PRIVATE APP_BENCH=1)
+    elseif(mode STREQUAL "mqtt")
+        target_compile_definitions(${target} PRIVATE TM_MQTT=1)
+    elseif(mode STREQUAL "test")
+        target_compile_definitions(${target} PRIVATE APP_TEST=1)
+    endif()
+endforeach()
 
 host_test(test_line_service tests/test_line_service.c app_program/subsystem3/line_service.c ${line_position_source})
 if(TARGET test_line_service)

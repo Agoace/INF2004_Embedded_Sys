@@ -9,6 +9,7 @@
 #define WATCHDOG_TIMEOUT_MS  100u
 
 #include "motion.h"
+#include "motion_pack.h"
 #include "motion_diag.h"
 #if APP_DIAG
 #include "motion_diag_capture.h"
@@ -43,22 +44,22 @@ static bool watchdog_armed;
 static void motion_status_locked(motion_status_t *s);
 #include "../platform/app_board.h"
 
-typedef struct {
-    motion_status_t status;
-    uint32_t us;
-} motion_board_t;
-
-static APP_BOARD(motion_board_t) board;
+/* Only motion_task publishes. Never modify bits in the shared words. */
+static APP_BOARD(motion_packed_t) board;
+_Static_assert(sizeof(board) == 64u, "compact motion board size");
 
 /*
  * Publish a coherent motion snapshot after a completed tick.
  */
 static void publish_motion(uint32_t us)
 {
-    motion_board_t v = {0};
-    v.us = us;
-    motion_status_locked(&v.status);
-    app_board_publish(&board.sequence, board.words, &v, sizeof(v));
+    motion_status_t status = {0};
+    motion_packed_t packed;
+    motion_status_locked(&status);
+    if (motion_pack(&packed, &status, us)) {
+        app_board_publish(&board.sequence, board.words, &packed,
+                          sizeof(packed));
+    }
 }
 #if APP_TEST
 static volatile bool test_requested;
@@ -616,11 +617,11 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *timestamp_us)
     if (mtx_motion <= 0 || tid_motion <= 0) {
         return E_OBJ;
     }
-    motion_board_t v;
-    if (!app_board_try_read(&board.sequence, board.words, &v, sizeof(v))) {
+    motion_packed_t packed;
+    if (!app_board_try_read(&board.sequence, board.words, &packed,
+                            sizeof(packed)) ||
+        !motion_unpack(out, timestamp_us, &packed)) {
         return E_TMOUT;
     }
-    *out = v.status;
-    *timestamp_us = v.us;
     return E_OK;
 }

@@ -303,6 +303,17 @@ See [junction actions](docs/architecture/JUNCTION_ACTION.md) and the
 [unrun hardware procedure](docs/kernel/JUNCTION_VALIDATION.md).
 Barcode input ideas remain in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
 
+## CR1 data representation
+
+[CR1 evidence](docs/architecture/CR1_EVIDENCE.md) records baseline RAM,
+board/queue and binary MQTT sizes. The
+[motion plan](docs/s2-motion/CR1_MOTION_PLAN.md) records approved motion
+board packing (8 B saved). A separate change removes the inactive bench
+stack/slot (4112 B saved in MQTT). A1/B1 hardware passed on 2026-11-10
+with an idle-stack margin note. Its approved safety increase adds 256 B;
+the larger stack is not yet retested on hardware. Main's merge is pending.
+Changes proceed one module at a time; sizes are not hardware acceptance.
+
 ## Local template changes
 
 See [the template change ledger](docs/architecture/TEMPLATE_CHANGES.md) for approved shared
