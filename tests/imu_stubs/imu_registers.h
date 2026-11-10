@@ -39,4 +39,5 @@ static inline void hw_clear_bits(volatile uint32_t *p, uint32_t value)
 { *p &= ~value; }
 void gpio_set_function(unsigned int pin, unsigned int function);
 void gpio_pull_up(unsigned int pin);
+void gpio_pull_down(unsigned int pin);
 #endif

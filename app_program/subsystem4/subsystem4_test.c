@@ -1,13 +1,18 @@
-/* TEST-only tilt check. Register/axis ideas: Jaison, b2a6bb6.
- * No vehicle, encoder, MQTT, calibration or hump path is connected. */
+/* The priority-14 IMU task owns the bus/core. TEST only observes it.
+ * IMU_STREAM additionally offers an operator-triggered bounded drive job;
+ * no terrain result commands motion. VIN/lifted-first checks are required. */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
 #include "subsystem4.h"
 #if APP_TEST
-#include "imu_probe.h"
+#include "imu_service.h"
 #include "imu_hw.h"
 #include "imu_mark.h"
+#include "imu_drive.h"
 #include "../platform/drv_time.h"
+#include "../platform/app_task.h"
+#include "../subsystem2/motion.h"
+#include <math.h>
 
 static ID runner;
 
@@ -17,112 +22,436 @@ static void release(void *context)
     (void)tk_wup_tsk(runner);
 }
 
+/* Console-only decimal formatting; keep all formatting out of IMU work.
+ * Clamp the DISPLAY conversion only, not the core's relative height. */
+static void print_mm(const char *name, float mm)
+{
+    const float magnitude = fabsf(mm);
+    const uint32_t scaled = !isfinite(magnitude) ? 0u :
+        magnitude >= 2147483.0f ? UINT32_C(2147483000) :
+        (uint32_t)(magnitude * 1000.0f);
+
+    tm_printf((UB *)" %s %s%lu.%03lu", name, mm < 0.0f ? "-" : "",
+              (unsigned long)(scaled / 1000u),
+              (unsigned long)(scaled % 1000u));
+}
+
+static void report(const imu_snapshot_t *snapshot)
+{
+    const imu_core_output_t *v = &snapshot->value;
+
+    tm_printf((UB *)"[S4] t_ms %lu source_us %lu valid %u motion %u "
+              "raw_mg %ld %ld %ld cal_mg %ld %ld %ld "
+              "raw_ddeg %ld %ld pitch_ddeg %ld roll_ddeg %ld "
+              "filt_ddeg %ld %ld corrected_ddeg %ld "
+              "v_mm_s %ld a_mm_s2 %ld cal %u faults %lu",
+              (unsigned long)snapshot->timestamp_ms,
+              (unsigned long)snapshot->timestamp_us,
+              (unsigned int)v->valid, (unsigned int)v->motion_valid,
+              (long)snapshot->raw.accel_mg[0],
+              (long)snapshot->raw.accel_mg[1],
+              (long)snapshot->raw.accel_mg[2],
+              (long)v->accel_mg[0], (long)v->accel_mg[1],
+              (long)v->accel_mg[2], (long)v->raw_pitch_ddeg,
+              (long)v->raw_roll_ddeg, (long)v->pitch_ddeg,
+              (long)v->roll_ddeg, (long)v->filtered_pitch_ddeg,
+              (long)v->filtered_roll_ddeg, (long)v->corrected_pitch_ddeg,
+              (long)v->speed_mm_s, (long)v->forward_accel_mm_s2,
+              (unsigned int)v->calibrated,
+              (unsigned long)snapshot->probe.faults);
+    print_mm("travel_mm", v->travel_mm);
+    print_mm("distance_mm", v->distance_mm);
+    print_mm("height_mm", v->height_mm);
+    print_mm("peak_mm", v->peak_mm);
+    print_mm("roll_zR_mm", v->roll_only.height_mm);
+    print_mm("roll_avg_mm", v->roll_only.smoothed_mm);
+    print_mm("roll_peak_mm", v->roll_only.peak_mm);
+    print_mm("roll_plateau_mm", v->roll_only.plateau_mm);
+    print_mm("pitch_expected_deg", v->roll_only.expected_pitch_rad *
+             57.2957795f);
+    print_mm("quality_ratio", v->roll_only.quality_ratio);
+    tm_printf((UB *)" roll_ready %u %u pitch_quality %u",
+              (unsigned int)v->roll_only.smooth_ready,
+              (unsigned int)v->roll_only.plateau_ready,
+              (unsigned int)v->roll_only.quality_good);
+    print_mm("zR_mm", v->right_mm);
+    print_mm("zR_avg_mm", v->right_smoothed_mm);
+    print_mm("zR_peak_mm", v->right_peak_mm);
+    print_mm("zL_mm", v->left_mm);
+    print_mm("zL_peak_mm", v->left_peak_mm);
+    print_mm("zC_mm", v->caster_mm);
+    print_mm("zC_peak_mm", v->caster_peak_mm);
+    print_mm("left_residual_mm", v->left_residual_mm);
+    tm_printf((UB *)" eligible %u corrected_roll_ddeg %ld",
+              (unsigned int)v->support_peak_eligible,
+              (long)v->corrected_roll_ddeg);
+    tm_printf((UB *)" hump_state %u hump_count %u hump_gated %u "
+              "hump_flags %02x",
+              (unsigned int)v->hump.state, (unsigned int)v->hump.count,
+              (unsigned int)v->hump.gated_starts,
+              (unsigned int)v->hump.flags);
+    print_mm("hump_avg_mm", v->hump.smoothed_mm);
+    print_mm("hump_event_mm", v->hump.event_peak_mm);
+    print_mm("hump_max_mm", v->hump.max_peak_mm);
+    tm_printf((UB *)"\n");
+}
+
+#if APP_IMU_STREAM
+static uint32_t hump_epoch;
+static imu_hump_report_t hump_last;
+static bool have_hump_last;
+static imu_hump_diag_report_t diag_last;
+static bool have_diag_last;
+
+/* One run result line, taken like the robot summary from the last good
+ * copy: an open confirmed event counts; a stale or other-run copy prints
+ * unavailable. */
+static void hump_report(void)
+{
+    const imu_hump_summary_t h = imu_hump_summarize(&hump_last,
+        have_hump_last, hump_epoch, drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+
+    tm_printf((UB *)"[S4_HUMP] peak_0.1mm %u count %u flags %02x "
+              "gated %u long %u source %u %s\n",
+              (unsigned int)h.peak_01mm, (unsigned int)h.count,
+              (unsigned int)h.flags, (unsigned int)h.gated,
+              (unsigned int)hump_last.hump.long_rejects,
+              (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+    imu_hump_diag_finish(&diag_last, hump_epoch, drv_time_ms(),
+        have_diag_last && have_hump_last &&
+        diag_last.timestamp_ms == hump_last.timestamp_ms &&
+        h.peak_01mm != IMU_HUMP_PEAK_NONE);
+    imu_hump_diag_print(&diag_last);
+}
+
+static imu_drive_stats_t vibration;
+static uint32_t vibration_stamp;
+static bool have_vibration_stamp;
+static uint32_t dump_index;
+
+/* One immutable batch per 20 ms wake, only AFTER a confirmed drive stop.
+ * A new drive pauses dumping and cannot overwrite the pending capture. */
+static void capture_dump_tick(void)
+{
+    uint32_t samples;
+    uint32_t batches;
+    imu_capture_reason_t reason;
+    imu_capture_batch_t batch;
+    int16_t raw[IMU_FIFO_MAX_BATCH][3];
+
+    if (!imu_capture_frozen(&samples, &batches, &reason)) {
+        return;
+    }
+    if (dump_index < batches &&
+        imu_capture_batch_read(dump_index, &batch, raw)) {
+        tm_printf((UB *)"[S4_RAW_BATCH] batch %lu first %lu n %lu t_us %lu\n",
+                  (unsigned long)dump_index, (unsigned long)batch.first,
+                  (unsigned long)batch.count,
+                  (unsigned long)batch.timestamp_us);
+        for (uint32_t i = 0u; i < batch.count; ++i) {
+            tm_printf((UB *)"[S4_RAW] %lu %ld %ld %ld\n",
+                      (unsigned long)(batch.first + i), (long)raw[i][0],
+                      (long)raw[i][1], (long)raw[i][2]);
+        }
+        ++dump_index;
+    }
+    if (dump_index == batches) {
+        tm_printf((UB *)"[S4_RAW_END] n %lu batches %lu reason %u odr 400\n",
+                  (unsigned long)samples, (unsigned long)batches,
+                  (unsigned int)reason);
+        (void)imu_capture_release();
+    }
+}
+
+static void vibration_report(void)
+{
+    float std[2];
+
+    imu_drive_stats_std(&vibration, std);
+    tm_printf((UB *)"[S4_VIB] n %lu observer_hz 50",
+              (unsigned long)vibration.samples);
+    print_mm("pitch_mean_deg", vibration.mean[0]);
+    print_mm("roll_mean_deg", vibration.mean[1]);
+    print_mm("pitch_std_deg", std[0]);
+    print_mm("roll_std_deg", std[1]);
+    tm_printf((UB *)"\n");
+}
+
+/* This is the ONLY drive client here, compiled out of ordinary TEST/robot.
+ * VIN and a clear test area are operator preconditions, not sensed inputs. */
+static void drive_update(imu_drive_t *job, bool *stop_pending, bool press,
+                          bool observed, const imu_snapshot_t *s,
+                          bool wake_fault)
+{
+    motion_status_t motor;
+    uint32_t stamp;
+    const bool motor_ok = motion_snapshot_try_read(&motor, &stamp) == E_OK;
+    const uint32_t now = drv_time_us();
+    const bool imu_ok = observed && s->value.valid && s->value.calibrated &&
+        s->value.motion_valid && s->raw.mag_valid && s->probe.faults == 0u &&
+        (uint32_t)(now - s->timestamp_us) <= 30000u;
+    const bool fault = *stop_pending || wake_fault || !imu_ok || !motor_ok ||
+        (motor_ok && ((uint32_t)(now - stamp) > 30000u ||
+                     motor.faults != 0u || !motor.watchdog_armed));
+    const bool was_active = job->active;
+
+    if (observed) {
+        hump_last.hump = s->value.hump;
+        hump_last.timestamp_ms = s->timestamp_ms;
+        have_hump_last = true;
+        if (imu_hump_diag_try_read(&diag_last) == E_OK) {
+            have_diag_last = true;
+        }
+    }
+    const int16_t speed = imu_drive_step(job, drv_time_ms(),
+        observed ? s->value.travel_mm : 0.0f, press, fault);
+
+    if (job->active) {
+        if (motion_set_speed(speed, speed) < E_OK) {
+            imu_drive_cancel(job);
+        }
+    }
+    if (!was_active && job->active) {
+        hump_epoch = imu_test_run(true);
+        imu_drive_stats_reset(&vibration);
+        have_vibration_stamp = false;
+        if (imu_capture_request()) {
+            dump_index = 0u;
+            tm_printf((UB *)"[S4_RAW_ARM] 800 raw16 XYZ; dump AFTER stop\n");
+        } else {
+            tm_printf((UB *)"[S4_RAW] disabled/busy; drive unaffected\n");
+        }
+    }
+    if ((was_active || job->active) && observed && s->value.valid &&
+        (!have_vibration_stamp || vibration_stamp != s->timestamp_us)) {
+        imu_drive_stats_add(&vibration,
+            (float)s->value.corrected_pitch_ddeg * 0.1f,
+            (float)s->value.filtered_roll_ddeg * 0.1f);
+        vibration_stamp = s->timestamp_us;
+        have_vibration_stamp = true;
+    }
+    if (!job->active && (was_active || press || *stop_pending)) {
+        const bool was_pending = *stop_pending;
+        bool stopped = motion_stop() >= E_OK;
+
+        if (!stopped) {
+            stopped = motion_estop() >= E_OK;
+        }
+        *stop_pending = !stopped;
+        if (!stopped && !was_pending) {
+            tm_printf((UB *)"[S4_DRIVE] STOP UNCONFIRMED; retrying; "
+                      "remove VIN if wheels move\n");
+        }
+    }
+    if (was_active != job->active || press) {
+        tm_printf((UB *)"[S4_DRIVE] active %u reason %u",
+                  (unsigned int)job->active, (unsigned int)job->reason);
+        print_mm("travel_mm", job->distance_mm);
+        tm_printf((UB *)"\n");
+        if (was_active && !job->active) {
+            hump_report();
+            (void)imu_test_run(false);
+            imu_capture_stop_request();
+            vibration_report();
+        }
+    }
+}
+#endif
+
+static void diagnostics(const imu_snapshot_t *s)
+{
+    const imu_core_output_t *v = &s->value;
+
+#if APP_IMU_STREAM
+    vibration_report();
+#endif
+    tm_printf((UB *)"[S4_FIFO] ctrl1 %02x ctrl5 %02x fifo_ctrl %02x "
+              "src %02x n %u polls %lu batches %lu samples %lu min %lu "
+              "max %lu empty %lu overrun %lu backlog %lu bad %lu reset %lu",
+              (unsigned int)s->probe.ctrl1, (unsigned int)s->probe.ctrl5,
+              (unsigned int)s->probe.fifo_ctrl,
+              (unsigned int)s->probe.fifo_status,
+              s->probe.fifo_last_samples,
+              (unsigned long)s->probe.fifo_cycles,
+              (unsigned long)s->probe.fifo_batches,
+              (unsigned long)s->probe.fifo_samples,
+              (unsigned long)s->probe.fifo_min,
+              (unsigned long)s->probe.fifo_max,
+              (unsigned long)s->probe.fifo_empty,
+              (unsigned long)s->probe.fifo_overruns,
+              (unsigned long)s->probe.fifo_backlogs,
+              (unsigned long)s->probe.fifo_bad_status,
+              (unsigned long)s->probe.fifo_recoveries);
+    print_mm("mean_samples_per_poll", s->probe.fifo_cycles == 0u ? 0.0f :
+             (float)s->probe.fifo_samples / (float)s->probe.fifo_cycles);
+    tm_printf((UB *)"\n");
+    tm_printf((UB *)"[S4_QUALITY] refresh_rejects %lu tilt_ddeg %ld "
+              "peak_rejects %lu omega_mrad_s %ld alpha_mrad_s2 %ld\n",
+              (unsigned long)v->refresh_rejects,
+              (long)v->refresh_tilt_ddeg,
+              (unsigned long)v->support_peak_rejects,
+              (long)(v->yaw_rate_rad_s * 1000.0f),
+              (long)(v->yaw_accel_rad_s2 * 1000.0f));
+    tm_printf((UB *)"[S4_DIAG] cal_count %lu rejects %lu "
+              "bias_mg %ld %ld %ld std_mg %ld %ld %ld "
+              "reads %lu faults %lu nack %lu timeout %lu id %lu cfg %lu "
+              "ctrl1 %02x ctrl4 %02x mag_valid %u "
+              "read_us %lu read_max_us %lu read_total_us %lu "
+              "work_us %lu work_max_us %lu work_total_us %lu "
+              "core_us %lu core_max_us %lu core_total_us %lu "
+              "gap_max_us %lu missed %lu wake_lost %lu "
+              "samples %lu invalid %lu motion_misses %lu gaps %lu\n",
+              (unsigned long)v->calibrations,
+              (unsigned long)v->calibration_rejects,
+              (long)v->bias_mg[0], (long)v->bias_mg[1],
+              (long)v->bias_mg[2], (long)v->still_std_mg[0],
+              (long)v->still_std_mg[1], (long)v->still_std_mg[2],
+              (unsigned long)s->probe.reads,
+              (unsigned long)s->probe.faults,
+              (unsigned long)s->probe.nacks,
+              (unsigned long)s->probe.timeouts,
+              (unsigned long)s->probe.identity_errors,
+              (unsigned long)s->probe.config_errors,
+              (unsigned int)s->probe.ctrl1, (unsigned int)s->probe.ctrl4,
+              (unsigned int)s->raw.mag_valid,
+              (unsigned long)s->probe.last_us,
+              (unsigned long)s->probe.max_us,
+              (unsigned long)s->probe.total_us,
+              (unsigned long)s->work_last_us,
+              (unsigned long)s->work_max_us,
+              (unsigned long)s->work_total_us,
+              (unsigned long)s->compute_last_us,
+              (unsigned long)s->compute_max_us,
+              (unsigned long)s->compute_total_us,
+              (unsigned long)s->gap_max_us,
+              (unsigned long)s->missed_wakes,
+              (unsigned long)s->wake_lost,
+              (unsigned long)v->samples,
+              (unsigned long)v->invalid_samples,
+              (unsigned long)v->motion_misses,
+              (unsigned long)v->gap_resets);
+}
+
 EXPORT void subsystem4_test(void)
 {
-    imu_probe_t probe;
-    imu_units_t units = {0};
-    uint32_t previous;
-    uint32_t gap_max = 0u;
-    uint32_t missed = 0u;
     ID cyclic;
+    imu_snapshot_t snapshot;
 #if APP_IMU_STREAM
     imu_mark_t marker = {0};
-    uint32_t marks = 0u;
+    imu_mark_t drive_button = {0};
+    imu_drive_t drive = {0};
+    bool stop_pending = false;
+    uint32_t printed_mark = 0u;
 #endif
     T_CCYC config = {.cycatr = TA_HLNG, .cychdr = (FP)release,
-                     .cyctim = 10u, .cycphs = 10u};
+                     .cyctim = 20u, .cycphs = 20u};
 
 #if TK_SUPPORT_SMP
     config.cycatr |= TA_ASSPRC;
     config.assprc = TP_PRC1;
 #endif
+    if (motion_stop() < E_OK) {
+        tm_printf((UB *)"[TEST] S4 FAIL: cannot request zero motor duty\n");
+        return;
+    }
 #if APP_IMU_STREAM
     imu_hw_mark_init();
-    tm_printf((UB *)"[TEST] IMU_STREAM until power-off; GP20 prints MARK. "
-              "Other tests and destructive watchdog reset are skipped.\n");
+    imu_hw_drive_init();
+    /* A held button across boot must not become a new drive command. */
+    drive_button.sample = imu_hw_drive_down();
+    drive_button.stable = drive_button.sample;
+    drive_button.changed_at = drv_time_ms();
+    tm_printf((UB *)"[TEST] VIN REQUIRED for drive. Lift wheels first. "
+              "GP21: equal 100 mm/s, 600 mm /10 s limit; "
+              "second press or ANY fault stops. GP20 MARK unchanged.\n");
+    tm_printf((UB *)"[TEST] IMU_STREAM: 50 Hz until power-off; "
+              "GP20 MARK resets height/peak/distance on next IMU tick; "
+              "hump totals reset at each GP21 drive start. "
+              "Other tests/destructive watchdog reset skipped.\n");
 #endif
-    tm_printf((UB *)"[TEST] S4-U01 operator tilt check: GY-511. "
-              "I2C0 GP0/1, 400 kHz, accel 100 Hz HR 2g, mag 75 Hz.\n");
-    tm_printf((UB *)"[TEST] S4 no gyro; uncalibrated +X right +Y forward "
-              "+Z up. Lift wheels; GP0/1 must not have a UART adapter.\n");
-    imu_probe_init(&probe);
+    tm_printf((UB *)"[TEST] S4 observe only; no gyro. +X right +Y forward "
+              "+Z up. Boot LEVEL and still >=1 s; refresh tilt guard 1 deg. "
+              "Zero duty is COAST (both bridge inputs low), not braking.\n");
+    tm_printf((UB *)"[TEST] S4 GP0/1 I2C: remove UART adapter. "
+              "Angles ddeg=0.1 degree; signed relative height in mm. "
+              "Hump events report only: no MQTT/KR1 field or driving "
+              "action.\n");
     runner = tk_get_tid();
     cyclic = tk_cre_cyc(&config);
-    if ((cyclic < E_OK) || (tk_sta_cyc(cyclic) < E_OK)) {
-        tm_printf((UB *)"[TEST] S4-U01 FAIL: cannot start 10 ms cyclic\n");
+    if (cyclic < E_OK || tk_sta_cyc(cyclic) < E_OK) {
+        tm_printf((UB *)"[TEST] S4 FAIL: cannot start 20 ms observer cyclic\n");
         if (cyclic >= E_OK) {
             (void)tk_del_cyc(cyclic);
         }
         return;
     }
-    previous = drv_time_us();
     for (unsigned int cycle = 0u;
 #if APP_IMU_STREAM
          ;
 #else
-         cycle < 3000u;
+         cycle < 1500u;
 #endif
          ++cycle) {
-        uint32_t now;
-        uint32_t gap;
-        bool valid;
-        INT extra;
-
         if (tk_slp_tsk(100u) < E_OK) {
-            tm_printf((UB *)"[TEST] S4-U01 FAIL: cyclic wake timeout\n");
+            tm_printf((UB *)"[TEST] S4 FAIL: observer wake timeout\n");
             break;
         }
-        extra = tk_can_wup(TSK_SELF);
-        if (extra > 0) {
-            missed += (uint32_t)extra;
-        }
-        now = drv_time_us();
-        gap = now - previous;
-        previous = now;
-        if (gap > gap_max) {
-            gap_max = gap;
-        }
+        const INT extra = tk_can_wup(TSK_SELF);
+
 #if APP_IMU_STREAM
+        const bool drive_press = imu_mark_update(&drive_button,
+            imu_hw_drive_down(), drv_time_ms());
         if (imu_mark_update(&marker, imu_hw_mark_down(), drv_time_ms())) {
-            ++marks;
-            tm_printf((UB *)"[S4] MARK %lu\n", (unsigned long)marks);
+            (void)imu_request_mark();
         }
 #endif
-        valid = imu_probe_read(&probe, drv_time_ms(), &units);
-        if ((cycle % 10u) == 9u) {
-            float gravity;
-            float pitch;
-            float roll;
-            const bool tilt = imu_tilt(units.accel_mg, &gravity, &pitch, &roll);
+        const bool observed = imu_snapshot_try_read(&snapshot) == E_OK;
 
-            tm_printf((UB *)"[S4] valid %u mag_valid %u a_mg %ld %ld %ld "
-                      "m_mgauss %ld %ld %ld g_mg %ld pitch_ddeg %ld "
-                      "roll_ddeg %ld read_us %lu max_us %lu "
-                      "reads %lu faults %lu nack %lu timeout %lu "
-                      "id %lu cfg %lu gap_max_us %lu missed %lu "
-                      "ctrl1 %02x ctrl4 %02x\n",
-                      (unsigned int)(valid && tilt),
-                      (unsigned int)units.mag_valid,
-                      (long)units.accel_mg[0], (long)units.accel_mg[1],
-                      (long)units.accel_mg[2], (long)units.mag_mgauss[0],
-                      (long)units.mag_mgauss[1], (long)units.mag_mgauss[2],
-                      (long)gravity, (long)(pitch * 10.0f),
-                      (long)(roll * 10.0f), (unsigned long)probe.last_us,
-                      (unsigned long)probe.max_us, (unsigned long)probe.reads,
-                      (unsigned long)probe.faults, (unsigned long)probe.nacks,
-                      (unsigned long)probe.timeouts,
-                      (unsigned long)probe.identity_errors,
-                      (unsigned long)probe.config_errors,
-                      (unsigned long)gap_max, (unsigned long)missed,
-                      (unsigned int)probe.ctrl1, (unsigned int)probe.ctrl4);
+#if APP_IMU_STREAM
+        drive_update(&drive, &stop_pending, drive_press, observed,
+                      &snapshot, extra > 0);
+#else
+        (void)extra;
+#endif
+        if (!observed) {
+            tm_printf((UB *)"[S4] snapshot unavailable\n");
+            continue;
+        }
+#if APP_IMU_STREAM
+        if (snapshot.marks != printed_mark) {
+            printed_mark = snapshot.marks;
+            tm_printf((UB *)"[S4] MARK %lu\n", (unsigned long)printed_mark);
+        }
+        report(&snapshot);
+        if (!drive.active && !stop_pending) {
+            capture_dump_tick();
+        }
+#else
+        if (cycle % 5u == 4u) {
+            report(&snapshot);
+        }
+#endif
+        if (cycle % 50u == 49u) {
+            diagnostics(&snapshot);
+            app_task_report();
         }
     }
+#if APP_IMU_STREAM
+    if (drive.active || stop_pending) {
+        do {
+            drive_update(&drive, &stop_pending, false, false, &snapshot,
+                          true);
+            if (stop_pending) {
+                (void)tk_slp_tsk(100u);
+                (void)tk_can_wup(TSK_SELF);
+            }
+        } while (stop_pending);
+    }
+#endif
     (void)tk_stp_cyc(cyclic);
     (void)tk_del_cyc(cyclic);
     (void)tk_can_wup(TSK_SELF);
-    tm_printf((UB *)"[TEST] S4-U01 operator judgement required; "
-              "read_total_us %lu reads %lu max_us %lu\n",
-              (unsigned long)probe.total_us, (unsigned long)probe.reads,
-              (unsigned long)probe.max_us);
+    tm_printf((UB *)"[TEST] S4 operator judgement required; "
+              "the observe-only IMU task continues\n");
 }
 #endif

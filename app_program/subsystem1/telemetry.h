@@ -5,6 +5,7 @@
 #define KERNEL_TELEMETRY_H
 #include <stdbool.h>
 #include <stdint.h>
+#include "../vehicle/junction_action.h"
 #define TELEMETRY_ROWS   4501u
 #define TELEMETRY_BYTES  16u
 #define TELEMETRY_EVENTS 512u
@@ -42,7 +43,8 @@ typedef enum {
     TELEMETRY_ROW,
     TELEMETRY_EVENT,
     TELEMETRY_INFO,
-    TELEMETRY_DUMP
+    TELEMETRY_DUMP,
+    TELEMETRY_JUNCTION
 } telemetry_kind_t;
 
 typedef struct {
@@ -53,6 +55,7 @@ typedef struct {
         uint8_t row[TELEMETRY_BYTES];
         telemetry_event_t event;
         telemetry_info_t info;
+        ja_result_t junction;
     } data;
 } telemetry_message_t;
 

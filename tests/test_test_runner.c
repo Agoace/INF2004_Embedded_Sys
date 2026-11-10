@@ -2,11 +2,14 @@
 #include <assert.h>
 #include <setjmp.h>
 #include <stdbool.h>
+#include <stdarg.h>
+#include "../app_program/subsystem4/imu_settings.h"
 #include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/platform/app_task.h"
 static jmp_buf finished;
 static unsigned int inits,starts,tests,reports,watchdog_tests,priority_calls,aborts;
+static unsigned int source_lines;
 static PRI priority=1;
 static bool fail_priority;
 int drv_time_init(void) { return E_OK; }
@@ -41,13 +44,22 @@ ER tk_chg_pri(ID id,PRI pri) {
 }
 void app_task_report(void) { assert(priority==20 && tests==5u);++reports; }
 void subsystem2_watchdog_test(void) { assert(priority==20 && tests==5u && reports==1u);++watchdog_tests; }
-int tm_printf(const UB *format,...) { if (strstr((const char *)format,"ABORT")) ++aborts;return 0; }
+int tm_printf(const UB *format,...) {
+    if (strstr((const char *)format,"ABORT")) ++aborts;
+    if (!strcmp((const char *)format,"[S4] hump_source %u %s\n")) {
+        va_list a;va_start(a,format);
+        assert(va_arg(a,unsigned int)==IMU_HUMP_SOURCE);
+        assert(!strcmp(va_arg(a,const char *),IMU_HUMP_SOURCE_NAME));
+        va_end(a);++source_lines;
+    }
+    return 0;
+}
 ER tk_slp_tsk(TMO timeout) { assert(timeout==TMO_FEVR);longjmp(finished,1); }
 extern INT usermain(void);
 int main(int argc,char **argv) {
     (void)argv;fail_priority=argc>1;
     if (setjmp(finished)==0) { (void)usermain();assert(0); }
-    assert(inits==5u && starts==5u);
+    assert(inits==5u && starts==5u && source_lines==1u);
 #if APP_TEST
     assert(priority_calls==1u);
     if (fail_priority) assert(priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==1u);

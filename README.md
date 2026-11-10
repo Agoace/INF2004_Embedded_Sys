@@ -194,11 +194,21 @@ the next plain `make` goes back to the defaults.
 | `TEST` | **`0`**, `1` | `1` compiles every `subsystemN_test.c` and runs the tests at power-up | `_test` / *(nothing)* | `APP_TEST` (1 or 0) |
 | `CRASH_REPORT` | **`0`**, `1` | `1` also copies the console to UART0 on **GP0 (TX) / GP1 (RX)**, 115200 baud, so you can see the last messages and the kernel's crash report (see below). **Uses GP0/GP1.** `CONSOLE=uart` always does this. | `_crash` / *(nothing)* | `TM_CONSOLE_UART` (1 or 0) |
 
-For the operator-only GY-511 tilt check, use `TEST=1 IMU_STREAM=1` with
-`SMP=0 WIFI=none NET=none`. It skips other tests and streams S4 until power-off;
-GP20 adds position markers. The IMU requires USB only and `CRASH_REPORT=0`.
-See [IMU bring-up](docs/s4-imu/IMU.md#continuous-operator-stream). Default
-TEST without this option is unchanged.
+Robot/TEST images now run the GY-511 task at 100 Hz, with no driving
+action and no KR1 IMU field. Step 2d reads the 400 Hz sensor FIFO and feeds
+the mean of each 10 ms batch. Step 3 reports humps only: a USB line at run
+end, a GP20 DUMP line, MQTT event kind 9 and summary v3; see
+[step 3 hump report](docs/s4-imu/IMU.md#step-3-hump-report). They require USB and `CRASH_REPORT=0`;
+UART-conflict builds are rejected. BENCH has no IMU task. For the 50 Hz
+RIGHT-wheel roll-only stream (legacy full-model diagnostics retained),
+use `TEST=1 IMU_STREAM=1` with
+`SMP=0 WIFI=none NET=none`. It skips other tests until power-off; GP20 MARK
+resets peaks/integral/distance. GP21 optionally drives equal100 mm/s for
+600 mm or10 s; second press/fault stops. VIN is required: lift wheels and
+verify stopping FIRST. Boot level/still >=1 s; tilted refresh is guarded.
+After a GP21 drive stops, IMU_STREAM dumps a 2 s raw 400 Hz capture.
+See the [current IMU procedure](docs/s4-imu/IMU.md#step-2d-current-procedure).
+Ordinary TEST retains the existing test order and destructive watchdog test.
 
 **Why `CRASH_REPORT` exists.** USB output is not sent the moment you call
 `tm_printf`: it waits in a buffer until the kernel's USB task sends it. If the
@@ -209,7 +219,9 @@ need to know why the Pico crashed or froze, build with `CRASH_REPORT=1`,
 connect a USB-serial adapter (adapter RX → GP0, adapter GND → GND), and read
 it at 115200 baud. Normal `tm_printf` output on USB works the same with
 either setting. If a subsystem has claimed GP0/GP1 in `TEAM.md`, unplug that
-hardware before using `CRASH_REPORT=1`.
+hardware before using `CRASH_REPORT=1`. The current robot/TEST IMU task
+also rejects this build: use USB for those roles, or an exclusive
+`BENCH=1` image with the IMU disconnected for UART diagnostics.
 
 The options are part of the image name, e.g.
 `mtk3pico_smp1_usb_cdc_wifi_test.uf2`, so you can always tell which build
@@ -294,6 +306,23 @@ WIDTH on 0cd2c03; course-size F failed.
 B1c PEAK passes real-capture host tests; powered B1c checks are Not run.
 No barcode controls routing. The 5.5 mm sensor mount cannot go lower.
 See [Barcode B1c and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
+
+Live barcode decoding is not implemented. B2a can execute one fake A/B/C/D
+command at the next `+` junction; the default is NONE and keeps normal LINE.
+See [junction actions](docs/architecture/JUNCTION_ACTION.md) and the
+[unrun hardware procedure](docs/kernel/JUNCTION_VALIDATION.md).
+Barcode input ideas remain in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
+
+## CR1 data representation
+
+[CR1 evidence](docs/architecture/CR1_EVIDENCE.md) records baseline RAM,
+board/queue and binary MQTT sizes. The
+[motion plan](docs/s2-motion/CR1_MOTION_PLAN.md) records approved motion
+board packing (8 B saved). A separate change removes the inactive bench
+stack/slot (4112 B saved in MQTT). A1/B1 hardware passed on 2026-11-10
+with an idle-stack margin note. Its approved safety increase adds 256 B;
+the larger stack is not yet retested on hardware. Merged to staging.
+Changes proceed one module at a time; sizes are not hardware acceptance.
 
 ## Local template changes
 

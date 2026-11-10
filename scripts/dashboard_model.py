@@ -31,7 +31,7 @@ MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle sca
                 4: "obstacle detour", 5: "scan reverse"}
 EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
                5: "run end", 6: "command decision", 7: "junction (reserved)",
-               8: "scan retry"}
+               8: "scan retry", 9: "hump"}
 SCAN_RETRY_TEXT = {1: "reverse begins", 2: "reverse ends", 3: "rescan begins"}
 DETOUR_LIMIT = 8
 SCAN_STAGES = {0: "not reported", 1: "coarse", 2: "fine"}
@@ -98,6 +98,16 @@ def _name(table, value):
     return table.get(value, f"unknown ({value})")
 
 
+def _mm_text(tenths):
+    """Hump heights travel in 0.1 mm units."""
+    return f"{tenths / 10:.1f} mm"
+
+
+def _side_text(left):
+    # Course humps hit the RIGHT wheel; LEFT detection is not hardware-proven.
+    return "left wheel (not proven)" if left else "right wheel"
+
+
 class DashboardModel:
     """Latest robot data, command bookkeeping and button gating. Thread safe."""
 
@@ -119,6 +129,7 @@ class DashboardModel:
         self.detour_sequence = None
         self.detour_missed = 0
         self.summary = None  # {"fields": dict, "rx": ms, "retained": bool}
+        self.hump_live = None  # this run's kind 9 events: {"peak", "left", "count", "rx"}
         self.reserved = {"barcode": None, "imu": None, "imu_event": None}
         self.ignored_reserved = 0
         self.sonar = None
@@ -209,6 +220,7 @@ class DashboardModel:
         self.path_previous = None
         self.path_reset_pending = False
         self.reserved = {"barcode": None, "imu": None, "imu_event": None}
+        self.hump_live = None
         self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
 
     def _store(self, topic, fields, now, retained=False):
@@ -239,6 +251,7 @@ class DashboardModel:
         elif topic == "robot/state":
             if fields["state"] == 1 and (self.state is None or self.state["fields"]["state"] != 1):
                 self.path_reset_pending = True
+                self.hump_live = None  # a new run: live hump events start again
             previous_module = None if self.state is None else self.state["fields"]["module"]
             if fields["module"] == 3 and previous_module not in (3, 5):
                 self.scan_samples.clear()
@@ -307,6 +320,16 @@ class DashboardModel:
             if (pending is not None and pending["result"] is None
                     and pending["opcode"] == opcode and now >= pending["sent"]):
                 pending["result"] = event
+        elif kind == robot_wire.EVENT_JUNCTION and fields["version"] >= 2:
+            if "junction_angle" in fields:
+                command = "ABCD"[fields["junction_command"] - 1]
+                angle = fields["junction_angle_cdeg"] / 100
+                event["text"] = (f"JUNCTION {command}: {fields['junction_angle']} line"
+                                 f" at {angle:.2f} deg")
+            else:
+                command = "ABCD"[(fields["word"] & 0xFF) - 1]
+                phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
+                event["text"] = (f"JUNCTION {command}: {phase}, reason {fields['detail']}")
         elif kind == robot_wire.EVENT_SCAN_RETRY:
             attempt = fields["word"] & 0xFF
             self.scan_retry = attempt
@@ -315,6 +338,17 @@ class DashboardModel:
                 self.scan_samples.clear()
             event["text"] = (f"SCAN retry {attempt}: {_name(SCAN_RETRY_TEXT, fields['detail'])}"
                              " (both sides blocked)")
+        elif kind == robot_wire.EVENT_HUMP:
+            left, number = fields["detail"] >> 7, fields["detail"] & 0x7F
+            event["text"] = (f"HUMP #{number}: {_mm_text(fields['word'])}, "
+                             f"{_side_text(left)}")
+            live = self.hump_live
+            if live is None or fields["word"] > live["peak"]:
+                live = {"peak": fields["word"], "left": left,
+                        "count": number if live is None else max(number, live["count"])}
+            else:
+                live = dict(live, count=max(number, live["count"]))
+            self.hump_live = dict(live, rx=now)
         else:
             event["text"] = (f"{_name(EVENT_KINDS, kind)}: {_name(MODULE_NAMES, fields['from'])}"
                              f" to {_name(MODULE_NAMES, fields['to'])},"
@@ -987,7 +1021,7 @@ def summary_panel(model, now):
         return make_panel("summary", "Run summary", None, stale_ms=None,
                           note="no run summary yet: it appears when a run ends")
     f = record["fields"]
-    implemented = f["barcode_hump_implemented"]
+    implemented = f["barcode_hump_implemented"]  # v3: barcode only
     shell = _name(SHELL_FAULTS, f["shell_fault"])
     if f["shell_fault"]:
         shell += f" (detail {f['shell_fault_detail']})"
@@ -1009,9 +1043,7 @@ def summary_panel(model, now):
             ("Motion faults seen", _fault_text(f["motion_fault_bits"])),
             ("Shell fault", shell),
             ("Barcode ok / failed", f"{f['barcode_ok']} / {f['barcode_failed']}" if implemented
-             else NOT_IMPLEMENTED),
-            ("Hump peak", NOT_IMPLEMENTED if not implemented else
-             ("none" if f["hump_peak"] == robot_wire.HUMP_PEAK_NONE else f["hump_peak"]))]
+             else NOT_IMPLEMENTED)]
     if f["detour_aborted"]:
         rows.append(("Detour", "a detour was still running when the run ended"))
     notes = ["age = time since this summary arrived"]
@@ -1027,6 +1059,56 @@ def summary_panel(model, now):
             and state["fields"]["active"]):
         notes.append("a new run is in progress: this summary is the previous run")
     return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
+                      rows=rows, note="; ".join(notes))
+
+
+HUMP_WARNINGS = (("hump_imu_fault", "IMU data was missing for part of the run"),
+                 ("hump_open_at_stop", "the run stopped on a hump: that peak may be low"),
+                 ("hump_curve_gated", "a curve froze a hump peak"),
+                 ("hump_long_rejected", "a slope longer than 600 mm was not counted"))
+
+
+def _hump_result(f):
+    """Rows of the run summary hump fields (summary v3 and later)."""
+    if f["version"] < 3:
+        return [("Highest hump", f"not reported (summary v{f['version']} firmware)")], []
+    if not f["hump_implemented"]:
+        return [("Highest hump", NOT_IMPLEMENTED)], []
+    warnings = [text for key, text in HUMP_WARNINGS if f[key]]
+    if f["hump_peak"] == robot_wire.HUMP_PEAK_NONE:
+        return [("Highest hump", "unavailable (no fresh IMU data)")], warnings
+    rows = [("Highest hump", _mm_text(f["hump_peak"]) if f["hump_count"] else
+             "no hump detected"),
+            ("Humps counted", f["hump_count"])]
+    if f["hump_count"]:
+        rows.append(("Side of highest", _side_text(f["hump_left"])))
+    rows.append(("Hump starts blocked (curve or slow)", f["hump_gated"]))
+    return rows, warnings
+
+
+@register_panel
+def hump_panel(model, now):
+    record, live = model.summary, model.hump_live
+    rows, notes = [], []
+    if live is not None and (record is None or live["rx"] > record["rx"]):
+        rows.append(("This run so far (live)",
+                     f"{_mm_text(live['peak'])}, {_side_text(live['left'])}, "
+                     f"{live['count']} counted"))
+        notes.append("live: from HUMP events of the run in progress")
+    if record is None:
+        notes.append("the run result appears when a run ends")
+        age = None if live is None else model.record_age(now, live)
+        return make_panel("hump", "Highest hump", age, stale_ms=None, rows=rows,
+                          note="; ".join(notes))
+    result, warnings = _hump_result(record["fields"])
+    rows += result
+    notes += warnings
+    if record["fields"]["boot_session"] != model.log.sessions.current:
+        notes.append("previous boot/session")
+    if record["retained"]:
+        notes.append("broker's retained copy: it may be from an earlier run")
+    notes.append(f"run {record['fields']['run_id']}; heights are report only")
+    return make_panel("hump", "Highest hump", model.record_age(now, record), stale_ms=None,
                       rows=rows, note="; ".join(notes))
 
 

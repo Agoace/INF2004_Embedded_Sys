@@ -66,7 +66,11 @@ host_test(module_detour host-tests/test_detour.c ${detour_run_source} ${obstacle
 # Kernel-side glue tests use explicit host doubles, never real kernel headers.
 host_test(test_motion_task tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
-    app_program/subsystem2/subsystem2.c)
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
+host_test(test_motion_pack tests/test_motion_pack.c
+    app_program/subsystem2/motion_pack.c)
+target_include_directories(test_motion_pack BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
 host_test(test_gpio_irq tests/test_gpio_irq.c app_program/platform/drv_gpio_irq.c)
 foreach(test IN ITEMS test_motion_task test_gpio_irq)
     if(TARGET ${test})
@@ -103,23 +107,26 @@ if(TARGET test_vehicle_log)
         "${REPO}/tests/test_robot_contract.py" "$<TARGET_FILE:test_vehicle_log>")
 endif()
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME test_ram_report COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_ram_report.py")
 add_test(NAME test_task_priorities COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_task_priorities.py")
 # The two button owners are mutually exclusive build modes.
 host_test(test_motion_task_bench tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
-    app_program/subsystem2/subsystem2.c)
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
 if(TARGET test_motion_task_bench)
     target_include_directories(test_motion_task_bench BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_task_bench PRIVATE APP_BENCH=1)
 endif()
 
 host_test(test_vehicle_task tests/test_vehicle_task.c app_program/vehicle/vehicle_task.c
-    app_program/vehicle/vehicle_log.c ${vehicle_sm_source} ${line_position_source}
+    app_program/vehicle/vehicle_log.c app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
     ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
     ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
 if(TARGET test_vehicle_task)
     target_include_directories(test_vehicle_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_link_libraries(test_vehicle_task PRIVATE m)
 endif()
 
 host_test(test_watchdog tests/test_watchdog.c app_program/platform/drv_watchdog.c)
@@ -138,17 +145,27 @@ if(TARGET test_motion_task)
     add_test(NAME test_motion_start_cyclic_failure COMMAND test_motion_task cyclic)
     add_test(NAME test_motion_start_watchdog_failure COMMAND test_motion_task watchdog)
 endif()
-host_test(test_motion_watchdog tests/test_motion_task.c app_program/subsystem2/motion.c
-    app_program/subsystem2/motor_ctl.c app_program/subsystem2/subsystem2.c)
+host_test(test_motion_watchdog tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
 if(TARGET test_motion_watchdog)
     target_include_directories(test_motion_watchdog BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_watchdog PRIVATE APP_TEST=1 APP_BENCH=1)
 endif()
 
-host_test(test_app_task tests/test_app_task.c app_program/platform/app_task.c)
-if(TARGET test_app_task)
-    target_include_directories(test_app_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
-endif()
+foreach(mode IN ITEMS normal bench mqtt test)
+    set(target test_app_task_${mode})
+    host_test(${target} tests/test_app_task.c app_program/platform/app_task.c)
+    target_include_directories(${target} BEFORE PRIVATE
+        "${REPO}/tests/mtk_stubs")
+    if(mode STREQUAL "bench")
+        target_compile_definitions(${target} PRIVATE APP_BENCH=1)
+    elseif(mode STREQUAL "mqtt")
+        target_compile_definitions(${target} PRIVATE TM_MQTT=1)
+    elseif(mode STREQUAL "test")
+        target_compile_definitions(${target} PRIVATE APP_TEST=1)
+    endif()
+endforeach()
 
 host_test(test_line_service tests/test_line_service.c app_program/subsystem3/line_service.c ${line_position_source})
 if(TARGET test_line_service)
@@ -190,3 +207,81 @@ add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priorit
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/barcode_checks.cmake")
+
+add_test(NAME test_imu_source_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_imu_source_make.py")
+host_test(test_production_runner_filtered tests/test_test_runner.c
+    app_program/app_main.c)
+target_include_directories(test_production_runner_filtered BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_production_runner_filtered PRIVATE
+    IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
+
+host_test(test_imu_hump_diag tests/test_imu_hump_diag.c
+    app_program/subsystem4/imu_hump.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_hump_diag_print.c)
+target_include_directories(test_imu_hump_diag BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_link_libraries(test_imu_hump_diag PRIVATE m)
+foreach(test IN ITEMS test_imu_service test_imu_capture_service
+        test_imu_stream test_vehicle_task test_vehicle_network_task)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+endforeach()
+foreach(test IN ITEMS test_imu_stream test_vehicle_task
+        test_vehicle_network_task test_telemetry test_telemetry_log)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
+    target_link_libraries(${test} PRIVATE m)
+endforeach()
+
+set(junction_sources app_program/vehicle/junction_action.c
+    app_program/vehicle/junction_source.c)
+host_test(test_junction tests/test_junction.c ${junction_sources}
+    app_program/vehicle/vehicle_sm.c
+    app_program/vehicle/junction_line.c ${line_search_source}
+    ${line_trace_source} ${line_steer_source} ${line_position_source}
+    ${obstacle_source})
+foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
+    foreach(source IN LISTS junction_sources)
+        target_sources(${test} PRIVATE "${REPO}/${source}")
+    endforeach()
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/vehicle/junction_line.c")
+endforeach()
+foreach(test IN ITEMS test_telemetry test_telemetry_log)
+    foreach(source IN LISTS junction_sources)
+        target_sources(${test} PRIVATE "${REPO}/${source}")
+    endforeach()
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/vehicle/junction_print.c"
+        "${REPO}/${line_search_source}" "${REPO}/${obstacle_source}")
+endforeach()
+add_test(NAME test_junction_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_junction_make.py")
+get_target_property(vehicle_test_sources test_vehicle_task SOURCES)
+set(junction_id 0)
+foreach(command IN ITEMS A B C D)
+    math(EXPR junction_id "${junction_id} + 1")
+    set(test test_vehicle_junction_${command})
+    add_executable(${test} ${vehicle_test_sources})
+    target_include_directories(${test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(${test} PRIVATE JUNCTION_TEST_CMD=${junction_id})
+    target_link_libraries(${test} PRIVATE m)
+    add_test(NAME ${test} COMMAND ${test} junction)
+endforeach()
+foreach(command A B C D)
+    add_test(NAME test_vehicle_junction_${command}_estop
+        COMMAND test_vehicle_junction_${command} junctionstop)
+endforeach()
+add_test(NAME test_vehicle_junction_pending_search_failure
+    COMMAND test_vehicle_junction_C junctionpendingfail)
+add_test(NAME test_vehicle_junction_pending_recovery
+    COMMAND test_vehicle_junction_C junctionpending)
+add_test(NAME test_vehicle_junction_C_recovery
+    COMMAND test_vehicle_junction_C junctionrecover)
+add_test(NAME test_vehicle_junction_start_busy
+    COMMAND test_vehicle_junction_A junctionbusy)
+add_test(NAME test_vehicle_junction_start_stale
+    COMMAND test_vehicle_junction_A junctionstale)

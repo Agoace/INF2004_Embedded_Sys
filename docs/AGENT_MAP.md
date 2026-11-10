@@ -23,8 +23,8 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
-| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH and TEST barcode B1c. |
-| [s4-imu/](s4-imu/) | Consolidated TEST-only IMU bring-up, scale and validation record. |
+| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c and analog barcode ideas; originals in archive/s3-line-barcode/. |
+| [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
 | [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
@@ -67,6 +67,24 @@ The archived development record retains older CMake bench examples.
 | Steering Wi-Fi log | [docs/archive/STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) |
 | Week 6 design-review diagrams | [`design-review/`](../design-review) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) |
+
+## CR1 measurement and planning
+
+- [CR1 evidence](architecture/CR1_EVIDENCE.md) records the `168d705`
+  baseline, ARM message sizes and the single-writer publication rule.
+- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) records approved A1 packing;
+  controller ownership changes and derived-copy removal remain separate.
+- [`motion_pack.h`](../app_program/subsystem2/motion_pack.h) and
+  [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
+  60 B motion payload, published in a 64 B sequence/word board. Its sole
+  writer is motion; decoded public APIs are unchanged.
+- [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
+  reserved codes and interrupted compact-board reads.
+- [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
+  [`test_ram_report.py`](../tests/test_ram_report.py) tests its parser.
+- [`message_sizes.py`](../scripts/message_sizes.py) compiles an ARM size
+  probe for public boards, queue values and MQTT payload constants.
+  Update its manifest when an interface is added.
 
 ## Implementation locations
 
@@ -230,16 +248,29 @@ vehicle task described below.
   The mount cannot go below 5.5 mm; it touches a 10 mm hump.
   Normal routing does not use the decoder.
 
-## TEST-only IMU acquisition
+## IMU task and hump report
 
-- [GY-511 IMU record](s4-imu/IMU.md) — merged steps 0/1 bring-up, scale evidence and software validation. The raw magnitude is explained by positive Z offset, not uniform gain. Six-face signs confirm the accelerometer identity map; S4-U03 stream passed. Calibration/core integration is not implemented. Absent-device, cold-power and MQTT-TEST checks remain pending.
-- [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM; default TEST is unchanged.
-- [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — TEST-only SDK register layer, bounded I2C0 on GP0/GP1; no robot call path.
-- [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, raw reads and counted faults with paced retries.
-- [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, signed-permutation mounting table and static pitch/roll.
-- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — TEST runner, 10 ms cyclic and 100 ms USB diagnostics: 30 s normally, continuous with IMU_STREAM=1.
-- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict host decode/protocol and hardware register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
-- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — S4-U01 partial/sign evidence, S4-U03 continuous-stream PASS and still-pending absent-device/cold-power/MQTT-TEST checks.
+- [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; diagnostic C hardware on 29d57de, uncorrected LINE height accepted, corrected over-read under investigation (9/9 humps, 0 false in 5 flat); full-circuit no-false-hump H3 is priority and Not run; accuracy follow-up deferred); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
+- [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure guarded calibration, compensated pitch/roll, support-quality peaks and secondary slope integral; no driving decisions or packed fields.
+- [`imu_hump.c`](../app_program/subsystem4/imu_hump.c), [`imu_hump.h`](../app_program/subsystem4/imu_hump.h) — pure step 3 hump detector: 100 ms mean, ON/OFF travel, curve/speed gates, run epochs, stale-safe run summary; report only.
+- [`imu_hump_diag.c`](../app_program/subsystem4/imu_hump_diag.c), [`imu_hump_diag.h`](../app_program/subsystem4/imu_hump_diag.h) — pure diagnostic C: paired height windows, winning peak context and LINE-only motion maxima; service owns its separate bounded state/board. [`imu_hump_diag_print.c`](../app_program/subsystem4/imu_hump_diag_print.c) prints one USB line after STOP and at GP20 DUMP; no wire change.
+- [`imu_support.c`](../app_program/subsystem4/imu_support.c), [`imu_settings.h`](../app_program/subsystem4/imu_settings.h) — pure alternative support hypotheses; WB80/T111, forward60/height130, refresh1degree, consistency2mm settings.
+- [`imu_drive.c`](../app_program/subsystem4/imu_drive.c) — pure bounded GP21 job and per-drive Welford stats; TEST reporter owns stop-pending/retries, no height-dependent driving.
+- [`imu_roll.c`](../app_program/subsystem4/imu_roll.c), [`imu_roll.h`](../app_program/subsystem4/imu_roll.h) — roll-only height, mean10/median20 maxima, wide diagnostic pitch ratio; fixtures compare15/20/31 windows and explicit crest/noise tradeoffs.
+- [`imu_service.c`](../app_program/subsystem4/imu_service.c), [`imu_service.h`](../app_program/subsystem4/imu_service.h) — robot/TEST task14 and own 10 ms cyclic; bounded motion-count read, calibration-epoch guard, sole snapshot and hump board writer, acknowledged MARK, EMPTY-batch skip and IMU_STREAM capture handoff; BENCH excluded.
+- [`vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — atomic calibration epoch covers the unchanged line spin/pause/abort/home routine, also without MQTT; atomic run epoch, no-wait hump copy, live kind 9, run-end hump summary and USB line.
+- [`imu_mark.c`](../app_program/subsystem4/imu_mark.c) — pure GP20 debounce for TEST IMU_STREAM.
+- [`imu_hw.c`](../app_program/subsystem4/imu_hw.c) — robot/TEST SDK register layer, bounded I2C0 on GP0/GP1, shared 2 ms read-cycle deadline, bursts up to 48 B, UART-conflict guard; no SDK runtime ownership.
+- [`imu_probe.c`](../app_program/subsystem4/imu_probe.c) — identity/configuration/readback, single-pass FIFO status/burst read, backlog/overrun reset, counted faults with paced retries.
+- [`imu_fifo.c`](../app_program/subsystem4/imu_fifo.c) — pure FIFO_SRC decode, raw word decode and HR batch mean.
+- [`imu_capture.c`](../app_program/subsystem4/imu_capture.c) — pure fixed 800-sample/256-batch TEST raw capture storage; storage and handoff exist only in IMU_STREAM.
+- [`imu_decode.c`](../app_program/subsystem4/imu_decode.c) — pure units, identity mounting table and static pitch/roll.
+- [`subsystem4_test.c`](../app_program/subsystem4/subsystem4_test.c) — observer only, 20 ms cyclic; 30 s/10 Hz sample lines normally, continuous/50 Hz with IMU_STREAM; `[S4_FIFO]` counters, raw capture dump after a confirmed GP21 stop, `[S4_HUMP]` per drive; not a bus owner.
+- [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, hump detector and corrected/filtered core fixtures, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
+- [`tests/test_imu_source_make.py`](../tests/test_imu_source_make.py) — isolated Make checks for `IMU_HUMP_SOURCE=1/2`, default/invalid values, `_humpfilt` image suffix and source-aware object invalidation. [H3 builds](kernel/BUILD.md#h3-source-comparison-images) compare both images; boot/result USB lines identify the source, default corrected.
+- [`tests/test_imu_hump_diag.c`](../tests/test_imu_hump_diag.c) — peak latch, paired windows/gate history, winners/rejections, run lifecycle, LINE maxima, stale-safe output and USB units; linked in `tests/CMakeLists.txt`.
+- [RAM budget](kernel/RAM_BUDGET.md#imu-diagnostic-c-measured-delta) — measured 5888 B MQTT delta including 2048 B stack (+772 B diagnostic C); IMU diagnostic C hardware high-water 1568/2048 B, free 480 B; sample frame 1000 B. 7888 B raw capture in IMU_STREAM only.
+- [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and step 3 H1 STREAM hardware PASS on 1480b37, H0/H2-short plus diagnostic C hardware on 29d57de (uncorrected LINE height accepted; corrected over-read under investigation), named robot stacks and shared sensor scrape condition; H3 full-circuit no-false-hump acceptance is priority, H3..H9 Not run; absent-device/cold-power/MQTT-TEST gates still pending.
 
 ## Kernel ultrasonic acquisition
 
@@ -249,10 +280,15 @@ vehicle task described below.
 
 ## Kernel robot integration
 
+- [Junction action design](architecture/JUNCTION_ACTION.md) — B2a only: fake command at START, pure detector/action, LINE wrapper (no new module number), draft B2b source record and live event7; no barcode decoder or summary change.
+- [`junction_action.c`](../app_program/vehicle/junction_action.c) and [`junction_action.h`](../app_program/vehicle/junction_action.h) — pure forced-corner job (A/B/D white-gated SEARCH; C160 mm marker; unconsumed pending survives normal SEARCH only); [`junction_line.c`](../app_program/vehicle/junction_line.c) and [`junction_line.h`](../app_program/vehicle/junction_line.h) delegate travel to locked LINE and wrap unchanged SEARCH for a forced corner.
+- [`junction_source.c`](../app_program/vehicle/junction_source.c) and [`junction_source.h`](../app_program/vehicle/junction_source.h) — single-writer fake source board, bounded read, consumer busy/ACK; [`junction_print.c`](../app_program/vehicle/junction_print.c) is the telemetry-owned USB formatter.
+- [`test_junction.c`](../tests/test_junction.c) and [`test_junction_make.py`](../tests/test_junction_make.py) — pure action/no-command comparison and Make option/profile tests. [Validation and J0–J6](kernel/JUNCTION_VALIDATION.md) records software checks, resource delta, operator-supplied J1/J2–J5 acceptance with capture limits, and new pending-policy hardware gates.
+
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
-- [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log.
+- [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
 - [RAM budget](kernel/RAM_BUDGET.md) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
@@ -266,7 +302,13 @@ vehicle task described below.
 
 ## Application task stacks
 
-- [`app_program/platform/app_task.c`](../app_program/platform/app_task.c) — core-0 static user stacks and fill-pattern high-water report.
+- [`app_program/platform/app_task.c`](../app_program/platform/app_task.c)
+  owns static stacks and high-water reports. The bench stack and slot exist
+  only with `APP_BENCH`. The MQTT idle-meter stack is now 768 B after
+  the approved margin correction; other task stack sizes are unchanged.
+  [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
+  and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
+  separates this saving from minimum-bit packing.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
 
 - [`line_service.c`](../app_program/subsystem3/line_service.c) — priority-11

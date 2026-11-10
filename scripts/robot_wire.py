@@ -12,7 +12,7 @@ import sys
 VERSION = 1
 # Recorded topics and their newest payload size. The log has variable batch sizes.
 SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
-         "obstacle": 24, "status": 6, "detour": 36, "summary": 48,
+         "obstacle": 24, "status": 6, "detour": 36, "summary": 52,
          "barcode": 20, "imu": 12}
 # State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity,
 # v5 adds the telemetry mode word (u16 at 70, bit 0 idle).
@@ -23,7 +23,7 @@ TOPIC_SIZES = {
     "state": STATE_SIZES, "heartbeat": {1: 100, 2: 100, 3: 108, 4: 108},
     "sonar": {1: 32, 2: 36}, "event": {1: 16, 2: 20},
     "obstacle": {1: 20, 2: 24}, "detour": {1: 32, 2: 36},
-    "summary": {1: 44, 2: 48}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
+    "summary": {1: 44, 2: 48, 3: 52}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
     "barcode": {1: 20}, "imu": {1: 12}}
 BOOT_OFFSETS = {"state": (4, 72), "heartbeat": (3, 100), "sonar": (2, 32),
                 "event": (2, 16), "obstacle": (2, 20), "detour": (2, 32),
@@ -33,11 +33,20 @@ RESERVED_TOPICS = ("barcode", "imu")  # reserved, never published yet
 RESERVED_SIZES = {("barcode", 1): 20, ("imu", 1): 12, ("imu", 2): 12}  # (topic, kind) -> size
 BARCODE_FLAGS = ("detected", "decoded", "unreadable", "command_issued", "executed")
 DETOUR_OUTCOMES = (3, 4, 7, 8)  # DONE_LINE, DONE_NO_LINE, FAILED, ABORTED
+# Summary v1/v2 flag bit 0 covers barcode AND hump; v3 bit 0 is barcode only.
 SUMMARY_FLAGS = ("barcode_hump_implemented", "speed_error_valid", "detour_aborted")
 SPEED_ERROR_NONE = 0xFFFF
-HUMP_PEAK_NONE = 0xFFFF
-EVENT_JUNCTION = 7  # reserved, not emitted yet
+HUMP_PEAK_NONE = 0xFFFF  # summary hump_peak unit: 0.1 mm (v3)
+# Summary v3 byte 50; bits 6..7 are reserved.
+HUMP_FLAGS = ("hump_implemented", "hump_imu_fault", "hump_open_at_stop",
+              "hump_curve_gated", "hump_long_rejected", "hump_left")
+EVENT_JUNCTION = 7  # live B2a phases / line angles, event v2
+JUNCTION_PHASES = {1: "pending", 2: "bar clear", 3: "legacy settle", 4: "search",
+                   5: "legacy turn settle", 6: "second line", 7: "done", 8: "failed",
+                   9: "unused", 10: "C LINE"}
+JUNCTION_ANGLE_TAGS = {0x80: "first", 0x40: "accepted"}
 EVENT_SCAN_RETRY = 8
+EVENT_HUMP = 9  # word: peak 0.1 mm; detail bits 0..6 number, bit 7 LEFT
 SCAN_RETRY_PHASES = {1: "reverse_begin", 2: "reverse_end", 3: "rescan_begin"}
 OBSTACLE_DECISIONS = ("none", "right", "left")
 OBSTACLE_FLAGS = ("closest_valid", "too_near", "left_blocked", "right_blocked")
@@ -160,12 +169,29 @@ def decode(topic, data):
         result.update(echo_status=(result["echo"] >> 9) & 3,
                       echo_mm=(result["echo"] & 511) if ((result["echo"] >> 9) & 3) == 0 else "")
     elif name == "event":
-        _require(1 <= data[1] <= EVENT_SCAN_RETRY and (data[15] & 0xFE) == 0,
+        _require(1 <= data[1] <= EVENT_HUMP and (data[15] & 0xFE) == 0,
                  "event kind or reserved flags")
+        if data[1] == EVENT_JUNCTION and data[0] >= 2:
+            _require(data[2] == data[3] == 1, "junction modules")
+            tag, command = data[14] & 0xF0, data[14] & 0x0F
+            if tag in JUNCTION_ANGLE_TAGS:
+                angle = _i16(data, 12)
+                limit = 27000 if command == 4 else 15000
+                _require(command in (1, 2, 4) and -limit < angle < limit and
+                         (angle <= 0 if command == 2 else angle >= 0), "junction angle")
+                result.update(junction_angle=JUNCTION_ANGLE_TAGS[tag],
+                              junction_command=command, junction_angle_cdeg=angle)
+            else:
+                _require(data[12] in (1, 2, 3, 4) and data[13] in JUNCTION_PHASES and
+                         data[14] <= 12, "junction phase")
         if data[1] == EVENT_SCAN_RETRY:
             _require(data[0] >= 2 and data[2] == data[3] == 3 and
                      data[14] in SCAN_RETRY_PHASES and data[12] in (1, 2) and data[13] == 1,
                      "scan retry event")
+        if data[1] == EVENT_HUMP:
+            _require(data[0] >= 2 and data[2] == data[3] == 0 and
+                     _u16(data, 12) != HUMP_PEAK_NONE and data[14] & 0x7F != 0,
+                     "hump event")
         result.update(kind=data[1], **{"from": data[2], "to": data[3]},
                       sequence=_u32(data, 4), uptime_ms=_u32(data, 8), word=_u16(data, 12),
                       detail=data[14], run_relative=data[15] & 1)
@@ -252,7 +278,7 @@ def _decode_detour(data):
 
 
 def _decode_summary(data):
-    """Decode the 44-byte summary of one finished run."""
+    """Decode the 44/48/52-byte summary of one finished run."""
     if data[0] == 1:
         _require(data[1] & ~7 == 0, "summary reserved flags")
     _require(data[2] <= 4, "summary stop source")
@@ -269,6 +295,10 @@ def _decode_summary(data):
                   motion_fault_bits=data[36], shell_fault=data[37],
                   shell_fault_detail=_u16(data, 38), barcode_ok=data[40],
                   barcode_failed=data[41], hump_peak=_u16(data, 42))
+    if data[0] >= 3:
+        _require(data[50] & 0xC0 == 0, "summary hump reserved flags")
+        result.update(_flags(data[50], HUMP_FLAGS))
+        result.update(hump_count=_u16(data, 48), hump_gated=data[51])
     return result
 
 
@@ -697,6 +727,11 @@ def csv_fields():
             elif name == "detour":
                 sample[1] = 3
             fields.update(decode("robot/" + name, sample))
+    # Junction angle variants add fields absent from ordinary phase events.
+    sample = bytearray(20)
+    sample[0:4] = bytes((2, EVENT_JUNCTION, 1, 1))
+    sample[14] = 0x81
+    fields.update(decode("robot/event", sample))
     # IMU motion events have different fields from snapshots.
     sample = bytearray(12)
     sample[0], sample[1], sample[2] = 1, 2, 1

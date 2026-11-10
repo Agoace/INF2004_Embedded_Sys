@@ -30,8 +30,8 @@
 #define RM_CPU_LOAD_UNKNOWN  65535u
 #define RM_DETOUR_SIZE       36u
 #define RM_DETOUR_VERSION    2u
-#define RM_SUMMARY_SIZE      48u
-#define RM_SUMMARY_VERSION   2u
+#define RM_SUMMARY_SIZE      52u
+#define RM_SUMMARY_VERSION   3u
 /* Value of an unavailable 16-bit measurement in robot/summary. */
 #define RM_SUMMARY_NONE_U16 65535u
 #define RM_COMMAND_SIZE     22u
@@ -187,6 +187,32 @@ enum {
     RM_SUMMARY_SCAN_REATTEMPT_MASK = 0xf8
 };
 
+/* Live-only JUNCTION/ACTION v2, from/to LINE. Phase variant: word low
+ * byte command1..4, high byte phase1..10, detail reason0..12 (12 legacy).
+ * Angle variants: word signed centidegrees, detail tag | command1..4.
+ * No source identity: retain boot/USB labels and tested revision. */
+#define RM_EVENT_JUNCTION 7u
+#define RM_JUNCTION_FIRST 0x80u
+#define RM_JUNCTION_ACCEPTED 0x40u
+
+/* robot/event kind 9 (HUMP), event v2 layout: from/to 0, word = event peak
+ * in 0.1 mm, detail bits 0-6 = event number in the run (saturates at 127),
+ * bit 7 = LEFT wheel. Live only; never stored in the RAM log. */
+#define RM_EVENT_HUMP 9u
+#define RM_HUMP_DETAIL_LEFT 0x80u
+
+/* robot/summary v3 hump_flags (byte 50); hump_peak 0.1 mm, 65535 none. */
+enum {
+    RM_HUMP_IMPLEMENTED = 0x01,
+    RM_HUMP_IMU_FAULT = 0x02,
+    RM_HUMP_OPEN_AT_STOP = 0x04,
+    RM_HUMP_CURVE_GATED = 0x08,
+    RM_HUMP_LONG_REJECTED = 0x10,
+    RM_HUMP_LEFT = 0x20,
+    RM_HUMP_FLAGS_MASK = 0x3f,
+    RM_HUMP_PEAK_NONE = 0xffff
+};
+
 /* robot/event kind 8 (SCAN_RETRY). Word: low byte attempt, high byte reason. */
 enum {
     RM_EVENT_SCAN_RETRY = 8,
@@ -217,8 +243,11 @@ typedef struct {
     uint16_t shell_fault_detail;
     uint8_t barcode_ok;
     uint8_t barcode_failed;
-    uint16_t hump_peak;
+    uint16_t hump_peak;  /* v3: 0.1 mm; RM_HUMP_PEAK_NONE unavailable */
     uint32_t boot_id;
+    uint16_t hump_count; /* v3 */
+    uint8_t hump_flags;  /* v3 RM_HUMP_* */
+    uint8_t hump_gated;  /* v3, saturating gated starts */
 } rm_summary_t;
 
 typedef struct {

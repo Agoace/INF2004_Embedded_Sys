@@ -29,10 +29,13 @@
 #include "subsystem3/barcode_test.h"
 #endif
 #include "platform/app_task.h"
+#include "subsystem4/imu_settings.h"
 #if TM_MQTT
 #include "platform/idle_meter.h"
 #include "platform/boot_id.h"
 #endif
+
+#include "vehicle/junction_source.h"
 
 /* TEST work runs below motion/sensors and above telemetry (30). */
 #define TEST_RUNNER_PRIORITY 20
@@ -63,6 +66,17 @@ EXPORT INT usermain(void)
     CHECK(boot_id_init(), "boot observation ID (noncritical)");
 #endif
 
+#if !APP_BENCH && !APP_TEST
+    tm_printf((UB *)"[JUNCTION] source FAKE cmd %s forced_corner "
+                    "bar_clear_mm %u N_mm %u black_min %u "
+                    "D skip_first_left\n",
+              JUNCTION_TEST_CMD_NAME, JA_BAR_CLEAR_MM, JA_CONFIRM_MM,
+              JA_BLACK_MIN);
+#endif
+#if !APP_BENCH
+    tm_printf((UB *)"[S4] hump_source %u %s\n",
+              (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+#endif
     /* tk_ref_ver: ask the kernel who it is */
     tk_ref_ver(&ver);
     tm_printf((UB *)"\n=== micro T-Kernel on Raspberry Pi Pico W"

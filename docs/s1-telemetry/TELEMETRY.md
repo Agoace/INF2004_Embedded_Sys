@@ -144,7 +144,9 @@ an active session on a producer failure or storage-full report. This is a
 GP20 requests a local USB dump with copied diagnostics. Busy is reserved
 before enqueue; no new session starts while queued/active. The logger
 formats rows/events and yields 20 ms every eight records, then prints
-`tm_usb_dropped` total and dump delta. No control task formats the saved
+`tm_usb_dropped` total and dump delta. After the counts line it prints one
+`[robot] hump ...` line from the last finished run (12 B board copy, not a
+larger INFO message). No control task formats the saved
 arrays. A reset destroys RAM data. KR1 remains 128 bits; there is no spare
 barcode byte. [Kernel archive](../archive/kernel/KERNEL_ROBOT.md#kr1-rows-and-ve-events)
 keeps the exact local KR/VE text description; the binary topic layout is

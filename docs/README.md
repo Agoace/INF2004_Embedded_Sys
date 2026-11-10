@@ -22,6 +22,9 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
+- [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
+  and MQTT sizes, measurement tools and shared-access rule.
+- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — B2a fake START command, LINE/SEARCH corner job, pending retention across natural SEARCH, draft B2b contract and live phase/angle event7.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
 - [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
@@ -29,7 +32,8 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — static RAM by group at `cr1-pre-imu`, dynamic estimate, steps for a RAM shortage and the CR1 order.
+- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a software checks, public-config image builds, measured +280 B RAM, compiler frames and J0–J6 physical procedure; hardware Not run.
+- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — measured step2/2b/2c deltas from b569adc, supplied step2b timing and pending current stack/CPU checks; shortage/CR1 order.
 
 ## S1 — Telemetry
 
@@ -41,6 +45,8 @@ not current acceptance reports. Local course originals are not public records.
 
 - [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
 - [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
+- [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
+  approved A1 board packing, ownership limits and approval gates.
 
 ## S3 — Line and barcode
 
@@ -52,7 +58,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — merged bring-up, scale and validation records; positive Z offset explains raw magnitude, six-face axes confirmed and TEST stream passed; calibration remains pending.
+- [IMU.md](s4-imu/IMU.md) — step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; diagnostic C hardware on 29d57de; uncorrected LINE height accepted, corrected over-read under investigation (9/9 humps, 0 false in 5 flat); IMU stack free 480 B; H3 full-circuit no-false-hump acceptance compares source-labelled corrected/filtered images, default corrected, and is priority and Not run; accuracy follow-up deferred); step 2d 400 Hz FIFO batch mean into the unchanged step 2c roll-only RIGHT height, cited datasheet/AN3308 facts, alias fixtures, retired INT1 check and TEST raw capture; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
 
 ## S5 — Obstacle
 

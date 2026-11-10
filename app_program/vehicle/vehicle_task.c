@@ -29,13 +29,16 @@
 #include "vehicle_inputs.h"
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
+#include "junction_line.h"
+#include "junction_source.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
 #include "run_stats.h"
+#include "../platform/app_board.h"
+#include "../subsystem4/imu_service.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
 #include "../subsystem1/network_queue.h"
-#include "../platform/app_board.h"
 #include "../subsystem2/motor_ctl_robot.h"
 #endif
 #if TM_WIFI_CYW43
@@ -47,6 +50,11 @@
 static lp_t lp;
 static line_snapshot_t sensor;
 static lt_t lt;
+static jl_t junction_line;
+static uint8_t junction_reported;
+#if TM_MQTT
+static uint8_t junction_angles_reported;
+#endif
 static ls_t ls;
 static ss_t ss;
 static dr_t dr;
@@ -58,6 +66,21 @@ static bool cancelled;
 static bool prev_run;
 static bool prev_dump;
 static bool step_open;
+/* Single writer; odd throughout line calibration, even otherwise.
+ * Observer only. No IMU result can affect navigation or motion. */
+static uint32_t calibration_epoch;
+/* Single writer; odd from run start until the hump values are taken. */
+static uint32_t run_epoch;
+static uint32_t line_run_epoch;
+static imu_hump_diag_report_t diag_copy;
+static bool have_diag_copy;
+static imu_hump_diag_report_t run_diag;
+static APP_BOARD(imu_hump_diag_report_t) run_diag_board;
+/* Newest IMU hump board copy and the result of the last finished run. */
+static imu_hump_report_t hump_copy;
+static bool have_hump_copy;
+static imu_hump_summary_t run_hump;
+static APP_BOARD(imu_hump_summary_t) run_hump_board;
 static uint32_t wake_lost;
 static uint32_t overruns;
 static uint32_t response_max_us;
@@ -223,6 +246,10 @@ static void publish_run_summary(void)
                    vsm.fault_detail, &summary, &aborted)) {
         publish_detour(&aborted);
     }
+    summary.hump_peak = run_hump.peak_01mm;
+    summary.hump_count = run_hump.count;
+    summary.hump_flags = run_hump.flags;
+    summary.hump_gated = run_hump.gated;
     app_board_publish(&summary_board.sequence, summary_board.words, &summary,
                       sizeof(summary));
 }
@@ -445,6 +472,100 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
 }
 
 /*
+ * Copy the IMU hump board once. Never waits: a busy board keeps the last
+ * copy, whose IMU timestamp decides later whether it is still usable.
+ */
+static void diagnostic_read(void)
+{
+    imu_hump_diag_report_t r;
+
+    if (imu_hump_diag_try_read(&r) == E_OK) {
+        diag_copy = r;
+        have_diag_copy = true;
+    }
+}
+
+static void hump_read(void)
+{
+    diagnostic_read();
+    imu_hump_report_t r;
+    if (imu_hump_try_read(&r) == E_OK) {
+        hump_copy = r;
+        have_hump_copy = true;
+    }
+}
+
+#if TM_MQTT
+static uint16_t hump_emitted;
+#endif
+
+/*
+ * Observe the hump board during a run. With MQTT, each newly closed event
+ * of THIS run from a fresh copy becomes one live HUMP event (kind 9).
+ */
+static void hump_poll(uint32_t epoch)
+{
+    hump_read();
+#if TM_MQTT
+    const imu_hump_output_t *h = &hump_copy.hump;
+    if (!have_hump_copy || h->run_epoch != epoch || h->count == hump_emitted ||
+        drv_time_ms() - hump_copy.timestamp_ms > IMU_HUMP_MAX_AGE_MS) {
+        return;
+    }
+    hump_emitted = h->count;
+    live_event(RM_EVENT_HUMP, 0u, 0u, imu_hump_tenths(h->last_peak_mm),
+               imu_hump_detail(h->count, h->last_left));
+#else
+    (void)epoch;
+#endif
+}
+
+/*
+ * Take the run's hump values, then end the IMU run. A stale, busy-only or
+ * other-run copy gives the unavailable value, never an old number.
+ */
+static void hump_finish(uint32_t epoch)
+{
+    hump_read();
+    run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
+                                  drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+    run_diag = diag_copy;
+    imu_hump_diag_finish(&run_diag, epoch, drv_time_ms(),
+        have_diag_copy && have_hump_copy &&
+        diag_copy.timestamp_ms == hump_copy.timestamp_ms &&
+        run_hump.peak_01mm != IMU_HUMP_PEAK_NONE);
+    app_board_publish(&run_diag_board.sequence, run_diag_board.words,
+                      &run_diag, sizeof(run_diag));
+    app_board_publish(&run_hump_board.sequence, run_hump_board.words,
+                      &run_hump, sizeof(run_hump));
+    __atomic_store_n(&line_run_epoch, 0u, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&run_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
+}
+
+/*
+ * Print the run's hump result once on the USB console.
+ */
+static void hump_print(void)
+{
+    const imu_hump_summary_t *h = &run_hump;
+    if (h->peak_01mm == IMU_HUMP_PEAK_NONE) {
+        tm_printf((UB *)"[robot] hump unavailable flags %02x "
+                  "source %u %s\n", (unsigned int)h->flags,
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+        return;
+    }
+    tm_printf((UB *)"[robot] hump highest_mm %u.%u side %s count %u "
+                    "flags %02x gated %u source %u %s\n",
+              (unsigned int)(h->peak_01mm / 10u),
+              (unsigned int)(h->peak_01mm % 10u),
+              h->count == 0u ? "none"
+              : (h->flags & IMU_HUMP_FLAG_LEFT) != 0u ? "left" : "right",
+              (unsigned int)h->count, (unsigned int)h->flags,
+              (unsigned int)h->gated, (unsigned int)IMU_HUMP_SOURCE,
+              IMU_HUMP_SOURCE_NAME);
+}
+
+/*
  * Measure the previous vehicle response and enforce its deadline.
  */
 static void finish_step(void)
@@ -638,7 +759,7 @@ static void cal_pause(void)
 /*
  * Run the existing line calibration and retain its failure policy.
  */
-static bool calibrate(void)
+static bool calibrate_body(void)
 {
     motion_diag_phase(MOTION_DIAG_CALIBRATE);
     motion_status_t s;
@@ -667,12 +788,73 @@ static bool calibrate(void)
     return ok && calibrated && lp_calibrated(&lp);
 }
 
+/* Preserve every existing calibration exit and motion decision. */
+static bool calibrate(void)
+{
+    const uint32_t epoch = __atomic_load_n(&calibration_epoch,
+                                            __ATOMIC_SEQ_CST);
+
+    __atomic_store_n(&calibration_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
+    const bool ok = calibrate_body();
+
+    __atomic_store_n(&calibration_epoch, epoch + 2u, __ATOMIC_SEQ_CST);
+    return ok;
+}
+
 typedef struct {
     vsm_module_t module;
     uint8_t id;
 } watched_t;
 
 static watched_t watched[4];
+
+/* Live only: never add junction phase events to the RAM event log. */
+static void junction_observe(void)
+{
+    const ja_t *action = &junction_line.action;
+#if TM_MQTT
+    if (action->phase == JA_PENDING && junction_reported != JA_PENDING) {
+        junction_angles_reported = 0u;
+    }
+    const uint8_t marks = action->result.marks;
+    const uint8_t command = action->result.command;
+    if ((marks & JA_MARK_FIRST) != 0u &&
+        (junction_angles_reported & JA_MARK_FIRST) == 0u) {
+        live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE,
+            (uint16_t)(int16_t)action->result.first_line_cdeg,
+            (uint8_t)(RM_JUNCTION_FIRST | command));
+    }
+    if ((marks & JA_MARK_ACCEPTED) != 0u &&
+        (junction_angles_reported & JA_MARK_ACCEPTED) == 0u) {
+        live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE,
+            (uint16_t)(int16_t)action->result.accepted_line_cdeg,
+            (uint8_t)(RM_JUNCTION_ACCEPTED | command));
+    }
+    junction_angles_reported = marks;
+#endif
+    if (action->phase == junction_reported) {
+        return;
+    }
+    junction_reported = action->phase;
+    /* Set busy before ACK: a consumed command still owns the action job. */
+    junction_source_set_busy(action->phase == JA_PENDING ||
+                               ja_active(action));
+#if TM_MQTT
+    const uint16_t word = (uint16_t)(action->result.command |
+                                      ((uint16_t)action->phase << 8u));
+    live_event(RM_EVENT_JUNCTION, VSM_MOD_LINE, VSM_MOD_LINE, word,
+               action->result.reason);
+#endif
+    if (action->consumed != 0u) {
+        junction_source_acknowledge(action->consumed);
+    }
+    if (action->phase == JA_DONE || action->phase == JA_FAILED ||
+        action->phase == JA_UNUSED) {
+        telemetry_message_t m = {.kind = TELEMETRY_JUNCTION};
+        m.data.junction = action->result;
+        (void)telemetry_send(&m);
+    }
+}
 
 /*
  * Start a navigation module and observe detour entry when enabled.
@@ -696,6 +878,7 @@ static vsm_outcome_t watched_step(void *ctx, const vsm_inputs_t *in,
                                   uint32_t now, vsm_drive_t *drive)
 {
     watched_t *w = ctx;
+    ja_pending_route(&junction_line.action, w->id, in->counts, now);
     const vsm_outcome_t out = w->module.step(w->module.ctx, in, now, drive);
     if (vsm_outcome_type(out) != VSM_OUT_RUNNING) {
         event(1u, w->id, 0u, out);
@@ -816,13 +999,38 @@ static void run_once(void)
     vsm_reset(&vsm);
     read_line();
     line_event = VC_EVENT_NONE;
-    run_start = drv_time_ms();
+    motion_status_t initial = {0};
+    uint32_t initial_stamp = 0u;
+    if (JUNCTION_TEST_CMD != 0 &&
+        (motion_snapshot_try_read(&initial, &initial_stamp) < E_OK ||
+         drv_time_us() - initial_stamp > VEHICLE_RESPONSE_LIMIT_US)) {
+        set_reason(RM_STOP_MOTION_STATUS, "junction START motion snapshot");
+        return;
+    }
+    int32_t final_counts[2] = {initial.counts[0], initial.counts[1]};
+    __atomic_store_n(&run_start, drv_time_ms(), __ATOMIC_SEQ_CST);
+    const uint32_t epoch =
+        __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST) | 1u;
+    __atomic_store_n(&run_epoch, epoch, __ATOMIC_SEQ_CST);
 #if TM_MQTT
+    hump_emitted = 0u;
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
 #endif
+    ja_init(&junction_line.action, SEARCH_CFG.speed_mm_s, epoch);
+    junction_reported = JA_IDLE;
+    const uint32_t read_age_ms = JUNCTION_TEST_CMD != 0
+        ? (drv_time_us() - initial_stamp) / 1000u : 0u;
+    junction_source_start(JUNCTION_TEST_CMD, epoch, run_start - read_age_ms,
+                            initial.counts);
+    ja_command_t command;
+    if (junction_source_read(&command)) {
+        (void)ja_offer(&junction_line.action, &command);
+    }
+    junction_observe();
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
+    __atomic_store_n(&line_run_epoch, epoch, __ATOMIC_SEQ_CST);
     ++generation;
     uint8_t mode = SONAR_MODE_UNSET;
     uint16_t interval = 0u;
@@ -840,6 +1048,7 @@ static void run_once(void)
         if (!wait_tick()) {
             break;
         }
+        hump_poll(epoch);
         const uint32_t now = drv_time_ms();
         sonar_snapshot_t sonar = {0};
         bool fresh = false;
@@ -900,6 +1109,16 @@ static void run_once(void)
             set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
             break;
         }
+        if (junction_source_read(&command)) {
+            (void)ja_offer(&junction_line.action, &command);
+        }
+        final_counts[0] = s.counts[0];
+        final_counts[1] = s.counts[1];
+        junction_line.sample = (ja_sample_t){
+            .line_stamp = sensor.timestamp_us,
+            .line_age_ms = (drv_time_us() - sensor.timestamp_us) / 1000u,
+            .valid = sensor.valid
+        };
         if (vc_event_type(line_event) == VC_EVENT_LINE_LOST) {
             pending_bits |= 1u;
         }
@@ -931,6 +1150,15 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        if (vsm.state == VSM_RUNNING &&
+            (vsm.running == VSM_MOD_LINE || vsm.running == VSM_MOD_SEARCH)) {
+            ja_cross_progress(&junction_line.action, s.counts, now);
+        }
+        junction_observe();
+        __atomic_store_n(&line_run_epoch,
+            vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE &&
+                    !ja_searching(&junction_line.action)
+                ? epoch : 0u, __ATOMIC_SEQ_CST);
         motion_diag_phase(MOTION_DIAG_RUN | ((uint32_t)vsm.running << 8u));
         if (vsm.state != state_before || vsm.running != module_before) {
             event(
@@ -969,7 +1197,15 @@ static void run_once(void)
                 set_reason(RM_STOP_SCAN_REVERSE_TIMEOUT,
                            "scan reverse timed out");
             } else {
-                set_reason(RM_STOP_SHELL, "shell left RUNNING");
+                if (vsm.fault == VSM_FAULT_FAILED &&
+                    vsm.fault_detail > JA_FAIL_BASE &&
+                    vsm.fault_detail <= JA_FAIL_BASE + JA_TOTAL_LIMIT) {
+                    set_reason(RM_STOP_SHELL,
+                        ja_reason_name((uint8_t)(vsm.fault_detail -
+                                                  JA_FAIL_BASE)));
+                } else {
+                    set_reason(RM_STOP_SHELL, "shell left RUNNING");
+                }
             }
             break;
         }
@@ -1002,6 +1238,9 @@ static void run_once(void)
             break;
         }
     }
+    ja_finish(&junction_line.action, final_counts, drv_time_ms());
+    junction_observe();
+    hump_finish(epoch);
     event(4u, vsm.state, vsm.running, vsm.fault_detail);
 #if TM_MQTT
     publish_run_summary();
@@ -1011,6 +1250,8 @@ static void run_once(void)
     vsm_stop(&vsm);
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
+    hump_print();
+    imu_hump_diag_print(&run_diag);
 }
 
 /*
@@ -1021,6 +1262,7 @@ static void vehicle_task(INT code, void *ctx)
     (void)code;
     (void)ctx;
     lt_init(&lt, &LINE_CFG);
+    jl_init(&junction_line, &lt, SEARCH_CFG.speed_mm_s);
     ls_init(&ls, &SEARCH_CFG);
     ss_init(&ss, &SCAN_CFG);
     dr_init(&dr, &DETOUR_CFG);
@@ -1034,7 +1276,7 @@ static void vehicle_task(INT code, void *ctx)
     }
 #endif
     vsm_init(&vsm, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
-    install(0u, VSM_MOD_LINE, lt_module(&lt));
+    install(0u, VSM_MOD_LINE, jl_module(&junction_line));
     install(1u, VSM_MOD_SEARCH, ls_module(&ls));
 #if TM_MQTT
     install(2u, VSM_MOD_SCAN,
@@ -1192,12 +1434,97 @@ int vehicle_task_start(void)
 
 _Static_assert(VR_BYTES == TELEMETRY_BYTES && VR_ROWS == TELEMETRY_ROWS,
                "KR1 storage contract");
+#if TM_MQTT
+_Static_assert(RM_HUMP_FLAGS_MASK == IMU_HUMP_FLAGS_MASK &&
+               RM_HUMP_IMPLEMENTED == IMU_HUMP_FLAG_IMPLEMENTED &&
+               RM_HUMP_LEFT == IMU_HUMP_FLAG_LEFT &&
+               RM_HUMP_PEAK_NONE == IMU_HUMP_PEAK_NONE &&
+               RM_HUMP_DETAIL_LEFT == IMU_HUMP_DETAIL_LEFT,
+               "summary v3 hump contract");
+#endif
 #else
 int vehicle_task_start(void)
 {
     return E_OK;
 }
 #endif
+/* Available without MQTT. TEST/BENCH cannot run vehicle calibration. */
+uint32_t vehicle_calibration_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&calibration_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+uint32_t vehicle_run_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+uint32_t vehicle_run_start_ms(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&run_start, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+uint32_t vehicle_line_run_epoch(void)
+{
+#if !APP_TEST && !APP_BENCH
+    return __atomic_load_n(&line_run_epoch, __ATOMIC_SEQ_CST);
+#else
+    return 0u;
+#endif
+}
+
+int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out)
+{
+    if (out == NULL) {
+        return E_PAR;
+    }
+#if !APP_TEST && !APP_BENCH
+    imu_hump_diag_report_t value;
+    if (!app_board_try_read(&run_diag_board.sequence, run_diag_board.words,
+                            &value, sizeof(value))) {
+        const uint32_t sequence =
+            __atomic_load_n(&run_diag_board.sequence, __ATOMIC_SEQ_CST);
+        return sequence == 0u ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+#else
+    return E_NOEXS;
+#endif
+}
+
+int vehicle_hump_try_read(imu_hump_summary_t *out)
+{
+    if (!out) {
+        return E_PAR;
+    }
+#if !APP_TEST && !APP_BENCH
+    imu_hump_summary_t value;
+    if (!app_board_try_read(&run_hump_board.sequence, run_hump_board.words,
+                            &value, sizeof(value))) {
+        const uint32_t sequence =
+            __atomic_load_n(&run_hump_board.sequence, __ATOMIC_SEQ_CST);
+        return sequence == 0u ? E_NOEXS : E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+#else
+    return E_NOEXS;
+#endif
+}
+
 #if !TM_MQTT || APP_TEST || APP_BENCH
 int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
 {

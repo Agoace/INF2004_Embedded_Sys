@@ -12,12 +12,15 @@
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
 #include "../subsystem2/motion_diag.h"
+#include "../vehicle/vehicle_task.h"
+#include "../subsystem4/imu_settings.h"
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
+static ja_result_t last_junction;
 static uint32_t loss_base;
 #if TM_MQTT
 #include "../platform/app_board.h"
@@ -168,6 +171,21 @@ static void dump(void)
               (unsigned long)info.sampled, (unsigned long)info.missed,
               (unsigned long)info.dropped, (unsigned int)info.raw_bc,
               (unsigned long)info.isr_max_us, (unsigned long)info.line_max_us);
+    imu_hump_summary_t hump;
+    if (vehicle_hump_try_read(&hump) == E_OK) {
+        tm_printf((UB *)"[robot] hump peak_0.1mm %u count %u flags %02x "
+                        "gated %u source %u %s\n",
+                  (unsigned int)hump.peak_01mm, (unsigned int)hump.count,
+                  (unsigned int)hump.flags, (unsigned int)hump.gated,
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+    } else {
+        tm_printf((UB *)"[robot] hump no finished run source %u %s\n",
+                  (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+    }
+    imu_hump_diag_report_t diag;
+    if (vehicle_hump_diag_try_read(&diag) == E_OK) {
+        imu_hump_diag_print(&diag);
+    }
     app_task_report();
     for (uint32_t i = 0u; i < st.rows; ++i) {
         tm_printf((UB *)"KR %lu ", (unsigned long)i);
@@ -213,6 +231,7 @@ static void telemetry_task(INT code, void *ctx)
         }
         switch (m.kind) {
         case TELEMETRY_BEGIN:
+            last_junction = (ja_result_t){0};
             stats.rows = 0u;
             stats.events = 0u;
             stats.storage_full = false;
@@ -248,12 +267,17 @@ static void telemetry_task(INT code, void *ctx)
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
             break;
+        case TELEMETRY_JUNCTION:
+            last_junction = m.data.junction;
+            ja_print(&last_junction);
+            break;
         case TELEMETRY_DUMP:
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
             motion_diag_dump(1);
             motion_diag_print();
             dump();
+            ja_print(&last_junction);
             motion_diag_dump(0);
             break;
         default:
@@ -314,7 +338,7 @@ int telemetry_send(const telemetry_message_t *message)
     if (mbf_telemetry <= 0 || task <= 0) {
         return E_OBJ;
     }
-    if (!message || message->kind > TELEMETRY_DUMP) {
+    if (!message || message->kind > TELEMETRY_JUNCTION) {
         return E_PAR;
     }
     telemetry_message_t m = *message;

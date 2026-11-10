@@ -25,6 +25,28 @@ for reason in ("power/RUN", "watchdog", "other"):
         [sys.executable, str(root / "scripts/robot_log_decode.py"), "--events"],
         input=capture, text=True).splitlines()
     assert len(csv_events) == 2 and csv_events[1] == "10,1,0,2,4"
+# Hump lines: run end, unavailable, GP20 DUMP and STREAM drive formats.
+capture = ("[robot] hump highest_mm 10.8 side right count 2 flags 05 gated 1\n"
+           "[robot] hump unavailable flags 03\n"
+           "[robot] hump peak_0.1mm 250 count 3 flags 21 gated 0\n"
+           "[robot] hump peak_0.1mm 65535 count 0 flags 03 gated 0\n"
+           "[S4_HUMP] peak_0.1mm 0 count 0 flags 01 gated 2 long 1\n"
+           f"KR 0 {payload}\n")
+csv_hump = subprocess.check_output(
+    [sys.executable, str(root / "scripts/robot_log_decode.py"), "--hump"],
+    input=capture, text=True).splitlines()
+assert csv_hump == ["source,peak_mm,side,count,flags,gated",
+                    "run_end,10.8,right,2,05,1", "run_end,unavailable,,,03,",
+                    "dump,25.0,left,3,21,0", "dump,unavailable,,,03,",
+                    "stream,0.0,none,0,01,2"], csv_hump
+# Source-labelled images retain the existing hump CSV fields.
+for source in ("1 corrected", "2 filtered"):
+    labelled = "\n".join(line + f" source {source}" if line.startswith(
+        ("[robot] hump", "[S4_HUMP]")) else line for line in capture.splitlines())
+    got = subprocess.check_output(
+        [sys.executable, str(root / "scripts/robot_log_decode.py"), "--hump"],
+        input=labelled, text=True).splitlines()
+    assert got == csv_hump, got
 ref = (root / "src/vc_line_test.c").read_text()
 first = ref.index("static const lt_config_t LINE_CFG")
 last = ref.index("typedef enum {\n    STOP_BUTTON", first)

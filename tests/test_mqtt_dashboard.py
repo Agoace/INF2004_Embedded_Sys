@@ -125,6 +125,12 @@ def summary(flags=0b010, source=1, reason=1, run=2, start=5000, duration=60000, 
                        barcode_failed, hump)
 
 
+def summary_v3(hump=108, count=1, hump_flags=1, gated=0, boot=0, **kwargs):
+    """Summary v3: the v1 layout, boot ID at 44 and the hump tail at 48..51."""
+    old = summary(hump=hump, **kwargs)
+    return b"\x03" + old[1:] + struct.pack("<IHBB", boot, count, hump_flags, gated)
+
+
 def barcode(flags=0b00111, code=5, votes=3, reads=4, direction=1, nav=9, result=-45,
             sequence=12, uptime=777):
     return struct.pack("<BBBBBBBBhHII", 1, 1, flags, code, votes, reads, direction, nav, result,
@@ -180,7 +186,7 @@ class PanelTests(ModelCase):
         ids = [panel["id"] for panel in snapshot["panels"]]
         self.assertEqual(ids, ["vehicle", "line", "wheels", "odometry", "ultrasonic",
                                "obstacle", "events", "health", "barcode", "imu", "summary",
-                               "log"])
+                               "hump", "log"])
         for panel in snapshot["panels"]:
             self.assertTrue(panel["stale"])
         self.assertEqual(snapshot["robot"]["level"], "silent")  # status online, no state yet
@@ -964,8 +970,8 @@ class SummaryTests(ModelCase):
         self.assertEqual(rows["Max speed error"], "45 mm/s")
         self.assertEqual(rows["Motion faults seen"], "stall left, ESTOP")
         self.assertEqual(rows["Shell fault"], "module failed (detail 6)")
-        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]),
-                         ("not implemented yet", "not implemented yet"))
+        self.assertEqual(rows["Barcode ok / failed"], "not implemented yet")
+        self.assertNotIn("Hump peak", rows)  # the hump card shows it
         self.assertNotIn("Detour", rows)
         self.assertNotIn("retained", self.panel("summary")["note"])
 
@@ -1010,18 +1016,78 @@ class SummaryTests(ModelCase):
         self.assertIn("Detour", self.rows("summary"))
         self.assertIn("still running", self.rows("summary")["Detour"])
 
-    def test_reserved_barcode_and_hump_fields_when_implemented(self):
+    def test_reserved_barcode_fields_when_implemented(self):
         self.model.ingest("robot/summary", summary(flags=0b011, barcode_ok=3, barcode_failed=1,
                                                    hump=12))
-        rows = self.rows("summary")
-        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]), ("3 / 1", 12))
-        self.model.ingest("robot/summary", summary(flags=0b011, hump=0xFFFF))
-        self.assertEqual(self.rows("summary")["Hump peak"], "none")
+        self.assertEqual(self.rows("summary")["Barcode ok / failed"], "3 / 1")
+        # An old v1/v2 hump value has no fixed unit: the card does not show it.
+        self.assertEqual(self.rows("hump")["Highest hump"], "not reported (summary v1 firmware)")
         # Values sent while the flag is off must not show as results.
         self.model.ingest("robot/summary", summary(flags=0b010, barcode_ok=3, hump=12))
-        rows = self.rows("summary")
-        self.assertEqual((rows["Barcode ok / failed"], rows["Hump peak"]),
-                         ("not implemented yet", "not implemented yet"))
+        self.assertEqual(self.rows("summary")["Barcode ok / failed"], "not implemented yet")
+        # v3 bit 0 is barcode only; the hump has its own implemented flag.
+        self.model.ingest("robot/summary", summary_v3(flags=0b010, hump=108))
+        self.assertEqual(self.rows("summary")["Barcode ok / failed"], "not implemented yet")
+        self.assertEqual(self.rows("hump")["Highest hump"], "10.8 mm")
+
+
+class HumpTests(ModelCase):
+    def test_before_any_run(self):
+        panel = self.panel("hump")
+        self.assertEqual((panel["age_ms"], panel["rows"], panel["stale"]), (None, [], True))
+        self.assertIn("appears when a run ends", panel["note"])
+
+    def test_c_packed_summary_and_events(self):
+        self.model.ingest("robot/summary", SAMPLES["summary_hump"])
+        rows = self.rows("hump")
+        self.assertEqual((rows["Highest hump"], rows["Humps counted"], rows["Side of highest"]),
+                         ("10.8 mm", 2, "right wheel"))
+        self.assertEqual(rows["Hump starts blocked (curve or slow)"], 1)
+        note = self.panel("hump")["note"]
+        self.assertIn("stopped on a hump", note)
+        self.assertNotIn("IMU data was missing", note)
+        self.assertFalse(self.panel("hump")["stale"])
+        self.model.ingest("robot/summary", SAMPLES["summary_hump_unavailable"])
+        self.assertEqual(self.rows("hump")["Highest hump"], "unavailable (no fresh IMU data)")
+        self.assertIn("IMU data was missing", self.panel("hump")["note"])
+        self.model.ingest("robot/event", SAMPLES["event_hump"])
+        self.model.ingest("robot/event", SAMPLES["event_hump_left"])
+        texts = [item["text"] for item in self.panel("events")["items"]]
+        self.assertIn("#21 HUMP #3: 10.8 mm, right wheel", texts)
+        self.assertIn("#22 HUMP #4: 25.0 mm, left wheel (not proven)", texts)
+
+    def test_flags_side_and_no_hump(self):
+        self.model.ingest("robot/summary", summary_v3(hump=0, count=0, hump_flags=0b10001))
+        rows = self.rows("hump")
+        self.assertEqual((rows["Highest hump"], rows["Humps counted"]), ("no hump detected", 0))
+        self.assertNotIn("Side of highest", rows)
+        self.assertIn("longer than 600 mm", self.panel("hump")["note"])
+        self.model.ingest("robot/summary", summary_v3(hump=250, count=3, hump_flags=0b101001))
+        rows = self.rows("hump")
+        self.assertEqual((rows["Highest hump"], rows["Side of highest"]),
+                         ("25.0 mm", "left wheel (not proven)"))
+        self.assertIn("curve froze", self.panel("hump")["note"])
+        self.model.ingest("robot/summary", summary_v3(hump_flags=0))
+        self.assertEqual(self.rows("hump")["Highest hump"], "not implemented yet")
+        self.model.ingest("robot/summary", summary_v3(hump_flags=0x40))  # reserved bit
+        self.assertEqual(self.model.snapshot()["discarded"], 1)
+
+    def test_live_events_during_a_run_then_the_summary(self):
+        self.model.ingest("robot/summary", summary_v3(hump=90, count=1))
+        self.feed("state_running")
+        self.clock.advance(10)
+        self.model.ingest("robot/event", SAMPLES["event_hump"])
+        rows = self.rows("hump")
+        self.assertEqual(rows["This run so far (live)"], "10.8 mm, right wheel, 3 counted")
+        self.assertEqual(rows["Highest hump"], "9.0 mm")  # previous run until this one ends
+        self.clock.advance(10)
+        self.model.ingest("robot/summary", summary_v3(hump=108, count=3))
+        rows = self.rows("hump")
+        self.assertNotIn("This run so far (live)", rows)
+        self.assertEqual(rows["Highest hump"], "10.8 mm")
+        self.feed("state_idle")
+        self.feed("state_running")  # a new run clears the live value
+        self.assertNotIn("This run so far (live)", self.rows("hump"))
 
     def test_retained_copy_is_labelled(self):
         self.model.ingest("robot/summary", summary(), retained=True)
@@ -1080,8 +1146,8 @@ class CpuAndJunctionTests(ModelCase):
         self.assertEqual(self.model.snapshot()["discarded"], 1)
         self.assertIsNone(self.model.heartbeat)
 
-    def test_junction_event_is_listed_with_its_reserved_name(self):
-        frame = bytearray(SAMPLES["event_run_end"])
+    def test_legacy_junction_event_is_listed_with_its_reserved_name(self):
+        frame = bytearray(b"\x01" + SAMPLES["event_run_end"][1:16])
         frame[1] = 7
         self.model.ingest("robot/event", bytes(frame))
         self.assertEqual(self.model.snapshot()["discarded"], 0)
@@ -1094,7 +1160,7 @@ class CpuAndJunctionTests(ModelCase):
         self.assertEqual(len(self.panel("events")["items"]), 1)
 
     def test_junction_event_does_not_touch_command_decisions(self):
-        frame = bytearray(SAMPLES["event_start_ok"])
+        frame = bytearray(SAMPLES["event_junction"])
         frame[1] = 7
         self.model.ingest("robot/event", bytes(frame))
         self.assertIsNone(self.model.last_decision)
@@ -1148,8 +1214,27 @@ class BatchTwoCFixtureTests(ModelCase):
 
     def test_c_junction_event(self):
         self.feed("event_junction")
-        self.assertIn("#20 junction (reserved)", self.panel("events")["items"][0]["text"])
+        self.assertIn("#20 JUNCTION B: bar clear", self.panel("events")["items"][0]["text"])
         self.assertEqual(self.model.discarded, 0)
+
+
+class JunctionActionDashboardTests(ModelCase):
+    def test_line_angle_labels(self):
+        for name in ("first", "accepted"):
+            self.feed(f"event_junction_{name}")
+            self.assertIn(f"JUNCTION B: {name} line at -33.00 deg",
+                          self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
+
+    def test_all_commands_and_terminal_reason(self):
+        for number, command in enumerate("ABCD", 1):
+            frame = bytearray(SAMPLES["event_junction"])
+            frame[12:15] = bytes((number, 8, 6))
+            self.model.ingest("robot/event", bytes(frame))
+            self.assertIn(f"JUNCTION {command}: failed, reason 6",
+                          self.panel("events")["items"][0]["text"])
+        self.assertEqual(self.model.discarded, 0)
+        self.assertIsNone(self.model.last_decision)
 
 
 class ScanRetryDashboardTests(ModelCase):
@@ -2142,6 +2227,16 @@ class RedesignPageTests(AppCase):
         self.assertEqual(trace["views"][0]["className"],"active")
         self.assertIn("details",trace["views"][1]["text"])
         self.assertIn("details",trace["views"][2]["text"])
+
+    def test_hump_card_is_a_primary_card(self):
+        self.model.ingest("robot/summary", SAMPLES["summary_hump"])
+        page = self.request("GET", "/")[2].decode()
+        # The fake DOM does not model parents: check the layout source directly.
+        self.assertIn('["ultrasonic", "line", "wheels", "summary", "hump"]', page)
+        self.assertIn("#panel-hump { grid-column:3; grid-row:2; }", page)
+        self.assertIn("#panel-summary { grid-column:2; grid-row:2; }", page)
+        trace = self.trace(views=[["panel-hump", ".title"]])
+        self.assertEqual(trace["views"][0]["text"], "HIGHEST HUMP")
 
     def test_collapsed_health_does_not_draw_zero_size_dial(self):
         expr = """(() => {

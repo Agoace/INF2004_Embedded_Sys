@@ -107,6 +107,35 @@ endif
 IMU_STREAM_SUFFIX := _imu_stream
 endif
 
+# Hump source: 1 corrected (default), 2 filtered roll for H3 comparison.
+IMU_HUMP_SOURCE ?= 1
+ifeq ($(IMU_HUMP_SOURCE),1)
+IMU_HUMP_SOURCE_SUFFIX :=
+else ifeq ($(IMU_HUMP_SOURCE),2)
+IMU_HUMP_SOURCE_SUFFIX := _humpfilt
+else
+$(error Unknown IMU_HUMP_SOURCE '$(IMU_HUMP_SOURCE)'; use 1 or 2)
+endif
+
+# B2a: fake command is latched once at START. NONE preserves normal LINE.
+JUNCTION_TEST_CMD ?= NONE
+ifeq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_TEST_CMD_ID := 0
+else ifeq ($(JUNCTION_TEST_CMD),A)
+JUNCTION_TEST_CMD_ID := 1
+else ifeq ($(JUNCTION_TEST_CMD),B)
+JUNCTION_TEST_CMD_ID := 2
+else ifeq ($(JUNCTION_TEST_CMD),C)
+JUNCTION_TEST_CMD_ID := 3
+else ifeq ($(JUNCTION_TEST_CMD),D)
+JUNCTION_TEST_CMD_ID := 4
+else
+$(error Unknown JUNCTION_TEST_CMD '$(JUNCTION_TEST_CMD)'; use NONE/A/B/C/D)
+endif
+ifneq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_SUFFIX := _jtest$(JUNCTION_TEST_CMD)
+endif
+
 # DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
 # It changes timing. Default 0 compiles the diagnostic paths out.
 DIAG ?= 0
@@ -170,6 +199,7 @@ endif
 EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(BARCODE_CAPTURE_SUFFIX)
 
 GCC := arm-none-eabi-gcc
@@ -232,6 +262,8 @@ ASFLAGS += -DCNF_SMP=1
 endif
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
+CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
+CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
 CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
@@ -268,6 +300,8 @@ endif
 PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)
 PROFILE_ID := $(PROFILE_ID)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)
 PROFILE_ID := $(PROFILE_ID)-diag$(DIAG)-imu_stream$(IMU_STREAM)
+PROFILE_ID := $(PROFILE_ID)-hump_source$(IMU_HUMP_SOURCE)
+PROFILE_ID := $(PROFILE_ID)-junction$(JUNCTION_TEST_CMD_ID)
 PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
 PROFILE_FILE := .build_profile
 

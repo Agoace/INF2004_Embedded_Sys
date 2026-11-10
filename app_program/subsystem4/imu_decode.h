@@ -1,5 +1,5 @@
 /* LSM303DLHC units and body axes. Port ideas: Jaison, b2a6bb6.
- * No gyro is present. No bias calibration or hump detection in step 1. */
+ * No gyro. This decoder stays raw; imu_core owns observer calibration. */
 #ifndef IMU_DECODE_H
 #define IMU_DECODE_H
 #include <stdbool.h>
@@ -15,7 +15,8 @@ typedef struct {
     imu_axis_map_t mag;
 } imu_axes_t;
 
-/* One mounting table: +X right, +Y forward, +Z up. Confirm on hardware. */
+/* One mounting table: +X right, +Y forward, +Z up. Accel identity passed
+ * S4-U03; magnetic orientation/calibration still require hardware checks. */
 extern const imu_axes_t imu_robot_axes;
 
 typedef struct {
