@@ -6,6 +6,12 @@ static unsigned int initialized;
 static unsigned int inputs;
 static unsigned int pulls;
 static bool down[2];
+static unsigned long usb_state;
+
+unsigned long tm_usb_state(void)
+{
+    return usb_state;
+}
 
 static unsigned int bit(unsigned int pin)
 {
@@ -37,6 +43,9 @@ bool gpio_get(unsigned int pin)
 
 int main(void)
 {
+    for (usb_state = 0UL; usb_state <= 4UL; ++usb_state) {
+        assert(barcode_hw_usb_ready() == (usb_state == 3UL));
+    }
     barcode_hw_button_init();
     assert(initialized == 3u && inputs == 3u && pulls == 3u);
     assert(!barcode_hw_button_down() && !barcode_hw_drive_down());

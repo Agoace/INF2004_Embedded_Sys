@@ -1,7 +1,16 @@
-/* SDK-only exclusive-profile buttons. Never configure the IMU GP7 wire. */
+/* Exclusive-profile buttons/USB state. Never configure the IMU GP7 wire. */
 #include "barcode_hw.h"
 #if APP_BARCODE_CAPTURE
 #include "hardware/gpio.h"
+
+/* libtm exports kernel UW (unsigned long). Keep kernel/SDK headers apart.
+ * This reads the console task's cached state, not the TinyUSB stack. */
+extern unsigned long tm_usb_state(void);
+
+bool barcode_hw_usb_ready(void)
+{
+    return tm_usb_state() == 3UL; /* Configured host with CDC DTR asserted. */
+}
 
 void barcode_hw_button_init(void)
 {

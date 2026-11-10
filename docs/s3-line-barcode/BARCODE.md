@@ -67,7 +67,7 @@ make -C build_make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
 ```
 
 Select `mtk3pico_smp0_usb_cdc_test_barcode_capture.uf2` and verify the
-**B1b DRIVEN TEST ONLY** banner. Use USB console and CRASH_REPORT=0 on the
+**B1c WIDTH+PEAK TEST ONLY** banner. Use USB console and CRASH_REPORT=0 on the
 connected robot. BENCH, IMU_STREAM, SMP, Wi-Fi, network and MQTT combinations
 are rejected. Ordinary subsystem tests and the destructive reset test are
 skipped. This profile alone has the GP21 barcode-pass client.
@@ -107,11 +107,13 @@ coast; verify actual travel before using the available floor space.
 2. With the robot stationary, place FLOOR under the sensor and press GP20.
    Record the **next** one-second range. Repeat for WHITE_PAPER and BLACK_BAR
    at the prompts. Save minimum, maximum and sample count. GP21 is disabled
-   until all three ranges complete. Ranges do not automatically certify
-   narrow-bar visibility.
+   until all three ranges complete. Keep USB and its terminal connected
+   during ranges: these results are not queued for later replay. Ranges do
+   not automatically certify narrow-bar visibility.
 3. Lifted check: with VIN present and wheels free, press/release GP21.
    Check equal positive wheel requests, the 430 mm target and confirmed
-   zero duty/low measured speed. Save the dump. Press/release again for
+   zero duty/low measured speed. Fetch the dump as in step 6. Press/release
+   again for
    negative requests. Test a GP21 early stop. Do not call this a barcode
    or floor-distance PASS. Reboot before floor work to restore FORWARD.
 4. Floor check: place **one** F sheet, bars across travel; use the 2x copy
@@ -125,8 +127,13 @@ coast; verify actual travel before using the available floor space.
    100/100 mm/s through motion APIs; there is no automatic line correction.
    Another fresh GP21 press requests stop. GP20 has no effect while moving.
 6. At distance/deadline/fault, the task repeatedly requests stop. Capture
-   stays active until stop is confirmed. Only then does it freeze, decode
-   TIME and DISTANCE independently, and print the complete dump.
+   stays active until stop is confirmed. Then it freezes and keeps the
+   data in RAM. USB can be unplugged before the pass, but **keep VIN on**.
+   After the robot stops, reconnect USB and open the capture terminal.
+   The task waits for CDC DTR for one continuous second before it decodes
+   and prints the existing report/dump. No host means an indefinite silent
+   wait, no new pass and no READY. GP21 presses cannot queue another pass.
+   See [USB capture wait](USB_CAPTURE_WAIT.md) for terminal requirements.
 7. Save `[BC_DUMP] END` and verify all row counts. Full dump stays enabled:
    it can take tens of seconds (about 40 s on the first 600 mm lifted pass).
    Before output, `[BC] DUMP n rows ~X s: GP21 ignored until READY` gives an

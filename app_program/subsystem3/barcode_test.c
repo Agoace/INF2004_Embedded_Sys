@@ -18,6 +18,9 @@
 #if !APP_TEST || APP_BENCH || APP_IMU_STREAM || TM_MQTT || TK_SUPPORT_SMP
 #error "BARCODE_CAPTURE requires exclusive single-core, non-MQTT TEST"
 #endif
+#if !TM_CONSOLE_USB_CDC
+#error "BARCODE_CAPTURE deferred reports require CONSOLE=usb_cdc"
+#endif
 
 static const barcode_drive_config_t settings = {
     BARCODE_BOUNDED_DISTANCE_MM, BARCODE_PASS_SPEED_MM_S, BARCODE_COUNTS_PER_M};
@@ -315,6 +318,29 @@ static void decode(bool lost)
     decode_peaks(lost, &config);
 }
 
+/* Confirmed zero drive and frozen data precede this wait. Never poll the
+ * run buttons here: presses cannot queue a pass. READY resynchronizes them.
+ * Keep yielding so the lower-priority USB task can enumerate/open. */
+static __attribute__((noinline)) void wait_for_usb(void)
+{
+    uint32_t since = 0u;
+    bool connected = false;
+    for (;;) {
+        const bool ready = barcode_hw_usb_ready();
+        const uint32_t now = drv_time_us();
+        if (!ready) {
+            connected = false;
+        } else if (!connected) {
+            since = now;
+            connected = true;
+        } else if (now - since >= 1000000u) {
+            return;
+        }
+        (void)tk_dly_tsk(20u);
+        (void)tk_can_wup(TSK_SELF);
+    }
+}
+
 static void dump_button(bool *previous, bool *notified)
 {
     const bool down = barcode_hw_drive_down();
@@ -545,6 +571,8 @@ void barcode_test(void)
     tm_printf(
         (UB *)"[BC] B1c WIDTH+PEAK TEST ONLY: VIN REQUIRED. Lift wheels "
               "for first GP21 check. One F sheet per run; swap when idle.\n");
+    tm_printf((UB *)"[BC] Frozen report waits for USB terminal DTR + 1 s. "
+                    "Keep VIN on; GP21 ignored until READY.\n");
     tm_printf((UB *)"[BC] GP20: floor/white/black ranges, then redo ranges. "
                     "GP21: forward, then backward; while moving = STOP.\n");
     tm_printf(
@@ -602,6 +630,7 @@ void barcode_test(void)
                     if (job.overrun) {
                         barcode_drive_cancel(&job, BC_DRIVE_OVERRUN);
                     }
+                    wait_for_usb();
                     frozen_report(&job, &initial, &current, observer_misses);
                     capturing = false;
                     (void)tk_can_wup(TSK_SELF);

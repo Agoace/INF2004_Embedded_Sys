@@ -19,7 +19,8 @@ host_test(test_barcode_test tests/test_barcode_test.c
 target_include_directories(test_barcode_test BEFORE PRIVATE
     "${REPO}/tests/barcode_stubs" "${REPO}/tests/mtk_stubs")
 target_compile_definitions(test_barcode_test PRIVATE
-    APP_TEST=1 APP_BARCODE_CAPTURE=1 APP_BENCH=0 APP_IMU_STREAM=0 TM_MQTT=0)
+    APP_TEST=1 APP_BARCODE_CAPTURE=1 APP_BENCH=0 APP_IMU_STREAM=0 TM_MQTT=0
+    TM_CONSOLE_USB_CDC=1)
 target_link_libraries(test_barcode_test PRIVATE m)
 foreach(case IN ITEMS button_stop stop_retry motion_fault sensor_fault
         command_fail missing_motor stale_motor acquisition_loss wake_fault
@@ -27,7 +28,8 @@ foreach(case IN ITEMS button_stop stop_retry motion_fault sensor_fault
         line_busy line_busy_twice line_busy_start line_age_jitter line_stale
         line_invalid line_raw line_read_error motor_busy motor_busy_twice
         motor_read_error watchdog_start watchdog_lost line_stale_start
-        dump_press dump_held motor_busy_phase)
+        dump_press dump_held motor_busy_phase
+        usb_offline usb_wait usb_reconnect usb_held usb_wrap)
     add_test(NAME test_barcode_${case} COMMAND test_barcode_test ${case})
 endforeach()
 host_test(test_barcode_packed tests/test_barcode_packed.c

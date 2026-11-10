@@ -39,11 +39,57 @@ static uint32_t dump_start_ms;
 static uint32_t ready_ms;
 static bool dump_active;
 static bool ready_inhibited;
+static uint32_t usb_wait_start_ms;
+static uint32_t usb_fingerprint;
+static bool usb_reported;
 static jmp_buf finished;
 
 static bool mode(const char *name)
 {
     return strcmp(scenario, name) == 0;
+}
+
+static bool usb_case(void)
+{
+    return strncmp(scenario, "usb_", 4u) == 0;
+}
+
+static uint32_t fingerprint(void)
+{
+    size_t n, m;
+    const barcode_packed_t *a = barcode_capture_rows(&n);
+    const barcode_motion_t *b = barcode_capture_motors(&m);
+    uint32_t hash = (uint32_t)(n + m);
+    const unsigned char *bytes = (const unsigned char *)a;
+    for (size_t i = 0u; i < n * sizeof(*a); ++i) {
+        hash = (hash ^ bytes[i]) * UINT32_C(16777619);
+    }
+    bytes = (const unsigned char *)b;
+    for (size_t i = 0u; i < m * sizeof(*b); ++i) {
+        hash = (hash ^ bytes[i]) * UINT32_C(16777619);
+    }
+    return hash;
+}
+
+bool barcode_hw_usb_ready(void)
+{
+    if (!usb_case()) {
+        return true;
+    }
+    assert(command == 0 && sampled_speed == 0 && starts == 1u);
+    assert(!barcode_capture_active() && results == 0u && dumps == 0u);
+    if (usb_wait_start_ms == 0u) {
+        usb_wait_start_ms = now;
+        usb_fingerprint = fingerprint();
+    }
+    assert(fingerprint() == usb_fingerprint && ranges == 3u);
+    const uint32_t elapsed = now - usb_wait_start_ms;
+    if (mode("usb_offline") && elapsed >= 3000u) {
+        assert(!usb_reported && frames == 0u && dump_notices == 0u);
+        longjmp(finished, 1);
+    }
+    return !mode("usb_offline") && elapsed >= 500u &&
+           !(mode("usb_reconnect") && elapsed >= 1000u && elapsed < 1300u);
 }
 
 static bool normal_case(void)
@@ -97,6 +143,9 @@ static void advance(uint32_t ms)
 
 uint32_t drv_time_us(void)
 {
+    if (mode("usb_wrap") && usb_wait_start_ms != 0u) {
+        return UINT32_MAX - 900000u + (now - usb_wait_start_ms) * 1000u;
+    }
     return now * 1000u;
 }
 
@@ -268,6 +317,11 @@ bool barcode_hw_button_down(void)
 bool barcode_hw_drive_down(void)
 {
     assert(button_ready);
+    if (usb_case() && usb_wait_start_ms > 0u &&
+        ((mode("usb_held") && (ready_ms == 0u || now < ready_ms + 60u)) ||
+         (now >= usb_wait_start_ms + 200u && now < usb_wait_start_ms + 300u))) {
+        return true; /* Ignored during wait; a held press cannot rearm. */
+    }
     if (mode("dump_press") && dump_active && dumps == 0u &&
         ((now >= dump_start_ms + 50u && now < dump_start_ms + 110u) ||
          (now >= dump_start_ms + 200u && now < dump_start_ms + 260u))) {
@@ -378,6 +432,12 @@ int tm_printf(const UB *format, ...)
     va_start(args, format);
     (void)vsnprintf(text, sizeof(text), (const char *)format, args);
     va_end(args);
+    if (usb_case() && usb_wait_start_ms != 0u && !usb_reported) {
+        assert(now - usb_wait_start_ms >=
+               (mode("usb_reconnect") ? 2300u : 1500u));
+        assert(!mode("usb_offline") && fingerprint() == usb_fingerprint);
+        usb_reported = true;
+    }
     if (strstr(text, "[BC_FAULT]") != NULL) {
         ++fault_reports;
         assert(stop_calls > 2u || starts == 0u);
@@ -534,7 +594,16 @@ int tm_printf(const UB *format, ...)
     if ((strstr(text, "[BC] READY:") || strstr(text, "[BC] NOT READY:")) &&
         dumps > 0u) {
         assert(command == 0 && !barcode_capture_active() && !dump_active);
-        if (normal_case() && dumps == 1u) {
+        if (usb_case()) {
+            assert(usb_reported && !ready_inhibited && dumps == 1u);
+            assert(starts == 1u && frames == 2u && results == 5u);
+            assert(ranges == 3u && fingerprint() == usb_fingerprint);
+            if (mode("usb_wrap")) {
+                longjmp(finished, 1);
+            }
+            ready_ms = now;
+            held_done_ms = now; /* Observe another 200 ms without restart. */
+        } else if (normal_case() && dumps == 1u) {
             assert(!ready_inhibited && frames == 2u);
             assert(strstr(text, "GP21 = BACKWARD") != NULL);
             ready_ms = now;

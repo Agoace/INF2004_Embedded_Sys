@@ -47,6 +47,8 @@ not current acceptance reports. Local course originals are not public records.
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
 - [BARCODE.md](s3-line-barcode/BARCODE.md) — pure Code 39 WIDTH and B1c PEAK
   observation; one sheet, 430 mm TEST passes, checked stop, no routing.
+- [USB_CAPTURE_WAIT.md](s3-line-barcode/USB_CAPTURE_WAIT.md) — TEST-only
+  frozen report retention until the USB terminal asserts DTR for one second.
 
 ## S4 — IMU
 
