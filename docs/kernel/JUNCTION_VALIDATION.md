@@ -2,10 +2,12 @@
 
 ## Status
 
-The 2026-11-10 forced-corner redesign replaces `eb18004` blind travel and
-encoder-target turns. The worker did not push or flash. The new pending-recovery policy has hardware status **Not run**. Historical operator
-evidence on `eb18004` and `7648081` is separated
-below; it is not a PASS for the new images. See the
+**B2a CLOSED**, as reported by Main_Worker after the `50426ae` A regression.
+All3 runs reached DONE. The worker did not push or flash. Evidence below is
+specific to its tested revision; closure does not invent missing heading,
+stack or recovery-path measurements. B2b is not authorized here: its proposed
+40-byte record with junction-encounter generation awaits operator approval
+and the contract from Main_Worker. See the
 [design](../architecture/JUNCTION_ACTION.md) for ownership and thresholds.
 
 ## Operator-supplied evidence — 2026-11-10
@@ -24,8 +26,9 @@ Main_Worker supplied these results; the worker did not inspect that CSV.
   drifted off the18 mm line. A4-degree error over160 mm gives about11 mm
   lateral displacement; this explains the risk, not a measured heading trace.
 - Run5 lost the line before the cross; natural SEARCH failed, and pending
-  was correctly cancelled with phase9. The new policy cancels pending at the
-  natural non-LINE handoff itself, rather than waiting for final STOP.
+  was correctly cancelled with phase9. The intermediate policy cancelled
+  pending at natural LINE loss; `50426ae` now preserves successful natural
+  SEARCH recovery instead.
 
 Old J2 did **not** pass. Do not tune locked LINE to compensate for blind
 travel. That travel,132 mm approach, settle and nominal90/180-degree endpoint
@@ -80,11 +83,28 @@ The operator then approved pending survival through successful natural
 LINE -> SEARCH -> LINE. Cancel on SEARCH failure/stop, SCAN, DETOUR, any
 other route or STOP. No travel/time expiry is added before the B2b contract.
 This specifically addresses the pre-cross cancellations in A run3/C run3.
-New-policy hardware checks remain Not run.
+The later `50426ae` A regression below supplies new-image acceptance;
+specific pre-claim recovery/cancellation traces were not supplied for it.
+
+### Closure regression — `50426ae` A x3
+
+Main_Worker reported3/3 DONE on hardware, with line-found encoder angles
+**45.1 /43.6 /40.8 degrees**. B2a is **CLOSED** by Main_Worker. No log was
+opened by this worker. Final physical heading errors, new stack values and
+which pre-claim SEARCH paths occurred were not supplied; do not infer them
+from these contact angles or the three DONE results.
+
+Main then merged CR1 motion revision `51be7a0` into `mtk3-vehicle`, producing
+`235af44`, and reported: host191/191, documentation OK, template8, configured
+NONE/A/BENCH builds with zero warnings, MQTT static RAM187092 B. Main reported
+that `mtk3-staging` was advanced to `235af44` and both branches were pushed.
+These are Main-supplied integration results, not this worker's local checks.
+The software/resource tables below retain the earlier `50426ae` public-build
+measurements; do not substitute them for CR1-merged image measurements.
 
 ## Software evidence
 
-Checks below apply to the pending-recovery fix based on `75a95f7`, with public example
+Checks below apply to `50426ae`, the pending-recovery fix based on `75a95f7`, with public example
 settings in an isolated copy; Main must rebuild device-configured images.
 
 | Check | Result |
@@ -215,7 +235,7 @@ wall collision or hard wheel restraint as a stall test.
 | J0 | Verify pair spacing/height, normalized floor/line/bar contrast and pending-command barcode-only rejection. Capture33 mm/two-fresh exit evidence, white20 ms and >=500 return. Lifted A/B/D direction and ESTOP checks. No axle/pivot ruler target is required. |Not run |
 | J1 | NONE plain-line/`+` baseline with zero kind7 and zero losses on the new image. Old `eb18004` cross passed; repeat after redesign. |Not run |
 | J2 | C normal LINE -> SEARCH -> LINE with160 mm detector suppression across handoffs. Verify straight course after recovery; DONE during SEARCH is not physical PASS. Retest pre-claim recovery under the new pending policy. |Operator PASS on `75a95f7`; new pending policy Not run |
-| J3 | First LEFT arm followed; retain the supplied two DONE turns plus one pre-claim cancellation as distinct results. Final heading error was not supplied. Retest pre-claim retention. |Operator PASS on `7648081`; new pending policy Not run |
+| J3 | Earlier two DONE turns plus one cancellation on `7648081`; regression3/3 DONE at45.1/43.6/40.8 degrees on `50426ae`. Final heading error and specific recovery paths were not supplied. |Operator PASS; `50426ae` regression accepted; B2a CLOSED |
 | J4 | Three RIGHT-arm turns accepted; final heading errors not supplied. |Operator PASS on `7648081` |
 | J5 | Three operator-confirmed returns, last USB first/accepted angles and vehicle/idle stack values supplied; final heading error not supplied. |Operator PASS on `7648081` |
 | J6 | Complete remaining missing-line/window/expiry-free pending recovery, blocked-route cancellation, barcode and named-stack/timing checks. Pending survives normal SEARCH only; STOP/failure/other routes cancel it. |Partial: C SEARCH ESTOP on `75a95f7`, vehicle/idle margins on `7648081`; other gates Not run |
