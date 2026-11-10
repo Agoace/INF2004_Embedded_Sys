@@ -12,6 +12,12 @@ static bool observing, race, raced;
 static barcode_live_control_t control;
 static char output[16384];
 static unsigned int used;
+/* RTOS ABI uses unsigned char, which cannot take printf's char-format
+ * attribute. Suppress only Clang's impossible attribute suggestion here. */
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-format-attribute"
+#endif
 int tm_printf(const UB *format, ...)
 {
     assert(!observing);
@@ -24,6 +30,9 @@ int tm_printf(const UB *format, ...)
     used += (unsigned int)n;
     return n;
 }
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 uint32_t drv_time_us(void) { return clock_us++; }
 uint32_t drv_time_ms(void) { return clock_us / 1000u; }
 int motion_snapshot_try_read(motion_status_t *out, uint32_t *us)
