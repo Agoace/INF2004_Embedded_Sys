@@ -16,9 +16,11 @@ the barcode owner is still pending. No barcode source file is changed.
 | D | SEARCH LEFT; skip the first new line; accept the second incoming stem. |
 
 A command is latched once at START, not on LINE restart. Confirmation consumes
-it even if the job fails. Failure never retries it. STOP cancels unfinished
-work. A natural non-LINE handoff cancels an unconsumed pending command at once.
-A/B/D private SEARCH stays inside the LINE wrapper; it does not cancel itself.
+it even if the job fails. Failure never retries it. STOP cancels unfinished work. Successful natural LINE -> SEARCH -> LINE
+recovery preserves an unconsumed pending command. Reset its detector on
+SEARCH departure and LINE re-entry; never detect while SEARCH drives. SCAN,
+DETOUR, any other route, SEARCH failure/stop and STOP cancel pending. A/B/D
+private SEARCH stays inside the LINE wrapper; it does not cancel itself.
 
 ## Ownership and entry points
 
@@ -75,9 +77,12 @@ a claimed action remains busy after consumption. A live producer must check
 busy again after reading ACK and reject an unacknowledged occupied slot. It
 must have one writer and a defined START/STOP handshake, reject/report lost
 replacement, and not republish the same decoded barcode repeatedly. Source
-age, delayed publication and concurrency still require B2b agreement. The
-consumer's natural non-LINE cancellation policy is now fixed by this redesign;
-it does not supply the missing live-source handshake or summary integration.
+age, delayed publication and concurrency still require B2b agreement.
+Pending survives successful natural SEARCH only; other routes and run stop
+cancel it. The original source record, sequence and read counts/time are not
+refreshed by recovery. No distance/time expiry is added here: travel expiry
+will come from B2b. This policy does not supply the missing live-source
+handshake or summary integration.
 
 ## Junction detection
 
@@ -88,6 +93,10 @@ forward baseline before a new black edge. A threshold ramp to the pair's
 1250-sum junction flag does not erase an already clear approach. Noise,
 nonqualifying, stationary, reverse or duplicate samples cannot accumulate a
 candidate. Save the first qualified edge; confirmation latency is not added.
+A pending command can survive repeated successful natural SEARCH recoveries,
+but each resumed LINE needs a new6 mm clear forward baseline. If SEARCH finds
+the cross itself, do not retroactively claim that black patch: keep pending
+for the next clear-to-cross transition.
 
 The measured pair spacing is14.5 mm, height about9 mm. Inferred21 mm optical
 spacing is not a physical measurement. Barcode white gap20 mm gives only
@@ -176,7 +185,7 @@ word low byte command1..4, high byte phase; detail reason0..12:
 |6 | D skipped first; SEARCH second new line |
 |7 | C distance complete (possibly still SEARCH); A/B/D LINE handoff |
 |8 | failed |
-|9 | unused/cancelled before confirmation, including natural non-LINE handoff |
+|9 | cancelled before confirmation: blocked route or run stop, not successful natural SEARCH |
 |10 | C normal LINE/SEARCH progress marker with detector suppressed |
 
 Two new angle variants preserve the same event size: detail=`0x80|command`

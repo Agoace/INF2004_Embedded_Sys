@@ -12,10 +12,13 @@ MBF4096 B. No new task or stack.
 Vehicle compiler frame grows from880 B to992 B for all five MQTT images;
 telemetry remains360 B. Nested frames: observer152 B, pure action136 B,
 wrapper72 B, formatter104 B; the C progress observer is24 B. The C-route
-fix adds no static RAM versus `7648081`. IMU sample remains1000 B. These are not whole-
-stack bounds. New-image named stack checks must retain at least256 B free,
-including IMU; redesigned hardware gates are Not run. Old J1 NONE cross
-PASS does not establish new-image stack acceptance. See the
+fix adds no static RAM versus `7648081`. The pending-recovery fix also adds
+no RAM; its route guard frame is8 B, and watched-step remains72 B. IMU sample
+remains1000 B. These are not whole-stack bounds. New-image named stack
+checks must retain at least256 B free, including IMU. The new pending policy
+and full named-stack gates remain Not run. Operator J2–J5 acceptance on older
+images includes a D vehicle/idle margin report; it does not establish full
+new-image stack acceptance. See the
 [full measurements and procedure](JUNCTION_VALIDATION.md#ram-and-stack).
 
 ## What it is

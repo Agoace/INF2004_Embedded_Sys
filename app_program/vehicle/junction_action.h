@@ -107,6 +107,9 @@ typedef struct {
 void ja_init(ja_t *state, int16_t search_speed_mm_s, uint32_t epoch);
 bool ja_offer(ja_t *state, const ja_command_t *command);
 void ja_suspend(ja_t *state);
+/* Before executing a normal module: only LINE/SEARCH can retain pending. */
+void ja_pending_route(ja_t *state, uint8_t module,
+                        const int32_t counts[2], uint32_t now_ms);
 bool ja_active(const ja_t *state);
 bool ja_searching(const ja_t *state);
 /* False leaves LINE's drive unchanged. True owns drive for this tick. */

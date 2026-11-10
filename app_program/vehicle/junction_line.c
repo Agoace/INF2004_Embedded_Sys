@@ -28,9 +28,11 @@ vsm_outcome_t jl_step(void *ctx, const vsm_inputs_t *in, uint32_t now,
     if (!ja_searching(action)) {
         out = lt_step(line->line, in, now, drive);
         if (vsm_outcome_type(out) != VSM_OUT_RUNNING) {
-            if (action->phase == JA_CROSS &&
-                vsm_outcome_type(out) == VSM_OUT_LINE_LOST) {
-                /* Preserve C's origin/disarm across the ordinary route. */
+            if (vsm_outcome_type(out) == VSM_OUT_LINE_LOST &&
+                (action->phase == JA_CROSS || action->phase == JA_PENDING)) {
+                /* Natural SEARCH keeps C progress or an unconsumed command.
+                 * A pending detector needs a new clear baseline on return. */
+                ja_suspend(action);
                 return out;
             }
             if (ja_active(action)) {
@@ -42,8 +44,7 @@ vsm_outcome_t jl_step(void *ctx, const vsm_inputs_t *in, uint32_t now,
                 *drive = (vsm_drive_t){0};
                 return failed(action);
             }
-            /* Natural LINE handoff cancels an unconsumed command now,
-             * not only when SEARCH/SCAN eventually ends the run. */
+            /* Other LINE exits cancel unconsumed work immediately. */
             ja_finish(action, in->counts, now);
             return out;
         }

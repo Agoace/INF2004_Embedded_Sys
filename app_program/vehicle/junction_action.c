@@ -106,6 +106,19 @@ void ja_suspend(ja_t *s)
     s->clear_started = false;
 }
 
+void ja_pending_route(ja_t *s, uint8_t module,
+                        const int32_t counts[2], uint32_t now)
+{
+    if (s->phase != JA_PENDING || module == VSM_MOD_LINE) {
+        return;
+    }
+    if (module == VSM_MOD_SEARCH) {
+        ja_suspend(s);
+    } else {
+        ja_finish(s, counts, now);
+    }
+}
+
 static bool black(const vsm_inputs_t *in)
 {
     return lp_junction(in->line) && in->line->norm[0] >= JA_BLACK_MIN &&

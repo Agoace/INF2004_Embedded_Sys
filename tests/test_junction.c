@@ -165,9 +165,11 @@ static void wrapper(void) {
         assert(da.left_mm_s==db.left_mm_s && da.right_mm_s==db.right_mm_s);
     }
     assert(j.action.phase==JA_DONE);
-    /* Immediate metadata cancellation preserves the natural SEARCH route. */
+    /* Natural SEARCH preserves pending, but resets the detector. */
     init(&f,JA_LEFT);j.action=f.action;f.in.line_event=vc_event(VC_EVENT_LINE_LOST,0u);
     vsm_drive_t d={0};assert(vsm_outcome_type(jl_step(&j,&f.in,10u,&d))==VSM_OUT_LINE_LOST);
+    assert(j.action.phase==JA_PENDING && j.action.command.valid && !j.action.clear);
+    ja_pending_route(&j.action,VSM_MOD_SCAN,f.in.counts,11u);
     assert(j.action.phase==JA_UNUSED);
     init(&f,JA_STRAIGHT);claim(&f);j.action=f.action;
     f.in.line_event=vc_event(VC_EVENT_LINE_LOST,0u);
@@ -230,6 +232,63 @@ static void cross_routes(void) {
             assert(j.action.phase==JA_DONE && v.running==VSM_MOD_LINE);
         }
     }
+}
+static void pending_routes(void) {
+    for (uint8_t command=JA_LEFT;command<=JA_UTURN;++command) {
+        fixture_t f;init(&f,command);lt_t original;lt_init(&original,&LINE);
+        jl_t j;jl_init(&j,&original,131);j.action=f.action;j.sample=f.sample;
+        ls_t search;const ls_config_t cfg={.speed_mm_s=131,.turn_counts=312};ls_init(&search,&cfg);
+        vsm_t v;vsm_init(&v,VSM_DEFAULT_ROUTES,VSM_DEFAULT_ROUTE_COUNT);
+        assert(vsm_set_module(&v,VSM_MOD_LINE,jl_module(&j)));
+        assert(vsm_set_module(&v,VSM_MOD_SEARCH,ls_module(&search)));
+        assert(vsm_start(&v,VSM_MOD_LINE,0u,0u));
+        j.action.clear=true;j.action.candidate=true;j.action.have_sample=true;
+        const ja_command_t retained=j.action.command;
+        f.in.line_event=vc_event(VC_EVENT_LINE_LOST,VC_LINE_SIDE_LEFT);
+        (void)vsm_step(&v,&f.in,0u,10u);
+        assert(v.running==VSM_MOD_SEARCH && j.action.phase==JA_PENDING);
+        assert(!j.action.clear && !j.action.candidate && !j.action.have_sample);
+        /* Black observations while SEARCH drives can never claim a cross. */
+        f.in.line_event=VC_EVENT_NONE;line(&f,true);
+        for (unsigned int i=0u;i<30u;++i) {
+            f.in.counts[0]-=1;f.in.counts[1]+=1;
+            ja_pending_route(&j.action,VSM_MOD_SEARCH,f.in.counts,20u+i*10u);
+            const vsm_drive_t d=vsm_step(&v,&f.in,0u,20u+i*10u);
+            assert(d.left_mm_s==-131 && d.right_mm_s==131);
+            assert(j.action.phase==JA_PENDING && j.action.command.valid && !j.action.consumed);
+        }
+        f.in.line_event=vc_event(VC_EVENT_LINE_FOUND,0u);
+        (void)vsm_step(&v,&f.in,0u,400u);
+        assert(v.running==VSM_MOD_LINE && !j.action.clear && !j.action.result.claimed);
+        assert(!memcmp(&retained,&j.action.command,sizeof(retained)));
+        f.in.line_event=VC_EVENT_NONE;
+        for (unsigned int i=0u;i<20u;++i) {
+            f.in.counts[0]+=10;f.in.counts[1]+=10;j.sample.line_stamp=410u+i*10u;
+            (void)vsm_step(&v,&f.in,0u,j.sample.line_stamp);
+        }
+        assert(j.action.phase==JA_PENDING); /*returning onto black is not a fresh edge*/
+        line(&f,false);
+        for (unsigned int i=0u;i<12u;++i) {
+            f.in.counts[0]+=10;f.in.counts[1]+=10;j.sample.line_stamp=700u+i*10u;
+            (void)vsm_step(&v,&f.in,0u,j.sample.line_stamp);
+        }
+        assert(j.action.clear);line(&f,true);
+        for (unsigned int i=0u;i<10u;++i) {
+            f.in.counts[0]+=10;f.in.counts[1]+=10;j.sample.line_stamp=900u+i*10u;
+            (void)vsm_step(&v,&f.in,0u,j.sample.line_stamp);
+        }
+        assert(j.action.result.claimed && j.action.result.command==command && j.action.consumed==1u);
+    }
+    for (uint8_t module=VSM_MOD_NONE;module<8u;++module) {
+        if (module==VSM_MOD_LINE || module==VSM_MOD_SEARCH) continue;
+        fixture_t f;init(&f,JA_LEFT);const int32_t counts[2]={123,456};
+        ja_pending_route(&f.action,module,counts,100u);
+        assert(f.action.phase==JA_UNUSED && f.action.consumed==1u && !f.action.command.valid);
+        assert(f.action.result.final_counts[0]==123 && f.action.result.final_counts[1]==456);
+    }
+    fixture_t f;init(&f,JA_LEFT);ja_pending_route(&f.action,VSM_MOD_SEARCH,f.in.counts,10u);
+    ja_finish(&f.action,f.in.counts,20u); /*normal SEARCH failure/stop finalization*/
+    assert(f.action.phase==JA_UNUSED && f.action.result.reason==JA_CANCELLED);
 }
 static void fresh_gates(void) {
     fixture_t f;init(&f,JA_LEFT);begin(&f);
@@ -307,5 +366,5 @@ static void unchanged_line(void) {
 int main(void) {
     _Static_assert(sizeof(ja_command_t)==24u,"source unchanged");
     _Static_assert(sizeof(ja_result_t)==52u,"bounded result");
-    detector();commands(false);commands(true);failures();wrapper();cross_routes();fresh_gates();source();unchanged_line();return 0;
+    detector();commands(false);commands(true);failures();wrapper();cross_routes();pending_routes();fresh_gates();source();unchanged_line();return 0;
 }

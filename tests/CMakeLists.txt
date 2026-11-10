@@ -258,6 +258,10 @@ foreach(command A B C D)
     add_test(NAME test_vehicle_junction_${command}_estop
         COMMAND test_vehicle_junction_${command} junctionstop)
 endforeach()
+add_test(NAME test_vehicle_junction_pending_search_failure
+    COMMAND test_vehicle_junction_C junctionpendingfail)
+add_test(NAME test_vehicle_junction_pending_recovery
+    COMMAND test_vehicle_junction_C junctionpending)
 add_test(NAME test_vehicle_junction_C_recovery
     COMMAND test_vehicle_junction_C junctionrecover)
 add_test(NAME test_vehicle_junction_start_busy

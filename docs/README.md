@@ -22,7 +22,7 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
-- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — B2a fake START command, LINE-following/white-gated SEARCH corner job, draft B2b source contract and live phase/angle event7.
+- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — B2a fake START command, LINE/SEARCH corner job, pending retention across natural SEARCH, draft B2b contract and live phase/angle event7.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
 - [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 

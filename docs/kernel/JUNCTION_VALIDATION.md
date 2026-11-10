@@ -3,7 +3,7 @@
 ## Status
 
 The 2026-11-10 forced-corner redesign replaces `eb18004` blind travel and
-encoder-target turns. The worker did not push or flash. The new C-route fix has hardware status **Not run**. Historical operator
+encoder-target turns. The worker did not push or flash. The new pending-recovery policy has hardware status **Not run**. Historical operator
 evidence on `eb18004` and `7648081` is separated
 below; it is not a PASS for the new images. See the
 [design](../architecture/JUNCTION_ACTION.md) for ownership and thresholds.
@@ -44,17 +44,53 @@ The operator approved a C-only correction: permit the normal SEARCH route
 during C; keep the detector disarmed across handoffs; complete at160 mm in
 LINE or SEARCH. Remove C-local line-level/time failure gates so ordinary
 SEARCH failure/stop stays authoritative. A/B/D remain unchanged for J3–J5
-trials on `7648081`. New C hardware results are not supplied yet.
+trials on `7648081`. The later `75a95f7` results below supersede that earlier C status.
+
+### Operator acceptance — `7648081` J3–J5
+
+Main_Worker supplied these 2026-11-10 MQTT/USB observations. The worker did
+not inspect the logs. PASS below means operator acceptance, not invented
+measurements of final heading error.
+
+| Check | Supplied evidence | Operator status |
+| --- | --- | --- |
+| J3 A,3 attempts | Two claimed/DONE turns: first=accepted42.6/43.0 degrees; operator saw the left arm followed. Run2 later failed normal SEARCH at the arm/mat end. Run3 lost line before the cross and cancelled pending under the old policy. This is not three claimed powered turns. |PASS |
+| J4 B,3 attempts | DONE at first=accepted -50.6/-47.6/-48.4 degrees; operator saw the right arm followed. |PASS |
+| J5 D,3 attempts | Operator reported all3 worked. MQTT connected late, so no kind7 capture. Last USB result: phase7 OK, first46.27 degrees, accepted177.08 degrees, elapsed1580 ms. |PASS |
+
+The last D stack report supplied vehicle1648 B used /4096 B total (2448 B
+free) and idle272 B free. Both exceed256 B on that tested image. Other named
+stack values were not supplied here; this is not new-image whole-stack proof.
+Final physical heading errors were not supplied for A/B/D: these encoder
+angles are line-contact observations, not final90/180-degree heading errors.
+
+### Operator acceptance — `75a95f7` J2 C x3
+
+Boot3219594035, 2026-11-10, operator-supplied MQTT/USB and observations:
+
+- Run1: claim -> loss -> normal SEARCH without a junction failure. Operator
+  ESTOP during SEARCH; cancellation phase8/reason1, as designed.
+- Run2: claim -> SEARCH -> LINE -> DONE.
+- Run3: line loss just before the cross -> pending cancelled phase9 under
+  the old policy; the cross was traversed as NONE.
+- Operator accepts **J2 PASS**. This is not a claim that all3 attempts
+  reached DONE, nor acceptance of the newer pending-recovery policy.
+
+The operator then approved pending survival through successful natural
+LINE -> SEARCH -> LINE. Cancel on SEARCH failure/stop, SCAN, DETOUR, any
+other route or STOP. No travel/time expiry is added before the B2b contract.
+This specifically addresses the pre-cross cancellations in A run3/C run3.
+New-policy hardware checks remain Not run.
 
 ## Software evidence
 
-Checks below apply to the C-route fix based on `7648081`, with public example
+Checks below apply to the pending-recovery fix based on `75a95f7`, with public example
 settings in an isolated copy; Main must rebuild device-configured images.
 
 | Check | Result |
 | --- | --- |
-| Strict host C/Python suite |184/184 passed |
-| Clang ASan/UBSan/float-cast-overflow |184/184 passed |
+| Strict host C/Python suite |186/186 passed |
+| Clang ASan/UBSan/float-cast-overflow |186/186 passed |
 | Recorder / dashboard Python tests |70 /187 passed, included above |
 | Firmware | Nine warning-free profiles |
 | Strict ARM application compilation |675/675 (75 units x9 profiles) |
@@ -109,8 +145,13 @@ credential-bearing image or log.
 - Real vehicle glue executes A/B/C/D, checks source busy/ACK and angle marks.
   Four additional GP21 fixtures stop each command while active (C after claim,
   A/B/D during SEARCH), verify cancelled result and zero motion. Busy/stale
-  START board reads fail without waiting. Natural LINE loss cancels unconsumed
-  pending immediately without changing the original route.
+  START board reads fail without waiting. A new real-task fixture recovers
+  before the cross, verifies ACK remains unconsumed, then claims/completes C.
+  A second real-task fixture loses the line before the cross, exhausts normal
+  SEARCH and records an unclaimed cancellation without starting a new job.
+  Pure A/B/C/D fixtures retain pending through SEARCH, ignore black samples
+  while SEARCH drives, require fresh clear LINE after return, then claim.
+  SCAN/DETOUR/other-route and failure/STOP cancellation remain covered.
 - C-packed angle events round-trip signed centidegrees through Python; first/
   accepted dashboard labels, recorder CSV-column coverage, sign/window/tag
   rejection and legacy event-v1
@@ -128,13 +169,14 @@ Matching public-config single-core MQTT, GNU Arm14.3, SDK2.3.0:
 | `168d705` |403988 |904 |189768 |190672 |
 | Old B2a `eb18004` NONE |410244 |904 |190048 |190952 |
 | `7648081` NONE |408816 |904 |190052 |190956 |
-| C-route fix NONE |409012 |904 |190052 |190956 |
-| C-route fix A |409076 |904 |190052 |190956 |
-| C-route fix B |409072 |904 |190052 |190956 |
-| C-route fix C |409076 |904 |190052 |190956 |
-| C-route fix D |409072 |904 |190052 |190956 |
+| `75a95f7` NONE |409012 |904 |190052 |190956 |
+| Pending fix NONE |409080 |904 |190052 |190956 |
+| Pending fix A |409144 |904 |190052 |190956 |
+| Pending fix B |409140 |904 |190052 |190956 |
+| Pending fix C |409144 |904 |190052 |190956 |
+| Pending fix D |409140 |904 |190052 |190956 |
 
-C-route fix adds **zero RAM** versus `7648081`: **284 B** versus `168d705`,
+Pending fix adds **zero RAM** versus `75a95f7` / `7648081`: **284 B** versus `168d705`,
 **4 B** versus `eb18004`, within
 the approved320 B estimate. LINE adapter184 B; result52 B; source record24 B,
 board28 B; source sequence/ACK/busy12 B; observed phase/angle marks2 B plus
@@ -148,6 +190,7 @@ unchanged. No allocation or task is added.
 | Junction observer |— |144 |152 |
 | Pure action step |— |128 |136 |
 | C progress observer |— |— |24 |
+| Pending route guard |— |— |8 |
 | LINE wrapper step |— |40 |72 |
 | USB formatter |— |96 |104 |
 | IMU sample |1000 |1000 |1000 |
@@ -171,11 +214,11 @@ wall collision or hard wheel restraint as a stall test.
 | --- | --- | --- |
 | J0 | Verify pair spacing/height, normalized floor/line/bar contrast and pending-command barcode-only rejection. Capture33 mm/two-fresh exit evidence, white20 ms and >=500 return. Lifted A/B/D direction and ESTOP checks. No axle/pivot ruler target is required. |Not run |
 | J1 | NONE plain-line/`+` baseline with zero kind7 and zero losses on the new image. Old `eb18004` cross passed; repeat after redesign. |Not run |
-| J2 | Repeat C with angled approaches and brief loss: normal LINE -> SEARCH -> LINE, detector suppressed160 mm across handoffs, DONE in LINE or SEARCH. No private SEARCH or blind bridge. Verify the straight outgoing course is retained after recovery; DONE during SEARCH alone is not PASS. Record normal SEARCH failure/stop if recovery fails. `7648081` results above are not acceptance of this fix. |Not run |
-| J3 | A x3: white rejects forward stem; first LEFT arm found; normal LINE swings onto that arm. Measure final heading on the arm and record first/accepted SEARCH angles. |Not run |
-| J4 | B x3: same checks on RIGHT arm. |Not run |
-| J5 | D x3: first LEFT arm skipped; re-white; second incoming stem>=120 degrees accepted; LINE runs back. Record both angles and final heading. |Not run |
-| J6 | Missing branch/line, early-second line, safety window/timeouts, cancel/ESTOP, speed variation, barcode+cross. No automatic retry, pending cancellation on natural non-LINE handoff, named stacks>=256 B free and no timing/sample faults. |Not run |
+| J2 | C normal LINE -> SEARCH -> LINE with160 mm detector suppression across handoffs. Verify straight course after recovery; DONE during SEARCH is not physical PASS. Retest pre-claim recovery under the new pending policy. |Operator PASS on `75a95f7`; new pending policy Not run |
+| J3 | First LEFT arm followed; retain the supplied two DONE turns plus one pre-claim cancellation as distinct results. Final heading error was not supplied. Retest pre-claim retention. |Operator PASS on `7648081`; new pending policy Not run |
+| J4 | Three RIGHT-arm turns accepted; final heading errors not supplied. |Operator PASS on `7648081` |
+| J5 | Three operator-confirmed returns, last USB first/accepted angles and vehicle/idle stack values supplied; final heading error not supplied. |Operator PASS on `7648081` |
+| J6 | Complete remaining missing-line/window/expiry-free pending recovery, blocked-route cancellation, barcode and named-stack/timing checks. Pending survives normal SEARCH only; STOP/failure/other routes cancel it. |Partial: C SEARCH ESTOP on `75a95f7`, vehicle/idle margins on `7648081`; other gates Not run |
 
 Final heading tolerance remains **at most10 degrees** after LINE settles onto
 the intended arm. Report actual heading and whether LINE resumed on every

@@ -878,6 +878,7 @@ static vsm_outcome_t watched_step(void *ctx, const vsm_inputs_t *in,
                                   uint32_t now, vsm_drive_t *drive)
 {
     watched_t *w = ctx;
+    ja_pending_route(&junction_line.action, w->id, in->counts, now);
     const vsm_outcome_t out = w->module.step(w->module.ctx, in, now, drive);
     if (vsm_outcome_type(out) != VSM_OUT_RUNNING) {
         event(1u, w->id, 0u, out);

@@ -112,6 +112,9 @@ normal LINE/SEARCH routes, with only its detector suppressed for160 mm
 from the first edge across natural SEARCH handoffs. The fake command is latched once at normal vehicle
 START; TEST/BENCH have no such START. NONE leaves LINE decisions unchanged.
 The option is included in the object-profile marker and passed to C as0..4.
+Unconsumed pending survives successful natural SEARCH back to LINE, with a
+new clear detector baseline. Other routes, failure and STOP cancel it.
+No distance/time expiry is added before the B2b contract.
 
 ```sh
 cd build_make
@@ -127,8 +130,9 @@ a kind7 phase event and telemetry-owned `[JUNCTION]` USB line report the job.
 No barcode decoder or summary version is added. Use NONE for H3 IMU circuit
 comparisons. Read the [design](../architecture/JUNCTION_ACTION.md) and
 [validation/J0–J6 procedure](JUNCTION_VALIDATION.md) before an authorized test.
-NONE crossed `+` on `eb18004` (operator-supplied J1 PASS). Redesigned
-command accuracy and pending-command barcode rejection remain **Not run**.
+NONE crossed `+` on `eb18004` (operator-supplied J1 PASS). Operator J2–J5 acceptance on `7648081`/`75a95f7` is recorded with its
+capture/measurement limits. The new pending-recovery policy and
+pending-command barcode rejection remain **Not run**.
 
 ## Private settings
 

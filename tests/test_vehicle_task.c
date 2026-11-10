@@ -11,7 +11,8 @@
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/subsystem4/imu_service.h"
 #include "../app_program/vehicle/junction_source.h"
-static bool junction_mode,junction_started,junction_stop,junction_recover;static int32_t junction_origin;
+static bool junction_mode,junction_started,junction_stop,junction_recover;
+static bool junction_pending,pending_recovered,junction_pending_fail;static int32_t junction_origin;
 static unsigned int junction_results,spins;static ja_result_t junction_result;
 static bool spin_started;static int32_t spin_origin[2];
 static unsigned int junction_start_fail,snapshot_reads;
@@ -40,7 +41,8 @@ ER tk_slp_tsk(TMO t) {
             const int32_t mean=(counts[0]+counts[1])/2;
             if (!junction_started) {junction_started=true;junction_origin=mean;}
             const int32_t travel=mean-junction_origin;
-            raw[0]=raw[1]=travel>=300 && travel<524 ? 3500u : 1700u;
+            const int32_t edge=junction_pending ? 1600 : 300;
+            raw[0]=raw[1]=travel>=edge && travel<edge+224 ? 3500u : 1700u;
             if (spin_started && junction_results==0u && JUNCTION_TEST_CMD!=JA_STRAIGHT) {
                 const int32_t angle=((counts[1]-spin_origin[1])-(counts[0]-spin_origin[0]))*10000/2405;
                 const int32_t target=JUNCTION_TEST_CMD==JA_UTURN ? 18000 :
@@ -56,6 +58,11 @@ ER tk_slp_tsk(TMO t) {
             }
             if (junction_recover && travel>=900 && junction_results==0u) {
                 raw[0]=raw[1]=spins>=3u ? 2600u : 500u;
+            }
+            if (junction_pending && !pending_recovered && travel>=200) {
+                assert(junction_source_acknowledged()==0u);
+                if (!junction_pending_fail && spins>=3u && vehicle_line_run_epoch()!=0u) pending_recovered=true;
+                else raw[0]=raw[1]=!junction_pending_fail && spins>=3u ? 2600u : 500u;
             }
         }
         if (calibrating) lp_calib_add(&line,raw);
@@ -166,7 +173,7 @@ bool drv_motor_hw_button_down(unsigned int pin) {
     const bool active_stop=junction_stop &&
         (JUNCTION_TEST_CMD==JA_STRAIGHT ? junction_source_acknowledged()!=0u : spins>=4u);
     return pin==21u && ((now>=20u && now<50u) || active_stop ||
-        (!junction_stop && !sonar_stale && now>=(junction_mode ? 12000u : 5000u) && now<(junction_mode ? 12050u : 5050u)));
+        (!junction_stop && !junction_pending_fail && !sonar_stale && now>=(junction_mode ? 12000u : 5000u) && now<(junction_mode ? 12050u : 5050u)));
 }
 int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
@@ -198,7 +205,9 @@ int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_
 int main(int argc,char **argv) {
     junction_stop=argc>1 && !strcmp(argv[1],"junctionstop");
     junction_recover=argc>1 && !strcmp(argv[1],"junctionrecover");
-    junction_mode=junction_stop || junction_recover || (argc>1 && !strcmp(argv[1],"junction"));
+    junction_pending_fail=argc>1 && !strcmp(argv[1],"junctionpendingfail");
+    junction_pending=junction_pending_fail || (argc>1 && !strcmp(argv[1],"junctionpending"));
+    junction_mode=junction_stop || junction_recover || junction_pending || (argc>1 && !strcmp(argv[1],"junction"));
     junction_start_fail=argc>1 && !strcmp(argv[1],"junctionbusy") ? 1u :
         (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
@@ -239,6 +248,11 @@ int main(int argc,char **argv) {
     if (junction_mode) {
         assert(junction_started && junction_results==1u);
         assert(junction_result.command==JUNCTION_TEST_CMD && junction_result.source==1u);
+        if (junction_pending_fail) {
+            assert(junction_result.phase==JA_UNUSED && !junction_result.claimed && junction_result.reason==JA_CANCELLED);
+            assert(spins>0u && !pending_recovered && junction_source_acknowledged()==junction_result.sequence);
+            return 0;
+        }
         assert(junction_result.phase==(junction_stop ? JA_FAILED : JA_DONE) && junction_result.claimed==1u);
         if (junction_stop) assert(junction_result.reason==JA_CANCELLED);
         else if (JUNCTION_TEST_CMD!=JA_STRAIGHT) {
@@ -248,7 +262,8 @@ int main(int argc,char **argv) {
             else assert(first==accepted && (JUNCTION_TEST_CMD==JA_RIGHT ? accepted<0 : accepted>0));
         }
         assert(junction_source_acknowledged()==junction_result.sequence);
-        assert(JUNCTION_TEST_CMD==JA_STRAIGHT && !junction_recover ? spins==0u : spins>0u);
+        assert(JUNCTION_TEST_CMD==JA_STRAIGHT && !junction_recover && !junction_pending ? spins==0u : spins>0u);
+        if (junction_pending) assert(pending_recovered);
     } else assert(junction_results==0u);
     if (overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
