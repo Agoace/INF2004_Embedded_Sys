@@ -12,6 +12,7 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core metrics */
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
 #include "robot_network.h"
@@ -60,6 +61,12 @@ static uint32_t heartbeat_at;
 static uint32_t state_sequence;
 static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
+
+/* Phase 4: the MQTT task runs on core 1 while Health reads these counters from
+ * core 0, so a core-local interrupt mask protects neither.  These are touched
+ * only from task context, so plain SpinLock is the right variant under the lock
+ * rule.  A zero-filled static already holds the unlocked state. */
+static T_SPLOCK metrics_lock;
 static rm_heartbeat_t health_cache = {.stack_min_free = RM_NO_DATA_U16,
                                       .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
 static bool health_present;
@@ -86,10 +93,9 @@ static uint8_t will_payload[RM_STATUS_SIZE];
  */
 static void inc(uint32_t *value)
 {
-    UINT irq;
-    DI(irq);
+    (void)SpinLock(&metrics_lock);
     ++*value;
-    EI(irq);
+    (void)SpinUnlock(&metrics_lock);
 }
 
 /*
@@ -252,27 +258,40 @@ int __attribute__((weak)) robot_network_summary(uint32_t *cursor,
  */
 void robot_network_metrics(rm_heartbeat_t *out)
 {
-    UINT irq;
-    DI(irq);
-    out->connect_attempts = metrics.connect_attempts;
-    out->sonar_history_missed = metrics.sonar_history_missed;
-    out->mqtt_hook_max_us = metrics.mqtt_hook_max_us;
-    out->publish_ok = metrics.publish_ok;
-    out->publish_failed = metrics.publish_failed;
-    out->latest_sonar_history_sequence = metrics.latest_sonar_history_sequence;
-    out->mqtt_state = metrics.mqtt_state;
-    out->wifi_observed_priority = metrics.wifi_observed_priority;
-    const bool connected = metrics.mqtt_state >= 2u;
+    /* Snapshot under the lock, then RELEASE it before any call that takes its own
+     * lock - log_stream_dump_active(), cyw43_utk_get_status() and
+     * cyw43_utk_timing_read() below.  Holding one lock while acquiring another
+     * invites an ordering problem, and the previous code masked interrupts across
+     * all of those calls. */
+    rm_heartbeat_t snapshot;
+    bool connected;
+    bool subscribed_now;
+    bool commands_now;
+    (void)SpinLock(&metrics_lock);
+    snapshot = metrics;
+    connected = metrics.mqtt_state >= 2u;
+    subscribed_now = subscribed;
+    commands_now = commands_enabled;
+    (void)SpinUnlock(&metrics_lock);
+
+    out->connect_attempts = snapshot.connect_attempts;
+    out->sonar_history_missed = snapshot.sonar_history_missed;
+    out->mqtt_hook_max_us = snapshot.mqtt_hook_max_us;
+    out->publish_ok = snapshot.publish_ok;
+    out->publish_failed = snapshot.publish_failed;
+    out->latest_sonar_history_sequence = snapshot.latest_sonar_history_sequence;
+    out->mqtt_state = snapshot.mqtt_state;
+    out->wifi_observed_priority = snapshot.wifi_observed_priority;
     if (connected) {
         out->flags |= 2u;
     }
-    if (subscribed) {
+    if (subscribed_now) {
         out->flags |= 4u;
     }
     if (log_stream_dump_active()) {
         out->flags |= 8u;
     }
-    if (commands_enabled) {
+    if (commands_now) {
         out->flags |= 16u;
     }
     T_CYW43_UTK_STATUS status;
@@ -281,7 +300,6 @@ void robot_network_metrics(rm_heartbeat_t *out)
     if (status.link_status == 3) {
         out->flags |= 1u;
     }
-    EI(irq);
     T_CYW43_TIMING timing;
     (void)cyw43_utk_timing_read(&timing);
     out->wifi_poll_gap_max_us = timing.gap_max_us;

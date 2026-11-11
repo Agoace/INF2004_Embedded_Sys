@@ -57,9 +57,9 @@ by a handler and a task on the same core once a task moves).
 | `platform/app_task.c:209,214` | stack high-water marks | caller of `app_task_stacks()` (Health, core 0) | **convert** when a core-1 task's stack is measured (Phase 2) |
 | `platform/drv_gpio_irq.c:47-54` | GPIO IRQ client table | init, core 0 | keep - boot-time, one core |
 | `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, core 0 | keep - core 0 by definition; add a separate core-1 meter |
-| `subsystem1/log_stream.c:468,538` | DUMP request state (`s_dump`), not RAM-log row copies | reached only from `robot_mqtt.c:300`, the Wi-Fi task, core 0 in this phase | keep, and treat as a **Phase 4 boundary**. The DUMP request is a separate boundary from the RAM-log row contract, which Phase 3 closed |
-| `subsystem1/network_queue.c:34,170,192` | network queue counters | Wi-Fi task and producers | **replace** in Phase 4, or keep if the task moves wholesale |
-| `subsystem1/robot_mqtt.c:90,256` | MQTT metrics | Wi-Fi task, but `robot_health.c:62` calls `robot_network_metrics()` on core 0, which copies them and calls `log_stream_dump_active()` | **Phase 4 cross-core repair** - when Wi-Fi moves to core 1, a local `DI()`/`EI()` cannot protect that read |
+| `subsystem1/log_stream.c:468,538` | DUMP request state (`s_dump`) | requested from Vehicle on core 0 (`vehicle_task.c:404`), consumed by the Wi-Fi task on core 1 | **converted in Phase 4**: `dump_lock` guards the request and its consumption. The RAM-log row contract was closed in Phase 3 |
+| `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4**: `queue_lock` guards `lost()`, the board-result recorder and `robot_queue_metrics()` |
+| `subsystem1/robot_mqtt.c` | MQTT metrics and counters | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4**: `metrics_lock` guards `inc()` and the `robot_network_metrics()` snapshot, which releases the lock before calling `log_stream_dump_active()`, `cyw43_utk_get_status()` or `cyw43_utk_timing_read()`, so no lock is nested inside another |
 | `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3** - rows/events/reset use `log_write_seq`, the multi-writer `lost`/`busy` use `stats_lock`; no `DI()`/`EI()` remains in the file |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
 | `subsystem3/drv_line.c:59-66` | line ring buffer | 1 ms ADC IRQ and line task, both core 0 | keep - core 0 by placement |
@@ -183,6 +183,39 @@ progress, not the RAM rows, and the only caller of `log_stream_dump_request()` i
 `robot_mqtt.c:300` - the Wi-Fi task, still on core 0. They are **kept** rather than
 converted, and become Phase 4's problem when the Wi-Fi task moves.
 
+## Phase 4: Wi-Fi/MQTT on core 1
+
+### The audit retired the risk I raised
+
+RT-0043 worried about CYW43 async-context core ownership. It does not apply to this
+port: there is no `async_context` or `cyw43_arch` use in `lib/libwifi`, and
+`cyw43_utk_compat.c:196-205` supplies `irq_add_shared_handler`,
+`irq_remove_handler` and `irq_set_enabled` as weak stubs, so the SDK IRQ path is
+overridden rather than used. The radio is served by one polling task, and PIO and
+DMA are core-independent hardware on RP2040. Nothing in the driver requires core 0;
+what it requires is one permanent owner.
+
+### What actually had to change
+
+- `cyw43_utk_kernel.c`: `timing_lock` replaces every `DI()`/`EI()` over the timing
+  and window state - `poll_begin`, `poll_end`, `timing_read`, `window_begin`,
+  `window_end` and `start_status`. The begin/end window is a shared state machine,
+  not a snapshot, so a lock is the right primitive and a seqlock would be wrong.
+- `cyw43_utk_start()` now requests core 1 (`TP_PRC1 + 1u`) under SMP. It creates the
+  task with `tk_cre_tsk` directly, so the Phase 1 slot table does not reach it; the
+  placement decision and its reasoning sit at that call.
+- `robot_mqtt.c`: `metrics_lock` guards `inc()` and the `robot_network_metrics()`
+  snapshot, released before `log_stream_dump_active()`, `cyw43_utk_get_status()` and
+  `cyw43_utk_timing_read()`. The previous code masked interrupts across all three,
+  which would have nested a lock inside a mask.
+- `network_queue.c`: `queue_lock` guards `lost()`, the board-result recorder and
+  `robot_queue_metrics()`.
+- `log_stream.c`: `dump_lock` guards the DUMP request and its consumption, because
+  Vehicle requests from core 0 and the Wi-Fi task consumes on core 1.
+
+Every lock added here is a plain `SpinLock`, which is the correct variant under the
+lock rule because all of these callers are task context.
+
 ## Open validation items
 
 None of these is closed, and none may be reported as a PASS without device
@@ -214,3 +247,9 @@ evidence.
    bounded `E_TMOUT` path ever being taken, or `stats_lock` contention staying
    short. The rejected-torn-read claim is an argument from the code, not an
    observed result.
+8. Phase 4 has not run on a device. Nothing shows the radio task actually executing
+   on core 1, MQTT traffic surviving the move, the poll-path spinlock staying cheap
+   under load, or `radio_status.owner_prc` reporting core 1 as it should.
+9. The Wi-Fi task sits outside the registry: `cyw43_utk_start()` builds it with
+   `tk_cre_tsk`, so it has no slot and no stack high-water measurement. Its 6-8 KB
+   stack is therefore untested against the 256-byte free minimum.

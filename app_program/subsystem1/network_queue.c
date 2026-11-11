@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core queue counters */
 #include "robot_network.h"
 
 /* Message buffer sizing: depth in messages; the kernel adds a header. */
@@ -27,13 +28,18 @@ static uint32_t busy[ROBOT_BOARD_COUNT];
 static uint32_t unavailable;
 static uint8_t unavailable_mask;
 
+/* Phase 4: the Wi-Fi task on core 1 updates these counters while Health and the
+ * board readers copy them on core 0, so a core-local mask protects neither.
+ * Task context only, so plain SpinLock is the right variant under the lock rule.
+ * A zero-filled static already holds the unlocked state. */
+static T_SPLOCK queue_lock;
+
 /* Increment a loss counter. Interrupts are masked for the update. */
 static void lost(uint32_t *counter)
 {
-    UINT irq;
-    DI(irq);
+    (void)SpinLock(&queue_lock);
     ++*counter;
-    EI(irq);
+    (void)SpinUnlock(&queue_lock);
 }
 
 /*
@@ -160,14 +166,12 @@ void robot_network_busy(unsigned int board)
 /* Classify a main-board read: absence is not writer contention. */
 void robot_network_board_result(unsigned int board, int result)
 {
-    UINT irq;
-
     if (board >= (unsigned int)ROBOT_BOARD_COUNT) {
         return;
     }
     const uint8_t mask = (uint8_t)(1u << board);
 
-    DI(irq);
+    (void)SpinLock(&queue_lock);
     if (result >= E_OK) {
         unavailable_mask = (uint8_t)(unavailable_mask & (uint8_t)~mask);
     } else if (result == E_OBJ || result == E_NOEXS) {
@@ -176,7 +180,7 @@ void robot_network_board_result(unsigned int board, int result)
     } else if (result == E_TMOUT) {
         ++busy[board];
     }
-    EI(irq);
+    (void)SpinUnlock(&queue_lock);
 }
 
 /* Count a command dropped before it reached the queue. */
@@ -188,8 +192,7 @@ void robot_command_lost(void)
 /* Copy the queue loss and busy counters into a heartbeat. */
 void robot_queue_metrics(rm_heartbeat_t *out)
 {
-    UINT irq;
-    DI(irq);
+    (void)SpinLock(&queue_lock);
     out->event_lost = event_lost;
     out->command_lost = command_lost;
     out->line_busy = busy[0];
@@ -199,7 +202,7 @@ void robot_queue_metrics(rm_heartbeat_t *out)
     out->health_busy = busy[4];
     out->board_unavailable = unavailable;
     out->board_unavailable_mask = unavailable_mask;
-    EI(irq);
+    (void)SpinUnlock(&queue_lock);
 }
 
 /* Default metrics provider. The MQTT module overrides it. */

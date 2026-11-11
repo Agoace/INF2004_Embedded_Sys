@@ -95,6 +95,15 @@ typedef struct {
 } dump_t;
 
 static live_t s_live;
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core DUMP request state */
+
+/* Phase 4: `log_stream_dump_request()` is called from Vehicle on core 0
+ * (vehicle_task.c:404) while this module's stepping runs in the Wi-Fi task on
+ * core 1, so a core-local mask protects neither.  Task context only, so plain
+ * SpinLock is the right variant under the lock rule.  A zero-filled static
+ * already holds the unlocked state. */
+static T_SPLOCK dump_lock;
+
 static dump_t s_dump;
 static log_stream_stats_t s_stats;
 static uint8_t s_records[RM_LOG_BATCH_MAX_COUNT * RM_LOG_RECORD_SIZE];
@@ -465,13 +474,13 @@ static void dump_service(log_stream_publish_fn publish)
     UINT irq;
 
     if (s_dump.stage == DUMP_IDLE) {
-        DI(irq);
+        (void)SpinLock(&dump_lock);
         if (s_dump.requested) {
             s_dump.requested = false;
             s_dump.id = s_dump.request_id;
             s_dump.stage = DUMP_OPEN;
         }
-        EI(irq);
+        (void)SpinUnlock(&dump_lock);
     }
     if ((s_dump.stage == DUMP_OPEN) && !dump_open()) {
         return;
@@ -533,15 +542,14 @@ void log_stream_link_down(void)
 int log_stream_dump_request(uint32_t request_id)
 {
     int result = E_OBJ;
-    UINT irq;
 
-    DI(irq);
+    (void)SpinLock(&dump_lock);
     if (!s_dump.requested && (s_dump.stage == DUMP_IDLE)) {
         s_dump.request_id = request_id;
         s_dump.requested = true;
         result = E_OK;
     }
-    EI(irq);
+    (void)SpinUnlock(&dump_lock);
     return result;
 }
 

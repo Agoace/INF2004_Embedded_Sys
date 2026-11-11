@@ -29,7 +29,9 @@ void cyw43_utk_task(int32_t stacd, void *exinf);
 void cyw43_utk_app_poll(void);
 
 /* Wall time, including interruption/preemption. Not CPU load. gap threshold
- * is strictly >10000 us. All copies/updates use short core-0 critical sections. */
+ * is strictly >10000 us. All copies and updates take one cross-core spinlock,
+ * because the poll path and the readers can run on different cores after the
+ * placement move; a core-local interrupt mask protects neither. */
 typedef struct {
     uint32_t polls;
     uint32_t gaps;
