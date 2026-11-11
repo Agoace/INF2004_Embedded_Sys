@@ -54,13 +54,13 @@ by a handler and a task on the same core once a task moves).
 
 | Site | Protects | Touched today by | Verdict |
 | --- | --- | --- | --- |
-| `platform/app_task.c:209,214` | stack high-water marks | caller of `app_task_stacks()` (Health, core 0) | **convert** when a core-1 task's stack is measured (Phase 2) |
+| `platform/app_task.c:209,214` | stack high-water marks | caller of `app_task_stacks()` (Health, core 0; Telemetry on core 1) | **converted in Phase 2**: `stacks_lock` with `ISpinTryLock` and a bounded fallback. A core-1 task's stack really is measured now, so the mark is a sampled read and the record says so |
 | `platform/drv_gpio_irq.c:47-54` | GPIO IRQ client table | init, core 0 | keep - boot-time, one core |
-| `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, core 0 | keep - core 0 by definition; add a separate core-1 meter |
-| `subsystem1/log_stream.c:468,538` | DUMP request state (`s_dump`) | requested from Vehicle on core 0 (`vehicle_task.c:404`), consumed by the Wi-Fi task on core 1 | **converted in Phase 4**: `dump_lock` guards the request and its consumption. The RAM-log row contract was closed in Phase 3 |
-| `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4**: `queue_lock` guards `lost()`, the board-result recorder and `robot_queue_metrics()` |
-| `subsystem1/robot_mqtt.c` | MQTT metrics and counters | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4**: `metrics_lock` guards `inc()` and the `robot_network_metrics()` snapshot, which releases the lock before calling `log_stream_dump_active()`, `cyw43_utk_get_status()` or `cyw43_utk_timing_read()`, so no lock is nested inside another |
-| `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3** - rows/events/reset use `log_write_seq`, the multi-writer `lost`/`busy` use `stats_lock`; no `DI()`/`EI()` remains in the file |
+| `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, both core 0 | keep for core 0; Phase 5 **added** the separate core-1 meter and moved sampling to a single Health-owned publication (RT-0069/C2) |
+| `subsystem1/log_stream.c:571,587` | DUMP admission state (`s_admit`: request id, IDLE/PENDING/ACTIVE) | requested from Vehicle on core 0 (`vehicle_task.c:404`), consumed by the Wi-Fi task on core 1 | **converted in Phase 4, repaired in RT-0069**: `log_stream_dump_request()` takes one `ISpinTryLock` and returns `E_TMOUT` rather than waiting; `dump_active()` and the two Wi-Fi holders use `ISpinLock`. The transfer stage, cursors and acknowledgements stay Wi-Fi-owned and are never read from core 0 |
+| `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0; Vehicle counts a loss on the ESTOP route | **converted in Phase 4, repaired in RT-0069**: every holder of `queue_lock` uses `ISpinLock`, so the ESTOP route cannot wait on a preempted Health |
+| `subsystem1/robot_mqtt.c` | MQTT metrics and counters | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4, repaired in RT-0069**: every writer goes through a locked setter and the `robot_network_metrics()` snapshot releases the lock before calling `log_stream_dump_active()`, `cyw43_utk_get_status()` or `cyw43_utk_timing_read()`, so no lock is nested inside another |
+| `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3, repaired in RT-0056/RT-0063**: ONE mechanism, `stats_lock`, covers the stats group, the payload copies and index publication; readers take one immediate `ISpinTryLock` and return `E_TMOUT`, holders use `ISpinLock`; no `DI()`/`EI()` and no write sequence remain in the file |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
 | `subsystem3/drv_line.c:59-66` | line ring buffer | 1 ms ADC IRQ and line task, both core 0 | keep - core 0 by placement |
 | `subsystem5/drv_ultrasonic.c:44` | listener id | echo IRQ and sonar task, both core 0 | keep - core 0 by placement |
@@ -140,27 +140,43 @@ rather than exact, and later stack acceptance reports must keep that limit.
 
 ## Phase 3: Telemetry on core 1
 
-Two contracts, deliberately different, because the fields have different writer
-counts.
+One contract, because review showed two mechanisms could not both be authoritative.
 
-### The log payload: a write sequence
+### The log: one lock, and why not a write sequence
 
-`log_write_seq` is a second word, not a reuse of `log_generation`.
-`log_generation` stays the capture-run identity that MQTT live and DUMP compare
-against. The sequence marks a row, event or reset mutation in progress - odd
-during, even after - with `__atomic_*` and `__ATOMIC_SEQ_CST`, and it sits outside
-the `TM_MQTT` guard because the writer and its readers exist in every profile
-while the run identity is MQTT-side.
+An earlier revision used `log_write_seq`, an odd/even sequence beside
+`log_generation`, with readers retrying up to three times. It was removed in
+RT-0056 and the removal is final. A sequence can reject a copy that changed
+underneath it, but it cannot make a byte-wise copy of `rows[]` or a struct copy of
+`events[]` atomic, and it left `publish_index()` outside the mutation interval. A
+second mechanism that no longer carries the contract would only invite doubt about
+which one does.
 
-Readers now verify stability **after** the copy rather than before it. Each of
-`telemetry_log_row()` and `telemetry_log_event()` samples the sequence, rejects an
-odd value, copies into a local scratch object, re-reads the sequence and rejects a
-change, then re-opens the index and requires the same run identity. Only then is
-scratch committed to the caller's buffer. Otherwise the read fails with `E_TMOUT`
-after three attempts: a bounded failure, never a row that may not be stable. That
-covers overwrite during a new run, and event reads as well as row reads.
+`stats_lock` is now the single mechanism. It covers the stats group, the row and
+event copies, and the index publication, so a reader never sees a payload that has
+moved while the index still points at the old place.
 
-### The stats counters: a lock, and why not the sequence
+Two variants, chosen by role:
+
+- **Readers** - `telemetry_log_row()` and `telemetry_log_event()`, called by the
+  Wi-Fi task on the same core as the Telemetry writer - take ONE immediate
+  `ISpinTryLock` and return `E_TMOUT` when it is busy. No retry loop is allowed
+  inside that call, because Telemetry cannot resume on that core until the Wi-Fi
+  task yields (RT-0063).
+- **Writers and the core-0 submitter** use `ISpinLock`/`ISpinUnlock`, which calls
+  `disint` before acquisition, so the holder cannot be preempted for its section.
+  Sections stay short and hold no `tk_*` wait, printf or network call.
+
+`log_generation` remains the capture-run identity that MQTT live and DUMP compare
+against. It is a value, not a synchronisation device.
+
+### The stats counters and the producer admission
+
+`telemetry_stats()` and `telemetry_send()` are decision reads on core 0 and must
+not wait on the payload lock, so both take one immediate try. `telemetry_send()`
+sends the message even when the try fails: a payload collision must not cancel a
+run or lose a message, and only a real message-buffer failure reports an error.
+`loss_base` is best-effort under contention and is diagnostic only (RT-0069/D1).
 
 `stats.lost` is incremented by submitters on core 0 and by the task on core 1, and
 `stats.busy` is set by a submitter and cleared by the dump task. A sequence cannot
@@ -184,6 +200,13 @@ progress, not the RAM rows, and the only caller of `log_stream_dump_request()` i
 converted, and become Phase 4's problem when the Wi-Fi task moves.
 
 ## Phase 4: Wi-Fi/MQTT on core 1
+
+**Ownership, recorded so it is not re-derived.** One task owns the radio: the
+CYW43439 PIO/DMA and pin state, the poll loop, and the DUMP transfer stage (stage,
+frame cursors, acknowledgements) - the Wi-Fi task, on core 1. Vehicle owns the DUMP
+*request* and nothing else of it: admission only, one word of state. Health owns the
+reads of radio status, timing, queue counters and MQTT metrics, and never reads the
+transfer stage. USB service and its interrupt stay on core 0.
 
 ### The audit retired the risk I raised
 
@@ -228,13 +251,21 @@ changes the wire format.
   `idle_meter_load_permille_core1()` add the core-1 pair and exist only under
   `TK_SUPPORT_SMP`. The guard matters: in a single-core build the second counting
   task would land on core 0 and corrupt the very figure it is meant to complement.
-- **Shared calibration.** The RP2040's two cores run the same clock, so the
-  existing calibration supplies the peak rate for both. A per-core clock
-  difference would appear as a constant load offset, which is one reason these
-  figures are diagnostics rather than control inputs.
-- **Reading it.** `idle_meter_load_permille_core1()` is a lock-free read of one
-  aligned 32-bit counter plus arithmetic, so it is a bounded snapshot a caller can
-  take without waiting and without a lock.
+- **Shared calibration, stated exactly.** `idle_meter_calibrate()` runs ONCE, from
+  `app_main.c:64` during usermain, as a single 4 ms window with interrupts disabled.
+  There is no second calibration anywhere in the tree. The RP2040's two cores run
+  the same clock, so that one measurement supplies the peak rate for both meters. A
+  per-core clock difference would appear as a constant load offset, which is one
+  reason these figures are diagnostics rather than control inputs.
+- **Reading it.** The getters are pure reads of a published snapshot written once
+  per Health sample (RT-0069/C2). `idle_meter_sample_all()` advances both meters and
+  is called only by Health at 1 Hz; `idle_meter_load_permille()` and
+  `idle_meter_load_permille_core1()` return the published word and advance nothing,
+  so a diagnostic on either core cannot race the sampling state or reset the Health
+  interval. Each value is an aligned 16-bit word, so no figure can tear, though the
+  pair may come from different samples when read mid-update. A fully busy core reads
+  1000 permille; 65535 means no calibration, the first sample, or an interval too
+  short to interpret.
 - **Stack margin per core.** `app_stack_t` gained a `core` field, filled from the
   placement table, and `app_task_report()` prints it, so a core-1 task's margin is
   reported beside its name instead of inferred. The core-1 meter has its own
@@ -271,10 +302,10 @@ evidence.
    second writer is introduced, but it needs an explicit cross-core audit rather
    than an assumption.
 7. Phase 3 has not run on a device. Nothing shows a core-1 Telemetry task
-   receiving messages, rows and events passing the sequence check under load, the
-   bounded `E_TMOUT` path ever being taken, or `stats_lock` contention staying
-   short. The rejected-torn-read claim is an argument from the code, not an
-   observed result.
+   receiving messages, rows and events surviving the lock contract under load, the
+   bounded `E_TMOUT` reader path ever being taken, or `stats_lock` contention
+   staying short. The coherence claim is an argument from the code, not an observed
+   result.
 8. Phase 4 has not run on a device. Nothing shows the radio task actually executing
    on core 1, MQTT traffic surviving the move, the poll-path spinlock staying cheap
    under load, or `radio_status.owner_prc` reporting core 1 as it should.
@@ -283,5 +314,164 @@ evidence.
    stack is therefore untested against the 256-byte free minimum.
 10. Phase 5 has not run on a device. No figure exists for core-1 load, no
    core-0 against core-1 comparison has been made, and no core-1 task's stack
-   margin has actually been read from the per-core report. The shared-calibration
-   assumption is also unverified against the two cores' real behaviour.
+   margin has actually been read from the per-core report. Unverified with it: that
+   a fully busy core reports 1000 permille rather than 65535, that the published
+   idle count advances between Health samples, and that a 100 ms count pass leaves
+   the meter accurate.
+
+## Lock audit by lock (RT-0069)
+
+### Inventory — verified
+
+`grep -rn "static T_SPLOCK" app_program lib/libwifi --include=*.c` finds nine locks.
+Holder counts are acquisition sites per lock.
+
+| Lock | Declaration | Acquisitions | Reached from |
+| --- | --- | --- | --- |
+| `stats_lock` | `subsystem1/telemetry.c:35` | 11 | RAM-log writer, readers, `telemetry_send` |
+| `dump_lock` | `subsystem1/log_stream.c:102` | 4 | DUMP request, active read, Wi-Fi step |
+| `queue_lock` | `subsystem1/network_queue.c:35` | 3 | queue metrics, board results |
+| `timing_lock` | `libwifi/.../cyw43_utk_kernel.c:22` | 9 | CYW43 poll, timing window, start status |
+| `metrics_lock` | `subsystem1/robot_mqtt.c:69` | 11 | MQTT writers, Health snapshot |
+| `status_lock` | `libwifi/.../cyw43_utk.c:82` | 2 | radio snapshot publish and copy |
+| `stacks_lock` | `platform/app_task.c:208` | 1 | stack scan (Health, Telemetry) |
+| `claim_lock` | `libwifi/.../cyw43_utk_compat.c:37` | — | Wi-Fi task only, not yet audited |
+| `stress_lock` | `platform/app_lock_stress.c:42` | — | test only |
+
+### Task, core and priority map used by the audit
+
+| Core 0 | Priority | Core 1 | Priority |
+| --- | --- | --- | --- |
+| Motion | 10 | IMU | 14 |
+| Line | 11 | Wi-Fi | 20 |
+| Sonar | 12 | Telemetry | 30 |
+| Vehicle | 13 | idle_meter_1 | 32 |
+| USB | 21 | | |
+| Health | 31 | | |
+| idle_meter | 32 | | |
+
+Lower number is more urgent. A task on the left can preempt another task on the left with a higher number. Cross-core pairs cannot preempt each other; they only contend.
+
+### Unsafe pairs — reasoned from the map, not yet verified per site
+
+A plain `SpinLock` is unsafe when two holders sit on the SAME core and the more urgent one can preempt the other. From the map:
+
+- `dump_lock`: Vehicle 13 and Health 31, both core 0. **Unsafe.**
+- `queue_lock`: Vehicle 13 (via `robot_command_lost`) and Health 31, both core 0. **Unsafe.**
+- `timing_lock`: Vehicle 13 and Health 31, both core 0. **Unsafe.**
+- `stats_lock`: already interrupt-preserving on every holder after `26d306d`.
+- `metrics_lock`: Wi-Fi 20 on core 1 writes; Health 31 on core 0 reads. Different cores, so contention is bounded by section length. Not a same-core pair.
+- `status_lock`: Wi-Fi 20 on core 1; readers on core 0. Different cores.
+- `stacks_lock`: Health 31 on core 0 and Telemetry 30 on core 1. Different cores.
+
+### Per-holder rows — verified
+
+Variant abbreviations: `ISL` = `ISpinLock`/`ISpinUnlock` (masks interrupts, holder not
+preemptible), `IST` = `ISpinTryLock` (fails fast), `SL` = plain `SpinLock`.
+"Unsafe" means two holders share a core and the more urgent one can preempt the
+other, so a plain spin can deadlock. Measured maximum wait is blank everywhere: no
+device evidence exists.
+
+#### `stats_lock` — `subsystem1/telemetry.c:35`
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `telemetry_log_row` | 105 | IST | core 1, 20 (Wi-Fi, via `log_stream`) | index read + one row copy | 1 struct + 1 row (64 B) |
+| `telemetry_log_event` | 140 | IST | core 1, 20 (Wi-Fi) | index read + one event copy | 1 struct + 1 event |
+| `telemetry_stats` | 198 | ISL | core 0, 31 (Health); core 1, 30 (`dump`) | stats snapshot | 1 struct copy |
+| `lose` | 220 | ISL | core 0, 13 (`telemetry_send`) | loss increment | 1 counter |
+| `dump` | 291 | ISL | core 1, 30 (Telemetry) | clear busy | 1 flag |
+| `telemetry_task` cases | 314, 328, 347, 377 | ISL | core 1, 30 | one row/event write + `publish_index` | 1 row or 1 event + index |
+| `telemetry_send` | 442, 457 | ISL | core 0, 13 (Vehicle) | admission check, copy into ring | 1 struct copy |
+
+`lose` is only reached from outside a held region; callers inside a case use
+`lose_locked`. No section contains a `tk_*` wait, printf or network call.
+
+#### `dump_lock` — `subsystem1/log_stream.c:102` — **UNSAFE**
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `log_stream_dump_request` | 571 | SL | core 0, 13 (Vehicle) | admission accept | 2 words |
+| `log_stream_dump_active` | 587 | SL | core 0, 31 (Health) | admission read | 1 word |
+| `dump_service` | 498 | SL | core 1, 20 (Wi-Fi) | pending to active | 2 words |
+| `dump_apply` | 625 | SL | core 1, 20 (Wi-Fi) | return to IDLE | 1 word |
+
+#### `queue_lock` — `subsystem1/network_queue.c:35` — **UNSAFE**
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `lost` | 40 | SL | core 0 and core 1 callers | counter increment | 1 counter |
+| `robot_network_board_result` | 174 | SL | core 1, 20 (Wi-Fi) | board result | 1 struct |
+| `robot_command_lost` | 195 | SL | core 0, 13 (Vehicle, ESTOP path) | loss counter | 1 counter |
+
+`robot_command_lost` on the ESTOP path is the finding that matters: it can wait on
+Health at priority 31 holding this lock.
+
+#### `timing_lock` — `libwifi/.../cyw43_utk_kernel.c:22` — **UNSAFE**
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `cyw43_utk_poll_begin` | 58 | SL | core 1, 20 (Wi-Fi) | timing add | 1 struct |
+| `cyw43_utk_poll_end` | 70, 84 | SL | core 1, 20 (Wi-Fi) | timing add, window close | 2 structs |
+| `cyw43_utk_timing_read` | 101 | SL | core 0, 31 (Health) | copy out | 2 structs |
+| `cyw43_utk_timing_window_begin` | 110 | SL | core 0, 13 (Vehicle) | open window | 3 words |
+| `cyw43_utk_timing_window_end` | 131 | SL | core 0, 13 (Vehicle) | close window | 2 structs |
+| `cyw43_utk_start_status` | 145 | SL | core 0 readers, core 1 writer | status read | 1 word |
+| `cyw43_utk_start` | 198, 205 | SL | core 1, 20 (boot) | reset state | 3 words |
+
+#### `metrics_lock` — `subsystem1/robot_mqtt.c:69` — different cores, not a same-core pair
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `inc` | 96 | SL | core 1, 20 (Wi-Fi) | 1 counter | 1 counter |
+| nine metric setters | 110-172 | SL | core 1, 20 (Wi-Fi) | 1 field | 1 field |
+| `robot_network_metrics` | 348 | SL | core 0, 31 (Health) | snapshot | 1 struct |
+
+#### `status_lock` — `libwifi/.../cyw43_utk.c:82` — different cores
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `cyw43_utk_task` publish | 363 | SL | core 1, 20 (Wi-Fi) | snapshot publish | 1 struct |
+| `cyw43_utk_get_status` | 377 | SL | core 0 (Health, Vehicle) | snapshot copy | 1 struct |
+
+#### `stacks_lock` — `platform/app_task.c:208` — different cores
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `app_task_stacks` | 242 | IST | core 0, 31 (Health); core 1, 30 (Telemetry) | one row update | 1 row |
+
+#### `claim_lock` — `libwifi/.../cyw43_utk_compat.c:37`
+
+| Holder | Line | Variant | Core, priority | Held across | Static bound |
+| --- | --- | --- | --- | --- | --- |
+| `hw_claim_lock` | 44 | ISL | believed core 1 only | SDK claim | 1 word |
+
+### Lock order — flat, no nesting
+
+No lock is held while another is acquired, in any of the nine. That makes order
+inversion impossible between these locks, and it is deliberate rather than
+accidental:
+
+- `robot_network_metrics()` releases `metrics_lock` before it calls
+  `log_stream_dump_active()`, `cyw43_utk_get_status()` and `cyw43_utk_timing_read()`,
+  which take `dump_lock`, `status_lock` and `timing_lock`. Holding `metrics_lock`
+  across those calls would open exactly the ordering question this table exists to
+  close.
+- `telemetry.c` splits `lose()` (takes `stats_lock`) from `lose_locked()` (caller
+  already holds it), so no path re-enters the same lock.
+- `dump()` takes `stats_lock` only for the busy flag and prints with no lock held.
+- `app_task_report()` prints the load line outside `app_task_stacks()`, so
+  `stacks_lock` is not held during printf.
+
+Two consequences follow, and both are limits rather than guarantees: a future
+change that takes a second lock inside a section breaks this property silently, and
+nothing in the code enforces it. Any new lock must be added to this table with its
+holders before it is used.
+
+### Still open in this audit
+
+- `claim_lock` reachability is believed Wi-Fi-task-only, from the SDK hardware-claim
+  path. That is an assumption; a call-site grep of the SDK is not done.
+- `lost()` in `network_queue.c` has callers on both cores. Each caller needs its core
+  attributed before the lock variant can be chosen.
+- Measured maximum wait per lock. Blank by design.

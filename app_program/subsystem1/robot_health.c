@@ -47,6 +47,8 @@ static void refresh(void)
     v.value.uptime_ms = drv_time_ms();
     v.value.reset_reason = (uint8_t)drv_watchdog_last_reset();
     v.value.stack_min_free = RM_NO_DATA_U16;
+    /* RT-0069/C2: Health is the single 1 Hz sampler for both meters. */
+    idle_meter_sample_all();
     v.value.cpu_load_permille = idle_meter_load_permille();
     app_stack_t stacks[HEALTH_STACK_SLOTS];
     const unsigned int n = app_task_stacks(stacks, HEALTH_STACK_SLOTS);

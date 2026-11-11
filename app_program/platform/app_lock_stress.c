@@ -65,6 +65,106 @@ static void stress_probe(FP exinf)
     }
 }
 
+/*
+ * --- Forced Health-to-Vehicle interleaving (RT-0069) -------------------------
+ *
+ * The hazard is task-versus-task on ONE core: Vehicle at priority 13 preempts
+ * Health at priority 31 while Health holds a lock, then spins on it. With a plain
+ * SpinLock the preempted holder can never release it.
+ *
+ * This runs the pair for real. The holder task sits at the Health priority and
+ * uses the interrupt-preserving pair; the runner sits above it and uses a bounded
+ * try-lock only. The runner yields between attempts so the holder can run, which
+ * is what makes the interleaving reachable at all.
+ *
+ * The check cannot hang the runner: the runner never spins on the lock, both
+ * loops are round-bounded, and the wait for the holder is bounded. A broken
+ * variant therefore reports FAIL rather than stopping the suite.
+ */
+#define IL_ROUNDS   500u
+#define IL_HOLD     2000u
+#define IL_WAIT     200000u
+#define IL_STACK_BYTES 2048u
+
+static volatile UW il_held;   /* 1 while the holder task holds the lock */
+static volatile UW il_seen;   /* runner found the lock held while it was taken */
+static volatile UW il_busy;   /* runner could not take the lock */
+static volatile UW il_done;   /* holder finished its rounds */
+
+static void il_holder(FP exinf)
+{
+    (void)exinf;
+    for (UW round = 0u; round < IL_ROUNDS; ++round) {
+        UINT intsts;
+        if (E_OK != ISpinLock(&stress_lock, &intsts)) {
+            ++stress_errors;
+            break;
+        }
+        il_held = 1u;
+        for (volatile UW spin = 0u; spin < IL_HOLD; ++spin) {
+            /* hold the lock for a short, bounded section */
+        }
+        il_held = 0u;
+        (void)ISpinUnlock(&stress_lock, intsts);
+    }
+    il_done = 1u;
+}
+
+static void interleave_run(void)
+{
+    il_held = 0u;
+    il_seen = 0u;
+    il_busy = 0u;
+    il_done = 0u;
+
+    T_CTSK task = {0};
+    task.tskatr = TA_HLNG | TA_RNG0;
+    task.exinf = 0;
+    task.task = (FP)il_holder;
+    task.itskpri = 31;   /* the Health priority */
+    task.stksz = IL_STACK_BYTES;   /* this port has no stkadr: the kernel allocates */
+
+    const ID id = tk_cre_tsk(&task);
+    if (id < E_OK) {
+        ++stress_errors;
+        tm_printf((UB *)"[lock] interleave create failed %d\n", (int)id);
+        return;
+    }
+    const ER sta = tk_sta_tsk(id, 0);
+    if (sta < E_OK) {
+        (void)tk_del_tsk(id);
+        ++stress_errors;
+        tm_printf((UB *)"[lock] interleave start failed %d\n", (int)sta);
+        return;
+    }
+
+    /* Runner side: bounded, yields, never spins on the lock. */
+    for (UW round = 0u; round < IL_ROUNDS && 0u == il_done; ++round) {
+        UINT intsts;
+        if (E_OK == ISpinTryLock(&stress_lock, &intsts)) {
+            if (0u != il_held) {
+                ++il_seen;
+            }
+            (void)ISpinUnlock(&stress_lock, intsts);
+        } else {
+            ++il_busy;
+        }
+        (void)tk_dly_tsk(1u);   /* let the lower-priority holder run */
+    }
+
+    /* Bounded wait for the holder to finish. */
+    for (UW wait = 0u; wait < IL_WAIT && 0u == il_done; ++wait) {
+        (void)tk_dly_tsk(1u);
+    }
+
+    (void)tk_del_tsk(id);
+
+    tm_printf((UB *)"[lock] interleave seen %lu busy %lu done %lu %s\n",
+              (unsigned long)il_seen, (unsigned long)il_busy,
+              (unsigned long)il_done,
+              (0u == il_seen && 0u != il_done) ? "PASS" : "FAIL");
+}
+
 void app_lock_stress_run(void)
 {
     stress_held = 0u;
@@ -130,6 +230,9 @@ void app_lock_stress_run(void)
               (unsigned long)stress_errors,
               (unsigned long)LOCK_STRESS_MIN_TRIES,
               (ran && clean) ? "PASS" : "FAIL");
+
+    /* RT-0069: the forced task-versus-task interleaving, after the handler case. */
+    interleave_run();
 }
 
 #endif /* APP_TEST */

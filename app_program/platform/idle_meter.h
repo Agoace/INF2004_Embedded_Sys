@@ -41,8 +41,17 @@ int idle_meter_calibrate(void);
 /* Create the counting task. Returns the task ID or a negative error. */
 int idle_meter_start(void);
 
-/* Load in permille since the previous call, or 65535 if unknown. */
+/* Load in permille since the previous sample, or 65535 if unknown. Pure read. */
 uint16_t idle_meter_load_permille(void);
+
+/*
+ * Advance both meters and publish the new figures. Call ONLY from Health, at
+ * 1 Hz: it is the single owner of the sampling state. Diagnostics use the two
+ * getters above and never advance anything. A fully busy core reads 1000
+ * permille; 65535 means no calibration, the first sample, or an interval too
+ * short to interpret.
+ */
+void idle_meter_sample_all(void);
 
 #if TK_SUPPORT_SMP
 /* Two-core builds: the core-1 meter and its reading. Same returns as above. */

@@ -495,13 +495,14 @@ static void dump_service(log_stream_publish_fn publish)
         /* Pending to active handoff: take the request ID under the lock, then
          * change the Wi-Fi-owned stage outside it. */
         bool accepted = false;
-        (void)SpinLock(&dump_lock);
+        UINT intsts;
+        (void)ISpinLock(&dump_lock, &intsts);
         if (DUMP_ADMIT_PENDING == s_admit.state) {
             s_admit.state = DUMP_ADMIT_ACTIVE;
             s_dump.id = s_admit.request_id;
             accepted = true;
         }
-        (void)SpinUnlock(&dump_lock);
+        (void)ISpinUnlock(&dump_lock, intsts);
         if (accepted) {
             s_dump.stage = DUMP_OPEN;
         }
@@ -567,14 +568,23 @@ int log_stream_dump_request(uint32_t request_id)
 {
     int result = E_OBJ;
 
-    /* Admission only: this side never reads the transfer stage (RT-0060). */
-    (void)SpinLock(&dump_lock);
+    /*
+     * RT-0069: Vehicle runs at priority 13 on core 0 and Health at 31, so Vehicle
+     * must not wait on a lock a lower-priority holder took and cannot release.
+     * One immediate try.  When it fails the request is refused rather than
+     * delayed, and no duplicate can slip in because the state changes only on
+     * success.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&dump_lock, &intsts)) {
+        return E_TMOUT;
+    }
     if (DUMP_ADMIT_IDLE == s_admit.state) {
         s_admit.request_id = request_id;
         s_admit.state = DUMP_ADMIT_PENDING;
         result = E_OK;
     }
-    (void)SpinUnlock(&dump_lock);
+    (void)ISpinUnlock(&dump_lock, intsts);
     return result;
 }
 
@@ -583,11 +593,13 @@ int log_stream_dump_request(uint32_t request_id)
  */
 bool log_stream_dump_active(void)
 {
-    /* True for PENDING and ACTIVE, and never reads the Wi-Fi-owned stage. */
-    (void)SpinLock(&dump_lock);
+    /* True for PENDING and ACTIVE, and never reads the Wi-Fi-owned stage.
+     * Interrupt-preserving: Health holds this on core 0 and Vehicle preempts it. */
+    UINT intsts;
+    (void)ISpinLock(&dump_lock, &intsts);
     const bool active = (DUMP_ADMIT_PENDING == s_admit.state) ||
                         (DUMP_ADMIT_ACTIVE == s_admit.state);
-    (void)SpinUnlock(&dump_lock);
+    (void)ISpinUnlock(&dump_lock, intsts);
     return active;
 }
 
@@ -622,9 +634,10 @@ static void dump_apply(const slot_t *slot)
         /* END or ABORT acknowledged: the transfer is over, so admission returns
          * to IDLE and a new request can be accepted. */
         s_dump.stage = DUMP_IDLE;
-        (void)SpinLock(&dump_lock);
+        UINT intsts;
+        (void)ISpinLock(&dump_lock, &intsts);
         s_admit.state = DUMP_ADMIT_IDLE;
-        (void)SpinUnlock(&dump_lock);
+        (void)ISpinUnlock(&dump_lock, intsts);
     }
 }
 

@@ -187,17 +187,20 @@ void telemetry_stats(telemetry_stats_t *out)
         return;
     }
     /*
-     * Phase 3: the writer runs on core 1 while this reader can run on core 0, so
-     * a local interrupt mask no longer covers it.  This takes the spinlock rather
-     * than the write sequence, because `lost` and `busy` have two writers - a
-     * submitter on core 0 and the task on core 1 - and a sequence cannot serve
-     * more than one writer.  The struct is a set of 32-bit diagnostic counters
-     * that never gate control, so the cost is limited to a short spin.
+     * RT-0069: this is a decision read and must not wait on the payload lock, and
+     * it must never block on a core-1 holder.  One immediate try; when the lock is
+     * busy the counters are copied without it.  Each field is an aligned 32-bit
+     * word, so no field can tear; the set may mix two instants, which for
+     * diagnostic counters that never gate control is acceptable and is stated
+     * rather than hidden.  The previous version spun here instead.
      */
     UINT intsts;
-    (void)ISpinLock(&stats_lock, &intsts);
+    if (E_OK == ISpinTryLock(&stats_lock, &intsts)) {
+        *out = stats;
+        (void)ISpinUnlock(&stats_lock, intsts);
+        return;
+    }
     *out = stats;
-    (void)ISpinUnlock(&stats_lock, intsts);
 }
 
 /*
@@ -438,14 +441,25 @@ int telemetry_send(const telemetry_message_t *message)
         return E_PAR;
     }
     telemetry_message_t m = *message;
+    /*
+     * RT-0069 / D1: the admission decision is separated from the RAM-log payload.
+     * Vehicle runs at priority 13 and must not wait on a lock the core-1 Telemetry
+     * task holds for a row, event or dump mutation, so this takes one immediate
+     * try and never spins.  On contention the message is STILL SENT: a payload
+     * collision must not cancel a run or lose a message.  Only a real message
+     * buffer failure below reports an error, which is what RM_STOP_TELEMETRY is
+     * for.  `loss_base` is best-effort under contention and is diagnostic only.
+     */
+    bool conflict = false;
     UINT intsts;
-    (void)ISpinLock(&stats_lock, &intsts);
-    const bool conflict = stats.busy;
-    m.loss_base = stats.lost;
-    if (!conflict && m.kind == TELEMETRY_DUMP) {
-        stats.busy = true;
+    if (E_OK == ISpinTryLock(&stats_lock, &intsts)) {
+        conflict = stats.busy;
+        m.loss_base = stats.lost;
+        if (!conflict && m.kind == TELEMETRY_DUMP) {
+            stats.busy = true;
+        }
+        (void)ISpinUnlock(&stats_lock, intsts);
     }
-    (void)ISpinUnlock(&stats_lock, intsts);
     if (conflict) {
         lose();
         return E_OBJ;

@@ -141,37 +141,64 @@ int idle_meter_start_core1(void)
 }
 #endif
 
+/* A sample interval shorter than this cannot be interpreted: the rate would be
+ * dominated by scheduling jitter.  Health samples at 1 Hz, so this is half a
+ * period and only rejects a duplicate or an early read. */
+#define IDLE_METER_MIN_INTERVAL_US 500000u
+
+/* Bounded read-only snapshot of the latest two loads.  Written only by
+ * idle_meter_sample_all() and read by any diagnostic.  Each value is an aligned
+ * 16-bit word, so a reader can never see a torn figure, though the pair may come
+ * from different samples when read mid-update. */
+static uint16_t load_pub[IDLE_METERS];
+
 /*
- * Take one load sample from the published count.
+ * Advance BOTH sampling states and publish the result.
  *
- * RT-0061 finding 1: the reader never touches the hot counter.  If no new
- * publication has arrived since the previous sample, report UNKNOWN rather than
- * let the arithmetic turn a zero delta into a false "fully busy".  That also
- * preserves the documented first-sample rule, because a fresh meter has
- * last_count 0 and reports UNKNOWN whichever way the first call lands.
+ * RT-0069/C2: cpu_load_sample() mutates the meter it is given, so it must have
+ * exactly one caller.  Health is that caller, at 1 Hz; diagnostics such as
+ * app_task_report() read the published values and never touch the sampling state.
+ * The previous version let two cores sample, which raced and let a dump reset the
+ * Health interval.
+ *
+ * RT-0069/C3: after a valid baseline, an unchanged idle count across a full
+ * interval means the core did no idle work at all, which is 1000 permille - not
+ * UNKNOWN.  cpu_load_sample() reports exactly that for a zero delta.  UNKNOWN is
+ * reserved for no calibration, the first sample, and an interval too short to
+ * interpret.
  */
-static uint16_t sample_published(unsigned int index)
+void idle_meter_sample_all(void)
 {
-    if (!calibrated[index]) {
-        return CPU_LOAD_UNKNOWN;
+    const uint32_t now = drv_time_us();
+    for (unsigned int i = 0u; i < IDLE_METERS; ++i) {
+        if (!calibrated[i]) {
+            load_pub[i] = CPU_LOAD_UNKNOWN;
+            continue;
+        }
+        const uint32_t count =
+            __atomic_load_n(&idle_published[i], __ATOMIC_SEQ_CST);
+        if (!meter[i].have_last) {
+            (void)cpu_load_sample(&meter[i], count, now);   /* baseline only */
+            load_pub[i] = CPU_LOAD_UNKNOWN;
+            continue;
+        }
+        if ((uint32_t)(now - meter[i].last_us) < IDLE_METER_MIN_INTERVAL_US) {
+            load_pub[i] = CPU_LOAD_UNKNOWN;
+            continue;
+        }
+        load_pub[i] = cpu_load_sample(&meter[i], count, now);
     }
-    const uint32_t count =
-        __atomic_load_n(&idle_published[index], __ATOMIC_SEQ_CST);
-    if (count == meter[index].last_count) {
-        return CPU_LOAD_UNKNOWN;
-    }
-    return cpu_load_sample(&meter[index], count, drv_time_us());
 }
 
 uint16_t idle_meter_load_permille(void)
 {
-    return sample_published(0u);
+    return load_pub[0];
 }
 
 #if TK_SUPPORT_SMP
 uint16_t idle_meter_load_permille_core1(void)
 {
-    return sample_published(1u);
+    return load_pub[1];
 }
 #endif
 

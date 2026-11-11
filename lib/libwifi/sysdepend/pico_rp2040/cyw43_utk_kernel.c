@@ -55,10 +55,11 @@ static void timing_add(T_CYW43_TIMING *t, UW work, UW gap, BOOL has_gap)
 void cyw43_utk_poll_begin(void)
 {
     const UW entered = (UW)time_us_64();
-    (void)SpinLock(&timing_lock);
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     started = (UW)time_us_64();
     poll_window_id = window_active ? window_id : 0u;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     probe_begin_us = (UW)time_us_64() - entered;
 }
 
@@ -67,7 +68,8 @@ void cyw43_utk_poll_end(void)
 {
     const UW end = (UW)time_us_64();
     const UW work = end - started;
-    (void)SpinLock(&timing_lock);
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     timing_add(&timing, work, started - previous, have_previous);
     previous = started;
     have_previous = TRUE;
@@ -78,10 +80,10 @@ void cyw43_utk_poll_end(void)
         window_previous = started;
         window_previous_valid = TRUE;
     }
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     /* Probe wall cost excludes its own final two max stores. */
     const UW cost = probe_begin_us + ((UW)time_us_64() - end);
-    (void)SpinLock(&timing_lock);
+    (void)ISpinLock(&timing_lock, &intsts);
     if (cost > timing.probe_max_us) {
         timing.probe_max_us = cost;
     }
@@ -89,7 +91,7 @@ void cyw43_utk_poll_end(void)
         cost > window.probe_max_us) {
         window.probe_max_us = cost;
     }
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
 }
 
 /* Copy lifetime timing counters under the cross-core timing lock. */
@@ -98,18 +100,28 @@ int32_t cyw43_utk_timing_read(T_CYW43_TIMING *out)
     if (!out) {
         return E_PAR;
     }
-    (void)SpinLock(&timing_lock);
+    /* Interrupt-preserving: a core-0 holder must not be preemptible by Vehicle. */
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     *out = timing;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
 /* Start an independent timing window without resetting lifetime counters. */
 int32_t cyw43_utk_timing_window_begin(void)
 {
-    (void)SpinLock(&timing_lock);
+    /*
+     * RT-0069: Vehicle must not wait on a lock held by a task it has preempted, so
+     * this fails fast.  On failure no window is opened at all: the caller defers
+     * its measurement and no duplicate or half-open window can result.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        return E_TMOUT;
+    }
     if (window_active) {
-        (void)SpinUnlock(&timing_lock);
+        (void)ISpinUnlock(&timing_lock, intsts);
         return E_OBJ;
     }
     window = (T_CYW43_TIMING){0};
@@ -118,7 +130,7 @@ int32_t cyw43_utk_timing_window_begin(void)
         ++window_id;
     }
     window_active = TRUE;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
@@ -128,23 +140,39 @@ int32_t cyw43_utk_timing_window_end(T_CYW43_TIMING *out)
     if (!out) {
         return E_PAR;
     }
-    (void)SpinLock(&timing_lock);
+    /*
+     * RT-0069: fail fast, but an active window must never be left behind.  When
+     * the lock cannot be taken, the window is closed with a single aligned store
+     * and no counters are returned: `window_active` is a word, so the store is
+     * atomic, and the poll path only uses it to decide attribution, which is
+     * diagnostics.  Losing one window's counters is the accepted cost.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        window_active = FALSE;
+        return E_TMOUT;
+    }
     if (!window_active) {
-        (void)SpinUnlock(&timing_lock);
+        (void)ISpinUnlock(&timing_lock, intsts);
         return E_OBJ;
     }
     window_active = FALSE;
     *out = window;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
 /* Read the latest task-start result without changing it. */
 int32_t cyw43_utk_start_status(void)
 {
-    (void)SpinLock(&timing_lock);
+    /* A 32-bit status word; on contention return the current value without
+     * waiting, since the reader only reports it. */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        return (int32_t)start_status;
+    }
     const ER result = start_status;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return result;
 }
 
@@ -195,17 +223,21 @@ EXPORT int32_t cyw43_utk_start(void)
 
     task = tk_cre_tsk(&ctsk);
     if (task < E_OK) {
-        (void)SpinLock(&timing_lock);
+        UINT intsts;
+        (void)ISpinLock(&timing_lock, &intsts);
         start_status = task;
-        (void)SpinUnlock(&timing_lock);
+        (void)ISpinUnlock(&timing_lock, intsts);
         return task;
     }
     /* start_status is read under timing_lock by cyw43_utk_start_status(), so every
-     * write to it must take the same lock (RT-0058 finding 4). */
-    (void)SpinLock(&timing_lock);
+     * write to it must take the same lock (RT-0058 finding 4).  The kernel call
+     * stays OUTSIDE the section (RT-0069): a task start may dispatch, and a
+     * critical section must hold no call that can dispatch. */
     const ER sta = tk_sta_tsk(task, 0);
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     start_status = sta;
-    (void)SpinUnlock(&timing_lock);
+    (void)ISpinUnlock(&timing_lock, intsts);
     if (sta < E_OK) {
         (void)tk_del_tsk(task);
     }
