@@ -63,7 +63,7 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
                          SLOT("imu_task", imu_stack, APP_CORE_1),
 #endif
                          SLOT("vehicle_task", vehicle_stack, APP_CORE_0),
-                         SLOT("telemetry_task", telemetry_stack, APP_CORE_0)
+                         SLOT("telemetry_task", telemetry_stack, APP_CORE_1)
 #if APP_BENCH
                              ,
                          SLOT("motion_bench", bench_stack, APP_CORE_0)

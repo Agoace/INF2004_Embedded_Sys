@@ -57,10 +57,10 @@ by a handler and a task on the same core once a task moves).
 | `platform/app_task.c:209,214` | stack high-water marks | caller of `app_task_stacks()` (Health, core 0) | **convert** when a core-1 task's stack is measured (Phase 2) |
 | `platform/drv_gpio_irq.c:47-54` | GPIO IRQ client table | init, core 0 | keep - boot-time, one core |
 | `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, core 0 | keep - core 0 by definition; add a separate core-1 meter |
-| `subsystem1/log_stream.c:468,538` | RAM log rows and index | Telemetry owner and Wi-Fi reader | **replace** with the two-word contract in Phase 3 |
+| `subsystem1/log_stream.c:468,538` | its own `s_dump` live/dump progress, not the RAM rows | reached only from `robot_mqtt.c:300`, the Wi-Fi task, core 0 in this phase | keep - revisit when the Wi-Fi task moves in Phase 4 |
 | `subsystem1/network_queue.c:34,170,192` | network queue counters | Wi-Fi task and producers | **replace** in Phase 4, or keep if the task moves wholesale |
 | `subsystem1/robot_mqtt.c:90,256` | MQTT metrics | Wi-Fi task only | keep - single-task owner, moves wholesale in Phase 4 |
-| `subsystem1/telemetry.c:133,144,215,346,361` | stats, busy, loss counters, `log_generation` | Telemetry task and core-0 readers | **replace** in Phase 3 - this is the main cross-core contract |
+| `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3** - rows/events/reset use `log_write_seq`, the multi-writer `lost`/`busy` use `stats_lock`; no `DI()`/`EI()` remains in the file |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
 | `subsystem3/drv_line.c:59-66` | line ring buffer | 1 ms ADC IRQ and line task, both core 0 | keep - core 0 by placement |
 | `subsystem5/drv_ultrasonic.c:44` | listener id | echo IRQ and sonar task, both core 0 | keep - core 0 by placement |
@@ -126,6 +126,51 @@ Only the header's "core-0 publication" wording was stale, and it is corrected.
 the last mark on contention. Scanning a core-1 task's stack from core 0 is still
 a sampled read, so the mark is approximate and monotonic, never exact.
 
+## Phase 3: Telemetry on core 1
+
+Two contracts, deliberately different, because the fields have different writer
+counts.
+
+### The log payload: a write sequence
+
+`log_write_seq` is a second word, not a reuse of `log_generation`.
+`log_generation` stays the capture-run identity that MQTT live and DUMP compare
+against. The sequence marks a row, event or reset mutation in progress - odd
+during, even after - with `__atomic_*` and `__ATOMIC_SEQ_CST`, and it sits outside
+the `TM_MQTT` guard because the writer and its readers exist in every profile
+while the run identity is MQTT-side.
+
+Readers now verify stability **after** the copy rather than before it. Each of
+`telemetry_log_row()` and `telemetry_log_event()` samples the sequence, rejects an
+odd value, copies into a local scratch object, re-reads the sequence and rejects a
+change, then re-opens the index and requires the same run identity. Only then is
+scratch committed to the caller's buffer. Otherwise the read fails with `E_TMOUT`
+after three attempts: a bounded failure, never a row that may not be stable. That
+covers overwrite during a new run, and event reads as well as row reads.
+
+### The stats counters: a lock, and why not the sequence
+
+`stats.lost` is incremented by submitters on core 0 and by the task on core 1, and
+`stats.busy` is set by a submitter and cleared by the dump task. A sequence cannot
+serve those fields: it assumes a **single** writer, so two concurrent odd/even
+pairs can leave the sequence even while a mutation is still in flight. This was
+found while doing the move, and it is the reason the stats group did not simply
+join the sequence. `stats_lock` - a `T_SPLOCK` taken with plain `SpinLock`,
+because these are task-only - guards them on the submit path, on the dump path,
+and for the `telemetry_stats()` group copy. The struct holds 32-bit diagnostic
+counters that never gate control, so a short spin is acceptable; routing every
+submitter through the task instead would have changed the message interface.
+
+The task moved with `app_prc_core1()` and `SLOT("telemetry_task", ...,
+APP_CORE_1)`. It has no cyclic handler, so there is no handler affinity to match.
+
+### log_stream
+
+`log_stream.c`'s two `DI()`/`EI()` sites protect its own `s_dump` live/dump
+progress, not the RAM rows, and the only caller of `log_stream_dump_request()` is
+`robot_mqtt.c:300` - the Wi-Fi task, still on core 0. They are **kept** rather than
+converted, and become Phase 4's problem when the Wi-Fi task moves.
+
 ## Open validation items
 
 None of these is closed, and none may be reported as a PASS without device
@@ -146,6 +191,11 @@ evidence.
    reach the Vehicle board intact, or that the stack mark for a core-1 task is
    usable. The compile passes prove only that both profiles build.
 6. The other boards still have writer and readers on core 0 until their phases
-   land: `motion.c`, `line_service.c`, `robot_health.c`, `telemetry.c`,
-   `junction_source.c` and the five boards in `vehicle_task.c`. Their `DI()`/`EI()`
-   and board contracts are unchanged by Phase 2.
+   land: `motion.c`, `line_service.c`, `robot_health.c`, `junction_source.c` and
+   the five boards in `vehicle_task.c`. Their `DI()`/`EI()` and board contracts
+   are unchanged by Phase 3.
+7. Phase 3 has not run on a device. Nothing shows a core-1 Telemetry task
+   receiving messages, rows and events passing the sequence check under load, the
+   bounded `E_TMOUT` path ever being taken, or `stats_lock` contention staying
+   short. The rejected-torn-read claim is an argument from the code, not an
+   observed result.
