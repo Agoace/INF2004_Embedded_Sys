@@ -122,6 +122,7 @@ EXPORT INT usermain(void)
         subsystem4_test();
         subsystem5_test();
         app_lock_stress_run();
+        log_stream_admission_selftest();
         app_task_report();
         /* Destructive reset check follows every other subsystem test. */
         subsystem2_watchdog_test();

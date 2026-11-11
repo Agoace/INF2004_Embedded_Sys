@@ -31,6 +31,7 @@
  * that one must stay out of here). Needed so join/link failures are
  * actually visible on the console instead of only sitting in radio_status. */
 #include <tm/tmonitor.h>
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: coherent status snapshot */
 
 #define CYW43_POLL_MS        2
 
@@ -66,6 +67,20 @@ extern void mp_memory_barrir(void);
 #endif
 
 static T_CYW43_UTK_STATUS radio_status = {
+    .init_result = -5,
+    .strongest_rssi = -32768,
+};
+
+/*
+ * RT-0058 finding 3: the poll task writes radio_status freely during an
+ * iteration, and a core-0 reader used to copy it behind barriers.  Barriers order
+ * accesses but give no mutual exclusion, so a multi-field copy could mix fields
+ * from different iterations.  Instead the poll task publishes ONE coherent
+ * snapshot per iteration at a single point, and readers copy that under the same
+ * lock.  Publishing at one point also keeps every lwIP call outside the lock.
+ */
+static T_SPLOCK status_lock;
+static T_CYW43_UTK_STATUS radio_status_pub = {
     .init_result = -5,
     .strongest_rssi = -32768,
 };
@@ -344,6 +359,11 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
         }
 #endif
 #endif
+        /* One coherent publication point per poll iteration.  See status_lock. */
+        (void)SpinLock(&status_lock);
+        radio_status_pub = radio_status;
+        (void)SpinUnlock(&status_lock);
+
         cyw43_utk_poll_end();
         (void)tk_dly_tsk(CYW43_POLL_MS);
     }
@@ -352,7 +372,9 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 void cyw43_utk_get_status(T_CYW43_UTK_STATUS *status)
 {
     if(status == NULL) return;
-    mp_memory_barrir();
-    *status = radio_status;
-    mp_memory_barrir();
+    /* Copy the snapshot published once per poll iteration, under the lock that
+     * publication uses (RT-0058 finding 3). */
+    (void)SpinLock(&status_lock);
+    *status = radio_status_pub;
+    (void)SpinUnlock(&status_lock);
 }

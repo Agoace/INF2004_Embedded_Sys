@@ -195,12 +195,19 @@ EXPORT int32_t cyw43_utk_start(void)
 
     task = tk_cre_tsk(&ctsk);
     if (task < E_OK) {
+        (void)SpinLock(&timing_lock);
         start_status = task;
+        (void)SpinUnlock(&timing_lock);
         return task;
     }
-    start_status = tk_sta_tsk(task, 0);
-    if (start_status < E_OK) {
+    /* start_status is read under timing_lock by cyw43_utk_start_status(), so every
+     * write to it must take the same lock (RT-0058 finding 4). */
+    (void)SpinLock(&timing_lock);
+    const ER sta = tk_sta_tsk(task, 0);
+    start_status = sta;
+    (void)SpinUnlock(&timing_lock);
+    if (sta < E_OK) {
         (void)tk_del_tsk(task);
     }
-    return start_status;
+    return sta;
 }

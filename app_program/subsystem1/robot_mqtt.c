@@ -99,6 +99,84 @@ static void inc(uint32_t *value)
 }
 
 /*
+ * RT-0058 finding 1: Health copies this group on core 0, so EVERY write to a
+ * copied field goes through one of these setters and takes metrics_lock.  Before
+ * this, the snapshot was locked but the writers were not, which protected the
+ * reader from nothing.  Each setter is short and contains no lwIP call, so no
+ * network operation ever runs with the lock held.
+ */
+static void metrics_state_set(uint8_t state)
+{
+    (void)SpinLock(&metrics_lock);
+    metrics.mqtt_state = state;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static void metrics_subscribed_set(bool value)
+{
+    (void)SpinLock(&metrics_lock);
+    subscribed = value;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+/* Subscription result and state are one fact; set them in one section so Health
+ * cannot see the flag and the state disagree. */
+static void metrics_subscribed_and_state(bool value, uint8_t state)
+{
+    (void)SpinLock(&metrics_lock);
+    subscribed = value;
+    metrics.mqtt_state = state;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static void metrics_commands_enabled_set(bool value)
+{
+    (void)SpinLock(&metrics_lock);
+    commands_enabled = value;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static void metrics_sonar_missed_add(uint32_t missed)
+{
+    (void)SpinLock(&metrics_lock);
+    metrics.sonar_history_missed += missed;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static void metrics_sonar_sequence_set(uint32_t sequence)
+{
+    (void)SpinLock(&metrics_lock);
+    metrics.latest_sonar_history_sequence = sequence;
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static bool metrics_observed_priority_unset(void)
+{
+    (void)SpinLock(&metrics_lock);
+    const bool unset = metrics.wifi_observed_priority == 0u;
+    (void)SpinUnlock(&metrics_lock);
+    return unset;
+}
+
+static void metrics_observed_priority_set_if_unset(uint8_t priority)
+{
+    (void)SpinLock(&metrics_lock);
+    if (metrics.wifi_observed_priority == 0u) {
+        metrics.wifi_observed_priority = priority;
+    }
+    (void)SpinUnlock(&metrics_lock);
+}
+
+static void metrics_hook_max_update(uint32_t elapsed)
+{
+    (void)SpinLock(&metrics_lock);
+    if (elapsed > metrics.mqtt_hook_max_us) {
+        metrics.mqtt_hook_max_us = elapsed;
+    }
+    (void)SpinUnlock(&metrics_lock);
+}
+
+/*
  * Test a wrapping millisecond deadline.
  */
 static bool due(uint32_t now, uint32_t at)
@@ -143,7 +221,7 @@ static void configure(void)
     }
     /* Absent/empty/all-zero example token: ESTOP-only fallback in decoder.
      * A valid configured token restricts EVERY command, including ESTOP. */
-    commands_enabled = good && any != 0u;
+    metrics_commands_enabled_set(good && any != 0u);
     log_stream_init(boot_id_get());
     pm_init(&mode_tracker);
     configured = true;
@@ -364,8 +442,8 @@ static void subscription_done(void *arg, err_t error)
 {
     (void)arg;
     subscribe_pending = false;
-    subscribed = error == ERR_OK;
-    metrics.mqtt_state = subscribed ? 3u : 2u;
+    metrics_subscribed_and_state(error == ERR_OK,
+                                 error == ERR_OK ? 3u : 2u);
     subscribe_at = drv_time_ms() + RETRY_MS;
     if (error != ERR_OK) {
         inc(&metrics.publish_failed);
@@ -381,10 +459,10 @@ static void connection_done(mqtt_client_t *c, void *arg,
     (void)c;
     (void)arg;
     connecting = false;
-    subscribed = false;
+    metrics_subscribed_set(false);
     subscribe_pending = false;
     if (status == MQTT_CONNECT_ACCEPTED) {
-        metrics.mqtt_state = 2u;
+        metrics_state_set(2u);
         mqtt_set_inpub_callback(client, incoming_publish, incoming_data, NULL);
         subscribe_at = drv_time_ms();
         status_pending = true;
@@ -394,7 +472,7 @@ static void connection_done(mqtt_client_t *c, void *arg,
         state_at = subscribe_at;
         heartbeat_at = subscribe_at;
     } else {
-        metrics.mqtt_state = 0u;
+        metrics_state_set(0u);
         retry_at = drv_time_ms() + RETRY_MS;
         inc(&metrics.publish_failed); /* asynchronous refusal/timeout/drop */
         /* lwIP mqtt_close deletes pending requests WITHOUT callbacks: the log
@@ -635,7 +713,7 @@ static void service(uint32_t now)
             uint32_t missed = 0u;
             const int er =
                 robot_network_sonar(&sonar_cursor, &pending_sonar, &missed);
-            metrics.sonar_history_missed += missed;
+            metrics_sonar_missed_add(missed);
             if (er == E_TMOUT) {
                 robot_network_busy(ROBOT_BOARD_SONAR);
             }
@@ -651,7 +729,7 @@ static void service(uint32_t now)
             --budget;
             break;
         }
-        metrics.latest_sonar_history_sequence = pending_sonar.history_sequence;
+        metrics_sonar_sequence_set(pending_sonar.history_sequence);
         have_sonar = false;
         --budget;
     }
@@ -672,10 +750,10 @@ void cyw43_utk_app_poll(void)
     if (!configured) {
         configure();
     }
-    if (metrics.wifi_observed_priority == 0u) {
+    if (metrics_observed_priority_unset()) {
         T_RTSK status;
         if (tk_ref_tsk(TSK_SELF, &status) >= E_OK) {
-            metrics.wifi_observed_priority = (uint8_t)status.tskpri;
+            metrics_observed_priority_set_if_unset((uint8_t)status.tskpri);
         }
     }
     if (client != NULL && mqtt_client_is_connected(client)) {
@@ -699,13 +777,13 @@ void cyw43_utk_app_poll(void)
                     .will_qos = QOS_AT_LEAST_ONCE,
                     .will_retain = RETAIN_ON};
                 connecting = true;
-                metrics.mqtt_state = 1u;
+                metrics_state_set(1u);
                 inc(&metrics.connect_attempts);
                 if (mqtt_client_connect(client, &broker, ROBOT_MQTT_BROKER_PORT,
                                         connection_done, NULL,
                                         &info) != ERR_OK) {
                     connecting = false;
-                    metrics.mqtt_state = 0u;
+                    metrics_state_set(0u);
                     inc(&metrics.publish_failed);
                 }
             } else {
@@ -714,8 +792,6 @@ void cyw43_utk_app_poll(void)
         }
     }
     const uint32_t elapsed = drv_time_us() - started;
-    if (elapsed > metrics.mqtt_hook_max_us) {
-        metrics.mqtt_hook_max_us = elapsed;
-    }
+    metrics_hook_max_update(elapsed);
 }
 #endif
