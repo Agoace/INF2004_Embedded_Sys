@@ -13,12 +13,22 @@
 
 /* Lowest priority of this kernel build (CNF_MAX_TSKPRI). */
 #define IDLE_METER_PRIORITY 32
-/* One pass of the idle task runs the loop for this long, then repeats. */
-#define IDLE_METER_PASS_US 1000000u
+/*
+ * One pass of the idle task runs the loop for this long, then repeats.  Kept well
+ * below the 1 Hz Health sample: the task publishes its count at the end of each
+ * pass, so this value is also the maximum age of a published count.  At 1 s the
+ * reader could sample twice inside one pass and see a zero delta, which the load
+ * arithmetic would report as a fully busy core.
+ */
+#define IDLE_METER_PASS_US 100000u
 /* One meter per core: index 0 is core 0, index 1 is core 1 (SMP builds only). */
 #define IDLE_METERS 2u
 
 static volatile uint32_t idle_counter[IDLE_METERS];
+/* Cross-core view of each counter, published once per pass.  The hot loop's
+ * volatile counter is not a snapshot, so a reader on the other core must never
+ * touch it; it reads this aligned word with an atomic load instead. */
+static uint32_t idle_published[IDLE_METERS];
 static cpu_load_t meter[IDLE_METERS];
 static bool calibrated[IDLE_METERS];
 
@@ -70,11 +80,18 @@ int idle_meter_calibrate(void)
     return calibrate_one(0u);
 }
 
-/* Count forever on one meter. */
+/*
+ * Count forever on one meter, publishing a coherent count at the end of each pass.
+ * The publication is deliberately outside the hot loop (RT-0061 finding 1): an
+ * atomic store per iteration would cost more than the measurement is worth, and
+ * the reader only needs a recent value, not the current one.
+ */
 static void idle_meter_body(unsigned int index)
 {
     for (;;) {
         idle_meter_loop(&idle_counter[index], IDLE_METER_PASS_US);
+        __atomic_store_n(&idle_published[index], idle_counter[index],
+                         __ATOMIC_SEQ_CST);
     }
 }
 
@@ -124,21 +141,37 @@ int idle_meter_start_core1(void)
 }
 #endif
 
-uint16_t idle_meter_load_permille(void)
+/*
+ * Take one load sample from the published count.
+ *
+ * RT-0061 finding 1: the reader never touches the hot counter.  If no new
+ * publication has arrived since the previous sample, report UNKNOWN rather than
+ * let the arithmetic turn a zero delta into a false "fully busy".  That also
+ * preserves the documented first-sample rule, because a fresh meter has
+ * last_count 0 and reports UNKNOWN whichever way the first call lands.
+ */
+static uint16_t sample_published(unsigned int index)
 {
-    if (!calibrated[0]) {
+    if (!calibrated[index]) {
         return CPU_LOAD_UNKNOWN;
     }
-    return cpu_load_sample(&meter[0], idle_counter[0], drv_time_us());
+    const uint32_t count =
+        __atomic_load_n(&idle_published[index], __ATOMIC_SEQ_CST);
+    if (count == meter[index].last_count) {
+        return CPU_LOAD_UNKNOWN;
+    }
+    return cpu_load_sample(&meter[index], count, drv_time_us());
+}
+
+uint16_t idle_meter_load_permille(void)
+{
+    return sample_published(0u);
 }
 
 #if TK_SUPPORT_SMP
 uint16_t idle_meter_load_permille_core1(void)
 {
-    if (!calibrated[1]) {
-        return CPU_LOAD_UNKNOWN;
-    }
-    return cpu_load_sample(&meter[1], idle_counter[1], drv_time_us());
+    return sample_published(1u);
 }
 #endif
 

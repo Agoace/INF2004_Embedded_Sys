@@ -13,6 +13,7 @@
  * task: app_task_start() rejects a core its slot does not allow.
  */
 #include "app_task.h"
+#include "idle_meter.h"   /* Phase 5: per-core load in the report */
 #include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
 #include <stdbool.h>
 #include <tk/smp.h>   /* T_SPLOCK, ISpinTryLock: cross-core stack marks */
@@ -83,6 +84,11 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
 #endif
 #endif
 };
+
+/* Keep the published bound honest: a slot added here without raising
+ * APP_TASK_MAX_SLOTS would truncate every caller's stack list. */
+_Static_assert(sizeof(slots) / sizeof(slots[0]) <= APP_TASK_MAX_SLOTS,
+               "slot table exceeds APP_TASK_MAX_SLOTS");
 /* Compare two C strings. Returns true when they are equal. */
 static bool equal(const char *a, const char *b)
 {
@@ -262,4 +268,19 @@ void app_task_report(void)
                   (unsigned long)rows[i].used, (unsigned long)rows[i].free,
                   rows[i].free < STACK_LOW_MARGIN ? "LOW MARGIN" : "OK");
     }
+#if TM_MQTT
+    /*
+     * Phase 5: the per-core load figures. This is the diagnostic consumer that
+     * makes the core-1 meter produce a visible number. The heartbeat wire format
+     * is deliberately untouched and keeps carrying the core-0 value alone.
+     */
+#if TK_SUPPORT_SMP
+    tm_printf((UB *)"[load] core 0 %u permille, core 1 %u permille\n",
+              (unsigned int)idle_meter_load_permille(),
+              (unsigned int)idle_meter_load_permille_core1());
+#else
+    tm_printf((UB *)"[load] core 0 %u permille\n",
+              (unsigned int)idle_meter_load_permille());
+#endif
+#endif
 }

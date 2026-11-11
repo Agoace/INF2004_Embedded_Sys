@@ -27,7 +27,7 @@ void __attribute__((weak)) robot_health_collect(rm_heartbeat_t *out)
 /* Health task and cyclic timing. */
 #define HEALTH_PERIOD_MS     1000u
 #define HEALTH_TASK_PRIORITY 31
-#define HEALTH_STACK_SLOTS   8u
+#define HEALTH_STACK_SLOTS   APP_TASK_MAX_SLOTS
 
 static ID health_task;
 static ID health_cyclic;
