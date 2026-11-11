@@ -35,35 +35,16 @@ static uint32_t loss_base;
 static T_SPLOCK stats_lock;
 
 /*
- * Separate from log_generation, which stays the capture-run identity that MQTT
- * live and DUMP compare against.  This sequence marks a row, event or reset
- * mutation in progress: odd means a mutation is underway, even means the log is
- * consistent.  It exists because the run identity alone cannot tell a reader
- * that the row it is copying was overwritten underneath it.  Unlike the board
- * sequence, zero is a valid consistent state here, because it is the state
- * before the first mutation.  It is deliberately OUTSIDE the TM_MQTT guard: the
- * writer and its readers exist in every profile, and only the run identity is
- * MQTT-side.
+ * The log has ONE contract: stats_lock.  An earlier revision used a separate
+ * odd/even write sequence here, with readers detecting a changed copy and
+ * retrying.  It was removed after review (RT-0056): a sequence can reject a copy
+ * that changed underneath it, but it cannot make a byte-wise copy of rows[] or a
+ * struct copy of events[] atomic, and it left the index publication outside the
+ * mutation interval.  Mutual exclusion covers all three cases, and a second
+ * mechanism that no longer carries the contract would only invite confusion about
+ * which one is authoritative.
  */
-static uint32_t log_write_seq;
 
-/* Writer side: make the sequence odd for the duration of one mutation. */
-static void log_write_begin(void)
-{
-    const uint32_t seq = __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST);
-    __atomic_store_n(&log_write_seq, seq + 1u, __ATOMIC_SEQ_CST);
-}
-
-/* Writer side: make the sequence even again once the mutation is published. */
-static void log_write_end(void)
-{
-    const uint32_t seq = __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST);
-    __atomic_store_n(&log_write_seq, seq + 1u, __ATOMIC_SEQ_CST);
-}
-/* Bounded reader retries. A writer that keeps mutating must never block a
- * caller, so after this many attempts the read fails instead of returning data
- * that may not be stable. */
-#define TELEMETRY_READ_TRIES 3u
 
 #if TM_MQTT
 #include "../platform/app_board.h"
@@ -107,46 +88,33 @@ int telemetry_log_row(uint32_t generation, uint32_t index,
     if (!out) {
         return E_PAR;
     }
-    for (unsigned int attempt = 0u; attempt < TELEMETRY_READ_TRIES; ++attempt) {
-        telemetry_log_index_t v;
-        const int er = telemetry_log_open(&v);
-        if (er < E_OK) {
-            return er;
-        }
-        if (v.generation != generation) {
-            return E_OBJ;
-        }
-        if (index >= v.rows) {
-            return E_PAR;
-        }
-        /* A mutation in progress means the payload is not consistent yet. */
-        const uint32_t before = __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST);
-        if (0u != (before & 1u)) {
-            continue;
-        }
-        uint8_t scratch[TELEMETRY_BYTES];
-        for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
-            scratch[i] = rows[index][i];
-        }
-        /* Copied, but the writer may have overwritten the row underneath us. */
-        if (before != __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST)) {
-            continue;
-        }
-        /* The run identity must also still hold now that the copy is done. */
-        telemetry_log_index_t again;
-        if (telemetry_log_open(&again) < E_OK) {
-            continue;
-        }
-        if (again.generation != generation) {
-            return E_OBJ;
-        }
-        for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
-            out[i] = scratch[i];
-        }
-        return E_OK;
+    /*
+     * RT-0056 defect 3: the payload copy happens with the writer EXCLUDED, not
+     * merely checked afterwards.  A sequence can reject a copy that changed
+     * underneath it, but it cannot make a byte-wise copy of rows[] atomic, so
+     * mutual exclusion is the contract here.  The lock is held only for the
+     * bounded copy.
+     */
+    (void)SpinLock(&stats_lock);
+    telemetry_log_index_t v;
+    const int er = telemetry_log_open(&v);
+    if (er < E_OK) {
+        (void)SpinUnlock(&stats_lock);
+        return er;
     }
-    /* Bounded failure: never hand back a row that may not be stable. */
-    return E_TMOUT;
+    if (v.generation != generation) {
+        (void)SpinUnlock(&stats_lock);
+        return E_OBJ;
+    }
+    if (index >= v.rows) {
+        (void)SpinUnlock(&stats_lock);
+        return E_PAR;
+    }
+    for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
+        out[i] = rows[index][i];
+    }
+    (void)SpinUnlock(&stats_lock);
+    return E_OK;
 }
 
 /*
@@ -158,38 +126,25 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
     if (!out) {
         return E_PAR;
     }
-    for (unsigned int attempt = 0u; attempt < TELEMETRY_READ_TRIES; ++attempt) {
-        telemetry_log_index_t v;
-        const int er = telemetry_log_open(&v);
-        if (er < E_OK) {
-            return er;
-        }
-        if (v.generation != generation) {
-            return E_OBJ;
-        }
-        if (index >= v.events) {
-            return E_PAR;
-        }
-        const uint32_t before = __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST);
-        if (0u != (before & 1u)) {
-            continue;
-        }
-        const telemetry_event_t scratch = events[index];
-        if (before != __atomic_load_n(&log_write_seq, __ATOMIC_SEQ_CST)) {
-            continue;
-        }
-        telemetry_log_index_t again;
-        if (telemetry_log_open(&again) < E_OK) {
-            continue;
-        }
-        if (again.generation != generation) {
-            return E_OBJ;
-        }
-        *out = scratch;
-        return E_OK;
+    /* Same contract as the row read: exclude the writer while copying. */
+    (void)SpinLock(&stats_lock);
+    telemetry_log_index_t v;
+    const int er = telemetry_log_open(&v);
+    if (er < E_OK) {
+        (void)SpinUnlock(&stats_lock);
+        return er;
     }
-    /* Bounded failure: an event read gets the same contract as a row read. */
-    return E_TMOUT;
+    if (v.generation != generation) {
+        (void)SpinUnlock(&stats_lock);
+        return E_OBJ;
+    }
+    if (index >= v.events) {
+        (void)SpinUnlock(&stats_lock);
+        return E_PAR;
+    }
+    *out = events[index];
+    (void)SpinUnlock(&stats_lock);
+    return E_OK;
 }
 #endif
 #if TM_CONSOLE_USB_CDC
@@ -230,6 +185,17 @@ void telemetry_stats(telemetry_stats_t *out)
     (void)SpinLock(&stats_lock);
     *out = stats;
     (void)SpinUnlock(&stats_lock);
+}
+
+/*
+ * Increment the loss counter with the log lock ALREADY HELD.  The task uses this
+ * inside its own critical section; lose() below takes the lock itself and is for
+ * callers outside one.  Using lose() inside the section would self-deadlock,
+ * because a spinlock is not recursive.
+ */
+static void lose_locked(void)
+{
+    ++stats.lost;
 }
 
 /*
@@ -326,7 +292,10 @@ static void telemetry_task(INT code, void *ctx)
         }
         switch (m.kind) {
         case TELEMETRY_BEGIN:
-            log_write_begin();
+            /* One critical section for the whole mutation AND the index
+             * publication, so a reader can never pair a new row with an old
+             * index (RT-0056 defect 2). */
+            (void)SpinLock(&stats_lock);
             last_junction = (ja_result_t){0};
             stats.rows = 0u;
             stats.events = 0u;
@@ -335,14 +304,15 @@ static void telemetry_task(INT code, void *ctx)
 #if TM_MQTT
             ++log_generation;
             newest_row_ms = 0u;
+            publish_index();
 #endif
-            log_write_end();
+            (void)SpinUnlock(&stats_lock);
             break;
         case TELEMETRY_ROW:
-            log_write_begin();
+            (void)SpinLock(&stats_lock);
             if (stats.rows == TELEMETRY_ROWS) {
                 stats.storage_full = true;
-                lose();
+                lose_locked();
             } else {
                 for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
                     rows[stats.rows][i] = m.data.row[i];
@@ -352,17 +322,23 @@ static void telemetry_task(INT code, void *ctx)
                 newest_row_ms = drv_time_ms();
 #endif
             }
-            log_write_end();
+#if TM_MQTT
+            publish_index();
+#endif
+            (void)SpinUnlock(&stats_lock);
             break;
         case TELEMETRY_EVENT:
-            log_write_begin();
+            (void)SpinLock(&stats_lock);
             if (stats.events == TELEMETRY_EVENTS) {
                 stats.storage_full = true;
-                lose();
+                lose_locked();
             } else {
                 events[stats.events++] = m.data.event;
             }
-            log_write_end();
+#if TM_MQTT
+            publish_index();
+#endif
+            (void)SpinUnlock(&stats_lock);
             break;
         case TELEMETRY_INFO:
             info = m.data.info;
@@ -382,12 +358,14 @@ static void telemetry_task(INT code, void *ctx)
             motion_diag_dump(0);
             break;
         default:
-            lose();
+            (void)SpinLock(&stats_lock);
+            lose_locked();
+#if TM_MQTT
+            publish_index();
+#endif
+            (void)SpinUnlock(&stats_lock);
             break;
         }
-#if TM_MQTT
-        publish_index();
-#endif
     }
 }
 
