@@ -126,37 +126,63 @@ static void test_dump_admission(void)
 }
 
 /*
- * T2. Storage-full stop. Writing past the row capacity must set storage_full, and
- * the flag must be readable from here without taking any lock.
+ * T2. Storage-full stop input.
+ *
+ * RT-0079: the previous version sent TELEMETRY_ROWS+32 rows in one loop with no
+ * yield. On one core the consumer runs BELOW the test runner, so the message buffer
+ * filled after a fraction of the rows, every later send was rejected, and the
+ * consumer never handled a row at all - storage_full is set only when it processes a
+ * row after the row count has reached capacity. The test therefore could not reach
+ * its own condition and reported FAIL for correct code.
+ *
+ * Now: reset the log through a processed BEGIN, then send in bounded rounds with a
+ * yield each round so the consumer can store, until storage_full is set. The loop
+ * bound makes the test unable to hang. Vehicle's actual stop remains Phase 6
+ * evidence (RT-0075/F3), and one excess row is checked as a counted loss.
  */
 static void test_storage_full(void)
 {
-    telemetry_message_t m = {0};
-    m.kind = TELEMETRY_ROW;
+    telemetry_message_t begin = {0};
+    begin.kind = TELEMETRY_BEGIN;
+    telemetry_message_t row = {0};
+    row.kind = TELEMETRY_ROW;
 
+    /* Reset: a BEGIN the consumer has actually processed clears rows and the flag. */
     settle();
+    (void)telemetry_send(&begin);
+    settle();
+
+    telemetry_stats_t st;
+    telemetry_stats(&st);
+    expect("log reset by a processed BEGIN", (0u == st.rows) && !st.storage_full);
+
     unsigned int sent = 0u;
     bool full = false;
-    for (unsigned int i = 0u; i < (TELEMETRY_ROWS + 32u); ++i) {
-        if (0 == telemetry_send(&m)) {
-            ++sent;
+    for (unsigned int round = 0u; round < 2000u && !full; ++round) {
+        /* A few sends, then yield: without the yield the buffer fills and no row is
+         * ever stored on a single core. */
+        for (unsigned int i = 0u; i < 8u; ++i) {
+            if (0 == telemetry_send(&row)) {
+                ++sent;
+            }
         }
-        telemetry_stats_t st;
+        (void)tk_dly_tsk(1u);
         telemetry_stats(&st);
-        if (st.storage_full) {
-            full = true;
-            break;
-        }
+        full = st.storage_full;
     }
-    expect("rows accepted before the log filled", sent > 0u);
-    expect("storage_full set when the log is full", full);
+
+    expect("rows accepted and stored before the log filled", sent > 0u);
+    expect("storage_full set once the consumer filled the log", full);
     if (full) {
-        /* This is the input Vehicle's storage-full stop decides on. The stop itself
-         * - that Vehicle actually halts - is not asserted here: it lives in
-         * vehicle_task.c and needs Phase 6 device evidence (RT-0075/F3). */
-        telemetry_stats_t st;
-        telemetry_stats(&st);
-        expect("storage_full remains readable", st.storage_full);
+        telemetry_stats_t before;
+        telemetry_stats(&before);
+        (void)telemetry_send(&row);   /* one excess row */
+        settle();
+        telemetry_stats_t after;
+        telemetry_stats(&after);
+        expect("excess row counted as a loss rather than stored",
+               after.lost > before.lost);
+        expect("storage_full remains readable", after.storage_full);
     }
 }
 
