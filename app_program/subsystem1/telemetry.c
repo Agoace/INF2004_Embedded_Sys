@@ -95,25 +95,34 @@ int telemetry_log_row(uint32_t generation, uint32_t index,
      * mutual exclusion is the contract here.  The lock is held only for the
      * bounded copy.
      */
-    (void)SpinLock(&stats_lock);
+    /*
+     * RT-0063: ONE immediate try, no retry loop. The Wi-Fi task runs above
+     * Telemetry on this core, so spinning here would block the very holder that
+     * must release the lock. ISpinTryLock also keeps this reader non-preemptible
+     * for the short copy.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&stats_lock, &intsts)) {
+        return E_TMOUT;
+    }
     telemetry_log_index_t v;
     const int er = telemetry_log_open(&v);
     if (er < E_OK) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return er;
     }
     if (v.generation != generation) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_OBJ;
     }
     if (index >= v.rows) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
     for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
         out[i] = rows[index][i];
     }
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
     return E_OK;
 }
 
@@ -126,24 +135,27 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
     if (!out) {
         return E_PAR;
     }
-    /* Same contract as the row read: exclude the writer while copying. */
-    (void)SpinLock(&stats_lock);
+    /* Same contract as the row read: one immediate try, never a spin. */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&stats_lock, &intsts)) {
+        return E_TMOUT;
+    }
     telemetry_log_index_t v;
     const int er = telemetry_log_open(&v);
     if (er < E_OK) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return er;
     }
     if (v.generation != generation) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_OBJ;
     }
     if (index >= v.events) {
-        (void)SpinUnlock(&stats_lock);
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
     *out = events[index];
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
     return E_OK;
 }
 #endif
@@ -182,9 +194,10 @@ void telemetry_stats(telemetry_stats_t *out)
      * more than one writer.  The struct is a set of 32-bit diagnostic counters
      * that never gate control, so the cost is limited to a short spin.
      */
-    (void)SpinLock(&stats_lock);
+    UINT intsts;
+    (void)ISpinLock(&stats_lock, &intsts);
     *out = stats;
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
 }
 
 /*
@@ -203,9 +216,10 @@ static void lose_locked(void)
  */
 static void lose(void)
 {
-    (void)SpinLock(&stats_lock);
+    UINT intsts;
+    (void)ISpinLock(&stats_lock, &intsts);
     ++stats.lost;
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
 }
 
 /*
@@ -273,9 +287,10 @@ static void dump(void)
     const UW after = dropped();
     tm_printf((UB *)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
               (unsigned long)after, (unsigned long)(after - before));
-    (void)SpinLock(&stats_lock);
+    UINT intsts;
+    (void)ISpinLock(&stats_lock, &intsts);
     stats.busy = false;
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
 }
 
 /*
@@ -295,7 +310,8 @@ static void telemetry_task(INT code, void *ctx)
             /* One critical section for the whole mutation AND the index
              * publication, so a reader can never pair a new row with an old
              * index (RT-0056 defect 2). */
-            (void)SpinLock(&stats_lock);
+    UINT intsts;
+            (void)ISpinLock(&stats_lock, &intsts);
             last_junction = (ja_result_t){0};
             stats.rows = 0u;
             stats.events = 0u;
@@ -306,10 +322,10 @@ static void telemetry_task(INT code, void *ctx)
             newest_row_ms = 0u;
             publish_index();
 #endif
-            (void)SpinUnlock(&stats_lock);
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_ROW:
-            (void)SpinLock(&stats_lock);
+            (void)ISpinLock(&stats_lock, &intsts);
             if (stats.rows == TELEMETRY_ROWS) {
                 stats.storage_full = true;
                 lose_locked();
@@ -325,10 +341,10 @@ static void telemetry_task(INT code, void *ctx)
 #if TM_MQTT
             publish_index();
 #endif
-            (void)SpinUnlock(&stats_lock);
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_EVENT:
-            (void)SpinLock(&stats_lock);
+            (void)ISpinLock(&stats_lock, &intsts);
             if (stats.events == TELEMETRY_EVENTS) {
                 stats.storage_full = true;
                 lose_locked();
@@ -338,7 +354,7 @@ static void telemetry_task(INT code, void *ctx)
 #if TM_MQTT
             publish_index();
 #endif
-            (void)SpinUnlock(&stats_lock);
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_INFO:
             info = m.data.info;
@@ -358,12 +374,12 @@ static void telemetry_task(INT code, void *ctx)
             motion_diag_dump(0);
             break;
         default:
-            (void)SpinLock(&stats_lock);
+            (void)ISpinLock(&stats_lock, &intsts);
             lose_locked();
 #if TM_MQTT
             publish_index();
 #endif
-            (void)SpinUnlock(&stats_lock);
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         }
     }
@@ -422,13 +438,14 @@ int telemetry_send(const telemetry_message_t *message)
         return E_PAR;
     }
     telemetry_message_t m = *message;
-    (void)SpinLock(&stats_lock);
+    UINT intsts;
+    (void)ISpinLock(&stats_lock, &intsts);
     const bool conflict = stats.busy;
     m.loss_base = stats.lost;
     if (!conflict && m.kind == TELEMETRY_DUMP) {
         stats.busy = true;
     }
-    (void)SpinUnlock(&stats_lock);
+    (void)ISpinUnlock(&stats_lock, intsts);
     if (conflict) {
         lose();
         return E_OBJ;
@@ -437,9 +454,9 @@ int telemetry_send(const telemetry_message_t *message)
     if (er < E_OK) {
         lose();
         if (m.kind == TELEMETRY_DUMP) {
-            (void)SpinLock(&stats_lock);
+            (void)ISpinLock(&stats_lock, &intsts);
             stats.busy = false;
-            (void)SpinUnlock(&stats_lock);
+            (void)ISpinUnlock(&stats_lock, intsts);
         }
     }
     return (int)er;
