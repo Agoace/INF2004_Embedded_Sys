@@ -45,6 +45,11 @@ static uint64_t bench_stack[BENCH_STACK_WORDS];
 #if TM_MQTT
 static uint64_t health_stack[HEALTH_STACK_WORDS];
 static uint64_t idle_stack[IDLE_STACK_WORDS];
+#if TK_SUPPORT_SMP
+/* Phase 5: the core-1 load meter gets its own slot and stack, so its margin is
+ * measured like every other task's instead of being assumed. */
+static uint64_t idle1_stack[IDLE_STACK_WORDS];
+#endif
 #endif
 typedef struct {
     const char *name;
@@ -72,6 +77,10 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
                              ,
                          SLOT("health_task", health_stack, APP_CORE_0),
                          SLOT("idle_meter", idle_stack, APP_CORE_0)
+#if TK_SUPPORT_SMP
+                             ,
+                         SLOT("idle_meter_1", idle1_stack, APP_CORE_1)
+#endif
 #endif
 };
 /* Compare two C strings. Returns true when they are equal. */
@@ -234,7 +243,8 @@ unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
             }
             (void)ISpinUnlock(&stacks_lock, intsts);
         }
-        out[n++] = (app_stack_t){s->name, s->size, high, s->size - high};
+        out[n++] = (app_stack_t){s->name, s->size, high, s->size - high,
+                                 (uint8_t)s->core};
     }
     return n;
 }
@@ -246,8 +256,9 @@ void app_task_report(void)
     const unsigned int n =
         app_task_stacks(rows, (unsigned int)(sizeof(slots) / sizeof(slots[0])));
     for (unsigned int i = 0u; i < n; ++i) {
-        tm_printf((UB *)"[stack] %s size %lu high_water %lu free %lu %s\n",
-                  rows[i].name, (unsigned long)rows[i].size,
+        tm_printf((UB *)"[stack] %s core %u size %lu high_water %lu free %lu %s\n",
+                  rows[i].name, (unsigned int)rows[i].core,
+                  (unsigned long)rows[i].size,
                   (unsigned long)rows[i].used, (unsigned long)rows[i].free,
                   rows[i].free < STACK_LOW_MARGIN ? "LOW MARGIN" : "OK");
     }

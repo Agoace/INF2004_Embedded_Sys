@@ -216,6 +216,34 @@ what it requires is one permanent owner.
 Every lock added here is a plain `SpinLock`, which is the correct variant under the
 lock rule because all of these callers are task context.
 
+## Phase 5: per-core load and stack margin
+
+Health stays on core 0, as decided, and the heartbeat's `cpu_load_permille` keeps
+its original core-0 meaning. Nothing in this phase introduces a dual-core total or
+changes the wire format.
+
+- **Core-1 load.** `idle_meter.c` now holds two meters, one per core.
+  `idle_meter_start()` and `idle_meter_load_permille()` keep their previous
+  behaviour exactly for core 0; `idle_meter_start_core1()` and
+  `idle_meter_load_permille_core1()` add the core-1 pair and exist only under
+  `TK_SUPPORT_SMP`. The guard matters: in a single-core build the second counting
+  task would land on core 0 and corrupt the very figure it is meant to complement.
+- **Shared calibration.** The RP2040's two cores run the same clock, so the
+  existing calibration supplies the peak rate for both. A per-core clock
+  difference would appear as a constant load offset, which is one reason these
+  figures are diagnostics rather than control inputs.
+- **Reading it.** `idle_meter_load_permille_core1()` is a lock-free read of one
+  aligned 32-bit counter plus arithmetic, so it is a bounded snapshot a caller can
+  take without waiting and without a lock.
+- **Stack margin per core.** `app_stack_t` gained a `core` field, filled from the
+  placement table, and `app_task_report()` prints it, so a core-1 task's margin is
+  reported beside its name instead of inferred. The core-1 meter has its own
+  registry slot (`idle_meter_1`, `APP_CORE_1`), so its stack is measured like
+  every other task's rather than assumed.
+- **The Wi-Fi task remains outside the registry** (open item 9). Phase 5 does not
+  close that: `cyw43_utk_start()` still creates it with `tk_cre_tsk`, so it has no
+  slot, no high-water mark, and no row in the per-core stack report.
+
 ## Open validation items
 
 None of these is closed, and none may be reported as a PASS without device
@@ -253,3 +281,7 @@ evidence.
 9. The Wi-Fi task sits outside the registry: `cyw43_utk_start()` builds it with
    `tk_cre_tsk`, so it has no slot and no stack high-water measurement. Its 6-8 KB
    stack is therefore untested against the 256-byte free minimum.
+10. Phase 5 has not run on a device. No figure exists for core-1 load, no
+   core-0 against core-1 comparison has been made, and no core-1 task's stack
+   margin has actually been read from the per-core report. The shared-calibration
+   assumption is also unverified against the two cores' real behaviour.

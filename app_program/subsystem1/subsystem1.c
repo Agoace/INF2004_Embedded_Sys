@@ -30,6 +30,11 @@ EXPORT ER subsystem1_start(void)
 #if TM_MQTT
     CHECK(robot_health_start(), "health task (noncritical)");
     CHECK(idle_meter_start(), "idle meter (noncritical)");
+#if TK_SUPPORT_SMP
+    /* Phase 5: the core-1 meter. Only in a two-core build; on one core a second
+     * counting task would run beside the first and corrupt the core-0 figure. */
+    CHECK(idle_meter_start_core1(), "idle meter core 1 (noncritical)");
+#endif
 #endif
 #if APP_BENCH && !APP_TEST
     return E_OK;
