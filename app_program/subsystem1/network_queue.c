@@ -173,11 +173,20 @@ void robot_network_board_result(unsigned int board, int result)
     }
     const uint8_t mask = (uint8_t)(1u << board);
 
+    /*
+     * RT-0083/F1: the reader is an atomic load, so the writer must be an atomic
+     * store as well. A plain C store against an atomic reader is not defined even
+     * when the object is one byte and the Wi-Fi task is the only writer.
+     */
     if (result >= E_OK) {
-        unavailable_mask = (uint8_t)(unavailable_mask & (uint8_t)~mask);
+        const uint8_t cur = __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
+        __atomic_store_n(&unavailable_mask, (uint8_t)(cur & (uint8_t)~mask),
+                         __ATOMIC_SEQ_CST);
     } else if (result == E_OBJ || result == E_NOEXS) {
         (void)atomic_inc((UW *)&unavailable);
-        unavailable_mask = (uint8_t)(unavailable_mask | mask);
+        const uint8_t cur = __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
+        __atomic_store_n(&unavailable_mask, (uint8_t)(cur | mask),
+                         __ATOMIC_SEQ_CST);
     } else if (result == E_TMOUT) {
         (void)atomic_inc((UW *)&busy[board]);
     }

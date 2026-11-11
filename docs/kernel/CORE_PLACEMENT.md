@@ -37,9 +37,13 @@ one core says nothing about the other, and a lock taken by a task and by a
 handler **on the same core** must use the interrupt-preserving variant, or the
 handler spins against the task it interrupted and neither proceeds.
 
-1. A lock reachable from a handler **and** a task on the same core uses
+1. A lock held by a task on one core and by a handler on that same core uses
    `ISpinLock` / `ISpinUnlock`. Never plain `SpinLock`.
-2. A lock reachable only from tasks may use `SpinLock`.
+2. The same applies whenever two holders on ONE core can preempt each other: two
+   tasks of different priority on that core, or a task and a handler. A plain
+   `SpinLock` is correct only when every holder sits on a different core from every
+   other holder, or when all holders are the same task. Reachability from a handler
+   is therefore not the test - preemption within a core is.
 3. Locked atomics (`atomic_*`) are hardware spinlock claims plus an
    interrupt-disable window on Cortex-M0+, which has no LDREX/STREX. Use them for
    low-rate state and counters. Do **not** take one per sample on the 1 ms Line

@@ -174,29 +174,42 @@ static void test_storage_full(void)
     expect("rows accepted and stored before the log filled", sent > 0u);
     expect("storage_full set once the consumer filled the log", full);
     if (full) {
-        telemetry_stats_t before;
-        telemetry_stats(&before);
         /*
-         * RT-0081/F2: the excess row must be ACCEPTED into the buffer, so that the
-         * consumer is what discards it. The previous version ignored this return, so
-         * a send rejected by a full buffer also satisfied the loss check without any
-         * excess row ever being handled.
+         * RT-0081/F2, corrected by RT-0083/F2: the excess row must be ACCEPTED into
+         * the buffer so that the CONSUMER discards it. The loss baseline is taken
+         * AFTER that accepted send, because every rejected retry below also
+         * increments lost - the previous version recorded it before the loop and
+         * could pass on retry losses alone, without the accepted row being handled.
          */
         int accepted = -1;
+        unsigned int retries = 0u;
         for (unsigned int attempt = 0u; attempt < 200u && 0 != accepted; ++attempt) {
             accepted = telemetry_send(&row);
             if (0 != accepted) {
+                ++retries;
                 (void)tk_dly_tsk(1u);   /* let the consumer make room */
             }
         }
         expect("excess row accepted into the buffer", 0 == accepted);
-        settle();
-        telemetry_stats_t after;
-        telemetry_stats(&after);
-        expect("excess row dropped rather than stored",
-               (uint32_t)TELEMETRY_ROWS == after.rows);
-        expect("excess row counted as a loss", after.lost > before.lost);
-        expect("storage_full remains readable", after.storage_full);
+        tm_printf((UB *)"[tel] storage-full retries before acceptance: %u\n",
+                  retries);
+        if (0 == accepted) {
+            telemetry_stats_t before;
+            telemetry_stats(&before);   /* baseline AFTER the accepted send */
+            bool dropped = false;
+            for (unsigned int wait = 0u; wait < 500u && !dropped; ++wait) {
+                (void)tk_dly_tsk(1u);
+                telemetry_stats_t after;
+                telemetry_stats(&after);
+                if (after.lost > before.lost) {
+                    expect("excess row dropped rather than stored",
+                           (uint32_t)TELEMETRY_ROWS == after.rows);
+                    expect("storage_full remains readable", after.storage_full);
+                    dropped = true;
+                }
+            }
+            expect("accepted excess row was discarded by the consumer", dropped);
+        }
     }
 }
 
