@@ -227,6 +227,11 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 
     (void)stacd;
     (void)exinf;
+    /* RT-0073/F3: record the entry stack pointer so the poll path can measure the
+     * deepest excursion against the known stack size. Declared here because this
+     * file's includes do not expose the T-Kernel types at file scope. */
+    extern void cyw43_utk_stack_top(uint32_t sp);
+    cyw43_utk_stack_top((uint32_t)(uint32_t)__builtin_frame_address(0));
     radio_status.owner_prc = (uint32_t)tk_get_prc();
 
     tm_printf((UB*)"wifi: cyw43_utk_task starting (proc %d)\n",

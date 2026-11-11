@@ -33,6 +33,35 @@ static BOOL window_active;
  * applied under the lock by the poll path or by the next window begin, so no
  * caller ever writes window_active from outside the lock. */
 static UW window_close_req;
+
+/* --- Wi-Fi task stack margin (RT-0073/F3) -----------------------------------
+ *
+ * The radio task is created by tk_cre_tsk directly, so it has no slot in the
+ * placement table and the kernel reports nothing about its stack: T_RTSK has no
+ * stack-use field, and T_CTSK has no stkadr because the kernel allocates the
+ * stack. There is therefore no address to scan.
+ *
+ * The available measurement is the task's own stack pointer. The task records the
+ * SP it started with (cyw43_utk_stack_top, called from cyw43_utk_task), and every
+ * poll iteration samples the current SP and keeps the lowest one seen. Free margin
+ * is the known stack size minus the deepest excursion.
+ *
+ * Limits, stated rather than papered over: the entry SP sits a few bytes below the
+ * true top of stack because of the call frame into the task function, so the figure
+ * is approximate and biased by that frame (well under 64 bytes on this ABI); the
+ * low-water sample is taken per poll, so a deeper excursion between samples is
+ * missed; and it reports nothing if the stack has already been overrun.
+ */
+static UW wifi_sp_top;
+static UW wifi_sp_low;
+
+void cyw43_utk_stack_top(uint32_t sp)
+{
+    if (0u == wifi_sp_top) {
+        wifi_sp_top = (UW)sp;
+        wifi_sp_low = (UW)sp;
+    }
+}
 static ER start_status = E_OBJ;
 #define CYW43_LONG_POLL_GAP_US 10000u
 
@@ -72,6 +101,13 @@ void cyw43_utk_poll_end(void)
 {
     const UW end = (UW)time_us_64();
     const UW work = end - started;
+    /* RT-0073/F3: one stack low-water sample per poll iteration. */
+    {
+        const UW sp = (UW)(uint32_t)__builtin_frame_address(0);
+        if (wifi_sp_top != 0u && sp < wifi_sp_low) {
+            wifi_sp_low = sp;
+        }
+    }
     UINT intsts;
     (void)ISpinLock(&timing_lock, &intsts);
     if (0u != atomic_xchg(&window_close_req, 0u)) {
@@ -188,7 +224,7 @@ int32_t cyw43_utk_start_status(void)
          * this reader reports. */
         return (int32_t)__atomic_load_n(&start_status, __ATOMIC_SEQ_CST);
     }
-    const ER result = start_status;
+    const ER result = __atomic_load_n(&start_status, __ATOMIC_SEQ_CST);
     (void)ISpinUnlock(&timing_lock, intsts);
     return result;
 }
@@ -208,6 +244,45 @@ int32_t cyw43_utk_start_status(void)
 #else
 #define CYW43_TASK_STACK     (6 * 1024)
 #endif
+
+/* Free margin of the radio task's stack, in bytes (RT-0073/F3). Placed after the
+ * stack size is defined, because the size is what makes the figure a margin. The
+ * limits are recorded beside the tracker above: approximate, biased by the entry
+ * frame, sampled per poll, and blind to a stack that has already been overrun. */
+uint32_t cyw43_utk_stack_free(void)
+{
+    if (0u == wifi_sp_top) {
+        return 0u;   /* the task has not started */
+    }
+    const UW used = wifi_sp_top - wifi_sp_low;
+    return (used >= CYW43_TASK_STACK) ? 0u : (uint32_t)(CYW43_TASK_STACK - used);
+}
+
+#if APP_TEST
+/*
+ * Collision hook for RT-0073/F3. timing_lock is static to this file, so the only
+ * way a test can force the "caller could not take the lock" path in
+ * cyw43_utk_timing_window_end() is to hold it from here. TEST builds only.
+ */
+static UINT timing_test_intsts;
+
+void cyw43_utk_timing_test_hold(void)
+{
+    (void)ISpinLock(&timing_lock, &timing_test_intsts);
+}
+
+void cyw43_utk_timing_test_release(void)
+{
+    (void)ISpinUnlock(&timing_lock, timing_test_intsts);
+}
+
+/* Pointer-free wrapper, so a test in app_program does not need T_CYW43_TIMING. */
+int32_t cyw43_utk_timing_test_window_end(void)
+{
+    T_CYW43_TIMING window;
+    return cyw43_utk_timing_window_end(&window);
+}
+#endif /* APP_TEST */
 
 EXPORT int32_t cyw43_utk_start(void)
 {
@@ -242,7 +317,7 @@ EXPORT int32_t cyw43_utk_start(void)
     if (task < E_OK) {
         UINT intsts;
         (void)ISpinLock(&timing_lock, &intsts);
-        start_status = task;
+        __atomic_store_n(&start_status, task, __ATOMIC_SEQ_CST);
         (void)ISpinUnlock(&timing_lock, intsts);
         return task;
     }
@@ -253,7 +328,7 @@ EXPORT int32_t cyw43_utk_start(void)
     const ER sta = tk_sta_tsk(task, 0);
     UINT intsts;
     (void)ISpinLock(&timing_lock, &intsts);
-    start_status = sta;
+    __atomic_store_n(&start_status, sta, __ATOMIC_SEQ_CST);
     (void)ISpinUnlock(&timing_lock, intsts);
     if (sta < E_OK) {
         (void)tk_del_tsk(task);

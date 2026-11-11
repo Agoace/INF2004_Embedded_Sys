@@ -60,7 +60,7 @@ by a handler and a task on the same core once a task moves).
 | `subsystem1/log_stream.c:571,587` | DUMP admission state (`s_admit`: request id, IDLE/PENDING/ACTIVE) | requested from Vehicle on core 0 (`vehicle_task.c:404`), consumed by the Wi-Fi task on core 1 | **converted in Phase 4, repaired in RT-0069**: `log_stream_dump_request()` takes one `ISpinTryLock` and returns `E_TMOUT` rather than waiting; `dump_active()` and the two Wi-Fi holders use `ISpinLock`. The transfer stage, cursors and acknowledgements stay Wi-Fi-owned and are never read from core 0 |
 | `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0; Vehicle counts a loss on the ESTOP route | **no lock remains (RT-0071/F3)**: every counter is updated with the kernel atomic RMW, so the ESTOP route cannot wait at all. The unavailable mask keeps a single writer |
 | `subsystem1/robot_mqtt.c` | MQTT metrics and counters | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4, repaired in RT-0069**: every writer goes through a locked setter and the `robot_network_metrics()` snapshot releases the lock before calling `log_stream_dump_active()`, `cyw43_utk_get_status()` or `cyw43_utk_timing_read()`, so no lock is nested inside another |
-| `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3, repaired in RT-0056/RT-0063**: ONE mechanism, `stats_lock`, covers the stats group, the payload copies and index publication; readers take one immediate `ISpinTryLock` and return `E_TMOUT`, holders use `ISpinLock`; no `DI()`/`EI()` and no write sequence remain in the file |
+| `subsystem1/telemetry.c` | RAM-log payload and index; control state separately | Telemetry task on core 1; Wi-Fi readers on core 1; core-0 decision readers use atomics only | **replaced in Phase 3, repaired in RT-0056/RT-0063/RT-0071**: `stats_lock` covers the payload copies and index publication only - readers take one immediate `ISpinTryLock` and return `E_TMOUT`, holders use `ISpinLock`. The control words (`busy`, `storage_full`, `lost`) are separate atomics, and `telemetry_send()`/`telemetry_stats()`/`lose()` take no lock at all |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
 | `subsystem3/drv_line.c:59-66` | line ring buffer | 1 ms ADC IRQ and line task, both core 0 | keep - core 0 by placement |
 | `subsystem5/drv_ultrasonic.c:44` | listener id | echo IRQ and sonar task, both core 0 | keep - core 0 by placement |
@@ -152,9 +152,11 @@ underneath it, but it cannot make a byte-wise copy of `rows[]` or a struct copy 
 second mechanism that no longer carries the contract would only invite doubt about
 which one does.
 
-`stats_lock` is now the single mechanism. It covers the stats group, the row and
-event copies, and the index publication, so a reader never sees a payload that has
-moved while the index still points at the old place.
+`stats_lock` is now the single mechanism **for the payload**: it covers the row and
+event copies and the index publication, so a reader never sees a payload that has
+moved while the index still points at the old place. It is deliberately *not* the
+mechanism for control state - see the next subsection, where `busy`, `storage_full`
+and `lost` are atomics because Vehicle decides on them.
 
 Two variants, chosen by role:
 
@@ -384,14 +386,13 @@ device evidence exists.
 | --- | --- | --- | --- | --- | --- |
 | `telemetry_log_row` | 105 | IST | core 1, 20 (Wi-Fi, via `log_stream`) | index read + one row copy | 1 struct + 1 row (64 B) |
 | `telemetry_log_event` | 140 | IST | core 1, 20 (Wi-Fi) | index read + one event copy | 1 struct + 1 event |
-| `telemetry_stats` | 198 | ISL | core 0, 31 (Health); core 1, 30 (`dump`) | stats snapshot | 1 struct copy |
-| `lose` | 220 | ISL | core 0, 13 (`telemetry_send`) | loss increment | 1 counter |
-| `dump` | 291 | ISL | core 1, 30 (Telemetry) | clear busy | 1 flag |
-| `telemetry_task` cases | 314, 328, 347, 377 | ISL | core 1, 30 | one row/event write + `publish_index` | 1 row or 1 event + index |
-| `telemetry_send` | 442, 457 | ISL | core 0, 13 (Vehicle) | admission check, copy into ring | 1 struct copy |
+| `telemetry_task` cases | 314, 328, 347, 377 | ISL | core 1, 30 | one row/event write + `publish_index` + `publish_stats` | 1 row or 1 event + index |
 
-`lose` is only reached from outside a held region; callers inside a case use
-`lose_locked`. No section contains a `tk_*` wait, printf or network call.
+Four callers that used to hold this lock no longer do, and the table is the place
+that says so: `telemetry_stats()`, `lose()`, `dump()` and `telemetry_send()` take
+no lock at all after RT-0071. `lose_locked()` is called only from inside a task
+case, and still takes nothing because the caller holds it. No section contains a
+`tk_*` wait, printf or network call.
 
 #### `dump_lock` — `subsystem1/log_stream.c:102` — repaired in RT-0069
 
@@ -461,9 +462,10 @@ accidental:
   which take `dump_lock`, `status_lock` and `timing_lock`. Holding `metrics_lock`
   across those calls would open exactly the ordering question this table exists to
   close.
-- `telemetry.c` splits `lose()` (takes `stats_lock`) from `lose_locked()` (caller
-  already holds it), so no path re-enters the same lock.
-- `dump()` takes `stats_lock` only for the busy flag and prints with no lock held.
+- `telemetry.c` no longer nests anything: `lose()` and `telemetry_stats()` are
+  atomic-only after RT-0071, and the task cases take `stats_lock` once for the
+  payload, the index publication and the snapshot together.
+- `dump()` takes no lock; it reads the published counters and prints.
 - `app_task_report()` prints the load line outside `app_task_stacks()`, so
   `stacks_lock` is not held during printf.
 

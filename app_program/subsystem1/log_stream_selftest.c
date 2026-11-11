@@ -23,6 +23,8 @@
 #if APP_TEST
 
 #include <stdbool.h>
+
+#if TM_MQTT
 #include "log_stream.h"
 
 static uint32_t last_token;
@@ -76,5 +78,18 @@ void log_stream_admission_selftest(void)
 
     tm_printf((UB *)"[dump] admission selftest done\n");
 }
+
+#else /* !TM_MQTT */
+/*
+ * log_stream is MQTT-only, so a non-MQTT profile has no DUMP admission to test.
+ * The function is still defined because app_main.c calls it unconditionally in a
+ * TEST build; without this the non-MQTT TEST image fails to link, which is exactly
+ * what a full TEST link caught.
+ */
+void log_stream_admission_selftest(void)
+{
+    tm_printf((UB *)"[dump] skipped: no MQTT in this profile\n");
+}
+#endif /* TM_MQTT */
 
 #endif /* APP_TEST */

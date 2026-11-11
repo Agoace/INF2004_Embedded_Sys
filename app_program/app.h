@@ -37,6 +37,19 @@ typedef enum {
 	APP_CORE_1 = 1
 } app_core_t;
 
+/*
+ * Build profile switch (RT-0073/F3): APP_FORCE_CORE0=1 pins every application task
+ * to core 0 even in an SMP image. That is the migration's control build - the
+ * dual-core kernel is linked, but placement is single-core - so behaviour can be
+ * compared against the migration image on the same kernel rather than against a
+ * different kernel. Default 0 is the migration placement.
+ *
+ * Build it with:  make SMP=1 FORCE_CORE0=1 ...
+ */
+#ifndef APP_FORCE_CORE0
+#define APP_FORCE_CORE0 0
+#endif
+
 /* PRC value for a core.  TP_PRC1 is core 0, so core 1 is TP_PRC1 + 1.  In a
    single-core build both answers are TP_PRC1, because there is nowhere else to
    run.  A cyclic handler must use the same core as the task it feeds. */
@@ -80,6 +93,8 @@ IMPORT void subsystem5_test(void);
 IMPORT void app_lock_stress_run(void);
 /* Phase 4: DUMP admission interleaving self-test. See docs/kernel/CORE_PLACEMENT.md */
 IMPORT void log_stream_admission_selftest(void);
+/* RT-0073/F3: contention and admission tests. See docs/kernel/CORE_PLACEMENT.md */
+IMPORT void telemetry_contention_test(void);
 #endif
 
 /* Print a readable message if a kernel call failed (negative error code) */

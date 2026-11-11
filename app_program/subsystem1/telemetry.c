@@ -37,10 +37,14 @@ static UW admit_lost;   /* losses, incremented from both cores */
  */
 static telemetry_stats_t stats_pub;
 
-/* Publish the diagnostic counters. Caller holds stats_lock. */
+/* Publish the diagnostic counters. Caller holds stats_lock.
+ *
+ * RT-0073/F1: per-field atomic stores, so each counter's publication is a defined
+ * operation rather than a plain write that a reader could race. */
 static void publish_stats(void)
 {
-    stats_pub = stats;
+    __atomic_store_n(&stats_pub.rows, stats.rows, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&stats_pub.events, stats.events, __ATOMIC_SEQ_CST);
 }
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
@@ -82,7 +86,8 @@ static APP_BOARD(telemetry_log_index_t) log_index;
 static void publish_index(void)
 {
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
-                                     admit_lost, newest_row_ms};
+                                     __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST),
+                                     newest_row_ms};
     app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
 }
 
@@ -223,12 +228,14 @@ void telemetry_stats(telemetry_stats_t *out)
      * without synchronisation here, which is what the previous version did when
      * its try-lock failed.
      */
-    const telemetry_stats_t snapshot = stats_pub;
-    out->busy = (0u != admit_busy);
-    out->storage_full = (0u != admit_full);
-    out->lost = admit_lost;
-    out->rows = snapshot.rows;
-    out->events = snapshot.events;
+    /* RT-0073/F1: every read here is a defined atomic load.  An aligned word read
+     * keeps the hardware value whole, but it is still a plain C access racing an
+     * atomic RMW on the other core, which is not the contract claimed. */
+    out->busy = (0u != __atomic_load_n(&admit_busy, __ATOMIC_SEQ_CST));
+    out->storage_full = (0u != __atomic_load_n(&admit_full, __ATOMIC_SEQ_CST));
+    out->lost = __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST);
+    out->rows = __atomic_load_n(&stats_pub.rows, __ATOMIC_SEQ_CST);
+    out->events = __atomic_load_n(&stats_pub.events, __ATOMIC_SEQ_CST);
 }
 
 /*
@@ -487,7 +494,7 @@ int telemetry_send(const telemetry_message_t *message)
         }
         reserved = true;
     }
-    m.loss_base = admit_lost;   /* aligned word read */
+    m.loss_base = __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST);
     const ER er = tk_snd_mbf(mbf_telemetry, &m, (INT)sizeof(m), TMO_POL);
     if (er < E_OK) {
         /* A real message-buffer failure: the caller may stop the run. */

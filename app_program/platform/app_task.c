@@ -15,6 +15,12 @@
 #include "app_task.h"
 #include "idle_meter.h"   /* Phase 5: per-core load in the report */
 #include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
+
+#if TM_MQTT
+/* libwifi: radio task stack margin (RT-0073/F3). Declared here rather than through
+ * cyw43_utk.h so this platform file does not depend on the Wi-Fi include path. */
+IMPORT uint32_t cyw43_utk_stack_free(void);
+#endif
 #include <stdbool.h>
 #include <tk/smp.h>   /* T_SPLOCK, ISpinTryLock: cross-core stack marks */
 #include <tm/tmonitor.h>
@@ -61,7 +67,14 @@ typedef struct {
     uint8_t core;   /* physical core this task is allowed to run on */
 } slot_t;
 
-#define SLOT(n, s, c) {n, s, sizeof(s), 0u, 0, c}
+/* RT-0073/F3: the control profile collapses every requested core to core 0, so a
+ * slot and the processor request it is checked against cannot disagree. */
+#if APP_FORCE_CORE0
+#define SLOT_CORE(c) APP_CORE_0
+#else
+#define SLOT_CORE(c) (c)
+#endif
+#define SLOT(n, s, c) {n, s, sizeof(s), 0u, 0, SLOT_CORE(c)}
 static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
                          SLOT("line_task", line_stack, APP_CORE_0),
                          SLOT("sonar_task", sonar_stack, APP_CORE_0),
@@ -125,7 +138,13 @@ UW app_prc_core0(void)
 /* PRC for core 1, or core 0 when the build has one core. */
 UW app_prc_core1(void)
 {
+#if APP_FORCE_CORE0
+    /* Control build: the migration's core-1 placement is collapsed to core 0, so
+     * the same image can be compared with the migration against one kernel. */
+    return app_prc_core0();
+#else
     return app_core_prc(APP_CORE_1);
+#endif
 }
 
 /*
@@ -282,5 +301,10 @@ void app_task_report(void)
     tm_printf((UB *)"[load] core 0 %u permille\n",
               (unsigned int)idle_meter_load_permille());
 #endif
+    /* RT-0073/F3: the radio task's stack margin, measured by the task itself
+     * because the kernel reports no stack use for an externally created task. The
+     * figure is approximate; see the note in cyw43_utk_kernel.c. */
+    tm_printf((UB *)"[stack] wifi free %lu bytes (approx)\n",
+              (unsigned long)cyw43_utk_stack_free());
 #endif
 }
