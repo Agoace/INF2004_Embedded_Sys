@@ -488,3 +488,50 @@ holders before it is used.
 - `lost()` in `network_queue.c` has callers on both cores. Each caller needs its core
   attributed before the lock variant can be chosen.
 - Measured maximum wait per lock. Blank by design.
+
+## Performance gate (RT-0085)
+
+The owner reports the RoboCar can approach 80% CPU load in normal running. This
+branch adds work to a system with limited headroom, so acceptance is a measurement on
+the Pico W, not a code size or a green link. **Nothing in this section is measured.**
+It records what was added, at what rate, and exactly what the bench run must capture.
+
+### Work this migration adds, by rate
+
+| Path | Period | What it adds |
+| --- | --- | --- |
+| CYW43 poll (`cyw43_utk_poll_end`) | ~2 ms | one stack low-water sample (two atomic loads, conditional atomic store) plus the existing timing update |
+| Telemetry per row/event | per message | `publish_stats()` (two atomic stores) and `publish_index()` (board publish) inside the existing `stats_lock` section |
+| IMU task and cyclic | 10 ms | unchanged work; only the core it runs on changed |
+| Idle meters | continuous | two counting tasks that spin without WFI, one per core; the core-1 meter is not started in the control profile |
+| Queue / admission atomics | low rate | one hardware-spinlock claim per counter update, on loss and board-result paths only |
+
+### Not optimised on guesswork
+
+The plan's gate says queue loss atomics are low-rate and must not be optimised on
+guesswork; the same standard applies to every row above. Nothing in this branch has
+been changed for speed, because no measurement exists. If the gate fails, the plan's
+order applies: gate or simplify optional diagnostics first - the per-poll stack sample
+and the per-row snapshot publication are the obvious candidates - then the costly
+synchronisation path, while preserving the repaired cross-core state contract. A
+safety or coherence fix is not to be reverted to save cycles.
+
+### TEST hooks are outside production images - verified
+
+`#if APP_TEST` encloses the payload-lock hook (`telemetry.c:65-83`) and the CYW43
+timing hooks with their pointer-free wrapper (`cyw43_utk_kernel.c:267-291`).
+`app_lock_stress.c`, `log_stream_selftest.c` and `telemetry_contention_test.c` are
+guarded from their first `#if APP_TEST`. A non-TEST image therefore contains none of
+them, which is the one part of this gate that can be settled without hardware.
+
+### Bench procedure and the exact images
+
+Images: migration `mtk3pico_smp1_usb_cdc_wifi_lwip_mqtt.uf2`; control
+`..._core0.uf2`; radio-off `mtk3pico_smp0_usb_cdc.uf2`; test `..._test.uf2`.
+
+Per image, under comparable line, IMU, Wi-Fi/MQTT and telemetry load, record: the
+`[load]` line for both cores, maximum Motion and Vehicle gaps, line losses, IMU
+sample and work time, Wi-Fi poll gaps and reconnect behaviour, telemetry producer
+time, maximum lock wait, maximum interrupt-off time, stop and watchdog response, and
+the active stack margins. Report the image with each number: average load alone does
+not establish a deadline or a stop-response result.
