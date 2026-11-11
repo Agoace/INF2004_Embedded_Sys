@@ -30,9 +30,11 @@ EXPORT ER subsystem1_start(void)
 #if TM_MQTT
     CHECK(robot_health_start(), "health task (noncritical)");
     CHECK(idle_meter_start(), "idle meter (noncritical)");
-#if TK_SUPPORT_SMP
+#if TK_SUPPORT_SMP && !APP_FORCE_CORE0
     /* Phase 5: the core-1 meter. Only in a two-core build; on one core a second
-     * counting task would run beside the first and corrupt the core-0 figure. */
+     * counting task would run beside the first and corrupt the core-0 figure.
+     * RT-0075/F1: also skipped in the all-core-0 control profile, where it would
+     * land on core 0 and add a second busy loop to the very figure it complements. */
     CHECK(idle_meter_start_core1(), "idle meter core 1 (noncritical)");
 #endif
 #endif

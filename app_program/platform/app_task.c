@@ -301,10 +301,13 @@ void app_task_report(void)
     tm_printf((UB *)"[load] core 0 %u permille\n",
               (unsigned int)idle_meter_load_permille());
 #endif
-    /* RT-0073/F3: the radio task's stack margin, measured by the task itself
-     * because the kernel reports no stack use for an externally created task. The
-     * figure is approximate; see the note in cyw43_utk_kernel.c. */
-    tm_printf((UB *)"[stack] wifi free %lu bytes (approx)\n",
+    /* RT-0073/F3, corrected by RT-0075/F4: this samples the poll frame once per
+     * iteration, so it cannot see deeper Wi-Fi calls that returned before the
+     * sample. It is therefore an UPPER BOUND on free space, not a minimum margin,
+     * and it cannot establish the 256-byte acceptance gate - which stays unmeasured
+     * until a stack watermark or another on-device method exists. */
+    tm_printf((UB *)"[stack] wifi free >= %lu bytes (upper bound on free; "
+              "256 B gate unmeasured)\n",
               (unsigned long)cyw43_utk_stack_free());
 #endif
 }

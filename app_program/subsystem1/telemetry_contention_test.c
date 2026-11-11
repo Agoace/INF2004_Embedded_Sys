@@ -37,6 +37,10 @@ IMPORT int32_t cyw43_utk_timing_window_begin(void);
 IMPORT int32_t cyw43_utk_timing_test_window_end(void);
 #endif
 
+/* Payload-lock hook, TEST builds only (telemetry.c). */
+IMPORT void telemetry_test_hold_payload_lock(void);
+IMPORT void telemetry_test_release_payload_lock(void);
+
 static unsigned int fails;
 
 static void expect(const char *what, bool ok)
@@ -56,36 +60,60 @@ static void settle(void)
 }
 
 /*
- * T1. DUMP admission and rollback. One reservation at a time, and a refused second
- * request must not be counted as an admitted dump.
+ * T1. DUMP admission, duplicate rejection and rollback.
+ *
+ * RT-0075/F3: the previous version discarded the second result and accepted either
+ * outcome, so it proved nothing about duplicate rejection. On ONE core the consumer
+ * cannot run between the two calls, so refusal is deterministic and is asserted. On
+ * two cores the consumer may already have completed the dump, so that assertion is
+ * scoped out rather than weakened into a tautology.
+ *
+ * Rollback is exercised by saturating the message buffer and then submitting a DUMP:
+ * it takes the reservation, the send fails, and the reservation must be released
+ * rather than left stuck.
  */
 static void test_dump_admission(void)
 {
-    telemetry_message_t m = {0};
-    m.kind = TELEMETRY_DUMP;
+    telemetry_message_t dump = {0};
+    dump.kind = TELEMETRY_DUMP;
+    telemetry_message_t row = {0};
+    row.kind = TELEMETRY_ROW;
 
     settle();
     telemetry_stats_t before;
     telemetry_stats(&before);
 
-    const int first = telemetry_send(&m);
+    const int first = telemetry_send(&dump);
     expect("first DUMP admitted", 0 == first);
 #if !TK_SUPPORT_SMP
-    /* Single core: the task cannot consume yet, so the reservation must be visible
-     * immediately. On two cores the consumer may already have cleared it. */
     telemetry_stats_t held;
     telemetry_stats(&held);
     expect("reservation visible before consumption", held.busy);
+    const int second = telemetry_send(&dump);
+    expect("duplicate DUMP refused while the reservation is held", E_OBJ == second);
+#else
+    (void)telemetry_send(&dump);   /* consumer may have finished; both are legal */
 #endif
-    (void)telemetry_send(&m);   /* may be refused or admitted, both are legal */
 
     settle();
     telemetry_stats_t after;
     telemetry_stats(&after);
-    /* Whatever happened, the reservation must not be stuck. */
     expect("reservation released after the dump", !after.busy);
-    /* A refused DUMP is a loss and must be counted. */
-    expect("loss accounting moved", after.lost >= before.lost);
+    expect("loss accounting did not go backwards", after.lost >= before.lost);
+
+#if !TK_SUPPORT_SMP
+    /* Saturate the buffer, then submit a DUMP that is expected to fail its send. */
+    for (unsigned int i = 0u; i < 2000u; ++i) {
+        (void)telemetry_send(&row);
+    }
+    const int saturated = telemetry_send(&dump);
+    tm_printf((UB *)"[tel] DUMP send against a saturated buffer returned %d\n",
+              saturated);
+    settle();
+    telemetry_stats_t rb;
+    telemetry_stats(&rb);
+    expect("reservation not stuck after a saturated dump send", !rb.busy);
+#endif
 }
 
 /*
@@ -114,7 +142,9 @@ static void test_storage_full(void)
     expect("rows accepted before the log filled", sent > 0u);
     expect("storage_full set when the log is full", full);
     if (full) {
-        /* The stop decision Vehicle makes is readable and must stay set. */
+        /* This is the input Vehicle's storage-full stop decides on. The stop itself
+         * - that Vehicle actually halts - is not asserted here: it lives in
+         * vehicle_task.c and needs Phase 6 device evidence (RT-0075/F3). */
         telemetry_stats_t st;
         telemetry_stats(&st);
         expect("storage_full remains readable", st.storage_full);
@@ -151,27 +181,43 @@ static void test_loss_counting(void)
  */
 static void test_producer_progress(void)
 {
+    telemetry_message_t row = {0};
+    row.kind = TELEMETRY_ROW;
+
+    /*
+     * RT-0075/F3: hold the payload lock for the whole measurement, so the producer
+     * demonstrably runs while the RAM-log lock is unavailable. The previous version
+     * never held it and proved nothing.
+     *
+     * Note for two-core builds: the Telemetry task will spin on this lock for the
+     * duration of the loop. That is the point - the producer must not join it.
+     */
+    telemetry_test_hold_payload_lock();
     const UW start = drv_time_us();
-    telemetry_message_t m = {0};
-    m.kind = TELEMETRY_ROW;
     unsigned int admitted = 0u;
     for (unsigned int i = 0u; i < 200u; ++i) {
-        if (0 == telemetry_send(&m)) {
+        if (0 == telemetry_send(&row)) {
             ++admitted;
         }
     }
     const UW elapsed = drv_time_us() - start;
-    tm_printf((UB *)"[tel] producer 200 sends in %lu us, %u admitted\n",
-              (unsigned long)elapsed, admitted);
-    expect("producer admitted work", admitted > 0u);
+    telemetry_test_release_payload_lock();
+
+    tm_printf((UB *)"[tel] producer 200 sends in %lu us under a held payload lock, "
+              "%u admitted\n", (unsigned long)elapsed, admitted);
+    expect("producer admitted work while the payload lock was held", admitted > 0u);
     /* Loose: 200 sends must not take longer than a 10 ms control tick, which a
      * payload-lock wait would exceed. */
     expect("producer not blocked by the payload lock", elapsed < 10000u);
 }
 
-#if TM_MQTT
+#if TM_MQTT && TK_SUPPORT_SMP
 /*
  * T5. Timing window collision at begin and end (RT-0071/F2).
+ *
+ * RT-0075/F3: scoped to two-core builds. The single-core shim's ISpinTryLock always
+ * succeeds, so a self-held collision cannot produce E_TMOUT there and the check
+ * asserted a result that profile cannot return.
  *
  * Begin while the lock is held: the call must fail fast and open NO window.
  * End while the lock is held: the call must fail fast AND leave a close request
@@ -217,7 +263,7 @@ void telemetry_contention_test(void)
     test_storage_full();
     test_loss_counting();
     test_producer_progress();
-#if TM_MQTT
+#if TM_MQTT && TK_SUPPORT_SMP
     test_timing_collision();
 #endif
 

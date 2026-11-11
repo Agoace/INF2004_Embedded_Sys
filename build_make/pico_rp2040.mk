@@ -175,13 +175,21 @@ ifeq ($(CONSOLE)$(CRASH_REPORT),usb_cdc1)
 CRASH_SUFFIX := _crash
 endif
 
+# RT-0075/F2: the placement profile changes which core every task lands on, so it
+# changes the object code and must appear in both the artifact name and the
+# invalidation key below. Without this, switching FORCE_CORE0 reuses objects built
+# for the other placement and overwrites an identically named UF2.
+ifeq ($(FORCE_CORE0),1)
+CORE_SUFFIX := _core0
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
 # a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
 # only the banner in the log revealed it.
 #
-EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)$(CORE_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -279,7 +287,7 @@ endif
 # before any recipe executes.
 ################################################################################
 
-PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)-junction$(JUNCTION_TEST_CMD_ID)
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)-diag$(DIAG)-imu_stream$(IMU_STREAM)-hump_source$(IMU_HUMP_SOURCE)-junction$(JUNCTION_TEST_CMD_ID)-forcecore$(FORCE_CORE0)
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

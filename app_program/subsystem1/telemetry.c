@@ -62,6 +62,26 @@ static uint32_t loss_base;
  */
 static T_SPLOCK stats_lock;
 
+#if APP_TEST
+/*
+ * RT-0075/F3: let a test hold the payload lock, so "producer progress while the
+ * core-1 payload lock is held" can actually be exercised. stats_lock is static to
+ * this file, so there is no other way to reach it. TEST builds only. Declared here,
+ * after the lock itself.
+ */
+static UINT stats_test_intsts;
+
+void telemetry_test_hold_payload_lock(void)
+{
+    (void)ISpinLock(&stats_lock, &stats_test_intsts);
+}
+
+void telemetry_test_release_payload_lock(void)
+{
+    (void)ISpinUnlock(&stats_lock, stats_test_intsts);
+}
+#endif /* APP_TEST */
+
 /*
  * The log has ONE contract: stats_lock.  An earlier revision used a separate
  * odd/even write sequence here, with readers detecting a changed copy and

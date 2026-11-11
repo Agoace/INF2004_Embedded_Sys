@@ -301,7 +301,14 @@ EXPORT int32_t cyw43_utk_start(void)
      * See docs/kernel/CORE_PLACEMENT.md. */
 #if TK_SUPPORT_SMP
     ctsk.tskatr = TA_HLNG | TA_RNG1 | TA_ASSPRC;
+#if APP_FORCE_CORE0
+    /* RT-0075/F1: the control profile must be all-core-0, and this task is the one
+     * that would otherwise keep running on core 1. Without this the "control" image
+     * still had the radio isolated on its own core. */
+    ctsk.assprc = TP_PRC1;
+#else
     ctsk.assprc = TP_PRC1 + 1u;   /* core 1 */
+#endif
 #else
     ctsk.tskatr = TA_HLNG | TA_RNG1;
     ctsk.assprc = 0;

@@ -159,7 +159,14 @@ static void interleave_run(void)
 
     (void)tk_del_tsk(id);
 
-    tm_printf((UB *)"[lock] interleave seen %lu busy %lu done %lu %s\n",
+    /*
+     * RT-0075/F3: `collisions` is the evidence that a collision actually happened -
+     * the runner found the lock taken. On ONE core it must stay 0, because the
+     * holder cannot be preempted, so there the check proves non-preemption and a
+     * same-core collision is impossible by construction. The count is printed so a
+     * two-core run can show one rather than assume it.
+     */
+    tm_printf((UB *)"[lock] interleave held_seen %lu collisions %lu done %lu %s\n",
               (unsigned long)il_seen, (unsigned long)il_busy,
               (unsigned long)il_done,
               (0u == il_seen && 0u != il_done) ? "PASS" : "FAIL");
