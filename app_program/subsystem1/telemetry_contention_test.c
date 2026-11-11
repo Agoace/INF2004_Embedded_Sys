@@ -102,17 +102,26 @@ static void test_dump_admission(void)
     expect("loss accounting did not go backwards", after.lost >= before.lost);
 
 #if !TK_SUPPORT_SMP
-    /* Saturate the buffer, then submit a DUMP that is expected to fail its send. */
+    /*
+     * Rollback. RT-0077/F1: the previous version only PRINTED the result and then
+     * settled, so it could PASS on a DUMP that was accepted, consumed and released
+     * normally without any send ever failing. Now the buffer is drained first and
+     * then saturated without yielding, so the state is deterministic, and the send
+     * failure itself is asserted before the reservation is examined.
+     */
+    settle();   /* drain, so saturation starts from a known state */
     for (unsigned int i = 0u; i < 2000u; ++i) {
         (void)telemetry_send(&row);
     }
     const int saturated = telemetry_send(&dump);
-    tm_printf((UB *)"[tel] DUMP send against a saturated buffer returned %d\n",
-              saturated);
-    settle();
-    telemetry_stats_t rb;
-    telemetry_stats(&rb);
-    expect("reservation not stuck after a saturated dump send", !rb.busy);
+    expect("DUMP send fails against a saturated buffer", E_TMOUT == saturated);
+    if (E_TMOUT == saturated) {
+        /* No settle() here: the rollback happens inside the send, so the
+         * reservation must already be free. */
+        telemetry_stats_t rb;
+        telemetry_stats(&rb);
+        expect("reservation released by the failed send", !rb.busy);
+    }
 #endif
 }
 
@@ -185,13 +194,20 @@ static void test_producer_progress(void)
     row.kind = TELEMETRY_ROW;
 
     /*
-     * RT-0075/F3: hold the payload lock for the whole measurement, so the producer
-     * demonstrably runs while the RAM-log lock is unavailable. The previous version
-     * never held it and proved nothing.
+     * RT-0075/F3, corrected by RT-0077/F2: hold the payload lock for the whole
+     * measurement, so the producer demonstrably runs while the RAM-log lock is
+     * unavailable. The buffer is drained first, so "admitted > 0" means the producer
+     * progressed rather than that the queue happened to have room left over from the
+     * previous test.
      *
-     * Note for two-core builds: the Telemetry task will spin on this lock for the
-     * duration of the loop. That is the point - the producer must not join it.
+     * Scope of the claim, stated because the previous wording overstated it: the
+     * holder here is THIS task on core 0, not the Telemetry task on core 1. What the
+     * test therefore establishes is that telemetry_send() takes no part in the
+     * payload lock at all - which is the mechanism the fix relies on - not a
+     * reproduced core-1-holder interleaving. That interleaving needs the consumer to
+     * be inside its critical section, which this test cannot force.
      */
+    settle();   /* drain, so admitted > 0 is meaningful */
     telemetry_test_hold_payload_lock();
     const UW start = drv_time_us();
     unsigned int admitted = 0u;

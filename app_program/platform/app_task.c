@@ -301,12 +301,13 @@ void app_task_report(void)
     tm_printf((UB *)"[load] core 0 %u permille\n",
               (unsigned int)idle_meter_load_permille());
 #endif
-    /* RT-0073/F3, corrected by RT-0075/F4: this samples the poll frame once per
-     * iteration, so it cannot see deeper Wi-Fi calls that returned before the
-     * sample. It is therefore an UPPER BOUND on free space, not a minimum margin,
-     * and it cannot establish the 256-byte acceptance gate - which stays unmeasured
-     * until a stack watermark or another on-device method exists. */
-    tm_printf((UB *)"[stack] wifi free >= %lu bytes (upper bound on free; "
+    /* RT-0073/F3, corrected by RT-0075/F4 and RT-0077/F3: this samples the poll
+     * frame once per iteration, so it cannot see deeper Wi-Fi calls that returned
+     * before the sample. The figure is therefore an UPPER BOUND on free space -
+     * actual free space is at or below it - so the inequality reads `<=`, not `>=`.
+     * It cannot establish the 256-byte acceptance gate, which stays unmeasured until
+     * a stack watermark or another on-device method exists. */
+    tm_printf((UB *)"[stack] wifi free <= %lu bytes (upper bound on free; "
               "256 B gate unmeasured)\n",
               (unsigned long)cyw43_utk_stack_free());
 #endif
