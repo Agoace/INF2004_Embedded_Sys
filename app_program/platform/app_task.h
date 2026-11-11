@@ -3,7 +3,9 @@
 #define APP_TASK_H
 #include <tk/tkernel.h>
 #include <stdint.h>
-/* Core-0 application tasks only. Stacks are static, 8-byte aligned, prefilled. */
+/* Registered application tasks.  Stacks are static, 8-byte aligned, prefilled.
+   The core passed to app_task_start() must agree with the placement table in
+   app_task.c, which owns where each task is allowed to run. */
 ID app_task_start(FP entry, PRI priority, UW core, const char *name);
 typedef struct { const char *name; uint32_t size, used, free; } app_stack_t;
 unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity);

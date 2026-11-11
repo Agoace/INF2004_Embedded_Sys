@@ -39,7 +39,9 @@
 
 /*
  * Create and start one task (declared in app.h for every subsystem).
- *   Registered application tasks use prc = TP_PRC1 (core 0).
+ *   prc comes from app_prc_core0() or app_prc_core1(); every subsystem still
+ *   passes core 0, and platform/app_task.c rejects any task placed on a core its
+ *   slot does not allow.
  */
 EXPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name)
 {
@@ -119,6 +121,7 @@ EXPORT INT usermain(void)
         subsystem3_test();
         subsystem4_test();
         subsystem5_test();
+        app_lock_stress_run();
         app_task_report();
         /* Destructive reset check follows every other subsystem test. */
         subsystem2_watchdog_test();

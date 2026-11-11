@@ -4,9 +4,16 @@
  *
  * Each slot has a static, 8-byte aligned stack that is filled with a known
  * pattern before the task starts. The unused part of the pattern shows how
- * much stack remains. Only core 0 (TP_PRC1) tasks are registered.
+ * much stack remains.
+ *
+ * Placement.  The slot table below is the single owner of where a registered
+ * task may run.  Movement and hardware owners stay on core 0.  The observers
+ * that the core-migration plan moves later are moved by editing their slot
+ * entry and their call site together, so a call-site edit alone cannot move a
+ * task: app_task_start() rejects a core its slot does not allow.
  */
 #include "app_task.h"
+#include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
 #include <stdbool.h>
 #include <tm/tmonitor.h>
 #include <tk/syslib.h>
@@ -44,25 +51,26 @@ typedef struct {
     uint32_t size;
     uint32_t high;
     ID id;
+    uint8_t core;   /* physical core this task is allowed to run on */
 } slot_t;
 
-#define SLOT(n, s) {n, s, sizeof(s), 0u, 0}
-static slot_t slots[] = {SLOT("motion_task", motion_stack),
-                         SLOT("line_task", line_stack),
-                         SLOT("sonar_task", sonar_stack),
+#define SLOT(n, s, c) {n, s, sizeof(s), 0u, 0, c}
+static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
+                         SLOT("line_task", line_stack, APP_CORE_0),
+                         SLOT("sonar_task", sonar_stack, APP_CORE_0),
 #if !APP_BENCH
-                         SLOT("imu_task", imu_stack),
+                         SLOT("imu_task", imu_stack, APP_CORE_0),
 #endif
-                         SLOT("vehicle_task", vehicle_stack),
-                         SLOT("telemetry_task", telemetry_stack)
+                         SLOT("vehicle_task", vehicle_stack, APP_CORE_0),
+                         SLOT("telemetry_task", telemetry_stack, APP_CORE_0)
 #if APP_BENCH
                              ,
-                         SLOT("motion_bench", bench_stack)
+                         SLOT("motion_bench", bench_stack, APP_CORE_0)
 #endif
 #if TM_MQTT
                              ,
-                         SLOT("health_task", health_stack),
-                         SLOT("idle_meter", idle_stack)
+                         SLOT("health_task", health_stack, APP_CORE_0),
+                         SLOT("idle_meter", idle_stack, APP_CORE_0)
 #endif
 };
 /* Compare two C strings. Returns true when they are equal. */
@@ -76,19 +84,56 @@ static bool equal(const char *a, const char *b)
 }
 
 /*
+ * PRC value for a physical core.  TP_PRC1 is core 0, so the value is TP_PRC1
+ * plus the core index.  A single-core build has only core 0, so a core-1
+ * request is answered with core 0 rather than an unmapped PRC.
+ */
+UW app_core_prc(app_core_t core)
+{
+#if TK_SUPPORT_SMP
+    if (APP_CORE_1 == core && TK_MAX_CORE > 1) {
+        return TP_PRC1 + 1u;
+    }
+#else
+    (void)core;
+#endif
+    return TP_PRC1;
+}
+
+/* PRC for core 0.  Cyclic handlers use this for their own core. */
+UW app_prc_core0(void)
+{
+    return app_core_prc(APP_CORE_0);
+}
+
+/* PRC for core 1, or core 0 when the build has one core. */
+UW app_prc_core1(void)
+{
+    return app_core_prc(APP_CORE_1);
+}
+
+/*
  * Create and start the task registered under name.
  * entry, priority and core are the usual kernel task parameters.
- * Returns the task ID (> 0) or a negative error: E_CTX for the wrong core,
- * E_PAR for an unknown name, E_OBJ if the slot is already running.
+ * Returns the task ID (> 0) or a negative error: E_CTX for the wrong core or a
+ * core the slot does not allow, E_PAR for an unknown name or core, E_OBJ if the
+ * slot is already running.
  */
 ID app_task_start(FP entry, PRI priority, UW core, const char *name)
 {
 #if TK_SUPPORT_SMP
-    if (tk_get_prc() != 1 || core != TP_PRC1) {
+    /* Creating a task must happen on core 0, as the kernel requires.  The task
+     * itself may be placed on core 1 when the build has a second core. */
+    if (tk_get_prc() != TP_PRC1) {
         return E_CTX;
     }
+    if (core != TP_PRC1 && !((TK_MAX_CORE > 1) && (core == TP_PRC1 + 1u))) {
+        return E_PAR;
+    }
 #else
-    (void)core;
+    if (core != TP_PRC1) {
+        return E_CTX;
+    }
 #endif
     if (!name) {
         return E_PAR;
@@ -106,6 +151,11 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     if (s->id > 0) {
         return E_OBJ;
     }
+    /* The slot table owns the placement, so a call site cannot move a task that
+     * the migration has not moved yet. */
+    if (app_core_prc((app_core_t)s->core) != core) {
+        return E_CTX;
+    }
     unsigned char *bytes = (unsigned char *)s->stack;
     for (uint32_t i = 0u; i < s->size; ++i) {
         bytes[i] = FILL;
@@ -117,8 +167,10 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     c.tskatr = TA_HLNG | TA_RNG3 | TA_USERBUF;
     c.bufptr = s->stack;
 #if TK_SUPPORT_SMP
+    /* Honour the requested core.  This used to be a fixed TP_PRC1, which would
+     * have pinned every task to core 0 no matter what the caller asked for. */
     c.tskatr |= TA_ASSPRC;
-    c.assprc = TP_PRC1;
+    c.assprc = core;
 #endif
     const ID id = tk_cre_tsk(&c);
     if (id < 0) {
