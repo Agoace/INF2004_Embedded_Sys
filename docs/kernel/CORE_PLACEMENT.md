@@ -57,9 +57,9 @@ by a handler and a task on the same core once a task moves).
 | `platform/app_task.c:209,214` | stack high-water marks | caller of `app_task_stacks()` (Health, core 0) | **convert** when a core-1 task's stack is measured (Phase 2) |
 | `platform/drv_gpio_irq.c:47-54` | GPIO IRQ client table | init, core 0 | keep - boot-time, one core |
 | `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, core 0 | keep - core 0 by definition; add a separate core-1 meter |
-| `subsystem1/log_stream.c:468,538` | its own `s_dump` live/dump progress, not the RAM rows | reached only from `robot_mqtt.c:300`, the Wi-Fi task, core 0 in this phase | keep - revisit when the Wi-Fi task moves in Phase 4 |
+| `subsystem1/log_stream.c:468,538` | DUMP request state (`s_dump`), not RAM-log row copies | reached only from `robot_mqtt.c:300`, the Wi-Fi task, core 0 in this phase | keep, and treat as a **Phase 4 boundary**. The DUMP request is a separate boundary from the RAM-log row contract, which Phase 3 closed |
 | `subsystem1/network_queue.c:34,170,192` | network queue counters | Wi-Fi task and producers | **replace** in Phase 4, or keep if the task moves wholesale |
-| `subsystem1/robot_mqtt.c:90,256` | MQTT metrics | Wi-Fi task only | keep - single-task owner, moves wholesale in Phase 4 |
+| `subsystem1/robot_mqtt.c:90,256` | MQTT metrics | Wi-Fi task, but `robot_health.c:62` calls `robot_network_metrics()` on core 0, which copies them and calls `log_stream_dump_active()` | **Phase 4 cross-core repair** - when Wi-Fi moves to core 1, a local `DI()`/`EI()` cannot protect that read |
 | `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3** - rows/events/reset use `log_write_seq`, the multi-writer `lost`/`busy` use `stats_lock`; no `DI()`/`EI()` remains in the file |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
 | `subsystem3/drv_line.c:59-66` | line ring buffer | 1 ms ADC IRQ and line task, both core 0 | keep - core 0 by placement |
@@ -74,15 +74,20 @@ merely because a core-1 task later reads a published board.
 `app_program/platform/app_lock_stress.c` builds only with `make TEST=1` and runs
 from `app_main.c` with the other on-target tests.
 
-It creates a 1 ms cyclic handler that runs in handler context and calls
-`ISpinTryLock()` on a lock the test task also takes. The task takes the lock with
-`ISpinLock()`, records that it is held, spins long enough that a 1 ms handler
-would certainly run if it could, and releases.
+It creates a cyclic handler at **one kernel tick** that runs in handler context and
+calls `ISpinTryLock()` on a lock the test task also takes. `CNF_TIMER_PERIOD` in
+`config/config.h` is 10, so `cyctim = 1` is a 10 ms period, not 1 ms; an earlier
+revision of this record said 1 ms and was wrong. The task takes the lock with
+`ISpinLock()`, records that it is held, spins briefly, and releases.
 
-The pass condition is that the handler attempts the lock many times, **never**
-observes it held, and the run completes. That is the rule made observable: with
-`ISpinLock` the task has interrupts masked, so the handler cannot preempt it while
-the lock is held.
+The pass condition is that the handler attempts the lock at least
+`LOCK_STRESS_MIN_TRIES` (50) times, **never** observes it held, and the run
+completes. Requiring a single attempt would have proved only that the handler was
+created, not that the overlap condition was exercised. The interval is
+deliberately NOT lengthened to force an overlap: the claim is that the handler
+cannot run while the lock is held, not that it is starved. With `ISpinLock` the
+task has interrupts masked, so the handler cannot preempt it while the lock is
+held.
 
 The test deliberately does not try the plain `SpinLock` variant. On this port the
 handler would spin against the task it interrupted and the board would hang, so
@@ -123,8 +128,15 @@ Only the header's "core-0 publication" wording was stale, and it is corrected.
 ### Stack marks
 
 `app_task_stacks()` takes `ISpinTryLock` around the high-water update and reports
-the last mark on contention. Scanning a core-1 task's stack from core 0 is still
-a sampled read, so the mark is approximate and monotonic, never exact.
+the last mark on contention. Every access to the mark is an atomic load or store,
+because another core's scan can update it while this one reads; plain reads had no
+cross-core ordering even though the aligned word could not tear, and could miss a
+LOW MARGIN report. The update is monotonic: a smaller value is never stored, so a
+mark can lag but never regress.
+
+Scanning a core-1 task's stack from core 0 is a sampled read. It cannot establish
+an exact instantaneous free-stack value, so the mark is approximate and monotonic
+rather than exact, and later stack acceptance reports must keep that limit.
 
 ## Phase 3: Telemetry on core 1
 
@@ -190,10 +202,13 @@ evidence.
    executes, that its cyclic handler fires at 10 ms on core 1, that samples
    reach the Vehicle board intact, or that the stack mark for a core-1 task is
    usable. The compile passes prove only that both profiles build.
-6. The other boards still have writer and readers on core 0 until their phases
-   land: `motion.c`, `line_service.c`, `robot_health.c`, `junction_source.c` and
-   the five boards in `vehicle_task.c`. Their `DI()`/`EI()` and board contracts
-   are unchanged by Phase 3.
+6. Remaining boards still on one core until their phases land: `line_service.c`,
+   `robot_health.c`, `junction_source.c` and the five boards in `vehicle_task.c`.
+   The **Motion board is already cross-core and is not in that list**:
+   `imu_service.c:101` calls `motion_snapshot_try_read()` from core 1 while Motion
+   publishes from core 0. It uses the same `app_board` sequence contract, so no
+   second writer is introduced, but it needs an explicit cross-core audit rather
+   than an assumption.
 7. Phase 3 has not run on a device. Nothing shows a core-1 Telemetry task
    receiving messages, rows and events passing the sequence check under load, the
    bounded `E_TMOUT` path ever being taken, or `stats_lock` contention staying

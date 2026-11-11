@@ -27,13 +27,17 @@
 
 #include <tk/smp.h>
 
-/* Iterations of the task side. Each holds the lock for roughly a millisecond of
- * spin, so the run covers many handler periods. */
+/* Iterations of the task side.  Each holds the lock for a short spin, so the run
+ * spans many handler periods. */
 #define LOCK_STRESS_ROUNDS 2000u
-/* Spin count inside the critical section: long enough that a 1 ms handler would
- * preempt this task if interrupts were not masked. Calibration is approximate
- * and is why the report includes the handler attempt count. */
+/* Spin count inside the critical section.  Calibration is approximate, which is
+ * why the report carries the handler attempt count instead of assuming it. */
 #define LOCK_STRESS_HOLD   4000u
+/* The handler must be observed MANY times, not merely once: a single attempt
+ * would prove only that the cyclic handler was created, not that the overlap
+ * condition was exercised.  The run spans far more than this many kernel
+ * periods, so a smaller count means the handler is not running at all. */
+#define LOCK_STRESS_MIN_TRIES 50u
 
 static T_SPLOCK stress_lock;
 static volatile UW stress_held;       /* 1 while the task holds the lock */
@@ -77,7 +81,7 @@ void app_lock_stress_run(void)
     T_CCYC config = {0};
     config.cycatr = TA_HLNG;
     config.cychdr = (FP)stress_probe;
-    config.cyctim = 1;
+    config.cyctim = 1;   /* one kernel tick; CNF_TIMER_PERIOD is 10 ms */
     config.cycphs = 1;
 #if TK_SUPPORT_SMP
     config.cycatr |= TA_ASSPRC;
@@ -103,8 +107,10 @@ void app_lock_stress_run(void)
             continue;
         }
         stress_held = 1u;
-        /* A 1 ms handler must not be able to run here, because the task's
-         * interrupt state is masked for the whole critical section. */
+        /* A handler at one kernel tick must not be able to run here, because the
+         * task's interrupt state is masked for the whole critical section.  Do
+         * NOT lengthen this interval to force an overlap: the claim is that the
+         * handler cannot run while the lock is held, not that it is starved. */
         for (volatile UW spin = 0u; spin < LOCK_STRESS_HOLD; ++spin) {
             /* hold the lock */
         }
@@ -115,12 +121,14 @@ void app_lock_stress_run(void)
     (void)tk_stp_cyc(cyc);
     (void)tk_del_cyc(cyc);
 
-    /* The handler must have run, and must never have seen the lock held. */
-    const bool ran = stress_tries > 0u;
+    /* The handler must have run many times, and must never have seen the lock
+     * held.  Requiring only one attempt would not prove the overlap condition. */
+    const bool ran = stress_tries >= LOCK_STRESS_MIN_TRIES;
     const bool clean = (0u == stress_violations) && (0u == stress_errors);
-    tm_printf((UB *)"[lock] stress tries %lu held_seen %lu other %lu %s\n",
+    tm_printf((UB *)"[lock] stress tries %lu held_seen %lu other %lu min %lu %s\n",
               (unsigned long)stress_tries, (unsigned long)stress_violations,
               (unsigned long)stress_errors,
+              (unsigned long)LOCK_STRESS_MIN_TRIES,
               (ran && clean) ? "PASS" : "FAIL");
 }
 

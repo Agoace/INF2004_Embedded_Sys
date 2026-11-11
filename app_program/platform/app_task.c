@@ -214,20 +214,24 @@ unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
         const uint32_t used = s->size - free;
         /*
          * Phase 2: the imu_task stack is owned by core 1 while this scan may run
-         * on core 0, so a mask on this core no longer covers the state.  The
-         * interrupt-preserving lock keeps a handler on THIS core out; on
-         * contention the last mark is reported instead of waiting, because this
-         * is a diagnostic path and an aligned 32-bit read is never torn.  The
-         * scan of another core's stack remains a sampled read, so the mark is
-         * approximate and monotonic, never exact.
+         * on core 0, so a mask on this core no longer covers the state.  EVERY
+         * access to the mark is an atomic load or store: another core's scan can
+         * update it while this one reads, and a plain read carries no cross-core
+         * ordering even though the aligned word cannot tear.  The update stays
+         * monotonic - a smaller value is never stored - so a mark can lag but
+         * never regress.  On contention the last atomically read mark is
+         * reported instead of waiting, because this is a diagnostic path.
          */
-        uint32_t high = s->high;
+        uint32_t high = __atomic_load_n(&s->high, __ATOMIC_SEQ_CST);
         UINT intsts;
         if (E_OK == ISpinTryLock(&stacks_lock, &intsts)) {
-            if (used > s->high) {
-                s->high = used;
+            const uint32_t prev = __atomic_load_n(&s->high, __ATOMIC_SEQ_CST);
+            if (used > prev) {
+                __atomic_store_n(&s->high, used, __ATOMIC_SEQ_CST);
+                high = used;
+            } else {
+                high = prev;
             }
-            high = s->high;
             (void)ISpinUnlock(&stacks_lock, intsts);
         }
         out[n++] = (app_stack_t){s->name, s->size, high, s->size - high};
