@@ -1,7 +1,9 @@
 # Core placement and lock discipline
 
-Status: Phase 1 record for the MTK3 core migration. Reference branch
-`mtk3-core-migration`. No device result is claimed here.
+Status: current record for the MTK3 core migration on the `mtk3-core-migration`
+branch. It describes the migration as built - placement, lock audit, control profile
+and tests - not as measured. No device result is claimed anywhere in it: every
+dynamic figure is listed as open at the end.
 
 ## Placement seam
 
@@ -291,8 +293,9 @@ evidence.
 
 1. The stress test has not been run. It needs `make TEST=1` on a Pico W with the
    radio off, and a console capture.
-2. No core-1 task exists yet, so the slot-table core field is exercised only for
-   core 0. Phase 2 is the first real exercise.
+2. Core-1 tasks exist and both placement profiles build, but the on-target affinity
+   audit has not been run: no capture yet confirms which processor each task and
+   cyclic handler actually reported. That evidence is Phase 6.
 3. Cross-core load, tick gaps, line losses, IMU read/work and Wi-Fi poll gaps are
    unmeasured. The Phase 0 images exist on this branch; the dynamic numbers do
    not.

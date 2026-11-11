@@ -172,33 +172,38 @@ void idle_meter_sample_all(void)
     const uint32_t now = drv_time_us();
     for (unsigned int i = 0u; i < IDLE_METERS; ++i) {
         if (!calibrated[i]) {
-            load_pub[i] = CPU_LOAD_UNKNOWN;
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
             continue;
         }
         const uint32_t count =
             __atomic_load_n(&idle_published[i], __ATOMIC_SEQ_CST);
         if (!meter[i].have_last) {
             (void)cpu_load_sample(&meter[i], count, now);   /* baseline only */
-            load_pub[i] = CPU_LOAD_UNKNOWN;
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
             continue;
         }
         if ((uint32_t)(now - meter[i].last_us) < IDLE_METER_MIN_INTERVAL_US) {
-            load_pub[i] = CPU_LOAD_UNKNOWN;
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
             continue;
         }
-        load_pub[i] = cpu_load_sample(&meter[i], count, now);
+        /* RT-0081/F1: load_pub is written here on core 0 and read by the diagnostics
+         * report on core 1, so every access must be atomic - a word-aligned plain
+         * access is indivisible in hardware but is still an undefined concurrent C
+         * access against the reader. */
+        const uint16_t value = cpu_load_sample(&meter[i], count, now);
+        __atomic_store_n(&load_pub[i], value, __ATOMIC_SEQ_CST);
     }
 }
 
 uint16_t idle_meter_load_permille(void)
 {
-    return load_pub[0];
+    return __atomic_load_n(&load_pub[0], __ATOMIC_SEQ_CST);
 }
 
 #if TK_SUPPORT_SMP
 uint16_t idle_meter_load_permille_core1(void)
 {
-    return load_pub[1];
+    return __atomic_load_n(&load_pub[1], __ATOMIC_SEQ_CST);
 }
 #endif
 

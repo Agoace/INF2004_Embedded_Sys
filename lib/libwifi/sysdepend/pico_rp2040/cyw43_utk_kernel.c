@@ -57,9 +57,11 @@ static UW wifi_sp_low;
 
 void cyw43_utk_stack_top(uint32_t sp)
 {
-    if (0u == wifi_sp_top) {
-        wifi_sp_top = (UW)sp;
-        wifi_sp_low = (UW)sp;
+    /* RT-0081/F1: written by the radio task on core 1 and read by the diagnostics
+     * report on core 0, so both sides use the atomic builtins. */
+    if (0u == __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST)) {
+        __atomic_store_n(&wifi_sp_top, (UW)sp, __ATOMIC_SEQ_CST);
+        __atomic_store_n(&wifi_sp_low, (UW)sp, __ATOMIC_SEQ_CST);
     }
 }
 static ER start_status = E_OBJ;
@@ -101,11 +103,13 @@ void cyw43_utk_poll_end(void)
 {
     const UW end = (UW)time_us_64();
     const UW work = end - started;
-    /* RT-0073/F3: one stack low-water sample per poll iteration. */
+    /* RT-0073/F3: one stack low-water sample per poll iteration. Atomic, because a
+     * diagnostics reader on the other core reads these (RT-0081/F1). */
     {
         const UW sp = (UW)(uint32_t)__builtin_frame_address(0);
-        if (wifi_sp_top != 0u && sp < wifi_sp_low) {
-            wifi_sp_low = sp;
+        if (0u != __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST) &&
+            sp < __atomic_load_n(&wifi_sp_low, __ATOMIC_SEQ_CST)) {
+            __atomic_store_n(&wifi_sp_low, sp, __ATOMIC_SEQ_CST);
         }
     }
     UINT intsts;
@@ -251,10 +255,12 @@ int32_t cyw43_utk_start_status(void)
  * frame, sampled per poll, and blind to a stack that has already been overrun. */
 uint32_t cyw43_utk_stack_free(void)
 {
-    if (0u == wifi_sp_top) {
+    const UW top = __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST);
+    if (0u == top) {
         return 0u;   /* the task has not started */
     }
-    const UW used = wifi_sp_top - wifi_sp_low;
+    const UW low = __atomic_load_n(&wifi_sp_low, __ATOMIC_SEQ_CST);
+    const UW used = top - low;
     return (used >= CYW43_TASK_STACK) ? 0u : (uint32_t)(CYW43_TASK_STACK - used);
 }
 

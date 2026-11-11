@@ -192,17 +192,22 @@ void robot_command_lost(void)
 /* Copy the queue loss and busy counters into a heartbeat. */
 void robot_queue_metrics(rm_heartbeat_t *out)
 {
-    /* Each counter is an aligned word, so a read is indivisible.  The set may
-     * come from two instants, which is a diagnostic limit and is stated here. */
-    out->event_lost = event_lost;
-    out->command_lost = command_lost;
-    out->line_busy = busy[0];
-    out->sonar_busy = busy[1];
-    out->motion_busy = busy[2];
-    out->vehicle_busy = busy[3];
-    out->health_busy = busy[4];
-    out->board_unavailable = unavailable;
-    out->board_unavailable_mask = unavailable_mask;
+    /*
+     * RT-0081/F1: the writers use atomic RMW from either core, so every read here
+     * must be an atomic load.  A word-aligned plain read is indivisible in hardware
+     * but is still an undefined concurrent C access against an atomic writer.  The
+     * set may come from two instants, which stays a diagnostic limit.
+     */
+    out->event_lost = __atomic_load_n(&event_lost, __ATOMIC_SEQ_CST);
+    out->command_lost = __atomic_load_n(&command_lost, __ATOMIC_SEQ_CST);
+    out->line_busy = __atomic_load_n(&busy[0], __ATOMIC_SEQ_CST);
+    out->sonar_busy = __atomic_load_n(&busy[1], __ATOMIC_SEQ_CST);
+    out->motion_busy = __atomic_load_n(&busy[2], __ATOMIC_SEQ_CST);
+    out->vehicle_busy = __atomic_load_n(&busy[3], __ATOMIC_SEQ_CST);
+    out->health_busy = __atomic_load_n(&busy[4], __ATOMIC_SEQ_CST);
+    out->board_unavailable = __atomic_load_n(&unavailable, __ATOMIC_SEQ_CST);
+    out->board_unavailable_mask =
+        __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
 }
 
 /* Default metrics provider. The MQTT module overrides it. */

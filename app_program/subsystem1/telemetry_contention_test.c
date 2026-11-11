@@ -176,12 +176,26 @@ static void test_storage_full(void)
     if (full) {
         telemetry_stats_t before;
         telemetry_stats(&before);
-        (void)telemetry_send(&row);   /* one excess row */
+        /*
+         * RT-0081/F2: the excess row must be ACCEPTED into the buffer, so that the
+         * consumer is what discards it. The previous version ignored this return, so
+         * a send rejected by a full buffer also satisfied the loss check without any
+         * excess row ever being handled.
+         */
+        int accepted = -1;
+        for (unsigned int attempt = 0u; attempt < 200u && 0 != accepted; ++attempt) {
+            accepted = telemetry_send(&row);
+            if (0 != accepted) {
+                (void)tk_dly_tsk(1u);   /* let the consumer make room */
+            }
+        }
+        expect("excess row accepted into the buffer", 0 == accepted);
         settle();
         telemetry_stats_t after;
         telemetry_stats(&after);
-        expect("excess row counted as a loss rather than stored",
-               after.lost > before.lost);
+        expect("excess row dropped rather than stored",
+               (uint32_t)TELEMETRY_ROWS == after.rows);
+        expect("excess row counted as a loss", after.lost > before.lost);
         expect("storage_full remains readable", after.storage_full);
     }
 }
