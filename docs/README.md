@@ -24,7 +24,8 @@ not current acceptance reports. Local course originals are not public records.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
 - [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
   and MQTT sizes, measurement tools and shared-access rule.
-- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — B2a fake START command, LINE/SEARCH corner job, pending retention across natural SEARCH, draft B2b contract and live phase/angle event7.
+- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
+- [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a source2 SHADOW admission, encounter ordering, terminal ACK, limits, counters and action gates.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
 - [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
@@ -32,8 +33,8 @@ not current acceptance reports. Local course originals are not public records.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a software checks, public-config image builds, measured +280 B RAM, compiler frames and J0–J6 physical procedure; hardware Not run.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — measured step2/2b/2c deltas from b569adc, supplied step2b timing and pending current stack/CPU checks; shortage/CR1 order.
+- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
+- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
 
 ## S1 — Telemetry
 
@@ -50,8 +51,15 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S3 — Line and barcode
 
+- [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md).
+- [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md).
+- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md).
+- [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
-- [BARCODE.md](s3-line-barcode/BARCODE.md) — analog GP28 input and course geometry; decoder ideas only, not robot implementation.
+- [BARCODE.md](s3-line-barcode/BARCODE.md) — pure Code 39 WIDTH and B1c PEAK
+  observation; one sheet, 430 mm TEST passes, checked stop, no routing.
+- [USB_CAPTURE_WAIT.md](s3-line-barcode/USB_CAPTURE_WAIT.md) — TEST-only
+  frozen report retention until the USB terminal asserts DTR for one second.
 
 ## S4 — IMU
 

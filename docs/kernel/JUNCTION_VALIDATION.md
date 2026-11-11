@@ -1,12 +1,92 @@
-# B2a validation and junction trials
+# Junction validation — B2a closure and B2b SHADOW
 
 ## Status
 
-The 2026-11-10 forced-corner redesign replaces `eb18004` blind travel and
-encoder-target turns. The worker did not push or flash. The new pending-recovery policy has hardware status **Not run**. Historical operator
-evidence on `eb18004` and `7648081` is separated
-below; it is not a PASS for the new images. See the
-[design](../architecture/JUNCTION_ACTION.md) for ownership and thresholds.
+**B2a CLOSED**, as reported by Main_Worker after the `50426ae` A regression.
+All3 runs reached DONE. The worker did not push or flash. Evidence below is
+specific to its tested revision; closure does not invent missing heading,
+stack or recovery-path measurements. Main approved B2b STEP4a/4b SHADOW
+integration, not live actions. The final40 B/20 B record/control contract,
+50 ms delivery/control limits and10 ms LINE-age refusal are approved.
+See the [fixed consumer](../architecture/JUNCTION_ACTION.md) and
+[live adapter](../architecture/JUNCTION_LIVE_ADAPTER.md).
+
+## B2b STEP4a software candidate
+
+Dependencies were merged with Main approval: `e43a1ca` brings `7177edd`,
+`711f4a5` brings STEP3 `366ec9a`, and `2cd44cd` brings STEP4b `ce58874`.
+Each clean merge passed its full host suite before restoring saved4a WIP:
+262,297 and329 tests respectively. Test-only Clang fixture fixes are merged
+as `2be2ca7`, `b7c9f1f` and `5aa6f05`, each with a clean329-test checkpoint;
+production code is unchanged. Integrated GCC host and full Clang
+ASan/UBSan/float-cast-overflow suites both pass363/363 with leak detection.
+No global warning flags were weakened.
+
+New cases cover malformed/coherent records, current/old epoch, age/cut/revision,
+route/encounter/motion guards, first-edge cancellation without a clear baseline,
+control heartbeat, clear-guard retention without expiry, reason counters,
+fieldwise adapter copy, serial wrap and STOP/START slot races. An ACK for X
+cannot free X+1, and a delayed action result cannot regress a newer live ACK.
+Telemetry tests prove separate strong-object override of the weak DUMP hook,
+value-copy counters and stopped repeat without new KR1/VE rows.
+
+Nine public-example profiles pass with zero compiler warnings: NONE, A, B, C,
+D, NO_WIFI, TEST, BENCH and SMP1. All use live enable0 and measured bound0.
+Strict ARM checks pass87/87 application units per profile,783 total. All nine
+SDK link/manifest probes pass. The SDK profile parser now validates the live
+permission/bound keys. A full first compile log is required: an incremental
+log is not a complete SDK proof. No live-action firmware was built.
+
+| Matched public single-core MQTT | text | data | BSS | Static RAM |
+| --- | ---: | ---: | ---: | ---: |
+| Rebuilt staging `235af44` | 409856 | 888 | 186204 | 187092 |
+| `2cd44cd` plus STEP4a | 425492 | 888 | 190108 | 190996 |
+| Delta | +15636 | 0 | +3904 | **+3904 B** |
+
+Both use the same public example headers. The worker did not open real
+credentials or private hardware logs. Retained logs are
+`build/b2b235-baseline-build.log`, `build/firmware-4a-*.log`,
+`build/b2b4a-builds.log` and `build/proof-4a-*.log`. Proof outputs remain
+outside the isolated source tree. Images/maps remain under
+`build/public-firmware/build_make/`; older public artifacts are backed up.
+
+ARM ABI probe: live state184 B, raw telemetry cache84 B, count cache36 B,
+record/control boards68 B and owner flags/alignment allowance8 B give a
+conservative **380 B**4a accounting, below the384 B ceiling. No new task,
+heap or wait. The integrated3904 B delta includes the separate S3 producer,
+window and retained diagnostic rows; it is not a4a-only380 B delta.
+Message116 B and INFO108 B are compile-time assertions. KR1/summaryv3 stay fixed.
+The normal ELF has a strong `T barcode_live_source_dump`, not the empty weak
+fallback. The26-entry boot table is read from S3 getters, not copied.
+
+### Stack and CPU estimates, not hardware acceptance
+
+Compiler frames in the normal SHADOW profile: vehicle1000 B, junction
+observer168 B, source read64 B, live read96 B, live tick64 B, telemetry368 B,
+live formatter48 B, count formatter40 B and strong S3 DUMP96 B. The source
+read/retire application path sums1000+64+96+20=1180 B; this excludes RTOS,
+interrupt, library and other vehicle paths and is not a whole-stack bound.
+S3's longest application decoder chain is88+80+72+128+176=544 B on the
+2048 B LINE stack. Existing stack sizes are unchanged. Every named task
+must still show at least256 B free on the new hardware image.
+
+Vehicle work is bounded: one40 B read plus a20 B heartbeat per10 ms tick,
+with additional publications only for state changes and terminal retirement.
+The basic payload traffic is about6 kB/s, not a CPU timing measurement.
+S3's planning targets remain about2% average and less than1 ms per source
+slice. Use `[BC_CPU]`, `[BC_CPU_ELIGIBLE]` and heartbeat CPU load; no source
+CPU percentage or deadline margin has yet been measured on this candidate.
+
+### First SHADOW hardware gate — Not run
+
+Main builds the configured operator image. The worker does not flash or push.
+Use NONE/enable0/bound0. Confirm SHADOW boot and the official table, normal
+LINE/SEARCH, decoded source2 evidence and **no action offer/kind7 job**.
+After STOP, collect reason-keyed counts, maximum record/control ages, original
+frame-end/pair-edge evidence, S3 source CPU rows and all named stack margins.
+GP20 repeats the stopped reports outside LINE mutex; it is not a mid-run job
+completion trigger. Physical barcode rejection, offset/clearance and final
+heading acceptance remain separate. Corrected/filtered IMU H3 is still pending.
 
 ## Operator-supplied evidence — 2026-11-10
 
@@ -24,8 +104,9 @@ Main_Worker supplied these results; the worker did not inspect that CSV.
   drifted off the18 mm line. A4-degree error over160 mm gives about11 mm
   lateral displacement; this explains the risk, not a measured heading trace.
 - Run5 lost the line before the cross; natural SEARCH failed, and pending
-  was correctly cancelled with phase9. The new policy cancels pending at the
-  natural non-LINE handoff itself, rather than waiting for final STOP.
+  was correctly cancelled with phase9. The intermediate policy cancelled
+  pending at natural LINE loss; `50426ae` now preserves successful natural
+  SEARCH recovery instead.
 
 Old J2 did **not** pass. Do not tune locked LINE to compensate for blind
 travel. That travel,132 mm approach, settle and nominal90/180-degree endpoint
@@ -80,11 +161,28 @@ The operator then approved pending survival through successful natural
 LINE -> SEARCH -> LINE. Cancel on SEARCH failure/stop, SCAN, DETOUR, any
 other route or STOP. No travel/time expiry is added before the B2b contract.
 This specifically addresses the pre-cross cancellations in A run3/C run3.
-New-policy hardware checks remain Not run.
+The later `50426ae` A regression below supplies new-image acceptance;
+specific pre-claim recovery/cancellation traces were not supplied for it.
+
+### Closure regression — `50426ae` A x3
+
+Main_Worker reported3/3 DONE on hardware, with line-found encoder angles
+**45.1 /43.6 /40.8 degrees**. B2a is **CLOSED** by Main_Worker. No log was
+opened by this worker. Final physical heading errors, new stack values and
+which pre-claim SEARCH paths occurred were not supplied; do not infer them
+from these contact angles or the three DONE results.
+
+Main then merged CR1 motion revision `51be7a0` into `mtk3-vehicle`, producing
+`235af44`, and reported: host191/191, documentation OK, template8, configured
+NONE/A/BENCH builds with zero warnings, MQTT static RAM187092 B. Main reported
+that `mtk3-staging` was advanced to `235af44` and both branches were pushed.
+These are Main-supplied integration results, not this worker's local checks.
+The software/resource tables below retain the earlier `50426ae` public-build
+measurements; do not substitute them for CR1-merged image measurements.
 
 ## Software evidence
 
-Checks below apply to the pending-recovery fix based on `75a95f7`, with public example
+Checks below apply to `50426ae`, the pending-recovery fix based on `75a95f7`, with public example
 settings in an isolated copy; Main must rebuild device-configured images.
 
 | Check | Result |
@@ -215,7 +313,7 @@ wall collision or hard wheel restraint as a stall test.
 | J0 | Verify pair spacing/height, normalized floor/line/bar contrast and pending-command barcode-only rejection. Capture33 mm/two-fresh exit evidence, white20 ms and >=500 return. Lifted A/B/D direction and ESTOP checks. No axle/pivot ruler target is required. |Not run |
 | J1 | NONE plain-line/`+` baseline with zero kind7 and zero losses on the new image. Old `eb18004` cross passed; repeat after redesign. |Not run |
 | J2 | C normal LINE -> SEARCH -> LINE with160 mm detector suppression across handoffs. Verify straight course after recovery; DONE during SEARCH is not physical PASS. Retest pre-claim recovery under the new pending policy. |Operator PASS on `75a95f7`; new pending policy Not run |
-| J3 | First LEFT arm followed; retain the supplied two DONE turns plus one pre-claim cancellation as distinct results. Final heading error was not supplied. Retest pre-claim retention. |Operator PASS on `7648081`; new pending policy Not run |
+| J3 | Earlier two DONE turns plus one cancellation on `7648081`; regression3/3 DONE at45.1/43.6/40.8 degrees on `50426ae`. Final heading error and specific recovery paths were not supplied. |Operator PASS; `50426ae` regression accepted; B2a CLOSED |
 | J4 | Three RIGHT-arm turns accepted; final heading errors not supplied. |Operator PASS on `7648081` |
 | J5 | Three operator-confirmed returns, last USB first/accepted angles and vehicle/idle stack values supplied; final heading error not supplied. |Operator PASS on `7648081` |
 | J6 | Complete remaining missing-line/window/expiry-free pending recovery, blocked-route cancellation, barcode and named-stack/timing checks. Pending survives normal SEARCH only; STOP/failure/other routes cancel it. |Partial: C SEARCH ESTOP on `75a95f7`, vehicle/idle margins on `7648081`; other gates Not run |

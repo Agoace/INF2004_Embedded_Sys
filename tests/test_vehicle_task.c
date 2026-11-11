@@ -159,7 +159,7 @@ int sonar_request(const sonar_request_t *r) {
 }
 void telemetry_stats(telemetry_stats_t *s) { *s=(telemetry_stats_t){0}; }
 int telemetry_send(const telemetry_message_t *m) {
-    assert(m->kind<=TELEMETRY_JUNCTION);
+    assert(m->kind<=TELEMETRY_JUNCTION_COUNTS);
     if (m->kind==TELEMETRY_JUNCTION) {
         assert(!junction_source_busy());++junction_results;junction_result=m->data.junction;
     }

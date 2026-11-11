@@ -28,9 +28,18 @@ supply line decisions or decoded robot commands.
 | Slow adaptation | Floor below 20%, line above 80%; move each end 1/256 per sample |
 
 The acquisition interrupt records data; the line task runs `lp_update()`.
-`raw_bc` carries GP28 unchanged for future barcode work. The vehicle reads a
-service copy; telemetry uses a separate bounded, non-consuming board read.
-Sampling continues while the robot is idle.
+`raw_bc` carries GP28 unchanged. The vehicle reads a service copy;
+telemetry uses a separate bounded, non-consuming board read. Sampling
+continues while the robot is idle. Only `BARCODE_CAPTURE=1` adds an O(1)
+raw copy after mutex release in task context, never in the ISR. The TEST
+runner decodes after freeze; normal LINE behaviour is unchanged. See the
+[barcode B1b contract](BARCODE.md). Its exclusive TEST profile alone uses
+GP21 for bounded driven passes; normal LINE and robot buttons are unchanged.
+
+The existing spin also collects [GP28 evidence](LIVE_CALIBRATION.md) on
+its separate report board. End/abort logs show GP28 min/max and learned or
+320/240 fallback thresholds. This observation does not change pair calibration,
+buttons or routing, and does not add a live barcode decoder.
 
 ### Pair-mode position
 

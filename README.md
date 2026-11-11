@@ -297,11 +297,24 @@ and pass the lifted-wheel checks before floor work. R5 has not run.
 The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
 
-Live barcode decoding is not implemented. B2a can execute one fake A/B/C/D
-command at the next `+` junction; the default is NONE and keeps normal LINE.
-See [junction actions](docs/architecture/JUNCTION_ACTION.md) and the
-[unrun hardware procedure](docs/kernel/JUNCTION_VALIDATION.md).
-Barcode input ideas remain in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
+Barcode B1c keeps Code 39 WIDTH and adds a separate PEAK observation path.
+In its exclusive TEST, VIN is required; GP21 runs 430 mm forward/backward
+(target clamp 450 mm), with checked stop before decode/dump. Frozen output
+waits for a USB terminal (DTR + 1 s); keep VIN on while USB is unplugged.
+Do GP20 ranges with USB connected. Use one F sheet per run. Large F passed
+WIDTH on 0cd2c03; course-size F failed.
+B1c PEAK passes real-capture host tests; powered B1c checks are Not run.
+No barcode controls routing. The 5.5 mm sensor mount cannot go lower.
+See [Barcode B1c and the lifted-wheels check](docs/s3-line-barcode/BARCODE.md).
+
+B2b decodes GP28 in SHADOW: the default NONE image reads source2 but never
+commands motion from a decoded letter. The150 mm label is unverified, not
+an action bound. Exclusive fake A/B/C/D images keep the B2a consumer; B2a is
+closed at `50426ae`. Live-action permission and SHADOW hardware checks remain
+separate gates. See the [live adapter](docs/architecture/JUNCTION_LIVE_ADAPTER.md),
+[junction actions](docs/architecture/JUNCTION_ACTION.md) and
+[revision-scoped validation](docs/kernel/JUNCTION_VALIDATION.md).
+B1c remains in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
 
 ## CR1 data representation
 
@@ -311,7 +324,7 @@ board/queue and binary MQTT sizes. The
 board packing (8 B saved). A separate change removes the inactive bench
 stack/slot (4112 B saved in MQTT). A1/B1 hardware passed on 2026-11-10
 with an idle-stack margin note. Its approved safety increase adds 256 B;
-the larger stack is not yet retested on hardware. Main's merge is pending.
+the larger stack is not yet retested on hardware. Merged to staging.
 Changes proceed one module at a time; sizes are not hardware acceptance.
 
 ## Local template changes

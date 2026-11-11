@@ -49,6 +49,17 @@ def main():
     if junction not in ("0", "1", "2", "3", "4"):
         parser.error("log has an invalid JUNCTION_TEST_CMD")
     expected += f"-imu_stream{stream}-hump_source{source}-junction{junction}"
+    capture = int("-DAPP_BARCODE_CAPTURE=1" in flags)
+    expected += f"-barcode_capture{capture}"
+    live = next((flag.split("=", 1)[1] for flag in flags
+                 if flag.startswith("-DBARCODE_LIVE_ENABLE=")), "0")
+    clear = next((flag.split("=", 1)[1] for flag in flags
+                  if flag.startswith("-DBARCODE_MEASURED_CLEAR_MM=")), "0")
+    if live not in ("0", "1") or not clear.isdecimal() or int(clear) > 65535:
+        parser.error("log has invalid barcode live permission or measured bound")
+    if live == "1" and (int(clear) == 0 or junction != "0"):
+        parser.error("log combines live actions with unverified bound or fake source")
+    expected += f"-bclive{live}-bcclear{clear}"
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
         parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")

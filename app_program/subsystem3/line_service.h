@@ -5,6 +5,7 @@
 #define LINE_SERVICE_H
 #include "line_position.h"
 #include "drv_line.h"
+#include "barcode_calibration.h"
 
 typedef struct {
     lp_t line;
@@ -29,6 +30,9 @@ int line_snapshot_read(line_snapshot_t *out, bool consume_event);
 /* Transport-independent bounded copy; never consumes events or waits.
  * E_TMOUT busy, E_OBJ unready; failed output unchanged. */
 int line_snapshot_try_read(line_snapshot_t *out);
+/* Separate GP28 spin evidence; bounded, non-consuming, output unchanged on
+ * failure. No change to line_snapshot_t, buttons or command publication. */
+int line_barcode_calibration_try_read(barcode_cal_report_t *out);
 int line_calibration_begin(void);
 lp_calib_result_t line_calibration_end(void);
 int line_calibration_abort(void); /* retain prior learned ends */
