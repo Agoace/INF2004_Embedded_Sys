@@ -88,6 +88,44 @@ The test deliberately does not try the plain `SpinLock` variant. On this port th
 handler would spin against the task it interrupted and the board would hang, so
 demonstrating the failure would not be a recoverable test.
 
+## Phase 2: IMU on core 1
+
+`app_task.c` records `SLOT("imu_task", imu_stack, APP_CORE_1)`, and
+`imu_service.c` starts the task with `app_prc_core1()` and sets the same PRC on
+its cyclic handler, so the handler and the task it feeds share a core. In a
+single-core build both helpers collapse to `TP_PRC1`, the pair still agrees, and
+the image is unchanged.
+
+The IMU writer now runs on core 1 while Vehicle and Health read from core 0.
+
+### Board publication: verified, not rebuilt
+
+`platform/app_board.h` already supplied the contract this phase needs.
+
+- **One writer per board.** The three IMU boards are published only from
+  `imu_service.c`: the snapshot `board` at line 261, `hump_board` at 252 and
+  `diag_board` at 179. No other file publishes them.
+- **A sequence.** The writer makes it odd, writes the words, then makes it even.
+  A reader rejects a zero or odd sequence and requires it to be unchanged after
+  the copy, so a torn read is detected rather than accepted.
+- **The barrier.** Every word access is an aligned 32-bit `__atomic_*` operation
+  with `__ATOMIC_SEQ_CST`. That supplies the ordering RP2040 needs, since it has
+  no data cache, so no separate `mp_memory_barrir()` was added: an explicit
+  barrier on top would be redundant and future readers would have to reason
+  about which one does the work.
+- **Unavailable stays unavailable.** A failed copy is not a value. Callers keep a
+  scratch object and commit only on success, and `imu_snapshot_try_read()`,
+  `imu_hump_try_read()` and `imu_hump_diag_try_read()` return `E_OBJ`, `E_PAR` or
+  `E_TMOUT` rather than a zero or a stale value with a fresh timestamp.
+
+Only the header's "core-0 publication" wording was stale, and it is corrected.
+
+### Stack marks
+
+`app_task_stacks()` takes `ISpinTryLock` around the high-water update and reports
+the last mark on contention. Scanning a core-1 task's stack from core 0 is still
+a sampled read, so the mark is approximate and monotonic, never exact.
+
 ## Open validation items
 
 None of these is closed, and none may be reported as a PASS without device
@@ -103,3 +141,11 @@ evidence.
 4. `ISpinLock` costs a hardware spinlock claim plus a mask on every acquisition.
    Its cost on the 1 ms Line path is unmeasured, which is why rule 3 keeps
    locked operations off that path.
+5. Phase 2 has not run on a device. Nothing shows that a core-1 IMU task
+   executes, that its cyclic handler fires at 10 ms on core 1, that samples
+   reach the Vehicle board intact, or that the stack mark for a core-1 task is
+   usable. The compile passes prove only that both profiles build.
+6. The other boards still have writer and readers on core 0 until their phases
+   land: `motion.c`, `line_service.c`, `robot_health.c`, `telemetry.c`,
+   `junction_source.c` and the five boards in `vehicle_task.c`. Their `DI()`/`EI()`
+   and board contracts are unchanged by Phase 2.

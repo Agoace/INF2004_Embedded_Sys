@@ -15,6 +15,7 @@
 #include "app_task.h"
 #include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
 #include <stdbool.h>
+#include <tk/smp.h>   /* T_SPLOCK, ISpinTryLock: cross-core stack marks */
 #include <tm/tmonitor.h>
 #include <tk/syslib.h>
 /* Fill pattern and stack sizes in 64-bit words (bytes = words * 8). */
@@ -59,7 +60,7 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
                          SLOT("line_task", line_stack, APP_CORE_0),
                          SLOT("sonar_task", sonar_stack, APP_CORE_0),
 #if !APP_BENCH
-                         SLOT("imu_task", imu_stack, APP_CORE_0),
+                         SLOT("imu_task", imu_stack, APP_CORE_1),
 #endif
                          SLOT("vehicle_task", vehicle_stack, APP_CORE_0),
                          SLOT("telemetry_task", telemetry_stack, APP_CORE_0)
@@ -185,6 +186,12 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     return id;
 }
 
+/* Guards the high-water marks, which can now be updated from either core:
+ * Health scans from core 0 and Telemetry scans from core 1 once it moves.  A
+ * zero-filled static already holds the unlocked state, because InitSpinLock()
+ * only stores 0 into the lock word. */
+static T_SPLOCK stacks_lock;
+
 /*
  * Copy stack use of started tasks to out (at most capacity rows).
  * Updates each high-water mark. Returns the number of rows written.
@@ -205,13 +212,25 @@ unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
             ++free;
         }
         const uint32_t used = s->size - free;
-        UINT irq;
-        DI(irq);
-        if (used > s->high) {
-            s->high = used;
+        /*
+         * Phase 2: the imu_task stack is owned by core 1 while this scan may run
+         * on core 0, so a mask on this core no longer covers the state.  The
+         * interrupt-preserving lock keeps a handler on THIS core out; on
+         * contention the last mark is reported instead of waiting, because this
+         * is a diagnostic path and an aligned 32-bit read is never torn.  The
+         * scan of another core's stack remains a sampled read, so the mark is
+         * approximate and monotonic, never exact.
+         */
+        uint32_t high = s->high;
+        UINT intsts;
+        if (E_OK == ISpinTryLock(&stacks_lock, &intsts)) {
+            if (used > s->high) {
+                s->high = used;
+            }
+            high = s->high;
+            (void)ISpinUnlock(&stacks_lock, intsts);
         }
-        out[n++] = (app_stack_t){s->name, s->size, s->high, s->size - s->high};
-        EI(irq);
+        out[n++] = (app_stack_t){s->name, s->size, high, s->size - high};
     }
     return n;
 }

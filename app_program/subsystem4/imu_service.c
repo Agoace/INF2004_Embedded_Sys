@@ -305,7 +305,8 @@ int imu_service_init(void)
 
 #if TK_SUPPORT_SMP
     config.cycatr |= TA_ASSPRC;
-    config.assprc = TP_PRC1;
+    /* The cyclic handler must run on the same core as the task it feeds. */
+    config.assprc = app_prc_core1();
 #endif
     imu_core_init(&core);
     imu_probe_init(&probe);
@@ -318,7 +319,7 @@ int imu_service_start(void)
     if (cyclic <= 0 || task > 0) {
         return E_OBJ;
     }
-    task = app_start_task((FP)entry, IMU_TASK_PRIORITY, TP_PRC1, "imu_task");
+    task = app_start_task((FP)entry, IMU_TASK_PRIORITY, app_prc_core1(), "imu_task");
     if (task < 0) {
         return (int)task;
     }
