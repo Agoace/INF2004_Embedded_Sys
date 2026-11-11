@@ -55,6 +55,7 @@ not current acceptance reports. Local course originals are not public records.
 - [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md).
 - [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md).
 - [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).
+- [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run: system PASS, large A not decoded, findings and the proposal on hold.
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
 - [BARCODE.md](s3-line-barcode/BARCODE.md) — pure Code 39 WIDTH and B1c PEAK
   observation; one sheet, 430 mm TEST passes, checked stop, no routing.

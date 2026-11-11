@@ -315,6 +315,9 @@ separate gates. See the [live adapter](docs/architecture/JUNCTION_LIVE_ADAPTER.m
 [junction actions](docs/architecture/JUNCTION_ACTION.md) and
 [revision-scoped validation](docs/kernel/JUNCTION_VALIDATION.md).
 B1c remains in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
+The first full-circuit SHADOW run passed for the system, but the large A
+was not decoded; see [SHADOW hardware results](docs/s3-line-barcode/SHADOW_HARDWARE_RESULTS.md).
+Barcode work is frozen for the dual-core migration.
 
 ## CR1 data representation
 
