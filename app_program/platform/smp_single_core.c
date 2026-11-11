@@ -92,4 +92,107 @@ ER ISpinUnlock(T_SPLOCK *lock, UINT intsts)
     return E_OK;
 }
 
+/*
+ * The atomic family. The kernel's whole SMP utility body, atomics included, sits
+ * inside `#if TK_SUPPORT_SMP` in kernel/tkernel/smp_lock.c, so single-core images
+ * need these too once application code uses them in every profile. On one core an
+ * interrupt-disable window is the equivalent guarantee, and the PRIMASK save and
+ * restore keeps a caller's existing mask intact.
+ *
+ * The return values mirror smp_lock.c exactly: inc/dec/add/sub and bitset/bitclr
+ * return the NEW value (bitset/bitclr the PREVIOUS one, as the kernel does), xchg
+ * and cmpxchg return the OLD value, and cmpxchg stores only when the old value
+ * equals `cmp`.
+ */
+static UINT shim_irq_save(void)
+{
+    UINT primask;
+    __asm__ volatile("mrs %0, primask" : "=r"(primask));
+    __asm__ volatile("cpsid i" ::: "memory");
+    return primask;
+}
+
+static void shim_irq_restore(UINT primask)
+{
+    if (0u == primask) {
+        __asm__ volatile("cpsie i" ::: "memory");
+    }
+}
+
+UW atomic_inc(UW *addr)
+{
+    const UINT primask = shim_irq_save();
+    ++*addr;
+    shim_irq_restore(primask);
+    return *addr;
+}
+
+UW atomic_dec(UW *addr)
+{
+    const UINT primask = shim_irq_save();
+    --*addr;
+    shim_irq_restore(primask);
+    return *addr;
+}
+
+UW atomic_add(UW *addr, UW val)
+{
+    const UINT primask = shim_irq_save();
+    *addr += val;
+    shim_irq_restore(primask);
+    return *addr;
+}
+
+UW atomic_sub(UW *addr, UW val)
+{
+    const UINT primask = shim_irq_save();
+    *addr -= val;
+    shim_irq_restore(primask);
+    return *addr;
+}
+
+UW atomic_xchg(UW *addr, UW val)
+{
+    const UINT primask = shim_irq_save();
+    const UW old = *addr;
+    *addr = val;
+    shim_irq_restore(primask);
+    return old;
+}
+
+UW atomic_cmpxchg(UW *addr, UW val, UW cmp)
+{
+    const UINT primask = shim_irq_save();
+    const UW old = *addr;
+    if (old == cmp) {
+        *addr = val;
+    }
+    shim_irq_restore(primask);
+    return old;
+}
+
+UW atomic_bitset(UW *addr, UW setptn)
+{
+    const UINT primask = shim_irq_save();
+    const UW old = *addr;
+    *addr = old | setptn;
+    shim_irq_restore(primask);
+    return old;
+}
+
+UW atomic_bitclr(UW *addr, UW clrptn)
+{
+    const UINT primask = shim_irq_save();
+    const UW old = *addr;
+    *addr = old & ~clrptn;
+    shim_irq_restore(primask);
+    return old;
+}
+
+/* The spelling is retained from the public SMP T-Kernel specification. */
+void mp_memory_barrir(void)
+{
+    __asm__ volatile("" ::: "memory");
+}
+
 #endif /* !TK_SUPPORT_SMP */

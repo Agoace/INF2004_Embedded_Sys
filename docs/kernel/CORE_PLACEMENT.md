@@ -58,7 +58,7 @@ by a handler and a task on the same core once a task moves).
 | `platform/drv_gpio_irq.c:47-54` | GPIO IRQ client table | init, core 0 | keep - boot-time, one core |
 | `platform/idle_meter.c:45,51` | core-0 CPU meter | idle task and meter reader, both core 0 | keep for core 0; Phase 5 **added** the separate core-1 meter and moved sampling to a single Health-owned publication (RT-0069/C2) |
 | `subsystem1/log_stream.c:571,587` | DUMP admission state (`s_admit`: request id, IDLE/PENDING/ACTIVE) | requested from Vehicle on core 0 (`vehicle_task.c:404`), consumed by the Wi-Fi task on core 1 | **converted in Phase 4, repaired in RT-0069**: `log_stream_dump_request()` takes one `ISpinTryLock` and returns `E_TMOUT` rather than waiting; `dump_active()` and the two Wi-Fi holders use `ISpinLock`. The transfer stage, cursors and acknowledgements stay Wi-Fi-owned and are never read from core 0 |
-| `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0; Vehicle counts a loss on the ESTOP route | **converted in Phase 4, repaired in RT-0069**: every holder of `queue_lock` uses `ISpinLock`, so the ESTOP route cannot wait on a preempted Health |
+| `subsystem1/network_queue.c` | queue loss and busy counters, unavailable mask | Wi-Fi task on core 1; Health copies on core 0; Vehicle counts a loss on the ESTOP route | **no lock remains (RT-0071/F3)**: every counter is updated with the kernel atomic RMW, so the ESTOP route cannot wait at all. The unavailable mask keeps a single writer |
 | `subsystem1/robot_mqtt.c` | MQTT metrics and counters | Wi-Fi task on core 1; Health copies on core 0 | **converted in Phase 4, repaired in RT-0069**: every writer goes through a locked setter and the `robot_network_metrics()` snapshot releases the lock before calling `log_stream_dump_active()`, `cyw43_utk_get_status()` or `cyw43_utk_timing_read()`, so no lock is nested inside another |
 | `subsystem1/telemetry.c` | stats, busy, loss counters, `log_generation` | Telemetry task on core 1 and core-0 readers | **replaced in Phase 3, repaired in RT-0056/RT-0063**: ONE mechanism, `stats_lock`, covers the stats group, the payload copies and index publication; readers take one immediate `ISpinTryLock` and return `E_TMOUT`, holders use `ISpinLock`; no `DI()`/`EI()` and no write sequence remain in the file |
 | `subsystem2/motion.c:96,157` | encoder counts, GP20 copy buffer | motion task and encoder IRQ, both core 0 | **keep** - the IMU reads the published Motion board, not the counts |
@@ -170,24 +170,29 @@ Two variants, chosen by role:
 `log_generation` remains the capture-run identity that MQTT live and DUMP compare
 against. It is a value, not a synchronisation device.
 
-### The stats counters and the producer admission
+### Control state and diagnostics are different contracts
 
-`telemetry_stats()` and `telemetry_send()` are decision reads on core 0 and must
-not wait on the payload lock, so both take one immediate try. `telemetry_send()`
-sends the message even when the try fails: a payload collision must not cancel a
-run or lose a message, and only a real message-buffer failure reports an error.
-`loss_base` is best-effort under contention and is diagnostic only (RT-0069/D1).
+RT-0071/F1 settled this: `busy`, `storage_full` and `lost` **do** gate control -
+Vehicle decides DUMP admission and the storage-full stop on them - so they cannot
+be a best-effort snapshot, and they cannot sit behind the payload lock.
 
-`stats.lost` is incremented by submitters on core 0 and by the task on core 1, and
-`stats.busy` is set by a submitter and cleared by the dump task. A sequence cannot
-serve those fields: it assumes a **single** writer, so two concurrent odd/even
-pairs can leave the sequence even while a mutation is still in flight. This was
-found while doing the move, and it is the reason the stats group did not simply
-join the sequence. `stats_lock` - a `T_SPLOCK` taken with plain `SpinLock`,
-because these are task-only - guards them on the submit path, on the dump path,
-and for the `telemetry_stats()` group copy. The struct holds 32-bit diagnostic
-counters that never gate control, so a short spin is acceptable; routing every
-submitter through the task instead would have changed the message interface.
+`telemetry_send()` takes **no lock at all**. A DUMP claims its reservation with one
+`atomic_cmpxchg` on `admit_busy`, so a second DUMP is refused rather than admitted
+beside the first, and it releases with `atomic_xchg` only when it actually
+reserved, so a failed send cannot clear another DUMP's reservation or leave `busy`
+false while a DUMP is pending. `TMO_POL` is unchanged, and only a real
+message-buffer failure returns an error, which is the one case that may stop a run.
+`m.loss_base` is an aligned read of `admit_lost`.
+
+`telemetry_stats()` reads no locked state. The control fields come from the three
+atomics (`admit_busy`, `admit_full`, `admit_lost`) and are exact. The diagnostic
+counters (`rows`, `events`) come from `stats_pub`, a snapshot the Telemetry task
+publishes under `stats_lock` after every mutation.
+
+`stats_lock` therefore guards only the payload and that snapshot. Its holders use
+`ISpinLock`; the two log readers take one immediate `ISpinTryLock`. The earlier
+design - a try-lock with an unlocked fallback copy - was wrong because it applied a
+diagnostic contract to control state.
 
 The task moved with `app_prc_core1()` and `SLOT("telemetry_task", ...,
 APP_CORE_1)`. It has no cyclic handler, so there is no handler affinity to match.
@@ -231,13 +236,15 @@ what it requires is one permanent owner.
   snapshot, released before `log_stream_dump_active()`, `cyw43_utk_get_status()` and
   `cyw43_utk_timing_read()`. The previous code masked interrupts across all three,
   which would have nested a lock inside a mask.
-- `network_queue.c`: `queue_lock` guards `lost()`, the board-result recorder and
-  `robot_queue_metrics()`.
-- `log_stream.c`: `dump_lock` guards the DUMP request and its consumption, because
-  Vehicle requests from core 0 and the Wi-Fi task consumes on core 1.
+- `network_queue.c`: **no lock at all**. Every counter is atomic (RT-0071/F3), so
+  the ESTOP loss path cannot be made to wait.
+- `log_stream.c`: `dump_lock` guards the DUMP admission state, because Vehicle
+  requests from core 0 and the Wi-Fi task consumes on core 1.
 
-Every lock added here is a plain `SpinLock`, which is the correct variant under the
-lock rule because all of these callers are task context.
+"Task context only" was NOT sufficient. That is the lesson of RT-0061 and
+RT-0069: a plain `SpinLock` deadlocks when a more urgent task on the same core
+holds it and is then preempted. Every lock with same-core holders now uses
+`ISpinLock`, and a caller that must not wait uses `ISpinTryLock` or an atomic.
 
 ## Phase 5: per-core load and stack margin
 
@@ -328,9 +335,8 @@ Holder counts are acquisition sites per lock.
 
 | Lock | Declaration | Acquisitions | Reached from |
 | --- | --- | --- | --- |
-| `stats_lock` | `subsystem1/telemetry.c:35` | 11 | RAM-log writer, readers, `telemetry_send` |
-| `dump_lock` | `subsystem1/log_stream.c:102` | 4 | DUMP request, active read, Wi-Fi step |
-| `queue_lock` | `subsystem1/network_queue.c:35` | 3 | queue metrics, board results |
+| `stats_lock` | `subsystem1/telemetry.c:35` | 11 | RAM-log payload, published snapshot |
+| `dump_lock` | `subsystem1/log_stream.c:102` | 4 | DUMP admission request, active read, Wi-Fi step |
 | `timing_lock` | `libwifi/.../cyw43_utk_kernel.c:22` | 9 | CYW43 poll, timing window, start status |
 | `metrics_lock` | `subsystem1/robot_mqtt.c:69` | 11 | MQTT writers, Health snapshot |
 | `status_lock` | `libwifi/.../cyw43_utk.c:82` | 2 | radio snapshot publish and copy |
@@ -356,9 +362,9 @@ Lower number is more urgent. A task on the left can preempt another task on the 
 
 A plain `SpinLock` is unsafe when two holders sit on the SAME core and the more urgent one can preempt the other. From the map:
 
-- `dump_lock`: Vehicle 13 and Health 31, both core 0. **Unsafe.**
-- `queue_lock`: Vehicle 13 (via `robot_command_lost`) and Health 31, both core 0. **Unsafe.**
-- `timing_lock`: Vehicle 13 and Health 31, both core 0. **Unsafe.**
+- `dump_lock`: Vehicle 13 and Health 31, both core 0. **Was unsafe; repaired in RT-0069** - Vehicle's request fails fast and Health plus the two Wi-Fi holders are interrupt-preserving.
+- `queue_lock`: **removed in RT-0071/F3.** The counters are atomic, so there is no lock here to be unsafe.
+- `timing_lock`: Vehicle 13 and Health 31, both core 0. **Was unsafe; repaired in RT-0069 and RT-0071** - Vehicle's window calls fail fast and a missed close is applied under the lock.
 - `stats_lock`: already interrupt-preserving on every holder after `26d306d`.
 - `metrics_lock`: Wi-Fi 20 on core 1 writes; Health 31 on core 0 reads. Different cores, so contention is bounded by section length. Not a same-core pair.
 - `status_lock`: Wi-Fi 20 on core 1; readers on core 0. Different cores.
@@ -387,37 +393,35 @@ device evidence exists.
 `lose` is only reached from outside a held region; callers inside a case use
 `lose_locked`. No section contains a `tk_*` wait, printf or network call.
 
-#### `dump_lock` — `subsystem1/log_stream.c:102` — **UNSAFE**
+#### `dump_lock` — `subsystem1/log_stream.c:102` — repaired in RT-0069
 
 | Holder | Line | Variant | Core, priority | Held across | Static bound |
 | --- | --- | --- | --- | --- | --- |
-| `log_stream_dump_request` | 571 | SL | core 0, 13 (Vehicle) | admission accept | 2 words |
-| `log_stream_dump_active` | 587 | SL | core 0, 31 (Health) | admission read | 1 word |
-| `dump_service` | 498 | SL | core 1, 20 (Wi-Fi) | pending to active | 2 words |
-| `dump_apply` | 625 | SL | core 1, 20 (Wi-Fi) | return to IDLE | 1 word |
+| `log_stream_dump_request` | 571 | IST (E_TMOUT) | core 0, 13 (Vehicle) | admission accept | 2 words |
+| `log_stream_dump_active` | 587 | ISL | core 0, 31 (Health) | admission read | 1 word |
+| `dump_service` | 498 | ISL | core 1, 20 (Wi-Fi) | pending to active | 2 words |
+| `dump_apply` | 625 | ISL | core 1, 20 (Wi-Fi) | return to IDLE | 1 word |
 
-#### `queue_lock` — `subsystem1/network_queue.c:35` — **UNSAFE**
+#### `queue_lock` — removed in RT-0071/F3
 
-| Holder | Line | Variant | Core, priority | Held across | Static bound |
-| --- | --- | --- | --- | --- | --- |
-| `lost` | 40 | SL | core 0 and core 1 callers | counter increment | 1 counter |
-| `robot_network_board_result` | 174 | SL | core 1, 20 (Wi-Fi) | board result | 1 struct |
-| `robot_command_lost` | 195 | SL | core 0, 13 (Vehicle, ESTOP path) | loss counter | 1 counter |
+The lock no longer exists. All three holders were counter updates, so they became
+the kernel's atomic RMW: `lost()` and `robot_command_lost()` are lock-free, which
+is the only way the ESTOP route can meet "no blocking wait in Vehicle". The
+board-result recorder uses an atomic increment for the counters it touched, and the
+unavailable mask keeps its single writer. The audit therefore lists one lock fewer
+than the eight it started with.
 
-`robot_command_lost` on the ESTOP path is the finding that matters: it can wait on
-Health at priority 31 holding this lock.
-
-#### `timing_lock` — `libwifi/.../cyw43_utk_kernel.c:22` — **UNSAFE**
+#### `timing_lock` — `libwifi/.../cyw43_utk_kernel.c:22` — repaired in RT-0069 and RT-0071
 
 | Holder | Line | Variant | Core, priority | Held across | Static bound |
 | --- | --- | --- | --- | --- | --- |
-| `cyw43_utk_poll_begin` | 58 | SL | core 1, 20 (Wi-Fi) | timing add | 1 struct |
-| `cyw43_utk_poll_end` | 70, 84 | SL | core 1, 20 (Wi-Fi) | timing add, window close | 2 structs |
-| `cyw43_utk_timing_read` | 101 | SL | core 0, 31 (Health) | copy out | 2 structs |
-| `cyw43_utk_timing_window_begin` | 110 | SL | core 0, 13 (Vehicle) | open window | 3 words |
-| `cyw43_utk_timing_window_end` | 131 | SL | core 0, 13 (Vehicle) | close window | 2 structs |
-| `cyw43_utk_start_status` | 145 | SL | core 0 readers, core 1 writer | status read | 1 word |
-| `cyw43_utk_start` | 198, 205 | SL | core 1, 20 (boot) | reset state | 3 words |
+| `cyw43_utk_poll_begin` | 58 | ISL | core 1, 20 (Wi-Fi) | timing add, apply deferred close | 1 struct |
+| `cyw43_utk_poll_end` | 70, 84 | ISL | core 1, 20 (Wi-Fi) | timing add, window close | 2 structs |
+| `cyw43_utk_timing_read` | 101 | ISL | core 0, 31 (Health) | copy out | 2 structs |
+| `cyw43_utk_timing_window_begin` | 110 | IST (E_TMOUT) | core 0, 13 (Vehicle) | open window, apply deferred close | 3 words |
+| `cyw43_utk_timing_window_end` | 131 | IST (E_TMOUT) | core 0, 13 (Vehicle) | close window, or leave a close request | 2 structs |
+| `cyw43_utk_start_status` | 145 | IST (atomic read) | core 0 readers, core 1 writer | status read | 1 word |
+| `cyw43_utk_start` | 198, 205 | ISL | core 1, 20 (boot) | reset state, kernel call outside | 3 words |
 
 #### `metrics_lock` — `subsystem1/robot_mqtt.c:69` — different cores, not a same-core pair
 

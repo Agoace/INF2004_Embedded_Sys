@@ -18,6 +18,30 @@
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
+
+/*
+ * RT-0071/F1: the CONTROL fields - DUMP reservation, storage full, loss count -
+ * are published as atomics, independent of stats_lock.  Vehicle decides on them
+ * (vehicle_task.c:393, 659, 1311), so reading them unsynchronised or behind the
+ * payload lock is a control defect rather than a diagnostic nicety.  stats_lock
+ * keeps guarding the payload and the diagnostic counters.
+ */
+static UW admit_busy;   /* DUMP reservation: 0 free, 1 held */
+static UW admit_full;   /* log storage full */
+static UW admit_lost;   /* losses, incremented from both cores */
+
+/*
+ * Diagnostic counters published for lock-free readers.  Written only by the
+ * Telemetry task while it holds stats_lock; a reader may mix two instants, which
+ * is exactly why the control fields above are kept as separate atomics.
+ */
+static telemetry_stats_t stats_pub;
+
+/* Publish the diagnostic counters. Caller holds stats_lock. */
+static void publish_stats(void)
+{
+    stats_pub = stats;
+}
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
@@ -58,7 +82,7 @@ static APP_BOARD(telemetry_log_index_t) log_index;
 static void publish_index(void)
 {
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
-                                     stats.lost, newest_row_ms};
+                                     admit_lost, newest_row_ms};
     app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
 }
 
@@ -187,20 +211,24 @@ void telemetry_stats(telemetry_stats_t *out)
         return;
     }
     /*
-     * RT-0069: this is a decision read and must not wait on the payload lock, and
-     * it must never block on a core-1 holder.  One immediate try; when the lock is
-     * busy the counters are copied without it.  Each field is an aligned 32-bit
-     * word, so no field can tear; the set may mix two instants, which for
-     * diagnostic counters that never gate control is acceptable and is stated
-     * rather than hidden.  The previous version spun here instead.
+     * RT-0071/F1: two different contracts, because these are not the same kind of
+     * field.
+     *
+     * The CONTROL fields - busy, storage_full, lost - drive Vehicle's DUMP
+     * admission and storage-full stop decisions, so they come from the atomics
+     * the writers update. They are exact, and no lock is taken to get them.
+     *
+     * The diagnostic counters - rows and events - come from the snapshot the
+     * Telemetry task publishes under its own lock. Locked state is never read
+     * without synchronisation here, which is what the previous version did when
+     * its try-lock failed.
      */
-    UINT intsts;
-    if (E_OK == ISpinTryLock(&stats_lock, &intsts)) {
-        *out = stats;
-        (void)ISpinUnlock(&stats_lock, intsts);
-        return;
-    }
-    *out = stats;
+    const telemetry_stats_t snapshot = stats_pub;
+    out->busy = (0u != admit_busy);
+    out->storage_full = (0u != admit_full);
+    out->lost = admit_lost;
+    out->rows = snapshot.rows;
+    out->events = snapshot.events;
 }
 
 /*
@@ -211,18 +239,16 @@ void telemetry_stats(telemetry_stats_t *out)
  */
 static void lose_locked(void)
 {
-    ++stats.lost;
+    (void)atomic_inc(&admit_lost);
 }
 
 /*
  * Account for a telemetry message that could not be stored.
  */
+/* Lock-free: reached from telemetry_send on core 0, which must never wait. */
 static void lose(void)
 {
-    UINT intsts;
-    (void)ISpinLock(&stats_lock, &intsts);
-    ++stats.lost;
-    (void)ISpinUnlock(&stats_lock, intsts);
+    (void)atomic_inc(&admit_lost);
 }
 
 /*
@@ -290,10 +316,9 @@ static void dump(void)
     const UW after = dropped();
     tm_printf((UB *)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
               (unsigned long)after, (unsigned long)(after - before));
-    UINT intsts;
-    (void)ISpinLock(&stats_lock, &intsts);
-    stats.busy = false;
-    (void)ISpinUnlock(&stats_lock, intsts);
+    /* The dump is over: release the reservation atomically, so the release can
+     * never strand or clear somebody else's reservation. */
+    (void)atomic_xchg(&admit_busy, 0u);
 }
 
 /*
@@ -318,19 +343,20 @@ static void telemetry_task(INT code, void *ctx)
             last_junction = (ja_result_t){0};
             stats.rows = 0u;
             stats.events = 0u;
-            stats.storage_full = false;
+            (void)atomic_xchg(&admit_full, 0u);
             loss_base = m.loss_base;
 #if TM_MQTT
             ++log_generation;
             newest_row_ms = 0u;
             publish_index();
 #endif
+            publish_stats();
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_ROW:
             (void)ISpinLock(&stats_lock, &intsts);
             if (stats.rows == TELEMETRY_ROWS) {
-                stats.storage_full = true;
+                (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
             } else {
                 for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
@@ -344,12 +370,13 @@ static void telemetry_task(INT code, void *ctx)
 #if TM_MQTT
             publish_index();
 #endif
+            publish_stats();
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_EVENT:
             (void)ISpinLock(&stats_lock, &intsts);
             if (stats.events == TELEMETRY_EVENTS) {
-                stats.storage_full = true;
+                (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
             } else {
                 events[stats.events++] = m.data.event;
@@ -357,6 +384,7 @@ static void telemetry_task(INT code, void *ctx)
 #if TM_MQTT
             publish_index();
 #endif
+            publish_stats();
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_INFO:
@@ -442,35 +470,30 @@ int telemetry_send(const telemetry_message_t *message)
     }
     telemetry_message_t m = *message;
     /*
-     * RT-0069 / D1: the admission decision is separated from the RAM-log payload.
-     * Vehicle runs at priority 13 and must not wait on a lock the core-1 Telemetry
-     * task holds for a row, event or dump mutation, so this takes one immediate
-     * try and never spins.  On contention the message is STILL SENT: a payload
-     * collision must not cancel a run or lose a message.  Only a real message
-     * buffer failure below reports an error, which is what RM_STOP_TELEMETRY is
-     * for.  `loss_base` is best-effort under contention and is diagnostic only.
+     * RT-0071/F1: reservation and rollback are ONE coherent operation on the
+     * admission atomic, with no payload lock involved.
+     *
+     * Reserve only if the reservation is free - a single compare-exchange, so a
+     * second DUMP is refused rather than admitted beside the first.  Release only
+     * what this call took, so a failed send can never clear another DUMP's
+     * reservation.  Vehicle never waits, because there is no lock here at all, and
+     * it never observes busy=false while its own DUMP is pending.
      */
-    bool conflict = false;
-    UINT intsts;
-    if (E_OK == ISpinTryLock(&stats_lock, &intsts)) {
-        conflict = stats.busy;
-        m.loss_base = stats.lost;
-        if (!conflict && m.kind == TELEMETRY_DUMP) {
-            stats.busy = true;
+    bool reserved = false;
+    if (m.kind == TELEMETRY_DUMP) {
+        if (0u != atomic_cmpxchg(&admit_busy, 1u, 0u)) {
+            lose();
+            return E_OBJ;
         }
-        (void)ISpinUnlock(&stats_lock, intsts);
+        reserved = true;
     }
-    if (conflict) {
-        lose();
-        return E_OBJ;
-    }
+    m.loss_base = admit_lost;   /* aligned word read */
     const ER er = tk_snd_mbf(mbf_telemetry, &m, (INT)sizeof(m), TMO_POL);
     if (er < E_OK) {
+        /* A real message-buffer failure: the caller may stop the run. */
         lose();
-        if (m.kind == TELEMETRY_DUMP) {
-            (void)ISpinLock(&stats_lock, &intsts);
-            stats.busy = false;
-            (void)ISpinUnlock(&stats_lock, intsts);
+        if (reserved) {
+            (void)atomic_xchg(&admit_busy, 0u);
         }
     }
     return (int)er;

@@ -29,6 +29,10 @@ static UW probe_begin_us;
 static BOOL have_previous;
 static BOOL window_previous_valid;
 static BOOL window_active;
+/* RT-0071/F2: a close request from a caller that could not take the lock.  It is
+ * applied under the lock by the poll path or by the next window begin, so no
+ * caller ever writes window_active from outside the lock. */
+static UW window_close_req;
 static ER start_status = E_OBJ;
 #define CYW43_LONG_POLL_GAP_US 10000u
 
@@ -70,6 +74,9 @@ void cyw43_utk_poll_end(void)
     const UW work = end - started;
     UINT intsts;
     (void)ISpinLock(&timing_lock, &intsts);
+    if (0u != atomic_xchg(&window_close_req, 0u)) {
+        window_active = FALSE;   /* apply a deferred close from a missed try */
+    }
     timing_add(&timing, work, started - previous, have_previous);
     previous = started;
     have_previous = TRUE;
@@ -120,6 +127,9 @@ int32_t cyw43_utk_timing_window_begin(void)
     if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
         return E_TMOUT;
     }
+    if (0u != atomic_xchg(&window_close_req, 0u)) {
+        window_active = FALSE;   /* a deferred close beats the stale flag */
+    }
     if (window_active) {
         (void)ISpinUnlock(&timing_lock, intsts);
         return E_OBJ;
@@ -149,7 +159,10 @@ int32_t cyw43_utk_timing_window_end(T_CYW43_TIMING *out)
      */
     UINT intsts;
     if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
-        window_active = FALSE;
+        /* RT-0071/F2: never touch window_active outside the lock, because the
+         * poll path owns it under the same lock.  Leave a request the poll path or
+         * the next begin applies, and return no counters for this window. */
+        (void)atomic_inc(&window_close_req);
         return E_TMOUT;
     }
     if (!window_active) {
@@ -169,7 +182,11 @@ int32_t cyw43_utk_start_status(void)
      * waiting, since the reader only reports it. */
     UINT intsts;
     if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
-        return (int32_t)start_status;
+        /* RT-0071/F2: a defined single-word read through the atomic builtin,
+         * rather than an unsynchronised read of state the writer stores under the
+         * lock.  A status word cannot tear, and a momentarily stale value is all
+         * this reader reports. */
+        return (int32_t)__atomic_load_n(&start_status, __ATOMIC_SEQ_CST);
     }
     const ER result = start_status;
     (void)ISpinUnlock(&timing_lock, intsts);

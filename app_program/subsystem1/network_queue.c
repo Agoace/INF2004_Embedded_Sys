@@ -29,25 +29,19 @@ static uint32_t unavailable;
 static uint8_t unavailable_mask;
 
 /*
- * Phase 4 and RT-0069: the Wi-Fi task on core 1 updates these counters while
- * Health and the board readers copy them on core 0, so a core-local mask protects
- * neither.  The saved-interrupt variant is required here, not merely preferred:
- * Vehicle at priority 13 and Health at priority 31 both HOLD this lock on core 0,
- * so a plain SpinLock would let Vehicle preempt Health and then spin on a lock
- * Health can no longer release.  With the interrupt-preserving pair the holder is
- * not preemptible for its section, so the ESTOP path in robot_command_lost()
- * cannot wait on a preempted Health.  A zero-filled static holds the unlocked
- * state.
+ * RT-0071/F3: these counters are updated from both cores and read from both, and
+ * Vehicle reaches robot_command_lost() on the ESTOP path.  RT-0069 forbids a
+ * blocking wait in Vehicle, so there is no lock here at all: every counter is
+ * updated with the kernel's atomic RMW, which is a hardware-spinlock claim held
+ * for a few instructions on two cores and an interrupt window on one.  The
+ * unavailable mask keeps a single writer (the Wi-Fi task), so a plain store and a
+ * plain aligned byte read are already indivisible.
  */
-static T_SPLOCK queue_lock;
 
-/* Increment a loss counter. The holder is not preemptible for the increment. */
+/* Increment a loss counter. Lock-free: no caller can be made to wait. */
 static void lost(uint32_t *counter)
 {
-    UINT intsts;
-    (void)ISpinLock(&queue_lock, &intsts);
-    ++*counter;
-    (void)ISpinUnlock(&queue_lock, intsts);
+    (void)atomic_inc((UW *)counter);
 }
 
 /*
@@ -179,17 +173,14 @@ void robot_network_board_result(unsigned int board, int result)
     }
     const uint8_t mask = (uint8_t)(1u << board);
 
-    UINT intsts;
-    (void)ISpinLock(&queue_lock, &intsts);
     if (result >= E_OK) {
         unavailable_mask = (uint8_t)(unavailable_mask & (uint8_t)~mask);
     } else if (result == E_OBJ || result == E_NOEXS) {
-        ++unavailable;
+        (void)atomic_inc((UW *)&unavailable);
         unavailable_mask = (uint8_t)(unavailable_mask | mask);
     } else if (result == E_TMOUT) {
-        ++busy[board];
+        (void)atomic_inc((UW *)&busy[board]);
     }
-    (void)ISpinUnlock(&queue_lock, intsts);
 }
 
 /* Count a command dropped before it reached the queue. */
@@ -201,8 +192,8 @@ void robot_command_lost(void)
 /* Copy the queue loss and busy counters into a heartbeat. */
 void robot_queue_metrics(rm_heartbeat_t *out)
 {
-    UINT intsts;
-    (void)ISpinLock(&queue_lock, &intsts);
+    /* Each counter is an aligned word, so a read is indivisible.  The set may
+     * come from two instants, which is a diagnostic limit and is stated here. */
     out->event_lost = event_lost;
     out->command_lost = command_lost;
     out->line_busy = busy[0];
@@ -212,7 +203,6 @@ void robot_queue_metrics(rm_heartbeat_t *out)
     out->health_busy = busy[4];
     out->board_unavailable = unavailable;
     out->board_unavailable_mask = unavailable_mask;
-    (void)ISpinUnlock(&queue_lock, intsts);
 }
 
 /* Default metrics provider. The MQTT module overrides it. */
