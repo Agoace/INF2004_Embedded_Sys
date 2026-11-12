@@ -26,6 +26,7 @@
 #include "platform/drv_time.h"
 #include "vehicle/vehicle_task.h"
 #include "platform/app_task.h"
+#include "platform/app_startup.h"
 #include "subsystem4/imu_settings.h"
 #if TM_MQTT
 #include "platform/idle_meter.h"
@@ -103,6 +104,9 @@ EXPORT INT usermain(void)
     CHECK(subsystem5_start(), "subsystem5_start");
     CHECK(vehicle_task_start(), "vehicle_task_start");
 
+    /* Publish even failed attempts: unavailable providers stay unavailable.
+     * Start-time task IDs/flags must settle before core-1 MQTT reads them. */
+    app_startup_complete_publish();
     tm_printf((UB *)"all subsystems started\n\n");
 
 #if APP_TEST

@@ -24,6 +24,7 @@
 #include "robot_mqtt_config.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id.h"
+#include "../platform/app_startup.h"
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define RETRY_MS 3000u
 
@@ -752,6 +753,10 @@ static void service(uint32_t now)
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */
 void cyw43_utk_app_poll(void)
 {
+    /* The radio can run before usermain initializes application providers. */
+    if (!app_startup_complete()) {
+        return;
+    }
     if (boot_id_get() == 0u) {
         /* Failed entropy cannot publish a repeatable boot identity. */
         return;

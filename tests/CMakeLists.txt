@@ -207,6 +207,13 @@ endif()
 # TEST runner policy and buffered timing evidence; no real scheduler or hardware.
 host_test(test_test_runner tests/test_test_runner.c app_program/app_main.c)
 host_test(test_production_runner tests/test_test_runner.c app_program/app_main.c)
+host_test(test_startup_mqtt_runner tests/test_test_runner.c
+    app_program/app_main.c)
+target_include_directories(test_startup_mqtt_runner BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_startup_mqtt_runner PRIVATE TM_MQTT=1)
+add_test(NAME test_startup_mqtt_provider_failure
+    COMMAND test_startup_mqtt_runner startup_failure)
 host_test(test_timing_test_hooks tests/test_timing_test_hooks.c
     app_program/subsystem1/subsystem1_test.c app_program/subsystem2/subsystem2_test.c)
 foreach(test IN ITEMS test_test_runner test_production_runner test_timing_test_hooks)
@@ -215,6 +222,8 @@ endforeach()
 target_compile_definitions(test_test_runner PRIVATE APP_TEST=1)
 target_compile_definitions(test_timing_test_hooks PRIVATE APP_TEST=1)
 add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priority_failure)
+add_test(NAME test_startup_provider_failure
+    COMMAND test_production_runner startup_failure)
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
 
@@ -297,6 +306,12 @@ add_test(NAME test_vehicle_junction_start_stale
     COMMAND test_vehicle_junction_A junctionstale)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/admission_checks.cmake")
+
+find_package(Threads REQUIRED)
+host_test(test_app_startup tests/test_app_startup.c
+    app_program/platform/app_startup.c)
+target_link_libraries(test_app_startup PRIVATE Threads::Threads)
+set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
 
 # Keep this last: placement variants copy fully configured fixture targets.
 include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")

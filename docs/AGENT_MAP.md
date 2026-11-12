@@ -173,6 +173,16 @@ vehicle task described below.
 
 ## Kernel platform
 
+- [`app_startup.h`](../app_program/platform/app_startup.h) and
+  [`app_startup.c`](../app_program/platform/app_startup.c) — one-way boot
+  handoff after all init/start attempts; the MQTT hook acquires before
+  application access. [M8 contract](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
+  lists covered readers and unchanged runtime synchronization.
+  [`test_app_startup.c`](../tests/test_app_startup.c),
+  [`test_test_runner.c`](../tests/test_test_runner.c) and
+  [`test_robot_mqtt.c`](../tests/test_robot_mqtt.c) check publication,
+  lifecycle ordering and refusal of early application work.
+
 - [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
 - [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
@@ -318,7 +328,7 @@ vehicle task described below.
 - [`tests/mqtt_protocol.cmake`](../tests/mqtt_protocol.cmake), [`dashboard_checks.cmake`](../tests/dashboard_checks.cmake), [`network_checks.cmake`](../tests/network_checks.cmake), [`mqtt_client_checks.cmake`](../tests/mqtt_client_checks.cmake) — C/Python packing, board/queue/log and mocked transport regression tests.
 - [`tests/test_sonar_history.c`](../tests/test_sonar_history.c) — non-consuming latest/history reads, overflow/miss and sequence wrap.
 
-- [`app_program/platform/app_board.h`](../app_program/platform/app_board.h) — single-writer atomic word publication and one-attempt core-0 reads; unavailable never spins.
+- [`app_program/platform/app_board.h`](../app_program/platform/app_board.h) — single-writer atomic word publication and one-attempt cross-core reads; unavailable never spins.
 - [`tests/test_template_tick.c`](../tests/test_template_tick.c) and [`tests/test_template_wifi.c`](../tests/test_template_wifi.c) — startup register/idempotence/bounded-failure and Wi-Fi priority/lifetime/window/ABI doubles; [`tests/template_checks.cmake`](../tests/template_checks.cmake).
 
 - Motion public `motion_snapshot_try_read` is a transport-independent last-tick board, not the inherited control mutex. Tests in [`tests/test_motion_task.c`](../tests/test_motion_task.c) cover null/unready/no-first-tick and coherent counts/time.

@@ -368,13 +368,12 @@ evidence.
    executes, that its cyclic handler fires at 10 ms on core 1, that samples
    reach the Vehicle board intact, or that the stack mark for a core-1 task is
    usable. The compile passes prove only that both profiles build.
-6. Remaining boards still on one core until their phases land: `line_service.c`,
-   `robot_health.c`, `junction_source.c` and the five boards in `vehicle_task.c`.
-   The **Motion board is already cross-core and is not in that list**:
-   `imu_service.c:101` calls `motion_snapshot_try_read()` from core 1 while Motion
-   publishes from core 0. It uses the same `app_board` sequence contract, so no
-   second writer is introduced, but it needs an explicit cross-core audit rather
-   than an assumption.
+6. LINE, Health and Vehicle boards already have core-1 Wi-Fi readers.
+   Motion has core-1 IMU and Wi-Fi readers. Their payloads retain the
+   `app_board` sequence and atomic-word contract; no second writer is added.
+   The M8 startup handoff below covers the Wi-Fi reader's init-only guards.
+   The IMU starts after Motion startup returns. Device evidence for concurrent
+   snapshot availability and timing is still required.
 7. Phase 3 has not run on a device. Nothing shows a core-1 Telemetry task
    receiving messages, rows and events surviving the lock contract under load, the
    bounded `E_TMOUT` reader path ever being taken, or `stats_lock` contention
@@ -637,6 +636,7 @@ It records what was added, at what rate, and exactly what the bench run must cap
 | IMU task and cyclic | 10 ms | unchanged work; only the core it runs on changed |
 | Idle meters | continuous | two counting tasks that spin without WFI, one per core; the core-1 meter is not started in the control profile |
 | Queue / admission atomics | low rate | one hardware-spinlock claim per counter update, on loss and board-result paths only |
+| Application startup gate | once at startup; each MQTT hook | one release store; one acquire load per hook, no locked RMW or wait |
 
 ### Not optimised on guesswork
 
@@ -721,3 +721,84 @@ to `af94874`, combined M2/M3 text is +64 B and static RAM is unchanged at
 192220 B. INFO remains 108 B and the telemetry message remains 116 B.
 Host scheduling proves these selected interleavings only. No hardware
 latency, CPU, deadline or stack acceptance is claimed.
+
+## M8: application startup handoff
+
+The radio task starts in kernel device initialization, before `usermain`.
+A nonzero boot ID is not an application-readiness barrier: `boot_id_init`
+runs before subsystem initialization. A core-1 MQTT hook could therefore
+read an init-only guard while core 0 was still writing it.
+
+[`app_startup.h`](../../app_program/platform/app_startup.h) defines one
+boot handoff. Its implementation has one aligned 32-bit word, initially
+zero. `usermain` is the sole publisher. It calls
+`app_startup_complete_publish()` after all five subsystem init attempts,
+all five start attempts and `vehicle_task_start()` return. The release
+store occurs before the final startup print and TEST priority change.
+Publishing between init and start is not sufficient: Motion task IDs and
+IMU running state are assigned by start calls.
+
+`cyw43_utk_app_poll()` first calls `app_startup_complete()`, an acquire
+load. If false, it returns before the boot-ID read, clock reads, metrics,
+configuration, queues, providers or MQTT client creation. After opening,
+the existing nonzero boot-ID requirement still applies. Radio setup,
+association, DHCP and lwIP timeout processing do not wait for this gate.
+MQTT callbacks cannot bypass it: no application MQTT client is created
+before the gate opens, and callbacks run on that same Wi-Fi owner task.
+
+The flag means **startup attempts have returned**, not that all providers
+are healthy or have published a first sample. Existing CHECK and optional
+failure policy are unchanged. An unavailable provider must still return
+its existing error; the gate must not manufacture a valid snapshot.
+There is no gate reset and no production retry that rewrites these
+init-only guards after publication. A future retry requires a separate
+synchronization contract.
+
+### Readers and limits
+
+| Reader | Startup ordering | Runtime protection retained |
+| --- | --- | --- |
+| Wi-Fi `robot_network_state` | Gate precedes LINE `ready`, Motion mutex/task IDs and sonar `ready` reads | Atomic-word LINE/Motion/sonar/Vehicle boards and existing age rules |
+| Wi-Fi sonar history/skip and telemetry/queue services | Gate follows queue creation and service startup | Existing history boards, payload locks and admission atomics |
+| Wi-Fi Vehicle phase, reports and Health reads | Gate follows all init/start attempts; no first sample is implied | Existing bounded boards and unavailable results |
+| IMU task reads Motion | Not covered by the MQTT gate; `motion_start` returns before IMU task creation/start | Existing atomic-word Motion board and stale checks |
+| Telemetry task before the gate opens | Not covered by the MQTT gate; its message buffer is created before task start, and the task waits for messages | Existing owner state, payload lock and control atomics |
+| Core-0 Vehicle/Health/TEST callers | Their startup sequence is unchanged; this gate does not guard arbitrary direct API calls | Existing mutexes, boards and runtime atomics |
+
+No direct Wi-Fi read of IMU `running` is claimed on this base: its network
+adapters read the listed boards. Runtime-changing epochs, loss/admission
+state, capture handoffs and board words still need their existing atomic
+or lock contract. This boot flag is not a mutex and does not replace any
+of them. No LINE, Motion, ADC or 1 ms path code changes.
+
+### Software evidence
+
+Before production changes, three focused checks failed: an early real MQTT
+hook with a nonzero boot ID performed application work; production startup
+never published completion, both with normal and failed provider attempts.
+The retained red log is `build/review/m8-red-tests.log`.
+
+The startup harness checks a closed gate at every init/start boundary,
+including inside Vehicle startup, then requires one publication before
+printing or lowering TEST priority. Failure injection keeps one provider
+unavailable without preventing completion. The MQTT fixture checks zero
+boot-ID, clock, priority, transport and provider access while closed;
+opening permits ordinary traffic. Open-gate/zero-ID refusal is retained.
+A separate host-thread test links the real gate and checks publication of
+plain provider IDs, including one unavailable ID. It is not an RP2040
+scheduler or timing test.
+
+GCC and Clang ASan/UBSan/float-cast-overflow with leak detection pass the
+full 279-test suite. Coverage includes UP, split and forced-core0 host
+variants, normal/failed startup, MQTT startup, TEST and IMU_STREAM paths.
+All 24 public-example firmware profiles link with zero compiler warnings.
+Strict ARM checks pass for all 81 application units in each profile:
+1944 checks with `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror`.
+Logs are retained under `build/review/m8-final-*`, `m8-matrix.log` and
+`m8-strict-arm.log`. No device run or timing PASS is claimed.
+
+Matched SMP1 MQTT images against `c8ecc98`: text 419904 -> 419952 B,
+data 1008 -> 1008 B, BSS 191212 -> 191220 B. M8 adds 48 B text and 8 B
+linked static RAM, including alignment, for its 4 B word. No task, stack,
+heap, public board, message or wire field is added. ARM code uses aligned
+word loads/stores and barriers, not a hardware-lock RMW.

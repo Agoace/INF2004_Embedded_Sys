@@ -1,4 +1,5 @@
 # M1: contract tests for the host double, and both placement seams.
+# M8: startup publication and early MQTT entry in all placement profiles.
 host_test(test_smp_double tests/test_smp_double.c)
 target_include_directories(test_smp_double BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
@@ -48,3 +49,19 @@ foreach(failure create_failure start_failure cyclic_failure count_wrap
 endforeach()
 add_test(NAME test_imu_capture_service_control_handoff
     COMMAND test_imu_capture_service_control capture)
+
+foreach(placement up control)
+    foreach(target test_app_startup test_production_runner test_test_runner
+            test_imu_stream_runner test_startup_mqtt_runner test_robot_mqtt)
+        placement_variant(${target} ${placement})
+    endforeach()
+    set_tests_properties(test_app_startup_${placement} PROPERTIES TIMEOUT 10)
+    add_test(NAME test_startup_provider_failure_${placement}
+        COMMAND test_production_runner_${placement} startup_failure)
+    add_test(NAME test_startup_mqtt_provider_failure_${placement}
+        COMMAND test_startup_mqtt_runner_${placement} startup_failure)
+    add_test(NAME test_robot_mqtt_startup_${placement}
+        COMMAND test_robot_mqtt_${placement} startup)
+    add_test(NAME test_robot_mqtt_no_boot_id_${placement}
+        COMMAND test_robot_mqtt_${placement} no_boot_id)
+endforeach()

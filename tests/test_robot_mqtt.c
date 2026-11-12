@@ -10,6 +10,7 @@
 #include "../app_program/subsystem1/network_queue.h"
 #include "../app_program/subsystem1/robot_health.h"
 #include "../app_program/subsystem1/telemetry.h"
+#include "../app_program/platform/app_startup.h"
 #include "../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define FIXTURE_TOKEN_HEX "00112233445566778899aabbccddeeff"
 #ifndef ROBOT_MQTT_COMMAND_TOKEN_HEX
@@ -53,8 +54,16 @@ static bool ram_busy;
 static unsigned int row_reads,event_log_reads;
 void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
 void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
+static bool startup_ready = true;
+static unsigned int startup_reads;
+bool app_startup_complete(void)
+{
+    ++startup_reads;
+    return startup_ready;
+}
 static uint32_t boot_identity=0x11223344u;
-uint32_t boot_id_get(void) { return boot_identity; }
+static unsigned int boot_reads, state_reads;
+uint32_t boot_id_get(void) { ++boot_reads; return boot_identity; }
 uint32_t drv_time_ms(void) { return now_ms; }
 uint32_t drv_time_us(void) { return now_ms*1000u+clock_calls++; }
 ER tk_ref_tsk(ID id,T_RTSK *status) { assert(id==TSK_SELF && !irq_off);++priority_reads;status->tskpri=20;return E_OK; }
@@ -103,7 +112,12 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
     } else assert(qos==0u);
     return record->result;
 }
-void robot_network_state(rm_state_t *value) { assert(in_hook);*value=(rm_state_t){.flags=15u,.state=2u,.raw_bc=321u}; }
+void robot_network_state(rm_state_t *value)
+{
+    assert(in_hook);
+    ++state_reads;
+    *value = (rm_state_t){.flags = 15u, .state = 2u, .raw_bc = 321u};
+}
 /* Vehicle phase provider. Default: no vehicle consumer, so the older
  * scenarios keep RUN rates. */
 static int vehicle_result = E_OBJ;
@@ -795,10 +809,30 @@ static void test_idle_busy(void)
     assert(mode_word(last_topic("robot/state")) == RM_STATE_MODE_IDLE);
 }
 
+/* Nonzero identity alone must not admit application work during startup. */
+static void test_startup_gate(void)
+{
+    startup_ready = false;
+    assert(boot_identity != 0u);
+    poll_at(0u);
+    poll_at(10000u);
+    assert(clock_calls == 0u && priority_reads == 0u);
+    assert(boot_reads == 0u && state_reads == 0u);
+    assert(new_count == 0u && connect_count == 0u);
+    assert(publication_count == 0u && event_reads == 0u);
+    assert(sonar_reads == 0u && row_reads == 0u && event_log_reads == 0u);
+    assert(startup_reads == 2u);
+    startup_ready = true;
+    start_connected();
+    assert(count_topic("robot/state") == 1u && state_reads == 1u);
+    assert(count_topic("robot/heartbeat") == 1u);
+}
+
 int main(int argc,char **argv) {
     assert(argc==1 || argc==2);
     if (!(argc==2 && !strcmp(argv[1],"unconfigured"))) assert(strcmp(ROBOT_MQTT_COMMAND_TOKEN_HEX,FIXTURE_TOKEN_HEX)==0);
-    if (argc==1) test_log_live();
+    if (argc == 2 && !strcmp(argv[1], "startup")) test_startup_gate();
+    else if (argc==1) test_log_live();
     else if (!strcmp(argv[1],"connection")) test_connection();
     else if (!strcmp(argv[1],"commands")) test_commands();
     else if (!strcmp(argv[1],"schedule")) test_schedule();
