@@ -360,12 +360,12 @@ static void telemetry_task(INT code, void *ctx)
         if (tk_rcv_mbf(mbf_telemetry, &m, TMO_FEVR) != (INT)sizeof(m)) {
             continue;
         }
+        UINT intsts;
         switch (m.kind) {
         case TELEMETRY_BEGIN:
             /* One critical section for the whole mutation AND the index
              * publication, so a reader can never pair a new row with an old
              * index (RT-0056 defect 2). */
-    UINT intsts;
             (void)ISpinLock(&stats_lock, &intsts);
             last_junction = (ja_result_t){0};
             stats.rows = 0u;
