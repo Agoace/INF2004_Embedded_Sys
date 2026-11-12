@@ -52,7 +52,10 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 | `DIAG` | 0; 1 adds fixed motion timing captures, printed at GP20 |
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
-| `JUNCTION_TEST_CMD` | NONE (default), A/B/C/D; fake command latched at vehicle START; other values rejected; fake images add `_jtestA`..`_jtestD` |
+| `BARCODE_CAPTURE` | 0; 1 selects B1b driven TEST capture; VIN required |
+| `JUNCTION_TEST_CMD` | NONE (default) selects source2 SHADOW; A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
+| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
+| `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
@@ -60,6 +63,44 @@ GP0/GP1 belong to I2C0. BENCH has no IMU task. Follow the current
 [50 Hz support/GP21 procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 The GP21 drive trial requires VIN and a lifted-wheel stop check first.
 It is not the full TEST suite or a navigation feature.
+
+### Barcode B1b driven TEST image
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 BARCODE_CAPTURE=1 -j4
+```
+
+The filename is `mtk3pico_smp0_usb_cdc_test_barcode_capture.uf2`. Use USB
+console and CRASH_REPORT=0 on the connected robot. This profile requires
+TEST=1, SMP=0, WIFI=none, NET=none and MQTT=0; BENCH and IMU_STREAM are
+rejected. It skips ordinary subsystem tests and the automatic S2 steps,
+but **GP21 now drives in this image**. VIN is required. Lift both wheels
+for the first check. GP20 records floor/white/black ranges; after those,
+GP21 starts a 430 mm forward pass at 100 mm/s, then a fresh press after
+the complete dump starts a backward pass. Use only one sheet per run;
+swap the 2x F and 141 mm F sheets while stopped. Settings are in
+[`barcode_settings.h`](../../app_program/subsystem3/barcode_settings.h);
+the target is clamped to <=450 mm for the operator's shorter map. A press
+while moving requests stop.
+Faults/deadline/capacity stop and inhibit restart. No dump/rearm occurs
+until stop API success and two fresh zero-duty/low-speed snapshots.
+Busy snapshot reads use the last coherent board for at most two failed
+10 ms polls; three failures or source age >30 ms stops. BC_FAULT records
+cause bits, read/age values, motor faults/watchdog and actual wake rc.
+A false watchdog flag has no startup grace; it must be armed to command.
+Capture uses 6144 four-byte decimated records, about 12.3 s at default
+2 ms, plus 512 motion records. The TEST runner reports each frame and
+WIDTH and B1c PEAK on independent TIME/DISTANCE axes after freeze.
+All accepted payloads must agree; conflicts give AMBIGUOUS. B1c PEAK has
+host replay evidence, not powered acceptance. Its sensor remains at the
+5.5 mm mechanical minimum; it touches the floor on a 10 mm hump.
+Full dumps can take tens of seconds:
+wait for READY before GP21; presses during the dump are ignored with one
+notice. Partial-contrast optical rules and the approved real-capture host
+fixtures are documented in the barcode contract. Read the
+[B1c procedure, stop limits and RAM](../s3-line-barcode/BARCODE.md) first.
+
+### Profile identity
 
 The profile marker prevents reuse of objects with different options. For a
 fully clean validation, use `make clean` with the same profile options,
@@ -114,7 +155,7 @@ START; TEST/BENCH have no such START. NONE leaves LINE decisions unchanged.
 The option is included in the object-profile marker and passed to C as0..4.
 Unconsumed pending survives successful natural SEARCH back to LINE, with a
 new clear detector baseline. Other routes, failure and STOP cancel it.
-No distance/time expiry is added before the B2b contract.
+No pending or course-gap expiry is added.
 
 ```sh
 cd build_make
@@ -125,14 +166,31 @@ done
 ```
 
 NONE retains the normal MQTT filename. The other images end in
-`_jtestA.uf2` through `_jtestD.uf2`. Boot prints a FAKE command/forced-corner clearance label;
+`_jtestA.uf2` through `_jtestD.uf2`. Fake boot prints its command and clearance;
 a kind7 phase event and telemetry-owned `[JUNCTION]` USB line report the job.
-No barcode decoder or summary version is added. Use NONE for H3 IMU circuit
+NONE now prints BARCODE SHADOW and the official26-entry table once at boot.
+No summary version is added. Use NONE for H3 IMU circuit
 comparisons. Read the [design](../architecture/JUNCTION_ACTION.md) and
 [validation/J0–J6 procedure](JUNCTION_VALIDATION.md) before an authorized test.
 NONE crossed `+` on `eb18004` (operator-supplied J1 PASS). Operator J2–J5 acceptance on `7648081`/`75a95f7` is recorded with its
-capture/measurement limits. The new pending-recovery policy and
-pending-command barcode rejection remain **Not run**.
+capture/measurement limits. Main closed B2a after the `50426ae` A regression.
+Pending-command barcode rejection and full named-task stack gates remain open.
+
+### B2b first SHADOW image
+
+```sh
+make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 JUNCTION_TEST_CMD=NONE \
+    BARCODE_LIVE_ENABLE=0 BARCODE_MEASURED_CLEAR_MM=0 -j4 --output-sync=target
+```
+
+The decoder and adapter report evidence only; S3 forces valid0 even in mode2.
+The150 mm SHADOW label is unverified and cannot authorize actions. Enable,
+bound and source choice are object-profile keys. Invalid bounds, fake+live,
+or enable1 with bound0 fail in Make and C. Do not build/flash an action image
+without a separate approval and measured clearance. Public-example proof
+images contain no real credentials and are not operator images.
+Read the [live adapter](../architecture/JUNCTION_LIVE_ADAPTER.md) for50 ms
+record/control limits,10 ms LINE age, terminal ACK and stopped diagnostics.
 
 ## Private settings
 

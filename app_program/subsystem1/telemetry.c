@@ -49,7 +49,20 @@ static void publish_stats(void)
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
+/* S3 supplies the strong, bounded stopped dump in its producer commit. */
+void barcode_live_source_dump(void) __attribute__((weak));
+void barcode_live_source_dump(void)
+{
+}
+
+static void dump_barcode_source(void)
+{
+    barcode_live_source_dump();
+}
+
 static ja_result_t last_junction;
+static jlive_report_t last_source;
+static jlive_counts_t last_source_counts;
 static uint32_t loss_base;
 /*
  * Guards the multi-writer part of `stats`.  `lost` is incremented by submitters
@@ -371,6 +384,8 @@ static void telemetry_task(INT code, void *ctx)
              * index (RT-0056 defect 2). */
             (void)ISpinLock(&stats_lock, &intsts);
             last_junction = (ja_result_t){0};
+            last_source = (jlive_report_t){0};
+            last_source_counts = (jlive_counts_t){0};
             stats.rows = 0u;
             stats.events = 0u;
             (void)atomic_xchg(&admit_full, 0u);
@@ -439,6 +454,17 @@ static void telemetry_task(INT code, void *ctx)
             last_junction = m.data.junction;
             ja_print(&last_junction);
             break;
+        case TELEMETRY_JUNCTION_SOURCE:
+            last_source = m.data.junction_source;
+            jlive_print(&last_source);
+            break;
+        case TELEMETRY_JUNCTION_COUNTS:
+            last_source_counts = m.data.junction_counts;
+            jlive_print_counts(&last_source_counts);
+            break;
+        case TELEMETRY_BARCODE_DUMP:
+            dump_barcode_source();
+            break;
         case TELEMETRY_DUMP:
             info = m.data.info;
             info.reason[sizeof(info.reason) - 1u] = '\0';
@@ -446,6 +472,9 @@ static void telemetry_task(INT code, void *ctx)
             motion_diag_print();
             dump();
             ja_print(&last_junction);
+            jlive_print(&last_source);
+            jlive_print_counts(&last_source_counts);
+            dump_barcode_source();
             motion_diag_dump(0);
             break;
         default:

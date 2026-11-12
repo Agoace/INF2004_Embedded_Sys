@@ -226,6 +226,7 @@ add_test(NAME test_startup_provider_failure
     COMMAND test_production_runner startup_failure)
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/barcode_checks.cmake")
 
 add_test(NAME test_imu_source_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_imu_source_make.py")
@@ -262,6 +263,18 @@ host_test(test_junction tests/test_junction.c ${junction_sources}
     app_program/vehicle/junction_line.c ${line_search_source}
     ${line_trace_source} ${line_steer_source} ${line_position_source}
     ${obstacle_source})
+target_compile_definitions(test_junction PRIVATE JUNCTION_TEST_CMD=1)
+foreach(test IN ITEMS test_telemetry test_telemetry_log)
+    target_sources(${test} PRIVATE "${REPO}/tests/test_barcode_dump_stub.c")
+endforeach()
+foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/vehicle/junction_live.c"
+        "${REPO}/app_program/subsystem3/barcode_live_source.c"
+        "${REPO}/app_program/subsystem3/barcode_live_producer.c"
+        "${REPO}/app_program/subsystem3/barcode_window.c"
+        "${REPO}/app_program/subsystem3/barcode.c")
+endforeach()
 foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
     foreach(source IN LISTS junction_sources)
         target_sources(${test} PRIVATE "${REPO}/${source}")
@@ -270,6 +283,7 @@ foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
         "${REPO}/app_program/vehicle/junction_line.c")
 endforeach()
 foreach(test IN ITEMS test_telemetry test_telemetry_log)
+    target_compile_definitions(${test} PRIVATE JUNCTION_TEST_CMD=1)
     foreach(source IN LISTS junction_sources)
         target_sources(${test} PRIVATE "${REPO}/${source}")
     endforeach()
@@ -304,6 +318,30 @@ add_test(NAME test_vehicle_junction_start_busy
     COMMAND test_vehicle_junction_A junctionbusy)
 add_test(NAME test_vehicle_junction_start_stale
     COMMAND test_vehicle_junction_A junctionstale)
+
+foreach(test IN ITEMS test_production_runner test_production_runner_filtered
+        test_startup_mqtt_runner)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem3/barcode_window.c"
+        "${REPO}/app_program/subsystem3/barcode.c")
+    target_link_libraries(${test} PRIVATE m)
+endforeach()
+
+foreach(mode IN ITEMS shadow permitted)
+    set(test test_junction_live_${mode})
+    host_test(${test} tests/test_junction_live.c ${junction_sources}
+        app_program/vehicle/junction_live.c ${line_search_source}
+        ${obstacle_source})
+    if(mode STREQUAL "permitted")
+        # HOST ONLY: synthetic measured bound, never a firmware build/flash.
+        target_compile_definitions(${test} PRIVATE BARCODE_LIVE_ENABLE=1
+            BARCODE_MEASURED_CLEAR_MM=1)
+    endif()
+    foreach(case coherent invalid age epoch route encounter motion pending
+            guard heartbeat wrap ramp freshness counters epoch_slot adapter)
+        add_test(NAME ${test}_${case} COMMAND ${test} ${case})
+    endforeach()
+endforeach()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/admission_checks.cmake")
 

@@ -12,6 +12,8 @@ static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
 #define irq_off test_smp_irq_mask
 static bool full;static unsigned int kr,ve,bytes,reports;
+unsigned int source_dumps;
+static unsigned int source_lines,source_count_lines;
 static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
 ID app_start_task(FP function, PRI priority, UW core, const char *name)
@@ -49,6 +51,15 @@ int tm_printf(const UB *fmt,...) {
     if (!strncmp((const char *)fmt,"[JUNCTION]",10u)) {
         assert(!strcmp(va_arg(a,const char *),"FAKE"));
         assert(!strcmp(va_arg(a,const char *),"B"));++junction_lines;
+    }
+    if (!strncmp((const char *)fmt,"[BC_ADMIT]",10u)) ++source_lines;
+    if (strstr((const char *)fmt,"[JUNCTION_COUNTS]")) {
+        ++source_count_lines;
+        if (strstr((const char *)fmt,"line_age10")) {
+            assert(va_arg(a,unsigned long)==1u);
+            for (unsigned int i=0u;i<6u;++i) (void)va_arg(a,unsigned int);
+            assert(va_arg(a,unsigned int)==3u);
+        }
     }
     if (!strcmp((const char *)fmt,"KR %lu ")) ++kr;
     if (!strcmp((const char *)fmt,"VE %lu %u %u %u %u\n")) ++ve;
@@ -99,5 +110,23 @@ int main(void) {
     assert(telemetry_send(&m)==E_OK);pump();assert(junction_lines==1u);
     m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(junction_lines==2u); /* Saved result repeats at GP20, no VE row. */
+    assert(source_dumps==3u);
+    m.kind=TELEMETRY_BARCODE_DUMP;
+    assert(telemetry_send(&m)==E_OK);pump();assert(source_dumps==4u);
+    m.kind=TELEMETRY_JUNCTION_SOURCE;
+    m.data.junction_source=(jlive_report_t){
+        .frame={.epoch=1u,.sequence=3u,.source=2u,.letter='A'},
+        .control={.epoch=1u},.max_delivery_ms=7u};
+    assert(telemetry_send(&m)==E_OK);pump();assert(source_lines==1u);
+    m.kind=TELEMETRY_JUNCTION_COUNTS;
+    m.data.junction_counts=(jlive_counts_t){.epoch=1u};
+    m.data.junction_counts.reason[JLIVE_LINE_STALE]=3u;
+    assert(telemetry_send(&m)==E_OK);
+    m.data.junction_counts.reason[JLIVE_LINE_STALE]=99u;
+    pump();assert(source_count_lines==2u);
+    m.kind=TELEMETRY_DUMP;
+    assert(telemetry_send(&m)==E_OK);pump();
+    assert(source_dumps==5u && source_lines==2u && source_count_lines==4u);
+    assert(junction_lines==3u);
     return 0;
 }

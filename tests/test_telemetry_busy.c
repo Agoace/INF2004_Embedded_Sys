@@ -8,7 +8,7 @@ int main(int argc, char **argv)
 {
     const unsigned int kind = argc > 1 ?
         (unsigned int)strtoul(argv[1], NULL, 10) : TELEMETRY_BEGIN;
-    assert(kind <= TELEMETRY_JUNCTION && kind != TELEMETRY_DUMP);
+    assert(kind <= TELEMETRY_JUNCTION_COUNTS && kind != TELEMETRY_DUMP);
     assert(telemetry_init() == E_OK && telemetry_start() == E_OK);
     telemetry_message_t dump = {.kind = TELEMETRY_DUMP};
     assert(telemetry_send(&dump) == E_OK);

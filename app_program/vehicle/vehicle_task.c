@@ -809,8 +809,22 @@ typedef struct {
 static watched_t watched[4];
 
 /* Live only: never add junction phase events to the RAM event log. */
+static void barcode_dump_request(void)
+{
+    const telemetry_message_t m = {.kind = TELEMETRY_BARCODE_DUMP};
+    (void)telemetry_send(&m);
+}
+
 static void junction_observe(void)
 {
+    telemetry_message_t m = {.kind = TELEMETRY_JUNCTION_SOURCE};
+    if (junction_source_report(&m.data.junction_source)) {
+        (void)telemetry_send(&m);
+    }
+    if (junction_source_counts(&m.data.junction_counts)) {
+        m.kind = TELEMETRY_JUNCTION_COUNTS;
+        (void)telemetry_send(&m);
+    }
     const ja_t *action = &junction_line.action;
 #if TM_MQTT
     if (action->phase == JA_PENDING && junction_reported != JA_PENDING) {
@@ -850,7 +864,7 @@ static void junction_observe(void)
     }
     if (action->phase == JA_DONE || action->phase == JA_FAILED ||
         action->phase == JA_UNUSED) {
-        telemetry_message_t m = {.kind = TELEMETRY_JUNCTION};
+        m.kind = TELEMETRY_JUNCTION;
         m.data.junction = action->result;
         (void)telemetry_send(&m);
     }
@@ -862,6 +876,7 @@ static void junction_observe(void)
 static void watched_start(void *ctx, uint16_t payload, uint32_t now)
 {
     watched_t *w = ctx;
+    junction_source_route(w->id, now);
 #if TM_MQTT
     if (w->id == VSM_MOD_DETOUR) {
         rs_detour_begin(&run_stats, now, (uint8_t)ss_payload_side(payload),
@@ -1024,9 +1039,11 @@ static void run_once(void)
     junction_source_start(JUNCTION_TEST_CMD, epoch, run_start - read_age_ms,
                             initial.counts);
     ja_command_t command;
+#if JUNCTION_TEST_CMD != 0
     if (junction_source_read(&command)) {
         (void)ja_offer(&junction_line.action, &command);
     }
+#endif
     junction_observe();
     event(2u, VSM_MOD_NONE, VSM_MOD_LINE, VSM_RUNNING);
     (void)vsm_start(&vsm, VSM_MOD_LINE, 0u, run_start);
@@ -1109,9 +1126,11 @@ static void run_once(void)
             set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
             break;
         }
+#if JUNCTION_TEST_CMD != 0
         if (junction_source_read(&command)) {
             (void)ja_offer(&junction_line.action, &command);
         }
+#endif
         final_counts[0] = s.counts[0];
         final_counts[1] = s.counts[1];
         junction_line.sample = (ja_sample_t){
@@ -1154,6 +1173,24 @@ static void run_once(void)
             (vsm.running == VSM_MOD_LINE || vsm.running == VSM_MOD_SEARCH)) {
             ja_cross_progress(&junction_line.action, s.counts, now);
         }
+        /* Resolve encounters/routes BEFORE admitting a new live frame.
+         * Fake commands retain the original pre-step B2a timing. */
+#if JUNCTION_TEST_CMD == 0
+        const uint32_t source_us = drv_time_us();
+        const uint32_t source_ms = drv_time_ms();
+        const ja_sample_t source_sample = {
+            .line_stamp = sensor.timestamp_us,
+            .line_age_ms = (source_us - sensor.timestamp_us) / 1000u,
+            .valid = sensor.valid};
+        junction_source_tick(vsm.state == VSM_RUNNING ? vsm.running :
+                                VSM_MOD_NONE,
+                                &lp, &source_sample, s.counts, source_ms,
+                                &junction_line.action);
+        if (junction_source_read(&command)) {
+            const bool accepted = ja_offer(&junction_line.action, &command);
+            junction_source_offer_result(command.sequence, accepted);
+        }
+#endif
         junction_observe();
         __atomic_store_n(&line_run_epoch,
             vsm.state == VSM_RUNNING && vsm.running == VSM_MOD_LINE &&
@@ -1239,7 +1276,9 @@ static void run_once(void)
         }
     }
     ja_finish(&junction_line.action, final_counts, drv_time_ms());
+    junction_source_stop(drv_time_ms());
     junction_observe();
+    barcode_dump_request();
     hump_finish(epoch);
     event(4u, vsm.state, vsm.running, vsm.fault_detail);
 #if TM_MQTT
@@ -1310,6 +1349,7 @@ static void vehicle_task(INT code, void *ctx)
         telemetry_stats_t log;
         telemetry_stats(&log);
         if (dump_edge && !run_edge && !log.busy) {
+            junction_observe(); /* Resend stopped counters after queue loss. */
             telemetry_message_t m = {.kind = TELEMETRY_DUMP};
             info(&m.data.info);
             (void)telemetry_send(&m);

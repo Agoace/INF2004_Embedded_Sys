@@ -26,7 +26,8 @@ foreach(placement up split control)
     target_include_directories(${target} BEFORE PRIVATE
         "${REPO}/tests/mtk_stubs")
     target_compile_definitions(${target} PRIVATE APP_TEST=1 TM_MQTT=1
-        TK_SUPPORT_SMP=${smp} TK_MAX_CORE=2 APP_FORCE_CORE0=${force})
+        JUNCTION_TEST_CMD=1 TK_SUPPORT_SMP=${smp} TK_MAX_CORE=2
+        APP_FORCE_CORE0=${force})
     target_link_libraries(${target} PRIVATE m)
     add_test(NAME ${target} COMMAND ${target})
 

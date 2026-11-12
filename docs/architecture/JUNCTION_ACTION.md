@@ -4,8 +4,10 @@
 
 The operator approved this redesign on 2026-11-10 through Main_Worker.
 It replaces the blind bridge and axle-centred encoder turn in `eb18004`.
-B2a uses a fake START command, not a live barcode decoder. B2b agreement with
-the barcode owner is still pending. No barcode source file is changed.
+B2a uses a fake START command, not a live barcode decoder. The fixed consumer
+is retained by the [B2b live adapter](JUNCTION_LIVE_ADAPTER.md). Its default
+SHADOW path does not offer decoded letters. B2a is closed at `50426ae`; live
+action permission and remaining physical gates are separate.
 
 | Command | Action |
 | --- | --- |
@@ -44,7 +46,7 @@ faults remain authoritative. The LINE-only IMU diagnostic epoch is excluded
 only during private SEARCH; normal LINE travel in C/bar clearance remains
 LINE. IMU still cannot command navigation or motors.
 
-## Draft B2b source contract
+## Fixed consumer value
 
 `ja_command_t` remains a24-byte value, not a wire packet:
 
@@ -56,14 +58,15 @@ LINE. IMU still cannot command navigation or motors.
 | 12 | `int32_t read_counts[2]` | Coherent LEFT/RIGHT encoder counts. |
 | 20 | `uint8_t command` | A/B/C/D =1/2/3/4. |
 | 21 | `uint8_t valid` | Exactly1. |
-| 22 | `uint8_t source` | Fake1; future live barcode2. |
+| 22 | `uint8_t source` | Fake1; live barcode2. |
 | 23 | `uint8_t reserved` | Zero. |
 
 The consumer performs one bounded read per tick. A failed read leaves its
 output unchanged; it never waits. B2a's sole writer is vehicle START, using a
 bounded motion-board read at most10 ms old. A busy/stale START read fails
-without waiting or starting a run. A live backend must replace that producer,
-not write concurrently. `junction_source_start()` is not a multi-producer API.
+without waiting or starting a run. The live backend is compile-time exclusive,
+not a concurrent writer. `junction_source_start()` is not a multi-producer API.
+The canonical40 B source2 record is copied fieldwise into this24 B value.
 
 Keep both counts: average short modular per-wheel differences, not absolute
 wrapped counters. Read time/counts are evidence, not permission to execute an
@@ -72,17 +75,17 @@ Invalid commands, wrong runs, consumed/old sequences and replacement during
 pending/active work are rejected. Sequence gaps must be less than half the
 32-bit range. STOP/new START cancels the old job.
 
-The consumer exposes busy and consumed-sequence ACK. Set busy BEFORE ACK;
-a claimed action remains busy after consumption. A live producer must check
+The source adapter exposes BUSY and terminal ACK, not a motor-execution ACK.
+Set BUSY before acceptance ACK; a claimed action remains busy after consumption. A live producer must check
 busy again after reading ACK and reject an unacknowledged occupied slot. It
 must have one writer and a defined START/STOP handshake, reject/report lost
-replacement, and not republish the same decoded barcode repeatedly. Source
-age, delayed publication and concurrency still require B2b agreement.
-Pending survives successful natural SEARCH only; other routes and run stop
-cancel it. The original source record, sequence and read counts/time are not
-refreshed by recovery. No distance/time expiry is added here: travel expiry
-will come from B2b. This policy does not supply the missing live-source
-handshake or summary integration.
+replacement, and not republish the same decoded barcode repeatedly. The final [B2b contract](JUNCTION_LIVE_ADAPTER.md) supplies delivery age,
+eligibility cuts and terminal slot retirement. Pending survives successful
+natural SEARCH only; other routes and run stop cancel it. Original sequence,
+read counts and time are not refreshed by recovery. There is no pending or
+course-gap expiry. Source2 additionally cancels an unarmed pending command
+at the first credible black edge; source1 behavior stays unchanged. Barcode
+summary integration remains separate.
 
 ## Junction detection
 

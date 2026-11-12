@@ -25,6 +25,9 @@
 #include "app.h"
 #include "platform/drv_time.h"
 #include "vehicle/vehicle_task.h"
+#if APP_BARCODE_CAPTURE
+#include "subsystem3/barcode_test.h"
+#endif
 #include "platform/app_task.h"
 #include "platform/app_startup.h"
 #include "subsystem4/imu_settings.h"
@@ -34,6 +37,21 @@
 #endif
 
 #include "vehicle/junction_source.h"
+#include "subsystem3/barcode_window.h"
+
+#if !APP_BENCH && !APP_TEST
+static void barcode_table_print(void)
+{
+    tm_printf((UB *)"[BARCODE_TABLE] id %lu confirmed %u ",
+              (unsigned long)barcode_window_mapping_id(),
+              (unsigned int)barcode_window_table_confirmed());
+    for (unsigned int i = 0u; i < 26u; ++i) {
+        tm_printf((UB *)"%c=%u%s", (int)('A' + i),
+                  (unsigned int)barcode_window_table_entry(i),
+                  i == 25u ? "\n" : " ");
+    }
+}
+#endif
 
 /* TEST work runs below motion/sensors and above telemetry (30). */
 #define TEST_RUNNER_PRIORITY 20
@@ -67,11 +85,19 @@ EXPORT INT usermain(void)
 #endif
 
 #if !APP_BENCH && !APP_TEST
+#if JUNCTION_TEST_CMD != 0
     tm_printf((UB *)"[JUNCTION] source FAKE cmd %s forced_corner "
                     "bar_clear_mm %u N_mm %u black_min %u "
                     "D skip_first_left\n",
               JUNCTION_TEST_CMD_NAME, JA_BAR_CLEAR_MM, JA_CONFIRM_MM,
               JA_BLACK_MIN);
+#else
+    tm_printf((UB *)"[JUNCTION] source BARCODE %s measured_clear_mm %u "
+                    "shadow_clear_mm 150 UNVERIFIED delivery_max_ms 50\n",
+              BARCODE_LIVE_ENABLE ? "LIVE" : "SHADOW",
+              (unsigned int)BARCODE_MEASURED_CLEAR_MM);
+#endif
+    barcode_table_print(); /* Once at boot, before tasks or LINE locks. */
 #endif
 #if !APP_BENCH
     tm_printf((UB *)"[S4] hump_source %u %s\n",
@@ -116,7 +142,10 @@ EXPORT INT usermain(void)
     CHECK(test_priority, "TEST runner priority 20");
     if (test_priority >= E_OK) {
         tm_printf((UB *)"[TEST] === test run start (runner priority 20) ===\n");
-#if APP_IMU_STREAM
+#if APP_BARCODE_CAPTURE
+        /* Exclusive hand-push capture: no driving or destructive tests. */
+        barcode_test();
+#elif APP_IMU_STREAM
         /* Operator-only S4 stream: no S2 command or destructive reset test. */
         subsystem4_test();
 #else
@@ -132,7 +161,7 @@ EXPORT INT usermain(void)
         /* Destructive reset check follows every other subsystem test. */
         subsystem2_watchdog_test();
         tm_printf((UB *)"[TEST] === test run end ===\n");
-#endif /* APP_IMU_STREAM */
+#endif /* exclusive capture / IMU stream / ordinary TEST */
     } else {
         tm_printf((UB *)"[TEST] ABORT: cannot set runner priority 20; tests "
                         "not run\n");
