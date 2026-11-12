@@ -44,7 +44,7 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 | sonar | 12 | Request/edge wake; 10 ms deadline cyclic; trigger and result service | 2048 |
 | vehicle | 13 | After each completed motion tick; buttons, calibration, modules and commands | 4096 |
 | IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO batch/count reads, pure core, report-only hump detector, snapshot and hump boards | 2048 |
-| Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8192 with lwIP (template-owned) |
+| Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8320 with lwIP; 6272 radio-only, registered |
 | TEST runner | 20 | Initial task after startup; no normal vehicle/bench task | Initial task stack |
 | USB console | 21 | IRQ wake or 10 ms fallback; console drain | 2048 UP / 4096 SMP (template-owned) |
 | telemetry | 30 | Message arrival; RAM rows/events and paced USB dump | 4096 |
@@ -98,18 +98,25 @@ cannot become a new generation's observations.
 ## Application stacks
 
 `app_start_task()` uses registered, static, 8-byte-aligned regions with
-`TA_USERBUF` and a 0xa5 fill pattern. Failed start deletes the dormant task.
+`TA_USERBUF` and a 0xa5 fill pattern. Failed start deletes the dormant task;
+failed deletion quarantines the still-owned stack until reboot. Wi-Fi uses
+`app_task_start_config()` to preserve its `TA_RNG1` policy and old actual
+allocation, including the former kernel allowance. Other app tasks use
+`TA_RNG3`. See [M9 ownership and evidence](WIFI_STACK_WATERMARK.md).
 The supplied size already includes system/context space; the kernel does
 not add its normal 128-byte allowance.
 
 | Reserve/use | Bytes | Meaning |
 | --- | ---: | --- |
-| BENCH registered regions | 19456 | Bench present; IMU absent |
-| IMU region, not BENCH | 2048 | Robot/TEST only |
-| MQTT extra health + idle meter | 2816 | 2048 + 768 |
-| All registered regions in MQTT image | 20224 | No inactive bench reserve |
-| Active normal robot, no MQTT | 17408 | Six stacks, including IMU |
-| Active normal MQTT robot | 20224 | Six tasks + health + idle meter |
+| Base BENCH regions | 19456 | Before Wi-Fi/MQTT; bench present, IMU absent |
+| Base normal robot regions | 17408 | Before Wi-Fi/MQTT; six stacks, including IMU |
+| IMU region, not BENCH | 2048 | Included in normal base; Robot/TEST only |
+| MQTT extra health + core-0 idle meter | 2816 | 2048 + 768 |
+| SMP + MQTT core-1 idle meter | 768 | Not reserved in UP |
+| Radio-only Wi-Fi region | 6272 | Includes the former 128 B kernel allowance |
+| lwIP Wi-Fi region | 8320 | With or without MQTT; includes former allowance |
+| Normal SMP MQTT robot | 29312 | Base + 2816 + 768 + 8320; ten slots |
+| Normal UP MQTT robot | 28544 | No core-1 idle meter; nine slots |
 | Low-margin threshold | 256 | Untouched bytes required per active application stack |
 
 The A1/B1 hardware gate on 2026-11-10 measured idle-meter use 296/512 B,
@@ -120,8 +127,9 @@ See [the gate record](../../testing/subsystem2/TEST_LOG.md).
 `app_task_stacks()` scans the fill pattern from the low end and keeps the
 largest observed use. TEST and GP20 print size, high-water use and remaining
 bytes. Health scans once per second. This is an estimate, not an overflow
-detector or proof of worst-case depth. Initial, USB, radio and interrupt
-stacks are outside this measurement. Exercise calibration, every navigation
+detector or proof of worst-case depth. Initial, USB and interrupt
+stacks are outside this measurement; radio is now included. Exercise
+calibration, every navigation
 module, queue saturation and dumps before accepting a stack budget.
 
 ## Watchdog

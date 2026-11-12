@@ -365,9 +365,10 @@ changes the wire format.
   reported beside its name instead of inferred. The core-1 meter has its own
   registry slot (`idle_meter_1`, `APP_CORE_1`), so its stack is measured like
   every other task's rather than assumed.
-- **The Wi-Fi task remains outside the registry** (open item 9). Phase 5 does not
-  close that: `cyw43_utk_start()` still creates it with `tk_cre_tsk`, so it has no
-  slot, no high-water mark, and no row in the per-core stack report.
+- **Wi-Fi stack measurement.** Phase 5 left Wi-Fi outside the registry.
+  M9 now gives it a pre-painted static stack, an ordinary `cyw43` row and a
+  persistent high-water measurement. The [M9 record](WIFI_STACK_WATERMARK.md)
+  separates software coverage from the still-open hardware margin gate.
 
 ## Open validation items
 
@@ -403,9 +404,10 @@ evidence.
 8. Phase 4 has not run on a device. Nothing shows the radio task actually executing
    on core 1, MQTT traffic surviving the move, the poll-path spinlock staying cheap
    under load, or `radio_status.owner_prc` reporting core 1 as it should.
-9. The Wi-Fi task sits outside the registry: `cyw43_utk_start()` builds it with
-   `tk_cre_tsk`, so it has no slot and no stack high-water measurement. Its 6-8 KB
-   stack is therefore untested against the 256-byte free minimum.
+9. M9 closes the missing Wi-Fi measurement path in software, not its hardware
+   gate. The registered stack preserves 6272 B for radio-only or 8320 B with
+   lwIP. A device run must exercise startup, reconnect, MQTT and DUMP paths and
+   retain a `cyw43` watermark with at least 256 B free. No such capture exists.
 10. Phase 5 has not run on a device. No figure exists for core-1 load, no
    core-0 against core-1 comparison has been made, and no core-1 task's stack
    margin has actually been read from the per-core report. Unverified with it: that

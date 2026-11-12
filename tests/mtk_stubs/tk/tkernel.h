@@ -68,7 +68,10 @@ void mock_ei(UINT irq);
 #define E_TMOUT (-50)
 #define E_NOEXS (-42)
 typedef int SZ;
-typedef struct { FP task; PRI itskpri; SZ stksz; UW tskatr; void *bufptr; UW assprc; } T_CTSK;
+typedef struct {
+    FP task; PRI itskpri; SZ stksz; UW tskatr;
+    void *bufptr; UW assprc; UB *dsname; void *exinf;
+} T_CTSK;
 typedef struct { UW mbfatr; SZ bufsz; INT maxmsz; void *bufptr; } T_CMBF;
 typedef struct { UW flgatr; UINT iflgptn; } T_CFLG;
 ID tk_cre_tsk(const T_CTSK *c);

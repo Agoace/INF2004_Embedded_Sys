@@ -54,14 +54,12 @@ ER tk_del_tsk(ID id)
 }
 uint16_t idle_meter_load_permille(void) { ++loads; return 100u; }
 uint16_t idle_meter_load_permille_core1(void) { ++loads; return 200u; }
+/* Regression trap: no production caller may use the removed SP estimate. */
 uint32_t cyw43_utk_stack_free(void) { ++wifi_reads; return 1024u; }
 int tm_printf(const UB *format, ...)
 {
     assert(test_smp_irq_mask == 0u);
-    if (strstr((const char *)format, "[stack] wifi")) {
-        assert(strstr((const char *)format, "free <=") != NULL);
-        assert(strstr((const char *)format, "gate unmeasured") != NULL);
-    }
+    assert(strstr((const char *)format, "[stack] wifi") == NULL);
     ++prints;
     return 0;
 }
@@ -82,6 +80,7 @@ int main(void)
 #endif
     assert(app_task_start((FP)entry, 10, 2u, "motion_task") == E_CTX);
     assert(app_task_start((FP)entry, 10, 1u, "unknown") == E_PAR);
+    assert(app_task_start((FP)entry, 20, app_prc_core1(), "cyw43") == E_PAR);
     create_error = 1;
     assert(app_task_start((FP)entry, 10, 1u, "motion_task") == E_SYS);
     create_error = 0;
@@ -99,7 +98,7 @@ int main(void)
     assert(app_task_stacks(rows, APP_TASK_MAX_SLOTS) == 1u);
     assert(rows[0].used == 80u); /* Never forget high water. */
     app_task_report();
-    assert(prints == (TM_MQTT ? 3 : 1));
+    assert(prints == (TM_MQTT ? 2 : 1));
     assert(app_task_start((FP)entry, 10, 1u, NULL) == E_PAR);
     expected_id = 8;
 #if APP_BENCH
@@ -125,10 +124,7 @@ int main(void)
     assert(strcmp(rows[1].name, secondary) == 0);
     assert(rows[1].used == 160u);
     assert(rows[1].free == (uint32_t)expected_size - 160u);
-#if TK_SUPPORT_SMP
     assert(rows[1].core == (uint8_t)(expected_core - TP_PRC1));
-#endif
-    /* UP creation is tested; the known M6 report-label issue remains open. */
     const char *names[] = {
         "line_task", "sonar_task", "vehicle_task", "telemetry_task"
     };
@@ -163,7 +159,7 @@ int main(void)
     assert(app_task_start((FP)entry, 32, 1u, "idle_meter_1") == E_PAR);
     assert(app_task_stacks(rows, APP_TASK_MAX_SLOTS) == 8u);
 #endif
-    assert(loads == (TK_SUPPORT_SMP ? 2u : 1u) && wifi_reads == 1u);
+    assert(loads == (TK_SUPPORT_SMP ? 2u : 1u) && wifi_reads == 0u);
 #else
     assert(app_task_start((FP)entry, 31, 1u, "health_task") == E_PAR);
     assert(app_task_start((FP)entry, 32, 1u, "idle_meter") == E_PAR);

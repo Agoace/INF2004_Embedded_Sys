@@ -3,8 +3,9 @@
 
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
-#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core timing state */
+#include <tk/smp.h>   /* Interrupt-preserving cross-core timing locks. */
 #include "cyw43_utk.h"
+#include "../../../../app_program/platform/app_task.h"
 
 extern uint64_t time_us_64(void);
 static T_CYW43_TIMING timing;
@@ -16,8 +17,8 @@ static T_CYW43_TIMING window;
  * calls run on the Vehicle task.  Once those are different cores, a DI()/EI() on
  * either core protects neither, and the begin/end window is a shared state
  * machine rather than a snapshot, so a seqlock would be the wrong primitive.
- * These are task-context only, so plain SpinLock is the correct variant under
- * the lock rule.  A zero-filled static already holds the unlocked state.
+ * Use interrupt-preserving locks: Health and Wi-Fi share core 0 in control
+ * builds. A zero-filled static holds the unlocked state.
  */
 static T_SPLOCK timing_lock;
 static UW started;
@@ -34,36 +35,8 @@ static BOOL window_active;
  * caller ever writes window_active from outside the lock. */
 static UW window_close_req;
 
-/* --- Wi-Fi task stack margin (RT-0073/F3) -----------------------------------
- *
- * The radio task is created by tk_cre_tsk directly, so it has no slot in the
- * placement table and the kernel reports nothing about its stack: T_RTSK has no
- * stack-use field, and T_CTSK has no stkadr because the kernel allocates the
- * stack. There is therefore no address to scan.
- *
- * The available measurement is the task's own stack pointer. The task records the
- * SP it started with (cyw43_utk_stack_top, called from cyw43_utk_task), and every
- * poll iteration samples the current SP and keeps the lowest one seen. Free margin
- * is the known stack size minus the deepest excursion.
- *
- * Limits, stated rather than papered over: the entry SP sits a few bytes below the
- * true top of stack because of the call frame into the task function, so the figure
- * is approximate and biased by that frame (well under 64 bytes on this ABI); the
- * low-water sample is taken per poll, so a deeper excursion between samples is
- * missed; and it reports nothing if the stack has already been overrun.
- */
-static UW wifi_sp_top;
-static UW wifi_sp_low;
-
-void cyw43_utk_stack_top(uint32_t sp)
-{
-    /* RT-0081/F1: written by the radio task on core 1 and read by the diagnostics
-     * report on core 0, so both sides use the atomic builtins. */
-    if (0u == __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST)) {
-        __atomic_store_n(&wifi_sp_top, (UW)sp, __ATOMIC_SEQ_CST);
-        __atomic_store_n(&wifi_sp_low, (UW)sp, __ATOMIC_SEQ_CST);
-    }
-}
+/* M9: app_task owns and paints the radio stack before kernel creation. The
+ * ordinary stack report scans its persistent watermark, not a poll-frame SP. */
 static ER start_status = E_OBJ;
 #define CYW43_LONG_POLL_GAP_US 10000u
 
@@ -103,15 +76,6 @@ void cyw43_utk_poll_end(void)
 {
     const UW end = (UW)time_us_64();
     const UW work = end - started;
-    /* RT-0073/F3: one stack low-water sample per poll iteration. Atomic, because a
-     * diagnostics reader on the other core reads these (RT-0081/F1). */
-    {
-        const UW sp = (UW)(uint32_t)__builtin_frame_address(0);
-        if (0u != __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST) &&
-            sp < __atomic_load_n(&wifi_sp_low, __ATOMIC_SEQ_CST)) {
-            __atomic_store_n(&wifi_sp_low, sp, __ATOMIC_SEQ_CST);
-        }
-    }
     UINT intsts;
     (void)ISpinLock(&timing_lock, &intsts);
     if (0u != atomic_xchg(&window_close_req, 0u)) {
@@ -249,21 +213,6 @@ int32_t cyw43_utk_start_status(void)
 #define CYW43_TASK_STACK     (6 * 1024)
 #endif
 
-/* Free margin of the radio task's stack, in bytes (RT-0073/F3). Placed after the
- * stack size is defined, because the size is what makes the figure a margin. The
- * limits are recorded beside the tracker above: approximate, biased by the entry
- * frame, sampled per poll, and blind to a stack that has already been overrun. */
-uint32_t cyw43_utk_stack_free(void)
-{
-    const UW top = __atomic_load_n(&wifi_sp_top, __ATOMIC_SEQ_CST);
-    if (0u == top) {
-        return 0u;   /* the task has not started */
-    }
-    const UW low = __atomic_load_n(&wifi_sp_low, __ATOMIC_SEQ_CST);
-    const UW used = top - low;
-    return (used >= CYW43_TASK_STACK) ? 0u : (uint32_t)(CYW43_TASK_STACK - used);
-}
-
 #if APP_TEST
 /*
  * Collision hook for RT-0073/F3. timing_lock is static to this file, so the only
@@ -285,8 +234,8 @@ void cyw43_utk_timing_test_release(void)
 /* Pointer-free wrapper, so a test in app_program does not need T_CYW43_TIMING. */
 int32_t cyw43_utk_timing_test_window_end(void)
 {
-    T_CYW43_TIMING window;
-    return cyw43_utk_timing_window_end(&window);
+    T_CYW43_TIMING snapshot;
+    return cyw43_utk_timing_window_end(&snapshot);
 }
 #endif /* APP_TEST */
 
@@ -326,25 +275,14 @@ EXPORT int32_t cyw43_utk_start(void)
     ctsk.dsname = (UB*)"cyw43";
 #endif
 
-    task = tk_cre_tsk(&ctsk);
-    if (task < E_OK) {
-        UINT intsts;
-        (void)ISpinLock(&timing_lock, &intsts);
-        __atomic_store_n(&start_status, task, __ATOMIC_SEQ_CST);
-        (void)ISpinUnlock(&timing_lock, intsts);
-        return task;
-    }
-    /* start_status is read under timing_lock by cyw43_utk_start_status(), so every
-     * write to it must take the same lock (RT-0058 finding 4).  The kernel call
-     * stays OUTSIDE the section (RT-0069): a task start may dispatch, and a
-     * critical section must hold no call that can dispatch. */
-    const ER sta = tk_sta_tsk(task, 0);
+    /* Preserve TA_RNG1, priority, affinity and effective capacity. The registry
+     * paints a static USERBUF before create/start; no live stack is repainted.
+     * Kernel calls stay outside timing_lock because starting may dispatch. */
+    task = app_task_start_config(&ctsk, "cyw43");
+    const ER sta = task < E_OK ? task : E_OK;
     UINT intsts;
     (void)ISpinLock(&timing_lock, &intsts);
     __atomic_store_n(&start_status, sta, __ATOMIC_SEQ_CST);
     (void)ISpinUnlock(&timing_lock, intsts);
-    if (sta < E_OK) {
-        (void)tk_del_tsk(task);
-    }
     return sta;
 }

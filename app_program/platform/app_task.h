@@ -7,6 +7,13 @@
    The core passed to app_task_start() must agree with the placement table in
    app_task.c, which owns where each task is allowed to run. */
 ID app_task_start(FP entry, PRI priority, UW core, const char *name);
+/* Boot-only kernel service adapter. Preserve a non-USERBUF request's policy
+ * and actual allocation (stksz + DEFAULT_SYS_STKSZ), with a registered buffer.
+ * SMP requests need explicit affinity. Returns ID or a negative error.
+ * Only the startup creator on core 0 may call either start API. After failed
+ * start and failed deletion, the slot is quarantined until reboot (E_OBJ on
+ * retry); an object that still owns a stack must never be repainted. */
+ID app_task_start_config(const T_CTSK *request, const char *name);
 typedef struct { const char *name; uint32_t size, used, free; uint8_t core; } app_stack_t;
 
 /*

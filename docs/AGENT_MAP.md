@@ -287,6 +287,13 @@ vehicle task described below.
   [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
   and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
   separates this saving from minimum-bit packing.
+  M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/WIFI_STACK_WATERMARK.md).
+  [`test_template_wifi.c`](../tests/test_template_wifi.c) links the real
+  initializer and registry; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
+  checks the real Health minimum at the full slot layout.
+  [`test_wifi_stack_contention.c`](../tests/test_wifi_stack_contention.c)
+  forces the real registry's diagnostic lock busy in UP/split/control.
+  The two existing template ledger rows change; no new deviation path is added.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
 - [Core placement and lock audit](kernel/CORE_PLACEMENT.md) records reviews B1/B2.
   The isolated [blocker test build](../tests/core_migration/CMakeLists.txt)

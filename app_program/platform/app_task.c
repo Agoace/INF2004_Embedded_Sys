@@ -16,11 +16,6 @@
 #include "idle_meter.h"   /* Phase 5: per-core load in the report */
 #include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
 
-#if TM_MQTT
-/* libwifi: radio task stack margin (RT-0073/F3). Declared here rather than through
- * cyw43_utk.h so this platform file does not depend on the Wi-Fi include path. */
-IMPORT uint32_t cyw43_utk_stack_free(void);
-#endif
 #include <stdbool.h>
 #include <tk/smp.h>   /* T_SPLOCK, ISpinTryLock: cross-core stack marks */
 #include <tm/tmonitor.h>
@@ -38,6 +33,18 @@ IMPORT uint32_t cyw43_utk_stack_free(void);
 #define IDLE_STACK_WORDS      96
 #define STACK_LOW_MARGIN      256u
 
+#if TM_WIFI_CYW43
+/* Preserve the old non-USERBUF allocation, including its kernel addition.
+ * USERBUF uses exactly stksz; it does not add DEFAULT_SYS_STKSZ again. */
+#if TM_NET_LWIP
+#define WIFI_REQUEST_BYTES (8u * 1024u)
+#else
+#define WIFI_REQUEST_BYTES (6u * 1024u)
+#endif
+#define WIFI_STACK_BYTES (WIFI_REQUEST_BYTES + DEFAULT_SYS_STKSZ)
+_Static_assert(WIFI_STACK_BYTES % 8u == 0u, "Wi-Fi stack alignment");
+static uint64_t wifi_stack[WIFI_STACK_BYTES / 8u];
+#endif
 static uint64_t motion_stack[MOTION_STACK_WORDS];
 static uint64_t line_stack[LINE_STACK_WORDS];
 static uint64_t sonar_stack[SONAR_STACK_WORDS];
@@ -63,13 +70,13 @@ typedef struct {
     uint64_t *stack;
     uint32_t size;
     uint32_t high;
-    ID id;
+    ID id;         /* 0 free; positive started; negative quarantined */
     uint8_t core;   /* physical core this task is allowed to run on */
 } slot_t;
 
-/* RT-0073/F3: the control profile collapses every requested core to core 0, so a
- * slot and the processor request it is checked against cannot disagree. */
-#if APP_FORCE_CORE0
+/* UP and the control profile use physical core 0 for every slot. Keep report
+ * labels consistent with the processor request checked at creation. */
+#if APP_FORCE_CORE0 || !TK_SUPPORT_SMP
 #define SLOT_CORE(c) APP_CORE_0
 #else
 #define SLOT_CORE(c) (c)
@@ -95,6 +102,10 @@ static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
                              ,
                          SLOT("idle_meter_1", idle1_stack, APP_CORE_1)
 #endif
+#endif
+#if TM_WIFI_CYW43
+                             ,
+                         SLOT("cyw43", wifi_stack, APP_CORE_1)
 #endif
 };
 
@@ -148,13 +159,11 @@ UW app_prc_core1(void)
 }
 
 /*
- * Create and start the task registered under name.
- * entry, priority and core are the usual kernel task parameters.
- * Returns the task ID (> 0) or a negative error: E_CTX for the wrong core or a
- * core the slot does not allow, E_PAR for an unknown name or core, E_OBJ if the
- * slot is already running.
+ * Check the boot creator, requested placement and slot ownership.
+ * Return E_CTX for the wrong core, E_PAR for an unknown name or core, or
+ * E_OBJ for a started or quarantined slot. Do not paint on failure.
  */
-ID app_task_start(FP entry, PRI priority, UW core, const char *name)
+static ER checked_slot(UW core, const char *name, slot_t **out)
 {
 #if TK_SUPPORT_SMP
     /* Creating a task must happen on core 0, as the kernel requires.  The task
@@ -183,7 +192,7 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     if (!s) {
         return E_PAR;
     }
-    if (s->id > 0) {
+    if (s->id != 0) {
         return E_OBJ;
     }
     /* The slot table owns the placement, so a call site cannot move a task that
@@ -191,33 +200,80 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     if (app_core_prc((app_core_t)s->core) != core) {
         return E_CTX;
     }
+    *out = s;
+    return E_OK;
+}
+
+/* Creation and start stay outside every diagnostic spinlock. Only the boot
+ * creator on core 0 may change slot ownership, before startup handoff. */
+static ID start_slot(slot_t *s, const T_CTSK *request)
+{
     unsigned char *bytes = (unsigned char *)s->stack;
     for (uint32_t i = 0u; i < s->size; ++i) {
         bytes[i] = FILL;
     }
-    T_CTSK c = {0};
-    c.task = entry;
-    c.itskpri = priority;
+    T_CTSK c = *request;
     c.stksz = (SZ)s->size;
-    c.tskatr = TA_HLNG | TA_RNG3 | TA_USERBUF;
+    c.tskatr |= TA_USERBUF;
     c.bufptr = s->stack;
-#if TK_SUPPORT_SMP
-    /* Honour the requested core.  This used to be a fixed TP_PRC1, which would
-     * have pinned every task to core 0 no matter what the caller asked for. */
-    c.tskatr |= TA_ASSPRC;
-    c.assprc = core;
-#endif
     const ID id = tk_cre_tsk(&c);
     if (id < 0) {
         return id;
     }
     const ER er = tk_sta_tsk(id, 0);
     if (er < 0) {
-        (void)tk_del_tsk(id);
+        if (tk_del_tsk(id) < E_OK) {
+            /* The dormant object still owns this buffer. Quarantine it:
+             * exclude it from reports and reject retries until reboot. */
+            s->id = -id;
+        }
         return er;
     }
     s->id = id;
     return id;
+}
+
+ID app_task_start(FP entry, PRI priority, UW core, const char *name)
+{
+    slot_t *s;
+    const ER checked = checked_slot(core, name, &s);
+    if (checked < E_OK) {
+        return checked;
+    }
+    T_CTSK c = {0};
+    c.task = entry;
+    c.itskpri = priority;
+    c.tskatr = TA_HLNG | TA_RNG3;
+#if TK_SUPPORT_SMP
+    c.tskatr |= TA_ASSPRC;
+    c.assprc = core;
+#endif
+    return start_slot(s, &c);
+}
+
+/* Convert a kernel-allocated request without changing its task policy or
+ * actual stack capacity. Used by radio startup before application startup. */
+ID app_task_start_config(const T_CTSK *request, const char *name)
+{
+    if (!request || (request->tskatr & TA_USERBUF) != 0u) {
+        return E_PAR;
+    }
+    UW core = TP_PRC1;
+#if TK_SUPPORT_SMP
+    if ((request->tskatr & TA_ASSPRC) == 0u) {
+        return E_PAR; /* A registered task must have fixed placement. */
+    }
+    core = request->assprc;
+#endif
+    slot_t *s;
+    const ER checked = checked_slot(core, name, &s);
+    if (checked < E_OK) {
+        return checked;
+    }
+    if (request->stksz != (SZ)s->size - DEFAULT_SYS_STKSZ) {
+        return E_PAR; /* Do not silently resize the old allocation. */
+    }
+    return start_slot(s, request);
 }
 
 /* Guards the high-water marks, which can now be updated from either core:
@@ -301,14 +357,5 @@ void app_task_report(void)
     tm_printf((UB *)"[load] core 0 %u permille\n",
               (unsigned int)idle_meter_load_permille());
 #endif
-    /* RT-0073/F3, corrected by RT-0075/F4 and RT-0077/F3: this samples the poll
-     * frame once per iteration, so it cannot see deeper Wi-Fi calls that returned
-     * before the sample. The figure is therefore an UPPER BOUND on free space -
-     * actual free space is at or below it - so the inequality reads `<=`, not `>=`.
-     * It cannot establish the 256-byte acceptance gate, which stays unmeasured until
-     * a stack watermark or another on-device method exists. */
-    tm_printf((UB *)"[stack] wifi free <= %lu bytes (upper bound on free; "
-              "256 B gate unmeasured)\n",
-              (unsigned long)cyw43_utk_stack_free());
 #endif
 }
