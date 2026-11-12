@@ -44,7 +44,11 @@ typedef enum {
     TELEMETRY_EVENT,
     TELEMETRY_INFO,
     TELEMETRY_DUMP,
-    TELEMETRY_JUNCTION
+    TELEMETRY_JUNCTION,
+#if APP_TEST
+    TELEMETRY_TEST_ROW,
+#endif
+    TELEMETRY_KIND_COUNT
 } telemetry_kind_t;
 
 typedef struct {
@@ -73,6 +77,14 @@ bool telemetry_running(void);
 /* Core-0 task producers, value copy, MBF TMO_POL; never wait for the consumer. */
 int telemetry_send(const telemetry_message_t *message);
 void telemetry_stats(telemetry_stats_t *out);
+#if APP_TEST
+/* One outstanding nonzero, nonreused token. A probe follows the normal row
+ * storage path, then publishes its exact disposition. E_TMOUT leaves the
+ * output unchanged; polling never acquires the payload lock.
+ */
+int telemetry_test_probe_send(uint32_t token);
+int telemetry_test_probe_result(uint32_t token, bool *discarded);
+#endif
 #if TM_MQTT
 typedef struct {
     uint32_t generation;

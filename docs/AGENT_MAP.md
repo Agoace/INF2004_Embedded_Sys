@@ -290,6 +290,8 @@ vehicle task described below.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 
+- [`tests/test_storage_probe_race.c`](../tests/test_storage_probe_race.c) and [`test_telemetry_probe.c`](../tests/test_telemetry_probe.c) — M5 fast-consumer/noise schedules and exact-token disposition through the real FIFO row handler. Probe code is TEST-only.
+
 - [`tests/review_checks.cmake`](../tests/review_checks.cmake) and [`test_log_stream_selftest.c`](../tests/test_log_stream_selftest.c) — M4 live-instance TEST-runner guard; isolated lifecycle coverage is in [`test_log_stream.c`](../tests/test_log_stream.c).
 
 - [`tests/admission_checks.cmake`](../tests/admission_checks.cmake), [`test_telemetry_busy.c`](../tests/test_telemetry_busy.c) and [`test_vehicle_dump_start.c`](../tests/test_vehicle_dump_start.c) — M3 real telemetry admission and real Vehicle GP20 plus pending START/CALIBRATE cases, in UP, split and forced-core0 host configurations.

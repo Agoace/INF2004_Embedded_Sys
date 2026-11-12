@@ -42,6 +42,7 @@ IMPORT void telemetry_test_hold_payload_lock(void);
 IMPORT void telemetry_test_release_payload_lock(void);
 
 static unsigned int fails;
+static uint32_t storage_probe_token;
 
 static void expect(const char *what, bool ok)
 {
@@ -174,17 +175,18 @@ static void test_storage_full(void)
     expect("rows accepted and stored before the log filled", sent > 0u);
     expect("storage_full set once the consumer filled the log", full);
     if (full) {
-        /*
-         * RT-0081/F2, corrected by RT-0083/F2: the excess row must be ACCEPTED into
-         * the buffer so that the CONSUMER discards it. The loss baseline is taken
-         * AFTER that accepted send, because every rejected retry below also
-         * increments lost - the previous version recorded it before the loop and
-         * could pass on retry losses alone, without the accepted row being handled.
+        /* M5: a token identifies this exact row's consumer disposition.
+         * Retry losses and older queued rows cannot acknowledge the token.
+         * Completion before send returns remains observable afterward.
          */
+        ++storage_probe_token;
+        if (storage_probe_token == 0u) {
+            ++storage_probe_token;
+        }
         int accepted = -1;
         unsigned int retries = 0u;
         for (unsigned int attempt = 0u; attempt < 200u && 0 != accepted; ++attempt) {
-            accepted = telemetry_send(&row);
+            accepted = telemetry_test_probe_send(storage_probe_token);
             if (0 != accepted) {
                 ++retries;
                 (void)tk_dly_tsk(1u);   /* let the consumer make room */
@@ -194,21 +196,24 @@ static void test_storage_full(void)
         tm_printf((UB *)"[tel] storage-full retries before acceptance: %u\n",
                   retries);
         if (0 == accepted) {
-            telemetry_stats_t before;
-            telemetry_stats(&before);   /* baseline AFTER the accepted send */
-            bool dropped = false;
-            for (unsigned int wait = 0u; wait < 500u && !dropped; ++wait) {
-                (void)tk_dly_tsk(1u);
-                telemetry_stats_t after;
-                telemetry_stats(&after);
-                if (after.lost > before.lost) {
-                    expect("excess row dropped rather than stored",
-                           (uint32_t)TELEMETRY_ROWS == after.rows);
-                    expect("storage_full remains readable", after.storage_full);
-                    dropped = true;
+            bool completed = false;
+            bool discarded = false;
+            for (unsigned int wait = 0u; wait < 500u; ++wait) {
+                if (telemetry_test_probe_result(storage_probe_token,
+                                                &discarded) == E_OK) {
+                    completed = true;
+                    break;
                 }
+                (void)tk_dly_tsk(1u);
             }
-            expect("accepted excess row was discarded by the consumer", dropped);
+            expect("selected probe processed by the consumer", completed);
+            if (completed) {
+                expect("selected probe discarded, not stored", discarded);
+            }
+            telemetry_stats_t after;
+            telemetry_stats(&after);
+            expect("full row count retained", after.rows == TELEMETRY_ROWS);
+            expect("storage_full remains readable", after.storage_full);
         }
     }
 }

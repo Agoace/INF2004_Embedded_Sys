@@ -817,3 +817,27 @@ This replaces the unsafe live-instance exercise. It is not cross-core
 hardware acceptance. The wrapper guard failed before M4 in all three MQTT
 placement configurations and now passes, including non-MQTT links. The
 focused stream/runner suite passes 26/26. No production stream logic changed.
+
+## M5: acknowledge the selected excess row
+
+The storage-full TEST no longer uses a generic loss-counter delta as proof.
+A TEST-only FIFO row probe carries one nonzero, nonreused token. There is
+one outstanding probe. Ordinary and probe rows use the same storage handler;
+the probe does not force a drop. The consumer publishes its disposition
+before its completion token. Ordered word loads let the runner observe a
+completion even if it happened before send returned. Unmatched or incomplete
+reads leave the output unchanged. No payload lock is taken by polling.
+
+Earlier queued rows and failed enqueue retries cannot acknowledge this
+probe. A BEGIN ahead of it can make it stored instead, which must fail the
+full-log assertion. Retry and completion loops are bounded. Two result words
+and a runner token exist only in TEST images. Normal message numbers and
+wire sizes are unchanged; the TEST kind remains after all normal kinds,
+with `TELEMETRY_KIND_COUNT` as the admission bound. When merging B2b, keep
+its normal kinds before the TEST kind and this count sentinel.
+
+The host runner exposed both old errors: fast completion gave a false FAIL,
+and unrelated losses gave a false PASS, in all three placements (six red
+cases). The corrected schedules and real-consumer checks pass 15/15,
+including retries, delayed/immediate completion, wrong tokens, queued excess
+rows and BEGIN/reset interference. This is not hardware scheduling evidence.

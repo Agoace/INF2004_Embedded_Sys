@@ -70,6 +70,9 @@ static T_SPLOCK stats_lock;
  * after the lock itself.
  */
 static UINT stats_test_intsts;
+/* M5: sole consumer publishes disposition before completion. TEST-only. */
+static uint32_t probe_dropped;
+static uint32_t probe_done;
 
 void telemetry_test_hold_payload_lock(void)
 {
@@ -381,8 +384,13 @@ static void telemetry_task(INT code, void *ctx)
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_ROW:
+#if APP_TEST
+        case TELEMETRY_TEST_ROW:
+#endif
+        {
             (void)ISpinLock(&stats_lock, &intsts);
-            if (stats.rows == TELEMETRY_ROWS) {
+            const bool row_full = stats.rows == TELEMETRY_ROWS;
+            if (row_full) {
                 (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
             } else {
@@ -399,7 +407,16 @@ static void telemetry_task(INT code, void *ctx)
 #endif
             publish_stats();
             (void)ISpinUnlock(&stats_lock, intsts);
+#if APP_TEST
+            if (m.kind == TELEMETRY_TEST_ROW) {
+                __atomic_store_n(&probe_dropped,
+                    row_full ? m.data.event.ms : 0u, __ATOMIC_SEQ_CST);
+                __atomic_store_n(&probe_done, m.data.event.ms,
+                                 __ATOMIC_SEQ_CST);
+            }
+#endif
             break;
+        }
         case TELEMETRY_EVENT:
             (void)ISpinLock(&stats_lock, &intsts);
             if (stats.events == TELEMETRY_EVENTS) {
@@ -492,7 +509,7 @@ int telemetry_send(const telemetry_message_t *message)
     if (mbf_telemetry <= 0 || task <= 0) {
         return E_OBJ;
     }
-    if (!message || message->kind > TELEMETRY_JUNCTION) {
+    if (!message || message->kind >= TELEMETRY_KIND_COUNT) {
         return E_PAR;
     }
     telemetry_message_t m = *message;
@@ -532,5 +549,29 @@ int telemetry_send(const telemetry_message_t *message)
     }
     return (int)er;
 }
+
+#if APP_TEST
+int telemetry_test_probe_send(uint32_t token)
+{
+    if (token == 0u) {
+        return E_PAR;
+    }
+    const telemetry_message_t message = {
+        .kind = TELEMETRY_TEST_ROW, .data.event.ms = token};
+    return telemetry_send(&message);
+}
+
+int telemetry_test_probe_result(uint32_t token, bool *discarded)
+{
+    if (token == 0u || !discarded) {
+        return E_PAR;
+    }
+    if (__atomic_load_n(&probe_done, __ATOMIC_SEQ_CST) != token) {
+        return E_TMOUT;
+    }
+    *discarded = __atomic_load_n(&probe_dropped, __ATOMIC_SEQ_CST) == token;
+    return E_OK;
+}
+#endif
 
 _Static_assert(sizeof(telemetry_event_t) == 12u, "VE event layout");
