@@ -51,6 +51,27 @@ handler spins against the task it interrupted and neither proceeds.
 4. Register publication uses a single writer plus a sequence, not a lock, so a
    reader can detect a torn or skipped read without ever blocking a writer.
 
+## M7: UP lock and atomic API contract
+
+The [UP shim record](UP_SMP_SHIM.md) audits all 16 public functions against the
+real kernel. UP locks now use their existing aligned word; failed tries preserve
+the incoming IRQ mask and output token. Plain locks mask only the claim, not the
+whole holding interval. Interrupt-preserving holders still mask through release.
+Arithmetic results are captured before IRQ restoration, and publication uses
+real DMB instructions. SMP keeps the unchanged kernel implementation.
+
+The shim adds no lock site or static storage. Its maximum local RMW section is
+two DMB instructions plus one word read/conditional store and fixed arithmetic;
+release is two DMB instructions plus one aligned store. Blocking acquisition can
+spin without a time bound. No protected section contains a kernel wait, console
+output, allocation or network operation. No on-device timing is claimed.
+
+The test compiles the actual shim with only instruction-level host hooks, not
+the M1 API double. Tests were red before the fix (16/19 failing) and are now
+green. Full strict GCC and Clang sanitizer suites pass 321/321; all 24 firmware
+profiles pass. MQTT static RAM is unchanged versus `7ecfd9d`; UP text grows by
+96 bytes. See the linked record for contract rows, assembly, RAM and limits.
+
 ## DI/EI inventory
 
 `DI()`/`EI()` protect against this core only. Each site below is recorded with a

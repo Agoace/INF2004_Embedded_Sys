@@ -34,6 +34,7 @@ not current acceptance reports. Local course originals are not public records.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a software checks, public-config image builds, measured +280 B RAM, compiler frames and J0–J6 physical procedure; hardware Not run.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — measured step2/2b/2c deltas from b569adc, supplied step2b timing and pending current stack/CPU checks; shortage/CR1 order.
+- [UP_SMP_SHIM.md](kernel/UP_SMP_SHIM.md) — M7 real UP lock/atomic contract, red-to-green tests, ARM ordering and zero static RAM delta.
 - [CORE_PLACEMENT.md](kernel/CORE_PLACEMENT.md) — core placement, lock audit,
   tests and the [M8 application startup handoff](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
   through `platform/app_startup.h`; no device result.

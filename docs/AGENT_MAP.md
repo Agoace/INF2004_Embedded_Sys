@@ -268,6 +268,16 @@ vehicle task described below.
 - [`tests/test_watchdog.c`](../tests/test_watchdog.c), [`test_watchdog_hw.c`](../tests/test_watchdog_hw.c) and [`watchdog_stubs/hardware/watchdog.h`](../tests/watchdog_stubs/hardware/watchdog.h) — driver/register doubles.
 - [Kernel hardware watchdog](kernel/KERNEL.md) — motion-only feeding, startup, reset classification and S2-U05 procedure.
 
+## UP SMP utility shim
+
+- [`smp_single_core.c`](../app_program/platform/smp_single_core.c) supplies the
+  public lock/atomic API only in UP. The instruction-only
+  [architecture seam](../app_program/platform/smp_single_core_arch.h) permits
+  [real-source tests](../tests/test_smp_single_core.c), wired by
+  [`shim_checks.cmake`](../tests/shim_checks.cmake) in both host test builds.
+  [M7 contract and proof](kernel/UP_SMP_SHIM.md) records red/green results,
+  ARM barriers, provider checks, RAM and hardware limits.
+
 ## Application task stacks
 
 - [`app_program/platform/app_task.c`](../app_program/platform/app_task.c)

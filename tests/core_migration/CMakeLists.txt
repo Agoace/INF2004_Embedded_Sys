@@ -41,3 +41,5 @@ foreach(smp 0 1)
     target_compile_definitions(${target} PRIVATE TK_SUPPORT_SMP=${smp})
     add_test(NAME "b2_lifecycle_smp${smp}" COMMAND ${target})
 endforeach()
+
+include("${REPO}/tests/shim_checks.cmake")

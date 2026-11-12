@@ -314,6 +314,7 @@ target_link_libraries(test_app_startup PRIVATE Threads::Threads)
 set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/review_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/shim_checks.cmake")
 
 # Keep this last: placement variants copy fully configured fixture targets.
 include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")

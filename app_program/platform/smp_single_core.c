@@ -1,40 +1,69 @@
 /*
- * smp_single_core.c - the SMP utility API for single-core builds.
+ * UP implementation of the public SMP utility API (review M7).
  *
- * The kernel supplies SpinLock, ISpinLock and friends only when CNF_SMP is set,
- * because on one core the kernel itself needs no cross-core primitive. The
- * migration's application code calls them in every profile so that one source
- * tree serves both: two-core images get the real implementation, and this file
- * supplies the single-core equivalents.
+ * Only the claim/RMW is IRQ-masked for plain locks. Like the SMP kernel,
+ * plain locks remain preemptible while held: same-core preempting holders
+ * must use ISpinLock instead. Lock words are aligned 32-bit values, 0/1.
+ * ISpinLock retains the caller's saved mask until ISpinUnlock releases.
+ * All publication barriers are real DMB instructions, not compiler hints.
  *
- * The semantics are deliberately the ones the port already uses in its own
- * single-core paths (see hw_claim_lock() in libwifi/.../cyw43_utk_compat.c):
- *
- *   - ISpinLock saves PRIMASK and disables interrupts, ISpinUnlock restores it.
- *     That is what "the holder is not preemptible" means on one core, and it is
- *     the same guarantee the two-core build gets from the hardware spinlock plus
- *     the interrupt-disable window.
- *   - SpinLock disables interrupts and SpinUnlock re-enables them. These two
- *     carry no saved state, so they cannot nest correctly; the code only uses
- *     them where no handler shares the data, which is why the interrupt-
- *     preserving pair exists for everything else.
- *   - SpinTryLock cannot fail on one core: with interrupts masked by the caller
- *     or with no second core, there is no other holder to race.
- *
- * This file is empty except in single-core builds, so a two-core image links
- * exactly one definition of each symbol.
+ * This unit is empty in SMP builds; the kernel supplies those definitions.
  */
 #include <tk/tkernel.h>
 #include <tk/smp.h>
 
 #if !TK_SUPPORT_SMP
+#include "smp_single_core_arch.h"
+
+static UINT shim_irq_save(void)
+{
+    const UINT saved = shim_arch_irq_get();
+    shim_arch_irq_disable();
+    return saved;
+}
+
+static void shim_irq_restore(UINT saved)
+{
+    shim_arch_irq_set(saved);
+}
+
+/* Caller masks interrupts. No other UP task or ordinary IRQ can change the
+ * word between the read and store. This is not cross-core RMW exclusion. */
+static ER shim_claim_masked(T_SPLOCK *lock)
+{
+    ER result = E_BUSY;
+    shim_arch_barrier();
+    if (*lock == 0u) {
+        *lock = 1u;
+        result = E_OK;
+    }
+    shim_arch_barrier();
+    return result;
+}
+
+static ER shim_try_claim(T_SPLOCK *lock)
+{
+    const UINT saved = shim_irq_save();
+    const ER result = shim_claim_masked(lock);
+    shim_irq_restore(saved);
+    return result;
+}
+
+/* Aligned stores are indivisible, as in knl_arch_atomic_store. Do not change
+ * the caller's mask: release is also used by the plain lock API. */
+static void shim_release(T_SPLOCK *lock)
+{
+    shim_arch_barrier();
+    *lock = 0u;
+    shim_arch_barrier();
+}
 
 ER InitSpinLock(T_SPLOCK *lock)
 {
     if (!lock) {
         return E_PAR;
     }
-    *lock = 0u;
+    shim_release(lock);
     return E_OK;
 }
 
@@ -43,7 +72,9 @@ ER SpinLock(T_SPLOCK *lock)
     if (!lock) {
         return E_PAR;
     }
-    __asm__ volatile("cpsid i" ::: "memory");
+    while (shim_try_claim(lock) != E_OK) {
+        shim_arch_relax();
+    }
     return E_OK;
 }
 
@@ -52,8 +83,7 @@ ER SpinTryLock(T_SPLOCK *lock)
     if (!lock) {
         return E_PAR;
     }
-    __asm__ volatile("cpsid i" ::: "memory");
-    return E_OK;
+    return shim_try_claim(lock);
 }
 
 ER SpinUnlock(T_SPLOCK *lock)
@@ -61,7 +91,7 @@ ER SpinUnlock(T_SPLOCK *lock)
     if (!lock) {
         return E_PAR;
     }
-    __asm__ volatile("cpsie i" ::: "memory");
+    shim_release(lock);
     return E_OK;
 }
 
@@ -70,15 +100,26 @@ ER ISpinLock(T_SPLOCK *lock, UINT *intsts)
     if (!lock || !intsts) {
         return E_PAR;
     }
-    __asm__ volatile("mrs %0, primask" : "=r"(*intsts));
-    __asm__ volatile("cpsid i" ::: "memory");
+    *intsts = shim_irq_save();
+    while (shim_claim_masked(lock) != E_OK) {
+        shim_arch_relax();
+    }
     return E_OK;
 }
 
 ER ISpinTryLock(T_SPLOCK *lock, UINT *intsts)
 {
-    /* Nothing else can hold it on one core, so this is the same as ISpinLock. */
-    return ISpinLock(lock, intsts);
+    if (!lock || !intsts) {
+        return E_PAR;
+    }
+    const UINT saved = shim_irq_save();
+    const ER result = shim_claim_masked(lock);
+    if (result == E_OK) {
+        *intsts = saved;
+    } else {
+        shim_irq_restore(saved);
+    }
+    return result;
 }
 
 ER ISpinUnlock(T_SPLOCK *lock, UINT intsts)
@@ -86,113 +127,95 @@ ER ISpinUnlock(T_SPLOCK *lock, UINT intsts)
     if (!lock) {
         return E_PAR;
     }
-    if (0u == intsts) {
-        __asm__ volatile("cpsie i" ::: "memory");
-    }
+    shim_release(lock);
+    shim_irq_restore(intsts);
     return E_OK;
 }
 
-/*
- * The atomic family. The kernel's whole SMP utility body, atomics included, sits
- * inside `#if TK_SUPPORT_SMP` in kernel/tkernel/smp_lock.c, so single-core images
- * need these too once application code uses them in every profile. On one core an
- * interrupt-disable window is the equivalent guarantee, and the PRIMASK save and
- * restore keeps a caller's existing mask intact.
- *
- * The return values mirror smp_lock.c exactly: inc/dec/add/sub and bitset/bitclr
- * return the NEW value (bitset/bitclr the PREVIOUS one, as the kernel does), xchg
- * and cmpxchg return the OLD value, and cmpxchg stores only when the old value
- * equals `cmp`.
- */
-static UINT shim_irq_save(void)
+static UINT shim_atomic_enter(void)
 {
-    UINT primask;
-    __asm__ volatile("mrs %0, primask" : "=r"(primask));
-    __asm__ volatile("cpsid i" ::: "memory");
-    return primask;
+    const UINT saved = shim_irq_save();
+    shim_arch_barrier();
+    return saved;
 }
 
-static void shim_irq_restore(UINT primask)
+static void shim_atomic_leave(UINT saved)
 {
-    if (0u == primask) {
-        __asm__ volatile("cpsie i" ::: "memory");
-    }
+    shim_arch_barrier();
+    shim_irq_restore(saved);
 }
 
+/* Capture return values before restoring IRQs: an ISR can update the same
+ * word as soon as it becomes runnable. Arithmetic wraps modulo 2^32. */
 UW atomic_inc(UW *addr)
 {
-    const UINT primask = shim_irq_save();
-    ++*addr;
-    shim_irq_restore(primask);
-    return *addr;
+    return atomic_add(addr, 1u);
 }
 
 UW atomic_dec(UW *addr)
 {
-    const UINT primask = shim_irq_save();
-    --*addr;
-    shim_irq_restore(primask);
-    return *addr;
+    return atomic_sub(addr, 1u);
 }
 
 UW atomic_add(UW *addr, UW val)
 {
-    const UINT primask = shim_irq_save();
-    *addr += val;
-    shim_irq_restore(primask);
-    return *addr;
+    const UINT saved = shim_atomic_enter();
+    const UW result = *addr + val;
+    *addr = result;
+    shim_atomic_leave(saved);
+    return result;
 }
 
 UW atomic_sub(UW *addr, UW val)
 {
-    const UINT primask = shim_irq_save();
-    *addr -= val;
-    shim_irq_restore(primask);
-    return *addr;
+    const UINT saved = shim_atomic_enter();
+    const UW result = *addr - val;
+    *addr = result;
+    shim_atomic_leave(saved);
+    return result;
 }
 
 UW atomic_xchg(UW *addr, UW val)
 {
-    const UINT primask = shim_irq_save();
+    const UINT saved = shim_atomic_enter();
     const UW old = *addr;
     *addr = val;
-    shim_irq_restore(primask);
+    shim_atomic_leave(saved);
     return old;
 }
 
 UW atomic_cmpxchg(UW *addr, UW val, UW cmp)
 {
-    const UINT primask = shim_irq_save();
+    const UINT saved = shim_atomic_enter();
     const UW old = *addr;
     if (old == cmp) {
         *addr = val;
     }
-    shim_irq_restore(primask);
+    shim_atomic_leave(saved);
     return old;
 }
 
 UW atomic_bitset(UW *addr, UW setptn)
 {
-    const UINT primask = shim_irq_save();
+    const UINT saved = shim_atomic_enter();
     const UW old = *addr;
     *addr = old | setptn;
-    shim_irq_restore(primask);
+    shim_atomic_leave(saved);
     return old;
 }
 
 UW atomic_bitclr(UW *addr, UW clrptn)
 {
-    const UINT primask = shim_irq_save();
+    const UINT saved = shim_atomic_enter();
     const UW old = *addr;
     *addr = old & ~clrptn;
-    shim_irq_restore(primask);
+    shim_atomic_leave(saved);
     return old;
 }
 
-/* The spelling is retained from the public SMP T-Kernel specification. */
+/* Retain the spelling of the public SMP T-Kernel specification. */
 void mp_memory_barrir(void)
 {
-    __asm__ volatile("" ::: "memory");
+    shim_arch_barrier();
 }
-
 #endif /* !TK_SUPPORT_SMP */
