@@ -549,6 +549,11 @@ void log_stream_init(uint32_t boot_id)
     (void)memset(&s_live, 0, sizeof(s_live));
     (void)memset(&s_dump, 0, sizeof(s_dump));
     (void)memset(&s_stats, 0, sizeof(s_stats));
+    UINT intsts;
+    (void)ISpinLock(&dump_lock, &intsts);
+    s_admit.state = DUMP_ADMIT_IDLE;
+    s_admit.request_id = 0u;
+    (void)ISpinUnlock(&dump_lock, intsts);
 }
 
 /*

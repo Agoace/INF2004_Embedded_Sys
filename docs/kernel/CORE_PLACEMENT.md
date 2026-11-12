@@ -403,7 +403,7 @@ Holder counts are acquisition sites per lock.
 | Lock | Declaration | Acquisitions | Reached from |
 | --- | --- | --- | --- |
 | `stats_lock` | `subsystem1/telemetry.c:35` | 11 | RAM-log payload, published snapshot |
-| `dump_lock` | `subsystem1/log_stream.c:102` | 4 | DUMP admission request, active read, Wi-Fi step |
+| `dump_lock` | `subsystem1/log_stream.c:102` | 5 | DUMP admission reset, request, active read, Wi-Fi step |
 | `timing_lock` | `libwifi/.../cyw43_utk_kernel.c:22` | 9 | CYW43 poll, timing window, start status |
 | `metrics_lock` | `subsystem1/robot_mqtt.c:69` | 11 | MQTT writers, Health snapshot |
 | `status_lock` | `libwifi/.../cyw43_utk.c:84` | 2 | radio snapshot publish and copy |
@@ -466,10 +466,29 @@ case, and still takes nothing because the caller holds it. No section contains a
 
 | Holder | Line | Variant | Core, priority | Held across | Static bound |
 | --- | --- | --- | --- | --- | --- |
+| `log_stream_init` | 553 | ISL | Wi-Fi configure; TEST reset | admission reset | 2 words |
 | `log_stream_dump_request` | 571 | IST (E_TMOUT) | core 0, 13 (Vehicle) | admission accept | 2 words |
 | `log_stream_dump_active` | 587 | ISL | core 0, 31 (Health) | admission read | 1 word |
 | `dump_service` | 498 | ISL | core 1, 20 (Wi-Fi) | pending to active | 2 words |
 | `dump_apply` | 625 | ISL | core 1, 20 (Wi-Fi) | return to IDLE | 1 word |
+
+#### M10: initialization left DUMP admission active
+
+The restored strict host tests found that `log_stream_init()` reset the private
+streams but not `s_admit`. This violated the public reset contract: a request
+accepted before initialization could leave admission PENDING or ACTIVE, so a
+new request after initialization returned `E_OBJ`. The fix resets both admission
+words under `dump_lock`, after the private stream reset. This adds one ISL site
+in `log_stream_init`: two aligned 32-bit stores, with no wait, print or network
+call while held.
+
+Production reachability was checked: `robot_mqtt.c` calls initialization from
+`configure()` once per boot. `configured` is never cleared; reconnect uses
+`log_stream_link_down()`, and a new run does not call initialization. Thus no
+normal-production repeated-init robot symptom is claimed. MQTT TEST has a second
+caller in `log_stream_admission_selftest()`, and host tests reinitialize between
+scenarios. Before this fix, repeated initialization could leave later DUMP
+requests refused with `E_OBJ`. No on-device reproduction is claimed.
 
 #### `queue_lock` — removed in RT-0071/F3
 
