@@ -489,7 +489,6 @@ static void dump_service(log_stream_publish_fn publish)
 {
     uint32_t sends = 0u;
     const uint32_t now = drv_time_ms();
-    UINT irq;
 
     if (s_dump.stage == DUMP_IDLE) {
         /* Pending to active handoff: take the request ID under the lock, then
