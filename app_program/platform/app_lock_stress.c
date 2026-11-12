@@ -83,7 +83,7 @@ static void stress_probe(FP exinf)
  */
 #define IL_ROUNDS   500u
 #define IL_HOLD     2000u
-#define IL_WAIT     200000u
+#define IL_WAIT     500u
 #define IL_STACK_BYTES 2048u
 
 static volatile UW il_held;   /* 1 while the holder task holds the lock */
@@ -91,8 +91,9 @@ static volatile UW il_seen;   /* runner found the lock held while it was taken *
 static volatile UW il_busy;   /* runner could not take the lock */
 static volatile UW il_done;   /* holder finished its rounds */
 
-static void il_holder(FP exinf)
+static void il_holder(INT stacd, void *exinf)
 {
+    (void)stacd;
     (void)exinf;
     for (UW round = 0u; round < IL_ROUNDS; ++round) {
         UINT intsts;
@@ -108,6 +109,72 @@ static void il_holder(FP exinf)
         (void)ISpinUnlock(&stress_lock, intsts);
     }
     il_done = 1u;
+    /* B2: raw task entry has LR=0, not a C return trampoline. */
+    tk_ext_tsk();
+    for (;;) {
+        /* A task exit must not return, even on a kernel context error. */
+    }
+}
+
+/* Completion publication is not proof that the kernel finished task exit. */
+static bool interleave_wait_dormant(ID id)
+{
+    for (UW wait = 0u; wait < IL_WAIT; ++wait) {
+        T_RTSK status;
+        const ER ref = tk_ref_tsk(id, &status);
+        if (ref != E_OK) {
+            ++stress_errors;
+            tm_printf((UB *)"[lock] interleave ref failed %d\n", (int)ref);
+            return false;
+        }
+        if (status.tskstat == TTS_DMT) {
+            return true;
+        }
+        const ER delay = tk_dly_tsk(1u);
+        if (delay != E_OK) {
+            ++stress_errors;
+            tm_printf((UB *)"[lock] interleave delay failed %d\n", (int)delay);
+            return false;
+        }
+    }
+    ++stress_errors;
+    tm_printf((UB *)"[lock] interleave exit timeout\n");
+    return false;
+}
+
+/* Delete only after a kernel-confirmed dormant state. On failure or timeout,
+ * stop the holder first. Both tasks are on core 0, so termination cannot catch
+ * the holder inside its interrupt-masked section and leave stress_lock held. */
+static bool interleave_delete(ID id)
+{
+    T_RTSK status;
+    ER ref = tk_ref_tsk(id, &status);
+    if (ref != E_OK) {
+        ++stress_errors;
+        tm_printf((UB *)"[lock] cleanup ref failed %d\n", (int)ref);
+    }
+    if (ref != E_OK || status.tskstat != TTS_DMT) {
+        const ER stop = tk_ter_tsk(id);
+        /* E_OBJ can mean the task has already become dormant. Verify it. */
+        if (stop != E_OK && stop != E_OBJ) {
+            ++stress_errors;
+            tm_printf((UB *)"[lock] cleanup stop failed %d\n", (int)stop);
+            return false;
+        }
+        ref = tk_ref_tsk(id, &status);
+        if (ref != E_OK || status.tskstat != TTS_DMT) {
+            ++stress_errors;
+            tm_printf((UB *)"[lock] cleanup not dormant (ref %d)\n", (int)ref);
+            return false;
+        }
+    }
+    const ER deleted = tk_del_tsk(id);
+    if (deleted != E_OK) {
+        ++stress_errors;
+        tm_printf((UB *)"[lock] cleanup delete failed %d\n", (int)deleted);
+        return false;
+    }
+    return true;
 }
 
 static void interleave_run(void)
@@ -116,13 +183,25 @@ static void interleave_run(void)
     il_seen = 0u;
     il_busy = 0u;
     il_done = 0u;
+    const UW errors_before = stress_errors;
+#if TK_SUPPORT_SMP
+    if ((UW)tk_get_prc() != app_prc_core0()) {
+        ++stress_errors;
+        tm_printf((UB *)"[lock] interleave runner not on core 0\n");
+        return;
+    }
+#endif
 
     T_CTSK task = {0};
     task.tskatr = TA_HLNG | TA_RNG0;
     task.exinf = 0;
     task.task = (FP)il_holder;
     task.itskpri = 31;   /* the Health priority */
-    task.stksz = IL_STACK_BYTES;   /* this port has no stkadr: the kernel allocates */
+    task.stksz = IL_STACK_BYTES;   /* kernel-allocated stack */
+#if TK_SUPPORT_SMP
+    task.tskatr |= TA_ASSPRC;
+    task.assprc = app_prc_core0();
+#endif
 
     const ID id = tk_cre_tsk(&task);
     if (id < E_OK) {
@@ -132,9 +211,10 @@ static void interleave_run(void)
     }
     const ER sta = tk_sta_tsk(id, 0);
     if (sta < E_OK) {
-        (void)tk_del_tsk(id);
         ++stress_errors;
-        tm_printf((UB *)"[lock] interleave start failed %d\n", (int)sta);
+        const bool deleted = interleave_delete(id);
+        tm_printf((UB *)"[lock] interleave start failed %d cleanup %s\n",
+                  (int)sta, deleted ? "OK" : "FAIL");
         return;
     }
 
@@ -149,27 +229,25 @@ static void interleave_run(void)
         } else {
             ++il_busy;
         }
-        (void)tk_dly_tsk(1u);   /* let the lower-priority holder run */
+        const ER delay = tk_dly_tsk(1u);   /* let the holder run */
+        if (delay != E_OK) {
+            ++stress_errors;
+            tm_printf((UB *)"[lock] interleave delay failed %d\n", (int)delay);
+            break;
+        }
     }
 
-    /* Bounded wait for the holder to finish. */
-    for (UW wait = 0u; wait < IL_WAIT && 0u == il_done; ++wait) {
-        (void)tk_dly_tsk(1u);
-    }
+    const bool exited = interleave_wait_dormant(id);
+    const bool deleted = interleave_delete(id);
 
-    (void)tk_del_tsk(id);
-
-    /*
-     * RT-0075/F3: `collisions` is the evidence that a collision actually happened -
-     * the runner found the lock taken. On ONE core it must stay 0, because the
-     * holder cannot be preempted, so there the check proves non-preemption and a
-     * same-core collision is impossible by construction. The count is printed so a
-     * two-core run can show one rather than assume it.
-     */
-    tm_printf((UB *)"[lock] interleave held_seen %lu collisions %lu done %lu %s\n",
-              (unsigned long)il_seen, (unsigned long)il_busy,
-              (unsigned long)il_done,
-              (0u == il_seen && 0u != il_done) ? "PASS" : "FAIL");
+    /* B2: both tasks share core 0. Both counts must stay zero because an
+     * interrupt-preserving holder cannot be preempted there. This is not a
+     * cross-core contention test. */
+    const bool passed = exited && deleted && il_seen == 0u && il_busy == 0u &&
+                        il_done != 0u && stress_errors == errors_before;
+    tm_printf((UB *)"[lock] interleave held_seen %lu collisions %lu "
+              "done %lu %s\n", (unsigned long)il_seen, (unsigned long)il_busy,
+              (unsigned long)il_done, passed ? "PASS" : "FAIL");
 }
 
 void app_lock_stress_run(void)

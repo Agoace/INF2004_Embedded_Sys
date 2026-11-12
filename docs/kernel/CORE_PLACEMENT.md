@@ -99,6 +99,64 @@ The test deliberately does not try the plain `SpinLock` variant. On this port th
 handler would spin against the task it interrupted and the board would hang, so
 demonstrating the failure would not be a recoverable test.
 
+### Review B2: helper task exit and checked cleanup
+
+The interleaving holder is a raw `tk_cre_tsk` entry. This port sets its initial
+LR to zero (`cpu_task.h`); it has no C return trampoline. `il_holder` now has the
+`(INT, void *)` entry signature and calls `tk_ext_tsk` after publishing
+completion. A fallback loop prevents a return even if task exit unexpectedly
+returns. ARM disassembly for UP, split and control confirms both completion and
+lock-error paths call task exit, then branch to the fallback loop, not to LR.
+
+The runner must be on core 0 in SMP; the holder is explicitly pinned there.
+UP has only that core. This is a same-core test, not cross-core contention
+proof. It also makes timeout termination safe: the runner cannot interrupt the
+holder inside its interrupt-masked section and strand a held lock.
+
+Creator-side lifecycle:
+
+```text
+create -> start -> bounded interleave -> poll TTS_DMT -> delete
+            failure/timeout -> terminate if needed -> confirm TTS_DMT -> delete
+```
+
+`il_done` alone never authorizes deletion. Each task-state, delay, termination
+and deletion result is checked. `E_OBJ` from termination is accepted only after
+a successful reference confirms dormancy. Any error prevents PASS. A failed
+kernel cleanup operation is reported; the test does not claim it reclaimed an
+object when the kernel refused it. It never deletes a known active task.
+
+The interleave loop requests at most 500 delays; the exit wait requests at most
+500 more. This replaces the former 200000-poll wait. One requested tick is
+10 ms on this kernel, but dispatch delay can extend the wall time: the call
+count is bounded, not a guaranteed elapsed-time deadline under starvation.
+
+No lock variant or protected payload is added by B2. The changed helper's
+existing sites have these source-level maximum contents:
+
+| Site | Variant | Maximum content while held |
+| --- | --- | --- |
+| `il_holder` | ISL | two aligned 32-bit flag stores and 2000 bounded volatile counter increments |
+| `interleave_run` | IST | one aligned flag read and conditional diagnostic increment |
+
+The ARM loop bound is 2000, verified from the generated compare value. No wait,
+print, lifecycle call or network operation is inside either section. Task exit,
+state queries, delay, termination, deletion and result output are all outside.
+Maximum hold time on the device is still unmeasured.
+
+The same isolated CMake build above now has four tests. It compiles the actual
+B2 entry and creator helpers against task-state doubles for both SMP and UP.
+The 29 scenarios include explicit exit, completion before exit finishes, timeout,
+create/start/reference/delay/lock failures, termination refusal, false `E_OBJ`,
+post-termination state failure and deletion refusal. The SMP test also rejects a
+runner on the wrong core. Deletion of an active task or a C return from the
+holder fails an assertion. All four tests pass with strict GCC warnings and
+with Clang ASan/UBSan. B2 repeats the same 24-profile build matrix listed under
+B1, with no compiler warnings. The three changed C units also pass ARM checks
+with `-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror` for UP, split and
+control MQTT TEST profiles (nine checks). The full host suite remains blocked
+by M1. No hardware run, push or flash is part of this repair.
+
 ## Phase 2: IMU on core 1
 
 `app_task.c` records `SLOT("imu_task", imu_stack, APP_CORE_1)`, and

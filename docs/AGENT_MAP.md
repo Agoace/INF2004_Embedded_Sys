@@ -268,11 +268,13 @@ vehicle task described below.
   and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
   separates this saving from minimum-bit packing.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
-- [Core placement and lock audit](kernel/CORE_PLACEMENT.md) records review B1.
+- [Core placement and lock audit](kernel/CORE_PLACEMENT.md) records reviews B1/B2.
   The isolated [blocker test build](../tests/core_migration/CMakeLists.txt)
   compiles [production lock sections](../tests/core_migration/extract_lock_sections.py)
-  for [interrupt-mask/preemption checks](../tests/core_migration/test_b1_lock_sections.c)
-  without the full host suite's SMP stubs.
+  for [interrupt-mask/preemption checks](../tests/core_migration/test_b1_lock_sections.c).
+  It also extracts the [task lifecycle](../tests/core_migration/extract_lifecycle.py)
+  for [exit/cleanup checks](../tests/core_migration/test_b2_lifecycle.c), without
+  the full host suite's SMP stubs.
 
 - [`app_program/subsystem3/line_service.c`](../app_program/subsystem3/line_service.c) — priority-11 per-sample line task, inherited-mutex snapshot and calibration owner; `raw_bc` is sampled only.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
