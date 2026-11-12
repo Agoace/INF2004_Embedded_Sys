@@ -296,5 +296,7 @@ add_test(NAME test_vehicle_junction_start_busy
 add_test(NAME test_vehicle_junction_start_stale
     COMMAND test_vehicle_junction_A junctionstale)
 
+include("${CMAKE_CURRENT_SOURCE_DIR}/admission_checks.cmake")
+
 # Keep this last: placement variants copy fully configured fixture targets.
 include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")

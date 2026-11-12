@@ -503,8 +503,8 @@ int telemetry_send(const telemetry_message_t *message)
      * Reserve only if the reservation is free - a single compare-exchange, so a
      * second DUMP is refused rather than admitted beside the first.  Release only
      * what this call took, so a failed send can never clear another DUMP's
-     * reservation.  Vehicle never waits, because there is no lock here at all, and
-     * it never observes busy=false while its own DUMP is pending.
+     * reservation. The producer takes no payload lock. The kernel atomic
+     * operation still uses its hardware-lock/IRQ mechanism.
      */
     bool reserved = false;
     if (m.kind == TELEMETRY_DUMP) {
@@ -513,6 +513,13 @@ int telemetry_send(const telemetry_message_t *message)
             return E_OBJ;
         }
         reserved = true;
+    } else if (0u != __atomic_load_n(&admit_busy, __ATOMIC_SEQ_CST)) {
+        /* M3: preserve baseline admission while DUMP owns the reservation.
+         * In particular, BEGIN must not use Vehicle's earlier busy sample
+         * after GP20 has reserved DUMP in the same idle-loop iteration.
+         */
+        lose();
+        return E_OBJ;
     }
     m.loss_base = __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST);
     const ER er = tk_snd_mbf(mbf_telemetry, &m, (INT)sizeof(m), TMO_POL);

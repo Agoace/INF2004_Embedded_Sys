@@ -688,3 +688,36 @@ Matched public-example SMP1 MQTT images: `af94874` text 419840 B, data 1008 B,
 BSS 191212 B; M2 text 419888 B, data 1008 B, BSS 191212 B. The private operand
 grows from 1 B to 4 B; linked static RAM is unchanged because of alignment.
 No task, stack, heap, wire field or motion behavior is added.
+
+## M3: retain baseline DUMP admission
+
+Every valid non-DUMP message now checks the atomic DUMP reservation before
+queueing. A held reservation returns `E_OBJ` and counts one loss, without
+calling the message buffer or releasing the reservation. DUMP still uses
+compare-exchange, releases its own failed-send reservation and is released
+by the consumer after a successful dump. The producer takes no payload lock.
+
+This restores the baseline observed-state admission contract. Vehicle is the
+production message producer. It is not a new transaction that serializes
+arbitrary non-DUMP producers with concurrent DUMP enqueue operations.
+
+The real-Telemetry host test pauses the consumer and checks all five
+non-DUMP kinds, duplicate refusal, failed-enqueue rollback and admission
+after release. The integration fixture links real Vehicle and Telemetry,
+not mocked admission. It calibrates, holds GP20 across one button cadence
+with a pending remote START or CALIBRATE, and checks that no BEGIN, new
+epoch or motor command passes while DUMP is held. A fresh request works
+after release. All 21 cases failed before M3 and pass after it in UP, split
+and forced-core0 configurations. No Vehicle production code changed.
+
+Full GCC and Clang host suites each pass 254/254. All 24 public-example
+firmware profiles link with zero normal-build warnings. Both changed
+production units pass strict ARM checks in all 24 profiles (48 checks).
+A broader strict check found an existing unused row declaration in the
+SMP1 TEST contention fixture; its warning-only repair is separate from M3.
+
+Matched SMP1 MQTT image: text 419904 B, data 1008 B, BSS 191212 B. Relative
+to `af94874`, combined M2/M3 text is +64 B and static RAM is unchanged at
+192220 B. INFO remains 108 B and the telemetry message remains 116 B.
+Host scheduling proves these selected interleavings only. No hardware
+latency, CPU, deadline or stack acceptance is claimed.
