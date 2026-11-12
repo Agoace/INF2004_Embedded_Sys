@@ -32,7 +32,8 @@ if(TARGET test_log_stream)
     target_compile_definitions(test_log_stream PRIVATE TM_MQTT=1)
     foreach(scenario two_boot_ids live_batches live_steady live_jump_lag live_jump_reconnect
             live_generation live_failures dump_flow dump_complete dump_failures
-            dump_link_down dump_abort dump_throughput shared_budget live_paused)
+            dump_link_down dump_abort dump_throughput shared_budget live_paused
+            admission_lifecycle)
         add_test(NAME test_log_stream_${scenario} COMMAND test_log_stream ${scenario})
     endforeach()
 endif()

@@ -802,3 +802,18 @@ data 1008 -> 1008 B, BSS 191212 -> 191220 B. M8 adds 48 B text and 8 B
 linked static RAM, including alignment, for its 4 B word. No task, stack,
 heap, public board, message or wire field is added. ARM code uses aligned
 word loads/stores and barriers, not a hardware-lock RMW.
+
+## M4: keep the TEST runner out of the live stream
+
+The core-0 TEST runner no longer initializes, services, acknowledges or
+requests transfers from the Wi-Fi-owned stream. It prints an explicit SKIP,
+not PASS. No state is saved/restored and no boot ID or pending request is
+changed. The non-MQTT TEST profile also reports SKIP.
+
+The isolated host fixture runs the real stream through two complete
+requests for each of two arbitrary boot IDs. It checks pending/busy refusal,
+BEGIN and END, frame boot IDs and no pending or unsolicited final transfer.
+This replaces the unsafe live-instance exercise. It is not cross-core
+hardware acceptance. The wrapper guard failed before M4 in all three MQTT
+placement configurations and now passes, including non-MQTT links. The
+focused stream/runner suite passes 26/26. No production stream logic changed.
