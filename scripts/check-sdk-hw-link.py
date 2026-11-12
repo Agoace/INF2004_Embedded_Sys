@@ -8,12 +8,79 @@ import argparse
 from pathlib import Path
 import shlex
 import subprocess
+import re
+
+
+def profile_from_compile_command(command):
+    """Reconstruct the exact schema from flags, never from the current marker.
+
+    Migration supplies FORCE_CORE0; staging supplies the complete barcode
+    family. A merged build supplies both, with placement before barcode keys.
+    """
+    binary = {"CNF_SMP", "TM_CONSOLE_USB_CDC", "TM_WIFI_CYW43", "TM_NET_LWIP",
+              "TM_MQTT", "TM_CONSOLE_UART", "APP_TEST", "APP_BENCH", "APP_DIAG",
+              "APP_IMU_STREAM", "APP_FORCE_CORE0", "APP_BARCODE_CAPTURE",
+              "BARCODE_LIVE_ENABLE"}
+    relevant = binary | {"IMU_HUMP_SOURCE", "JUNCTION_TEST_CMD",
+                         "BARCODE_MEASURED_CLEAR_MM"}
+    definitions = {}
+    for flag in command:
+        if not flag.startswith("-D"):
+            continue
+        name, separator, value = flag[2:].partition("=")
+        if name not in relevant:
+            continue
+        value = value if separator else "1"
+        if name in definitions and definitions[name] != value:
+            raise ValueError(f"log has conflicting {name} definitions")
+        definitions[name] = value
+    for name in binary:
+        if name in definitions and definitions[name] not in ("0", "1"):
+            raise ValueError(f"log has invalid {name}")
+    smp = definitions.get("CNF_SMP", "0")
+    console = "usb_cdc" if definitions.get("TM_CONSOLE_USB_CDC") == "1" else "uart"
+    wifi = "cyw43" if definitions.get("TM_WIFI_CYW43") == "1" else "none"
+    net = "lwip" if definitions.get("TM_NET_LWIP") == "1" else "none"
+    mqtt = definitions.get("TM_MQTT", "0")
+    crash = definitions.get("TM_CONSOLE_UART", "0")
+    test = definitions.get("APP_TEST", "0")
+    bench = definitions.get("APP_BENCH", "0")
+    diag = definitions.get("APP_DIAG", "0")
+    stream = definitions.get("APP_IMU_STREAM", "0")
+    source = definitions.get("IMU_HUMP_SOURCE", "1")
+    junction = definitions.get("JUNCTION_TEST_CMD", "0")
+    if source not in ("1", "2"):
+        raise ValueError("log has invalid IMU_HUMP_SOURCE")
+    if junction not in ("0", "1", "2", "3", "4"):
+        raise ValueError("log has invalid JUNCTION_TEST_CMD")
+    expected = (f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}"
+                f"-test{test}-bench{bench}-diag{diag}-imu_stream{stream}"
+                f"-hump_source{source}-junction{junction}")
+    if "APP_FORCE_CORE0" in definitions:
+        expected += f"-forcecore{definitions['APP_FORCE_CORE0']}"
+    barcode = {"APP_BARCODE_CAPTURE", "BARCODE_LIVE_ENABLE",
+               "BARCODE_MEASURED_CLEAR_MM"}
+    present = barcode & definitions.keys()
+    if present:
+        if present != barcode:
+            raise ValueError("log has an incomplete barcode profile family")
+        capture = definitions["APP_BARCODE_CAPTURE"]
+        live = definitions["BARCODE_LIVE_ENABLE"]
+        clear = definitions["BARCODE_MEASURED_CLEAR_MM"]
+        if (len(clear) > 5 or re.fullmatch(r"0|[1-9][0-9]*", clear) is None or
+                int(clear) > 65535):
+            raise ValueError("log has an invalid canonical barcode bound")
+        if live == "1" and (clear == "0" or junction != "0"):
+            raise ValueError("log combines live actions with no bound or fake source")
+        expected += f"-barcode_capture{capture}-bclive{live}-bcclear{clear}"
+    return expected
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("build_log", type=Path, help="full make log for the current object profile")
-    parser.add_argument("--output-dir", type=Path, required=True, help="directory outside the repository")
+    parser.add_argument("--output-dir", type=Path, required=True,
+                        help="directory outside the repository")
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     out = args.output_dir.resolve()
@@ -27,31 +94,16 @@ def main():
     link_cmd = next((cmd for cmd in commands if "-c" not in cmd and
                      any(part.endswith(".elf") for part in cmd)), None)
     if compile_cmd is None or link_cmd is None:
-        parser.error("log needs the adc.c compile command and final ELF link; clean and rebuild first")
-    flags = set(compile_cmd)
-    smp = int("-DCNF_SMP=1" in flags)
-    console = "usb_cdc" if "-DTM_CONSOLE_USB_CDC=1" in flags else "uart"
-    wifi = "cyw43" if "-DTM_WIFI_CYW43=1" in flags else "none"
-    net = "lwip" if "-DTM_NET_LWIP=1" in flags else "none"
-    mqtt = int("-DTM_MQTT=1" in flags)
-    crash = int("-DTM_CONSOLE_UART=1" in flags)
-    test = int("-DAPP_TEST=1" in flags)
-    bench = int("-DAPP_BENCH=1" in flags)
-    diag = int("-DAPP_DIAG=1" in flags)
-    expected = f"smp{smp}-{console}-wifi{wifi}-net{net}-mqtt{mqtt}-crash{crash}-test{test}-bench{bench}-diag{diag}"
-    stream = int("-DAPP_IMU_STREAM=1" in flags)
-    source = next((flag.split("=", 1)[1] for flag in flags
-                   if flag.startswith("-DIMU_HUMP_SOURCE=")), "1")
-    if source not in ("1", "2"):
-        parser.error("log has an invalid IMU_HUMP_SOURCE")
-    junction = next((flag.split("=", 1)[1] for flag in flags
-                     if flag.startswith("-DJUNCTION_TEST_CMD=")), "0")
-    if junction not in ("0", "1", "2", "3", "4"):
-        parser.error("log has an invalid JUNCTION_TEST_CMD")
-    expected += f"-imu_stream{stream}-hump_source{source}-junction{junction}"
+        parser.error("log needs the adc.c compile command and final ELF link; "
+                     "clean and rebuild first")
+    try:
+        expected = profile_from_compile_command(compile_cmd)
+    except ValueError as error:
+        parser.error(str(error))
     current = (root / "build_make/.build_profile").read_text().strip()
     if current != expected:
-        parser.error(f"object profile is {current}, but log is {expected}; rebuild the logged profile first")
+        parser.error(f"object profile is {current}, but log is {expected}; "
+                     "rebuild the logged profile first")
     cmd = list(compile_cmd)
     for option in ("-MF", "-MT", "-o"):
         while option in cmd:
@@ -84,7 +136,8 @@ def main():
     forbidden = {"clock_get_hz", "irq_set_exclusive_handler", "timer_time_us_64", "runtime_init"}
     if forbidden & {line.split()[-1] for line in probe_refs.splitlines() if line.split()}:
         raise SystemExit("probe requires a forbidden SDK runtime function")
-    print(f"PASS {expected}: retained PWM/GPIO/ADC/alarm/ultrasonic/reset/timer32/tick/watchdog probe links: {elf}")
+    print(f"PASS {expected}: retained PWM/GPIO/ADC/alarm/ultrasonic/reset/"
+          f"timer32/tick/watchdog probe links: {elf}")
     print("Link-only result. Hardware tests remain NOT RUN. Do not flash this ELF.")
 
 

@@ -1,3 +1,6 @@
+add_test(NAME test_sdk_profiles COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_sdk_profiles.py")
+
 # M4: never mutate the live stream from the TEST runner, at any placement.
 get_target_property(probe_sources test_telemetry SOURCES)
 list(REMOVE_ITEM probe_sources "${REPO}/tests/test_telemetry.c")

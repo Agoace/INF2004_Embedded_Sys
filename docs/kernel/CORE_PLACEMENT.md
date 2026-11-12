@@ -841,3 +841,51 @@ and unrelated losses gave a false PASS, in all three placements (six red
 cases). The corrected schedules and real-consumer checks pass 15/15,
 including retries, delayed/immediate completion, wrong tokens, queued excess
 rows and BEGIN/reset interference. This is not hardware scheduling evidence.
+
+## M6: retain exact SDK profile proof
+
+The SDK checker reconstructs the marker from the ADC compile flags before
+calling a compiler or linker. It recognizes canonical `APP_FORCE_CORE0=0/1`
+and rejects conflicting definitions. It still requires a complete ADC
+compile command, the final ELF link and exact equality with the current
+object marker. An incremental build log is not proof.
+
+The optional barcode family is derived only from compile macros, not from
+fields copied out of the current marker. All three fields must be present:
+`APP_BARCODE_CAPTURE`, `BARCODE_LIVE_ENABLE`, `BARCODE_MEASURED_CLEAR_MM`.
+The bound is canonical ASCII decimal in 0..65535; live permission requires
+a positive bound and fake NONE. Booleans are exactly 0 or 1. Partial or
+conflicting fields fail closed. In the future Make merge, keep this order:
+
+- Migration: normal keys, `forcecoreN`.
+- Staging: normal keys, `barcode_captureN-bcliveN-bcclearN`.
+- Combined: normal keys, `forcecoreN-barcode_captureN-bcliveN-bcclearN`.
+
+Keep all B2b permission checks and the default SHADOW settings. The synthetic
+permission cases do not build or authorize an action image. No B2b source
+was merged for this repair. Twelve valid placement/barcode cases failed
+before M6. The host CLI tests now accept them and reject stale individual
+keys, missing/full-log failures and invalid/conflicting permission flags
+before invoking the compiler.
+
+### M4-M6 software validation
+
+Against `c5febe4`, GCC and Clang each pass 302/302 host cases. Clang
+ASan/UBSan/float-cast-overflow with leak detection also passes 302/302.
+The 24 public-example firmware profiles (UP, split, forced-core0, each with
+USB/TEST/BENCH/Wi-Fi/lwIP/MQTT/MQTT-TEST/MQTT-BENCH) all link with zero normal
+compiler warnings. All 81 application units pass strict ARM compilation in
+each profile: 1944 checks. All 24 retained SDK probes link, with required
+symbols, no unresolved symbols and no forbidden SDK runtime references.
+These are separate link-only probe ELFs. Do not flash them.
+
+Matched public-example SMP1 MQTT production image: text 419952 B, data
+1008 B, BSS 191220 B, exactly unchanged from `c5febe4`. MQTT TEST image:
+text 409048 -> 408912 B, data 1008 -> 1008 B, BSS 189764 -> 189772 B.
+The TEST-only linked static delta is +8 B, including alignment. INFO108 B,
+message116 B, event12 B and summary52 B remain unchanged. No task, stack or
+heap is added. Compiler frames and host schedules are not hardware stack,
+CPU, latency or deadline acceptance.
+
+Red and final logs, isolated public source, SDK probes and resource reports
+are under `build/review/round2/`. No push, flash or device result is included.
