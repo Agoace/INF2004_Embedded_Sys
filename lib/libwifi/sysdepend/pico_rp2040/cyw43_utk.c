@@ -31,7 +31,7 @@
  * that one must stay out of here). Needed so join/link failures are
  * actually visible on the console instead of only sitting in radio_status. */
 #include <tm/tmonitor.h>
-#include <tk/smp.h>   /* T_SPLOCK, SpinLock: coherent status snapshot */
+#include <tk/smp.h>   /* Interrupt-preserving status snapshot lock. */
 
 #define CYW43_POLL_MS        2
 
@@ -78,6 +78,8 @@ static T_CYW43_UTK_STATUS radio_status = {
  * from different iterations.  Instead the poll task publishes ONE coherent
  * snapshot per iteration at a single point, and readers copy that under the same
  * lock.  Publishing at one point also keeps every lwIP call outside the lock.
+ * B1: use the interrupt-preserving pair in every profile. In FORCE_CORE0 and
+ * UP, a Wi-Fi task must not preempt a Health reader while it holds this lock.
  */
 static T_SPLOCK status_lock;
 static T_CYW43_UTK_STATUS radio_status_pub = {
@@ -365,9 +367,10 @@ void cyw43_utk_task(int32_t stacd, void *exinf)
 #endif
 #endif
         /* One coherent publication point per poll iteration.  See status_lock. */
-        (void)SpinLock(&status_lock);
+        UINT intsts;
+        (void)ISpinLock(&status_lock, &intsts);
         radio_status_pub = radio_status;
-        (void)SpinUnlock(&status_lock);
+        (void)ISpinUnlock(&status_lock, intsts);
 
         cyw43_utk_poll_end();
         (void)tk_dly_tsk(CYW43_POLL_MS);
@@ -379,7 +382,8 @@ void cyw43_utk_get_status(T_CYW43_UTK_STATUS *status)
     if(status == NULL) return;
     /* Copy the snapshot published once per poll iteration, under the lock that
      * publication uses (RT-0058 finding 3). */
-    (void)SpinLock(&status_lock);
+    UINT intsts;
+    (void)ISpinLock(&status_lock, &intsts);
     *status = radio_status_pub;
-    (void)SpinUnlock(&status_lock);
+    (void)ISpinUnlock(&status_lock, intsts);
 }

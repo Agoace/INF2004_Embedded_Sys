@@ -348,7 +348,7 @@ Holder counts are acquisition sites per lock.
 | `dump_lock` | `subsystem1/log_stream.c:102` | 4 | DUMP admission request, active read, Wi-Fi step |
 | `timing_lock` | `libwifi/.../cyw43_utk_kernel.c:22` | 9 | CYW43 poll, timing window, start status |
 | `metrics_lock` | `subsystem1/robot_mqtt.c:69` | 11 | MQTT writers, Health snapshot |
-| `status_lock` | `libwifi/.../cyw43_utk.c:82` | 2 | radio snapshot publish and copy |
+| `status_lock` | `libwifi/.../cyw43_utk.c:84` | 2 | radio snapshot publish and copy |
 | `stacks_lock` | `platform/app_task.c:208` | 1 | stack scan (Health, Telemetry) |
 | `claim_lock` | `libwifi/.../cyw43_utk_compat.c:37` | — | Wi-Fi task only, not yet audited |
 | `stress_lock` | `platform/app_lock_stress.c:42` | — | test only |
@@ -375,8 +375,11 @@ A plain `SpinLock` is unsafe when two holders sit on the SAME core and the more 
 - `queue_lock`: **removed in RT-0071/F3.** The counters are atomic, so there is no lock here to be unsafe.
 - `timing_lock`: Vehicle 13 and Health 31, both core 0. **Was unsafe; repaired in RT-0069 and RT-0071** - Vehicle's window calls fail fast and a missed close is applied under the lock.
 - `stats_lock`: already interrupt-preserving on every holder after `26d306d`.
-- `metrics_lock`: Wi-Fi 20 on core 1 writes; Health 31 on core 0 reads. Different cores, so contention is bounded by section length. Not a same-core pair.
-- `status_lock`: Wi-Fi 20 on core 1; readers on core 0. Different cores.
+- `metrics_lock`: Wi-Fi 20 and Health 31 use different cores in the split
+  profile, but share core 0 in `FORCE_CORE0=1` and UP. **Repaired in review B1**:
+  every holder uses `ISpinLock`/`ISpinUnlock`.
+- `status_lock`: the same profile-dependent pair. **Repaired in review B1**:
+  both the publisher and the reader preserve and mask the local interrupt state.
 - `stacks_lock`: Health 31 on core 0 and Telemetry 30 on core 1. Different cores.
 
 ### Per-holder rows — verified
@@ -431,20 +434,72 @@ than the eight it started with.
 | `cyw43_utk_start_status` | 145 | IST (atomic read) | core 0 readers, core 1 writer | status read | 1 word |
 | `cyw43_utk_start` | 198, 205 | ISL | core 1, 20 (boot) | reset state, kernel call outside | 3 words |
 
-#### `metrics_lock` — `subsystem1/robot_mqtt.c:69` — different cores, not a same-core pair
+#### Review B1: `metrics_lock` and `status_lock`
 
-| Holder | Line | Variant | Core, priority | Held across | Static bound |
-| --- | --- | --- | --- | --- | --- |
-| `inc` | 96 | SL | core 1, 20 (Wi-Fi) | 1 counter | 1 counter |
-| nine metric setters | 110-172 | SL | core 1, 20 (Wi-Fi) | 1 field | 1 field |
-| `robot_network_metrics` | 348 | SL | core 0, 31 (Health) | snapshot | 1 struct |
+All 13 acquisition sites below now use ISL, with a separate saved `UINT` per
+call. Wi-Fi priority 20 and Health priority 31 share core 0 in the control and
+UP profiles. Plain `SpinLock` does not mask interrupts for the holding interval
+in the real SMP kernel. A Wi-Fi wake could therefore strand a Health holder.
+`ISpinLock` masks before the cross-core claim; `ISpinUnlock` releases before it
+restores the saved mask. This excludes that same-core preemption without losing
+cross-core mutual exclusion. No holder calls another holder.
 
-#### `status_lock` — `libwifi/.../cyw43_utk.c:82` — different cores
+The table gives the maximum source-level content, not a time estimate. The
+isolated host test measures `sizeof(rm_heartbeat_t) = 112` and
+`sizeof(T_CYW43_UTK_STATUS) = 52` bytes. The ARM control-profile disassembly
+confirms a 52-byte `memcpy` for each status copy. It reduces the metrics snapshot
+to six word and four byte shared loads (28 bytes); 112 bytes plus the three
+flag reads remains the conservative source-level bound. No section contains a
+kernel wait, console output, network call or unbounded payload loop. The fixed
+52-byte compiler copy helper is not a scheduler wait.
 
-| Holder | Line | Variant | Core, priority | Held across | Static bound |
-| --- | --- | --- | --- | --- | --- |
-| `cyw43_utk_task` publish | 363 | SL | core 1, 20 (Wi-Fi) | snapshot publish | 1 struct |
-| `cyw43_utk_get_status` | 377 | SL | core 0 (Health, Vehicle) | snapshot copy | 1 struct |
+| Lock / holder | Acquisition line | Maximum content while held |
+| --- | --- | --- |
+| metrics / `inc` | 97 | one 32-bit counter load, add and store |
+| metrics / `metrics_state_set` | 112 | one byte store |
+| metrics / `metrics_subscribed_set` | 120 | one Boolean store |
+| metrics / `metrics_subscribed_and_state` | 130 | one Boolean and one byte store |
+| metrics / `metrics_commands_enabled_set` | 139 | one Boolean store |
+| metrics / `metrics_sonar_missed_add` | 147 | one 32-bit load, add and store |
+| metrics / `metrics_sonar_sequence_set` | 155 | one 32-bit store |
+| metrics / `metrics_observed_priority_unset` | 163 | one byte read and comparison |
+| metrics / `metrics_observed_priority_set_if_unset` | 172 | one byte read and conditional byte store |
+| metrics / `metrics_hook_max_update` | 182 | one 32-bit read and conditional 32-bit store |
+| metrics / `robot_network_metrics` | 359 | one 112-byte snapshot plus three flag reads |
+| status / `cyw43_utk_task` publication | 371 | one 52-byte snapshot copy |
+| status / `cyw43_utk_get_status` | 386 | one 52-byte snapshot copy; null returns before locking |
+
+The B1 sweep covers every `.c` and `.h` under `app_program` and `lib/libwifi`,
+not just the split profile's preprocessed files. No plain lock caller remains.
+Only the three UP API definitions in `smp_single_core.c` remain; they are not
+call sites and are outside this repair. Existing dump, telemetry, timing,
+stack, claim and TEST holders already use interrupt-preserving variants.
+
+Build the isolated regression harness without the broken full host suite:
+
+```sh
+cmake -S tests/core_migration -B build/core-blockers
+make -C build/core-blockers -j4 --output-sync=target
+ctest --test-dir build/core-blockers --output-on-failure
+```
+
+The harness compiles the actual 13 protected sections and real SMP
+`ISpinLock`/`ISpinUnlock` functions extracted from production sources. It models
+only the IRQ and atomic primitives. It checks both incoming interrupt masks,
+conditional branches, a higher-priority same-core task deferred until unlock,
+and a simulated remote holder that releases after one failed claim. A source
+inventory rejects new plain callers; extraction rejects calls inside these
+sections. This does not execute the RP2040 scheduler or measure contention. The full host suite still fails at its
+missing `tk/smp.h` stubs (review M1); this repair does not change them.
+
+B1 software checks: the two isolated tests pass with strict host warnings.
+All 24 firmware builds pass without compiler warnings: UP, split SMP and forced
+core-0 SMP, each with USB, TEST, BENCH, Wi-Fi only, lwIP, MQTT, MQTT TEST and
+MQTT BENCH. Builds use public example settings. Logs and control-profile
+assembly are local under `build/review/`; no image was flashed.
+
+Device maximum wait and interrupt-off time remain **unmeasured**. Section byte
+sizes and successful links must not be reported as hardware timing acceptance.
 
 #### `stacks_lock` — `platform/app_task.c:208` — different cores
 

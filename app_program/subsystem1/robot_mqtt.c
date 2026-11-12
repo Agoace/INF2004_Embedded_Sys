@@ -12,7 +12,7 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
-#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core metrics */
+#include <tk/smp.h>   /* Interrupt-preserving metrics lock. */
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
 #include "robot_network.h"
@@ -62,10 +62,10 @@ static uint32_t state_sequence;
 static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
 
-/* Phase 4: the MQTT task runs on core 1 while Health reads these counters from
- * core 0, so a core-local interrupt mask protects neither.  These are touched
- * only from task context, so plain SpinLock is the right variant under the lock
- * rule.  A zero-filled static already holds the unlocked state. */
+/* B1: Health and Wi-Fi share a core in the control and UP profiles.
+ * Mask local interrupts before the cross-core claim, so Wi-Fi cannot preempt
+ * a Health holder and spin against it. Restore the caller's exact mask.
+ * A zero-filled static already holds the unlocked state. */
 static T_SPLOCK metrics_lock;
 static rm_heartbeat_t health_cache = {.stack_min_free = RM_NO_DATA_U16,
                                       .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
@@ -93,9 +93,10 @@ static uint8_t will_payload[RM_STATUS_SIZE];
  */
 static void inc(uint32_t *value)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     ++*value;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 /*
@@ -107,73 +108,82 @@ static void inc(uint32_t *value)
  */
 static void metrics_state_set(uint8_t state)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     metrics.mqtt_state = state;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static void metrics_subscribed_set(bool value)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     subscribed = value;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 /* Subscription result and state are one fact; set them in one section so Health
  * cannot see the flag and the state disagree. */
 static void metrics_subscribed_and_state(bool value, uint8_t state)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     subscribed = value;
     metrics.mqtt_state = state;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static void metrics_commands_enabled_set(bool value)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     commands_enabled = value;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static void metrics_sonar_missed_add(uint32_t missed)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     metrics.sonar_history_missed += missed;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static void metrics_sonar_sequence_set(uint32_t sequence)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     metrics.latest_sonar_history_sequence = sequence;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static bool metrics_observed_priority_unset(void)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     const bool unset = metrics.wifi_observed_priority == 0u;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
     return unset;
 }
 
 static void metrics_observed_priority_set_if_unset(uint8_t priority)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     if (metrics.wifi_observed_priority == 0u) {
         metrics.wifi_observed_priority = priority;
     }
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 static void metrics_hook_max_update(uint32_t elapsed)
 {
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     if (elapsed > metrics.mqtt_hook_max_us) {
         metrics.mqtt_hook_max_us = elapsed;
     }
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 /*
@@ -345,12 +355,13 @@ void robot_network_metrics(rm_heartbeat_t *out)
     bool connected;
     bool subscribed_now;
     bool commands_now;
-    (void)SpinLock(&metrics_lock);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     snapshot = metrics;
     connected = metrics.mqtt_state >= 2u;
     subscribed_now = subscribed;
     commands_now = commands_enabled;
-    (void)SpinUnlock(&metrics_lock);
+    (void)ISpinUnlock(&metrics_lock, intsts);
 
     out->connect_attempts = snapshot.connect_attempts;
     out->sonar_history_missed = snapshot.sonar_history_missed;
