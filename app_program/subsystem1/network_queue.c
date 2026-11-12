@@ -26,7 +26,8 @@ static uint32_t event_lost;
 static uint32_t command_lost;
 static uint32_t busy[ROBOT_BOARD_COUNT];
 static uint32_t unavailable;
-static uint8_t unavailable_mask;
+/* M2: kernel atomic bit operations require an aligned 32-bit operand. */
+static UW unavailable_mask;
 
 /*
  * RT-0071/F3: these counters are updated from both cores and read from both, and
@@ -34,8 +35,8 @@ static uint8_t unavailable_mask;
  * blocking wait in Vehicle, so there is no lock here at all: every counter is
  * updated with the kernel's atomic RMW, which is a hardware-spinlock claim held
  * for a few instructions on two cores and an interrupt window on one.  The
- * unavailable mask keeps a single writer (the Wi-Fi task), so a plain store and a
- * plain aligned byte read are already indivisible.
+ * unavailable mask also has two writers: Wi-Fi and Health. Each bit update
+ * must be one atomic RMW, not an atomic load followed by an atomic store.
  */
 
 /* Increment a loss counter. Lock-free: no caller can be made to wait. */
@@ -171,22 +172,14 @@ void robot_network_board_result(unsigned int board, int result)
     if (board >= (unsigned int)ROBOT_BOARD_COUNT) {
         return;
     }
-    const uint8_t mask = (uint8_t)(1u << board);
+    const UW mask = (UW)1u << board;
 
-    /*
-     * RT-0083/F1: the reader is an atomic load, so the writer must be an atomic
-     * store as well. A plain C store against an atomic reader is not defined even
-     * when the object is one byte and the Wi-Fi task is the only writer.
-     */
+    /* M2: retain other boards' concurrent updates from either core. */
     if (result >= E_OK) {
-        const uint8_t cur = __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
-        __atomic_store_n(&unavailable_mask, (uint8_t)(cur & (uint8_t)~mask),
-                         __ATOMIC_SEQ_CST);
+        (void)atomic_bitclr(&unavailable_mask, mask);
     } else if (result == E_OBJ || result == E_NOEXS) {
         (void)atomic_inc((UW *)&unavailable);
-        const uint8_t cur = __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
-        __atomic_store_n(&unavailable_mask, (uint8_t)(cur | mask),
-                         __ATOMIC_SEQ_CST);
+        (void)atomic_bitset(&unavailable_mask, mask);
     } else if (result == E_TMOUT) {
         (void)atomic_inc((UW *)&busy[board]);
     }
@@ -216,7 +209,7 @@ void robot_queue_metrics(rm_heartbeat_t *out)
     out->health_busy = __atomic_load_n(&busy[4], __ATOMIC_SEQ_CST);
     out->board_unavailable = __atomic_load_n(&unavailable, __ATOMIC_SEQ_CST);
     out->board_unavailable_mask =
-        __atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
+        (uint8_t)__atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
 }
 
 /* Default metrics provider. The MQTT module overrides it. */

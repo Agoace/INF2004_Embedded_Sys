@@ -280,6 +280,8 @@ vehicle task described below.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 
+- [`tests/test_network_mask.c`](../tests/test_network_mask.c) — M2 deterministic two-writer availability-mask updates; host-only store/RMW instrumentation in SMP0 and SMP1 configurations.
+
 - [`app_program/subsystem1/telemetry.c`](../app_program/subsystem1/telemetry.c) — priority-30 RAM log/dump owner; value messages via `mbf_telemetry`, `TMO_POL` producer sends.
 - [Kernel telemetry](s1-telemetry/TELEMETRY.md) — boards/queues, RAM ownership, local loss policy and current MQTT boundary.
 

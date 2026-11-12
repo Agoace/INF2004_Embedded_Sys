@@ -667,3 +667,24 @@ sample and work time, Wi-Fi poll gaps and reconnect behaviour, telemetry produce
 time, maximum lock wait, maximum interrupt-off time, stop and watchdog response, and
 the active stack margins. Report the image with each number: average load alone does
 not establish a deadline or a stop-response result.
+
+## M2: availability mask has two writers
+
+Wi-Fi and Health both call `robot_network_board_result()`. The private mask
+is now an aligned kernel word. Each set or clear uses one kernel atomic bit
+operation, so another board's concurrent update is retained. The heartbeat
+still copies only the low byte. Busy and unavailable counters are unchanged.
+The operation uses the kernel hardware-lock/IRQ mechanism; it is not a
+formal lock-free guarantee.
+
+`tests/test_network_mask.c` injects a second board update before the old
+store or before the new RMW, with recursion disabled. The eight distinct-bit
+cases (four schedules in each SMP configuration) failed on `af94874` before
+this fix. All six schedules, including same-bit ordering, now pass with both
+initial IRQ states. This is a deterministic host model, not hardware timing.
+Full GCC and Clang suites each pass 233/233.
+
+Matched public-example SMP1 MQTT images: `af94874` text 419840 B, data 1008 B,
+BSS 191212 B; M2 text 419888 B, data 1008 B, BSS 191212 B. The private operand
+grows from 1 B to 4 B; linked static RAM is unchanged because of alignment.
+No task, stack, heap, wire field or motion behavior is added.
