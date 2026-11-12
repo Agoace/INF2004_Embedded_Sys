@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
 
 #include "../app_program/subsystem1/log_stream.h"
 #include "../app_program/subsystem1/mqtt_wire.h"
@@ -31,7 +32,7 @@ static unsigned int row_reads;
 static bool row_gen_error;
 static bool bump_generation_on_open;
 static unsigned int opens;
-static unsigned int irq_off;
+#define irq_off test_smp_irq_mask
 static frame_t frames[MAX_FRAMES];
 static unsigned int frame_count;
 static unsigned int publish_fail_count;
@@ -43,15 +44,12 @@ static uint8_t fail_qos;
 
 void mock_di(UINT *irq)
 {
-    assert(!irq_off);
-    *irq = 7u;
-    irq_off = 1u;
+    *irq = test_smp_irq_save();
 }
 
 void mock_ei(UINT irq)
 {
-    assert(irq == 7u && irq_off);
-    irq_off = 0u;
+    test_smp_irq_restore(irq);
 }
 
 uint32_t drv_time_ms(void)

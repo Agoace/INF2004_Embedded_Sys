@@ -1,7 +1,12 @@
 #ifndef TEST_TKERNEL_H
 #define TEST_TKERNEL_H
 #include <stdint.h>
+#ifndef TK_SUPPORT_SMP
 #define TK_SUPPORT_SMP 1
+#endif
+#ifndef TK_MAX_CORE
+#define TK_MAX_CORE 2
+#endif
 #define EXPORT
 #define IMPORT extern
 #define CONST const

@@ -6,6 +6,12 @@ set(CMAKE_C_EXTENSIONS OFF)
 get_filename_component(REPO "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 enable_testing()
 add_compile_options(-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror -UNDEBUG)
+# M1: one shared SMP double; target-specific kernel headers still win.
+add_library(host_smp_double STATIC smp_stubs/smp_double.c)
+target_include_directories(host_smp_double PRIVATE
+    "${REPO}/tests/smp_stubs" "${REPO}/tests/mtk_stubs")
+include_directories(BEFORE "${REPO}/tests/smp_stubs")
+link_libraries(host_smp_double)
 include_directories("${REPO}/src" "${REPO}/app_program/subsystem2"
     "${REPO}/app_program/subsystem3" "${REPO}/app_program/subsystem5"
     "${REPO}/app_program/vehicle")
@@ -21,6 +27,11 @@ function(host_test name test_file)
         return()
     endif()
     add_executable(${name} ${sources})
+    if("${sources}" MATCHES
+            "imu_service.c|subsystem1/telemetry.c|test_telemetry_log.c")
+        target_sources(${name} PRIVATE
+            "${REPO}/tests/smp_stubs/placement_double.c")
+    endif()
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
@@ -284,3 +295,6 @@ add_test(NAME test_vehicle_junction_start_busy
     COMMAND test_vehicle_junction_A junctionbusy)
 add_test(NAME test_vehicle_junction_start_stale
     COMMAND test_vehicle_junction_A junctionstale)
+
+# Keep this last: placement variants copy fully configured fixture targets.
+include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")

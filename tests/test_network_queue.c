@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
 #include "../app_program/subsystem1/robot_network.h"
 /* Integration-private functions are audited without changing public headers. */
 int robot_event_pop(rm_event_t *out);
@@ -13,10 +14,13 @@ typedef struct {
     unsigned int count,head,capacity;INT size;bool live;
 } queue_t;
 static queue_t queues[3];
-static unsigned int created,deleted,irq_off,di_count,ei_count,sends,receives;
+#define irq_off test_smp_irq_mask
+#define di_count test_smp_saves
+#define ei_count test_smp_restores
+static unsigned int created,deleted,sends,receives;
 static unsigned int fail_create;
-void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=42u;++di_count; }
-void mock_ei(UINT irq) { assert(irq==42u && irq_off);irq_off=0u;++ei_count; }
+void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 ID tk_cre_mbf(const T_CMBF *value) {
     const unsigned int slot=created%3u;assert(!irq_off && value && value->mbfatr==TA_TFIFO);
     const INT size=slot==0u ? (INT)sizeof(rm_event_t) : (INT)sizeof(robot_command_t);

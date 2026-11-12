@@ -100,7 +100,7 @@ ID tk_cre_cyc(const T_CCYC *config)
 {
     ++create_calls;
     assert(config->cyctim == 10u && config->cycphs == 10u);
-    assert(config->assprc == TP_PRC1);
+    assert(config->assprc == app_prc_core1());
     cyclic_function = config->cychdr;
     return create_error != 0 ? E_SYS : 6;
 }
@@ -113,7 +113,7 @@ ER tk_sta_cyc(ID id)
 
 ID app_start_task(FP entry, PRI priority, UW core, const char *name)
 {
-    assert(priority == 14 && core == TP_PRC1);
+    assert(priority == 14 && core == app_prc_core1());
     assert(strcmp(name, "imu_task") == 0);
     entry_function = entry;
     return start_error != 0 ? E_SYS : 7;

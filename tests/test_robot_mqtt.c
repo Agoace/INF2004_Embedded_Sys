@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
 #include "lwip/apps/mqtt.h"
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/subsystem1/network_queue.h"
@@ -21,7 +22,10 @@ typedef struct {
 } publication_t;
 static publication_t publications[256];
 static unsigned int publication_count,connect_count,new_count,subscribe_count,priority_reads;
-static unsigned int irq_off,di_count,ei_count,hook_calls;
+#define irq_off test_smp_irq_mask
+#define di_count test_smp_saves
+#define ei_count test_smp_restores
+static unsigned int hook_calls;
 static uint32_t now_ms,clock_calls;
 static bool in_hook,fail_new;
 static err_t connect_result,subscribe_result;
@@ -47,8 +51,8 @@ static unsigned int event_reads,sonar_reads;
 static telemetry_log_index_t ram_index={.generation=7u,.rows=2u,.events=1u,.lost=9u,.newest_ms=0u};
 static bool ram_busy;
 static unsigned int row_reads,event_log_reads;
-void mock_di(UINT *irq) { assert(!irq_off);*irq=33u;irq_off=1u;++di_count; }
-void mock_ei(UINT irq) { assert(irq==33u && irq_off);irq_off=0u;++ei_count; }
+void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 static uint32_t boot_identity=0x11223344u;
 uint32_t boot_id_get(void) { return boot_identity; }
 uint32_t drv_time_ms(void) { return now_ms; }

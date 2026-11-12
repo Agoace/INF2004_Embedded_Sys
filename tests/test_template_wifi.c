@@ -2,12 +2,27 @@
 #include <stdint.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
+#ifndef APP_FORCE_CORE0
+#define APP_FORCE_CORE0 0
+#endif
 #include "../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
-static unsigned int locked,di_calls,ei_calls,clock_index,creates,starts,deletes;
+#define locked test_smp_irq_mask
+#define di_calls test_smp_saves
+#define ei_calls test_smp_restores
+static unsigned int clock_index,creates,starts,deletes;
+static uint32_t stack_pointer = 0x20010000u;
+uint32_t template_mock_stack_pointer(unsigned int level)
+{
+    assert(level == 0u);
+    return stack_pointer;
+}
+extern void cyw43_utk_stack_top(uint32_t sp);
+extern uint32_t cyw43_utk_stack_free(void);
 static uint64_t clock_values[5];
 static int create_result=7,start_result;
-void template_mock_di(UINT *irq) { assert(locked==0u);locked=1u;*irq=123u;++di_calls; }
-void template_mock_ei(UINT irq) { assert(locked==1u && irq==123u);locked=0u;++ei_calls; }
+void template_mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void template_mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 uint64_t time_us_64(void) {
     assert(clock_index<5u);
     assert(locked==(clock_index==1u ? 1u : 0u));
@@ -19,7 +34,9 @@ ID tk_cre_tsk(const T_CTSK *value) {
     assert(value->itskpri==20 && value->stksz==(TM_NET_LWIP ? 8192 : 6144));
     assert(strcmp((const char *)value->dsname,"cyw43")==0);
 #if TK_SUPPORT_SMP
-    assert(value->tskatr==(TA_HLNG|TA_RNG1|TA_ASSPRC) && value->assprc==TP_PRC1);
+    const UW expected = TP_PRC1 + (APP_FORCE_CORE0 ? 0u : 1u);
+    assert(value->tskatr==(TA_HLNG|TA_RNG1|TA_ASSPRC));
+    assert(value->assprc == expected);
 #else
     assert(value->tskatr==(TA_HLNG|TA_RNG1) && value->assprc==0u);
 #endif
@@ -91,6 +108,21 @@ int main(int argc,char **argv) {
         assert(value.polls==8u && value.gaps==7u && value.gap_max_us==10001u && value.gaps_over_10000==1u);
         assert(value.work_total_us==520u && value.work_max_us==100u && value.probe_max_us==9u);
     }
+    /* The SP adapter also exercises the production sampled low-water logic. */
+    assert(cyw43_utk_stack_free() == 0u);
+    cyw43_utk_stack_top(stack_pointer);
+    const uint32_t capacity = TM_NET_LWIP ? 8192u : 6144u;
+    assert(cyw43_utk_stack_free() == capacity);
+    stack_pointer -= 512u;
+    poll(1000000u, 20u);
+    assert(cyw43_utk_stack_free() == capacity - 512u);
+    stack_pointer += 256u;
+    cyw43_utk_stack_top(stack_pointer); /* Cannot reset the original top. */
+    poll(1010000u, 20u);
+    assert(cyw43_utk_stack_free() == capacity - 512u);
+    stack_pointer = 0x20010000u - capacity;
+    poll(1020000u, 20u);
+    assert(cyw43_utk_stack_free() == 0u);
     assert(!locked && di_calls==ei_calls);
     return 0;
 }

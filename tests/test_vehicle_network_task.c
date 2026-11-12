@@ -12,7 +12,10 @@
 #include "../app_program/vehicle/vehicle_board.h"
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/vehicle/run_stats.h"
-static unsigned int mode,irq_off,network_events,network_lost,dump_requests,command_losses;
+#include <tk/smp.h>
+#define irq_off test_smp_irq_mask
+static unsigned int mode, network_events, network_lost, dump_requests;
+static unsigned int command_losses;
 static robot_command_t ordinary[8],estop_slot;
 static unsigned int command_head,command_tail;
 static bool have_estop,injected,verified_dump,verified_priority;
@@ -20,8 +23,8 @@ static unsigned int rows_at_dump,rows_after_stop;
 static uint32_t stopped_at;
 static bool rejected_uncalibrated;
 static unsigned int hump_events;
-void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
-void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
+void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;

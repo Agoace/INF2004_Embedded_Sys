@@ -3,15 +3,24 @@
 #include <stdarg.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
+#include "../app_program/app.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
-static bool full;static int irq_off;static unsigned int kr,ve,bytes,reports;
+#define irq_off test_smp_irq_mask
+static bool full;static unsigned int kr,ve,bytes,reports;
 static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
-ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==30 && core==1u);entry=f;return 7; }
+ID app_start_task(FP function, PRI priority, UW core, const char *name)
+{
+    (void)name;
+    assert(priority == 30 && core == app_prc_core1());
+    entry = function;
+    return 7;
+}
 ER tk_snd_mbf(ID id,const void *m,INT size,TMO timeout) {
     assert(id==1 && size==(INT)sizeof(telemetry_message_t) && timeout==TMO_POL && !irq_off);
     if (full) return E_TMOUT;
@@ -22,8 +31,8 @@ INT tk_rcv_mbf(ID id,void *m,TMO timeout) {
     if (tail==head) longjmp(end,1);
     *(telemetry_message_t *)m=queue[tail++%64u];return (INT)sizeof(telemetry_message_t);
 }
-void mock_di(UINT *irq) { assert(!irq_off);*irq=0u;irq_off=1; }
-void mock_ei(UINT irq) { assert(irq==0u && irq_off);irq_off=0; }
+void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 ER tk_dly_tsk(RELTIM delay) { assert(delay==20u && !irq_off);return E_OK; }
 const char *drv_watchdog_reset_name(void) { return "watchdog"; }
 void app_task_report(void) { ++reports; }

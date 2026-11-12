@@ -9,7 +9,7 @@
 #include "../app_program/platform/app_task.h"
 static jmp_buf finished;
 static unsigned int inits,starts,tests,reports,watchdog_tests,priority_calls,aborts;
-static unsigned int source_lines;
+static unsigned int source_lines, migration_tests;
 static PRI priority=1;
 static bool fail_priority;
 int drv_time_init(void) { return E_OK; }
@@ -37,7 +37,26 @@ ER tk_chg_pri(ID id,PRI pri) {
     assert(APP_TEST && id==TSK_SELF && pri==20 && starts==5u && tests==0u);
     ++priority_calls;if (fail_priority) return E_SYS;priority=pri;return E_OK;
 }
-void app_task_report(void) { assert(priority==20 && tests==5u);++reports; }
+void app_lock_stress_run(void)
+{
+    assert(priority == 20 && tests == 5u && migration_tests == 0u);
+    ++migration_tests;
+}
+void log_stream_admission_selftest(void)
+{
+    assert(priority == 20 && tests == 5u && migration_tests == 1u);
+    ++migration_tests;
+}
+void telemetry_contention_test(void)
+{
+    assert(priority == 20 && tests == 5u && migration_tests == 2u);
+    ++migration_tests;
+}
+void app_task_report(void)
+{
+    assert(priority == 20 && tests == 5u && migration_tests == 3u);
+    ++reports;
+}
 void subsystem2_watchdog_test(void) { assert(priority==20 && tests==5u && reports==1u);++watchdog_tests; }
 int tm_printf(const UB *format,...) {
     if (strstr((const char *)format,"ABORT")) ++aborts;
@@ -57,20 +76,25 @@ int main(int argc,char **argv) {
     assert(inits==5u && starts==5u && source_lines==1u);
 #if APP_TEST
     assert(priority_calls==1u);
-    if (fail_priority) assert(priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==1u);
+    if (fail_priority) {
+        assert(priority == 1 && tests == 0u && reports == 0u);
+        assert(watchdog_tests == 0u && aborts == 1u && migration_tests == 0u);
+    }
 #if APP_IMU_STREAM
     else {
         assert(priority == 20 && tests == 1u && reports == 0u);
-        assert(watchdog_tests == 0u && aborts == 0u);
+        assert(watchdog_tests == 0u && aborts == 0u && migration_tests == 0u);
     }
 #else
     else {
         assert(priority == 20 && tests == 5u && reports == 1u);
-        assert(watchdog_tests == 1u && aborts == 0u);
+        assert(watchdog_tests == 1u && aborts == 0u && migration_tests == 3u);
     }
 #endif
 #else
-    assert(priority_calls==0u && priority==1 && tests==0u && reports==0u && watchdog_tests==0u && aborts==0u);
+    assert(priority_calls == 0u && priority == 1 && tests == 0u);
+    assert(reports == 0u && watchdog_tests == 0u && aborts == 0u);
+    assert(migration_tests == 0u);
 #endif
     return 0;
 }
