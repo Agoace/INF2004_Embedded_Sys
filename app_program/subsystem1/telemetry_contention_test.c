@@ -76,8 +76,6 @@ static void test_dump_admission(void)
 {
     telemetry_message_t dump = {0};
     dump.kind = TELEMETRY_DUMP;
-    telemetry_message_t row = {0};
-    row.kind = TELEMETRY_ROW;
 
     settle();
     telemetry_stats_t before;
@@ -102,6 +100,8 @@ static void test_dump_admission(void)
     expect("loss accounting did not go backwards", after.lost >= before.lost);
 
 #if !TK_SUPPORT_SMP
+    telemetry_message_t row = {0};
+    row.kind = TELEMETRY_ROW;
     /*
      * Rollback. RT-0077/F1: the previous version only PRINTED the result and then
      * settled, so it could PASS on a DUMP that was accepted, consumed and released
