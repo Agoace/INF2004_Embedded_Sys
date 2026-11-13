@@ -246,6 +246,7 @@ class StreamDecoder:
         self.partial = bytearray()
         self.discarding = False
         self.bad_frames = 0
+        self.crc_errors = 0
         self.oversize_frames = 0
 
     def feed(self, data):
@@ -255,8 +256,10 @@ class StreamDecoder:
                 if not self.discarding and self.partial:
                     try:
                         frames.append(decode(bytes(self.partial) + b"\x00"))
-                    except ProtocolError:
+                    except ProtocolError as error:
                         self.bad_frames += 1
+                        if str(error) == "CRC32C mismatch":
+                            self.crc_errors += 1
                 self.partial.clear()
                 self.discarding = False
             elif not self.discarding:

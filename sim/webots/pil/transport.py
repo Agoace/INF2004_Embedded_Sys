@@ -21,9 +21,12 @@ class HostTransport:
     EVENT_LIMIT = 1024
     MAX_RX_CHUNK = 4096
 
-    def __init__(self, session, *, clock=None):
+    def __init__(self, session, *, clock=None, transport_only=False):
         if type(session) is not int or not 1 <= session <= 0xFFFFFFFF:
             raise ValueError("nonzero uint32 host session required")
+        if type(transport_only) is not bool:
+            raise ValueError('transport_only must be an explicit boolean')
+        self.required_caps = 4 if transport_only else CAPABILITIES
         self.session, self.clock = session, clock if clock is not None else ClockBounds()
         self.decoder = StreamDecoder()
         self.state, self.failure = "NEW", None
@@ -87,9 +90,9 @@ class HostTransport:
         if self.state not in ("BOOT", "NEGOTIATED") or self.boot is None:
             raise TransportFault("HELLO requires BOOT, before ARM")
         nonce, caps = u32(self.boot.payload, 0), u32(self.boot.payload, 4)
-        if caps & CAPABILITIES != CAPABILITIES:
+        if caps & self.required_caps != self.required_caps:
             self._fault("Pico lacks operational capabilities; skeletons cannot arm")
-        payload = struct.pack("<6I", nonce, self.session, CAPABILITIES, 1000, 4000, 5000)
+        payload = struct.pack("<6I", nonce, self.session, self.required_caps, 1000, 4000, 5000)
         self.hello_frame = self._queue(Type.HELLO, payload, pc_us, self.boot.sequence)
         self.ack_frame, self.timeline = None, None
         self.state = "BOOT"
@@ -122,9 +125,12 @@ class HostTransport:
         self.state, self.arm_pc_us = "ARM_PENDING", pc_us
         return frame
 
-    def sensor(self, payload, source_us, captured_pc_us):
+    def sensor(self, payload, source_us, captured_pc_us, *, capture_end_pc_us=None):
         self._require_live()
-        self._time(captured_pc_us)
+        end = captured_pc_us if capture_end_pc_us is None else capture_end_pc_us
+        if type(end) is not int or end < captured_pc_us:
+            self._fault('invalid source capture bracket')
+        self._time(end)
         if self.state not in ("ARM_PENDING", "ARMED") or self.timeline is None:
             raise TransportFault("SENSOR requires requested ARM")
         if source_us != self.next_sensor * 1000 or source_us > MAX_SOURCE_US:
@@ -139,15 +145,18 @@ class HostTransport:
             self._fault("initial encoder origin must be zero")
         try:
             phase, uncertainty = self.timeline.validate_capture(
-                source_us, captured_pc_us, self.clock)
-            frame = self._queue(Type.SENSOR, payload, captured_pc_us,
+                source_us, captured_pc_us, self.clock, end)
+            lower = self.clock.pico_range(captured_pc_us).lower
+            upper = self.clock.pico_range(end).upper + 1
+            frame = self._queue(Type.SENSOR, payload, end,
                                 self.applied_output, source_us)
         except (ClockError, ProtocolError) as error:
             self._fault(str(error))
         self.next_sensor += 1
         self.last_sensor_sent = frame.sequence
         self._record("source_capture", source_us=source_us, pc_us=captured_pc_us,
-                     phase_us=phase, uncertainty_us=uncertainty)
+                     capture_end_pc_us=end, source_lower_pico_us=lower,
+                     source_upper_pico_us=upper, phase_us=phase, uncertainty_us=uncertainty)
         return frame
 
     def peek_tx(self, maximum=130):
@@ -187,7 +196,8 @@ class HostTransport:
             self._fault("RX chunk exceeds bounded transport input")
         for frame in self.decoder.feed(data):
             self._record("rx_complete", pc_us=received_pc_us, type=frame.type,
-                         seq=frame.sequence, source_us=frame.source_us)
+                         seq=frame.sequence, source_us=frame.source_us,
+                         session=frame.session, ack=frame.ack, payload_hex=frame.payload.hex())
             if frame.type == Type.BOOT:
                 if self.boot is not None and u32(frame.payload, 0) != u32(self.boot.payload, 0):
                     self._fault("Pico reset/new nonce; new host session required")
