@@ -142,7 +142,10 @@ static const dr_config_t DETOUR_CFG = {
            /* First straight: wall triangle d / cos(turn) + 50, at most
             * 700 mm (operator 2026-11-13), not vehicle_mm. */
            .first_extra_mm = 50u,
-           .first_max_mm = 700u},
+           .first_max_mm = 700u,
+           /* Trim the turn away: pass the corner by half the robot
+            * width 80 (160 mm widest) + margin 30. */
+           .first_clear_mm = 110u},
     .straight_mm_s = 131,
     .turn_mm_s = 131,
     .pause_ms = 250u,
