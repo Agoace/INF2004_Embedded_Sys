@@ -38,3 +38,39 @@ target_compile_definitions(test_pil_skeletons PRIVATE
 add_test(NAME test_pil_skeletons COMMAND test_pil_skeletons)
 add_test(NAME test_pil_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_pil_make.py" "${CMAKE_CURRENT_BINARY_DIR}")
+
+foreach(unit metrics dump)
+    add_executable(test_pil_gate1_${unit}
+        "${REPO}/tests/test_pil_gate1_${unit}.c"
+        "${REPO}/app_program/sim/pil_gate1_${unit}.c"
+        "${REPO}/app_program/sim/pil_wire.c")
+    set_property(TARGET test_pil_gate1_${unit} PROPERTY LINK_LIBRARIES "")
+    target_include_directories(test_pil_gate1_${unit} PRIVATE
+        "${REPO}/app_program/sim")
+    add_test(NAME test_pil_gate1_${unit} COMMAND test_pil_gate1_${unit})
+endforeach()
+file(READ "${REPO}/tests/fixtures/pil_gate1_d1.json" D1_FIXTURES)
+string(JSON D1_COUNT LENGTH "${D1_FIXTURES}" vectors)
+math(EXPR D1_LAST "${D1_COUNT} - 1")
+foreach(index RANGE 0 ${D1_LAST})
+    foreach(field name accepted_envelope wire_hex)
+        string(JSON D1_${field} GET "${D1_FIXTURES}" vectors ${index} ${field})
+    endforeach()
+    if(D1_accepted_envelope)
+        set(mode accept)
+    else()
+        set(mode reject)
+    endif()
+    add_test(NAME "test_pil_gate1_d1_${D1_name}" COMMAND test_pil_gate1_dump
+        "${mode}" "${D1_wire_hex}")
+endforeach()
+add_test(NAME test_pil_gate1_d1_reference COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/generate_pil_gate1_fixtures.py" --check)
+add_executable(pil_gate1_fixture "${REPO}/tests/pil_gate1_fixture.c"
+    "${REPO}/app_program/sim/pil_gate1_dump.c"
+    "${REPO}/app_program/sim/pil_gate1_metrics.c"
+    "${REPO}/app_program/sim/pil_wire.c")
+set_property(TARGET pil_gate1_fixture PROPERTY LINK_LIBRARIES "")
+target_include_directories(pil_gate1_fixture PRIVATE "${REPO}/app_program/sim")
+add_test(NAME test_pil_gate1_c_fixture COMMAND pil_gate1_fixture
+    "${CMAKE_CURRENT_BINARY_DIR}/pil_gate1_c_fixture.bin")

@@ -82,6 +82,8 @@ not current acceptance reports. Local course originals are not public records.
 ## Simulation
 
 - [PIL_PROTOCOL.md](simulation/PIL_PROTOCOL.md) — frozen PIL v1 bytes, clocks, safety and host-only Stage 0 / hardware Gate 1 boundary.
+- [PIL_GATE1.md](simulation/PIL_GATE1.md) — approved host-only transport plan and first reducer/D1 checkpoint; no UART runtime or hardware result yet.
+- [PIL_GATE1_DIAGNOSTICS.md](simulation/PIL_GATE1_DIAGNOSTICS.md) — approved separate stopped-USB D1 records, exact coverage, raw extrema and one-time quantization.
 - [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.
 - [WEBOTS_PIL.md](simulation/WEBOTS_PIL.md) — host-only Webots PIL course/world generator, robot PROTO, explicit assumptions, frozen-v1 PC transport, host tests and R2025a load smokes; no Pico bridge or hardware timing acceptance.

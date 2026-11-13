@@ -419,6 +419,19 @@ vehicle task described below.
   contracts and real-alarm register surface with host register doubles.
   [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
+- [Gate 1 plan/status](simulation/PIL_GATE1.md) is host-only work in progress;
+  [D1 diagnostics](simulation/PIL_GATE1_DIAGNOSTICS.md) is the approved separate
+  stopped-USB contract, not a change to the frozen UART v1 envelope.
+  [`pil_gate1_metrics.c`](../app_program/sim/pil_gate1_metrics.c) reduces raw
+  all-event extrema; [`pil_gate1_dump.c`](../app_program/sim/pil_gate1_dump.c)
+  packs D1 bytes only. Neither module opens UART or supplies a runtime task.
+  [`test_pil_gate1_metrics.c`](../tests/test_pil_gate1_metrics.c) is the wrap/oracle
+  test; [`test_pil_gate1_dump.c`](../tests/test_pil_gate1_dump.c) checks envelopes.
+  [`pil_gate1_fixture.c`](../tests/pil_gate1_fixture.c) generates synthetic host
+  cohorts with the production helpers, not hardware measurements.
+  [`pil_gate1_d1.json`](../tests/fixtures/pil_gate1_d1.json) and
+  [`generate_pil_gate1_fixtures.py`](../tests/generate_pil_gate1_fixtures.py)
+  retain independent D1 envelope bytes. No Gate1 image exists yet.
   Runtime UART, virtual edges and IMU register emulation are not implemented.
 - [Webots PIL record](simulation/WEBOTS_PIL.md) — PC side.
   [`course_builder.py`](../sim/webots/pil/course_builder.py),
