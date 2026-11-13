@@ -148,6 +148,20 @@ static void begin(dt_t *dt, dt_step_t step) {
     dt->sweep_seen = dt->sweep_lost = 0u;
     dt->sweep_end = DT_SWEEP_NONE;
     dt->target_deg = 0u; /* turns look first */
+    dt->first_leg_mm = 0u;
+    dt->trimming = false;
+    if (step == DT_STRAIGHT && dt->straights == 0u && dt->cfg.first_max_mm != 0u) {
+        /* Wall triangle: hypotenuse to the wall line, then extra. */
+        const int c = dt_cos1000(dt->heading);
+        uint32_t leg = dt->cfg.first_max_mm;
+        if (c > 0 && dt->wall_mm > 0) {
+            const int64_t hyp = (int64_t)dt->wall_mm * 1000 / c + dt->cfg.first_extra_mm;
+            if (hyp < (int64_t)leg) {
+                leg = (uint32_t)hyp;
+            }
+        }
+        dt->first_leg_mm = leg;
+    }
     if (step == DT_ON_LINE) {
         dt->leg_mm = dt->cfg.line_ahead_mm;
     }
@@ -193,6 +207,7 @@ void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t ob
     /* The obstacle must be outside the turn circle round the rear axle. */
     const int32_t front = (int32_t)cfg->sensor_ahead_mm + obstacle_mm;
     const int32_t need = (int32_t)cfg->sweep_mm + cfg->margin_mm;
+    dt->wall_mm = front;
     if (front < need) {
         dt->leg_mm = (uint32_t)(need - front);
         begin(dt, DT_BACK);
@@ -202,8 +217,42 @@ void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t ob
 }
 
 static bool sweeping(const dt_t *dt) {
-    return dt->cfg.sweep_deg_s != 0u && is_turn(dt) && !dt->backing &&
+    return dt->cfg.sweep_deg_s != 0u && is_turn(dt) && !dt->backing && !dt->trimming &&
            dt->sweep_end == DT_SWEEP_NONE;
+}
+
+/* Smallest heading (S frame, whole degrees, below the heading now) whose
+ * path from the axle passes the last seen corner by first_clear_mm on the
+ * obstacle side; -1 when none. */
+static int trim_target(const dt_t *dt) {
+    if (!dt->edge_valid || dt->cfg.first_clear_mm == 0u) {
+        return -1;
+    }
+    const int ray = dt->edge_deg + dt->servo_deg;
+    const int64_t ex = (int64_t)dt->cfg.sensor_ahead_mm * dt_cos1000(dt->edge_deg) +
+                       (int64_t)dt->edge_mm * dt_cos1000(ray);
+    const int64_t ey = (int64_t)dt->cfg.sensor_ahead_mm * dt_sin1000(dt->edge_deg) +
+                       (int64_t)dt->edge_mm * dt_sin1000(ray);
+    const int64_t need = -(int64_t)dt->cfg.first_clear_mm * 1000000;
+    for (int th = 0; th < dt->heading; ++th) {
+        if (-ex * dt_sin1000(th) + ey * dt_cos1000(th) <= need) {
+            return th;
+        }
+    }
+    return -1;
+}
+
+/* TURN_AWAY passed the edge: trim toward the corner, or go straight. */
+static void away_done(dt_t *dt) {
+    dt->heading = (int16_t)(dt->heading + turn_deg(dt));
+    const int th = trim_target(dt);
+    if (th >= 0) {
+        begin(dt, DT_TURN_TOWARD);
+        dt->trimming = true;
+        dt->trim_deg = dt->heading - th;
+    } else {
+        begin(dt, DT_STRAIGHT);
+    }
 }
 
 bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
@@ -215,6 +264,17 @@ bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
 void dt_triggered(dt_t *dt) {
     dt->pending = true;
     dt->trig_mm = travel_mm(dt);
+    dt->trig_turn_x100 = (int32_t)turn_x100(dt);
+}
+
+/* TURN_AWAY: keep the last seen echo and its heading for the trim. */
+static void note_edge(dt_t *dt, uint16_t mm) {
+    const int32_t t = dt->trig_turn_x100;
+    const int32_t half = (int32_t)dt->cfg.counts_per_deg_x100 / 2;
+    dt->edge_valid = true;
+    dt->edge_mm = mm;
+    dt->edge_deg = dt->heading + (int)((t + (t < 0 ? -half : half)) /
+                                       (int32_t)dt->cfg.counts_per_deg_x100);
 }
 
 /* A look in a turn found nothing to stop for: turn one more step. */
@@ -289,6 +349,7 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             if (dt->step == DT_TURN_AWAY) {
                 if (seen) {
                     dt->seen_once = true;
+                    note_edge(dt, mm);
                 } else if (dt->seen_once) {
                     sweep_stop(dt, DT_SWEEP_LOST, now_ms);
                 }
@@ -308,9 +369,10 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
     } else if (dt->step == DT_TURN_AWAY) {
         if (seen) {
             dt->seen_once = true;
+            note_edge(dt, mm);
             next_look(dt, dt->cfg.away_max_deg);
         } else if (dt->seen_once) {
-            end_turn(dt, DT_STRAIGHT); /* past the edge */
+            away_done(dt); /* past the edge */
         } else {
             next_look(dt, dt->cfg.away_max_deg);
         }
@@ -375,6 +437,8 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
             } else if (reason == DT_SWEEP_LIMIT) {
                 dt->heading = (int16_t)dt->sweep_heading;
                 fail(dt, DT_FAIL_TURN_LIMIT);
+            } else if (reason == DT_SWEEP_LOST) {
+                away_done(dt);
             } else {
                 end_turn(dt, DT_STRAIGHT);
                 dt->returning = reason == DT_SWEEP_RETURN;
@@ -387,11 +451,14 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
     switch (dt_step(dt)) {
     case DT_BACK:
         if ((uint32_t)dist >= dt->leg_mm) {
+            dt->wall_mm += dist;
             begin(dt, DT_TURN_AWAY);
         }
         break;
     case DT_TURN_TOWARD:
         if (dt->backing && turn_x100(dt) >= dt->back_x100) {
+            end_turn(dt, DT_STRAIGHT);
+        } else if (dt->trimming && turned(dt, dt->trim_deg)) {
             end_turn(dt, DT_STRAIGHT);
         }
         break;
@@ -403,7 +470,8 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
             if (s >= (int32_t)dt->cfg.return_max_mm) {
                 fail(dt, DT_FAIL_NO_LINE);
             }
-        } else if (s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
+        } else if (dt->first_leg_mm != 0u ? s >= (int32_t)dt->first_leg_mm
+                                          : s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
             end_straight(dt);
             ++dt->straights;
             if (dt->straights >= dt->cfg.max_straights) {
@@ -433,7 +501,7 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
 
     /* After the step switch, so that a new turn looks before it moves. */
     if (dt->cfg.sweep_deg_s == 0u && is_turn(dt) && !dt->looking &&
-        !dt->backing && turned(dt, dt->target_deg)) {
+        !dt->backing && !dt->trimming && turned(dt, dt->target_deg)) {
         dt->looking = true; /* stop, let the robot settle, then read */
         const uint32_t look = now_ms + dt->cfg.look_ms;
         if ((int32_t)(look - dt->settle_ms) > 0) {
