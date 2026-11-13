@@ -38,6 +38,7 @@ not current acceptance reports. Local course originals are not public records.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
 - [UP_SMP_SHIM.md](kernel/UP_SMP_SHIM.md) — M7 real UP lock/atomic contract, red-to-green tests, ARM ordering and zero static RAM delta.
+- [SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — SWD probe wiring (Debug Probe at school, Pi 400 at home), safety rules, run-time memory reads, GDB on both cores and firmware load.
 - [WIFI_STACK_WATERMARK.md](kernel/WIFI_STACK_WATERMARK.md) — M9 pre-start painted radio stack, 256 B reporting rule, tests and static-RAM increase versus removed heap allocation; hardware gate Not run.
 - [CORE_PLACEMENT.md](kernel/CORE_PLACEMENT.md) — core placement, lock audit,
   tests and the [M8 application startup handoff](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)

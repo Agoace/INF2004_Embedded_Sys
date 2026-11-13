@@ -41,6 +41,7 @@ The archived development record retains older CMake bench examples.
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
+| SWD debug probe | [docs/kernel/SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — wiring, safety, memory reads, GDB on both cores |
 | Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Current architecture | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — tasks/cores, interrupt/polling rules and shell routes; [`vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), [`test_vehicle_sm.c`](../tests/test_vehicle_sm.c). |
