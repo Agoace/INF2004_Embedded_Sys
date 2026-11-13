@@ -434,6 +434,15 @@ vehicle task described below.
   frozen-v1 transport; [`check_c_interop.py`](../sim/webots/tools/check_c_interop.py)
   compares them with the C codec. Tests: [`sim/webots/tests/`](../sim/webots/tests/).
   Host-only; hardware Gate 1 is not run.
+  Gate 1 host side (not hardware acceptance, see
+  [Gate 1 host code](simulation/WEBOTS_PIL.md#gate-1-host-code-not-hardware-acceptance)):
+  [`gate1.py`](../sim/webots/pil/gate1.py),
+  [`serial_io.py`](../sim/webots/pil/serial_io.py) and
+  [`gate1_soak.py`](../sim/webots/tools/gate1_soak.py) run the opt-in by-id
+  Probe soak; [`gate1_diagnostics.py`](../sim/webots/pil/gate1_diagnostics.py),
+  [`gate1_report.py`](../sim/webots/tools/gate1_report.py) and
+  [`check_d1_interop.py`](../sim/webots/tools/check_d1_interop.py) correlate
+  stopped D1 evidence. Tests: [`test_gate1.py`](../sim/webots/tests/test_gate1.py).
 - [S3 sensor model](simulation/S3_SENSOR_MODEL.md) — exploratory, not calibration.
   [`s3_geometry.py`](../sim/webots/pil/s3_geometry.py),
   [`s3_assets.py`](../sim/webots/pil/s3_assets.py),
@@ -443,6 +452,11 @@ vehicle task described below.
   [`s3_profiles.py`](../sim/webots/pil/s3_profiles.py) and
   [`s3_sensor_profiles.json`](../calibration/s3_sensor_profiles.json); tests are
   `sim/webots/tests/test_s3_*`.
+- [S3 fast runtime F1](simulation/S3_FAST_RUNTIME_F1.md) — host-only flat
+  reference: [`s3_fast.py`](../sim/webots/pil/s3_fast.py),
+  [`s3_referee.py`](../sim/webots/pil/s3_referee.py),
+  [`s3_f1_check.py`](../sim/webots/pil/s3_f1_check.py). Straight, barcode,
+  CROSS and T only; the strict time gate FAIL is kept.
 
 ## Approved template deviations
 

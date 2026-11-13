@@ -86,6 +86,7 @@ not current acceptance reports. Local course originals are not public records.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.
 - [WEBOTS_PIL.md](simulation/WEBOTS_PIL.md) — host-only Webots PIL course/world generator, robot PROTO, explicit assumptions, frozen-v1 PC transport, host tests and R2025a load smokes; no Pico bridge or hardware timing acceptance.
 - [S3_SENSOR_MODEL.md](simulation/S3_SENSOR_MODEL.md) — exploratory S3 geometry/ADC reference, tracked fit and held-out FAIL checks, null GP26/27 profiles, sensor yaw tests and offline-only speed/accuracy limits; not calibration.
+- [S3_FAST_RUNTIME_F1.md](simulation/S3_FAST_RUNTIME_F1.md) — host-only flat rectangle integrals and independent fine-ray referee; accuracy PASS, strict three-channel maximum-time gate FAIL; curves unsupported, no physical calibration claim.
 - [SIMULATION.md](simulation/SIMULATION.md) — implemented host model, interfaces, assumptions, echo-fit and box-sweep summaries; not kernel/track proof.
 
 ## Archive
