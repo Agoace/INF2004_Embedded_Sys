@@ -75,6 +75,9 @@ class Recorder:
         self.stopped_status_observed = False
         self.image_sha256 = None
         self.profile_flags = None
+        self.bootstrap_bad_frames = 0
+        self.bootstrap_crc_errors = 0
+        self.bootstrap_oversize_frames = 0
 
     def record(self, event, pc_us, **details):
         self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
@@ -171,9 +174,15 @@ class Recorder:
             'serial': {'baud': 921600, 'data_bits': 8, 'parity': 'none',
                        'stop_bits': 1, 'flow_control': False},
             'counts': dict(self.counters), 'input_queue_depth_max': self.queue_max,
-            'decoder_bad_frames': host.decoder.bad_frames,
-            'decoder_crc_errors': host.decoder.crc_errors,
-            'decoder_oversize_frames': host.decoder.oversize_frames,
+            'decoder_bad_frames': host.decoder.bad_frames - self.bootstrap_bad_frames,
+            'decoder_crc_errors': host.decoder.crc_errors - self.bootstrap_crc_errors,
+            'decoder_oversize_frames': host.decoder.oversize_frames - self.bootstrap_oversize_frames,
+            'decoder_total_bad_frames': host.decoder.bad_frames,
+            'decoder_total_crc_errors': host.decoder.crc_errors,
+            'decoder_total_oversize_frames': host.decoder.oversize_frames,
+            'bootstrap_discarded_bad_frames': self.bootstrap_bad_frames,
+            'bootstrap_discarded_crc_errors': self.bootstrap_crc_errors,
+            'bootstrap_discarded_oversize_frames': self.bootstrap_oversize_frames,
             'unmeasured': ['Pico endpoint staging/source-to-availability',
                            'Pico actual apply/source-to-apply', 'native alarm jitter',
                            'pause/unplug/reset/no-auto-rearm hardware cases'],
@@ -185,6 +194,45 @@ class Recorder:
         temporary.replace(self.output / 'summary.json')
         self.stream.close()
         return summary
+
+
+def receive_chunk(host, recorder, data, pc_us):
+    """Only before valid BOOT, retain/count malformed startup fragments.
+
+    Boundaries are delimiters, NEVER a byte-offset search inside a failed
+    packet. A good first BOOT is accepted even without a leading delimiter.
+    Process spans separately so post-BOOT errors in the same read stay fatal.
+    """
+    if not isinstance(data, (bytes, bytearray)) or len(data) > host.MAX_RX_CHUNK:
+        host.receive(data, pc_us)  # Existing fail-closed input bounds.
+        return
+    start = 0
+    while start < len(data):
+        delimiter = data.find(b'\x00', start)
+        end = len(data) if delimiter < 0 else delimiter + 1
+        bootstrap = host.boot is None
+        before = (host.decoder.bad_frames, host.decoder.crc_errors, host.decoder.oversize_frames)
+        host.receive(data[start:end], pc_us)
+        delta = tuple(after - old for after, old in zip(
+            (host.decoder.bad_frames, host.decoder.crc_errors, host.decoder.oversize_frames), before))
+        if delta[0]:
+            if not bootstrap:
+                raise GateFailure('invalid received frame')
+            recorder.bootstrap_bad_frames += delta[0]
+            recorder.bootstrap_crc_errors += delta[1]
+            recorder.bootstrap_oversize_frames += delta[2]
+            recorder.record('bootstrap_discard', pc_us, bad_frames=delta[0],
+                            crc_errors=delta[1], oversize_frames=delta[2],
+                            readiness_or_lease_renewed=False)
+        for event in host.drain_events():
+            if bootstrap and event['event'] == 'rx_complete' and event['type'] != Type.BOOT:
+                recorder.record('bootstrap_frame_ignored', pc_us, frame=event)
+            else:
+                recorder.observe(event, host)
+        if bootstrap and host.boot is not None:
+            recorder.record('first_valid_boot', pc_us, seq=host.boot.sequence,
+                            source_us=host.boot.source_us)
+        start = end
 
 
 def neutral_payload(source_us):
@@ -234,9 +282,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             if chunk:
                 received = clock.now_us()
                 recorder.record('raw_rx', received, packet_hex=chunk.hex())
-                host.receive(chunk, received)
-                if host.decoder.bad_frames:
-                    raise GateFailure('invalid received frame')
+                receive_chunk(host, recorder, chunk, received)
             for event in host.drain_events():
                 recorder.observe(event, host)
             now = clock.now_us()
@@ -326,7 +372,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                     recorder.stopped_status_observed = True
                                     recorder.record('stopped_status_observed', received,
                                                     seq=frame.sequence, ack=frame.ack)
-                        if host.decoder.bad_frames:
+                        if host.decoder.bad_frames > recorder.bootstrap_bad_frames:
                             raise GateFailure('invalid frame during stopped drain')
                     clock.sleep_us(50)
         except (OSError, ValueError, TransportFault, GateFailure) as error:

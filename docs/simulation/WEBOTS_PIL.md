@@ -271,6 +271,20 @@ more than one is present, an exact by-id selector is required. A guessed
 `ttyACM` path is rejected. The link is exclusive, nonblocking 921600 8N1 with
 no flow control. The runner does not reconnect or rearm after a fault.
 
+At port open, bytes may start inside a BOOT packet. Before the first fully
+valid BOOT only, malformed startup fragments are retained and counted as
+`bootstrap_discarded_*`. The decoder resumes only at packet delimiters; it never
+scans inside a damaged packet. A valid first BOOT is accepted without requiring
+an extra leading delimiter. Startup junk does not establish readiness, create a
+session or renew progress. After that BOOT, malformed packets fail immediately,
+even if BOOT and corrupt bytes arrived in the same read. `decoder_total_*`
+retains all errors; `decoder_*` excludes only pre-BOOT discards. Pico counters
+are never erased. The original attempt2 RX chunk now accepts BOOTseq2 after one
+startup discard. This is an offline regression check, not a hardware result.
+The regression suite ran144 tests OK with the same three expected S3 failures;
+logs are `build/wip/pil_plan/bootstrap-resync-red.log`,
+`bootstrap-resync-green.log` and `attempt2-bootstrap-replay.log`.
+
 The no-Webots worker sends a synthetic neutral 1 kHz source. Only timing,
 released buttons and zero encoder endpoints are valid; optical, IMU and sonar
 models are explicitly unavailable. OUTPUT is observed, not applied in physics.
