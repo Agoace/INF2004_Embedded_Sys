@@ -76,6 +76,8 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `tools/load_smoke.py` | Bounded load/initial-pose test with explicit PID-group cleanup and retained proof/log. |
 | `pil/serial_io.py` | Explicit Linux Debug Probe by-id selection and bounded nonblocking 921600 8N1 I/O. Import opens nothing. |
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
+| `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
+| `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
 | `pil/robot_profile.py` | Required numeric parameters, sources and assumption flags; mount-coordinate conversion. |
 | `calibration/robot_assumed.json` | Explicit provisional model, not a calibrated robot. |
@@ -253,10 +255,10 @@ hardware result is implied. Logs/proofs remain under `build/webots/` and
 
 ## Gate 1 host code: not hardware acceptance
 
-The new transport-only runner has fake-pair tests. The combined host suite ran
-117 tests successfully, with three existing expected S3 model failures; the
-3026 frozen C/PC comparisons also passed. Logs are in
-`build/wip/pil_plan/gate1-host-tests.log` and
+The transport-only runner and D1 reader have fake-pair and reference-fixture
+tests. The combined host suite ran 135 tests successfully, with three existing
+expected S3 model failures; the 3026 frozen C/PC comparisons also passed. Logs
+are in `build/wip/pil_plan/gate1-d1-host-tests.log` and
 `build/wip/pil_plan/gate1-host-c-interop.log`. These are host software results,
 not Gate 1 hardware results. No serial device was listed or opened during
 development. Hardware execution needs separate operator
@@ -279,8 +281,11 @@ conservative clock intervals, frame sequences/payloads and local inhibition.
 A completed PC write is never called Pico endpoint availability. Queue growth,
 missing/duplicate/reordered frames, invalid packets, stale clocks, late source
 steps, nonzero Pico error counters or nonzero transport-profile PWM stop the
-run and report FAIL. Exit attempts one nonblocking DISARM write, records its
-byte count without claiming delivery, and closes the port.
+run and report FAIL. Local inhibition precedes exit work. A planned stop has a
+bounded 5 ms nonblocking DISARM-write budget and a 100 ms report-drain budget.
+The drain retains final active reports before the inhibited status. Write byte
+counts never claim device delivery. Failed runs do not wait for this drain.
+The port is then closed. Stop/drain time does not count as active soak time.
 
 Reported latency distributions use integer-microsecond nearest-rank
 p50/p95/p99 and maximum values. They cover SYNC round trip, OUTPUT source-age
@@ -290,16 +295,86 @@ not proof of oscillator frequency. Default active-stream duration is 600 s;
 the summary records whether that duration was reached. Logging overhead and
 host scheduling remain part of the measured run, not hidden latency corrections.
 
+The approved transport-only mode is an explicit opt-in:
+`--transport-only-cap4`. It requests only the real-TIMER capability. The normal
+host default still requires all frozen operational bits (`0x1f`). It cannot
+arm a cap4-only image. The soak can retain an operator-supplied `--image-sha256`
+and expected `--profile-flags`. Missing image/placement evidence cannot qualify
+the transport subset. None of these options permits hardware access without
+separate operator approval.
+
 The candidate limits remain fixed: nominal pipeline 4 ms, source expiry 5 ms,
 endpoint availability 3 ms, clock half-width 250 us and source phase 250 us.
-A measured miss is FAIL and stops the run. No bound is increased automatically.
-Pico endpoint staging, actual apply and native-alarm capture records still need
-an approved diagnostic channel. These missing measurements are explicitly
-listed, so the current successful fake/transport run is **INCOMPLETE**, never
-PASS. No availability/apply percentiles are inferred from OUTPUT ACK or PC
-write completion. Capability negotiation for a transport-only Pico profile is
-also pending joint approval; the default host path still requires all frozen
-operational capability bits.
+Native first-C-entry jitter and logical apply jitter each have a candidate
+250 us upper bound. A measured miss is FAIL and stops the run. No bound is
+increased automatically. The 4 ms value is the fixed nominal schedule; actual
+source-to-apply age is reported separately and must meet the 5 ms upper bound.
+
+### Stopped D1 evidence
+
+The SW6 record `docs/simulation/PIL_GATE1_DIAGNOSTICS.md` owns the exact approved
+D1 schema. D1 is a separate stopped USB stream, not a UART v1 extension. Its
+132-byte maximum decoded body uses a dedicated reader. UART v1 stays at 128
+bytes with unchanged types, fields and fixtures. No live USB evidence load is
+added. A later operator capture must retain the Pico USB bytes as a regular
+file; the offline reporter never opens a serial port.
+
+```sh
+python3 sim/webots/tools/gate1_report.py \
+  --pc-run build/webots/gate1-run \
+  --usb-dump build/webots/gate1-stopped-usb.bin \
+  --output build/webots/gate1-correlated.json
+```
+
+The active cohort is the consecutive group of armed transport frames before
+planned DISARM. The reader requires exact record order, identity, CRCs, final
+chain CRC, all 12 metric records and complete cohort counts. Identical complete repeated dumps
+are permitted; changed or partial snapshots cannot be combined. Optional trace
+records remain partial diagnostics, never proof of all-frame coverage.
+
+Every PC capture brackets the actual neutral fixture capture. Stored Pico-time
+intervals include then-valid clock uncertainty, drift and outward timestamp
+rounding. Clock SYNC rounding is separate from drift expansion. For source n,
+let B be its nominal capture time and [lo,hi] its conservative captured interval.
+The reader computes H=max(B-lo) and L=max(hi-B) over the staged prefix.
+
+| All-frame bound | Calculation |
+| --- | --- |
+| Availability upper age | max(Ahi-B) + 1 us + H |
+| Availability lower age | min(Alo-B) - L |
+| Actual apply upper age | max(Phi-B) + 1 us + H |
+| Actual apply lower age | min(Plo-B) - L |
+
+A/P are the Pico's before/after publication/apply TIMER brackets. The extra
+1 us expands the Pico upper read exactly once. Device extrema do not already
+contain it. The reporter also checks endpoint slack, both jitter limits,
+chronology, the contiguous staged/applied prefixes and every active OUTPUT
+ACK. It requires operator image/placement metadata, valid clock/source records,
+planned-stop inhibition and a full ten-minute cohort before it can qualify even
+the transport subset. Bad or absent evidence remains INCOMPLETE; a measured
+limit violation, reported Pico fault or proved OUTPUT loss is FAIL.
+
+Device availability/apply/jitter p50/p95/p99 remain UNMEASURED because D1 retains
+all-event extrema, not every device timestamp. No percentiles are inferred from
+OUTPUT ACKs, PC writes or the small optional trace. A successful host/fake run
+and even a qualified transport subset remain overall **INCOMPLETE**, never a
+full physical Gate 1 PASS. The separate hardware fault campaigns and later
+functional sensor gates are not closed by these tools.
+
+The real C D1 reducer/encoder/chain producer was compiled and checked on the
+host with `tools/check_d1_interop.py` against committed SW6
+`0752fdf2a8c0fc3c92e84d4408c6c466e204a36d`. The tool verified its C source and
+headers against that revision before compilation. Its synthetic fixture has 600004 staged
+frames, 600001 applied frames and three cancelled tail frames across TIMER
+wrap. With declared synthetic capture intervals B +/-5 us, independent PC bounds
+are availability [995,1008] us, actual apply [4015,4030] us, endpoint slack at
+least1997 us, apply jitter at most25 us and native first-C-entry jitter at
+most11 us. Fixture SHA256 is
+`0407811d725221b58321478c66584655a0eba701447382d126f8d16ea6634d40`.
+The full source hashes and result remain under
+`build/webots/gate1-d1-c-interop-0752fdf/` and
+`build/wip/pil_plan/gate1-d1-c-interop-0752fdf.log`. These are **synthetic host checks**,
+not Pico/Probe measurements or a ten-minute hardware result.
 
 ## Remaining work and hardware gate
 

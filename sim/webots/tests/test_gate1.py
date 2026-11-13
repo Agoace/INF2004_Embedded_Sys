@@ -25,7 +25,8 @@ class FakeClock:
 
 class FakePair:
     """Partial write/read pair. Peer time runs independently of source step."""
-    def __init__(self, clock, *, write_limit=130, read_limit=4096, fault=None):
+    def __init__(self, clock, *, write_limit=130, read_limit=4096, fault=None,
+                 capabilities=CAPABILITIES):
         self.clock, self.write_limit, self.read_limit = clock, write_limit, read_limit
         self.fault = fault
         self.closed, self.decoder, self.pending = False, StreamDecoder(), []
@@ -33,7 +34,7 @@ class FakePair:
         self.next_output, self.sensors = None, {}
         self.sequence = {}
         self.sent_frames = []
-        self.queue(Type.BOOT, struct.pack('<4I', 7, CAPABILITIES, 921600, SCHEMA_ID))
+        self.queue(Type.BOOT, struct.pack('<4I', 7, capabilities, 921600, SCHEMA_ID))
 
     def queue(self, kind, payload, ack=NO_ACK, source=None):
         seq = self.sequence.get(kind, 0)
@@ -65,6 +66,11 @@ class FakePair:
                 self.next_output = self.clock.now + 1000
             elif frame.type == Type.SENSOR:
                 self.sensors[frame.sequence] = frame
+            elif frame.type == Type.DISARM:
+                self.next_output = None
+                payload = struct.pack('<hhHBBHBBIIIHHHH', 0, 0, 1500, 0, 6,
+                                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+                self.queue(Type.OUTPUT, payload)
         return count
 
     def read(self, maximum):
@@ -109,14 +115,21 @@ class FakePair:
 
 
 class Gate1Tests(unittest.TestCase):
-    def run_fake(self, *, clock_start=10000, **options):
+    def run_fake(self, *, clock_start=10000, transport_only=False, **options):
         clock = FakeClock(clock_start)
         pair = FakePair(clock, **options)
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'run'
-            summary = run_soak(pair, path, clock=clock, duration_us=40000, session=123)
+            summary = run_soak(pair, path, clock=clock, duration_us=40000, session=123,
+                               transport_only=transport_only)
             self.assertEqual(summary, json.loads((path / 'summary.json').read_text()))
             events = (path / 'events.csv').read_text()
+            if summary['verdict'] == 'INCOMPLETE':
+                from pil.gate1_diagnostics import load_pc_evidence
+                retained = load_pc_evidence(path)
+                self.assertTrue(retained['source_limits_verified'])
+                self.assertTrue(retained['active_output_prefix_complete'])
+                self.assertGreater(retained['active_output_count'], 0)
         self.assertTrue(pair.closed)
         if pair.write_limit >= 130 and pair.fault not in ('unplug', 'txstall'):
             self.assertEqual(pair.sent_frames[-1].type, Type.DISARM)
@@ -129,8 +142,29 @@ class Gate1Tests(unittest.TestCase):
         self.assertGreaterEqual(summary['elapsed_us'], 40000)
         self.assertGreater(summary['metrics_us']['output_age_upper_us']['count'], 0)
         self.assertIn('output_observed_no_physics', events)
+        self.assertIn('stopped_status_observed', events)
+        self.assertTrue(summary['stopped_status_observed'])
         self.assertNotIn('physics_applied', events)
         self.assertTrue(all(f.ack == NO_ACK for f in pair.sent_frames if f.type == Type.SENSOR))
+
+    def test_transport_only_capability_is_explicit(self):
+        from pil.transport import HostTransport, TransportFault
+        boot = Frame(Type.BOOT, 0, 0, 10000, NO_ACK,
+                     struct.pack('<4I', 7, 4, 921600, SCHEMA_ID))
+        normal = HostTransport(123)
+        normal.receive(encode(boot), 10000)
+        with self.assertRaises(TransportFault):
+            normal.hello(10100)
+        gate = HostTransport(123, transport_only=True)
+        gate.receive(encode(boot), 10000)
+        self.assertEqual(struct.unpack_from('<I', gate.hello(10100).payload, 8)[0], 4)
+
+    def test_explicit_cap4_fake_soak(self):
+        summary, _, pair = self.run_fake(transport_only=True, capabilities=4)
+        self.assertEqual(summary['verdict'], 'INCOMPLETE')
+        self.assertEqual(summary['required_capabilities'], 4)
+        hello = next(f for f in pair.sent_frames if f.type == Type.HELLO)
+        self.assertEqual(struct.unpack_from('<I', hello.payload, 8)[0], 4)
 
     def test_fragmented_reads_and_partial_writes(self):
         summary, _, _ = self.run_fake(write_limit=17, read_limit=19)

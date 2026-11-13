@@ -74,9 +74,11 @@ class ClockBounds:
         if transmit < receive:
             raise ClockError("Pico time moved backwards")
         # Optional minima need separate hardware/baud proof. Defaults subtract NOTHING.
-        observation_growth = self._growth(host_rx_us - host_tx_us)
-        result = Interval(transmit - host_rx_us + proven_min_rx_us - observation_growth,
-                          receive - host_tx_us - proven_min_tx_us + observation_growth)
+        observation_growth = self._growth(host_rx_us - host_tx_us + 1)
+        # Each floor-to-us TIMER/monotonic read denotes [t,t+1). Offset
+        # differences therefore need a separate outward1us beyond drift.
+        result = Interval(transmit - host_rx_us + proven_min_rx_us - observation_growth - 1,
+                          receive - host_tx_us - proven_min_tx_us + observation_growth + 1)
         if self.interval is not None:
             previous = self.bounds_at(host_rx_us, qualified=False)
             result = Interval(max(previous.lower, result.lower),
@@ -115,13 +117,18 @@ class Timeline:
     def source_target(self, source_us):
         return self.apply(source_us) - 4000
 
-    def validate_capture(self, source_us, captured_pc_us, clock):
-        interval = clock.pico_range(captured_pc_us)
-        # Midpoint phase error and uncertainty are recorded SEPARATELY, then added.
-        phase = abs(interval.midpoint - self.source_target(source_us))
+    def validate_capture(self, source_us, captured_pc_us, clock, capture_end_pc_us=None):
+        end = captured_pc_us if capture_end_pc_us is None else capture_end_pc_us
+        if type(end) is not int or end < captured_pc_us:
+            raise ClockError('invalid source capture bracket')
+        first, last = clock.pico_range(captured_pc_us), clock.pico_range(end)
+        # Bound pacing across the actual capture bracket, separate from offset
+        # uncertainty. Include the upper endpoint's floor-to-us quantization.
+        target = self.source_target(source_us)
+        phase = max(abs(first.midpoint - target), abs(last.midpoint + 1 - target))
         if phase > 250:
             raise ClockError("source phase error exceeds250us")
-        return phase, interval.halfwidth
+        return phase, max(first.halfwidth, last.halfwidth)
 
     def validate_available(self, source_us, captured_pc_us, available_pico_us, clock):
         """Reference scheduler check using actual fake/device availability time.

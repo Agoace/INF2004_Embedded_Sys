@@ -36,7 +36,7 @@ class Histogram:
         self.counts = Counter()
 
     def add(self, value):
-        value = round(value)
+        value = math.ceil(value)  # Never round an upper bound down.
         if value not in self.counts and len(self.counts) >= 20000:
             raise GateFailure('metric histogram capacity exceeded')
         self.counts[value] += 1
@@ -65,13 +65,16 @@ class Recorder:
         self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
-            'clock_halfwidth_us', 'output_interarrival_us')}
+            'clock_halfwidth_us', 'source_uncertainty_us', 'output_interarrival_us')}
         self.counters = Counter()
         self.previous = {}
         self.last_output_pc = None
         self.first_offset = None
         self.drift = None
         self.queue_max = 0
+        self.stopped_status_observed = False
+        self.image_sha256 = None
+        self.profile_flags = None
 
     def record(self, event, pc_us, **details):
         self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
@@ -82,9 +85,11 @@ class Recorder:
         self.record(name, pc, **event)
         if name == 'source_capture':
             self.metrics['source_phase_us'].add(event['phase_us'])
-            bounds = host.clock.pico_range(pc)
+            self.metrics['source_uncertainty_us'].add(event['uncertainty_us'])
             self.record('source_clock_bounds', pc, source_us=event['source_us'],
-                        lower_pico_us=bounds.lower, upper_pico_us=bounds.upper,
+                        capture_end_pc_us=event['capture_end_pc_us'],
+                        lower_pico_us=event['source_lower_pico_us'],
+                        upper_pico_us=event['source_upper_pico_us'],
                         intended_pico_us=host.timeline.source_target(event['source_us']))
         if name != 'rx_complete':
             return
@@ -120,7 +125,7 @@ class Recorder:
             counters = tuple(u16(payload, off) for off in (24, 26, 28, 30))
             if any(counters):
                 raise GateFailure('Pico loss/bad-frame/missed-schedule/overrun counter nonzero')
-            if host.clock.observations >= 8:
+            if host.clock.observations >= 8 and (host.state != 'FAULT' or payload[7] & 1):
                 bounds = host.clock.pico_range(pc)
                 snapshot = unwrap32(event['source_us'], round(bounds.midpoint))
                 age = bounds.upper - snapshot
@@ -160,6 +165,9 @@ class Recorder:
                          'boot_nonce': (int.from_bytes(host.boot.payload[:4], 'little')
                                         if host.boot else None),
                          'epoch_pico_us': host.timeline.epoch_pico_us if host.timeline else None},
+            'stopped_status_observed': self.stopped_status_observed,
+            'image_sha256': self.image_sha256, 'profile_flags': self.profile_flags,
+            'required_capabilities': host.required_caps,
             'serial': {'baud': 921600, 'data_bits': 8, 'parity': 'none',
                        'stop_bits': 1, 'flow_control': False},
             'counts': dict(self.counters), 'input_queue_depth_max': self.queue_max,
@@ -190,7 +198,8 @@ def neutral_payload(source_us):
     return bytes(payload)
 
 
-def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None):
+def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
+             transport_only=False, image_sha256=None, profile_flags=None):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -199,12 +208,16 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None):
     if type(duration_us) is not int or not 1000 <= duration_us <= 1_700_000_000:
         raise ValueError('soak duration must be1ms..1700s')
     clock = clock or RealClock()
-    host = HostTransport(session or secrets.randbelow(0xffffffff) + 1)
+    host = HostTransport(session or secrets.randbelow(0xffffffff) + 1,
+                         transport_only=transport_only)
     try:
         recorder = Recorder(output)
     except BaseException:
         io.close()
         raise
+    recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
+    recorder.record('run_metadata', clock.now_us(), image_sha256=image_sha256,
+                    profile_flags=profile_flags, required_capabilities=host.required_caps)
     start = clock.now_us()
     end = None
     active_start = None
@@ -248,7 +261,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None):
                 bounds = host.clock.pico_range(now)
                 target = host.timeline.source_target(source)
                 if bounds.midpoint >= target:
-                    host.sensor(neutral_payload(source), source, now)
+                    capture_start = clock.now_us()
+                    payload = neutral_payload(source)
+                    capture_end = clock.now_us()
+                    host.sensor(payload, source, capture_start, capture_end_pc_us=capture_end)
                 # No physics exists in this harness. Leave applied_output=NO_ACK.
                 while host.outputs:
                     frame = host.outputs.popleft()
@@ -270,15 +286,51 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None):
     except KeyboardInterrupt:
         reason = 'operator interrupted; reset/new session required'
     finally:
-        # Local inhibit is immediate; only ONE nonblocking best-effort write.
+        active_elapsed = 0 if active_start is None else clock.now_us() - active_start
         try:
-            now = clock.now_us()
-            packet = host.disarm_packet(3 if reason is None else 7, now)
-            count = io.write(packet)
-            recorder.record('best_effort_disarm', clock.now_us(), bytes=count,
-                            delivered=False, local_model_inhibited=True)
-        except (OSError, ValueError):
-            pass
+            # Local inhibit happens BEFORE bounded write/drain work. A hardware
+            # gate still needs the stopped D1 reason; a write is not delivery.
+            packet = host.disarm_packet(3 if reason is None else 7, clock.now_us())
+            offset, deadline = 0, clock.now_us() + 5000
+            for _ in range(len(packet) + 100):
+                count = io.write(packet[offset:])
+                if type(count) is not int or not 0 <= count <= len(packet)-offset:
+                    raise GateFailure('invalid stop-write result')
+                offset += count
+                recorder.record('best_effort_disarm', clock.now_us(), bytes=count,
+                                delivered=False, local_model_inhibited=True)
+                if offset == len(packet) or reason is not None or clock.now_us() >= deadline:
+                    break
+                clock.sleep_us(50)
+            # A planned stop preserves every final active report before the
+            # final inhibited status. No new source, SYNC or ARM is generated.
+            if reason is None and offset == len(packet):
+                drain_end = clock.now_us() + 100_000
+                while clock.now_us() < drain_end and not recorder.stopped_status_observed:
+                    chunk = io.read(4096)
+                    received = clock.now_us()
+                    if chunk:
+                        recorder.record('raw_rx_after_disarm', received, packet_hex=chunk.hex())
+                        for frame in host.decoder.feed(chunk):
+                            if frame.type == Type.BOOT or frame.session != host.session:
+                                raise GateFailure('reset/session change during stopped drain')
+                            if frame.type == Type.OUTPUT:
+                                recorder.observe({'event': 'rx_complete', 'pc_us': received,
+                                                  'type': frame.type, 'seq': frame.sequence,
+                                                  'source_us': frame.source_us,
+                                                  'session': frame.session, 'ack': frame.ack,
+                                                  'payload_hex': frame.payload.hex()}, host)
+                                if frame.payload[7] & 8:
+                                    raise GateFailure('underflow during stopped drain')
+                                if frame.payload[7] & 4 and not frame.payload[7] & (1 | 16):
+                                    recorder.stopped_status_observed = True
+                                    recorder.record('stopped_status_observed', received,
+                                                    seq=frame.sequence, ack=frame.ack)
+                        if host.decoder.bad_frames:
+                            raise GateFailure('invalid frame during stopped drain')
+                    clock.sleep_us(50)
+        except (OSError, ValueError, TransportFault, GateFailure) as error:
+            reason = reason or str(error)
         finally:
             try:
                 io.close()
@@ -287,5 +339,4 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None):
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
     for event in host.drain_events():
         recorder.record('final_transport_event', clock.now_us(), record=event)
-    return recorder.finish(host, reason,
-                           0 if active_start is None else clock.now_us() - active_start)
+    return recorder.finish(host, reason, active_elapsed)

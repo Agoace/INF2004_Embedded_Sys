@@ -83,6 +83,26 @@ def streaming():
 
 
 class ClockTests(unittest.TestCase):
+    def test_timestamp_quantization_is_separate_from_drift(self):
+        clock = ClockBounds()
+        clock.DRIFT_PPM = 0  # Isolate quantization, never use drift as its allowance.
+        bounds = clock.observe(1000, 1000, 1000, 1000)
+        self.assertEqual((bounds.lower, bounds.upper), (-1, 1))
+        default = ClockBounds().observe(1000, 1000, 1000, 1000)
+        self.assertEqual((default.lower, default.upper), (-2, 2))
+
+    def test_source_capture_retains_outward_bracket(self):
+        host = streaming()
+        frame = host.sensor(sensor_payload(5000), 5000, 111950,
+                            capture_end_pc_us=112050)
+        events = host.drain_events()
+        capture = next(e for e in reversed(events) if e['event'] == 'source_capture')
+        lower = host.clock.pico_range(111950).lower
+        upper = host.clock.pico_range(112050).upper + 1
+        self.assertEqual(capture['source_lower_pico_us'], lower)
+        self.assertEqual(capture['source_upper_pico_us'], upper)
+        self.assertEqual(frame.source_us, 5000)
+
     def test_eight_intersections_and_headroom(self):
         clock = qualified_clock()
         bounds = clock.bounds_at(7200)
