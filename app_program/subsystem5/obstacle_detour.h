@@ -29,6 +29,12 @@
  *                at most first_max_mm (wall triangle: the rear axle
  *                reaches the line of the obstacle wall, then extra).
  *                wall_mm = sensor_ahead_mm + obstacle_mm + the BACK.
+ *   (trim)       With first_clear_mm != 0, after TURN_AWAY the corner is
+ *                put at the last seen echo (its range along the servo ray
+ *                at its trigger). The smallest heading whose path passes
+ *                the corner by first_clear_mm is the target. If it is
+ *                below the heading now, turn toward the obstacle to it
+ *                (step TURN_TOWARD, no readings), then the first STRAIGHT.
  *   TURN_TOWARD  Turn toward the obstacle until it is seen, then back
  *                back_off_fn(turned_deg), or back_off_deg, away (no look; runs 1 and 3 of the
  *                detour clipped the corner with no back-off). Then STRAIGHT.
@@ -92,6 +98,7 @@ typedef struct {
     bool line_return_only;        /* line counts only in the returning STRAIGHT */
     uint16_t first_extra_mm;      /* first STRAIGHT: added to the wall triangle */
     uint16_t first_max_mm;        /* first STRAIGHT limit; 0: off (vehicle_mm rule) */
+    uint16_t first_clear_mm;      /* trim: path to corner clearance; 0: off */
 } dt_config_t;
 
 /* Step: 3 bits. */
@@ -217,6 +224,12 @@ typedef struct {
     int sweep_coast_x10;         /* coast magnitude, tenths of a degree */
     int32_t wall_mm;             /* rear axle to the obstacle wall at TURN_AWAY */
     uint32_t first_leg_mm;       /* first STRAIGHT length; 0: vehicle_mm rule */
+    int32_t trig_turn_x100;      /* turn of the step at the pending trigger */
+    bool edge_valid;             /* TURN_AWAY saw the obstacle */
+    uint16_t edge_mm;            /* last seen echo of TURN_AWAY */
+    int edge_deg;                /* S-frame heading at its trigger */
+    bool trimming;               /* TURN_TOWARD: trim before the first STRAIGHT */
+    int trim_deg;                /* trim angle, degrees */
 } dt_t;
 
 /* Start a detour at the STOP point. side and obstacle_mm come from the

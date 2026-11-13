@@ -713,6 +713,53 @@ int main(void) {
         check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 60, "triangle back: heading 60");
         check(dt.first_leg_mm == 410u, "triangle back: 180 / cos 60 + 50 = 410");
 
+        /* Trim: from the last seen echo of TURN_AWAY (250 mm at turn 40,
+         * servo -30 -> ray 10) the corner is at (296, 85) mm from the
+         * axle. The path clears it by first_clear_mm 110 at 37 degrees,
+         * so after "lost" at 45 the robot turns back 8 degrees first.
+         * First leg: 285 / cos 37 + 50 = 406 mm. */
+        tri.first_clear_mm = 110u;
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 40; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(45));
+        read(&dt, NR);
+        check(dt.heading == 45 && dt_step(&dt) == DT_TURN_TOWARD && dt.trimming &&
+                  dt.trim_deg == 8,
+              "trim: lost at 45, turn back 8 to 37");
+        w = update(&dt);
+        check(dt_move(w) == DT_MOVE_TURN && dt_dir(w) == -1 && !dt_wants_reading(&dt, now + 1000u),
+              "trim: turn toward the obstacle, no readings");
+        (void)turn_to(&dt, -counts(7));
+        check(dt_step(&dt) == DT_TURN_TOWARD, "trim: 7 of 8: still turning");
+        (void)turn_to(&dt, -counts(8));
+        check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 37 && dt.first_leg_mm == 406u,
+              "trim: heading 37, first leg 406");
+
+        /* Trim not possible below the turned angle: straight at once. */
+        tri.first_clear_mm = 300u;
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 40; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(45));
+        read(&dt, NR);
+        check(dt_step(&dt) == DT_STRAIGHT && !dt.trimming && dt.heading == 45,
+              "trim: 300 mm clear needs more than 45: no trim");
+
         /* Off: first_max_mm 0 keeps vehicle_mm after the nearest reading. */
         dt = to_straight(OBSTACLE_SIDE_LEFT);
         check(dt.first_leg_mm == 0u, "triangle off: no first leg");
