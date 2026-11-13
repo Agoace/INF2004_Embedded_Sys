@@ -68,6 +68,8 @@ assert field("toward_max_deg") >= field("away_max_deg") + field("return_heading_
 assert 0 < field("first_max_mm") <= 700 and field("first_extra_mm") == 50
 # Trim clearance: half robot width 80 (160 mm widest) + margin 30.
 assert field("first_clear_mm") == 110
+# Second straight after the nearest echo: operator 2026-11-13 (350, no contact).
+assert field("vehicle_mm") == 350
 # The unchanged robot motor configuration supplies KI=128.
 assert ".ki_q8 = 128u" in (root / "app_program/subsystem2/motor_ctl_robot.h").read_text()
 print("KR1 C/Python round trip and reference settings: PASS")

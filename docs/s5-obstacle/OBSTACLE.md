@@ -116,7 +116,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Sweep | 40°/s, about 39 mm/s per wheel; ping every 60 ms, two seen readings |
 | Motion-change pause / look | 250 / 150 ms |
 | Back-off | Fixed 25° |
-| Straight-length setting / sweep distance | 400 / 150 mm |
+| Straight-length setting / sweep distance | 350 (2026-11-13, with the trim; was 400) / 150 mm |
 | First straight | wall triangle: (sensor-ahead + obstacle + back) / cos(turn away) + 50 mm, at most 700 mm |
 | Turn-away trim | back to the smallest heading that passes the last seen corner by 110 mm (half width 80 + margin 30) |
 | Margin / sensor-ahead / line-ahead | 30 / 65 / 123 mm |
