@@ -10,6 +10,8 @@
 /* Task timing and resource limits. */
 #define LINE_US_PER_MS     1000u
 #define LINE_TASK_PRIORITY 11
+/* P1: an ISR-exit -> running gap above this is not a dispatch (no wake yet). */
+#define LINE_WAKE_LIMIT_US 100000u
 
 #include "line_service.h"
 #include "barcode_live_source.h"
@@ -17,6 +19,7 @@
 #include "barcode_capture.h"
 #endif
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
 static ID mutex;
 static ID task_id;
 static bool ready;
@@ -127,13 +130,20 @@ static void line_task(INT code, void *ctx)
         if (tk_slp_tsk(TMO_FEVR) < E_OK) {
             continue;
         }
+        const uint32_t woke = drv_time_us();
+        const uint32_t dispatch = woke - drv_line_last_wake_us();
+        if (dispatch <= LINE_WAKE_LIMIT_US) {
+            rt_call(RT_K_LINE_WAKE, dispatch);
+        }
         (void)tk_can_wup(TSK_SELF);
+        rt_call(RT_K_LINE_CAN, drv_time_us() - woke);
         drv_line_sample_t sample;
         while (drv_line_take(&sample)) {
             const uint32_t start = drv_time_us();
             if (tk_loc_mtx(mutex, TMO_FEVR) < E_OK) {
                 continue;
             }
+            rt_call(RT_K_LINE_LOC, drv_time_us() - start);
             snapshot.raw[0] = sample.raw[0];
             snapshot.raw[1] = sample.raw[1];
             snapshot.raw[2] = 0u;
@@ -146,8 +156,10 @@ static void line_task(INT code, void *ctx)
                 const uint32_t ms =
                     drv_time_ms() -
                     (drv_time_us() - sample.us) / LINE_US_PER_MS;
+                const uint32_t lp_start = drv_time_us();
                 const vc_event_t event =
                     lp_update(&snapshot.line, snapshot.raw, ms);
+                rt_max(RT_LINE_LPU, drv_time_us() - lp_start);
                 if (vc_event_type(event) == VC_EVENT_LINE_LOST ||
                     vc_event_type(event) == VC_EVENT_LINE_FOUND) {
                     snapshot.event = event;
@@ -172,13 +184,18 @@ static void line_task(INT code, void *ctx)
             if (cost > snapshot.sample_max_us) {
                 snapshot.sample_max_us = cost;
             }
+            const uint32_t unl_start = drv_time_us();
             (void)tk_unl_mtx(mutex);
+            const uint32_t unlocked = drv_time_us();
+            rt_call(RT_K_LINE_UNL, unlocked - unl_start);
 #if !APP_TEST && !APP_BENCH
             /* Same acquisition owner, every GP28 sample. No decoder work,
              * motion wait, logging or extra board work inside LINE mutex. */
             barcode_live_source_sample(sample.us, sample.raw[2],
                                        &live_calibration, missed, dropped);
+            rt_max(RT_LINE_BARCODE, drv_time_us() - unlocked);
 #endif
+            rt_max(RT_LINE_SAMPLE, drv_time_us() - start);
 #if APP_BARCODE_CAPTURE
             /* Bounded TEST-only copy, never a second acquisition consumer.
              * No decoder, print or motion lock in this priority-11 path. */

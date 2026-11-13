@@ -16,6 +16,7 @@ foreach(smp 0 1)
             lib/libwifi/sysdepend/pico_rp2040/cyw43_utk_kernel.c
             app_program/platform/app_task.c
             app_program/subsystem1/robot_health.c
+            app_program/platform/cpu_load.c
             tests/wifi_stack_health_checks.c)
         target_include_directories(${name} BEFORE PRIVATE
             "${REPO}/tests/template_stubs" "${REPO}/tests/mtk_stubs")

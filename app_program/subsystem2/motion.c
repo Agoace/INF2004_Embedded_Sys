@@ -19,6 +19,7 @@ static md_capture_t s_diag;
 #include "drv_motor_hw.h"
 #include "../platform/drv_gpio_irq.h"
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
 #include "../platform/drv_watchdog.h"
 
 static const mc_config_t config = MC_ROBOT_CONFIG;
@@ -266,7 +267,11 @@ static void motion_task(INT stacd, void *exinf)
 #endif
         }
         if (notify > 0) {
+            const uint32_t w0 = drv_time_us();
             (void)tk_wup_tsk(notify);
+            const uint32_t w1 = drv_time_us();
+            rt_motion_stamp(w1);
+            rt_call(RT_K_MOT_WUP, w1 - w0);
         }
     }
 }

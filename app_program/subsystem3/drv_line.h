@@ -12,4 +12,6 @@ bool drv_line_take(drv_line_sample_t *sample);
 void drv_line_flush(void);
 void drv_line_listen(int task_id); /* ISR wake after every acquisition, core 0 */
 void drv_line_stats(drv_line_stats_t *stats);
+/* P1: TIMER time when the last ISR wake call returned (line_task reads). */
+uint32_t drv_line_last_wake_us(void);
 #endif

@@ -48,3 +48,41 @@ uint16_t cpu_load_sample(cpu_load_t *meter, uint32_t count, uint32_t now_us)
 
     return (uint16_t)(CPU_LOAD_FULL - idle);
 }
+
+void cpu_peak_init(cpu_peak_t *p)
+{
+    p->epoch = 0u;
+    p->samples = 0u;
+    p->peak[0] = CPU_LOAD_UNKNOWN;
+    p->peak[1] = CPU_LOAD_UNKNOWN;
+}
+
+/* Keep the larger known load; CPU_LOAD_UNKNOWN never replaces a value. */
+static uint16_t peak_of(uint16_t old, uint16_t load)
+{
+    if (load > CPU_LOAD_FULL) {
+        return old;
+    }
+    if (old == CPU_LOAD_UNKNOWN || load > old) {
+        return load;
+    }
+    return old;
+}
+
+void cpu_peak_update(cpu_peak_t *p, uint32_t run_epoch, uint16_t load0,
+                     uint16_t load1)
+{
+    if ((run_epoch & 1u) == 0u) {
+        return; /* no run, or after STOP: keep the frozen values */
+    }
+    if (p->epoch != run_epoch) {
+        cpu_peak_init(p);
+        p->epoch = run_epoch;
+    }
+    if (load0 > CPU_LOAD_FULL && load1 > CPU_LOAD_FULL) {
+        return;
+    }
+    ++p->samples;
+    p->peak[0] = peak_of(p->peak[0], load0);
+    p->peak[1] = peak_of(p->peak[1], load1);
+}

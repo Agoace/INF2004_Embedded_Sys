@@ -179,6 +179,45 @@ The meter counts interrupt and task activity on core 0, not both cores or
 individual tasks. It replaces WFI sleep, so power use increases. Failure is
 diagnostic only and does not gate motion. Target accuracy is not established.
 
+## Run timing report (P1)
+
+P1 adds report-only latches for one vehicle run. The GP20 dump prints them
+after the unchanged `[load]` line (`TM_MQTT` builds). Code:
+[`run_timing.c`](../../app_program/platform/run_timing.c) and
+[`kernel_lock_stats.c`](../../app_program/platform/kernel_lock_stats.c).
+They do not change driving, wire formats, task priorities or placement.
+
+Run scope: Vehicle sets an odd epoch at run start and an even epoch after
+STOP. Each latch has one writer. A writer clears its own latch when it first
+sees a new run. After STOP, writes stop, so the dump shows the run, not the
+idle time after it. A latch that its writer did not touch in the run prints 0.
+
+| Line | Content | Writer |
+| --- | --- | --- |
+| `[load_run]` | peak load per core over the 1 Hz samples of the run; 65535 = unknown | Health |
+| `[bkl]` | big-kernel-lock figures from run start to STOP; `unavailable` with `SMP=0` | Vehicle |
+| `[isr_max]` | line alarm lateness (entry minus target), ADC read, ISR wake call | line ISR |
+| `[line_max]` | one sample, `lp_update`, barcode sample | line_task |
+| `[step_max]` | wake latency and the parts of a vehicle step | Vehicle |
+| `[kcall]` | `n`, `sum`, `max` per call site; mean = `sum / n` | ISR, line, motion, Vehicle |
+| `[first_overrun]` | step, elapsed, motion ticks since release, slowest part, wake latency, uptime | Vehicle |
+
+`[kcall]` sites, all on core 0 in the current placement: `isr_wup`
+(alarm `tk_wup_tsk`), `line_wake` (ISR wake return to line_task running),
+`line_can`, `line_loc`, `line_unl` (line_task `tk_can_wup`, `tk_loc_mtx`,
+`tk_unl_mtx`), `mot_wup` (motion notify `tk_wup_tsk`), `veh_wake` (motion
+notify return to Vehicle running), `veh_can`, `veh_status`
+(`motion_status` in `wait_tick`), `veh_send` (`telemetry_send`).
+Compare the same source built as `SMP=0`, force-core-0 and split.
+
+Limits: all values are wall time from the 1 MHz TIMER. Interrupts and
+higher-priority tasks inside an interval are included, so use the mean for
+`[kcall]`; a maximum can include preemption. Wake latencies above 100 ms are
+not counted. A late step skips `motion_status`; its tick count then comes
+from the motion board copy, and `ticks +4294967295` means it was not
+available. The `[bkl]` reset at run start can race a core-1 update. Runs
+shorter than 1 s can have zero `[load_run]` samples.
+
 ## USB priority
 
 USB runs at 21, below driving10..13, IMU14 and Wi-Fi/TEST20, but above

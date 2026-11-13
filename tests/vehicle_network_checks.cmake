@@ -31,6 +31,10 @@ foreach(odo_test test_odometry test_run_stats)
 endforeach()
 
 host_test(test_cpu_load tests/test_cpu_load.c app_program/platform/cpu_load.c)
+host_test(test_run_timing tests/test_run_timing.c app_program/platform/run_timing.c)
+if(TARGET test_run_timing)
+    target_include_directories(test_run_timing BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
 host_test(test_motion_diag tests/test_motion_diag.c)
 host_test(test_motion_task_diag tests/test_motion_task.c
     app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
