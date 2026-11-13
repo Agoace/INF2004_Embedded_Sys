@@ -52,6 +52,18 @@ first = ref.index("static const lt_config_t LINE_CFG")
 last = ref.index("typedef enum {\n    STOP_BUTTON", first)
 config = ref[first:last].replace(".back_off_fn = NULL", ".back_off_fn = 0")
 assert config in (root / "app_program/vehicle/vehicle_robot_config.h").read_text()
+# Pivot bench on the course mat (2026-11-13): 19 and 28 mm/s sweeps
+# stick for 870 and 330 ms (stall rule: 500 ms); 38 mm/s never stops.
+import re
+sweep = re.search(r"\.sweep_deg_s = (\d+)u", config)
+assert sweep and int(sweep.group(1)) >= 40, "detour sweep below the pivot floor"
+# The turn back must reach the return heading after the widest turn away
+# (2026-11-13: turn away 63 + return 90 = 153 > 150 failed TURN_LIMIT).
+def field(name):
+    m = re.search(r"\." + name + r" = (\d+)u", config)
+    assert m, name
+    return int(m.group(1))
+assert field("toward_max_deg") >= field("away_max_deg") + field("return_heading_deg")
 # The unchanged robot motor configuration supplies KI=128.
 assert ".ki_q8 = 128u" in (root / "app_program/subsystem2/motor_ctl_robot.h").read_text()
 print("KR1 C/Python round trip and reference settings: PASS")
