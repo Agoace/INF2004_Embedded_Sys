@@ -119,7 +119,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Straight-length setting / sweep distance | 400 / 150 mm |
 | Margin / sensor-ahead / line-ahead | 30 / 65 / 123 mm |
 | Seen range / turn step | 400 mm / 5° |
-| Away / toward limits | 90 / 150° |
+| Away / toward limits | 90 / 180° (toward ≥ away + return heading) |
 | Return heading / max distance | 90° / 1000 mm |
 | Max straights / total time | 5 / 40 s |
 | Encoder turn scale | 24.05 difference counts/degree |
@@ -136,6 +136,10 @@ The sweep was 20°/s until 2026-11-13. A pivot bench on the course mat
 The stall rule stops after 500 ms at 150 permille or more with no counts.
 At 19 mm/s the wheels stick and slip; detours stopped with
 `MC_FAULT_STALL_LEFT`. The sonar now gets one ping per about 2.4° of sweep.
+
+The toward limit was 150° until 2026-11-13. Two detours turned away 62° and
+63°; the turn back then needed 152° and 153° to reach the return heading
+(-90°) and failed with TURN_LIMIT. The limit is now away + return = 180°.
 
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
