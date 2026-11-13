@@ -131,14 +131,21 @@ static const dr_config_t DETOUR_CFG = {
            .max_straights = 5u,
            .back_off_deg = 25u, /* operator 2026-11-05 */
            .look_ms = 150u,
-           .vehicle_mm = 400u, /* operator 2026-11-05: 350 touched the box (R2), 450 went too far (R3) */
+           .vehicle_mm = 350u, /* operator 2026-11-13, with the trim: no contact */
            .sweep_mm = 150u,
            .margin_mm = 30u,
            .sensor_ahead_mm = 65u,
            .line_ahead_mm = 123u,
            .seen_mm = 400u,
            .counts_per_deg_x100 = 2405u,
-           .total_max_ms = 40000u},
+           .total_max_ms = 40000u,
+           /* First straight: wall triangle d / cos(turn) + 50, at most
+            * 700 mm (operator 2026-11-13), not vehicle_mm. */
+           .first_extra_mm = 50u,
+           .first_max_mm = 700u,
+           /* Trim the turn away: pass the corner by half the robot
+            * width 80 (160 mm widest) + margin 30. */
+           .first_clear_mm = 110u},
     .straight_mm_s = 131,
     .turn_mm_s = 131,
     .pause_ms = 250u,
