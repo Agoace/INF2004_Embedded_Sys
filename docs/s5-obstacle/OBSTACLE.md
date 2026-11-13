@@ -117,6 +117,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Motion-change pause / look | 250 / 150 ms |
 | Back-off | Fixed 25° |
 | Straight-length setting / sweep distance | 400 / 150 mm |
+| First straight | wall triangle: (sensor-ahead + obstacle + back) / cos(turn away) + 50 mm, at most 700 mm |
 | Margin / sensor-ahead / line-ahead | 30 / 65 / 123 mm |
 | Seen range / turn step | 400 mm / 5° |
 | Away / toward limits | 90 / 180° (toward ≥ away + return heading) |

@@ -47,7 +47,11 @@ static const dr_config_t DETOUR_CFG = {
            .line_ahead_mm = 123u,
            .seen_mm = 400u,
            .counts_per_deg_x100 = 2405u,
-           .total_max_ms = 40000u},
+           .total_max_ms = 40000u,
+           /* First straight: wall triangle d / cos(turn) + 50, at most
+            * 700 mm (operator 2026-11-13), not vehicle_mm. */
+           .first_extra_mm = 50u,
+           .first_max_mm = 700u},
     .straight_mm_s = 131,
     .turn_mm_s = 131,
     .pause_ms = 250u,
