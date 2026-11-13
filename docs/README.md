@@ -81,6 +81,10 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Simulation
 
+- [PIL_PROTOCOL.md](simulation/PIL_PROTOCOL.md) — frozen PIL v1 bytes, clocks, safety and host-only Stage 0 / hardware Gate 1 boundary.
+- [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
+- [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.
+
 - [SIMULATION.md](simulation/SIMULATION.md) — implemented host model, interfaces, assumptions, echo-fit and box-sweep summaries; not kernel/track proof.
 
 ## Archive
