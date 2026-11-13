@@ -111,7 +111,7 @@ static const ss_config_t SCAN_CFG = {.stop_ms = 300u};
 
 /* Detour v1.8 (src/detour_test.c, docs/archive/OBSTACLE_DETOUR_HANDOFF.md) with
  * wheel speeds: straights and the non-sweep turns 131 mm/s (20 %); the
- * sweeps 20 deg/s = 19 mm/s per wheel, held by the motor controller (no
+ * sweeps 40 deg/s = 39 mm/s per wheel, held by the motor controller (no
  * duty rate control). No heading hold on the straights (operator
  * 2026-11-04). Back off: a fixed back_off_deg 25 degrees (operator
  * 2026-11-05, after run R1; before: half of the turn, at most 30). */
@@ -119,7 +119,7 @@ static const dr_config_t DETOUR_CFG = {
     .dt = {.back_off_fn = NULL, /* fixed back_off_deg */
            .return_heading_deg = 90u,
            .return_max_mm = 1000u,
-           .sweep_deg_s = 20u,
+           .sweep_deg_s = 40u, /* pivot bench 2026-11-13: 19 mm/s sticks */
            .sweep_ping_ms = 60u,
            .sweep_seen_count = 2u,
            .sweep_min_duty = 0u, /* duty rate control: not used */

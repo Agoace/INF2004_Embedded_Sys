@@ -113,7 +113,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Setting | Current value |
 | --- | --- |
 | Straight / non-sweep turn | 131 mm/s; no heading hold on straights |
-| Sweep | 20°/s, about 19 mm/s per wheel; ping every 60 ms, two seen readings |
+| Sweep | 40°/s, about 39 mm/s per wheel; ping every 60 ms, two seen readings |
 | Motion-change pause / look | 250 / 150 ms |
 | Back-off | Fixed 25° |
 | Straight-length setting / sweep distance | 400 / 150 mm |
@@ -123,6 +123,19 @@ back-off, return toward the line, then alignment. Main settings are:
 | Return heading / max distance | 90° / 1000 mm |
 | Max straights / total time | 5 / 40 s |
 | Encoder turn scale | 24.05 difference counts/degree |
+
+The sweep was 20°/s until 2026-11-13. A pivot bench on the course mat
+(3 s per step, BENCH image) measured the longest wheel stop per speed:
+
+| Wheel speed | Longest stop | Duty (permille) |
+| --- | --- | --- |
+| 19 mm/s | 870 ms | 102-206 |
+| 28 mm/s | 330 ms | 126-194 |
+| 38 mm/s | 0 ms | 128-209 |
+
+The stall rule stops after 500 ms at 150 permille or more with no counts.
+At 19 mm/s the wheels stick and slip; detours stopped with
+`MC_FAULT_STALL_LEFT`. The sonar now gets one ping per about 2.4° of sweep.
 
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.

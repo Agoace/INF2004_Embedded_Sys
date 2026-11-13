@@ -420,6 +420,8 @@ static void test_turn_speed(void) {
     /* 20 deg/s: 240.5 counts/s per wheel x 0.0806 mm = 19.4 mm/s. */
     CHECK(dr_turn_mm_s(&DR.dt, 20u) == 19, "20 deg/s: %d", dr_turn_mm_s(&DR.dt, 20u));
     CHECK(dr_turn_mm_s(&DR.dt, 0u) == 0, "0 deg/s");
+    /* 40 deg/s: the robot sweep; 38 mm/s did not stick on the mat. */
+    CHECK(dr_turn_mm_s(&DR.dt, 40u) >= 38, "40 deg/s: %d", dr_turn_mm_s(&DR.dt, 40u));
     CHECK(dr_turn_mm_s(&DR.dt, 135u) == 131, "135 deg/s: %d", dr_turn_mm_s(&DR.dt, 135u));
     dr_t dr;
     dr_init(&dr, &DR);
