@@ -35,6 +35,10 @@ class FakePair:
         self.sequence = {}
         self.sent_frames = []
         self.queue(Type.BOOT, struct.pack('<4I', 7, capabilities, 921600, SCHEMA_ID))
+        if fault == 'bootstrap_noise':
+            self.pending[0][1][:0] = b'\xff\xff\xff' + bytes(self.pending[0][1][:8]) + b'\0'
+        elif fault == 'post_boot_noise':
+            self.pending[0][1].extend(b'\x02x\0')
 
     def queue(self, kind, payload, ack=NO_ACK, source=None):
         seq = self.sequence.get(kind, 0)
@@ -165,6 +169,21 @@ class Gate1Tests(unittest.TestCase):
         self.assertEqual(summary['required_capabilities'], 4)
         hello = next(f for f in pair.sent_frames if f.type == Type.HELLO)
         self.assertEqual(struct.unpack_from('<I', hello.payload, 8)[0], 4)
+
+    def test_startup_ff_and_partial_frame_resync_before_first_valid_boot(self):
+        summary, events, _ = self.run_fake(fault='bootstrap_noise')
+        self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
+        self.assertEqual(summary['bootstrap_discarded_bad_frames'], 1)
+        self.assertEqual(summary['decoder_total_bad_frames'], 1)
+        self.assertEqual(summary['decoder_bad_frames'], 0)
+        self.assertIn('bootstrap_discard', events)
+        self.assertTrue(summary['stopped_status_observed'])
+
+    def test_corrupt_packet_after_boot_in_same_chunk_still_fails(self):
+        summary, _, _ = self.run_fake(fault='post_boot_noise')
+        self.assertEqual(summary['verdict'], 'FAIL')
+        self.assertEqual(summary['bootstrap_discarded_bad_frames'], 0)
+        self.assertEqual(summary['decoder_bad_frames'], 1)
 
     def test_fragmented_reads_and_partial_writes(self):
         summary, _, _ = self.run_fake(write_limit=17, read_limit=19)
