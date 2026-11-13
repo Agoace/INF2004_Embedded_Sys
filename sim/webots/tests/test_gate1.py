@@ -58,12 +58,12 @@ class FakePair:
                 self.epoch = ((self.clock.now + 100000 + 999) // 1000) * 1000
                 self.queue(Type.HELLO_ACK, frame.payload + struct.pack('<I', self.epoch & 0xffffffff),
                            frame.sequence)
+                self.next_output = self.clock.now + 1000
             elif frame.type == Type.SYNC_REQ:
                 self.queue(Type.SYNC_REPLY, frame.payload + struct.pack('<II', self.clock.now & 0xffffffff, 0),
                            frame.sequence)
             elif frame.type == Type.ARM:
                 self.armed = True
-                self.next_output = self.clock.now + 1000
             elif frame.type == Type.SENSOR:
                 self.sensors[frame.sequence] = frame
             elif frame.type == Type.DISARM:
@@ -80,10 +80,10 @@ class FakePair:
             tick = self.next_output
             self.next_output += 1000
             ack = min((tick - self.epoch) // 1000, max(self.sensors, default=-1))
-            active = tick >= self.epoch and ack >= 0
+            active = self.armed and tick >= self.epoch and ack >= 0
             if active and self.fault == 'loss' and self.output_seq == 120:
                 self.sequence[Type.OUTPUT] += 1
-            flags = 1 if active else 20
+            flags = 1 if active else 20 if self.armed else 4
             payload = struct.pack('<hhHBBHBBIIIHHHH', 0, 0, 1500, 0, flags,
                                   0, min(8, len(self.sensors)), 0, 0, 0, 0, 0, 0, 0, 0)
             if not (self.fault == 'stall' and tick > 140000):
