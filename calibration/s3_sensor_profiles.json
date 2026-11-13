@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "classification": "EXPLORATORY_HOST_REFERENCE_NOT_SENSOR_CALIBRATION",
+  "units": {
+    "position": "mm",
+    "time": "us",
+    "ADC": "post8_average_12bit"
+  },
+  "channels": {
+    "GP28": {
+      "profile": {
+        "name": "GP28",
+        "reference_height_mm": 5.5,
+        "sigma_x_mm": 2.125,
+        "sigma_y_mm": 2.125,
+        "levels_adc": {
+          "MAT_WHITE": 167.0,
+          "MAT_LINE": 2673.0,
+          "PAPER_WHITE": 164.0,
+          "PAPER_INK": 1499.4427098534202
+        },
+        "noise_sigma_adc": 4.4478,
+        "paper_response_power": 6,
+        "mat_response_power": 1.0,
+        "evidence_status": "EXPLORATORY_EXPECTED_FAIL",
+        "assumptions": [
+          "5.5mm_reference_is_operator_nominal_not_capture_height_survey",
+          "height_and_tilt_response_unmeasured",
+          "transverse_sigma_assumed_equal_longitudinal",
+          "mount_80_forward_77_left_nominal_no_slip",
+          "mat_high2673_is_sweep_mean_not_pure_material_plateau",
+          "mat_power1_and_mixed_material_response_unmeasured",
+          "post8_average_noise_white_only_no_double_averaging",
+          "finite_ray_sampling_has_separate_resolution_error",
+          "unexplained_waveform_residual_not_added_as_noise",
+          "heldout_edge_check_failed_no_physical_generalisation"
+        ]
+      },
+      "mount": {
+        "forward_mm_nominal": 80,
+        "left_mm_nominal": 77,
+        "flat_clearance_mm_nominal": 5.5,
+        "forward_uncertainty_mm": 5,
+        "surveyed_current_mount": false
+      }
+    },
+    "GP26": {
+      "profile": null,
+      "evidence_status": "UNMEASURED",
+      "reason": "No per-material response/footprint or current surveyed mount",
+      "mount": {
+        "forward_mm": null,
+        "left_mm_relative_GP26": 0,
+        "current_clearance_mm": null,
+        "historical_height_mm_approx": 9
+      }
+    },
+    "GP27": {
+      "profile": null,
+      "evidence_status": "UNMEASURED",
+      "reason": "No per-material response/footprint or current surveyed mount",
+      "mount": {
+        "forward_mm": null,
+        "left_mm_relative_GP26": 14.5,
+        "current_clearance_mm": null,
+        "historical_height_mm_approx": 9
+      }
+    }
+  },
+  "noise_fit": {
+    "source": "tests/fixtures/barcode_430_large_fwd.csv",
+    "sha256": "0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5",
+    "axis": "sensor_x",
+    "ROI_mm": [
+      0,
+      30
+    ],
+    "sample_count": 201,
+    "median_adc": 164,
+    "MAD_adc": 3,
+    "robust_sigma_adc": 4.4478,
+    "population_sigma_adc": 4.158662394218411,
+    "scope": "post8_average_white_only_not_full_waveform_error"
+  },
+  "other_material_reference": "docs/s3-line-barcode/LIVE_CALIBRATION.md",
+  "fixed_geometry_mm": {
+    "narrow": 5.8,
+    "wide": 17.5,
+    "body": 273.5
+  },
+  "check_limits": {
+    "normalized_rmse_max": 0.1,
+    "edge_p95_mm_max": 1.5,
+    "run_width_p95_mm_max": 2.0,
+    "edge_count_required": 30
+  },
+  "fit_search_bounds": {
+    "sigma_mm": [
+      0.5,
+      5
+    ],
+    "response_power": [
+      1,
+      16
+    ],
+    "registration_mm_about_first_star": [
+      -8,
+      8
+    ],
+    "gain_relative_to_top1percent_contrast": [
+      0.85,
+      1.25
+    ],
+    "no_print_scale_fit": true
+  },
+  "replay_variants": {
+    "sensor_x": {
+      "fit": {
+        "letter": "F",
+        "baseline_adc": 164.0,
+        "gain_adc": 1335.4427098534202,
+        "sigma_mm": 2.125,
+        "response_power": 6,
+        "offset_mm": 63.41563122016577,
+        "search_bound_hit": false
+      },
+      "training": {
+        "path": "tests/fixtures/barcode_430_large_fwd.csv",
+        "sha256": "0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5",
+        "coverage": {
+          "axis": "sensor_x",
+          "unbracketed_adc": 0,
+          "flagged_adc": 0,
+          "saturated_adc": 0,
+          "input_adc": 2245,
+          "motor_max_gap_us": 39999,
+          "counts_per_mm": 12.414,
+          "pose_assumptions": [
+            "no_slip",
+            "constant_twist_between_motor",
+            "initial_stripe_normal_world_X",
+            "mount_80_forward_77_left_nominal"
+          ]
+        },
+        "metrics": {
+          "samples": 2193,
+          "rmse_adc": 151.18805925400605,
+          "normalized_rmse": 0.1132119394852967,
+          "mae_adc": 70.06516485921355,
+          "observed_edge_count": 30,
+          "model_edge_count": 30,
+          "edge_p95_error_mm": 1.9905967319758986,
+          "run_width_p95_error_mm": 2.0242377005089622,
+          "registration_offset_mm": 63.41563122016577,
+          "check": "FAIL",
+          "limits": {
+            "normalized_rmse_max": 0.1,
+            "edge_p95_mm_max": 1.5,
+            "run_width_p95_mm_max": 2.0,
+            "edge_count_required": 30
+          }
+        }
+      },
+      "holdout": {
+        "path": "tests/fixtures/barcode_large_f_forward.csv",
+        "sha256": "a10e86e72b88944aeb310e1ce2d7a7a5e6c9f3fe22764e6c4d607d2ff667de0f",
+        "refitted_parameters": [
+          "global_pose_translation_only"
+        ],
+        "coverage": {
+          "axis": "sensor_x",
+          "unbracketed_adc": 0,
+          "flagged_adc": 0,
+          "saturated_adc": 0,
+          "input_adc": 3080,
+          "motor_max_gap_us": 49998,
+          "counts_per_mm": 12.414,
+          "pose_assumptions": [
+            "no_slip",
+            "constant_twist_between_motor",
+            "initial_stripe_normal_world_X",
+            "mount_80_forward_77_left_nominal"
+          ]
+        },
+        "metrics": {
+          "samples": 2239,
+          "rmse_adc": 126.39086974199503,
+          "normalized_rmse": 0.09464342334525742,
+          "mae_adc": 60.1031452026707,
+          "observed_edge_count": 30,
+          "model_edge_count": 30,
+          "edge_p95_error_mm": 1.870871096470978,
+          "run_width_p95_error_mm": 1.838282446733956,
+          "registration_offset_mm": 70.69563093868504,
+          "check": "FAIL",
+          "limits": {
+            "normalized_rmse_max": 0.1,
+            "edge_p95_mm_max": 1.5,
+            "run_width_p95_mm_max": 2.0,
+            "edge_count_required": 30
+          }
+        }
+      }
+    },
+    "mean_wheel": {
+      "fit": {
+        "letter": "F",
+        "baseline_adc": 164.0,
+        "gain_adc": 1324.3,
+        "sigma_mm": 1.525,
+        "response_power": 14.25,
+        "offset_mm": 62.98237112089446,
+        "search_bound_hit": true
+      },
+      "training": {
+        "path": "tests/fixtures/barcode_430_large_fwd.csv",
+        "sha256": "0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5",
+        "coverage": {
+          "axis": "mean_wheel",
+          "unbracketed_adc": 0,
+          "flagged_adc": 0,
+          "saturated_adc": 0,
+          "input_adc": 2245,
+          "motor_max_gap_us": 39999,
+          "counts_per_mm": 12.414,
+          "pose_assumptions": [
+            "no_slip",
+            "constant_twist_between_motor",
+            "initial_stripe_normal_world_X",
+            "mount_80_forward_77_left_nominal"
+          ]
+        },
+        "metrics": {
+          "samples": 2206,
+          "rmse_adc": 119.96112849214336,
+          "normalized_rmse": 0.09058455674102799,
+          "mae_adc": 54.44334014720813,
+          "observed_edge_count": 30,
+          "model_edge_count": 30,
+          "edge_p95_error_mm": 1.4184012723304633,
+          "run_width_p95_error_mm": 0.9386111406017648,
+          "registration_offset_mm": 62.98237112089446,
+          "check": "PASS",
+          "limits": {
+            "normalized_rmse_max": 0.1,
+            "edge_p95_mm_max": 1.5,
+            "run_width_p95_mm_max": 2.0,
+            "edge_count_required": 30
+          }
+        }
+      },
+      "holdout": {
+        "path": "tests/fixtures/barcode_large_f_forward.csv",
+        "sha256": "a10e86e72b88944aeb310e1ce2d7a7a5e6c9f3fe22764e6c4d607d2ff667de0f",
+        "refitted_parameters": [
+          "global_pose_translation_only"
+        ],
+        "coverage": {
+          "axis": "mean_wheel",
+          "unbracketed_adc": 0,
+          "flagged_adc": 0,
+          "saturated_adc": 0,
+          "input_adc": 3080,
+          "motor_max_gap_us": 49998,
+          "counts_per_mm": 12.414,
+          "pose_assumptions": [
+            "no_slip",
+            "constant_twist_between_motor",
+            "initial_stripe_normal_world_X",
+            "mount_80_forward_77_left_nominal"
+          ]
+        },
+        "metrics": {
+          "samples": 2223,
+          "rmse_adc": 175.24227972283455,
+          "normalized_rmse": 0.13232823357459378,
+          "mae_adc": 71.47351408876965,
+          "observed_edge_count": 30,
+          "model_edge_count": 30,
+          "edge_p95_error_mm": 3.720147213280825,
+          "run_width_p95_error_mm": 1.1655178784455984,
+          "registration_offset_mm": 71.92461323525993,
+          "check": "FAIL",
+          "limits": {
+            "normalized_rmse_max": 0.1,
+            "edge_p95_mm_max": 1.5,
+            "run_width_p95_mm_max": 2.0,
+            "edge_count_required": 30
+          }
+        }
+      }
+    }
+  },
+  "release_gate": "STOP_BEFORE_GATE1"
+}
