@@ -1,0 +1,159 @@
+# Gate 1 transport image — build and operator handoff
+
+## Status and limits
+
+The image is host-tested and ready for an operator transport trial on a spare
+RP2040 Pico. Physical P1 is NOT RUN. This is NOT sensor/physics acceptance.
+Only the operator flashes or opens target ports. Coding workers do neither.
+Do not flash a plain Stage0 `_sim` image. Do not connect a robot or actuators.
+
+Use the [design/status](PIL_GATE1.md), frozen [UART v1](PIL_PROTOCOL.md) and
+separate [D1 contract](PIL_GATE1_DIAGNOSTICS.md). The PC-side owner supplies the
+matching home runbook and capture/soak tools. Use explicit cap4 transport opt-in;
+the default full-simulator capability requirement must stay0x1f.
+
+## Exact image
+
+From the repository root:
+
+```sh
+make -C build_make SIM=1 PIL_GATE1=1 SMP=0 FORCE_CORE0=0 \
+  WIFI=none NET=none MQTT=0 CONSOLE=usb_cdc CRASH_REPORT=0 \
+  TEST=0 BENCH=0 DIAG=0 IMU_STREAM=0 BARCODE_CAPTURE=0 \
+  BARCODE_LIVE_ENABLE=0 JUNCTION_TEST_CMD=NONE -j4 --output-sync=target
+sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
+```
+
+- File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (244224 bytes).
+- UF2 SHA256: `c7df4c0bdbdbbeaa280f5a0abedcefc26c7458be9bdffa57f4030f9f432bd21c`.
+- ELF SHA256: `12cebe1a8dcb515b46b18c2675f84eeaedfa857e75d05aa7f3219a42806ea6d9`.
+- Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
+- D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
+- Retained copy: `build/pil-gate1/artifacts/up-final/`, with map/size/NM/hashes.
+
+Debug paths affect ELF hashes. Another checkout path can give a different ELF
+hash. Record the exact UF2 used for each operator run.
+
+## Wiring and first output
+
+| Connection | Rule |
+| --- | --- |
+| Pico GP0 TX | Connect to Debug Probe U RX |
+| Pico GP1 RX | Connect to Debug Probe U TX |
+| GND | Connect common ground |
+| Probe power | Do NOT connect |
+| Pico USB | Separate USB CDC, not the Probe UART |
+
+UART0 is921600 baud,8N1, binary only. Use the Probe UART's stable by-id path.
+Identify the separate Pico CDC port as the operator; do not guess its tty number.
+Start a binary-safe Pico CDC capture BEFORE UART negotiation/ARM. Do not run a
+second reader on either port. USB terminal newline conversion is not permitted.
+
+After completed native startup, nonzero boot identity and a valid alarm0 grid:
+
+1. USB prints `[PILG1] transport-only cap4 UART0 921600 8N1; ...`.
+2. UART emits BOOT at10Hz: session0, first sequence0, no-ACK, cap4, baud921600,
+   schema`0x50494c01`. No successful initialization means no valid ready BOOT.
+3. Accepted HELLO returns HELLO_ACK with a native-grid epoch at least100ms after
+   its generation timestamp. ARM must name that latest ACK.
+4. Negotiated OUTPUT runs at1kHz: flags4/INHIBITED and ACK`ffffffff` before ARM;
+   flags20/ARM_PENDING and no-ACK after ARM. BOOT stops once pending.
+5. SENSOR0 and1 must be ready before epoch. At epoch, the first successful apply
+   gives OUTPUT flags1/ARMED, ACK0, then contiguous ACK1+. Missing/late input or
+   a timing/lease fault latches inhibition. Sending ARM is not acceptance.
+
+Neutral SENSOR validity is`0xC18`: zero encoder endpoints, released buttons,
+invalid ADC/IMU/sonar. SENSOR peer ACK stays no-ACK. OUTPUT is observed by the PC,
+never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated.
+
+## Stop and verdict
+
+- Use a planned601s PC run to obtain at least600s contiguous coverage.
+- The PC first inhibits locally, stops new source production, then sends valid
+  DISARM reason1(user) or3(exit), even if the session is stale.
+- Drain the active OUTPUT cohort. Pico retains a final inhibited OUTPUT, drains
+  its UART queue/FIFO/shift register (100ms limit), then freezes the summary.
+- Pico sends D1 automatically and exactly ONCE on the already-open USB CDC.
+  No GP20/request is needed. Keep capture open through MANIFEST and the following
+  `[PILG1] stopped; reset required; worker stack untouched .../2048 bytes` line.
+  USB backpressure can delay the dump; do not use the100ms UART limit as a USB
+  capture deadline. A missing record/manifest is INCOMPLETE, never PASS.
+- Require all26 counts,12 all-event extrema, exact contiguous stage/apply/OUTPUT
+  cohorts, manifest CRC/identity, controlled tail<=8, zero faults, matching image
+  flags and source capture/clock evidence. Availability upper<=3000us, actual
+  source age upper<=5000us and jitter upper<=250us remain unchanged. Apply outward
+  timer quantization once, separate from clock drift/source brackets.
+- A plot, trace sample, mean or short replay cannot establish coverage or PASS.
+  Fault, pause or reset requires a new boot nonce/session; never auto-rearm.
+
+## Host/build evidence
+
+- GCC585/585 and Clang ASan/UBSan585/585. The session test includes10000 continuous
+  slots and TIMER wrap. HAL and option-guard tests were RED first. Runtime tests
+  compile the actual task/session/stream/D1 sources against explicit single-thread
+  kernel/MMIO doubles; these do NOT prove hardware IRQ latency or SMP exclusion.
+- Runtime cases on UP/split/control: clean drain, independent lease IRQ, UART
+  overrun, RX queue full, late progress and missing lookahead. Extra RED tests
+  exposed repeated dumps and stale ARM receive-state mutation; both are fixed.
+- Actual runtime short D1 fixture:3165 bytes,35 records including20 traces,
+ 11staged/8applied/3cancelled and8generated/enqueued/FIFO-loaded OUTPUTs.
+  SHA256`69edc2e017d48f1b3bff42776660720ae5f5994e7733967f373b3ad863e89e5d`.
+  Independent PC review passes structure/metrics. It remains synthetic8ms and
+  INCOMPLETE, not a Pico result.
+- All38 ordinary profiles and38 SDK link proofs pass without warnings. All76
+  literal ELF/UF2 hashes equal baseline451e562 at the retained public build path,
+  including debug data. Final source edits are SIM-only. Template deviations stay8.
+- UP/split/forced-core0 Gate1 links pass. SIM0 -> Stage0 -> SIM0 restores native
+  ELF/UF2 bytes; restoring Gate1 UP also restores its ELF/UF2 bytes.
+- All42 strict ARM compilations pass (14 SIM/Gate1 units x3 placements). Native
+  clock/IRQ/kernel/console objects also have frame records with unchanged flags.
+
+## RAM, stack and ownership proof
+
+| Image | `.data` | `.bss` | Total static RAM |
+| --- | ---: | ---: | ---: |
+| UP native |696|125324|126020 B|
+| UP Stage0 |696|125300|125996 B|
+| UP Gate1 |696|136444|137140 B|
+| Split/control Gate1 |704|140564|141268 B|
+
+New writable storage is11164B: runtime`g`9112B, painted worker stack2048B,
+and last native-line timestamp4B. A compile-time assertion covers all three.
+Net UP increase from Stage0 is11144B: disabling sample SER startup removes20B.
+The previous Stage0 omission of24B hardware state is not a functional saving.
+
+ARM static frames: service432B, transmit192B, UART IRQ72B, lease IRQ16B,
+native hook24B, session alarm72B, fail40B, trace12B, note24B, metric observer20B.
+Trace writes owned storage directly; it has no64B automatic array/memcpy chain.
+
+Reviewed additional IRQ chains, including kernel wake paths:
+
+- UP maximum180B: ACK8 + hook24 + alarm72 + note24 + fail40 + trace12.
+- SMP/control maximum240B: UART72 + wake16 + release8 + ready16 + reschedule48
+  + ready-assign72 + core-mask8. Lock-enter and dispatch-request branches are
+  smaller. PRIMASK exclusion is explicit; `knl_dispatch` only pends PendSV.
+- These are additional C call chains, not a measured IRQ assertion latency.
+  Existing hardware exception/HLL/native frames and the2048B exception stack
+  are separate. The largest reviewed worker chain is888B: worker32 + service432
+  + decode288 + validate16 + sensor48 + arithmetic72. The arithmetic term is
+  ul-div thunk16 + divide48 + clz8 from actual binary prologues. Memcpy24 and
+  memset20 are also included in the path review. Target painted reserve is NOT
+  measured yet; record it from the stopped USB line.
+
+Kernel owns IRQ20/UART0 and IRQ1/TIMER alarm1. Each UART IRQ transfers at most32 RX
+and32 TX bytes; no CRC/decode/encode occurs in IRQ context. Service-duration
+brackets end before their final metric update; they measure the service body,
+not hardware IRQ entry/exit latency. Worker priority16 and TA_USERBUF stack
+stay core0. Core0 IRQ exclusion protects session mutations; it
+is not a cross-core lock. Whole-word SPSC publication uses ARM DMB.
+
+Only Gate1 devinit.o force-includes the original config plus SER=0; ADC=1/IIC=0
+stay unchanged. Only Gate1 drv_line.o aliases its time read; the helper returns
+real TIMER and retains the original first-C-entry timestamp for the next ACK.
+Native application/template C stays unchanged. Six SIM providers are unique;
+UP shim definitions appear only on UP. There is no SDK startup/IRQ/time runtime,
+PIO or physical action path. Existing USB SDK-compat names are kernel adapters,
+not SDK IRQ runtime providers.
+
+Retained evidence: `build/pil-gate1/cp3-*`, `cycle-*`, `strict/`, `artifacts/`,
+`provider-proof.txt`; ordinary matrix in `build/pil-proof/gate1-cp3/`.

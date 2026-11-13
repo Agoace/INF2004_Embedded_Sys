@@ -55,8 +55,45 @@ static void preload(pil_gate1_session_t *s, unsigned int count)
         assert(s->counts[G1_STAGED] == i + 1u);
     }
 }
+static void control_tests(void)
+{
+    pil_gate1_session_t s;
+    pil_frame_t out;
+    now = 1000000u;
+    pil_gate1_session_init(&s, 123u, clock_read, NULL);
+    pil_gate1_grid(&s, now + 1000u);
+    pil_gate1_motor(&s, 0, 0, 1500u, now);
+    pil_frame_t f = {.type = PIL_HELLO, .payload_length = 24u,
+        .session = 456u, .ack = PIL_NO_ACK};
+    const uint32_t hello[6] = {123u,456u,4u,1000u,4000u,5000u};
+    for (unsigned int i = 0u; i < 6u; ++i) {
+        pil_put_u32(f.payload + i * 4u, hello[i]);
+    }
+    assert(!pil_gate1_receive(&s, &f, now, &out) && s.session == 0u);
+    pil_gate1_boot(&s, &out);
+    f.ack = 1u;
+    assert(!pil_gate1_receive(&s, &f, now, &out) && s.session == 0u);
+    f.ack = 0u;
+    assert(pil_gate1_receive(&s, &f, now, &out));
+    const uint32_t old_ack = s.hello_ack;
+    f.sequence = 1u;
+    assert(pil_gate1_receive(&s, &f, now, &out));
+    assert(s.hello_ack != old_ack);
+    const uint32_t epoch = s.epoch;
+    assert(!pil_gate1_receive(&s, &f, now, &out) && s.epoch == epoch);
+    f = (pil_frame_t){.type = PIL_ARM, .payload_length = 8u,
+        .session = 456u, .ack = old_ack, .sequence = 0u};
+    pil_put_u32(f.payload, 123u); pil_put_u32(f.payload + 4u, 456u);
+    assert(!pil_gate1_receive(&s, &f, now, &out) && !s.armed_once);
+    assert((s.seen & (1u << PIL_ARM)) == 0u);
+    f.ack = s.hello_ack;
+    assert(!pil_gate1_receive(&s, &f, now, &out) && s.armed_once);
+    const uint32_t lease = s.lease;
+    assert(!pil_gate1_receive(&s, &f, now, &out) && s.lease == lease);
+}
 int main(void)
 {
+    control_tests();
     pil_gate1_session_t s;
     pil_frame_t out;
     for (unsigned int wrap = 0u; wrap < 2u; ++wrap) {

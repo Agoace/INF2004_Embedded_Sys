@@ -16,12 +16,17 @@ static void trace(pil_gate1_session_t *s, uint32_t event, uint32_t seq,
     if (s->frozen) { return; }
     const uint32_t i = s->trace_total < 32u ? s->trace_total :
                        32u + (s->trace_total - 32u) % 32u;
-    const uint32_t words[16] = {event, seq,
-        seq == PIL_NO_ACK ? 0u : seq * 1000u, demand, stamp,
-        alo, ahi, plo, phi, s->next_stage - s->next_apply, s->flags,
-        s->counts[G1_DROPPED], s->counts[G1_BAD], s->counts[G1_MISSED],
-        s->counts[G1_OVERRUN], s->reason};
-    memcpy(s->trace[i], words, sizeof(words));
+    /* Caller excludes core0 IRQ mutation. Dump readers run only frozen.
+     * Write owned storage directly: no64B automatic array on the IRQ chain. */
+    uint32_t *words = s->trace[i];
+    words[0] = event; words[1] = seq;
+    words[2] = seq == PIL_NO_ACK ? 0u : seq * 1000u;
+    words[3] = demand; words[4] = stamp;
+    words[5] = alo; words[6] = ahi; words[7] = plo; words[8] = phi;
+    words[9] = s->next_stage - s->next_apply; words[10] = s->flags;
+    words[11] = s->counts[G1_DROPPED]; words[12] = s->counts[G1_BAD];
+    words[13] = s->counts[G1_MISSED]; words[14] = s->counts[G1_OVERRUN];
+    words[15] = s->reason;
     if (s->trace_total != UINT32_MAX) { ++s->trace_total; }
 }
 void pil_gate1_trace_get(const pil_gate1_session_t *s, unsigned int index,
@@ -106,19 +111,21 @@ void pil_gate1_boot(pil_gate1_session_t *s, pil_frame_t *out)
 void pil_gate1_motor(pil_gate1_session_t *s, int16_t left, int16_t right,
                      uint16_t servo, uint32_t stamp)
 {
+    if (s->frozen) { return; }
     if (left != 0 || right != 0 || servo < 1100u || servo > 1900u) {
         pil_gate1_fail(s, 0x10bu); return;
     }
     if (s->servo != 0u && s->servo != servo) { ++s->generation; }
     s->servo = servo; s->write_time = stamp;
 }
-static bool fresh(pil_gate1_session_t *s, const pil_frame_t *f)
+static bool fresh(const pil_gate1_session_t *s, const pil_frame_t *f)
 {
-    const uint32_t bit = 1u << f->type;
-    if ((s->seen & bit) != 0u &&
-        !pil_newer(f->sequence, s->received[f->type])) { return false; }
-    s->seen |= bit; s->received[f->type] = f->sequence;
-    return true;
+    return (s->seen & (1u << f->type)) == 0u ||
+           pil_newer(f->sequence, s->received[f->type]);
+}
+static void accept(pil_gate1_session_t *s, const pil_frame_t *f)
+{
+    s->seen |= 1u << f->type; s->received[f->type] = f->sequence;
 }
 static void stage(pil_gate1_session_t *s, const pil_frame_t *f)
 {
@@ -154,6 +161,11 @@ static void stage(pil_gate1_session_t *s, const pil_frame_t *f)
     slot->ready = 1u;
     slot->ahi = clock_now(s);
     const uint32_t target = s->epoch + f->source_us;
+    if (reached(slot->ahi + 1u, s->lease)) {
+        slot->ready = 0u;
+        pil_gate1_count(s, G1_DROPPED); pil_gate1_count(s, G1_LEASE);
+        pil_gate1_fail(s, 0x104u); return;
+    }
     if (pil_newer(slot->ahi + 1u, target - 1000u)) {
         slot->ready = 0u;
         pil_gate1_count(s, G1_DROPPED); pil_gate1_count(s, G1_LATE);
@@ -181,6 +193,7 @@ bool pil_gate1_receive(pil_gate1_session_t *s, const pil_frame_t *f,
         pil_gate1_fail(s, pil_get_u32(f->payload)); return false;
     }
     if (s->frozen) { return false; }
+    if (s->armed_once) { pil_gate1_check_lease(s, clock_now(s)); }
     if (f->type == PIL_SENSOR) { stage(s, f); return false; }
     if (f->type == PIL_HELLO && s->reason == 0u && !s->armed_once &&
         s->grid_ready && s->nonce != 0u &&
@@ -188,15 +201,21 @@ bool pil_gate1_receive(pil_gate1_session_t *s, const pil_frame_t *f,
         !pil_newer(f->ack, s->transmitted[PIL_BOOT] - 1u) &&
         pil_get_u32(f->payload) == s->nonce &&
         (pil_get_u32(f->payload + 8u) & ~4u) == 0u) {
-        if (f->session != s->session) {
-            s->seen = 0u; s->session = f->session;
+        if (f->session == s->session && !fresh(s, f)) {
+            pil_gate1_count(s, G1_REFUSED); return false;
         }
-        if (!fresh(s, f)) { pil_gate1_count(s, G1_REFUSED); return false; }
-        frame(s, reply, PIL_HELLO_ACK, 28u, f->sequence);
-        const uint32_t delta = reply->source_us + 100000u - s->grid_next;
+        const uint32_t stamp = clock_now(s);
+        const uint32_t delta = stamp + 100000u - s->grid_next;
         if (delta > 101000u) {
             pil_gate1_count(s, G1_REFUSED); return false;
         }
+        if (f->session != s->session) {
+            s->seen = 0u; s->session = f->session;
+        }
+        accept(s, f);
+        *reply = (pil_frame_t){.type = PIL_HELLO_ACK, .payload_length = 28u,
+            .session = s->session, .sequence = s->transmitted[PIL_HELLO_ACK]++,
+            .source_us = stamp, .ack = f->sequence};
         s->epoch = s->grid_next + ((delta + 999u) / 1000u) * 1000u;
         memcpy(reply->payload, f->payload, 24u);
         pil_put_u32(reply->payload + 24u, s->epoch);
@@ -208,6 +227,7 @@ bool pil_gate1_receive(pil_gate1_session_t *s, const pil_frame_t *f,
         pil_gate1_count(s, G1_REFUSED); return false;
     }
     if (f->type == PIL_SYNC_REQ) {
+        accept(s, f);
         frame(s, reply, PIL_SYNC_REPLY, 16u, f->sequence);
         memcpy(reply->payload, f->payload, 8u);
         pil_put_u32(reply->payload + 8u, rx_time);
@@ -216,6 +236,7 @@ bool pil_gate1_receive(pil_gate1_session_t *s, const pil_frame_t *f,
     if (f->type == PIL_ARM && !s->armed_once &&
         f->ack == s->hello_ack && pil_get_u32(f->payload) == s->nonce &&
         s->servo != 0u && !reached(clock_now(s), s->epoch)) {
+        accept(s, f);
         s->armed_once = true; s->flags = 20u;
         s->lease = s->epoch + 1000u;
         return false;

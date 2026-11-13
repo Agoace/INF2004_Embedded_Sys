@@ -419,7 +419,9 @@ vehicle task described below.
   contracts and real-alarm register surface with host register doubles.
   [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
-- [Gate 1 plan/status](simulation/PIL_GATE1.md) is host-only work in progress;
+- [Gate 1 design/status](simulation/PIL_GATE1.md) has a host-tested transport
+  image; physical P1 is not run. The
+  [build record](simulation/PIL_GATE1_BUILD.md) has its hash, wiring and limits;
   [D1 diagnostics](simulation/PIL_GATE1_DIAGNOSTICS.md) is the approved separate
   stopped-USB contract, not a change to the frozen UART v1 envelope.
   [`pil_gate1_metrics.c`](../app_program/sim/pil_gate1_metrics.c) reduces raw
@@ -431,11 +433,23 @@ vehicle task described below.
   cohorts with the production helpers, not hardware measurements.
   [`pil_gate1_d1.json`](../tests/fixtures/pil_gate1_d1.json) and
   [`generate_pil_gate1_fixtures.py`](../tests/generate_pil_gate1_fixtures.py)
-  retain independent D1 envelope bytes. No Gate1 image exists yet.
+  retain independent D1 envelope bytes. The isolated Gate1 image is available.
   [`pil_gate1_session.c`](../app_program/sim/pil_gate1_session.c) owns the
   neutral cap4 lifecycle, deadlines, eight staged slots and all-event metrics.
   [`pil_gate1_stream.c`](../app_program/sim/pil_gate1_stream.c) supplies core0
   IRQ/task SPSC packet storage and delimiter recovery, not a UART driver.
+  [`pil_gate1_task.c`](../app_program/sim/pil_gate1_task.c) owns the core0 worker,
+  bounded kernel UART0/lease IRQs, drain and immutable automatic USB dump.
+  [`pil_gate1_uart_hw.c`](../app_program/sim/pil_gate1_uart_hw.c) is its separate
+  SDK-only MMIO boundary, with no SDK startup/IRQ/time runtime.
+  [`pil_gate1_device_config.h`](../app_program/sim/pil_gate1_device_config.h)
+  changes only Gate1 devinit.o sample SER startup; ADC/IIC stay unchanged.
+  [`pil_gate1_line_time.c`](../app_program/sim/pil_gate1_line_time.c) retains the
+  real first native C TIMER read through the Gate1-only drv_line.o alias.
+  [`test_pil_gate1_runtime.c`](../tests/test_pil_gate1_runtime.c),
+  [`test_pil_gate1_hw.c`](../tests/test_pil_gate1_hw.c) and
+  [`test_pil_gate1_make.py`](../tests/test_pil_gate1_make.py) test production
+  runtime/register/option seams without device access.
   [`test_pil_gate1_session.c`](../tests/test_pil_gate1_session.c) and
   [`test_pil_gate1_stream.c`](../tests/test_pil_gate1_stream.c) test production
   sources with host clocks and byte streams.

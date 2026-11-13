@@ -16,10 +16,19 @@ SIM_HW_SRCS := ../app_program/subsystem2/drv_motor_hw.c \
     ../app_program/subsystem5/drv_ultrasonic_hw.c \
     ../app_program/platform/drv_gpio_irq_hw.c
 TEMP_SRCS := $(filter-out $(SIM_HW_SRCS),$(TEMP_SRCS))
+ifneq ($(PIL_GATE1),1)
+TEMP_SRCS := $(filter-out ../app_program/sim/pil_gate1_task.c \
+    ../app_program/sim/pil_gate1_uart_hw.c \
+    ../app_program/sim/pil_gate1_line_time.c,$(TEMP_SRCS))
+endif
 else
 # Preserve the original source order, flags and names with SIM unset or zero.
 TEMP_SRCS := $(filter-out ../app_program/%_sim.c \
     ../app_program/sim/%.c,$(TEMP_SRCS))
+endif
+ifeq ($(PIL_GATE1),1)
+mtkernel_3/kernel/sysdepend/pico_rp2040/devinit.o: CFLAGS += -include ../app_program/sim/pil_gate1_device_config.h
+mtkernel_3/app_program/subsystem3/drv_line.o: CFLAGS += -Ddrv_time_us=pil_gate1_line_time_us
 endif
 TEMP_OBJS = $(TEMP_SRCS:.c=.o)
 TEMP_DEPS = $(TEMP_SRCS:.c=.d)

@@ -1,21 +1,23 @@
-# Gate 1 — host-only implementation plan
+# Gate 1 — transport design and status
 
-Main approved this plan on base9831991. Work is in progress.
-No flash, serial access or hardware timing test is authorized.
+Main approved this design on base9831991. The host-tested transport image is
+supplied. Only the operator flashes/opens target ports; coding workers do not.
+Physical P1 is NOT RUN. Sensor/physics acceptance is not supplied.
 
 ## Current checkpoint
 
-The reducer, D1 codec, neutral session state machine and bounded packet stream
-are supplied. There is NO Pico UART runtime, new task or Gate1 image yet.
-Do not flash Stage0 skeleton images. The sections below describe approved
-remaining work, not a claim that a physical link runs.
+The reducer, D1 codec, neutral session, bounded stream, UART0 task/IRQ adapter,
+independent TIMER1 lease and isolated Gate1 image are supplied. Use the
+[build/evidence/operator handoff](PIL_GATE1_BUILD.md) for the exact image hash,
+wiring, first output and stop/verdict procedure. Do not flash Stage0 skeleton
+images. The design below is not a claim of a physical transport PASS.
 
 The [D1 diagnostic contract](PIL_GATE1_DIAGNOSTICS.md) is normative.
 The frozen [UART protocol](PIL_PROTOCOL.md) is unchanged.
 
 ## Build and scope
 
-Add PIL_GATE1=1 as an explicit SIM=1-only image, suffix _sim_gate1 and separate
+Use PIL_GATE1=1 as an explicit SIM=1-only image, suffix _sim_gate1 and separate
 profile invalidation key. Default/unset adds no flags, names or source changes
 to the 38 ordinary profiles. SIM=1 without PIL_GATE1 keeps Stage 0 skeletons.
 Require explicit WIFI=none NET=none MQTT=0 CONSOLE=usb_cdc CRASH_REPORT=0.
@@ -174,6 +176,13 @@ no-auto-rearm campaigns separately from the clean soak. Report observed maxima,
 uncertainty and raw counters, not just percentiles. Aligned ADC/encoder emulation,
 IMU/sonar/cache behavior and robot timing remain outside this transport-only
 image; they cannot acquire a functional acceptance label from this soak.
+
+## Checkpoint 3 software evidence
+
+The [build/evidence record](PIL_GATE1_BUILD.md) has full585/585 GCC and sanitizer
+results,42 strict ARM unit builds, UP/split/control links, the76 ordinary literal
+hash matches, runtime-cycle restoration and complete RAM/frame/call-chain review.
+No target port was opened. No Pico timing/stack reserve measurement is claimed.
 
 ## Checkpoint 2 software evidence
 

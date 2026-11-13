@@ -78,3 +78,33 @@ set_property(TARGET pil_gate1_fixture PROPERTY LINK_LIBRARIES "")
 target_include_directories(pil_gate1_fixture PRIVATE "${REPO}/app_program/sim")
 add_test(NAME test_pil_gate1_c_fixture COMMAND pil_gate1_fixture
     "${CMAKE_CURRENT_BINARY_DIR}/pil_gate1_c_fixture.bin")
+
+add_executable(test_pil_gate1_hw "${REPO}/tests/test_pil_gate1_hw.c"
+    "${REPO}/app_program/sim/pil_gate1_uart_hw.c"
+    "${REPO}/app_program/sim/pil_gate1_line_time.c")
+set_property(TARGET test_pil_gate1_hw PROPERTY LINK_LIBRARIES "")
+target_include_directories(test_pil_gate1_hw PRIVATE
+    "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
+add_test(NAME test_pil_gate1_hw COMMAND test_pil_gate1_hw)
+add_test(NAME test_pil_gate1_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_pil_gate1_make.py")
+foreach(profile up smp control)
+    set(target test_pil_gate1_runtime_${profile})
+    add_executable(${target} "${REPO}/tests/test_pil_gate1_runtime.c"
+        "${REPO}/app_program/sim/pil_gate1_task.c"
+        "${REPO}/app_program/sim/pil_gate1_session.c"
+        "${REPO}/app_program/sim/pil_gate1_stream.c"
+        "${REPO}/app_program/sim/pil_gate1_metrics.c"
+        "${REPO}/app_program/sim/pil_gate1_dump.c"
+        "${REPO}/app_program/sim/pil_wire.c")
+    set_property(TARGET ${target} PROPERTY LINK_LIBRARIES "")
+    target_include_directories(${target} PRIVATE
+        "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
+    target_compile_definitions(${target} PRIVATE
+        APP_SIM=1 APP_SIM_GATE1=1 PIL_GATE1_RUNTIME_TEST=1
+        TK_SUPPORT_SMP=$<IF:$<STREQUAL:${profile},up>,0,1>
+        APP_FORCE_CORE0=$<IF:$<STREQUAL:${profile},control>,1,0>)
+    foreach(mode clean lease overrun lateprogress queuefull missing)
+        add_test(NAME ${target}_${mode} COMMAND ${target} ${mode})
+    endforeach()
+endforeach()
