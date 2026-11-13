@@ -20,7 +20,8 @@ static bool spin_started;static int32_t spin_origin[2];
 static unsigned int junction_start_fail,snapshot_reads;
 static FP entry;static jmp_buf done;static uint32_t now;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
-static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,run_overrun,sonar_stale;
+static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,run_overrun,slow_stop,sonar_stale;
+static char last_reason[64];
 bool line_service_running(void) { return services_ready; }
 bool sonar_service_running(void) { return services_ready; }
 bool telemetry_running(void) { return services_ready; }
@@ -111,6 +112,7 @@ int tm_printf(const UB *f,...) {
     if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
         const unsigned int mm=va_arg(a,unsigned int),tenth=va_arg(a,unsigned int);
         assert(mm==10u && tenth==8u);++hump_lines;
+        if (slow_stop) now+=15u; /* a slow USB print after the run */
         (void)va_arg(a,const char *);
         for (unsigned int i=0u;i<3u;++i) (void)va_arg(a,unsigned int);
         assert(va_arg(a,unsigned int)==IMU_HUMP_SOURCE);
@@ -168,6 +170,7 @@ int telemetry_send(const telemetry_message_t *m) {
     if (m->kind==TELEMETRY_ROW) ++rows;
     if (m->kind==TELEMETRY_INFO && m->data.info.overruns>max_overruns) max_overruns=m->data.info.overruns;
     if (m->kind==TELEMETRY_INFO && !strcmp(m->data.info.reason,"sonar watch stale")) ++sonar_timeouts;
+    if (m->kind==TELEMETRY_INFO) { strncpy(last_reason,m->data.info.reason,sizeof(last_reason)-1u); }
     return E_OK;
 }
 void drv_motor_hw_buttons_init(void) { }
@@ -215,6 +218,7 @@ int main(int argc,char **argv) {
         (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
     run_overrun=argc>1 && !strcmp(argv[1],"runoverrun");
+    slow_stop=argc>1 && !strcmp(argv[1],"slowstop");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
@@ -292,6 +296,12 @@ int main(int argc,char **argv) {
         assert(rt.first.tick_delta==1u && rt.max[RT_STEP_VSM]==11000u);
         assert(rt.first.uptime_ms!=0u);
     } else assert(rt.first.step==0u);
+    if (slow_stop) {
+        /* The stop work after the run is not a driving step: no overrun,
+         * and the stop reason stays the one that ended the run. */
+        assert(hump_lines==1u && max_overruns==0u);
+        assert(!strcmp(last_reason,"GP21 emergency stop"));
+    }
     if (run_overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
     else if (sonar_stale) assert(sonar_timeouts>0u);

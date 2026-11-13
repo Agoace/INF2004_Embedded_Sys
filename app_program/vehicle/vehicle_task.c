@@ -1360,6 +1360,10 @@ static void run_once(void)
         }
         part_end(RT_STEP_LOG);
     }
+    /* Close the last driving step here, before the stop work (prints,
+     * actuator stops). Measured later, that work would count as a deadline
+     * miss and replace the real stop reason. */
+    finish_step();
     ja_finish(&junction_line.action, final_counts, drv_time_ms());
     junction_source_stop(drv_time_ms());
     junction_observe();
