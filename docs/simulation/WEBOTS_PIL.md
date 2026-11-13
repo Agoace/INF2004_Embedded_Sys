@@ -271,7 +271,18 @@ more than one is present, an exact by-id selector is required. A guessed
 `ttyACM` path is rejected. The link is exclusive, nonblocking 921600 8N1 with
 no flow control. The runner does not reconnect or rearm after a fault.
 
-At port open, bytes may start inside a BOOT packet. Before the first fully
+At port open, reset kernel input, then read and log discarded bytes for at least
+300ms (three BOOT periods). A Debug Probe can retain a stale64B USB buffer;
+a valid BOOT followed by its truncated successor is not a fresh startup stream.
+After the discard window, require two CRC/range-valid BOOTs with the same nonce
+and sequence+1 before HELLO. A gap requires a later consecutive pair. These
+startup steps do not change active timing bounds or Pico error counters.
+The attempt3 regression fixture `sim/webots/tests/fixtures/pil_gate1_attempt3_stale_rx.txt`
+contains the original received bytes, including stale BOOT0, partial BOOT1 and
+a valid HELLO_ACK glued to it. The red test selects the stale nonce and fails;
+the corrected worker discards those bytes and selects a later fresh BOOT pair.
+
+Bytes can also start inside a BOOT packet. Before the first fully
 valid BOOT only, malformed startup fragments are retained and counted as
 `bootstrap_discarded_*`. The decoder resumes only at packet delimiters; it never
 scans inside a damaged packet. A valid first BOOT is accepted without requiring
@@ -281,7 +292,7 @@ even if BOOT and corrupt bytes arrived in the same read. `decoder_total_*`
 retains all errors; `decoder_*` excludes only pre-BOOT discards. Pico counters
 are never erased. The original attempt2 RX chunk now accepts BOOTseq2 after one
 startup discard. This is an offline regression check, not a hardware result.
-The regression suite ran144 tests OK with the same three expected S3 failures;
+The regression suite ran147 tests OK with the same three expected S3 failures;
 logs are `build/wip/pil_plan/bootstrap-resync-red.log`,
 `bootstrap-resync-green.log` and `attempt2-bootstrap-replay.log`.
 
@@ -404,7 +415,7 @@ python3 sim/webots/tools/gate1_dry_run.py \
 
 This path imports no serial adapter and opens no device. It uses a committed,
 explicitly SYNTHETIC host recording, not saved Pico/Probe measurements. It feeds
-154 recorded RX chunks through the real worker and requires exact byte/time
+158 recorded RX chunks through the real worker and requires exact byte/time
 matches for all58 PC writes. The fake clock accelerates a40ms active source;
 it does not measure laptop pacing or prove a ten-minute physical run.
 
@@ -421,7 +432,7 @@ Expected dry-run result: CLI exit0, `host_fixture_match: true`,
 software recording. Retain `events.csv`, `summary.json` and `dry-run.json`.
 A mismatch fails the host check. No hardware authorization flag is used.
 
-Validation:142 host tests OK, including seven replay checks, with the same
+Validation:147 host tests OK, including seven replay checks, with the same
 three expected S3 model failures. The recorded-soak CLI matched all chunks.
 Logs are `build/wip/pil_plan/home-preflash-host-tests.log` and
 `build/wip/pil_plan/home-dry-run-validation.log`. No serial discovery/open,

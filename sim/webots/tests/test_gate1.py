@@ -34,25 +34,37 @@ class FakePair:
         self.next_output, self.sensors = None, {}
         self.sequence = {}
         self.sent_frames = []
+        self.capabilities, self.input_resets = capabilities, 0
+        self.next_boot = clock.now + 100000
         self.queue(Type.BOOT, struct.pack('<4I', 7, capabilities, 921600, SCHEMA_ID))
-        if fault == 'bootstrap_noise':
-            self.pending[0][1][:0] = b'\xff\xff\xff' + bytes(self.pending[0][1][:8]) + b'\0'
-        elif fault == 'post_boot_noise':
-            self.pending[0][1].extend(b'\x02x\0')
+        if fault == 'stale_open':
+            self.pending[0][1][:] = bytes.fromhex((Path(__file__).parent /
+                'fixtures/pil_gate1_attempt3_stale_rx.txt').read_text())
 
     def queue(self, kind, payload, ack=NO_ACK, source=None):
         seq = self.sequence.get(kind, 0)
+        if kind == Type.BOOT and self.fault == 'boot_gap' and seq == 4:
+            seq += 1
         self.sequence[kind] = seq + 1
         frame = Frame(kind, 0 if kind == Type.BOOT else self.session, seq,
                       (self.clock.now if source is None else source) & 0xffffffff,
                       ack, payload)
         packet = encode(frame)
+        if kind == Type.BOOT and seq == 3:
+            if self.fault == 'bootstrap_noise':
+                packet = b'\xff\xff\xff' + packet[:8] + b'\0' + packet
+            elif self.fault == 'post_boot_noise':
+                packet += b'\x02x\0'
         self.pending.append([self.clock.now + 100, bytearray(packet)])
 
+    def reset_input_buffer(self):
+        self.input_resets += 1
+        self.pending = [row for row in self.pending if row[0] > self.clock.now]
+
     def write(self, data):
-        if self.fault == 'unplug' and self.clock.now > 140000:
+        if self.fault == 'unplug' and self.clock.now > 540000:
             raise OSError('fake unplug')
-        if self.fault == 'txstall' and self.clock.now > 140000:
+        if self.fault == 'txstall' and self.clock.now > 540000:
             return 0
         count = min(len(data), self.write_limit)
         for frame in self.decoder.feed(data[:count]):
@@ -78,7 +90,10 @@ class FakePair:
         return count
 
     def read(self, maximum):
-        if self.fault == 'pause' and self.clock.now > 140000:
+        if not self.armed and self.clock.now >= self.next_boot:
+            self.queue(Type.BOOT, struct.pack('<4I', 7, self.capabilities, 921600, SCHEMA_ID))
+            self.next_boot = self.clock.now + 100000
+        if self.fault == 'pause' and self.clock.now > 540000:
             self.clock.now += 6000
         if self.next_output is not None and self.clock.now >= self.next_output:
             tick = self.next_output
@@ -90,14 +105,14 @@ class FakePair:
             flags = 1 if active else 20 if self.armed else 4
             payload = struct.pack('<hhHBBHBBIIIHHHH', 0, 0, 1500, 0, flags,
                                   0, min(8, len(self.sensors)), 0, 0, 0, 0, 0, 0, 0, 0)
-            if not (self.fault == 'stall' and tick > 140000):
-                if self.fault == 'reset' and tick > 140000:
+            if not (self.fault == 'stall' and tick > 540000):
+                if self.fault == 'reset' and tick > 540000:
                     self.queue(Type.BOOT, struct.pack('<4I', 8, CAPABILITIES, 921600, SCHEMA_ID))
                 else:
-                    if self.fault == 'duplicate' and tick > 140000:
+                    if self.fault == 'duplicate' and tick > 540000:
                         self.sequence[Type.OUTPUT] -= 1
                     saved_session = self.session
-                    if self.fault == 'session' and tick > 140000:
+                    if self.fault == 'session' and tick > 540000:
                         self.session += 1
                     self.queue(Type.OUTPUT, payload, ack if active else NO_ACK, tick)
                     self.session = saved_session
@@ -170,6 +185,25 @@ class Gate1Tests(unittest.TestCase):
         hello = next(f for f in pair.sent_frames if f.type == Type.HELLO)
         self.assertEqual(struct.unpack_from('<I', hello.payload, 8)[0], 4)
 
+    def test_attempt3_stale_probe_bytes_cannot_select_boot_or_trigger_hello(self):
+        summary, events, pair = self.run_fake(fault='stale_open')
+        self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
+        self.assertEqual(pair.input_resets, 1)
+        self.assertGreaterEqual(summary['startup_discard_us'], 300000)
+        self.assertGreater(summary['startup_discarded_bytes'], 100)
+        self.assertEqual(summary['bootstrap_first_valid_boot_seq'], 3)
+        self.assertGreaterEqual(summary['bootstrap_consecutive_boots'], 2)
+        hello = next(f for f in pair.sent_frames if f.type == Type.HELLO)
+        self.assertEqual(struct.unpack_from('<I', hello.payload)[0], 7)
+        self.assertIn('startup_discard', events)
+
+    def test_boot_sequence_gap_requires_a_later_consecutive_pair(self):
+        summary, _, _ = self.run_fake(fault='boot_gap')
+        self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
+        self.assertEqual(summary['bootstrap_first_valid_boot_seq'], 3)
+        self.assertEqual(summary['bootstrap_last_valid_boot_seq'], 6)
+        self.assertEqual(summary['bootstrap_consecutive_boots'], 2)
+
     def test_startup_ff_and_partial_frame_resync_before_first_valid_boot(self):
         summary, events, _ = self.run_fake(fault='bootstrap_noise')
         self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
@@ -190,7 +224,7 @@ class Gate1Tests(unittest.TestCase):
         self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
 
     def test_pico_timer_wrap_does_not_move_fixed_epoch(self):
-        summary, _, _ = self.run_fake(clock_start=0xffffffff - 90000)
+        summary, _, _ = self.run_fake(clock_start=0xffffffff - 450000)
         self.assertEqual(summary['verdict'], 'INCOMPLETE', summary)
         self.assertGreater(summary['identity']['epoch_pico_us'], 0xffffffff)
 
@@ -210,6 +244,15 @@ class Gate1Tests(unittest.TestCase):
             hist.add(n)
         self.assertEqual(hist.summary(), {'count': 100, 'p50': 50, 'p95': 95,
                                          'p99': 99, 'max': 100})
+
+    def test_input_reset_flushes_input_only_without_device_access(self):
+        from pil.serial_io import ProbeSerial
+        import termios
+        serial = ProbeSerial.__new__(ProbeSerial)
+        serial.fd = 123
+        with patch('pil.serial_io.termios.tcflush') as flush:
+            serial.reset_input_buffer()
+        flush.assert_called_once_with(123, termios.TCIFLUSH)
 
     def test_discovery_only_by_id_and_ambiguity_fails(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -70,9 +70,11 @@ class ReplayTests(unittest.TestCase):
     def test_corrupt_recorded_uart_fails_the_real_worker(self):
         fixture = load_fixture(FIXTURE)
         fixture = copy.deepcopy(fixture)
-        packet = bytearray.fromhex(fixture['rx'][0]['hex'])
+        row = next(row for row in fixture['rx']
+                   if decode(bytes.fromhex(row['hex'])).type == Type.HELLO_ACK)
+        packet = bytearray.fromhex(row['hex'])
         packet[-3] ^= 1
-        fixture['rx'][0]['hex'] = packet.hex()
+        row['hex'] = packet.hex()
         clock = ReplayClock(fixture['start_pc_us'])
         pair = RecordedUART(fixture, clock)
         with tempfile.TemporaryDirectory() as tmp:
