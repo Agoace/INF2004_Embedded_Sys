@@ -11,8 +11,9 @@ explicit robot profile, duty-driven plant, robot PROTO, PNG-textured world
 generator, PC wire codec, conservative clock bounds and bounded host transport.
 Three illustrative worlds pass a Webots R2025a load/initial-pose smoke. That
 smoke uses passive zero wheel torque; it is not a driving or sensor-model test.
-The operational serial worker and Pico sensor/edge runtime are not implemented.
-Do not treat the host state machine as firmware.
+An opt-in host serial soak worker is now under test. It is not connected to
+Webots and has no measured hardware result. The Pico sensor/edge runtime is not
+implemented here. Do not treat the host state machine as firmware.
 
 SW6 owns the frozen PIL v1 protocol and C codec. SW4 owns `pil/s3_*` geometry,
 optics and assets. SW5 owns other `sim/webots/` source files. Main owns integration,
@@ -73,6 +74,8 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `protos/RoboPico.proto` | Axle-centred body, driven wheel joints, passive swivel/trailing caster, GP15 servo head and IMU/debug sensor mounts. |
 | `controllers/stage0_preview/` | Passive zero-torque preview, no UART or navigation. |
 | `tools/load_smoke.py` | Bounded load/initial-pose test with explicit PID-group cleanup and retained proof/log. |
+| `pil/serial_io.py` | Explicit Linux Debug Probe by-id selection and bounded nonblocking 921600 8N1 I/O. Import opens nothing. |
+| `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
 | `pil/robot_profile.py` | Required numeric parameters, sources and assumption flags; mount-coordinate conversion. |
 | `calibration/robot_assumed.json` | Explicit provisional model, not a calibrated robot. |
@@ -247,6 +250,56 @@ parser/texture warnings were repaired before the final runs. No GUI/operator
 usability, motion-controller behavior, optics, driven hump, wall-clock1ms or
 hardware result is implied. Logs/proofs remain under `build/webots/` and
 `build/wip/pil_plan/`. No launched Webots process is intentionally left running.
+
+## Gate 1 host code: not hardware acceptance
+
+The new transport-only runner has fake-pair tests. The combined host suite ran
+117 tests successfully, with three existing expected S3 model failures; the
+3026 frozen C/PC comparisons also passed. Logs are in
+`build/wip/pil_plan/gate1-host-tests.log` and
+`build/wip/pil_plan/gate1-host-c-interop.log`. These are host software results,
+not Gate 1 hardware results. No serial device was listed or opened during
+development. Hardware execution needs separate operator
+permission. The default CLI refuses access unless `--hardware-authorized` is
+present. That option is an explicit request, not evidence of operator approval.
+
+The adapter selects exactly one `/dev/serial/by-id/*Debug_Probe*` symlink. If
+more than one is present, an exact by-id selector is required. A guessed
+`ttyACM` path is rejected. The link is exclusive, nonblocking 921600 8N1 with
+no flow control. The runner does not reconnect or rearm after a fault.
+
+The no-Webots worker sends a synthetic neutral 1 kHz source. Only timing,
+released buttons and zero encoder endpoints are valid; optical, IMU and sonar
+models are explicitly unavailable. OUTPUT is observed, not applied in physics.
+SENSOR OUTPUT-ACK stays no-ACK. This is not a robot or navigation test.
+
+Each fresh output directory contains `events.csv` and an atomic `summary.json`.
+The CSV retains byte chunks, PC write-completion times, source captures with
+conservative clock intervals, frame sequences/payloads and local inhibition.
+A completed PC write is never called Pico endpoint availability. Queue growth,
+missing/duplicate/reordered frames, invalid packets, stale clocks, late source
+steps, nonzero Pico error counters or nonzero transport-profile PWM stop the
+run and report FAIL. Exit attempts one nonblocking DISARM write, records its
+byte count without claiming delivery, and closes the port.
+
+Reported latency distributions use integer-microsecond nearest-rank
+p50/p95/p99 and maximum values. They cover SYNC round trip, OUTPUT source-age
+upper bounds and report interarrival time. Source phase and offset uncertainty
+are separate measurements. Drift is a conservative offset-change interval,
+not proof of oscillator frequency. Default active-stream duration is 600 s;
+the summary records whether that duration was reached. Logging overhead and
+host scheduling remain part of the measured run, not hidden latency corrections.
+
+The candidate limits remain fixed: nominal pipeline 4 ms, source expiry 5 ms,
+endpoint availability 3 ms, clock half-width 250 us and source phase 250 us.
+A measured miss is FAIL and stops the run. No bound is increased automatically.
+Pico endpoint staging, actual apply and native-alarm capture records still need
+an approved diagnostic channel. These missing measurements are explicitly
+listed, so the current successful fake/transport run is **INCOMPLETE**, never
+PASS. No availability/apply percentiles are inferred from OUTPUT ACK or PC
+write completion. Capability negotiation for a transport-only Pico profile is
+also pending joint approval; the default host path still requires all frozen
+operational capability bits.
 
 ## Remaining work and hardware gate
 

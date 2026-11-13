@@ -187,7 +187,8 @@ class HostTransport:
             self._fault("RX chunk exceeds bounded transport input")
         for frame in self.decoder.feed(data):
             self._record("rx_complete", pc_us=received_pc_us, type=frame.type,
-                         seq=frame.sequence, source_us=frame.source_us)
+                         seq=frame.sequence, source_us=frame.source_us,
+                         session=frame.session, ack=frame.ack, payload_hex=frame.payload.hex())
             if frame.type == Type.BOOT:
                 if self.boot is not None and u32(frame.payload, 0) != u32(self.boot.payload, 0):
                     self._fault("Pico reset/new nonce; new host session required")
