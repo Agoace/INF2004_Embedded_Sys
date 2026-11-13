@@ -42,6 +42,7 @@ The archived development record retains older CMake bench examples.
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
 | SWD debug probe | [docs/kernel/SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — wiring, safety, memory reads, GDB on both cores |
+| Interrupt priorities | [docs/kernel/NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: measured IPR, all external IRQs at 0 |
 | Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Current architecture | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — tasks/cores, interrupt/polling rules and shell routes; [`vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), [`test_vehicle_sm.c`](../tests/test_vehicle_sm.c). |
@@ -184,7 +185,7 @@ vehicle task described below.
   [`test_robot_mqtt.c`](../tests/test_robot_mqtt.c) check publication,
   lifecycle ordering and refusal of early application work.
 
-- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/NVIC_PRIORITY_FINDING.md)).
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
 - [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
 - [`testing/subsystem1/TEST_LOG.md`](../testing/subsystem1/TEST_LOG.md) — shared platform S0-U01 cold-power clock test, run by the S1 TEST hook.

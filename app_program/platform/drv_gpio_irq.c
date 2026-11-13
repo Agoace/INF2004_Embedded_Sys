@@ -33,7 +33,8 @@ int drv_gpio_irq_init(void) {
     if (er < E_OK) return (int)er;
     used = 0u;
     ClearInt(DRV_GPIO_IRQ_NUMBER);
-    /* USB IRQ5 remains reset priority 0; GPIO 1; SysTick/PendSV 3. */
+    /* Requested: USB IRQ5 0, GPIO 1, SysTick/PendSV 3. EnableInt does not
+     * write the level on RP2040, so GPIO stays at 0 (F-NVIC record). */
     EnableInt(DRV_GPIO_IRQ_NUMBER, DRV_GPIO_IRQ_PRIORITY);
     ready = 1;
     return (int)E_OK;

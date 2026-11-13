@@ -70,8 +70,11 @@ remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 | Network | Bounded read-only boards, event/command queues; never a control mutex or PWM writer |
 | IMU | Bounded motion-count copy, own snapshot/hump/diagnostic boards; atomic vehicle calibration, run and LINE epochs; vehicle reads without a wait; diagnostic context prints after STOP/DUMP only; no motion mutex or commands |
 
-Only core 0 enables ADC/GPIO interrupts. GPIO IRQ13 is interrupt priority 1;
-ADC TIMER alarm0 uses 2; USB IRQ5 keeps 0; SysTick/PendSV use 3. These are
+Only core 0 enables ADC/GPIO interrupts. The source requests GPIO IRQ13 at
+interrupt priority 1 and ADC TIMER alarm0 at 2; USB IRQ5 keeps 0;
+SysTick/PendSV use 3. On the hardware IRQ0, IRQ5 and IRQ13 are all at 0,
+because `EnableInt` does not write the priority
+([F-NVIC](NVIC_PRIORITY_FINDING.md)). These are
 **interrupt** priorities, not task priorities. A high-level interrupt wrapper
 permits `tk_wup_tsk(explicit_id)` from the interrupt context.
 

@@ -51,7 +51,7 @@ int drv_line_init(void) {
     drv_line_hw_ack(); ClearInt(0u);
     next_us = drv_time_us() + 1000u;
     drv_line_hw_alarm(next_us);
-    EnableInt(0u, 2);
+    EnableInt(0u, 2); /* level 2 requested; hardware keeps 0 (F-NVIC) */
     ready = true;
     return (int)E_OK;
 }
