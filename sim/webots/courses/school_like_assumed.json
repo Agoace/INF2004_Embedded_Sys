@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "name": "school_like_assumed",
+  "provenance": {"assumed": true, "source": "ILLUSTRATIVE Stage0 connected junction network, NOT a surveyed school course. All layout/start/box/hump/paper dimensions and placement are assumptions. STATION omitted because marker survey is missing; zero paper thickness explicitly neglects sheet thickness."},
+  "origin_mm": [0, 0],
+  "start": {"position_mm": [350, 157.5], "yaw_deg": 0},
+  "allow_open_ports": false,
+  "texture_mm_per_pixel": 0.5,
+  "tiles": [
+    {"id": "sw", "column": 0, "row": 0, "kind": "CURVE", "rotation_deg": 0},
+    {"id": "south", "column": 1, "row": 0, "kind": "STRAIGHT", "rotation_deg": 90},
+    {"id": "south_t", "column": 2, "row": 0, "kind": "T", "rotation_deg": 0},
+    {"id": "se", "column": 3, "row": 0, "kind": "CURVE", "rotation_deg": 90},
+    {"id": "west_t", "column": 0, "row": 1, "kind": "T", "rotation_deg": 270},
+    {"id": "middle", "column": 1, "row": 1, "kind": "STRAIGHT", "rotation_deg": 90},
+    {"id": "cross", "column": 2, "row": 1, "kind": "CROSS", "rotation_deg": 0},
+    {"id": "east_t", "column": 3, "row": 1, "kind": "T", "rotation_deg": 90},
+    {"id": "nw", "column": 0, "row": 2, "kind": "CURVE", "rotation_deg": 270},
+    {"id": "north", "column": 1, "row": 2, "kind": "STRAIGHT", "rotation_deg": 90},
+    {"id": "north_t", "column": 2, "row": 2, "kind": "T", "rotation_deg": 180},
+    {"id": "ne", "column": 3, "row": 2, "kind": "CURVE", "rotation_deg": 180}
+  ],
+  "boxes": [
+    {"id": "detour_box", "centre_mm": [700, 472.5, 60], "size_mm": [100, 180, 100], "rotation_deg": 0, "material_id": "BOX"}
+  ],
+  "humps": [
+    {"id": "right_wheel_hump", "centre_mm": [470, 102, 10], "length_mm": 80, "width_mm": 30, "height_mm": 10, "segments": 16, "rotation_deg": 0, "material_id": "MAT_WHITE"}
+  ],
+  "barcodes": [
+    {"id": "barcode_a", "letter": "A", "centre_mm": [600, 234.5, 10], "rotation_deg": 0, "bar_height_mm": 40, "paper_size_mm": [400, 50], "paper_thickness_mm": 0, "reverse": false},
+    {"id": "barcode_b", "letter": "B", "centre_mm": [600, 710.5, 10], "rotation_deg": 180, "bar_height_mm": 40, "paper_size_mm": [400, 50], "paper_thickness_mm": 0, "reverse": false},
+    {"id": "barcode_c", "letter": "C", "centre_mm": [600, 549.5, 10], "rotation_deg": 0, "bar_height_mm": 40, "paper_size_mm": [400, 50], "paper_thickness_mm": 0, "reverse": false},
+    {"id": "barcode_d", "letter": "D", "centre_mm": [1025.5, 500, 10], "rotation_deg": 90, "bar_height_mm": 40, "paper_size_mm": [400, 50], "paper_thickness_mm": 0, "reverse": false}
+  ]
+}
