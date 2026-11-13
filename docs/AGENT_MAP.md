@@ -420,7 +420,7 @@ vehicle task described below.
   [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
 - [Gate 1 design/status](simulation/PIL_GATE1.md) has a host-tested transport
-  image; physical P1 is not run. The
+  image; the corrected image awaits P1 after the first attempt failed. The
   [build record](simulation/PIL_GATE1_BUILD.md) has its hash, wiring and limits;
   [D1 diagnostics](simulation/PIL_GATE1_DIAGNOSTICS.md) is the approved separate
   stopped-USB contract, not a change to the frozen UART v1 envelope.
@@ -440,6 +440,9 @@ vehicle task described below.
   IRQ/task SPSC packet storage and delimiter recovery, not a UART driver.
   [`pil_gate1_task.c`](../app_program/sim/pil_gate1_task.c) owns the core0 worker,
   bounded kernel UART0/lease IRQs, drain and immutable automatic USB dump.
+  Its shared FIFO consumer primes TX during enqueue under core0 IRQ exclusion;
+  the [startup correction](simulation/PIL_GATE1_TX_PRIME.md) records the failed
+  first operator attempt and register-double regression.
   [`pil_gate1_uart_hw.c`](../app_program/sim/pil_gate1_uart_hw.c) is its separate
   SDK-only MMIO boundary, with no SDK startup/IRQ/time runtime.
   [`pil_gate1_device_config.h`](../app_program/sim/pil_gate1_device_config.h)

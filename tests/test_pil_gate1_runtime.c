@@ -4,6 +4,7 @@
 #include "pil_gate1_session.h"
 #include "pil_gate1_uart_hw.h"
 #include "pil_gate1_dump.h"
+#include "hardware/structs/uart.h"
 #include <assert.h>
 #include <setjmp.h>
 #include <string.h>
@@ -16,7 +17,11 @@ static FP task;
 static void (*handlers[32])(UINT);
 static jmp_buf sleep_exit;
 static uint32_t now = 500000u, deadline;
-static bool tx_enabled;
+/* PL011 register double: TXIM alone does not raise TX IRQ on an empty FIFO. */
+uart_hw_t fake_uart;
+static unsigned int fifo_depth;
+static bool tx_pending;
+#define tx_enabled ((fake_uart.imsc & 32u) != 0u)
 static uint32_t uart_errors;
 static uint8_t rx[256], uart[32768], usb[32768];
 static size_t rx_at, rx_size, uart_size, usb_size;
@@ -69,15 +74,22 @@ bool pil_gate1_uart_rx(uint8_t *byte, uint32_t *errors)
 }
 bool pil_gate1_uart_tx(uint8_t byte)
 {
-    assert(uart_size < sizeof(uart)); uart[uart_size++] = byte; return true;
+    if (fifo_depth == 32u) { return false; }
+    assert(uart_size < sizeof(uart)); uart[uart_size++] = byte;
+    ++fifo_depth; fake_uart.fr = 8u | (fifo_depth == 32u ? 32u : 0u);
+    return true;
 }
-void pil_gate1_uart_tx_enable(bool enabled) { tx_enabled = enabled; }
+void pil_gate1_uart_tx_enable(bool enabled)
+{
+    if (enabled) { fake_uart.imsc |= 32u; }
+    else { fake_uart.imsc &= ~32u; }
+}
 uint32_t pil_gate1_uart_errors(void)
 {
     const uint32_t result = uart_errors; uart_errors = 0u; return result;
 }
-void pil_gate1_uart_ack(void) {}
-bool pil_gate1_uart_idle(void) { return !tx_enabled; }
+void pil_gate1_uart_ack(void) { tx_pending = false; }
+bool pil_gate1_uart_idle(void) { return fifo_depth == 0u; }
 void pil_gate1_uart_disable(void) {}
 void pil_gate1_lease_ack(void) {}
 void pil_gate1_lease_set(bool enabled, uint32_t value)
@@ -86,10 +98,15 @@ void pil_gate1_lease_set(bool enabled, uint32_t value)
 }
 static void drain(void)
 {
-    for (unsigned int i = 0u; tx_enabled && i < 100u; ++i) {
-        handlers[20](20u);
+    for (unsigned int i = 0u; i < 100u; ++i) {
+        if (fifo_depth > 16u) {
+            fifo_depth = 16u; tx_pending = true;
+        } else if (fifo_depth != 0u) { fifo_depth = 0u; }
+        fake_uart.fr = fifo_depth == 0u ? 128u : 8u;
+        if (tx_pending && tx_enabled) { handlers[20](20u); }
+        if (fifo_depth == 0u && !tx_pending) { break; }
     }
-    assert(!tx_enabled);
+    assert(!tx_enabled && fifo_depth == 0u);
 }
 static void send(pil_frame_t *f)
 {
@@ -115,7 +132,23 @@ int main(int argc, char **argv)
     if (setjmp(sleep_exit) == 0) {
         ((void (*)(INT, void *))task)(0, NULL);
     }
-    drain();
+    /* No RX traffic or synthetic TX interrupt may bootstrap transmission. */
+    assert(uart_size == 32u && fifo_depth == 32u && tx_enabled);
+    /* Finish the descriptor while bytes still shift: TXIM is now off.
+     * A new enqueue must refill this nonempty FIFO, not wait for an edge. */
+    fifo_depth = 16u; tx_pending = true; handlers[20](20u);
+    assert(!tx_enabled && fifo_depth == 26u);
+    for (unsigned int i = 0u; i < 20u; ++i) {
+        now += 100000u;
+        pil_gate1_session_t *state = pil_gate1_test_session();
+        const uint32_t next = state->grid_anchor +
+            ((now - state->grid_anchor) / 1000u + 1u) * 1000u;
+        pil_gate1_native_grid(next);
+        pil_gate1_test_service();
+        assert(tx_enabled && fifo_depth == 32u && state->reason == 0u);
+        drain();
+        assert(state->counts[G1_TX_FULL] == 0u);
+    }
     pil_frame_t f = {.type = PIL_HELLO, .payload_length = 24u,
         .session = 456u, .ack = 0u};
     const uint32_t hello[6] = {123u,456u,4u,1000u,4000u,5000u};
