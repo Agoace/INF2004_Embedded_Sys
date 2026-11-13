@@ -148,6 +148,19 @@ static void begin(dt_t *dt, dt_step_t step) {
     dt->sweep_seen = dt->sweep_lost = 0u;
     dt->sweep_end = DT_SWEEP_NONE;
     dt->target_deg = 0u; /* turns look first */
+    dt->first_leg_mm = 0u;
+    if (step == DT_STRAIGHT && dt->straights == 0u && dt->cfg.first_max_mm != 0u) {
+        /* Wall triangle: hypotenuse to the wall line, then extra. */
+        const int c = dt_cos1000(dt->heading);
+        uint32_t leg = dt->cfg.first_max_mm;
+        if (c > 0 && dt->wall_mm > 0) {
+            const int64_t hyp = (int64_t)dt->wall_mm * 1000 / c + dt->cfg.first_extra_mm;
+            if (hyp < (int64_t)leg) {
+                leg = (uint32_t)hyp;
+            }
+        }
+        dt->first_leg_mm = leg;
+    }
     if (step == DT_ON_LINE) {
         dt->leg_mm = dt->cfg.line_ahead_mm;
     }
@@ -193,6 +206,7 @@ void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t ob
     /* The obstacle must be outside the turn circle round the rear axle. */
     const int32_t front = (int32_t)cfg->sensor_ahead_mm + obstacle_mm;
     const int32_t need = (int32_t)cfg->sweep_mm + cfg->margin_mm;
+    dt->wall_mm = front;
     if (front < need) {
         dt->leg_mm = (uint32_t)(need - front);
         begin(dt, DT_BACK);
@@ -387,6 +401,7 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
     switch (dt_step(dt)) {
     case DT_BACK:
         if ((uint32_t)dist >= dt->leg_mm) {
+            dt->wall_mm += dist;
             begin(dt, DT_TURN_AWAY);
         }
         break;
@@ -403,7 +418,8 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
             if (s >= (int32_t)dt->cfg.return_max_mm) {
                 fail(dt, DT_FAIL_NO_LINE);
             }
-        } else if (s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
+        } else if (dt->first_leg_mm != 0u ? s >= (int32_t)dt->first_leg_mm
+                                          : s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
             end_straight(dt);
             ++dt->straights;
             if (dt->straights >= dt->cfg.max_straights) {
