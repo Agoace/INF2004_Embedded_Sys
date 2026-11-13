@@ -213,6 +213,21 @@ ifeq ($(CONSOLE)$(CRASH_REPORT),usb_cdc1)
 CRASH_SUFFIX := _crash
 endif
 
+# PIL Stage 0: source-selection skeletons only; never flash these images.
+SIM ?= 0
+ifneq ($(words $(SIM)),1)
+$(error SIM must be one value: 0 or 1)
+endif
+ifneq ($(filter $(SIM),0 1),$(SIM))
+$(error Unknown SIM '$(SIM)'; use 0 or 1)
+endif
+ifeq ($(SIM),1)
+ifneq ($(CONSOLE):$(CRASH_REPORT),usb_cdc:0)
+$(error SIM=1 requires CRASH_REPORT=0 and CONSOLE=usb_cdc)
+endif
+SIM_SUFFIX := _sim
+endif
+
 # RT-0075/F2: the placement profile changes which core every task lands on, so it
 # changes the object code and must appear in both the artifact name and the
 # invalidation key below. Without this, switching FORCE_CORE0 reuses objects built
@@ -231,7 +246,7 @@ EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
-EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)$(SIM_SUFFIX)
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -300,6 +315,9 @@ CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
 CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
 CFLAGS  += -DBARCODE_LIVE_ENABLE=$(BARCODE_LIVE_ENABLE)
 CFLAGS  += -DBARCODE_MEASURED_CLEAR_MM=$(BARCODE_MEASURED_CLEAR_MM)
+ifeq ($(SIM),1)
+CFLAGS  += -DAPP_SIM=1
+endif
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -341,6 +359,9 @@ PROFILE_ID := $(PROFILE_ID)-forcecore$(FORCE_CORE0)
 PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
 PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
 PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
+ifeq ($(SIM),1)
+PROFILE_ID := $(PROFILE_ID)-sim1
+endif
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

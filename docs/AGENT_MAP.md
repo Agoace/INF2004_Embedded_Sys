@@ -396,6 +396,31 @@ vehicle task described below.
 - [`app_program/subsystem1/telemetry.c`](../app_program/subsystem1/telemetry.c) — priority-30 RAM log/dump owner; value messages via `mbf_telemetry`, `TMO_POL` producer sends.
 - [Kernel telemetry](s1-telemetry/TELEMETRY.md) — boards/queues, RAM ownership, local loss policy and current MQTT boundary.
 
+## Processor-in-the-loop Stage 0
+
+- [PIL protocol v1](simulation/PIL_PROTOCOL.md) defines the binary UART contract,
+  fixed sensor timeline, fault behavior and Stage 0 / Gate 1 boundary.
+- [`pil_wire.h`](../app_program/sim/pil_wire.h) and
+  [`pil_wire.c`](../app_program/sim/pil_wire.c) are the stateless C byte codec.
+  No UART, kernel or SDK runtime is owned by this codec.
+- [`pil_wire_v1.json`](../tests/fixtures/pil_wire_v1.json) contains shared exact
+  packets; [`generate_pil_fixtures.py`](../tests/generate_pil_fixtures.py) checks
+  their independent reference bytes. [`test_pil_wire.c`](../tests/test_pil_wire.c)
+  tests C encoding, decoding, malformed packets and unchanged failed outputs;
+  [`pil_checks.cmake`](../tests/pil_checks.cmake) registers the host tests.
+- The six fail-closed skeletons are
+  [`drv_motor_sim.c`](../app_program/subsystem2/drv_motor_sim.c),
+  [`drv_line_sim.c`](../app_program/subsystem3/drv_line_sim.c),
+  [`barcode_sim.c`](../app_program/subsystem3/barcode_sim.c),
+  [`imu_sim.c`](../app_program/subsystem4/imu_sim.c),
+  [`drv_ultrasonic_sim.c`](../app_program/subsystem5/drv_ultrasonic_sim.c) and
+  [`drv_gpio_irq_sim.c`](../app_program/platform/drv_gpio_irq_sim.c).
+  [`test_pil_skeletons.c`](../tests/test_pil_skeletons.c) checks their failure
+  contracts and real-alarm register surface with host register doubles.
+  [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
+  [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
+  Runtime UART, virtual edges and IMU register emulation are not implemented.
+
 ## Approved template deviations
 
 - [Template change ledger](architecture/TEMPLATE_CHANGES.md) — shared startup and Wi-Fi changes; template source is not frozen.

@@ -1,0 +1,386 @@
+{
+  "reference_commit": "451e562",
+  "comparison": "literal ELF and UF2 SHA256, same source/build paths and public example settings; every baseline equals Stage0",
+  "profiles": {
+    "up-usb": {
+      "elf": {
+        "baseline": "509eab784984040bf9c7f9aa861d3be3e0bad626da7db17d287afb136e468f0f",
+        "stage0": "509eab784984040bf9c7f9aa861d3be3e0bad626da7db17d287afb136e468f0f"
+      },
+      "uf2": {
+        "baseline": "91bf55ffbcf512fb9711af7b86b9147bcd27d75eeadd5a88da08b325f84c2029",
+        "stage0": "91bf55ffbcf512fb9711af7b86b9147bcd27d75eeadd5a88da08b325f84c2029"
+      }
+    },
+    "up-test": {
+      "elf": {
+        "baseline": "c6cbd0d80fd622fcd0ddab4d7dec0cdd98727b59c5fe2973c6db256f2c345fd9",
+        "stage0": "c6cbd0d80fd622fcd0ddab4d7dec0cdd98727b59c5fe2973c6db256f2c345fd9"
+      },
+      "uf2": {
+        "baseline": "b353719e99c9d432c016ff1b1b9cbc25fb87e3a246da9654e609baba656f196e",
+        "stage0": "b353719e99c9d432c016ff1b1b9cbc25fb87e3a246da9654e609baba656f196e"
+      }
+    },
+    "up-bench": {
+      "elf": {
+        "baseline": "117d8075643e85cd08dcff10a7d4009b3f1f384cbdcfd41a31f45d7a93ef9af0",
+        "stage0": "117d8075643e85cd08dcff10a7d4009b3f1f384cbdcfd41a31f45d7a93ef9af0"
+      },
+      "uf2": {
+        "baseline": "ac8a2884a5f4dacc370a39f794a35d62de10976d2a1d45df00d0cbfd9b85191a",
+        "stage0": "ac8a2884a5f4dacc370a39f794a35d62de10976d2a1d45df00d0cbfd9b85191a"
+      }
+    },
+    "up-wifi": {
+      "elf": {
+        "baseline": "5f905baca815a4344b0f9d4c61da2efd8f8d6d3d90a64f95b9d2715fb9a78b5e",
+        "stage0": "5f905baca815a4344b0f9d4c61da2efd8f8d6d3d90a64f95b9d2715fb9a78b5e"
+      },
+      "uf2": {
+        "baseline": "e36e6e45d047f4642e0d46308fac0c77e11284c826d9b99a78635a95bef598fe",
+        "stage0": "e36e6e45d047f4642e0d46308fac0c77e11284c826d9b99a78635a95bef598fe"
+      }
+    },
+    "up-lwip": {
+      "elf": {
+        "baseline": "ce03afbdefa81f8caac1ad97174d767eac393aa8350857b0805cc999facea2fc",
+        "stage0": "ce03afbdefa81f8caac1ad97174d767eac393aa8350857b0805cc999facea2fc"
+      },
+      "uf2": {
+        "baseline": "319593e2c1657b971af8e6c1a3bd75ebbc2be7dd1ab2cd8083f721d78ddb4120",
+        "stage0": "319593e2c1657b971af8e6c1a3bd75ebbc2be7dd1ab2cd8083f721d78ddb4120"
+      }
+    },
+    "up-mqtt": {
+      "elf": {
+        "baseline": "e675acc9fad41c0644d034824aaa80cf87bce8a414ed17b2db25b9bae4f18b55",
+        "stage0": "e675acc9fad41c0644d034824aaa80cf87bce8a414ed17b2db25b9bae4f18b55"
+      },
+      "uf2": {
+        "baseline": "5686f2e72e152d1fc6fb02f0fc64950cea8c75e5a1633401d0f3092c5035d91c",
+        "stage0": "5686f2e72e152d1fc6fb02f0fc64950cea8c75e5a1633401d0f3092c5035d91c"
+      }
+    },
+    "up-mqtt-test": {
+      "elf": {
+        "baseline": "b532aeeaf6cf7b344658d41862bd95de8aa909eb3f01c2b94f86ccc4e11cf873",
+        "stage0": "b532aeeaf6cf7b344658d41862bd95de8aa909eb3f01c2b94f86ccc4e11cf873"
+      },
+      "uf2": {
+        "baseline": "c5b1a6e7358054ddabb41a4e8b23b08dc6c204ffd00f2c58c5b7c870a48f9874",
+        "stage0": "c5b1a6e7358054ddabb41a4e8b23b08dc6c204ffd00f2c58c5b7c870a48f9874"
+      }
+    },
+    "up-mqtt-bench": {
+      "elf": {
+        "baseline": "ccbbda6a3547852b97e5544b6102001bf6aad0d255b231ce440cde31f0a0e606",
+        "stage0": "ccbbda6a3547852b97e5544b6102001bf6aad0d255b231ce440cde31f0a0e606"
+      },
+      "uf2": {
+        "baseline": "0873745f1107802699f30b09f8799966d715f492793521268a28238a46f51ae9",
+        "stage0": "0873745f1107802699f30b09f8799966d715f492793521268a28238a46f51ae9"
+      }
+    },
+    "split-usb": {
+      "elf": {
+        "baseline": "9aa0ae4eef10bfaf0f247eee3d6b0b9a22ee0ba8afaf4f29da930893869ddcae",
+        "stage0": "9aa0ae4eef10bfaf0f247eee3d6b0b9a22ee0ba8afaf4f29da930893869ddcae"
+      },
+      "uf2": {
+        "baseline": "458c86ed53db572f508a6a0d3237f2a215e903605a9514d5df7d89c5ac32bd22",
+        "stage0": "458c86ed53db572f508a6a0d3237f2a215e903605a9514d5df7d89c5ac32bd22"
+      }
+    },
+    "split-test": {
+      "elf": {
+        "baseline": "fd6b73ba6b29131aeec0cd16e35befb9ba4c9a3e7caf777fe073957d20c211e5",
+        "stage0": "fd6b73ba6b29131aeec0cd16e35befb9ba4c9a3e7caf777fe073957d20c211e5"
+      },
+      "uf2": {
+        "baseline": "b3695a4dbf1ca2ec3e00d1abfc35d53c4a0f2fad75946a8751491946a13f781b",
+        "stage0": "b3695a4dbf1ca2ec3e00d1abfc35d53c4a0f2fad75946a8751491946a13f781b"
+      }
+    },
+    "split-bench": {
+      "elf": {
+        "baseline": "23fa29a805a6f8c2ac5482f895681999584fcf38004919d8446159a2d12af8b6",
+        "stage0": "23fa29a805a6f8c2ac5482f895681999584fcf38004919d8446159a2d12af8b6"
+      },
+      "uf2": {
+        "baseline": "b27a3446505ac9c620a2dc728472cdfb3abbbd81d06ab4a3b74937e40895ce72",
+        "stage0": "b27a3446505ac9c620a2dc728472cdfb3abbbd81d06ab4a3b74937e40895ce72"
+      }
+    },
+    "split-wifi": {
+      "elf": {
+        "baseline": "d7bd724d5109c1caac18b37b2e0b45d2e12c63c50ab1f4f1324a19a4a2391d56",
+        "stage0": "d7bd724d5109c1caac18b37b2e0b45d2e12c63c50ab1f4f1324a19a4a2391d56"
+      },
+      "uf2": {
+        "baseline": "9396d41b05849648908c535343088cd72eff22dd6a01e8ace89601dd342062d5",
+        "stage0": "9396d41b05849648908c535343088cd72eff22dd6a01e8ace89601dd342062d5"
+      }
+    },
+    "split-lwip": {
+      "elf": {
+        "baseline": "d1d449c89d0f971ea146643ec6e0504801a2e0b6213b31658da44f1d34a0987e",
+        "stage0": "d1d449c89d0f971ea146643ec6e0504801a2e0b6213b31658da44f1d34a0987e"
+      },
+      "uf2": {
+        "baseline": "82b254f4ed3870e6ca6c76f53e463147b495e461cedd08f818e3553a50c38ba9",
+        "stage0": "82b254f4ed3870e6ca6c76f53e463147b495e461cedd08f818e3553a50c38ba9"
+      }
+    },
+    "split-mqtt": {
+      "elf": {
+        "baseline": "22c9f3f91b478a5128f3011af0186611a68d0fa5a7bd1018fb7d70a524e0b8d4",
+        "stage0": "22c9f3f91b478a5128f3011af0186611a68d0fa5a7bd1018fb7d70a524e0b8d4"
+      },
+      "uf2": {
+        "baseline": "bb0e4c6eac46c6eaf8cef64b85b4aba872882ecc87fb0cf573c67a6b524826ef",
+        "stage0": "bb0e4c6eac46c6eaf8cef64b85b4aba872882ecc87fb0cf573c67a6b524826ef"
+      }
+    },
+    "split-mqtt-test": {
+      "elf": {
+        "baseline": "822970baa2d69639503afc1df2904e80973b430c6695f6bbcab23b3446212002",
+        "stage0": "822970baa2d69639503afc1df2904e80973b430c6695f6bbcab23b3446212002"
+      },
+      "uf2": {
+        "baseline": "075c87b9f63ee84e5f8e4778551543beb54abcf2760c74a259bcbfd2073dbf6b",
+        "stage0": "075c87b9f63ee84e5f8e4778551543beb54abcf2760c74a259bcbfd2073dbf6b"
+      }
+    },
+    "split-mqtt-bench": {
+      "elf": {
+        "baseline": "d3cf55a7df954854a66d42d60cab987352576c3884815b5354ca71f3557a765b",
+        "stage0": "d3cf55a7df954854a66d42d60cab987352576c3884815b5354ca71f3557a765b"
+      },
+      "uf2": {
+        "baseline": "527499d2599e9512dfdefa7dc8264d704a6ca9220a02f67004aa6cd2045eef3e",
+        "stage0": "527499d2599e9512dfdefa7dc8264d704a6ca9220a02f67004aa6cd2045eef3e"
+      }
+    },
+    "control-usb": {
+      "elf": {
+        "baseline": "233502f5171b3466a96f93ac74156c83eb4735c7b2a52c540435194577b5f6d7",
+        "stage0": "233502f5171b3466a96f93ac74156c83eb4735c7b2a52c540435194577b5f6d7"
+      },
+      "uf2": {
+        "baseline": "7093cf285791bf855b5fded78675a42fe4d0cbbd1637e0464d542c976dc0103b",
+        "stage0": "7093cf285791bf855b5fded78675a42fe4d0cbbd1637e0464d542c976dc0103b"
+      }
+    },
+    "control-test": {
+      "elf": {
+        "baseline": "fb5aff65e11c7e916c960ef2ba86fe5e3562e852e0a4148bce56e49e0f9ec032",
+        "stage0": "fb5aff65e11c7e916c960ef2ba86fe5e3562e852e0a4148bce56e49e0f9ec032"
+      },
+      "uf2": {
+        "baseline": "0156906d40ed2d1b01f3abbc7ff8447e62ab485c24a4946d96472a191526e670",
+        "stage0": "0156906d40ed2d1b01f3abbc7ff8447e62ab485c24a4946d96472a191526e670"
+      }
+    },
+    "control-bench": {
+      "elf": {
+        "baseline": "f8818f88ae8d02eaaa99f4383e27ee7e906a4dcec3307a6a3e69279b7f65998f",
+        "stage0": "f8818f88ae8d02eaaa99f4383e27ee7e906a4dcec3307a6a3e69279b7f65998f"
+      },
+      "uf2": {
+        "baseline": "4af498058b4945d07eed65879c9af9a83da3e0b90d5a95ede8e955a0e6ed6f2c",
+        "stage0": "4af498058b4945d07eed65879c9af9a83da3e0b90d5a95ede8e955a0e6ed6f2c"
+      }
+    },
+    "control-wifi": {
+      "elf": {
+        "baseline": "8740eda26182c1892a111d8514391ddac7b41ec755ded4e3ad0a0e173180dbed",
+        "stage0": "8740eda26182c1892a111d8514391ddac7b41ec755ded4e3ad0a0e173180dbed"
+      },
+      "uf2": {
+        "baseline": "8df40746cf2177256898f04a37d99e418bab09d4e67bd10520578a17bba389dd",
+        "stage0": "8df40746cf2177256898f04a37d99e418bab09d4e67bd10520578a17bba389dd"
+      }
+    },
+    "control-lwip": {
+      "elf": {
+        "baseline": "13450358921e0361afae4406a353b30b56dca4d705cd9d678e9ac06630fae74e",
+        "stage0": "13450358921e0361afae4406a353b30b56dca4d705cd9d678e9ac06630fae74e"
+      },
+      "uf2": {
+        "baseline": "b76bb4aa97d836dd82a75cafd74b8a59c50632a60681ce972d5348424275ecbb",
+        "stage0": "b76bb4aa97d836dd82a75cafd74b8a59c50632a60681ce972d5348424275ecbb"
+      }
+    },
+    "control-mqtt": {
+      "elf": {
+        "baseline": "53abbc3ac5d59202bde488485858e692ed3a8f7652d43248f0a420b11c5bfd90",
+        "stage0": "53abbc3ac5d59202bde488485858e692ed3a8f7652d43248f0a420b11c5bfd90"
+      },
+      "uf2": {
+        "baseline": "c7a302c14c397c8c7c53d955187f601d5aa93b33dda8453b50b1f612e263d200",
+        "stage0": "c7a302c14c397c8c7c53d955187f601d5aa93b33dda8453b50b1f612e263d200"
+      }
+    },
+    "control-mqtt-test": {
+      "elf": {
+        "baseline": "458c2be0ddd942755b1b89d681a0a48fe2457a9b0b4496d40511096985770208",
+        "stage0": "458c2be0ddd942755b1b89d681a0a48fe2457a9b0b4496d40511096985770208"
+      },
+      "uf2": {
+        "baseline": "6519fdd4cff20fc5e0ef90de4e8009f61e6d4d7f146f7ad40fbf688cee08cc87",
+        "stage0": "6519fdd4cff20fc5e0ef90de4e8009f61e6d4d7f146f7ad40fbf688cee08cc87"
+      }
+    },
+    "control-mqtt-bench": {
+      "elf": {
+        "baseline": "24e79f91956bce1a257a1610ebfacea48cfab00a90a315759576a4b9b6ed8e52",
+        "stage0": "24e79f91956bce1a257a1610ebfacea48cfab00a90a315759576a4b9b6ed8e52"
+      },
+      "uf2": {
+        "baseline": "8016fed7c844e99adb38cb46a7493e0151a866d02f24b82f8569dfa3cdca1ce6",
+        "stage0": "8016fed7c844e99adb38cb46a7493e0151a866d02f24b82f8569dfa3cdca1ce6"
+      }
+    },
+    "capture-force0": {
+      "elf": {
+        "baseline": "09fe261cb5774ce7ba4e666f560d7c9341a9273d81f86c648c79d44a12dde8e6",
+        "stage0": "09fe261cb5774ce7ba4e666f560d7c9341a9273d81f86c648c79d44a12dde8e6"
+      },
+      "uf2": {
+        "baseline": "94944ff328e0e04e390f87e7b1a04fa3f3e9f695c30f6a08dd5a085c3a0d5216",
+        "stage0": "94944ff328e0e04e390f87e7b1a04fa3f3e9f695c30f6a08dd5a085c3a0d5216"
+      }
+    },
+    "capture-force1": {
+      "elf": {
+        "baseline": "9acd49f86de45cbe081dcfbb15b2428c948637cc1ead5d4bdb143075768f14b2",
+        "stage0": "9acd49f86de45cbe081dcfbb15b2428c948637cc1ead5d4bdb143075768f14b2"
+      },
+      "uf2": {
+        "baseline": "94944ff328e0e04e390f87e7b1a04fa3f3e9f695c30f6a08dd5a085c3a0d5216",
+        "stage0": "94944ff328e0e04e390f87e7b1a04fa3f3e9f695c30f6a08dd5a085c3a0d5216"
+      }
+    },
+    "up-fakeA": {
+      "elf": {
+        "baseline": "e7412f19ac5096801a6ebf0aff318150fbe2debe00e5988b47eb31d49e18fabe",
+        "stage0": "e7412f19ac5096801a6ebf0aff318150fbe2debe00e5988b47eb31d49e18fabe"
+      },
+      "uf2": {
+        "baseline": "532a70cecae4b53dc6c15a79a5acf9995904e10039f33b72e1538329b203d7ff",
+        "stage0": "532a70cecae4b53dc6c15a79a5acf9995904e10039f33b72e1538329b203d7ff"
+      }
+    },
+    "up-fakeB": {
+      "elf": {
+        "baseline": "45b3a600fbafbb710d387cee329fa76d9d611e24c5cbaf8110fad7290f819d4a",
+        "stage0": "45b3a600fbafbb710d387cee329fa76d9d611e24c5cbaf8110fad7290f819d4a"
+      },
+      "uf2": {
+        "baseline": "9bcf016f011e21ad2cf8cfcba3058382dfd0b70105776f6de33c917729393fff",
+        "stage0": "9bcf016f011e21ad2cf8cfcba3058382dfd0b70105776f6de33c917729393fff"
+      }
+    },
+    "up-fakeC": {
+      "elf": {
+        "baseline": "6fcdbcc0a5cc211be67792012e40c41533a3cd30402c15b5c22ded8b2517923d",
+        "stage0": "6fcdbcc0a5cc211be67792012e40c41533a3cd30402c15b5c22ded8b2517923d"
+      },
+      "uf2": {
+        "baseline": "ef017968a5f367e61ba67a48b5950e386a78b2d9e9efee808ff19a39ad3e2eef",
+        "stage0": "ef017968a5f367e61ba67a48b5950e386a78b2d9e9efee808ff19a39ad3e2eef"
+      }
+    },
+    "up-fakeD": {
+      "elf": {
+        "baseline": "0fa79f5783a9b1bfc88c6bebe6ab8186f860b80a92d29f09166e093dfee708bd",
+        "stage0": "0fa79f5783a9b1bfc88c6bebe6ab8186f860b80a92d29f09166e093dfee708bd"
+      },
+      "uf2": {
+        "baseline": "e90ec002b27d4f0e416a87008a1c33e26f982d1a6f02be5a4e4900bc37794df7",
+        "stage0": "e90ec002b27d4f0e416a87008a1c33e26f982d1a6f02be5a4e4900bc37794df7"
+      }
+    },
+    "split-fakeA": {
+      "elf": {
+        "baseline": "d5fe1e8fa59c5bda0409671cfb6793eba0964db9b6a8db2978c38249b732eb93",
+        "stage0": "d5fe1e8fa59c5bda0409671cfb6793eba0964db9b6a8db2978c38249b732eb93"
+      },
+      "uf2": {
+        "baseline": "790647a3b0d992e8a4120b129f237ccaf223f394902495ce07cfd1f78d23cc1b",
+        "stage0": "790647a3b0d992e8a4120b129f237ccaf223f394902495ce07cfd1f78d23cc1b"
+      }
+    },
+    "split-fakeB": {
+      "elf": {
+        "baseline": "511ac2846b843ca1a1240ba5e7519815cd9023a3ddfcdbcfa1d583142d7f5e39",
+        "stage0": "511ac2846b843ca1a1240ba5e7519815cd9023a3ddfcdbcfa1d583142d7f5e39"
+      },
+      "uf2": {
+        "baseline": "fad137af5571f3a479c033a49e3d17361b7ff281b134590ac3cc58defddc0384",
+        "stage0": "fad137af5571f3a479c033a49e3d17361b7ff281b134590ac3cc58defddc0384"
+      }
+    },
+    "split-fakeC": {
+      "elf": {
+        "baseline": "df1fbe41a5a21ef92ec7adab1aadf9ab1a84b72581b1d3701d2ad8d8eec34791",
+        "stage0": "df1fbe41a5a21ef92ec7adab1aadf9ab1a84b72581b1d3701d2ad8d8eec34791"
+      },
+      "uf2": {
+        "baseline": "d6ba97784705dffa14310368113d000708202a3d1b09626eb34829780515af43",
+        "stage0": "d6ba97784705dffa14310368113d000708202a3d1b09626eb34829780515af43"
+      }
+    },
+    "split-fakeD": {
+      "elf": {
+        "baseline": "153173d19b87ae9ada58b59fd305a632605348e2d3b8ac36281326ac0ad4265c",
+        "stage0": "153173d19b87ae9ada58b59fd305a632605348e2d3b8ac36281326ac0ad4265c"
+      },
+      "uf2": {
+        "baseline": "397a8fea65b30b207a198c71ad59df3ae4f6bceb13fbe6561471eaf156b713c2",
+        "stage0": "397a8fea65b30b207a198c71ad59df3ae4f6bceb13fbe6561471eaf156b713c2"
+      }
+    },
+    "control-fakeA": {
+      "elf": {
+        "baseline": "c2e4650303616ece3e8d90209bc1eaa7ff6880c95d465da0c4b868410150af40",
+        "stage0": "c2e4650303616ece3e8d90209bc1eaa7ff6880c95d465da0c4b868410150af40"
+      },
+      "uf2": {
+        "baseline": "a58db1106fa978c6688dbff504817d437552cf742606c249cce122b5219daece",
+        "stage0": "a58db1106fa978c6688dbff504817d437552cf742606c249cce122b5219daece"
+      }
+    },
+    "control-fakeB": {
+      "elf": {
+        "baseline": "834745ff1f2c5cc521eedd7f6c241e2b8c91b176cba381e0471b4371cc76a996",
+        "stage0": "834745ff1f2c5cc521eedd7f6c241e2b8c91b176cba381e0471b4371cc76a996"
+      },
+      "uf2": {
+        "baseline": "ce1de628adbad8c2f4f75de2fde53b7bd09e5cb79238a00a5009cfe813f75487",
+        "stage0": "ce1de628adbad8c2f4f75de2fde53b7bd09e5cb79238a00a5009cfe813f75487"
+      }
+    },
+    "control-fakeC": {
+      "elf": {
+        "baseline": "e15caffe4ef448343966a94762452e1bd3a0ccb3c8cb833538d1b0dff269d1f7",
+        "stage0": "e15caffe4ef448343966a94762452e1bd3a0ccb3c8cb833538d1b0dff269d1f7"
+      },
+      "uf2": {
+        "baseline": "24c9e03e33de3c4fdd96dd2f0e8ad03ca4544ab76230fb9a000111c45508a59b",
+        "stage0": "24c9e03e33de3c4fdd96dd2f0e8ad03ca4544ab76230fb9a000111c45508a59b"
+      }
+    },
+    "control-fakeD": {
+      "elf": {
+        "baseline": "1613b8370dfa612d1e043b97e653cba49e7f67738ffc509e14845084ea06a8b3",
+        "stage0": "1613b8370dfa612d1e043b97e653cba49e7f67738ffc509e14845084ea06a8b3"
+      },
+      "uf2": {
+        "baseline": "339877c19d3e87544f864588a527a631542b3a64d32dcca494404a28a425a0a8",
+        "stage0": "339877c19d3e87544f864588a527a631542b3a64d32dcca494404a28a425a0a8"
+      }
+    }
+  }
+}
