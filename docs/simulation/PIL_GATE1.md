@@ -5,9 +5,8 @@ No flash, serial access or hardware timing test is authorized.
 
 ## Current checkpoint
 
-Only the all-event metric reducer and separate D1 envelope codec are supplied.
-There is NO Pico UART runtime, session state machine, new task or Gate1 image
-at this checkpoint.
+The reducer, D1 codec, neutral session state machine and bounded packet stream
+are supplied. There is NO Pico UART runtime, new task or Gate1 image yet.
 Do not flash Stage0 skeleton images. The sections below describe approved
 remaining work, not a claim that a physical link runs.
 
@@ -175,6 +174,17 @@ no-auto-rearm campaigns separately from the clean soak. Report observed maxima,
 uncertainty and raw counters, not just percentiles. Aligned ADC/encoder emulation,
 IMU/sonar/cache behavior and robot timing remain outside this transport-only
 image; they cannot acquire a functional acceptance label from this soak.
+
+## Checkpoint 2 software evidence
+
+Production session/stream tests were written RED first. Full GCC and Clang
+ASan/UBSan each pass565/565. Tests cover10000 continuous slots, pending preload,
+missing lookahead, exact late/lease boundaries, eight/nine slot capacity,
+stale sessions, duplicate/no-progress renewal, SYNC timestamps, unconditional
+DISARM, first-latch preservation, counter overflow, TIMER/queue-index wrap,
+queue-full preservation and oversize discard through the next delimiter.
+All storage remains caller-owned; a core0 caller must exclude IRQ access to
+session mutations. UART hardware/task binding is the next checkpoint.
 
 ## Checkpoint 1 software evidence
 

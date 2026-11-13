@@ -39,11 +39,15 @@ add_test(NAME test_pil_skeletons COMMAND test_pil_skeletons)
 add_test(NAME test_pil_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_pil_make.py" "${CMAKE_CURRENT_BINARY_DIR}")
 
-foreach(unit metrics dump)
+foreach(unit metrics dump stream session)
     add_executable(test_pil_gate1_${unit}
         "${REPO}/tests/test_pil_gate1_${unit}.c"
         "${REPO}/app_program/sim/pil_gate1_${unit}.c"
         "${REPO}/app_program/sim/pil_wire.c")
+    if(unit STREQUAL "session")
+        target_sources(test_pil_gate1_${unit} PRIVATE
+            "${REPO}/app_program/sim/pil_gate1_metrics.c")
+    endif()
     set_property(TARGET test_pil_gate1_${unit} PROPERTY LINK_LIBRARIES "")
     target_include_directories(test_pil_gate1_${unit} PRIVATE
         "${REPO}/app_program/sim")

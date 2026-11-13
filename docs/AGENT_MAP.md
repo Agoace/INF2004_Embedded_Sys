@@ -432,6 +432,13 @@ vehicle task described below.
   [`pil_gate1_d1.json`](../tests/fixtures/pil_gate1_d1.json) and
   [`generate_pil_gate1_fixtures.py`](../tests/generate_pil_gate1_fixtures.py)
   retain independent D1 envelope bytes. No Gate1 image exists yet.
+  [`pil_gate1_session.c`](../app_program/sim/pil_gate1_session.c) owns the
+  neutral cap4 lifecycle, deadlines, eight staged slots and all-event metrics.
+  [`pil_gate1_stream.c`](../app_program/sim/pil_gate1_stream.c) supplies core0
+  IRQ/task SPSC packet storage and delimiter recovery, not a UART driver.
+  [`test_pil_gate1_session.c`](../tests/test_pil_gate1_session.c) and
+  [`test_pil_gate1_stream.c`](../tests/test_pil_gate1_stream.c) test production
+  sources with host clocks and byte streams.
   Runtime UART, virtual edges and IMU register emulation are not implemented.
 - [Webots PIL record](simulation/WEBOTS_PIL.md) — PC side.
   [`course_builder.py`](../sim/webots/pil/course_builder.py),
