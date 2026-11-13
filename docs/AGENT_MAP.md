@@ -420,6 +420,29 @@ vehicle task described below.
   [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
   Runtime UART, virtual edges and IMU register emulation are not implemented.
+- [Webots PIL record](simulation/WEBOTS_PIL.md) — PC side.
+  [`course_builder.py`](../sim/webots/pil/course_builder.py),
+  [`scene.py`](../sim/webots/pil/scene.py),
+  [`world.py`](../sim/webots/pil/world.py),
+  [`RoboPico.proto`](../sim/webots/protos/RoboPico.proto),
+  [assumed courses](../sim/webots/courses/) and
+  [`load_smoke.py`](../sim/webots/tools/load_smoke.py) build and load the
+  passive preview worlds. [`robot_profile.py`](../sim/webots/pil/robot_profile.py),
+  [`motor_plant.py`](../sim/webots/pil/motor_plant.py),
+  [`wire.py`](../sim/webots/pil/wire.py), [`clock.py`](../sim/webots/pil/clock.py)
+  and [`transport.py`](../sim/webots/pil/transport.py) are the host models and
+  frozen-v1 transport; [`check_c_interop.py`](../sim/webots/tools/check_c_interop.py)
+  compares them with the C codec. Tests: [`sim/webots/tests/`](../sim/webots/tests/).
+  Host-only; hardware Gate 1 is not run.
+- [S3 sensor model](simulation/S3_SENSOR_MODEL.md) — exploratory, not calibration.
+  [`s3_geometry.py`](../sim/webots/pil/s3_geometry.py),
+  [`s3_assets.py`](../sim/webots/pil/s3_assets.py),
+  [`s3_optics.py`](../sim/webots/pil/s3_optics.py),
+  [`s3_kinematics.py`](../sim/webots/pil/s3_kinematics.py),
+  [`s3_replay.py`](../sim/webots/pil/s3_replay.py),
+  [`s3_profiles.py`](../sim/webots/pil/s3_profiles.py) and
+  [`s3_sensor_profiles.json`](../calibration/s3_sensor_profiles.json); tests are
+  `sim/webots/tests/test_s3_*`.
 
 ## Approved template deviations
 
