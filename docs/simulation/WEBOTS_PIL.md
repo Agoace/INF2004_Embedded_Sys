@@ -78,6 +78,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
+| `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
 | `pil/robot_profile.py` | Required numeric parameters, sources and assumption flags; mount-coordinate conversion. |
 | `calibration/robot_assumed.json` | Explicit provisional model, not a calibrated robot. |
@@ -375,6 +376,42 @@ The full source hashes and result remain under
 `build/webots/gate1-d1-c-interop-0752fdf/` and
 `build/wip/pil_plan/gate1-d1-c-interop-0752fdf.log`. These are **synthetic host checks**,
 not Pico/Probe measurements or a ten-minute hardware result.
+
+### Pre-flash no-device dry-run
+
+Run the host tests first, then use a fresh output directory:
+
+```sh
+PYTHONPATH=sim/webots python3 -m unittest discover -s sim/webots/tests -v
+python3 sim/webots/tools/gate1_dry_run.py \
+  --fixture sim/webots/tests/fixtures/pil_gate1_cap4_synthetic_replay.json \
+  --output build/webots/preflash-dry-run
+```
+
+This path imports no serial adapter and opens no device. It uses a committed,
+explicitly SYNTHETIC host recording, not saved Pico/Probe measurements. It feeds
+154 recorded RX chunks through the real worker and requires exact byte/time
+matches for all58 PC writes. The fake clock accelerates a40ms active source;
+it does not measure laptop pacing or prove a ten-minute physical run.
+
+The first negotiated OUTPUT is inhibited (`0x04`), then pending after ARM
+(`0x14`), then ARMED (`0x01`, first SENSOR ACK0), then inhibited after DISARM.
+The fixture generator and tests retain this sequence without inventing physics.
+To regenerate the reference intentionally, use
+`PYTHONPATH=sim/webots python3 sim/webots/tests/generate_gate1_replay_fixture.py`.
+Review any byte changes; do not regenerate just to hide a regression.
+
+Expected dry-run result: CLI exit0, `host_fixture_match: true`,
+`soak_verdict: INCOMPLETE`, `physical_gate1_pass: false` and
+`serial_device_opened: false`. HOST DRY-RUN PASS means only agreement with the
+software recording. Retain `events.csv`, `summary.json` and `dry-run.json`.
+A mismatch fails the host check. No hardware authorization flag is used.
+
+Validation:142 host tests OK, including seven replay checks, with the same
+three expected S3 model failures. The recorded-soak CLI matched all chunks.
+Logs are `build/wip/pil_plan/home-preflash-host-tests.log` and
+`build/wip/pil_plan/home-dry-run-validation.log`. No serial discovery/open,
+Webots launch, Pico image build or flash was performed for these checks.
 
 ## Remaining work and hardware gate
 
