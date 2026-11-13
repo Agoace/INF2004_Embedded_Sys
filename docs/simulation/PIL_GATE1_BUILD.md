@@ -3,7 +3,9 @@
 ## Status and limits
 
 The image is host-tested and ready for an operator transport trial on a spare
-RP2040 Pico. Physical P1 is NOT RUN. This is NOT sensor/physics acceptance.
+RP2040 Pico. The corrected image awaits operator P1. The first attempt with
+older firmware failed; see the [TX startup correction](PIL_GATE1_TX_PRIME.md).
+This is NOT sensor/physics acceptance.
 Only the operator flashes or opens target ports. Coding workers do neither.
 Do not flash a plain Stage0 `_sim` image. Do not connect a robot or actuators.
 
@@ -25,11 +27,11 @@ sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
 - File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (244224 bytes).
-- UF2 SHA256: `c7df4c0bdbdbbeaa280f5a0abedcefc26c7458be9bdffa57f4030f9f432bd21c`.
-- ELF SHA256: `12cebe1a8dcb515b46b18c2675f84eeaedfa857e75d05aa7f3219a42806ea6d9`.
+- UF2 SHA256: `0017cfa0c05ca69447bf1cd8d41d1801bbca909ed3c66e914e6901958034ba08`.
+- ELF SHA256: `694ab36af72e808d738ffafc85bbbbb2724244a0be461fd3d03f2121dab25bea`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/up-final/`, with map/size/NM/hashes.
+- Retained copy: `build/pil-gate1/artifacts/tx-prime/`, with map/size/hashes.
 
 Debug paths affect ELF hashes. Another checkout path can give a different ELF
 hash. Record the exact UF2 used for each operator run.
@@ -95,7 +97,7 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
 - Runtime cases on UP/split/control: clean drain, independent lease IRQ, UART
   overrun, RX queue full, late progress and missing lookahead. Extra RED tests
   exposed repeated dumps and stale ARM receive-state mutation; both are fixed.
-- Actual runtime short D1 fixture:3165 bytes,35 records including20 traces,
+- Original checkpoint runtime short D1 fixture:3165 bytes,35 records/20 traces,
  11staged/8applied/3cancelled and8generated/enqueued/FIFO-loaded OUTPUTs.
   SHA256`69edc2e017d48f1b3bff42776660720ae5f5994e7733967f373b3ad863e89e5d`.
   Independent PC review passes structure/metrics. It remains synthetic8ms and
@@ -141,7 +143,8 @@ Reviewed additional IRQ chains, including kernel wake paths:
   measured yet; record it from the stopped USB line.
 
 Kernel owns IRQ20/UART0 and IRQ1/TIMER alarm1. Each UART IRQ transfers at most32 RX
-and32 TX bytes; no CRC/decode/encode occurs in IRQ context. Service-duration
+and32 TX bytes; no CRC/decode/encode occurs in IRQ context. Enqueue also primes
+up to32 FIFO bytes under core0 IRQ exclusion, without waiting for a TX edge. Service-duration
 brackets end before their final metric update; they measure the service body,
 not hardware IRQ entry/exit latency. Worker priority16 and TA_USERBUF stack
 stay core0. Core0 IRQ exclusion protects session mutations; it

@@ -102,6 +102,23 @@ void pil_gate1_motor_stopped(void)
     if (!g.session.frozen) { g.session.write_time = drv_time_us(); }
     EI(irq);
 }
+/* One serialized consumer on core0: caller must hold IRQ exclusion.
+ * Also run from enqueue: PL011 TXIM alone cannot start an empty FIFO. */
+static bool tx_fifo(void)
+{
+    bool completed = false;
+    for (unsigned int i = 0u; i < 32u; ++i) {
+        const pil_gate1_packet_t *p = pil_gate1_queue_front(&g.tx);
+        if (p == NULL) { pil_gate1_uart_tx_enable(false); break; }
+        if (!pil_gate1_uart_tx(p->bytes[g.tx_offset])) { break; }
+        if (++g.tx_offset == p->length) {
+            if (p->tag != PIL_NO_ACK) { pil_gate1_count(&g.session, G1_FIFO); }
+            (void)pil_gate1_queue_drop(&g.tx); g.tx_offset = 0u;
+            queue_metric(10u, pil_gate1_queue_depth(&g.tx)); completed = true;
+        }
+    }
+    return completed;
+}
 static void uart_irq(UINT intno)
 {
     UINT irq; DI(irq);
@@ -127,16 +144,7 @@ static void uart_irq(UINT intno)
             pil_gate1_count(&g.session, G1_BAD);
         }
     }
-    for (unsigned int i = 0u; i < 32u; ++i) {
-        const pil_gate1_packet_t *p = pil_gate1_queue_front(&g.tx);
-        if (p == NULL) { pil_gate1_uart_tx_enable(false); break; }
-        if (!pil_gate1_uart_tx(p->bytes[g.tx_offset])) { break; }
-        if (++g.tx_offset == p->length) {
-            if (p->tag != PIL_NO_ACK) { pil_gate1_count(&g.session, G1_FIFO); }
-            (void)pil_gate1_queue_drop(&g.tx); g.tx_offset = 0u;
-            queue_metric(10u, pil_gate1_queue_depth(&g.tx)); wake_worker();
-        }
-    }
+    if (tx_fifo()) { wake_worker(); }
     ClearInt(intno);
     pil_gate1_note(&g.session, 11u, PIL_NO_ACK,
                    start, drv_time_us(), 0u, 0u);
@@ -164,6 +172,9 @@ static bool transmit(const pil_frame_t *f, bool active)
     if (ok) {
         queue_metric(10u, pil_gate1_queue_depth(&g.tx));
         if (active) { pil_gate1_count(&g.session, G1_ENQUEUED); }
+        /* Fill available slots even if a previous packet is still shifting.
+         * A late enqueue can otherwise miss the last threshold crossing. */
+        (void)tx_fifo();
         pil_gate1_uart_tx_enable(true);
     } else { queue_failure(G1_TX_FULL, 0x108u); }
     EI(irq);

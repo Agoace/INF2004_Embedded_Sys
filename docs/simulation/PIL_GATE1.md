@@ -2,7 +2,9 @@
 
 Main approved this design on base9831991. The host-tested transport image is
 supplied. Only the operator flashes/opens target ports; coding workers do not.
-Physical P1 is NOT RUN. Sensor/physics acceptance is not supplied.
+The corrected image awaits operator P1. The older image's first attempt failed;
+see the [TX startup correction](PIL_GATE1_TX_PRIME.md). Sensor/physics acceptance
+is not supplied.
 
 ## Current checkpoint
 
