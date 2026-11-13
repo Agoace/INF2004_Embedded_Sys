@@ -24,6 +24,11 @@
  *                reading was triggered. The straight ends vehicle_mm after
  *                the nearest reading (from the start with none). Then
  *                TURN_TOWARD; after max_straights straights, NO_LINE.
+ *                With first_max_mm != 0 the first STRAIGHT has a fixed
+ *                length instead: wall_mm / cos(heading) + first_extra_mm,
+ *                at most first_max_mm (wall triangle: the rear axle
+ *                reaches the line of the obstacle wall, then extra).
+ *                wall_mm = sensor_ahead_mm + obstacle_mm + the BACK.
  *   TURN_TOWARD  Turn toward the obstacle until it is seen, then back
  *                back_off_fn(turned_deg), or back_off_deg, away (no look; runs 1 and 3 of the
  *                detour clipped the corner with no back-off). Then STRAIGHT.
@@ -85,6 +90,8 @@ typedef struct {
     uint8_t sweep_min_duty;       /* loaded turn minimum is not measured */
     uint8_t sweep_max_duty;       /* upper duty clamp, percent */
     bool line_return_only;        /* line counts only in the returning STRAIGHT */
+    uint16_t first_extra_mm;      /* first STRAIGHT: added to the wall triangle */
+    uint16_t first_max_mm;        /* first STRAIGHT limit; 0: off (vehicle_mm rule) */
 } dt_config_t;
 
 /* Step: 3 bits. */
@@ -208,6 +215,8 @@ typedef struct {
     int32_t sweep_stop_x100;      /* count difference x100 at stop request */
     int sweep_heading;           /* final S-frame heading, coast included */
     int sweep_coast_x10;         /* coast magnitude, tenths of a degree */
+    int32_t wall_mm;             /* rear axle to the obstacle wall at TURN_AWAY */
+    uint32_t first_leg_mm;       /* first STRAIGHT length; 0: vehicle_mm rule */
 } dt_t;
 
 /* Start a detour at the STOP point. side and obstacle_mm come from the
