@@ -1,0 +1,196 @@
+#VRML_SIM R2025a utf8
+# template language: javascript
+# Stage0 geometry preview. Defaults are ASSUMED unless the profile says measured.
+# No UART, Pico runtime or physical timing claim. Body frame: axle-centred FLU.
+PROTO RoboPico [
+  field SFVec3f translation 0 0 0.0425
+  field SFRotation rotation 0 0 1 0
+  field SFString controller "stage0_preview"
+  field SFFloat track 0.111
+  field SFFloat wheelRadius 0.0325
+  field SFFloat wheelWidth 0.016
+  field SFFloat wheelMass 0.04
+  field SFFloat wheelTorqueLimit 0.12
+  field SFFloat bodyMass 0.88
+  field SFVec3f bodySize 0.19 0.16 0.035
+  field SFVec3f bodyCentre 0.028 0 0.025
+  field MFVec3f centreOfMass [ 0.03 0 0.02 ]
+  field SFFloat casterMass 0.02
+  field SFFloat casterRadius 0.01
+  field SFFloat casterWidth 0.006
+  field SFFloat casterTrail 0.008
+  field SFVec3f casterPosition 0.08 0 -0.0225
+  field SFFloat headMass 0.02
+  field SFVec3f servoPosition 0.065 0 0.02
+  field SFFloat sonarFaceOffset 0
+  field SFFloat servoSlew 4.84813681
+  field SFVec3f lineCentrePosition 0.119 0 -0.0235
+  field SFVec3f lineLeftPosition 0.119 0.0145 -0.0235
+  field SFVec3f barcodePosition 0.08 0.077 -0.027
+  field SFVec3f imuPosition 0.06 0 0.0975
+  field SFBool debugCameras FALSE
+]
+{
+  %<
+    const track = fields.track.value;
+    const radius = fields.wheelRadius.value;
+    const caster = fields.casterPosition.value;
+    if (track <= 0 || radius <= 0 || fields.bodyMass.value <= 0)
+      throw new Error('Invalid robot dimensions or mass');
+  >%
+  Robot {
+    translation IS translation
+    rotation IS rotation
+    controller IS controller
+    supervisor TRUE
+    synchronization TRUE
+    name "RoboPico ASSUMED Stage0"
+    children [
+      Pose {
+        translation IS bodyCentre
+        children [
+          Shape {
+            appearance PBRAppearance { baseColor 0.05 0.3 0.1 roughness 1 metalness 0 }
+            geometry Box { size IS bodySize }
+          }
+        ]
+      }
+      %< for (const [name, sign] of [['left', 1], ['right', -1]]) { >%
+        HingeJoint {
+          jointParameters HingeJointParameters {
+            axis 0 1 0
+            anchor 0 %<= sign * track / 2 >% 0
+          }
+          device [
+            RotationalMotor { name "%<= name >%_motor" maxTorque IS wheelTorqueLimit }
+            PositionSensor { name "%<= name >%_encoder" }
+          ]
+          endPoint Solid {
+            translation 0 %<= sign * track / 2 >% 0
+            rotation 1 0 0 1.5707963267948966
+            name "%<= name >% wheel"
+            contactMaterial "tyre"
+            children [
+              Shape {
+                appearance PBRAppearance { baseColor 0.03 0.03 0.03 roughness 1 metalness 0 }
+                geometry Cylinder { radius IS wheelRadius height IS wheelWidth }
+              }
+            ]
+            boundingObject Cylinder { radius IS wheelRadius height IS wheelWidth }
+            physics Physics { density -1 mass IS wheelMass }
+          }
+        }
+      %< } >%
+      # Passive swivel + trailing wheel. Trail/width/damping are ASSUMED.
+      HingeJoint {
+        jointParameters HingeJointParameters {
+          axis 0 0 1
+          anchor IS casterPosition
+          dampingConstant 0.0001
+        }
+        endPoint Solid {
+          translation IS casterPosition
+          name "caster swivel ASSUMED"
+          children [
+            HingeJoint {
+              jointParameters HingeJointParameters {
+                axis 0 1 0
+                anchor %<= -fields.casterTrail.value >% 0 0
+                dampingConstant 0.00001
+              }
+              endPoint Solid {
+                translation %<= -fields.casterTrail.value >% 0 0
+                rotation 1 0 0 1.5707963267948966
+                contactMaterial "tyre"
+                name "caster wheel ASSUMED"
+                children [
+                  Shape {
+                    appearance PBRAppearance { baseColor 0.1 0.1 0.1 roughness 1 metalness 0 }
+                    geometry Cylinder { radius IS casterRadius height IS casterWidth }
+                  }
+                ]
+                boundingObject Cylinder { radius IS casterRadius height IS casterWidth }
+                physics Physics { density -1 mass %<= fields.casterMass.value * 0.75 >% }
+              }
+            }
+          ]
+          boundingObject Sphere { radius 0.003 }
+          physics Physics { density -1 mass %<= fields.casterMass.value * 0.25 >% }
+        }
+      }
+      HingeJoint {
+        jointParameters HingeJointParameters { axis 0 0 1 anchor IS servoPosition }
+        device [
+          RotationalMotor {
+            name "sonar_servo"
+            minPosition -0.6283185307179586
+            maxPosition 0.6283185307179586
+            maxVelocity IS servoSlew
+            maxTorque 0.1
+          }
+          PositionSensor { name "servo_angle" }
+        ]
+        endPoint Solid {
+          translation IS servoPosition
+          name "GP15 sonar head ASSUMED"
+          children [
+            Shape {
+              appearance PBRAppearance { baseColor 0.1 0.3 0.8 roughness 1 metalness 0 }
+              geometry Box { size 0.03 0.035 0.02 }
+            }
+            DistanceSensor {
+              translation %<= fields.sonarFaceOffset.value >% 0 0
+              name "sonar_debug_only"
+              type "sonar"
+              numberOfRays 5
+              aperture 0.5235987756
+              lookupTable [ 0 0 0, 0.6 0.6 0 ]
+            }
+          ]
+          boundingObject Box { size 0.03 0.035 0.02 }
+          physics Physics { density -1 mass IS headMass }
+        }
+      }
+      Accelerometer {
+        translation IS imuPosition
+        rotation 0 0 1 -1.5707963267948966
+        name "imu_accelerometer"
+      }
+      Compass {
+        translation IS imuPosition
+        rotation 0 0 1 -1.5707963267948966
+        name "imu_compass_direction_only"
+      }
+      %< if (fields.debugCameras.value) { >%
+        # Camera optical axis is local -Z. These never produce firmware ADC.
+        Camera {
+          translation IS lineCentrePosition
+          name "gp26_footprint_debug"
+          width 16 height 16 near 0.0005 far 0.2
+          fieldOfView 1.0471975512
+        }
+        Camera {
+          translation IS lineLeftPosition
+          name "gp27_footprint_debug"
+          width 16 height 16 near 0.0005 far 0.2
+          fieldOfView 1.0471975512
+        }
+        Camera {
+          translation IS barcodePosition
+          name "gp28_footprint_debug"
+          width 16 height 16 near 0.0005 far 0.2
+          fieldOfView 1.0471975512
+        }
+      %< } >%
+    ]
+    boundingObject Pose {
+      translation IS bodyCentre
+      children [ Box { size IS bodySize } ]
+    }
+    physics Physics {
+      density -1
+      mass IS bodyMass
+      centerOfMass IS centreOfMass
+    }
+  }
+}

@@ -3,6 +3,7 @@
 
 import argparse
 import ctypes
+import hashlib
 import json
 from pathlib import Path
 import random
@@ -26,7 +27,20 @@ def main():
     parser.add_argument("--codec-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--compiler", default="cc")
+    parser.add_argument("--expected-revision",
+                        help="verify codec/header/fixture against Git commit")
     args = parser.parse_args()
+    if args.expected_revision:
+        revision = subprocess.check_output(
+            ["git", "-C", str(args.codec_root), "rev-parse",
+             args.expected_revision + "^{commit}"], text=True).strip()
+        for relative in ("app_program/sim/pil_wire.c", "app_program/sim/pil_wire.h",
+                         "tests/fixtures/pil_wire_v1.json"):
+            committed = subprocess.check_output(
+                ["git", "-C", str(args.codec_root), "show", revision + ":" + relative])
+            if committed != (args.codec_root / relative).read_bytes():
+                raise AssertionError("working codec artifact differs from expected commit")
+        print("Verified C codec/header/fixture revision:", revision)
     args.output.mkdir(parents=True, exist_ok=True)
     source = args.codec_root / "app_program/sim/pil_wire.c"
     library = args.output.resolve() / "libpil_wire.so"
@@ -43,6 +57,8 @@ def main():
     if fixture.read_bytes() != authoritative.read_bytes():
         raise AssertionError("SW6 authoritative fixture and PC copy differ")
     vectors = json.loads(fixture.read_text())["vectors"]
+    print("C source SHA256:", hashlib.sha256(source.read_bytes()).hexdigest())
+    print("Golden fixture SHA256:", hashlib.sha256(fixture.read_bytes()).hexdigest())
     checked = 0
 
     def compare(packet, expected=None):

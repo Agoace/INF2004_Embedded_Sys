@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "name": "home_mat_2_assumed",
+  "provenance": {"assumed": true, "source": "ILLUSTRATIVE Stage0 three-by-two loop; actual second home mat photo/layout NOT supplied. Replace with operator survey."},
+  "origin_mm": [0, 0],
+  "start": {"position_mm": [350, 157.5], "yaw_deg": 0},
+  "allow_open_ports": false,
+  "texture_mm_per_pixel": 0.5,
+  "tiles": [
+    {"id": "sw", "column": 0, "row": 0, "kind": "CURVE", "rotation_deg": 0},
+    {"id": "south", "column": 1, "row": 0, "kind": "STRAIGHT", "rotation_deg": 90},
+    {"id": "se", "column": 2, "row": 0, "kind": "CURVE", "rotation_deg": 90},
+    {"id": "nw", "column": 0, "row": 1, "kind": "CURVE", "rotation_deg": 270},
+    {"id": "north", "column": 1, "row": 1, "kind": "STRAIGHT", "rotation_deg": 90},
+    {"id": "ne", "column": 2, "row": 1, "kind": "CURVE", "rotation_deg": 180}
+  ],
+  "boxes": [],
+  "humps": [],
+  "barcodes": []
+}

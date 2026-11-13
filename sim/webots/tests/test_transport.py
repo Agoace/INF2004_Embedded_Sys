@@ -10,6 +10,7 @@ from pil.wire import (CAPABILITIES, NO_ACK, SCHEMA_ID, Frame, Type, decode, due,
 VECTORS = json.loads((Path(__file__).parent / "fixtures/pil_wire_v1.json").read_text())["vectors"]
 SESSION = 0x11223344
 NONCE = 0xA1B2C3D4
+OUTPUT_BASE = 99  # Valid pending snapshots cover the100ms negotiated setup lead.
 
 
 def sensor_payload(source):
@@ -21,11 +22,13 @@ def sensor_payload(source):
     return bytes(payload)
 
 
-def output(seq=0, timer=111000, ack=0, flags=1, compare=1250, actuator=111000):
+def output(seq=0, timer=111000, ack=0, flags=1, compare=1250, actuator=111000,
+           sequence_base=OUTPUT_BASE):
     p = bytearray(32)
     struct.pack_into("<hhHBBHBBIIIHHHH", p, 0, compare, compare, 1500, 0, flags,
                      0, 2, 0, actuator, 0, 0, 0, 0, 0, 0)
-    return Frame(Type.OUTPUT, SESSION, seq, timer & 0xFFFFFFFF, ack, bytes(p))
+    return Frame(Type.OUTPUT, SESSION, seq + sequence_base,
+                 timer & 0xFFFFFFFF, ack, bytes(p))
 
 
 def qualified_clock():
@@ -63,9 +66,18 @@ def pending():
 
 def streaming():
     host = pending()
-    for n in range(5):
-        host.sensor(sensor_payload(n * 1000), n * 1000, 107000 + n * 1000)
-        drain(host, 107100 + n * 1000)
+    # The real TIMER/report stream continues during the100ms setup lead.
+    # Pending zero outputs renew only the report lease, never ARM acceptance.
+    for seq, timer in enumerate(range(12000, 111000, 1000)):
+        if timer >= 107000:
+            source = timer - 107000
+            host.sensor(sensor_payload(source), source, timer)
+            drain(host, timer + 50)
+        frame = output(seq=seq, timer=timer, ack=NO_ACK, flags=20, compare=0,
+                       actuator=0, sequence_base=0)
+        host.receive(encode(frame), timer + 100)
+    host.sensor(sensor_payload(4000), 4000, 111000)
+    drain(host, 111100)
     host.receive(encode(output()), 111500)
     return host
 
@@ -139,10 +151,11 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(host.state, "ARMED")
         self.assertFalse(host.model_inhibited)
         self.assertEqual(host.applied_output, NO_ACK)
-        self.assertEqual(host.next_output().sequence, 0)
-        host.mark_output_applied(0, 111750)
+        self.assertEqual(host.next_output().sequence, OUTPUT_BASE)
+        self.assertEqual(len(host.outputs), 1)  # Pending reports never queue physics output.
+        host.mark_output_applied(OUTPUT_BASE, 111750)
         frame = host.sensor(sensor_payload(5000), 5000, 112000)
-        self.assertEqual(frame.ack, 0)
+        self.assertEqual(frame.ack, OUTPUT_BASE)
         records = host.drain_events()
         self.assertTrue(any(r["event"] == "physics_applied" for r in records))
         self.assertTrue(all(not r["device_available"] for r in records
@@ -168,17 +181,44 @@ class TransportTests(unittest.TestCase):
 
     def test_new_snapshot_renews_lease_not_actuator_timestamp(self):
         host = streaming()
-        host.mark_output_applied(0, 111750)
+        host.mark_output_applied(OUTPUT_BASE, 111750)
         host.receive(encode(output(seq=1, timer=115000, actuator=111000)), 115500)
         host.tick(116000)
         self.assertEqual(host.last_output_pc_us, 115500)
         self.assertFalse(host.model_inhibited)
+
+    def test_fresh_packet_after_five_ms_gap_cannot_revive_session(self):
+        host = streaming()
+        with self.assertRaises(TransportFault):
+            host.receive(encode(output(seq=1, timer=117000)), 117500)
+        self.assertTrue(host.model_inhibited)
+
+    def test_rx_chunk_bound_fails_closed(self):
+        host = streaming()
+        with self.assertRaises(TransportFault):
+            host.receive(b"x" * 4097, 112000)
+        self.assertTrue(host.model_inhibited)
 
     def test_new_sequence_same_snapshot_does_not_renew(self):
         host = streaming()
         host.receive(encode(output(seq=1, timer=111000)), 115500)
         with self.assertRaises(TransportFault):
             host.tick(116500)
+
+    def test_progressing_but_stale_or_future_output_does_not_hide_age(self):
+        # Arrive within the progress lease, so snapshot-age validation itself
+        # must reject the old report (rather than the receive-gap guard).
+        for timer, receive in ((111001, 116400), (120000, 112500)):
+            host = streaming()
+            with self.subTest(timer=timer), self.assertRaises(TransportFault):
+                host.receive(encode(output(seq=1, timer=timer)), receive)
+            self.assertTrue(host.model_inhibited)
+
+    def test_ack_regression_cannot_renew_progress(self):
+        host = streaming()
+        host.receive(encode(output(seq=1, timer=112000, ack=1)), 112500)
+        with self.assertRaises(TransportFault):
+            host.receive(encode(output(seq=2, timer=113000, ack=0)), 113500)
 
     def test_delayed_unsent_sensor_faults_no_deadline_sliding(self):
         host = pending()

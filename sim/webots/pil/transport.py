@@ -19,6 +19,7 @@ class TransportFault(RuntimeError):
 class HostTransport:
     QUEUE_LIMIT = 8
     EVENT_LIMIT = 1024
+    MAX_RX_CHUNK = 4096
 
     def __init__(self, session, *, clock=None):
         if type(session) is not int or not 1 <= session <= 0xFFFFFFFF:
@@ -171,9 +172,19 @@ class HostTransport:
         else:
             self.tx[0] = (frame, packet, offset + count)
 
+    def _output_lease(self, pc_us):
+        if self.state in ("ARM_PENDING", "ARMED"):
+            last = (self.last_output_pc_us if self.last_output_pc_us is not None
+                    else self.arm_pc_us)
+            if pc_us - last >= 5000:
+                self._fault("OUTPUT progress lease expired; MODEL inhibited, Pico PWM unknown")
+
     def receive(self, data, received_pc_us):
         self._require_live()
         self._time(received_pc_us)
+        self._output_lease(received_pc_us)
+        if not isinstance(data, (bytes, bytearray)) or len(data) > self.MAX_RX_CHUNK:
+            self._fault("RX chunk exceeds bounded transport input")
         for frame in self.decoder.feed(data):
             self._record("rx_complete", pc_us=received_pc_us, type=frame.type,
                          seq=frame.sequence, source_us=frame.source_us)
@@ -219,6 +230,14 @@ class HostTransport:
                 if self.last_output is not None and not newer(
                         frame.source_us, self.last_output.source_us):
                     continue
+                if self.state in ("ARM_PENDING", "ARMED"):
+                    try:
+                        now = self.clock.pico_range(received_pc_us)
+                        snapshot = unwrap32(frame.source_us, round(now.midpoint))
+                    except ClockError as error:
+                        self._fault(str(error))
+                    if snapshot > now.upper or now.upper - snapshot > 5000:
+                        self._fault("OUTPUT snapshot outside conservative source-age bound")
                 if frame.ack != NO_ACK and (self.last_sensor_sent == NO_ACK or
                                            newer(frame.ack, self.last_sensor_sent)):
                     self._fault("OUTPUT acknowledges an unsent SENSOR")
@@ -268,9 +287,7 @@ class HostTransport:
             now = self.clock.pico_range(pc_us)
         except ClockError as error:
             self._fault(str(error))
-        last = self.last_output_pc_us if self.last_output_pc_us is not None else self.arm_pc_us
-        if pc_us - last >= 5000:
-            self._fault("OUTPUT progress lease expired; MODEL inhibited, Pico PWM unknown")
+        self._output_lease(pc_us)
         if self.state == "ARM_PENDING" and now.lower > self.timeline.epoch_pico_us + 5000:
             self._fault("no ARM acceptance after initial epoch")
         for frame, _, _ in self.tx:

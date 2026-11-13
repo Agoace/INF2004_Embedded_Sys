@@ -55,11 +55,12 @@ class RobotProfile:
 
     @classmethod
     def from_dict(cls, data):
-        if set(data) != {"schema", "profile_id", "parameters"} or data["schema"] != 1:
+        if (not isinstance(data, dict) or set(data) != {"schema", "profile_id", "parameters"}
+                or type(data["schema"]) is not int or data["schema"] != 1):
             raise ValueError("unsupported robot profile schema")
         if not isinstance(data["profile_id"], str) or not data["profile_id"].strip():
             raise ValueError("profile ID required")
-        if set(data["parameters"]) != REQUIRED:
+        if not isinstance(data["parameters"], dict) or set(data["parameters"]) != REQUIRED:
             raise ValueError("unknown or missing robot parameter")
         items = tuple((key, Parameter.read(data["parameters"][key])) for key in sorted(REQUIRED))
         result = cls(items, data["profile_id"])
