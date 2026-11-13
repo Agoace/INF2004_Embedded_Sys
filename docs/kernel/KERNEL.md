@@ -218,6 +218,16 @@ from the motion board copy, and `ticks +4294967295` means it was not
 available. The `[bkl]` reset at run start can race a core-1 update. Runs
 shorter than 1 s can have zero `[load_run]` samples.
 
+Cost, measured at `d8adbcc` against `451e562` (school MQTT profiles):
+
+| Item | Cost |
+| --- | --- |
+| Static RAM (bss) | +408 B (split, force0, `SMP=0`); +384 B USB-only; +280 B capture |
+| Flash (text) | +4456 B split and force0; +4200 B `SMP=0` MQTT; +1672 B USB-only |
+| Hot-path code size | `alarm_irq` 304 -> 388 B, `line_task` 444 -> 572 B, `wait_tick` 780 -> 1010 B, `finish_step` 176 -> 332 B, `motion_task` 480 -> 516 B; all in flash (XIP) |
+| Stack frames | `rt_report` 120 B on the dump caller; `alarm_irq` +8 B (+20 B `rt_call`); `wait_tick` +8 B; `finish_step` +48 B |
+| Time | 2 or 3 extra TIMER reads per measured site |
+
 ## USB priority
 
 USB runs at 21, below driving10..13, IMU14 and Wi-Fi/TEST20, but above
