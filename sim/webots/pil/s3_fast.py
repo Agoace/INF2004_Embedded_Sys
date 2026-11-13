@@ -209,8 +209,11 @@ class FastScene:
         if abs(total-1) > 1e-7:
             return fail('UNSUPPORTED_COVERAGE')
         mean = mean_adc(profile, fractions)
-        raw = round(mean+random.Random(f'{seed}:{profile.name}:{sample_us}').gauss(
-            0, profile.noise_sigma_adc))
+        # A private RNG has no observable state when its output is multiplied
+        # by zero. The frozen nonzero GP28 path is deliberately unchanged.
+        noise = (random.Random(f'{seed}:{profile.name}:{sample_us}').gauss(
+            0, profile.noise_sigma_adc) if profile.noise_sigma_adc else 0.0)
+        raw = round(mean+noise)
         return OpticalSample(max(0, min(4095, raw)), True, '', mean,
                              profile.reference_height_mm, MappingProxyType(fractions),
                              profile.assumptions+('F1_EXPLORATORY_RECTANGLES_ONLY',),

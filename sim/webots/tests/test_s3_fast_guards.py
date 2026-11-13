@@ -2,6 +2,7 @@
 import math
 import random
 import unittest
+from unittest.mock import patch
 from sim.webots.pil import s3_geometry as g
 from sim.webots.pil.course_builder import Course, build_course
 from sim.webots.pil.s3_fast import FastScene
@@ -27,6 +28,17 @@ class GuardTests(unittest.TestCase):
                 a.material_fractions[g.MAT_WHITE] = 1
         with self.assertRaises(TypeError):
             fast.cells[(0, 0)] = ()
+
+    def test_zero_noise_synthetic_path_does_not_allocate_a_private_rng(self):
+        from sim.webots.pil.s3_optics import SensorProfile
+        fast = FastScene.from_patches(g.tile_geometry('BLANK').patches)
+        profile = SensorProfile('SYNTHETIC_ZERO_NOISE', 5.5, 2, 2,
+                                dict(load_profile().levels_adc),
+                                assumptions=('ASSUMED_TEST_ONLY',))
+        with patch('sim.webots.pil.s3_fast.random.Random',
+                   side_effect=AssertionError('zero-noise RNG must not be built')):
+            sample = fast.sample(profile, (0, 0, 15.5))
+        self.assertEqual(sample.adc, round(sample.mean_adc))
 
     def test_hole_raised_paper_and_occluder_are_never_valid_white(self):
         p = load_profile()

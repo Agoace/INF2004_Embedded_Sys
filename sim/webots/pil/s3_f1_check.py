@@ -4,7 +4,9 @@ Generated reports/CSV belong under build/. No firmware, decoder or profile
 writes. Synthetic line profiles exist only inside this evidence driver.
 """
 import argparse
+from array import array
 from collections import Counter
+from contextlib import contextmanager
 import csv
 import gc
 import hashlib
@@ -168,7 +170,62 @@ def course_coverage():
     return report
 
 
-def timing_report(output, count=100000, repeats=3):
+class MeasurementBuffers:
+    """Fixed numeric measurement storage, not retained per-frame GC tuples.
+
+    Scalar temporaries and sampler result allocations still exist. This is
+    not a claim of an allocation-free Python sensor implementation.
+    """
+    def __init__(self, count):
+        if count < 1:
+            raise ValueError('positive measurement count required')
+        self.elapsed = array('d', [0])*count
+        self.cpu = array('d', [0])*count
+        self.valid = array('B', [0])*count
+        self.start = array('Q', [0])*count
+        self.end = array('Q', [0])*count
+
+    def record(self, i, elapsed, cpu, valid, start, end):
+        self.elapsed[i], self.cpu[i], self.valid[i] = elapsed, cpu, valid
+        self.start[i], self.end[i] = start, end
+
+    def rows(self):
+        # Called only AFTER the timer loop when exporting CSV.
+        return zip(range(len(self.elapsed)), self.elapsed, self.cpu, self.valid,
+                   self.start, self.end)
+
+
+@contextmanager
+def timing_gc_policy(mode):
+    """Experiment only; never a production sampling/transport policy."""
+    if mode not in ('enabled', 'freeze-disable'):
+        raise ValueError('unknown timing GC experiment')
+    enabled, frozen = gc.isenabled(), gc.get_freeze_count()
+    if mode == 'enabled' and not enabled:
+        raise ValueError('enabled control requires initially enabled GC')
+    if mode == 'freeze-disable' and frozen:
+        raise ValueError('refuse to unfreeze a caller-owned frozen heap')
+    info = {'mode': mode, 'initially_enabled': enabled,
+            'measurement_storage': 'PREALLOCATED_NUMERIC_ARRAYS',
+            'sampler_allocations_still_present': True}
+    try:
+        if mode == 'freeze-disable':
+            gc.collect()
+            gc.freeze()
+            gc.disable()
+        info['timed_gc_enabled'] = gc.isenabled()
+        info['timed_frozen_objects'] = gc.get_freeze_count()
+        yield info
+    finally:
+        if mode == 'freeze-disable':
+            gc.unfreeze()
+            if enabled:
+                gc.enable()
+            else:
+                gc.disable()
+
+
+def timing_report(output, count=100000, repeats=3, gc_mode='enabled'):
     if count < 100000 or repeats < 3:
         raise ValueError('certification requires>=100000 frames and>=3 repeats')
     patches = g.tile_geometry('CROSS').patches+g.barcode_geometry(
@@ -200,30 +257,41 @@ def timing_report(output, count=100000, repeats=3):
     reports = []
     for repeat in range(repeats):
         gc_events.clear()
-        samples, valid_frames = [], 0
+        samples, valid_frames = MeasurementBuffers(count), 0
         gc.callbacks.append(gc_marker)
         try:
-            for i in range(count):
-                start = time.perf_counter_ns()
-                cpu_start = time.thread_time_ns()
-                valid = batch(i)
-                cpu_end = time.thread_time_ns()
-                end = time.perf_counter_ns()
-                samples.append((i, (end-start)/1000, (cpu_end-cpu_start)/1000, valid, start, end))
-                valid_frames += valid == 3
+            with timing_gc_policy(gc_mode) as policy:
+                # Initial collection/freezing is setup, not timed sampling.
+                gc_events.clear()
+                for i in range(count):
+                    start = time.perf_counter_ns()
+                    cpu_start = time.thread_time_ns()
+                    valid = batch(i)
+                    cpu_end = time.thread_time_ns()
+                    end = time.perf_counter_ns()
+                    samples.record(i, (end-start)/1000, (cpu_end-cpu_start)/1000,
+                                   valid, start, end)
+                    valid_frames += valid == 3
         finally:
             gc.callbacks.remove(gc_marker)
         with (output/f'timing-{repeat}.csv').open('w', newline='') as stream:
             writer = csv.writer(stream)
             writer.writerow(('source_index', 'batch_wall_us', 'batch_thread_cpu_us',
                              'valid_channels', 'wall_start_ns', 'wall_end_ns'))
-            writer.writerows(samples)
-        result = time_summary([r[1] for r in samples])
+            writer.writerows(samples.rows())
+        result = time_summary(samples.elapsed)
         result['three_valid_frames'] = valid_frames
-        result['gc_enabled'] = gc.isenabled()
+        result['gc_policy'] = dict(policy)
+        result['gc_enabled_after_restore'] = gc.isenabled()
         result['gc_events'] = list(gc_events)
         result['outliers'] = [dict(index=r[0], wall_us=r[1], thread_cpu_us=r[2],
-            gc_overlap=any(r[4] <= e[0] <= r[5] for e in gc_events)) for r in samples if r[1] > 500]
+            non_cpu_gap_us=r[1]-r[2],
+            gc_overlap=any(r[4] <= e[0] <= r[5] for e in gc_events))
+            for r in samples.rows() if r[1] > 500]
+        result['outliers_thread_cpu_over500'] = sum(
+            r['thread_cpu_us'] > 500 for r in result['outliers'])
+        result['outliers_noncpu_gap_over500'] = sum(
+            r['non_cpu_gap_us'] > 500 for r in result['outliers'])
         if valid_frames != count:
             result['check'] = 'FAIL'
         reports.append(result)
@@ -238,18 +306,21 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--timing-only', action='store_true')
     parser.add_argument('--accuracy-only', action='store_true')
+    parser.add_argument('--gc-mode', choices=('enabled', 'freeze-disable'), default='enabled')
     args = parser.parse_args()
     if args.timing_only and args.accuracy_only:
         parser.error('choose at most one mode')
     args.output.mkdir(parents=True, exist_ok=True)
     report = {'classification': 'F1_EXPLORATORY_NOT_GATE1_ACCEPTANCE',
               'python': sys.version, 'platform': platform.platform(),
+              'source_sha256': {name: hashlib.sha256(Path(__file__).with_name(name).read_bytes()).hexdigest()
+                  for name in ('s3_fast.py', 's3_referee.py', 's3_f1_check.py')},
               'profile_sha256': hashlib.sha256(DEFAULT_PATH.read_bytes()).hexdigest(),
               'real_course_coverage': course_coverage()}
     if not args.timing_only:
         report['accuracy'] = accuracy_report()
     if not args.accuracy_only:
-        report['timing'] = timing_report(args.output)
+        report['timing'] = timing_report(args.output, gc_mode=args.gc_mode)
     report['check'] = 'PASS' if all(report[k]['summary']['check'] == 'PASS' if k == 'accuracy'
         else report[k]['check'] == 'PASS' for k in ('accuracy', 'timing') if k in report) else 'FAIL'
     (args.output/'f1_report.json').write_text(json.dumps(report, indent=2)+'\n')

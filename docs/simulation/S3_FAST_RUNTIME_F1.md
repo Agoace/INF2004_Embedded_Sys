@@ -126,12 +126,63 @@ be attributed to scheduler delay alone. The initial harness retains Python
 metric tuples, so observer-induced GC is one candidate, not a proven sole
 cause. Keep these initial reports when investigating.
 
-Main authorized ONE later bounded investigation: preallocated numeric
-measurement buffers, a documented freeze/disable-GC experiment, and the safe
-zero-noise shortcut for synthetic channels. That is a separate change and
-rerun. It must not overwrite this FAIL, weaken500us, precompute sensor poses
-or change the nonzero GP28 noise sequence. GC policy experiments are not a
-production runtime policy or hardware timing result.
+Main authorized ONE bounded paired investigation after the initial FAIL
+commit `4d12025`. The results below do not overwrite that FAIL or weaken500us.
+
+## One paired refinement investigation — both modes still FAIL
+
+The refinement uses fixed numeric measurement arrays instead of retained
+per-frame metric tuples. Only zero-noise synthetic channels skip private RNG
+construction; the nonzero GP28 path and frozen profile are unchanged. Pose
+math, domain checks, response, noise and result construction remain inside
+the timer. Python scalar and sampler-result allocations still exist: this
+is **not an allocation-free sampler**. Measurement payload is33 bytes per
+frame (3.3MB for100000 frames, excluding array headers). No complete
+sensor-pose replay is precomputed.
+
+The same source and generated poses ran exactly once in each mode, three
+repeats of100000 batches per mode. All600000 batches had three valid channels.
+GC-on is the control. The experiment explicitly collects/freezes the existing
+heap and disables cyclic GC during each timed loop, then restores the prior
+policy. GC setup/restore and CSV export are outside the sample timer. This
+policy exists in the evidence driver only, not in the runtime sampler.
+No reruns or further tuning were done after these paired measurements.
+
+| GC on | P95 us | P99 us | Maximum us | Count >500 us | Outlier thread CPU >500 us |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Repeat0 | 60.003 | 75.772 | 599.038 | 48 | 36 |
+| Repeat1 | 59.412 | 63.790 | 2157.581 | 49 | 32 |
+| Repeat2 | 58.621 | 61.556 | 603.265 | 48 | 29 |
+
+| Freeze + disable GC | P95 us | P99 us | Maximum us | Count >500 us | Outlier thread CPU >500 us |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Repeat0 | 59.532 | 71.374 | 694.256 | 57 | 44 |
+| Repeat1 | 59.492 | 63.299 | 638.852 | 38 | 28 |
+| Repeat2 | 58.831 | 62.217 | 568.080 | 23 | 16 |
+
+**Every repeat fails the unchanged500us maximum.** No paired-run outlier
+overlapped a GC callback. Thread CPU measures execution by the measured
+thread; elapsed time also includes time when it does not execute.
+
+In GC-on repeat1, the largest elapsed outlier was2157.581us but only
+107.533us of thread CPU:2050.048us was off-CPU delay, consistent with
+scheduler/OS wait, not uniquely identified as a particular cause. With
+GC frozen/disabled, the largest per-repeat outliers were:
+
+| Repeat | Wall us | Thread CPU us | Non-CPU gap us |
+| --- | ---: | ---: | ---: |
+| 0 | 694.256 | 656.688 | 37.568 |
+| 1 | 638.852 | 632.011 | 6.841 |
+| 2 | 568.080 | 542.473 | 25.607 |
+
+These remaining maxima are mainly CPU work in the timed sampling/library
+path, not cyclic GC or scheduler delay alone. The exact expensive function
+has not been identified. Assigning all spikes to GC/OS scheduling would be
+incorrect. Further profiling is outside this one bounded investigation.
+
+All original and refined CSV rows/outliers are retained separately. The
+freeze/disable experiment is not a production GC policy, a hard OS deadline,
+a Pico timing claim or permission to integrate the runtime path.
 
 ## Reproduce and tests
 
@@ -145,7 +196,20 @@ python3 -S -m sim.webots.pil.s3_f1_check --timing-only \
   --output build/webots/f1/timing
 ```
 
-The timing command returns nonzero when any strict timing limit fails.
+The paired investigation uses separate output folders; do not overwrite the
+initial `build/webots/f1/timing` evidence:
+
+```sh
+python3 -S -m sim.webots.pil.s3_f1_check --timing-only --gc-mode enabled \
+  --output build/webots/f1/refinement/enabled
+python3 -S -m sim.webots.pil.s3_f1_check --timing-only --gc-mode freeze-disable \
+  --output build/webots/f1/refinement/freeze-disable
+```
+
+These commands document the completed one-time protocol; do not rerun it
+without approval. Each report includes source/profile hashes and every
+outlier's thread-CPU/elapsed split. The timing command returns nonzero when
+any strict timing limit fails.
 The initial S3 run has58 cases:55 passes and the same3 expected physical-model
 failures. Tests cover immutable revisions/fractions, no runtime rays, exact
 seeded noise, stale revision, unknown/ambiguous material, raised paper,
@@ -153,5 +217,8 @@ unsupported curves/occluders, absent floor and rigid pure-yaw bar exit/re-entry.
 The merged host suite passes125 cases with the same3 expected failures:
 use `PYTHONPATH="$PWD/sim/webots:$PWD"` for its existing `pil.*` imports.
 The unchanged host C/PC wire interop check passes3026 comparisons at9831991.
+The refinement adds3 tests: current S3 total61 and merged total128, each
+retaining the same3 expected failures. Tests check buffer storage, GC-policy
+restoration, zero-noise RNG avoidance and unchanged GP28 seeded values.
 Full results and source hashes remain in generated evidence. Do not infer
 Pico timing, stack, UART freshness or action safety from them.
