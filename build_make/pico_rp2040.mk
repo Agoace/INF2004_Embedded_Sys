@@ -228,6 +228,23 @@ endif
 SIM_SUFFIX := _sim
 endif
 
+PIL_GATE1 ?= 0
+ifneq ($(words $(PIL_GATE1)),1)
+$(error PIL_GATE1 must be one value: 0 or 1)
+endif
+ifneq ($(filter $(PIL_GATE1),0 1),$(PIL_GATE1))
+$(error Unknown PIL_GATE1 '$(PIL_GATE1)'; use 0 or 1)
+endif
+ifeq ($(PIL_GATE1),1)
+GATE1_MODE := $(SIM):$(WIFI):$(NET):$(MQTT):$(TEST):$(BENCH):$(DIAG)
+GATE1_MODE := $(GATE1_MODE):$(IMU_STREAM):$(BARCODE_CAPTURE)
+GATE1_MODE := $(GATE1_MODE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_CMD)
+ifneq ($(GATE1_MODE),1:none:none:0:0:0:0:0:0:0:NONE)
+$(error PIL_GATE1=1 requires SIM=1 WIFI=none NET=none MQTT=0 and neutral non-TEST non-BENCH non-DIAG options)
+endif
+GATE1_SUFFIX := _gate1
+endif
+
 # RT-0075/F2: the placement profile changes which core every task lands on, so it
 # changes the object code and must appear in both the artifact name and the
 # invalidation key below. Without this, switching FORCE_CORE0 reuses objects built
@@ -247,6 +264,9 @@ EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)$(SIM_SUFFIX)
+ifeq ($(PIL_GATE1),1)
+EXE_FILE := $(EXE_FILE)$(GATE1_SUFFIX)
+endif
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -318,6 +338,10 @@ CFLAGS  += -DBARCODE_MEASURED_CLEAR_MM=$(BARCODE_MEASURED_CLEAR_MM)
 ifeq ($(SIM),1)
 CFLAGS  += -DAPP_SIM=1
 endif
+ifeq ($(PIL_GATE1),1)
+CFLAGS += -DAPP_SIM_GATE1=1
+LFLAGS += -Wl,--wrap=usermain
+endif
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)
 CFLAGS  += -DBOARD_UART0_FREE=1
@@ -361,6 +385,9 @@ PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
 PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
 ifeq ($(SIM),1)
 PROFILE_ID := $(PROFILE_ID)-sim1
+endif
+ifeq ($(PIL_GATE1),1)
+PROFILE_ID := $(PROFILE_ID)-gate1
 endif
 PROFILE_FILE := .build_profile
 
