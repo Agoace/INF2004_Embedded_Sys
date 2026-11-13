@@ -65,6 +65,9 @@ static unsigned int rt_calls[RT_CALL_COUNT];
 uint32_t drv_line_last_wake_us(void) { return wake_ref; }
 void rt_max(rt_max_t w, uint32_t us) { assert(!held || w == RT_LINE_LPU); rt_last_max[w] = us; }
 void rt_call(rt_call_t w, uint32_t us) { rt_last_call[w] = us; ++rt_calls[w]; }
+/* P2 timeline double: site order and args. */
+static rt_tl_site_t tl_sites[8]; static uint32_t tl_args[8], tl_n;
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg) { (void)us; if (tl_n < 8u) { tl_sites[tl_n] = site; tl_args[tl_n] = arg; } ++tl_n; }
 uint32_t drv_time_ms(void) { return clock_us/1000u; }
 static void sample(uint16_t v) {
     value=v;clock_us+=1000u;wake_ref=clock_us-5u;available=true;sleeps=0u;
@@ -104,6 +107,7 @@ int main(void) {
     assert((calibration.faults & BC_CAL_FAULT_RAW) != 0u);
     assert(calibration_logs == 2u);
     memset(rt_calls, 0, sizeof(rt_calls));
+    tl_n = 0u;
     memset(rt_last_max, 0, sizeof(rt_last_max));
     sample(3500u);
     /* P1: ISR-exit -> running is 5 us; each kernel call is timed once. */
@@ -113,6 +117,9 @@ int main(void) {
     assert(rt_calls[RT_K_LINE_UNL] == 1u && rt_last_call[RT_K_LINE_UNL] > 0u);
     assert(rt_last_max[RT_LINE_LPU] > 0u);
     assert(rt_last_max[RT_LINE_SAMPLE] > rt_last_max[RT_LINE_LPU]);
+    /* P2: LINE_RUN at wake, LINE_IDLE before sleep with 1 sample drained. */
+    assert(tl_n == 2u && tl_sites[0] == RT_TL_LINE_RUN && tl_sites[1] == RT_TL_LINE_IDLE);
+    assert(tl_args[1] == 1u);
 #if !APP_TEST && !APP_BENCH
     assert(rt_last_max[RT_LINE_BARCODE] > 0u);
 #endif

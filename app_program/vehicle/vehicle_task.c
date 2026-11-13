@@ -444,6 +444,7 @@ static void part_end(rt_max_t part)
     const uint32_t us = now - part_mark_us;
     part_mark_us = now;
     rt_max(part, us);
+    rt_tl(RT_TL_VEH_PART, now, (uint32_t)part);
     if (us > part_slow_us) {
         part_slow_us = us;
         part_slow = part;
@@ -627,7 +628,10 @@ static void finish_step(void)
     if (!late) {
         part_end(RT_STEP_STATUS);
     }
-    if (late || (have && s.ticks != release_tick)) {
+    const bool over = late || (have && s.ticks != release_tick);
+    /* P2: record the finish before rt_overrun() freezes the timeline. */
+    rt_tl(RT_TL_VEH_FINISH, drv_time_us(), over ? 1u : 0u);
+    if (over) {
         /* P1: a late step did not read the status; use the bounded board
          * copy for the tick count. 0xFFFFFFFF: not available. */
         uint32_t ticks = 0xFFFFFFFFu;
@@ -696,6 +700,7 @@ static bool wait_tick(void)
     }
     const ER er = tk_slp_tsk(VEHICLE_WAKE_TIMEOUT_MS);
     const uint32_t woke = drv_time_us();
+    rt_tl(RT_TL_VEH_WAKE, woke, 0u);
     const uint32_t wake = woke - rt_motion_stamp_us();
     step_wake_us = 0u;
     if (er >= E_OK && wake <= VEHICLE_WAKE_LIMIT_US) {

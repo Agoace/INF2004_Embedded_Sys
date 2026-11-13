@@ -131,6 +131,8 @@ static void line_task(INT code, void *ctx)
             continue;
         }
         const uint32_t woke = drv_time_us();
+        rt_tl(RT_TL_LINE_RUN, woke, 0u);
+        uint32_t drained = 0u;
         const uint32_t dispatch = woke - drv_line_last_wake_us();
         if (dispatch <= LINE_WAKE_LIMIT_US) {
             rt_call(RT_K_LINE_WAKE, dispatch);
@@ -140,6 +142,7 @@ static void line_task(INT code, void *ctx)
         drv_line_sample_t sample;
         while (drv_line_take(&sample)) {
             const uint32_t start = drv_time_us();
+            ++drained;
             if (tk_loc_mtx(mutex, TMO_FEVR) < E_OK) {
                 continue;
             }
@@ -204,6 +207,7 @@ static void line_task(INT code, void *ctx)
             barcode_capture_cost(drv_time_us() - capture_start);
 #endif
         }
+        rt_tl(RT_TL_LINE_IDLE, drv_time_us(), drained);
     }
 }
 

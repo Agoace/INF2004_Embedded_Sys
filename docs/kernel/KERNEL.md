@@ -228,6 +228,44 @@ Cost, measured at `d8adbcc` against `451e562` (school MQTT profiles):
 | Stack frames | `rt_report` 120 B on the dump caller; `alarm_irq` +8 B (+20 B `rt_call`); `wait_tick` +8 B; `finish_step` +48 B |
 | Time | 2 or 3 extra TIMER reads per measured site |
 
+### Overrun timeline (P2)
+
+P2 adds a ring of the last 128 core-0 events of a run. It shows the order
+of events in a bad step; the P1 maxima cannot show this. It is report only.
+The GP20 dump prints it after the P1 lines with 20 ms USB yields:
+
+```
+[timeline] epoch E frozen F records N end_us T
+[tl] -US SITE ARG gGPIO | ... (8 records per line, oldest first)
+```
+
+`-US` is microseconds before the newest record. `gGPIO` is the low 16 bits
+of a GPIO-IRQ dispatch count (encoder and echo). The difference between two
+records is the number of GPIO interrupts between them.
+
+| Site | Event | ARG |
+| --- | --- | --- |
+| 1 | end of the line alarm ISR | queue depth |
+| 2 | line_task running | 0 |
+| 3 | line_task about to sleep | samples drained |
+| 4 | motion tick start | 0 |
+| 5 | motion notify returned | 0 |
+| 6 | sonar_task wake / ping sent | 0 / 1 |
+| 7 | Vehicle running | 0 |
+| 8 | end of a step part | `rt_max_t` part id |
+| 9 | `finish_step` | 1 = overrun |
+
+Run scope: a new run clears the ring. The first overrun freezes it
+(`frozen 1`), so it keeps the bad step. Without an overrun it holds the
+last events before STOP. Writers are core-0 contexts only. Each record is
+written in one core-local `DI`/`EI` section (index plus two word stores; no
+kernel call). A long gap between records is time in a context with no
+site, for example the USB or SIO interrupt or a kernel masked section.
+
+Cost, measured at the P2 commit against `ddc5436`: static RAM +1040 B
+(all profiles); flash +832 B (MQTT), +800 B (USB-only), +880 B (TEST).
+`rt_tl` is 176 B in flash (XIP) and is called from the line ISR.
+
 ## USB priority
 
 USB runs at 21, below driving10..13, IMU14 and Wi-Fi/TEST20, but above

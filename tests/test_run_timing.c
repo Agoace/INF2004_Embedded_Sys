@@ -176,6 +176,77 @@ static void check_load_and_bkl(void)
     assert(strstr(out, "[bkl] epoch 19 unavailable\n"));
 }
 
+static unsigned int pauses;
+static void pause_cb(void) { ++pauses; }
+
+static void check_timeline(void)
+{
+    rt_tl_info_t info;
+    rt_tl_record_t r;
+    rt_begin(21u);
+    rt_tl_info(&info);
+    assert(info.records == 0u && info.frozen == 0u);
+    /* GPIO counter goes into each record (low 16 bits). */
+    rt_tl_gpio();
+    rt_tl_gpio();
+    rt_tl(RT_TL_ISR_EXIT, 1000u, 3u);
+    rt_tl(RT_TL_LINE_RUN, 1010u, 0u);
+    rt_tl(RT_TL_LINE_IDLE, 1050u, 300u); /* arg saturates at 255 */
+    rt_tl_info(&info);
+    assert(info.records == 3u && info.epoch == 21u && info.end_us == 1050u);
+    rt_tl_get(0u, &r);
+    assert(r.us == 1000u && r.site == RT_TL_ISR_EXIT && r.arg == 3u);
+    assert(r.gpio == 2u);
+    rt_tl_get(2u, &r);
+    assert(r.site == RT_TL_LINE_IDLE && r.arg == 255u);
+    /* Wrap: keep the newest 128, oldest first. */
+    for (uint32_t i = 0u; i < 200u; ++i) {
+        rt_tl(RT_TL_VEH_PART, 2000u + i, (uint8_t)(i & 0x7Fu));
+    }
+    rt_tl_info(&info);
+    assert(info.records == RT_TL_RECORDS && info.end_us == 2199u);
+    rt_tl_get(0u, &r);
+    assert(r.us == 2072u);
+    rt_tl_get(RT_TL_RECORDS - 1u, &r);
+    assert(r.us == 2199u);
+    /* The first overrun freezes the ring; later writes are ignored. */
+    rt_overrun_t o = {.step = 1u};
+    rt_overrun(&o);
+    rt_tl(RT_TL_VEH_FINISH, 9999u, 1u);
+    rt_tl_info(&info);
+    assert(info.frozen == 1u && info.end_us == 2199u);
+    /* STOP keeps it; even epoch writes are ignored. */
+    rt_begin(22u);
+    rt_tl(RT_TL_VEH_WAKE, 12345u, 0u);
+    rt_tl_info(&info);
+    assert(info.frozen == 1u && info.end_us == 2199u && info.epoch == 21u);
+    /* A new run clears it. */
+    rt_begin(23u);
+    rt_tl_info(&info);
+    assert(info.records == 0u && info.frozen == 0u && info.epoch == 23u);
+    /* Report: header and 8 records per [tl] line, pause every 4 lines. */
+    rt_tl(RT_TL_ISR_EXIT, 100u, 1u);
+    rt_tl(RT_TL_VEH_FINISH, 350u, 1u);
+    used = 0u;
+    out[0] = '\0';
+    pauses = 0u;
+    rt_timeline_report(pause_cb);
+    assert(strstr(out, "[timeline] epoch 23 frozen 0 records 2 end_us 350\n"));
+    assert(strstr(out, "[tl] -250 1 1 g2 | -0 9 1 g2\n"));
+    for (uint32_t i = 0u; i < 70u; ++i) {
+        rt_tl(RT_TL_LINE_RUN, 400u + i, 0u);
+    }
+    used = 0u;
+    out[0] = '\0';
+    pauses = 0u;
+    rt_timeline_report(pause_cb);
+    unsigned int lines = 0u;
+    for (const char *p = out; (p = strstr(p, "[tl] ")) != NULL; ++p) {
+        ++lines;
+    }
+    assert(lines == 9u && pauses == 2u); /* 72 records: 9 lines */
+}
+
 int main(void)
 {
     rt_snapshot_t s;
@@ -189,6 +260,7 @@ int main(void)
     check_first_overrun();
     check_report();
     check_load_and_bkl();
+    check_timeline();
     /* Motion wake stamp: written always, also while frozen. */
     assert(rt_motion_stamp_us() == 0u);
     rt_motion_stamp(1234u);

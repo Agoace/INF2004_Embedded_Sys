@@ -7,6 +7,8 @@
  */
 #include "run_timing.h"
 #include <stdbool.h>
+#include <tk/tkernel.h>
+#include <tk/syslib.h>
 #include <tm/tmonitor.h>
 
 #define LOAD(p)     __atomic_load_n((p), __ATOMIC_SEQ_CST)
@@ -39,6 +41,23 @@ typedef struct {
     rt_bkl_t r;
 } bkl_latch_t;
 static bkl_latch_t bkl; /* Vehicle only */
+/* P2 timeline ring: core-0 writers inside one short masked section. */
+#define TL_PER_LINE        8u
+#define TL_LINES_PER_PAUSE 4u
+static uint32_t tl_words[RT_TL_RECORDS][2]; /* us; site | arg<<8 | gpio<<16 */
+static uint32_t tl_head;   /* records written since the run started */
+static uint32_t tl_frozen; /* 1 after the first overrun */
+static uint32_t tl_epoch;  /* run of the ring contents */
+static uint32_t tl_gpio;   /* GPIO dispatcher only */
+#ifdef KLS_HOST_TEST
+UINT test_smp_irq_save(void);
+void test_smp_irq_restore(UINT saved);
+#define TL_MASK(m)   ((m) = test_smp_irq_save())
+#define TL_UNMASK(m) test_smp_irq_restore(m)
+#else
+#define TL_MASK(m)   DI(m)
+#define TL_UNMASK(m) EI(m)
+#endif
 
 static const char *const part_name[RT_MAX_COUNT] = {
     "isr_late", "isr_adc", "isr_wup", "line_sample", "lp_update",
@@ -67,6 +86,10 @@ void rt_begin(uint32_t epoch)
 {
     if ((epoch & 1u) != 0u) {
         STORE(&frozen, epoch);
+        /* Writers are idle here: the previous epoch was even. */
+        STORE(&tl_head, 0u);
+        STORE(&tl_frozen, 0u);
+        STORE(&tl_epoch, epoch);
     }
     STORE(&current, epoch);
 }
@@ -153,6 +176,7 @@ void rt_overrun(const rt_overrun_t *record)
     STORE(&first.r.wake_us, record->wake_us);
     STORE(&first.r.uptime_ms, record->uptime_ms);
     STORE(&first.epoch, e);
+    STORE(&tl_frozen, 1u); /* keep the timeline of the bad step */
 }
 
 void rt_motion_stamp(uint32_t us)
@@ -315,4 +339,88 @@ void rt_report(void)
     report_maxima(e);
     report_calls(e);
     report_overrun(e);
+}
+
+/* ---- P2 timeline -------------------------------------------------------- */
+
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg)
+{
+    const uint32_t e = live_epoch();
+    if (e == 0u || LOAD(&tl_frozen) != 0u || LOAD(&tl_epoch) != e) {
+        return;
+    }
+    const uint32_t a = arg > 255u ? 255u : arg;
+    const uint32_t meta = ((uint32_t)site & 0xFFu) | (a << 8u) |
+                          ((LOAD(&tl_gpio) & 0xFFFFu) << 16u);
+    UINT mask;
+    TL_MASK(mask);
+    const uint32_t head = LOAD(&tl_head);
+    const uint32_t slot = head % RT_TL_RECORDS;
+    STORE(&tl_words[slot][0], us);
+    STORE(&tl_words[slot][1], meta);
+    STORE(&tl_head, head + 1u);
+    TL_UNMASK(mask);
+}
+
+void rt_tl_gpio(void)
+{
+    STORE(&tl_gpio, LOAD(&tl_gpio) + 1u);
+}
+
+static uint32_t tl_records(void)
+{
+    const uint32_t head = LOAD(&tl_head);
+    return head < RT_TL_RECORDS ? head : RT_TL_RECORDS;
+}
+
+void rt_tl_get(uint32_t index, rt_tl_record_t *out)
+{
+    const uint32_t head = LOAD(&tl_head);
+    const uint32_t start = head > RT_TL_RECORDS ? head - RT_TL_RECORDS : 0u;
+    const uint32_t slot = (start + index) % RT_TL_RECORDS;
+    const uint32_t meta = LOAD(&tl_words[slot][1]);
+    out->us = LOAD(&tl_words[slot][0]);
+    out->site = (uint8_t)(meta & 0xFFu);
+    out->arg = (uint8_t)((meta >> 8u) & 0xFFu);
+    out->gpio = (uint16_t)((meta >> 16u) & 0xFFFFu);
+}
+
+void rt_tl_info(rt_tl_info_t *out)
+{
+    out->epoch = LOAD(&tl_epoch);
+    out->records = tl_records();
+    out->frozen = LOAD(&tl_frozen);
+    out->end_us = 0u;
+    if (out->records != 0u) {
+        rt_tl_record_t r;
+        rt_tl_get(out->records - 1u, &r);
+        out->end_us = r.us;
+    }
+}
+
+void rt_timeline_report(void (*pause)(void))
+{
+    rt_tl_info_t info;
+    rt_tl_info(&info);
+    tm_printf((UB *)"[timeline] epoch %lu frozen %lu records %lu "
+                    "end_us %lu\n", (unsigned long)info.epoch,
+              (unsigned long)info.frozen, (unsigned long)info.records,
+              (unsigned long)info.end_us);
+    unsigned int lines = 0u;
+    for (uint32_t i = 0u; i < info.records; ++i) {
+        rt_tl_record_t r;
+        rt_tl_get(i, &r);
+        const uint32_t col = i % TL_PER_LINE;
+        tm_printf((UB *)"%s -%lu %u %u g%u",
+                  col == 0u ? "[tl]" : " |",
+                  (unsigned long)(info.end_us - r.us), (unsigned int)r.site,
+                  (unsigned int)r.arg, (unsigned int)r.gpio);
+        if (col == TL_PER_LINE - 1u || i + 1u == info.records) {
+            tm_printf((UB *)"\n");
+            ++lines;
+            if (lines % TL_LINES_PER_PAUSE == 0u && pause != 0) {
+                pause();
+            }
+        }
+    }
 }

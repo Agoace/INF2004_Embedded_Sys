@@ -148,6 +148,15 @@ int main(int argc, char **argv) {
     assert(rt.call[RT_K_MOT_WUP].count == 1u);
     assert(rt.call[RT_K_MOT_WUP].sum_us == 3u);
     assert(rt_motion_stamp_us() == 20000u + 7u + 3u);
+    /* P2: MOT_START at the tick start, then MOT_NOTIFY at the stamp. */
+    rt_tl_info_t tl;
+    rt_tl_record_t rec;
+    rt_tl_info(&tl);
+    assert(tl.records == 2u);
+    rt_tl_get(0u, &rec);
+    assert(rec.site == RT_TL_MOT_START && rec.us == 20000u);
+    rt_tl_get(1u, &rec);
+    assert(rec.site == RT_TL_MOT_NOTIFY && rec.us == 20000u + 7u + 3u);
     rt_begin(2u);
     assert(motion_status(&s) == E_OK && s.counts[0] == 4 && s.counts[1] == 4);
     assert(motion_snapshot_try_read(&board_status,&board_us)==E_OK && !held);

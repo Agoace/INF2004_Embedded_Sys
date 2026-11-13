@@ -47,7 +47,12 @@ static void alarm_irq(UINT intno) {
         rt_call(RT_K_ISR_WUP, w1 - w0);
         rt_max(RT_ISR_WUP, w1 - w0);
     }
-    const uint32_t cost=drv_time_us()-entry;
+    const uint32_t exit_us=drv_time_us();
+    /* P2: queue depth shows a line_task backlog. */
+    const unsigned int h = head;
+    const unsigned int t = tail;
+    rt_tl(RT_TL_ISR_EXIT, exit_us, (h + CAPACITY - t) % CAPACITY);
+    const uint32_t cost=exit_us-entry;
     stats.isr_us+=cost;
     if (cost>stats.isr_max_us) stats.isr_max_us=cost;
 }

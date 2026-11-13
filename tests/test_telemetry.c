@@ -6,6 +6,7 @@
 #include <tk/smp.h>
 #include "../app_program/app.h"
 #include "../app_program/subsystem1/telemetry.h"
+#include "../app_program/platform/run_timing.h"
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
@@ -35,9 +36,19 @@ INT tk_rcv_mbf(ID id,void *m,TMO timeout) {
 }
 void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
 void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
-ER tk_dly_tsk(RELTIM delay) { assert(delay==20u && !irq_off);return E_OK; }
+static unsigned int timelines, yields;
+ER tk_dly_tsk(RELTIM delay) { assert(delay==20u && !irq_off);++yields;return E_OK; }
 const char *drv_watchdog_reset_name(void) { return "watchdog"; }
 void app_task_report(void) { ++reports; }
+/* P2 timeline double: once per dump, after the first report, with the
+ * dump's USB yield as the pause. */
+void rt_timeline_report(void (*pause)(void)) {
+    assert(pause != NULL && reports % 2u == 1u);
+    ++timelines;
+    const unsigned int before = yields;
+    pause();
+    assert(yields == before + 1u);
+}
 int vehicle_hump_try_read(imu_hump_summary_t *out) {
     if (hump_result==E_OK) *out=(imu_hump_summary_t){.peak_01mm=108u,.count=2u,.flags=0x05u,.gated=3u};
     return hump_result;
@@ -100,6 +111,7 @@ int main(void) {
     assert(telemetry_send(&m)==E_OK);telemetry_stats(&s);assert(s.busy);
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
     assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
+    assert(timelines==1u);
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();

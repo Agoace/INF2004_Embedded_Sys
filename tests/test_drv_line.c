@@ -25,6 +25,9 @@ void drv_line_hw_ack(void) { }
 static uint32_t maxes[RT_MAX_COUNT], call_us, call_n;
 void rt_max(rt_max_t w, uint32_t us) { if (us > maxes[w]) maxes[w] = us; }
 void rt_call(rt_call_t w, uint32_t us) { assert(w == RT_K_ISR_WUP); call_us = us; ++call_n; }
+/* P2 timeline double: last record. */
+static uint32_t tl_n, tl_us, tl_arg; static rt_tl_site_t tl_site;
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg) { ++tl_n; tl_site = site; tl_us = us; tl_arg = arg; }
 static void fire(uint32_t at) { now = at; ((void (*)(UINT))handler)(0u); }
 int main(void) {
     hw_error = -1; assert(drv_line_init() == E_SYS);
@@ -38,6 +41,8 @@ int main(void) {
     /* P1: on time -> late 0, ADC 48 us, wake 9 us measured around the call. */
     assert(maxes[RT_ISR_LATE] == 0u && maxes[RT_ISR_ADC] == 48u);
     assert(call_n == 1u && call_us == 9u && maxes[RT_ISR_WUP] == 9u);
+    /* P2: one ISR_EXIT record after the wake, arg = queue depth (1, taken: 0). */
+    assert(tl_n == 1u && tl_site == RT_TL_ISR_EXIT && tl_arg == 1u && tl_us > 1000u);
     fire(4500u); assert(alarm == 5000u);
     /* Target was 2000: entry at 4500 is 2500 us late. */
     assert(maxes[RT_ISR_LATE] == 2500u);

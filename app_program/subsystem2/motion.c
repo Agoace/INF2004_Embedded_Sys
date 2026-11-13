@@ -184,6 +184,7 @@ static void motion_task(INT stacd, void *exinf)
         }
         const INT queued = tk_can_wup(TSK_SELF);
         const uint32_t started = drv_time_us();
+        rt_tl(RT_TL_MOT_START, started, 0u);
 #if APP_DIAG
         md_point_t point = {.entry = started,
             .gap = ticks != 0u ? started - last_run_us : 0u,
@@ -271,6 +272,7 @@ static void motion_task(INT stacd, void *exinf)
             (void)tk_wup_tsk(notify);
             const uint32_t w1 = drv_time_us();
             rt_motion_stamp(w1);
+            rt_tl(RT_TL_MOT_NOTIFY, w1, 0u);
             rt_call(RT_K_MOT_WUP, w1 - w0);
         }
     }

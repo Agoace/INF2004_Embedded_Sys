@@ -90,6 +90,47 @@ typedef struct {
     rt_overrun_t first;
 } rt_snapshot_t;
 
+/* P2 timeline: core-0 event codes. */
+typedef enum {
+    RT_TL_ISR_EXIT = 1, /* end of the line alarm ISR; arg = queue depth */
+    RT_TL_LINE_RUN,     /* line_task after tk_slp_tsk */
+    RT_TL_LINE_IDLE,    /* line_task before tk_slp_tsk; arg = samples */
+    RT_TL_MOT_START,    /* motion_task tick start */
+    RT_TL_MOT_NOTIFY,   /* after the motion notify tk_wup_tsk */
+    RT_TL_SONAR_RUN,    /* sonar_task wake (arg 0) and ping sent (arg 1) */
+    RT_TL_VEH_WAKE,     /* Vehicle after tk_slp_tsk */
+    RT_TL_VEH_PART,     /* end of a step part; arg = rt_max_t */
+    RT_TL_VEH_FINISH    /* finish_step; arg 1 = overrun */
+} rt_tl_site_t;
+
+#define RT_TL_RECORDS 128u
+
+typedef struct {
+    uint32_t us;
+    uint8_t site;
+    uint8_t arg;
+    uint16_t gpio; /* low 16 bits of the GPIO-IRQ count */
+} rt_tl_record_t;
+
+typedef struct {
+    uint32_t epoch;
+    uint32_t records; /* 0..RT_TL_RECORDS */
+    uint32_t frozen;  /* 1: frozen at the first overrun */
+    uint32_t end_us;  /* time of the newest record */
+} rt_tl_info_t;
+
+/* Core 0 writers only, while a run is live and the ring is not frozen.
+ * One short interrupt-masked section; no kernel call. arg saturates. */
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg);
+/* GPIO dispatcher only (core 0 ISR): count one dispatch. */
+void rt_tl_gpio(void);
+/* Readers, after the freeze or after STOP. Index 0 is the oldest record. */
+void rt_tl_info(rt_tl_info_t *out);
+void rt_tl_get(uint32_t index, rt_tl_record_t *out);
+/* Print [timeline] and [tl] lines; call pause() after every 4 [tl] lines
+ * (the dump passes its USB yield). pause may be NULL. */
+void rt_timeline_report(void (*pause)(void));
+
 /* Vehicle only: odd epoch starts a run, even epoch freezes it. */
 void rt_begin(uint32_t epoch);
 /* Any reader: the current epoch (odd: run, even: frozen). */

@@ -295,7 +295,30 @@ int main(int argc,char **argv) {
         assert(rt.first.slow_part==RT_STEP_VSM && rt.first.slow_us==11000u);
         assert(rt.first.tick_delta==1u && rt.max[RT_STEP_VSM]==11000u);
         assert(rt.first.uptime_ms!=0u);
-    } else assert(rt.first.step==0u);
+        /* P2: the frozen timeline ends with the late finish; the parts
+         * of the bad step and its wake come before it. */
+        rt_tl_info_t tl;
+        rt_tl_record_t rec;
+        rt_tl_info(&tl);
+        assert(tl.frozen==1u && tl.epoch==rt.epoch && tl.records>=3u);
+        rt_tl_get(tl.records-1u,&rec);
+        assert(rec.site==RT_TL_VEH_FINISH && rec.arg==1u);
+        rt_tl_get(tl.records-2u,&rec);
+        assert(rec.site==RT_TL_VEH_PART && rec.arg==RT_STEP_PUBLISH);
+        bool vsm=false, woke=false;
+        for (uint32_t i=0u;i<tl.records;++i) {
+            rt_tl_get(i,&rec);
+            vsm=vsm || (rec.site==RT_TL_VEH_PART && rec.arg==RT_STEP_VSM);
+            woke=woke || rec.site==RT_TL_VEH_WAKE;
+        }
+        assert(vsm && woke);
+    } else {
+        assert(rt.first.step==0u);
+        /* P2: no overrun, so the ring is not frozen; it holds the run end. */
+        rt_tl_info_t tl;
+        rt_tl_info(&tl);
+        assert(tl.frozen==0u && tl.epoch==rt.epoch && tl.records>0u);
+    }
     if (slow_stop) {
         /* The stop work after the run is not a driving step: no overrun,
          * and the stop reason stays the one that ended the run. */
