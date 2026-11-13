@@ -40,7 +40,8 @@ def make_fixture():
                            duration_us=40000, session=123, transport_only=True)
     assert summary['verdict'] == 'INCOMPLETE', summary
     assert summary['stopped_status_observed'] is True
-    return {'schema': 1, 'provenance': 'SYNTHETIC host reference; NOT a Pico/Probe capture',
+    return {'schema': 2, 'input_reset_pc_us': 10000, 'startup_discard_us': 300000,
+               'provenance': 'SYNTHETIC host reference; NOT a Pico/Probe capture',
                'hardware_measured': False, 'start_pc_us': 10000, 'duration_us': 40000,
                'session': 123, 'transport_only': True, 'expected_verdict': 'INCOMPLETE',
                'rx': pair.rx, 'tx': pair.tx}

@@ -34,10 +34,11 @@ def load_fixture(path):
         raise ReplayMismatch('replay input must be a regular fixture file within2MB')
     fixture = json.loads(path.read_text())
     fields = {'schema', 'provenance', 'hardware_measured', 'start_pc_us', 'duration_us',
-              'session', 'transport_only', 'expected_verdict', 'rx', 'tx'}
+              'session', 'transport_only', 'expected_verdict', 'rx', 'tx',
+              'input_reset_pc_us', 'startup_discard_us'}
     if not isinstance(fixture, dict) or set(fixture) != fields or type(fixture['schema']) is not int:
         raise ReplayMismatch('unknown replay fixture schema')
-    if (fixture['schema'] != 1 or fixture['hardware_measured'] is not False or
+    if (fixture['schema'] != 2 or fixture['hardware_measured'] is not False or
             fixture['transport_only'] is not True or fixture['expected_verdict'] != 'INCOMPLETE' or
             not isinstance(fixture['provenance'], str) or 'SYNTHETIC' not in fixture['provenance']):
         raise ReplayMismatch('fixture must explicitly declare synthetic host-only scope')
@@ -45,6 +46,10 @@ def load_fixture(path):
                           ('session', 1, 0xffffffff)):
         if type(fixture[field]) is not int or not lo <= fixture[field] <= hi:
             raise ReplayMismatch('replay time/session outside bounds')
+    if (type(fixture['input_reset_pc_us']) is not int or
+            fixture['input_reset_pc_us'] != fixture['start_pc_us'] or
+            type(fixture['startup_discard_us']) is not int or fixture['startup_discard_us'] != 300000):
+        raise ReplayMismatch('fixture must include the reset and300ms discard guard')
     for name in ('rx', 'tx'):
         rows = fixture[name]
         if not isinstance(rows, list) or not 1 <= len(rows) <= 10000:
@@ -69,6 +74,12 @@ class RecordedUART:
         self.fixture, self.clock = fixture, clock
         self.rx_index = self.tx_index = 0
         self.closed = False
+        self.input_resets = 0
+
+    def reset_input_buffer(self):
+        if self.input_resets or self.clock.now_us() != self.fixture['input_reset_pc_us']:
+            raise ReplayMismatch('recorded input-reset time/count mismatch')
+        self.input_resets += 1
 
     def read(self, maximum):
         if self.rx_index == len(self.fixture['rx']):
@@ -99,7 +110,7 @@ class RecordedUART:
 
     @property
     def complete(self):
-        return (self.closed and self.rx_index == len(self.fixture['rx']) and
+        return (self.closed and self.input_resets == 1 and self.rx_index == len(self.fixture['rx']) and
                 self.tx_index == len(self.fixture['tx']))
 
 

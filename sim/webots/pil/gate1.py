@@ -78,6 +78,11 @@ class Recorder:
         self.bootstrap_bad_frames = 0
         self.bootstrap_crc_errors = 0
         self.bootstrap_oversize_frames = 0
+        self.startup_discarded_bytes = 0
+        self.startup_discard_us = 300000
+        self.bootstrap_first_boot_seq = None
+        self.bootstrap_last_boot = None
+        self.bootstrap_consecutive_boots = 0
 
     def record(self, event, pc_us, **details):
         self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
@@ -99,6 +104,17 @@ class Recorder:
         kind, seq = event['type'], event['seq']
         # BOOT is a separate reset/session observation, not the1kHz stream.
         if kind == Type.BOOT:
+            nonce = struct.unpack_from('<I', bytes.fromhex(event['payload_hex']))[0]
+            seq = event['seq']
+            previous = self.bootstrap_last_boot
+            consecutive = previous is not None and nonce == previous[0] and seq == ((previous[1] + 1) & 0xffffffff)
+            self.bootstrap_consecutive_boots = self.bootstrap_consecutive_boots + 1 if consecutive else 1
+            self.bootstrap_last_boot = (nonce, seq)
+            if self.bootstrap_first_boot_seq is None:
+                self.bootstrap_first_boot_seq = seq
+            self.record('bootstrap_boot_candidate', pc, nonce=nonce, seq=seq,
+                        consecutive=self.bootstrap_consecutive_boots,
+                        pair_ready=self.bootstrap_consecutive_boots >= 2)
             return
         if event['session'] != host.session:
             self.counters['wrong_session'] += 1
@@ -180,6 +196,11 @@ class Recorder:
             'decoder_total_bad_frames': host.decoder.bad_frames,
             'decoder_total_crc_errors': host.decoder.crc_errors,
             'decoder_total_oversize_frames': host.decoder.oversize_frames,
+            'startup_discard_us': self.startup_discard_us,
+            'startup_discarded_bytes': self.startup_discarded_bytes,
+            'bootstrap_first_valid_boot_seq': self.bootstrap_first_boot_seq,
+            'bootstrap_last_valid_boot_seq': self.bootstrap_last_boot[1] if self.bootstrap_last_boot else None,
+            'bootstrap_consecutive_boots': self.bootstrap_consecutive_boots,
             'bootstrap_discarded_bad_frames': self.bootstrap_bad_frames,
             'bootstrap_discarded_crc_errors': self.bootstrap_crc_errors,
             'bootstrap_discarded_oversize_frames': self.bootstrap_oversize_frames,
@@ -272,6 +293,13 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     reason, hello_sent, armed_once = None, False, False
     next_sync = start
     try:
+        if not callable(getattr(io, 'reset_input_buffer', None)):
+            raise GateFailure('I/O backend lacks input-buffer reset')
+        io.reset_input_buffer()
+        discard_start = clock.now_us()
+        discard_until = discard_start + recorder.startup_discard_us
+        recorder.record('startup_input_reset', discard_start,
+                        discard_until_pc_us=discard_until, minimum_discard_us=300000)
         while True:
             now = clock.now_us()
             if end is not None and now >= end:
@@ -282,13 +310,18 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             if chunk:
                 received = clock.now_us()
                 recorder.record('raw_rx', received, packet_hex=chunk.hex())
-                receive_chunk(host, recorder, chunk, received)
+                if now < discard_until:
+                    recorder.startup_discarded_bytes += len(chunk)
+                    recorder.record('startup_discard', received, packet_hex=chunk.hex(),
+                                    bytes=len(chunk), used_for_bootstrap=False)
+                else:
+                    receive_chunk(host, recorder, chunk, received)
             for event in host.drain_events():
                 recorder.observe(event, host)
             now = clock.now_us()
             if host.state == 'ARMED' and active_start is None:
                 active_start, end = now, now + duration_us
-            if host.state == 'BOOT' and not hello_sent:
+            if host.state == 'BOOT' and not hello_sent and recorder.bootstrap_consecutive_boots >= 2:
                 host.hello(now)
                 hello_sent = True
             if host.ack_frame is not None and now >= next_sync and not host.sync_pending:

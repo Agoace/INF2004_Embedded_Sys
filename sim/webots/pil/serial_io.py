@@ -49,6 +49,10 @@ class ProbeSerial:
             self.close()
             raise
 
+    def reset_input_buffer(self):
+        """Drop queued kernel input; the caller must also drain Probe USB data."""
+        termios.tcflush(self.fd, termios.TCIFLUSH)
+
     def read(self, maximum=4096):
         if not 1 <= maximum <= 4096:
             raise ValueError('read bound must be1..4096')
