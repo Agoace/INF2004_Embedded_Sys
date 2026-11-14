@@ -29,9 +29,9 @@ class TrialCaptureFirstTests(unittest.TestCase):
             import json
             manifest=json.loads((out/'trial-manifest.json').read_text())
             self.assertTrue(manifest['capture_first'])
-            self.assertTrue(manifest['queued_logger'])
+            self.assertFalse(manifest['queued_logger'])
             self.assertEqual(result['pc_capture_order'],'capture-first')
-            self.assertEqual(result['pc_logging'],'bounded-queue')
+            self.assertEqual(result['pc_logging'],'synchronous')
             for row in csv.DictReader((out/'events.csv').read_text().splitlines()):
                 if row['event']=='source_capture':
                     d=json.loads(row['details_json'])

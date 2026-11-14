@@ -64,7 +64,7 @@ class TrialCaptureOpportunities(unittest.TestCase):
                 self.assertNotIn(delayed_source[0],pair.sensors)
                 return
             self.assertNotEqual(summary['verdict'],'FAIL',summary['failure'])
-            self.assertEqual(summary['pc_capture_revision'],'C1+C2+C2b+C3')
+            self.assertEqual(summary['pc_capture_revision'],'C1+C2+C2b')
             import json
             manifest=json.loads((out/'trial-manifest.json').read_text())
             self.assertEqual(manifest['capture_checks'],['loop-entry','post-RX/pre-SYNC','post-SYNC'])

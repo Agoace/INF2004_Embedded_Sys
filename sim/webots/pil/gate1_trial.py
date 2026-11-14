@@ -9,9 +9,9 @@ def labels(trial):
 
 def manifest():
     return {**labels(True), 'operator_decision': '2026-11-14 D-TRIAL',
-            'scope': 'C1 + C2 + C2b + C3 bounded queued logging; TRIAL ONLY',
-            'capture_first': True, 'queued_logger': True,
-            'pc_capture_revision': 'C1+C2+C2b+C3',
+            'scope': 'C1 + C2 + C2b capture opportunities; NOT C3 queued logging',
+            'capture_first': True, 'queued_logger': False,
+            'pc_capture_revision': 'C1+C2+C2b',
             'capture_checks': ['loop-entry', 'post-RX/pre-SYNC', 'post-SYNC'],
             'max_captures_per_iteration': 1,
             'clock_halfwidth_us': 400, 'sync_max_period_us': 20000,

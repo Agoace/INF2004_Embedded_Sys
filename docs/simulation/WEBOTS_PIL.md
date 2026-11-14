@@ -81,8 +81,6 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
 | `pil/gate1_attribution.py` | Optional bounded numeric timing tail. Sleep/wake, loop stages, GC callbacks and CSV serialization/flush stamps. Saved after the serial stop/close attempt. |
 | `pil/gate1_trial.py` | Explicit D-TRIAL metadata/manifest only. Clock400us/SYNC20ms is opt-in; default clock/phase and native acceptance are not redefined. |
-| `pil/gate1_log.py` | Bounded immutable evidence snapshots; one FIFO writer owns JSON/hex/CSV/file work. Overflow inhibits/fails. Stop/fault evidence has reserved storage and close acknowledgement. |
-| `pil/gate1_timer_slack.py` | Read-only calling-thread PR_GET_TIMERSLACK snapshot before writer creation. No timer-slack or scheduler change. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -426,13 +424,10 @@ source-to-apply age is reported separately and must meet the 5 ms upper bound.
 See the [2026-11-14 operator decision](GATE1_D_TRIAL_20261114.md).
 `--trial-clock-400-sync20` explicitly selects **TRIAL / NOT GATE 1 PASS** on the
 initial C1 baseline; the operator-approved attempt11 now adds C2 capture-first,
-initially without C3. Operator-approved C2b then adds fresh capture checks
+not C3 queued logging. Operator-approved C2b then adds fresh capture checks
 post-RX/pre-SYNC and post-SYNC, each after inhibit/expiry checks. At most one
 capture occurs per iteration; no extra sleep or timer setting is changed.
-After attempt12, operator-approved C3 adds bounded queued logging; current
-manifest/metadata name C1+C2+C2b+C3. There is no C2c check before sleep.
-Run metadata records calling-thread PR_GET_TIMERSLACK before writer creation
-(GET only; unknown on failure). Defaults remain250us/100ms. Source
+Manifest/metadata name C1+C2+C2b. Defaults remain250us/100ms. Source
 phase250, native jitter250, exact upper/lower D1 age checks and3/4/5ms stay.
 All trial callers must reject capture before the estimated midpoint target.
 Keep the trial manifest with external binary captures. Trial completion cannot
@@ -472,29 +467,8 @@ checks and before read/parse/SYNC work. It validates and queues the capture
 before a newer SYNC can change the clock timestamp. RX faults can still cancel
 that queue before write; another expiry check follows RX. No source slot is
 caught up or skipped. The target, epoch,50us sleep and250us phase limit do not
-change. C2 alone keeps synchronous logging. Test C1, C2 and C3 in separate
+change. Logging is still synchronous. Test C1, C2 and queued logging in separate
 operator trials; do not combine them into a single comparison.
-
-C3 moves JSON/RAW-byte hex/CSV serialization and file flush to a writer thread.
-The main thread retains safety checks, metric updates and immutable typed
-snapshots. Its single-producer deque is limited to8192 snapshots, including
-flush requests. It never waits on queue capacity, a queue lock or the writer.
-Empty flush requests are coalesced. The writer yields after four snapshots;
-this is not a scheduling-priority change or a hard wake-time guarantee. Python
-threads still share the GIL, and snapshot copying still costs main-thread time.
-
-A full queue or writer error fails the run. The first rejected submission is
-retained separately; up to4096 stop snapshots and one capture-rejection record
-have reserved storage. Reserved overflow is explicit failure, never silent
-success. After inhibit, the bounded DISARM and serial close attempts run before
-waiting for the writer. FIFO order includes the reserved tail. The post-stop
-join is limited to5s. `logger-status.json` and the summary declare queue/write
-errors, reserved overflow and flush/close acknowledgement. A timeout or writer
-error cannot yield successful evidence closure. The numeric timing tail exports
-only after writer quiescence; otherwise its missing export is explicit.
-The writer does not open a device, change GC, change source targets or relax any
-timing bound. A close acknowledgement refers to evidence files, NOT delivery
-of DISARM to the Pico.
 
 `pil/gate1_rx_timing.py` reads the stopped `PILG1RX1` block. It checks its
 bounds, canonical order, CRC, reserved fields and matching D1 identity/reason/

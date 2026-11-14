@@ -5,6 +5,7 @@ version can FAIL measured gates, but cannot issue a physical Gate1 PASS.
 """
 
 from collections import Counter
+import csv
 import json
 import math
 from pathlib import Path
@@ -16,7 +17,6 @@ from .clock import ClockError, unwrap32
 from .transport import HostTransport, TransportFault
 from .wire import Type, u16
 from .gate1_trial import labels, manifest, TRIAL_LABEL
-from .gate1_timer_slack import read_timer_slack
 
 
 class RealClock:
@@ -65,12 +65,11 @@ class Recorder:
     def __init__(self, output):
         self.output = Path(output)
         self.output.mkdir(parents=True, exist_ok=False)
-        from .gate1_log import QueuedEventWriter
-        self.writer = QueuedEventWriter(self.output/'events.csv')
+        self.stream = (self.output / 'events.csv').open('x', newline='')
+        self.csv = csv.writer(self.stream)
         self.attribution = None
         self.trial_clock_400_sync20 = False
-        self.logger_status = None
-        self.timer_slack = None
+        self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
             'clock_halfwidth_us', 'source_uncertainty_us', 'output_interarrival_us')}
@@ -94,22 +93,22 @@ class Recorder:
         self.bootstrap_consecutive_boots = 0
 
     def record(self, event, pc_us, **details):
-        self.writer.attribution = self.attribution
-        self.writer.record(event, pc_us, {**labels(self.trial_clock_400_sync20), **details},
-                           loop=self.attribution.loop if self.attribution else 0)
+        if self.attribution:
+            self.attribution.mark('serialize_enter')
+        try:
+            self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
+        finally:
+            if self.attribution:
+                self.attribution.mark('serialize_exit')
 
     def flush(self):
-        self.writer.attribution = self.attribution
-        self.writer.flush(loop=self.attribution.loop if self.attribution else 0)
-
-    def begin_stop(self):
-        self.writer.begin_stop()
-
-    def stop_writer(self):
-        if self.logger_status is None:
-            self.logger_status = {**self.writer.finish(), **labels(self.trial_clock_400_sync20)}
-            (self.output/'logger-status.json').write_text(json.dumps(self.logger_status, indent=2)+'\n')
-        return self.logger_status
+        if self.attribution:
+            self.attribution.mark('flush_enter')
+        try:
+            self.stream.flush()
+        finally:
+            if self.attribution:
+                self.attribution.mark('flush_exit')
 
     def observe(self, event, host):
         event = dict(event)
@@ -193,19 +192,14 @@ class Recorder:
                     raise GateFailure('measured drift contradicts100ppm clock bound')
 
     def finish(self, host, reason, elapsed_us):
-        status = self.stop_writer()
-        reason = reason or status['failure'] or status['worker_error']
-        if not status['close_ack']:
-            reason = reason or 'evidence writer did not acknowledge flush/close'
+        self.flush()
         trial = self.trial_clock_400_sync20
         completed = (trial and not reason and elapsed_us >= 600_000_000 and
                      self.stopped_status_observed)
         summary = {
             **labels(trial), 'sync_max_period_us': 20000 if trial else 100000,
-            'pc_capture_order': 'capture-first', 'pc_logging': 'bounded-queue',
-            'pc_capture_revision': 'C1+C2+C2b+C3',
-            'timer_slack': self.timer_slack,
-            'evidence_logger': status,
+            'pc_capture_order': 'capture-first', 'pc_logging': 'synchronous',
+            'pc_capture_revision': 'C1+C2+C2b',
             'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
@@ -253,6 +247,7 @@ class Recorder:
         temporary = self.output / 'summary.json.tmp'
         temporary.write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
         temporary.replace(self.output / 'summary.json')
+        self.stream.close()
         return summary
 
 
@@ -341,7 +336,6 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     host = HostTransport(session or secrets.randbelow(0xffffffff) + 1,
                          transport_only=transport_only,
                          trial_clock_400_sync20=trial_clock_400_sync20)
-    timer_slack = read_timer_slack()  # Calling thread, before writer creation; GET only.
     try:
         recorder = Recorder(output)
     except BaseException:
@@ -350,7 +344,18 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     recorder.trial_clock_400_sync20 = trial_clock_400_sync20
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
-    recorder.timer_slack = timer_slack
+    recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
+                    pc_capture_order='capture-first', pc_logging='synchronous',
+                    pc_capture_revision='C1+C2+C2b',
+                    clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
+                    sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
+                    source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
+                    pc_clock_domain=recorder.pc_clock_domain,
+                    image_sha256=image_sha256,
+                    profile_flags=profile_flags, required_capabilities=host.required_caps,
+                    clock_proven_min_tx_us=host.proven_min_tx_us,
+                    clock_proven_min_rx_us=host.proven_min_rx_us,
+                    clock_minima_proof_verdict='INCOMPLETE' if host.proven_min_tx_us else 'NOT_USED')
     start = clock.now_us()
     end = None
     active_start = None
@@ -433,20 +438,6 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         return checked
 
     try:
-        # Metadata submission can itself find a failed/full writer. Keep it
-        # inside the inhibit/DISARM/serial-close lifecycle, not before the try.
-        recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
-                        pc_capture_order='capture-first', pc_logging='bounded-queue',
-                        pc_capture_revision='C1+C2+C2b+C3', timer_slack=timer_slack,
-                        clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
-                        sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
-                        source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
-                        pc_clock_domain=recorder.pc_clock_domain,
-                        image_sha256=image_sha256,
-                        profile_flags=profile_flags, required_capabilities=host.required_caps,
-                        clock_proven_min_tx_us=host.proven_min_tx_us,
-                        clock_proven_min_rx_us=host.proven_min_rx_us,
-                        clock_minima_proof_verdict='INCOMPLETE' if host.proven_min_tx_us else 'NOT_USED')
         if measure_io:
             from .gate1_attribution import AttributionRing
             attribution = AttributionRing(clock)
@@ -479,10 +470,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             now = capture_if_due()
             chunk, received = read_input()
             if chunk:
-                recorder.record('raw_rx', received, packet_hex=chunk)
+                recorder.record('raw_rx', received, packet_hex=chunk.hex())
                 if now < discard_until:
                     recorder.startup_discarded_bytes += len(chunk)
-                    recorder.record('startup_discard', received, packet_hex=chunk,
+                    recorder.record('startup_discard', received, packet_hex=chunk.hex(),
                                     bytes=len(chunk), used_for_bootstrap=False)
                 else:
                     receive_chunk(host, recorder, chunk, received,
@@ -530,7 +521,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 valid_write = type(written) is int and 0 <= written <= len(packet)
                 if measure_io and valid_write:
                     # Retain the actual OS result even if consume_tx faults.
-                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written],
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
                                     device_available=False)
                     clock_pair()
                     recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
@@ -539,7 +530,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                     tx_bytes += written
                 host.consume_tx(written, completed)
                 if not measure_io:
-                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written],
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
                                     device_available=False)
             for event in host.drain_events():
                 recorder.observe(event, host)
@@ -550,8 +541,6 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     except KeyboardInterrupt:
         reason = 'operator interrupted; reset/new session required'
     finally:
-        # No writer queue/backpressure can delay the bounded native stop attempt.
-        recorder.begin_stop()
         active_elapsed = 0 if active_start is None else clock.now_us() - active_start
         try:
             # Local inhibit happens BEFORE bounded write/drain work. A hardware
@@ -567,7 +556,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 stop_bytes = packet[offset:offset+count]
                 offset += count
                 if measure_io:
-                    recorder.record('raw_pc_write', completed, packet_hex=stop_bytes,
+                    recorder.record('raw_pc_write', completed, packet_hex=stop_bytes.hex(),
                                     device_available=False, best_effort_stop=True)
                     clock_pair()
                     recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
@@ -586,7 +575,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 while clock.now_us() < drain_end and not recorder.stopped_status_observed:
                     chunk, received = read_input()
                     if chunk:
-                        recorder.record('raw_rx_after_disarm', received, packet_hex=chunk)
+                        recorder.record('raw_rx_after_disarm', received, packet_hex=chunk.hex())
                         for frame in host.decoder.feed(chunk):
                             if frame.type == Type.BOOT or frame.session != host.session:
                                 raise GateFailure('reset/session change during stopped drain')
@@ -625,20 +614,14 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                          serial_closed_before_log=serial_closed)
         (recorder.output/'capture-rejected.json').write_text(json.dumps(rejection, indent=2)+'\n')
         recorder.record('source_capture_rejected', rejection['capture_end_pc_us'], **rejection)
+    if attribution is not None:
+        attribution.detach()
+        recorder.flush()
+        recorder.attribution = None
+        attribution.finish(recorder.output, serial_closed=serial_closed)
     if trial_clock_400_sync20:
         (recorder.output/'trial-manifest.json').write_text(json.dumps(manifest(), indent=2)+'\n')
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
     for event in host.drain_events():
         recorder.record('final_transport_event', clock.now_us(), record=event)
-    status = recorder.stop_writer()
-    recorder.attribution = recorder.writer.attribution = None
-    if attribution is not None:
-        attribution.detach()
-        if not status['writer_alive']:
-            attribution.finish(recorder.output, serial_closed=serial_closed)
-        else:
-            (recorder.output/'attribution.json').write_text(json.dumps({
-                **labels(trial_clock_400_sync20),
-                'scope': 'INCOMPLETE: writer did not quiesce; numeric tail not exported',
-                'total_rows': attribution.total, 'overwritten_rows': attribution.overwritten})+'\n')
     return recorder.finish(host, reason, active_elapsed)
