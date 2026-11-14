@@ -54,9 +54,16 @@ UINT test_smp_irq_save(void);
 void test_smp_irq_restore(UINT saved);
 #define TL_MASK(m)   ((m) = test_smp_irq_save())
 #define TL_UNMASK(m) test_smp_irq_restore(m)
+#define TL_RAMFUNC(name)
 #else
-#define TL_MASK(m)   DI(m)
-#define TL_UNMASK(m) EI(m)
+/* The line and GPIO ISRs call rt_tl and rt_tl_gpio: run them from RAM, so
+ * a flash (XIP) cache miss does not change the timing they record. The
+ * template linker script copies .data.* to executable RAM. Same as DI/EI
+ * (disint is in flash): save PRIMASK, mask, restore. */
+#define TL_MASK(m)   ((m) = get_primask(), set_primask(1u))
+#define TL_UNMASK(m) set_primask(m)
+#define TL_RAMFUNC(name) \
+    __attribute__((section(".data.ramfunc." #name), noinline))
 #endif
 
 static const char *const part_name[RT_MAX_COUNT] = {
@@ -343,7 +350,7 @@ void rt_report(void)
 
 /* ---- P2 timeline -------------------------------------------------------- */
 
-void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg)
+TL_RAMFUNC(rt_tl) void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg)
 {
     const uint32_t e = live_epoch();
     if (e == 0u || LOAD(&tl_frozen) != 0u || LOAD(&tl_epoch) != e) {
@@ -362,7 +369,7 @@ void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg)
     TL_UNMASK(mask);
 }
 
-void rt_tl_gpio(void)
+TL_RAMFUNC(rt_tl_gpio) void rt_tl_gpio(void)
 {
     STORE(&tl_gpio, LOAD(&tl_gpio) + 1u);
 }

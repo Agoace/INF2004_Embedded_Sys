@@ -264,7 +264,15 @@ site, for example the USB or SIO interrupt or a kernel masked section.
 
 Cost, measured at the P2 commit against `ddc5436`: static RAM +1040 B
 (all profiles); flash +832 B (MQTT), +800 B (USB-only), +880 B (TEST).
-`rt_tl` is 176 B in flash (XIP) and is called from the line ISR.
+`rt_tl` (196 B) and `rt_tl_gpio` (32 B) run from RAM, because the line and
+GPIO ISRs call them; a flash (XIP) cache miss would change the times they
+record. They sit in `.data.ramfunc.*` sections, which the template linker
+script copies to RAM; flash callers reach them through a 16 B long-branch
+veneer each. Their interrupt mask uses the inline `get_primask` and
+`set_primask`, because `DI` calls `disint()` in flash. The ISRs that call
+them still run from flash. Cost of the RAM placement: `.data` +224 to
++232 B, `.text` -176 B. The RAM load segment is now RWX on purpose
+(`--no-warn-rwx-segments` in `build_make/app_sdk_hw.mk`).
 
 ## USB priority
 
