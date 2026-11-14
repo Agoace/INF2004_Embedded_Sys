@@ -86,6 +86,7 @@ not current acceptance reports. Local course originals are not public records.
 - [PIL_GATE1_BUILD.md](simulation/PIL_GATE1_BUILD.md) — exact Gate1 image/hash, operator wiring/stop procedure and host/ARM/RAM/identity evidence.
 - [PIL_GATE1_TX_PRIME.md](simulation/PIL_GATE1_TX_PRIME.md) — failed first operator attempt, exact D1 decode and tested UART FIFO startup correction.
 - [PIL_GATE1_CLOCK_PROOF.md](simulation/PIL_GATE1_CLOCK_PROOF.md) — conditional334/444us directional serialization floors, timestamp causality, receiver-derived Probe-rate ceiling and required zero-error evidence.
+- [PIL_GATE1_RX_TIMING.md](simulation/PIL_GATE1_RX_TIMING.md) — versioned stopped RX/worker/alarm timing block, bounded pre/post-fault capture, schema and diagnostic image evidence.
 - [PIL_GATE1_DIAGNOSTICS.md](simulation/PIL_GATE1_DIAGNOSTICS.md) — approved separate stopped-USB D1 records, exact coverage, raw extrema and one-time quantization.
 - [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.

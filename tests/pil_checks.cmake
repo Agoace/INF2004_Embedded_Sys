@@ -88,10 +88,18 @@ target_include_directories(test_pil_gate1_hw PRIVATE
 add_test(NAME test_pil_gate1_hw COMMAND test_pil_gate1_hw)
 add_test(NAME test_pil_gate1_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_pil_gate1_make.py")
+add_executable(test_pil_gate1_rxlog "${REPO}/tests/test_pil_gate1_rxlog.c"
+    "${REPO}/app_program/sim/pil_gate1_rxlog.c"
+    "${REPO}/app_program/sim/pil_wire.c")
+set_property(TARGET test_pil_gate1_rxlog PROPERTY LINK_LIBRARIES "")
+target_include_directories(test_pil_gate1_rxlog PRIVATE
+    "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
+add_test(NAME test_pil_gate1_rxlog COMMAND test_pil_gate1_rxlog)
 foreach(profile up smp control)
     set(target test_pil_gate1_runtime_${profile})
     add_executable(${target} "${REPO}/tests/test_pil_gate1_runtime.c"
         "${REPO}/app_program/sim/pil_gate1_task.c"
+        "${REPO}/app_program/sim/pil_gate1_rxlog.c"
         "${REPO}/app_program/sim/pil_gate1_session.c"
         "${REPO}/app_program/sim/pil_gate1_stream.c"
         "${REPO}/app_program/sim/pil_gate1_metrics.c"

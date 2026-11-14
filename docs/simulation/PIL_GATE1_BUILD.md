@@ -3,8 +3,10 @@
 ## Status and limits
 
 The image is host-tested and ready for an operator transport trial on a spare
-RP2040 Pico. The corrected image awaits operator P1. The first attempt with
-older firmware failed; see the [TX startup correction](PIL_GATE1_TX_PRIME.md).
+RP2040 Pico. Attempt5 armed but failed on missing lookahead658 after657 applied
+slots. The current image adds only the approved stopped [RX timing diagnostic](PIL_GATE1_RX_TIMING.md)
+to locate the delay; it has no physical PASS. Earlier startup failure/correction
+is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
 This is NOT sensor/physics acceptance.
 Only the operator flashes or opens target ports. Coding workers do neither.
 Do not flash a plain Stage0 `_sim` image. Do not connect a robot or actuators.
@@ -26,12 +28,14 @@ make -C build_make SIM=1 PIL_GATE1=1 SMP=0 FORCE_CORE0=0 \
 sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
-- File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (244224 bytes).
-- UF2 SHA256: `0017cfa0c05ca69447bf1cd8d41d1801bbca909ed3c66e914e6901958034ba08`.
-- ELF SHA256: `694ab36af72e808d738ffafc85bbbbb2724244a0be461fd3d03f2121dab25bea`.
+- File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (248320 bytes).
+- UF2 SHA256: `71cf7cb2b3bd51fbd798a6d6c7a8e3d6543c0d9fd6ca129ac5d5eba1dc248b4a`.
+- ELF SHA256: `0e2767cb8e7465d11ebbfa25cbf6ea4b6a24f338d9523fbdf087061ed3a4fdbd`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/tx-prime/`, with map/size/hashes.
+- Retained copy: `build/pil-gate1/artifacts/rx-timing/`, with map/size/hashes.
+- Appends versioned ASCII after D1 manifest, before the unchanged stopped stack
+  line. Use the matching PC RX diagnostic parser; live UART and D1 v1 stay fixed.
 
 Debug paths affect ELF hashes. Another checkout path can give a different ELF
 hash. Record the exact UF2 used for each operator run.
@@ -111,6 +115,12 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
   clock/IRQ/kernel/console objects also have frame records with unchanged flags.
 
 ## RAM, stack and ownership proof
+
+The table and frame values below are the original runtime checkpoint record.
+The current diagnostic adds3632B: total added storage14796B, UP `.bss`140076B,
+service440B, native hook40B. Reviewed maxima are196B UP /240B SMP added IRQ
+chains and896B worker. See the [RX diagnostic evidence](PIL_GATE1_RX_TIMING.md)
+for exact current totals and test logs. No new target reserve is claimed.
 
 | Image | `.data` | `.bss` | Total static RAM |
 | --- | ---: | ---: | ---: |

@@ -9,6 +9,7 @@
 #include "pil_gate1_session.h"
 #include "pil_gate1_stream.h"
 #include "pil_gate1_dump.h"
+#include "pil_gate1_rxlog.h"
 #include "pil_gate1_uart_hw.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id_hw.h"
@@ -24,6 +25,7 @@ extern void tm_snd_dat(const UB *buf, INT size);
 typedef struct { pil_frame_t frame; bool active; } output_work_t;
 static struct {
     pil_gate1_session_t session;
+    pil_gate1_rxlog_t rxlog;
     pil_gate1_rx_t rx;
     pil_gate1_queue_t tx;
     output_work_t output[8];
@@ -74,8 +76,13 @@ void pil_gate1_native_alarm(void)
 {
     if (!g.live || !g.session.grid_ready) { return; }
     UINT irq; DI(irq);
-    if (pil_gate1_alarm(&g.session, g.demand, pil_gate1_native_entry(),
-                        &g.irq_frame)) {
+    const uint32_t entry = pil_gate1_native_entry();
+    const uint32_t n = g.session.next_apply;
+    const uint32_t ready = (g.session.slot[n & 7u].ready ? 1u : 0u) |
+                          (g.session.slot[(n + 1u) & 7u].ready ? 2u : 0u);
+    const uint32_t log = pil_gate1_rxlog_alarm(&g.rxlog, g.demand, entry,
+                                               n, ready);
+    if (pil_gate1_alarm(&g.session, g.demand, entry, &g.irq_frame)) {
         if (g.output_head - g.output_tail == 8u) {
             pil_gate1_fail(&g.session, 0x10fu);
         } else {
@@ -86,6 +93,8 @@ void pil_gate1_native_alarm(void)
         }
         wake_worker();
     }
+    pil_gate1_rxlog_alarm_done(&g.rxlog, log, g.session.reason,
+                               drv_time_us());
     EI(irq);
 }
 void pil_gate1_motor_seen(int16_t left, int16_t right, uint16_t servo)
@@ -135,7 +144,17 @@ static void uart_irq(UINT intno)
     for (unsigned int i = 0u; i < 32u; ++i) {
         uint8_t byte; uint32_t flags;
         if (!pil_gate1_uart_rx(&byte, &flags)) { break; }
-        const int result = pil_gate1_rx_byte(&g.rx, byte, drv_time_us(), flags);
+        const uint32_t stamp = drv_time_us();
+        const uint32_t length = (uint32_t)g.rx.partial.length + 1u;
+        if (byte == 0u) {
+            g.rx.partial.tag = pil_gate1_rxlog_tag(&g.rxlog);
+        }
+        const int result = pil_gate1_rx_byte(&g.rx, byte, stamp, flags);
+        if (result == PIL_G1_RX_PACKET || result == PIL_G1_RX_FULL) {
+            pil_gate1_rxlog_rx(&g.rxlog, stamp, length,
+                pil_gate1_queue_depth(&g.rx.queue),
+                result == PIL_G1_RX_PACKET ? 1u : 2u);
+        }
         if (result == PIL_G1_RX_PACKET) {
             queue_metric(9u, pil_gate1_queue_depth(&g.rx.queue)); wake_worker();
         } else if (result == PIL_G1_RX_FULL) {
@@ -189,6 +208,8 @@ static void dump_one(void)
                             g.session.trace_total : 64u;
     const uint32_t last = 14u + traces;
     if (g.dump_index > last) {
+        if (!pil_gate1_rxlog_print(&g.rxlog, g.session.nonce,
+                                   g.session.session)) { return; }
         g.dump_complete = true;
         uint32_t free_bytes = 0u;
         const UB *paint = (const UB *)worker_stack;
@@ -255,17 +276,28 @@ static void service(void)
         const pil_gate1_packet_t *packet = pil_gate1_queue_front(&g.rx.queue);
         if (packet == NULL) { break; }
         const uint32_t stamp = packet->stamp, errors = packet->errors;
+        const uint32_t tag = packet->tag;
+        UINT irq; DI(irq);
+        pil_gate1_rxlog_worker(&g.rxlog, tag, drv_time_us(),
+                               pil_gate1_queue_depth(&g.rx.queue));
+        EI(irq);
         const int decoded = pil_decode(packet->bytes, packet->length,
                                         &incoming);
-        UINT irq; DI(irq);
+        const uint32_t done = drv_time_us();
+        DI(irq);
+        pil_gate1_rxlog_decode(&g.rxlog, tag, done, decoded, &incoming);
         (void)pil_gate1_queue_drop(&g.rx.queue);
         queue_metric(9u, pil_gate1_queue_depth(&g.rx.queue));
         bool send = false;
+        pil_gate1_rxlog_stage(&g.rxlog, tag, drv_time_us(),
+                              g.session.reason, false, 0u);
         if (decoded != PIL_OK || errors != 0u) {
             pil_gate1_count(&g.session, G1_BAD);
         } else {
             send = pil_gate1_receive(&g.session, &incoming, stamp, &reply);
         }
+        pil_gate1_rxlog_stage(&g.rxlog, tag, drv_time_us(),
+            g.session.reason, true, pil_gate1_queue_depth(&g.rx.queue));
         lease_update(); EI(irq);
         if (send) { (void)transmit(&reply, false); }
     }
@@ -306,6 +338,7 @@ static void service(void)
             if (drained) { g.session.coverage |= 16u; }
             g.session.coverage |= 1024u;
             g.session.frozen = true;
+            pil_gate1_rxlog_seal(&g.rxlog);
         }
     }
     EI(irq);
@@ -341,6 +374,8 @@ INT __wrap_usermain(void)
         return __real_usermain();
     }
     pil_gate1_session_init(&g.session, nonce, real_clock, NULL);
+    g.session.fault_observer = pil_gate1_rxlog_fault;
+    g.session.fault_context = &g.rxlog;
     pil_gate1_rx_init(&g.rx); g.initialized = true;
     memset(worker_stack, 0xa5, sizeof(worker_stack));
     T_CTSK c = {.task = (FP)worker, .itskpri = 16,
