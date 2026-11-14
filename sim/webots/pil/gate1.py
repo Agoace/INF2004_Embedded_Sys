@@ -11,12 +11,14 @@ import math
 from pathlib import Path
 import secrets
 import struct
+import sys
 import time
 
 from .clock import ClockError, unwrap32
 from .transport import HostTransport, TransportFault
 from .wire import Type, u16
 from .gate1_trial import labels, manifest, TRIAL_LABEL
+from .gate1_timer_slack import read_timer_slack
 
 
 class RealClock:
@@ -69,6 +71,8 @@ class Recorder:
         self.csv = csv.writer(self.stream)
         self.attribution = None
         self.trial_clock_400_sync20 = False
+        self.timer_slack = None
+        self.interpreter_switch_interval_s = None
         self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
@@ -199,7 +203,9 @@ class Recorder:
         summary = {
             **labels(trial), 'sync_max_period_us': 20000 if trial else 100000,
             'pc_capture_order': 'capture-first', 'pc_logging': 'synchronous',
-            'pc_capture_revision': 'C1+C2+C2b',
+            'pc_capture_revision': 'C1+C2+C2b+C2c',
+            'timer_slack': self.timer_slack,
+            'interpreter_switch_interval_s': self.interpreter_switch_interval_s,
             'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
@@ -336,17 +342,22 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     host = HostTransport(session or secrets.randbelow(0xffffffff) + 1,
                          transport_only=transport_only,
                          trial_clock_400_sync20=trial_clock_400_sync20)
+    timer_slack = read_timer_slack()  # GET only, calling thread.
+    switch_interval = sys.getswitchinterval()  # Read only; never set.
     try:
         recorder = Recorder(output)
     except BaseException:
         io.close()
         raise
     recorder.trial_clock_400_sync20 = trial_clock_400_sync20
+    recorder.timer_slack = timer_slack
+    recorder.interpreter_switch_interval_s = switch_interval
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
     recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
                     pc_capture_order='capture-first', pc_logging='synchronous',
-                    pc_capture_revision='C1+C2+C2b',
+                    pc_capture_revision='C1+C2+C2b+C2c', timer_slack=timer_slack,
+                    interpreter_switch_interval_s=switch_interval,
                     clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
                     sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
                     source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
@@ -516,6 +527,11 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 if measure_io:
                     clock_pair()
                 entered = clock.now_us() if measure_io else None
+                # TX preparation/output logging can cross lease/lookahead.
+                # Recheck NEW time before normal writes, never after the bytes.
+                if host.state in ('ARM_PENDING', 'ARMED'):
+                    host.tick(clock.now_us())
+                    mark('tick_exit')
                 written = io.write(packet)
                 completed = clock.now_us()
                 valid_write = type(written) is int and 0 <= written <= len(packet)
@@ -535,6 +551,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             for event in host.drain_events():
                 recorder.observe(event, host)
             recorder.flush()
+            # C2c: the target may cross during TX/log/flush. Same latch/validator;
+            # a newly queued SENSOR waits for the next normal TX opportunity.
+            # That iteration checks expiry and RX faults before transmitting.
+            capture_if_due()
             sleep(50)
     except (OSError, ValueError, TransportFault, ClockError, GateFailure) as error:
         reason = str(error)

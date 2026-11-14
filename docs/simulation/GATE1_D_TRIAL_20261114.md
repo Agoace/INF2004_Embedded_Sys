@@ -28,8 +28,27 @@ already captured. Sleep remains50us; no timer-slack/deadline-wait/GC/scheduler
 or C3 change is included. C2b restores a missed post-RX opportunity, not a
 latency guarantee.
 
-The manifest and PC metadata identify **C1+C2+C2b**, its three check locations,
-and synchronous logging with no C3.
+The subsequent C3 experiment `5409337` is retained as a measured dead end:
+attempt13 failed after0.65s with delayed wake/read markers overlapping writer
+work. This is strong contention evidence, not exclusive proof of GIL ownership.
+The operator approved a NEW C2c branch from `a6ee177`, without C3.
+
+Current manifest and metadata identify **C1+C2+C2b+C2c**, synchronous logging,
+and four capture opportunities. C2c checks fresh inhibit/expiry after normal
+TX/output logging/flush, directly before the unchanged50us sleep. It uses the
+same one-capture-per-iteration latch and start/end qualification/no-early rules.
+A SENSOR captured here waits for the next normal TX opportunity: the next
+iteration's expiry and RX-fault checks can still cancel it. There is also a
+fresh expiry/lookahead check immediately before normal TX, after output logging
+and TX preparation. No catch-up, skip, epoch shift or bound change is added.
+
+GET-only timer-slack measurement from `5409337` is retained WITHOUT its writer.
+Run metadata and summary record calling-thread PR_GET_TIMERSLACK status/value_ns/
+native thread ID, and read-only `interpreter_switch_interval_s` from
+sys.getswitchinterval(). Neither value is set. Failed timer reads remain UNKNOWN,
+not an assumed zero/default. No extra thread, C3 queue, sleep/timer/priority/
+switch-interval/deadline-wait change is included. C2c targets the earlier TX/log
+boundary cases; it cannot guarantee against delayed wakes or long RX processing.
 The paper review remains operator workspace material:
 `build/wip/pil_plan/GATE1_BOUND_REVIEW_PAPER.md`.
 
