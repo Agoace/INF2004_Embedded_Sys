@@ -19,6 +19,8 @@ typedef struct {
 typedef struct {
     pil_gate1_clock_t clock;
     void *clock_context;
+    void (*fault_observer)(void *context, uint32_t stamp, uint32_t reason);
+    void *fault_context;
     uint32_t nonce, session, epoch, grid_anchor, grid_next, lease;
     uint32_t flags, reason, coverage, next_stage, next_apply;
     uint32_t seen, received[9], transmitted[9], hello_ack;

@@ -9,6 +9,7 @@
 #include <setjmp.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdarg.h>
 
 extern INT __wrap_usermain(void);
 extern pil_gate1_session_t *pil_gate1_test_session(void);
@@ -60,7 +61,24 @@ INT __real_usermain(void)
 }
 UW tm_usb_state(void) { return 3u; }
 UW tm_usb_pending(void) { return 0u; }
-void tm_printf(UB *fmt, ...) { (void)fmt; }
+void tm_printf(UB *fmt, ...)
+{
+    if (strstr((const char *)fmt, "stopped; reset required") == NULL) {
+        return;
+    }
+    assert(strcmp((const char *)fmt, "[PILG1] stopped; reset required; "
+                  "worker stack untouched %lu/2048 bytes\n") == 0);
+    char text[256]; va_list args;
+    va_start(args, fmt);
+    const unsigned long untouched = va_arg(args, unsigned long);
+    va_end(args);
+    const int n = snprintf(text, sizeof(text),
+        "[PILG1] stopped; reset required; "
+        "worker stack untouched %lu/2048 bytes\n", untouched);
+    assert(n > 0 && (size_t)n < sizeof(text));
+    assert(usb_size + (size_t)n < sizeof(usb));
+    memcpy(usb + usb_size, text, (size_t)n); usb_size += (size_t)n;
+}
 void tm_snd_dat(const UB *bytes, INT length)
 {
     assert(length > 0 && usb_size + (size_t)length <= sizeof(usb));
@@ -183,6 +201,9 @@ int main(int argc, char **argv)
     if (missing) {
         alarm_at(s->epoch); reason = 0x100u; coverage = 0x49fu;
         assert(s->counts[G1_MISSED] == 1u);
+        f.sequence = 1u; f.source_us = 1000u;
+        send(&f); /* Keep the rejected post-fault packet in diagnostics. */
+        assert(s->counts[G1_DROPPED] == 1u);
     } else if (strcmp(mode, "lease") == 0) {
         now = deadline; handlers[1](1u); reason = 0x104u; coverage = 0x49fu;
         assert(s->counts[G1_LEASE] == 1u);
@@ -207,7 +228,7 @@ int main(int argc, char **argv)
             .session = 0u, .ack = PIL_NO_ACK};
         pil_put_u32(f.payload, 1u); send(&f);
     }
-    for (unsigned int i = 0u; i < 40u; ++i) {
+    for (unsigned int i = 0u; i < 256u; ++i) {
         pil_gate1_test_service(); drain();
     }
     assert(s->reason == reason && s->frozen);
@@ -254,6 +275,37 @@ int main(int argc, char **argv)
         assert(pil_gate1_dump_chain(&chain, &r));
     }
     assert(manifest);
+    assert(usb_size < sizeof(usb)); usb[usb_size] = 0u;
+    const char *tail = (const char *)(usb + pos);
+    const char *begin = strstr(tail, "[PILG1RX1 BEGIN ");
+    const char *end = strstr(tail, "[PILG1RX1 END ");
+    const char *stack = strstr(tail, "stopped; reset required");
+    assert(begin != NULL && end != NULL && stack != NULL);
+    assert(begin < end && end < stack);
+    unsigned int h[8];
+    assert(sscanf(begin + strlen("[PILG1RX1 BEGIN "),
+        "%x %x %x %x %x %x %x %x", &h[0], &h[1], &h[2], &h[3],
+        &h[4], &h[5], &h[6], &h[7]) == 8);
+    assert(h[0] == 123u && h[1] == s->session && h[2] == s->stop_time);
+    assert(h[3] == reason && h[4] <= 64u && h[5] <= 16u && h[6] <= 16u);
+    bool post_sensor = false;
+    const char *row = begin;
+    while ((row = strstr(row, "[PILG1RX1 P ")) != NULL) {
+        unsigned int p[10];
+        row += strlen("[PILG1RX1 P ");
+        assert(sscanf(row, "%x %x %x %x %x %x %x %x %x %x",
+            &p[0], &p[1], &p[2], &p[3], &p[4], &p[5], &p[6], &p[7],
+            &p[8], &p[9]) == 10);
+        if (p[2] != UINT32_MAX) {
+            assert(p[1] <= p[2] && p[2] <= p[3] && p[3] <= p[4]);
+            assert(p[4] <= p[5]);
+        }
+        if ((p[8] & 255u) == PIL_SENSOR && p[6] == 1u &&
+            p[9] >> 24u == 3u && p[8] >> 16u == reason) {
+            post_sensor = true;
+        }
+    }
+    if (missing) { assert(h[5] >= 1u && post_sensor); }
     const size_t frozen_usb_size = usb_size;
     for (unsigned int i = 0u; i < 100u; ++i) { pil_gate1_test_service(); }
     assert(usb_size == frozen_usb_size);

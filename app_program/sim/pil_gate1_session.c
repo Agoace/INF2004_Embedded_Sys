@@ -43,6 +43,9 @@ void pil_gate1_fail(pil_gate1_session_t *s, uint32_t reason)
     if (s->frozen || s->reason != 0u) { return; }
     s->reason = reason;
     s->stop_time = clock_now(s);
+    if (s->fault_observer != NULL) {
+        s->fault_observer(s->fault_context, s->stop_time, reason);
+    }
     s->flags = 4u;
     if (reason >= 0x100u) {
         s->flags |= 2u;
