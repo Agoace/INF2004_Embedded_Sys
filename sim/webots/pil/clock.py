@@ -157,7 +157,22 @@ class Timeline:
         target = self.source_target(source_us)
         phase = max(abs(first.midpoint - target), abs(last.midpoint + 1 - target))
         if phase > 250:
-            raise ClockError("source phase error exceeds250us")
+            error = ClockError("source phase error exceeds250us")
+            error.capture_rejection = {
+                'source_us': source_us, 'intended_pico_us': target,
+                'capture_start_pc_us': captured_pc_us, 'capture_end_pc_us': end,
+                'start_lower_pico_us': first.lower, 'start_upper_pico_us': first.upper,
+                'end_lower_pico_us': last.lower, 'end_upper_pico_us': last.upper,
+                'start_midpoint_error_us': first.midpoint-target,
+                'end_midpoint_error_plus_quantization_us': last.midpoint+1-target,
+                'start_phase_us': abs(first.midpoint-target),
+                'end_phase_us': abs(last.midpoint+1-target),
+                'endpoint_quantization_us': 1,
+                'phase_us': phase, 'limit_us': 250, 'excess_us': phase-250,
+                'uncertainty_us': max(first.halfwidth, last.halfwidth),
+                'last_sync_pc_us': clock.updated_pc_us,
+                'reason': str(error)}
+            raise error
         return phase, max(first.halfwidth, last.halfwidth)
 
     def validate_available(self, source_us, captured_pc_us, available_pico_us, clock):

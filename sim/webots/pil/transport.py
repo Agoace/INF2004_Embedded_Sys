@@ -61,7 +61,7 @@ class HostTransport:
         self.events.clear()
         return result
 
-    def _fault(self, reason):
+    def _fault(self, reason, *, capture_rejection=None):
         if self.failure is None:
             self.failure = reason
         self.state = "FAULT"
@@ -69,6 +69,8 @@ class HostTransport:
         # Never silently resume queued commands after a fault. A delimiter is
         # needed before best-effort DISARM if a packet was partially transmitted.
         self.tx.clear()
+        if capture_rejection is not None:
+            self.capture_rejection = dict(capture_rejection, sequence=self.next_sensor)
         raise TransportFault(self.failure)
 
     def _require_live(self):
@@ -154,7 +156,15 @@ class HostTransport:
             frame = self._queue(Type.SENSOR, payload, end,
                                 self.applied_output, source_us)
         except (ClockError, ProtocolError) as error:
-            self._fault(str(error))
+            rejection = getattr(error, 'capture_rejection', None)
+            if rejection is None:
+                rejection = {'source_us': source_us,
+                    'intended_pico_us': self.timeline.source_target(source_us),
+                    'capture_start_pc_us': captured_pc_us, 'capture_end_pc_us': end,
+                    'phase_us': None, 'start_phase_us': None, 'end_phase_us': None,
+                    'excess_us': None, 'uncertainty_us': None, 'limit_us': 250,
+                    'reason': str(error)}
+            self._fault(str(error), capture_rejection=rejection)
         self.next_sensor += 1
         self.last_sensor_sent = frame.sequence
         self._record("source_capture", source_us=source_us, pc_us=captured_pc_us,

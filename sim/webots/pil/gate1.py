@@ -66,6 +66,7 @@ class Recorder:
         self.output.mkdir(parents=True, exist_ok=False)
         self.stream = (self.output / 'events.csv').open('x', newline='')
         self.csv = csv.writer(self.stream)
+        self.attribution = None
         self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
@@ -90,7 +91,22 @@ class Recorder:
         self.bootstrap_consecutive_boots = 0
 
     def record(self, event, pc_us, **details):
-        self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
+        if self.attribution:
+            self.attribution.mark('serialize_enter')
+        try:
+            self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
+        finally:
+            if self.attribution:
+                self.attribution.mark('serialize_exit')
+
+    def flush(self):
+        if self.attribution:
+            self.attribution.mark('flush_enter')
+        try:
+            self.stream.flush()
+        finally:
+            if self.attribution:
+                self.attribution.mark('flush_exit')
 
     def observe(self, event, host):
         event = dict(event)
@@ -174,7 +190,7 @@ class Recorder:
                     raise GateFailure('measured drift contradicts100ppm clock bound')
 
     def finish(self, host, reason, elapsed_us):
-        self.stream.flush()
+        self.flush()
         summary = {
             'schema': 1, 'verdict': 'FAIL' if reason else 'INCOMPLETE',
             'failure': reason, 'elapsed_us': elapsed_us,
@@ -323,6 +339,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     end = None
     active_start = None
     reason, hello_sent, armed_once = None, False, False
+    serial_closed = False
     next_sync = start
     tx_bytes = rx_bytes = 0
 
@@ -336,10 +353,23 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             recorder.record('measurement_clock_pair', after, realtime_us=realtime,
                             raw_before_us=before, raw_after_us=after)
 
+    attribution = None
+
+    def mark(kind, value=0):
+        if attribution is not None:
+            attribution.mark(kind, value=value)
+
+    def sleep(delay):
+        mark('sleep_enter', delay)
+        clock.sleep_us(delay)
+        mark('wake', delay)
+
     def read_input():
         nonlocal rx_bytes
+        mark('read_enter')
         if not measure_io:
             data = io.read(4096)
+            mark('read_exit', len(data))
             return data, clock.now_us() if data else None
         entered = clock.now_us()
         if callable(getattr(io, 'read_timed', None)):
@@ -348,6 +378,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             data = io.read(4096)
             timing = {'select_layer': 'UNKNOWN', 'read_return_pc_us': clock.now_us()}
         returned = timing['read_return_pc_us'] if 'read_return_pc_us' in timing else clock.now_us()
+        mark('read_exit', len(data))
         if data:
             clock_pair()
             recorder.record('io_read_timing', returned, call_enter_pc_us=entered,
@@ -356,12 +387,16 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             rx_bytes += len(data)
         return data, returned
 
-    if measure_io:
-        recorder.record('measurement_enabled', start, production_cadence_changed=False,
-                        observer_overhead_unmeasured=True,
-                        pcap_clock='CLOCK_REALTIME; mapping conditional on no backward steps')
-        clock_pair()
     try:
+        if measure_io:
+            from .gate1_attribution import AttributionRing
+            attribution = AttributionRing(clock)
+            recorder.attribution = attribution
+            attribution.install()
+            recorder.record('measurement_enabled', start, production_cadence_changed=False,
+                            observer_overhead_unmeasured=True,
+                            pcap_clock='CLOCK_REALTIME; mapping conditional on no backward steps')
+            clock_pair()
         if not callable(getattr(io, 'reset_input_buffer', None)):
             raise GateFailure('I/O backend lacks input-buffer reset')
         io.reset_input_buffer()
@@ -370,6 +405,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         recorder.record('startup_input_reset', discard_start,
                         discard_until_pc_us=discard_until, minimum_discard_us=300000)
         while True:
+            if attribution is not None:
+                attribution.loop += 1
+            mark('loop')
             now = clock.now_us()
             if end is not None and now >= end:
                 break
@@ -385,8 +423,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 else:
                     receive_chunk(host, recorder, chunk, received,
                                   timing_clock=clock if measure_io else None)
+            mark('receive_exit')
             for event in host.drain_events():
                 recorder.observe(event, host)
+            mark('drain_exit')
             now = clock.now_us()
             if host.state == 'ARMED' and active_start is None:
                 active_start, end = now, now + duration_us
@@ -403,15 +443,19 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             if host.state == 'NEGOTIATED' and host.clock.observations >= 8:
                 host.arm(now)
                 armed_once = True
+            mark('sync_exit')
             if host.state in ('ARM_PENDING', 'ARMED'):
                 host.tick(now)
+                mark('tick_exit')
                 source = host.next_sensor * 1000
                 bounds = host.clock.pico_range(now)
                 target = host.timeline.source_target(source)
                 if bounds.midpoint >= target:
+                    mark('capture_enter', source)
                     capture_start = clock.now_us()
                     payload = neutral_payload(source)
                     capture_end = clock.now_us()
+                    mark('capture_exit', source)
                     host.sensor(payload, source, capture_start, capture_end_pc_us=capture_end)
                 # No physics exists in this harness. Leave applied_output=NO_ACK.
                 while host.outputs:
@@ -441,8 +485,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                     device_available=False)
             for event in host.drain_events():
                 recorder.observe(event, host)
-            recorder.stream.flush()
-            clock.sleep_us(50)
+            recorder.flush()
+            sleep(50)
     except (OSError, ValueError, TransportFault, ClockError, GateFailure) as error:
         reason = str(error)
     except KeyboardInterrupt:
@@ -474,7 +518,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                 delivered=False, local_model_inhibited=True)
                 if offset == len(packet) or reason is not None or clock.now_us() >= deadline:
                     break
-                clock.sleep_us(50)
+                sleep(50)
             # A planned stop preserves every final active report before the
             # final inhibited status. No new source, SYNC or ARM is generated.
             if reason is None and offset == len(packet):
@@ -500,14 +544,31 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                                     seq=frame.sequence, ack=frame.ack)
                         if host.decoder.bad_frames > recorder.bootstrap_bad_frames:
                             raise GateFailure('invalid frame during stopped drain')
-                    clock.sleep_us(50)
+                    sleep(50)
         except (OSError, ValueError, TransportFault, GateFailure) as error:
             reason = reason or str(error)
         finally:
             try:
                 io.close()
+                serial_closed = True
             except OSError as error:
                 reason = reason or 'serial close failed: ' + str(error)
+            finally:
+                if attribution is not None:
+                    attribution.detach()
+    # Dedicated rejection evidence bypasses ordinary transport events and is
+    # serialized only AFTER local inhibit, bounded DISARM attempt and close.
+    rejection = getattr(host, 'capture_rejection', None)
+    if rejection is not None:
+        rejection = dict(rejection, pc_clock_domain=recorder.pc_clock_domain,
+                         serial_closed_before_log=serial_closed)
+        (recorder.output/'capture-rejected.json').write_text(json.dumps(rejection, indent=2)+'\n')
+        recorder.record('source_capture_rejected', rejection['capture_end_pc_us'], **rejection)
+    if attribution is not None:
+        attribution.detach()
+        recorder.flush()
+        recorder.attribution = None
+        attribution.finish(recorder.output, serial_closed=serial_closed)
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
     for event in host.drain_events():
         recorder.record('final_transport_event', clock.now_us(), record=event)
