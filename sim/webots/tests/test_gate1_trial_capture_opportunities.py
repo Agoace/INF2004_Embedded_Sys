@@ -18,8 +18,8 @@ class TrialCaptureOpportunities(unittest.TestCase):
         # Synthetic wake latency avoids an accidental50us/1ms grid alignment.
         clock.sleep_us=lambda delay:setattr(clock,'now',clock.now+delay+7)
         pair=FakePair(clock,capabilities=4)
-        original_read=pair.read;original_sync=HostTransport.sync_request
-        hosts=[];injected=[];last_payload=[];delayed_source=[]
+        original_read=pair.read;original_write=pair.write;original_sync=HostTransport.sync_request
+        hosts=[];injected=[];last_payload=[];delayed_source=[];tail_source=[]
         def factory(*a,**kw):
             h=HostTransport(*a,**kw)
             # Unit-test request cadence: arrange a real request in the crossing
@@ -31,6 +31,7 @@ class TrialCaptureOpportunities(unittest.TestCase):
             if h.state not in ('ARM_PENDING','ARMED'):return None
             return h.timeline.source_target(h.next_sensor*1000)-h.clock.pico_range(clock.now).midpoint
         def read(n):
+            if where=='txfault' and injected:return b'\x02x\0'
             h=hosts[0];data=original_read(n);g=gap(h)
             # Return a completed SYNC reply: RX clears pending so the overdue
             # real next request is generated in this same crossing iteration.
@@ -38,6 +39,14 @@ class TrialCaptureOpportunities(unittest.TestCase):
             if where=='rx'and not injected and reply and g is not None and 0<g<=100:
                 clock.now+=math.ceil(g)+10;injected.append(clock.now)
             return data
+        def write(data):
+            h=hosts[0];g=gap(h)
+            request=any(f.type==Type.SYNC_REQ for f in StreamDecoder().feed(bytes(data)))
+            result=original_write(data)
+            if where in ('tx','txfault')and not injected and request and g is not None and 0<g<=100:
+                tail_source.append(h.next_sensor)
+                clock.now+=math.ceil(g)+10;injected.append(clock.now)
+            return result
         def sync(h,pc):
             result=original_sync(h,pc)
             g=gap(h)
@@ -54,20 +63,24 @@ class TrialCaptureOpportunities(unittest.TestCase):
             return neutral_payload(source)
         with tempfile.TemporaryDirectory()as tmp:
             out=Path(tmp)/'run'
-            with patch('pil.gate1.HostTransport',side_effect=factory),patch.object(pair,'read',side_effect=read),patch.object(HostTransport,'sync_request',sync),patch('pil.gate1.neutral_payload',side_effect=payload):
+            with patch('pil.gate1.HostTransport',side_effect=factory),patch.object(pair,'read',side_effect=read),patch.object(pair,'write',side_effect=write),patch.object(HostTransport,'sync_request',sync),patch('pil.gate1.neutral_payload',side_effect=payload):
                 summary=run_soak(pair,out,clock=clock,duration_us=40000,session=123,
                     transport_only=True,measure_io=True,trial_clock_400_sync20=True)
             self.assertTrue(injected,summary['failure'] or 'test must actually cross a target')
+            if where=='txfault':
+                self.assertEqual(summary['verdict'],'FAIL')
+                self.assertNotIn(tail_source[0],pair.sensors)
+                return
             if where=='expire':
                 self.assertEqual(summary['verdict'],'FAIL')
                 self.assertTrue('lease expired' in summary['failure'] or 'lookahead deadline' in summary['failure'])
                 self.assertNotIn(delayed_source[0],pair.sensors)
                 return
             self.assertNotEqual(summary['verdict'],'FAIL',summary['failure'])
-            self.assertEqual(summary['pc_capture_revision'],'C1+C2+C2b')
+            self.assertEqual(summary['pc_capture_revision'],'C1+C2+C2b+C2c')
             import json
             manifest=json.loads((out/'trial-manifest.json').read_text())
-            self.assertEqual(manifest['capture_checks'],['loop-entry','post-RX/pre-SYNC','post-SYNC'])
+            self.assertEqual(manifest['capture_checks'],['loop-entry','post-RX/pre-SYNC','post-SYNC','post-TX/flush/pre-sleep'])
             self.assertEqual(manifest['max_captures_per_iteration'],1)
             source_rows=[json.loads(x['details_json']) for x in csv.DictReader(
                 (out/'events.csv').read_text().splitlines()) if x['event']=='source_capture']
@@ -81,7 +94,7 @@ class TrialCaptureOpportunities(unittest.TestCase):
             for r in rows:loops.setdefault(r['loop'],[]).append(r)
             for rs in loops.values():self.assertLessEqual(sum(r['kind']=='capture_enter'for r in rs),1)
             if where!='one':
-                kind='read_exit'if where=='rx'else'sync_exit'
+                kind='sleep_enter' if where=='tx' else 'read_exit'if where=='rx'else'sync_exit'
                 crossing=next(rs for rs in loops.values()if any(r['kind']==kind and r['pc_us']>=injected[0]for r in rs))
                 names=[r['kind']for r in crossing]
                 self.assertIn('capture_enter',names,'capture must occur before next sleep')
@@ -92,6 +105,9 @@ class TrialCaptureOpportunities(unittest.TestCase):
                     queued=[x for x in csv.DictReader((out/'events.csv').read_text().splitlines())if x['event']=='tx_queued'and json.loads(x['details_json']).get('type')==7]
                     self.assertTrue(any(crossing[0]['pc_us']<=int(x['pc_us'])<=crossing[-1]['pc_us']for x in queued))
                 else:self.assertLess(names.index('sync_exit'),names.index('capture_enter'))
+                if where=='tx':
+                    self.assertLess(names.index('flush_exit'),names.index('capture_enter'))
+                    self.assertLess(names.index('capture_enter'),names.index('sleep_enter'))
                 ticks=[i for i,n in enumerate(names)if n=='tick_exit']
                 cap=names.index('capture_enter')
                 self.assertTrue(any(names.index('receive_exit')<i<cap for i in ticks))

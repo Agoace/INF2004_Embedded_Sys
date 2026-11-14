@@ -81,6 +81,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
 | `pil/gate1_attribution.py` | Optional bounded numeric timing tail. Sleep/wake, loop stages, GC callbacks and CSV serialization/flush stamps. Saved after the serial stop/close attempt. |
 | `pil/gate1_trial.py` | Explicit D-TRIAL metadata/manifest only. Clock400us/SYNC20ms is opt-in; default clock/phase and native acceptance are not redefined. |
+| `pil/gate1_timer_slack.py` | Read-only calling-thread PR_GET_TIMERSLACK, no setting changes. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -427,7 +428,12 @@ initial C1 baseline; the operator-approved attempt11 now adds C2 capture-first,
 not C3 queued logging. Operator-approved C2b then adds fresh capture checks
 post-RX/pre-SYNC and post-SYNC, each after inhibit/expiry checks. At most one
 capture occurs per iteration; no extra sleep or timer setting is changed.
-Manifest/metadata name C1+C2+C2b. Defaults remain250us/100ms. Source
+After the separately retained C3 attempt13, the operator approved a new branch
+from the no-C3 baseline: C2c adds a fourth check after TX/log/flush, before sleep,
+and fresh expiry immediately before normal TX. Manifest/metadata name
+C1+C2+C2b+C2c with synchronous logging, no writer thread. Read-only timer slack
+and interpreter switch interval are recorded; neither is set.
+Defaults remain250us/100ms. Source
 phase250, native jitter250, exact upper/lower D1 age checks and3/4/5ms stay.
 All trial callers must reject capture before the estimated midpoint target.
 Keep the trial manifest with external binary captures. Trial completion cannot
