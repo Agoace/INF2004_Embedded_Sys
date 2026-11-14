@@ -447,7 +447,11 @@ vehicle task described below.
   RX/worker/alarm timing without changing live UART or D1 binary framing;
   [RX timing schema](simulation/PIL_GATE1_RX_TIMING.md) defines the stopped ASCII
   extension. The [priority9 record](simulation/PIL_GATE1_PRIORITY.md) records
-  the Gate1-only scheduling correction and production ready-queue regression.
+  the Gate1-only priority change and production ready-queue regression.
+  The [IRQ-wake record](simulation/PIL_GATE1_IRQ_WAKE.md) records the UART,
+  lease and native-hook dispatch correction and short read-only robot audit.
+  [`generate_pil_critical.py`](../tests/generate_pil_critical.py) imports the
+  production critical macros for the PRIMASK/PendSV runtime test double.
   [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks
   wrap, fault retention, post-fault packets, sealing, ordering and CRC.
   The [startup correction](simulation/PIL_GATE1_TX_PRIME.md) records the failed

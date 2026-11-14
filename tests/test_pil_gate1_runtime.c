@@ -1,5 +1,6 @@
 /* Real runtime/session/stream with fake kernel/MMIO, never serial access. */
 #include <tk/tkernel.h>
+#include <tk/syslib.h>
 #include "pil_gate1_runtime.h"
 #include "pil_gate1_session.h"
 #include "pil_gate1_uart_hw.h"
@@ -61,6 +62,27 @@ static void priority_order(INT worker_priority)
 extern INT __wrap_usermain(void);
 extern pil_gate1_session_t *pil_gate1_test_session(void);
 extern void pil_gate1_test_service(void);
+extern uint32_t pil_gate1_test_rx_depth(void);
+static UINT primask, dispatch_disabled;
+static bool pendsv, expect_rx_publication;
+static unsigned int wakes;
+static TCB background, pil_context;
+static TCB *current = &background, *scheduled = &background;
+UINT pil_test_irq_disable(void)
+{
+    const UINT saved = primask; primask = 1u; return saved;
+}
+void pil_test_irq_restore(UINT saved) { assert(saved <= 1u); primask = saved; }
+static UINT disint(void) { return pil_test_irq_disable(); }
+static void set_primask(UINT saved) { pil_test_irq_restore(saved); }
+static BOOL isDI(UINT saved) { return saved != 0u; }
+static TCB **knl_ctxtsk_slot(void) { return &current; }
+static TCB **knl_schedtsk_slot(void) { return &scheduled; }
+static UINT *knl_dispatch_disabled_slot(void) { return &dispatch_disabled; }
+static void knl_dispatch(void) { pendsv = true; }
+#define KNL_KERNEL_LOCK_ENTER() ((void)0)
+#define KNL_KERNEL_LOCK_LEAVE() ((void)0)
+#include "pil_gate1_critical.h"
 static FP task;
 static void (*handlers[32])(UINT);
 static jmp_buf sleep_exit;
@@ -85,7 +107,15 @@ ID tk_cre_tsk(const T_CTSK *c)
 }
 ER tk_sta_tsk(ID id, INT code) { assert(id == 9 && code == 0); return 0; }
 ER tk_del_tsk(ID id) { (void)id; return 0; }
-ER tk_wup_tsk(ID id) { assert(id == 9); return 0; }
+ER tk_wup_tsk(ID id)
+{
+    assert(id == 9);
+    if (expect_rx_publication) { assert(pil_gate1_test_rx_depth() >= 1u); }
+    BEGIN_CRITICAL_SECTION;
+    ++wakes; scheduled = &pil_context;
+    END_CRITICAL_SECTION;
+    return 0;
+}
 ER tk_slp_tsk(INT delay) { (void)delay; longjmp(sleep_exit, 1); }
 ER tk_def_int(UINT n, const T_DINT *d)
 {
@@ -201,6 +231,55 @@ int main(int argc, char **argv)
     }
     /* No RX traffic or synthetic TX interrupt may bootstrap transmission. */
     assert(uart_size == 32u && fifo_depth == 32u && tx_enabled);
+    if (strcmp(mode, "wake") == 0 || strcmp(mode, "wakelease") == 0 ||
+        strcmp(mode, "wakenative") == 0) {
+        const bool uart_case = strcmp(mode, "wake") == 0;
+        /* A saved mask1 suppresses PendSV even after the caller restores0. */
+        UINT saved; DI(saved); (void)tk_wup_tsk(9);
+        assert(scheduled == &pil_context && !pendsv);
+        EI(saved); assert(primask == 0u && !pendsv);
+        dispatch_disabled = 1u; (void)tk_wup_tsk(9);
+        assert(!pendsv); dispatch_disabled = 0u;
+        scheduled = current; wakes = 0u;
+        pil_frame_t request = {.type = PIL_HELLO, .payload_length = 24u,
+            .session = 456u, .ack = 0u};
+        const uint32_t words[6] = {123u,456u,4u,1000u,4000u,5000u};
+        for (unsigned int i = 0u; i < 6u; ++i) {
+            pil_put_u32(request.payload + i * 4u, words[i]);
+        }
+        assert(pil_encode(&request, rx, sizeof(rx), &rx_size) == PIL_OK);
+        rx_at = 0u; expect_rx_publication = true;
+        while (rx_at < rx_size) { handlers[20](20u); }
+        assert(primask == 0u && scheduled == &pil_context);
+        if (uart_case) { assert(pendsv); }
+        assert(wakes == 1u && pil_gate1_test_rx_depth() == 1u);
+        expect_rx_publication = false;
+        /* Completion/error IRQs also request dispatch, without RX traffic. */
+        scheduled = current; pendsv = false; wakes = 0u; drain();
+        assert(wakes == 1u && primask == 0u);
+        if (uart_case) {
+            assert(pendsv);
+            pil_gate1_test_service(); /* HELLO_ACK now has a FIFO tail. */
+            scheduled = current; pendsv = false; wakes = 0u;
+            fifo_depth = 8u; fake_uart.fr = 8u; tx_pending = true;
+            uart_errors = 8u; handlers[20](20u);
+            /* Error plus descriptor completion must coalesce to one wake. */
+            assert(pendsv && wakes == 1u && primask == 0u && !tx_enabled);
+        } else {
+            pil_gate1_test_service(); drain();
+            assert(pil_gate1_test_session()->session == 456u);
+            scheduled = current; pendsv = false; wakes = 0u;
+            if (strcmp(mode, "wakelease") == 0) {
+                handlers[1](1u);
+            } else {
+                const uint32_t at = pil_gate1_test_session()->epoch - 50000u;
+                pil_gate1_native_grid(at); now = at + 10u;
+                pil_gate1_native_alarm();
+            }
+            assert(pendsv && wakes == 1u && primask == 0u);
+        }
+        return 0;
+    }
     /* Finish the descriptor while bytes still shift: TXIM is now off.
      * A new enqueue must refill this nonempty FIFO, not wait for an edge. */
     fifo_depth = 16u; tx_pending = true; handlers[20](20u);

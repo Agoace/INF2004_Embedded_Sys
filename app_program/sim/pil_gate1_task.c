@@ -82,6 +82,7 @@ void pil_gate1_native_alarm(void)
                           (g.session.slot[(n + 1u) & 7u].ready ? 2u : 0u);
     const uint32_t log = pil_gate1_rxlog_alarm(&g.rxlog, g.demand, entry,
                                                n, ready);
+    bool need_wake = false;
     if (pil_gate1_alarm(&g.session, g.demand, entry, &g.irq_frame)) {
         if (g.output_head - g.output_tail == 8u) {
             pil_gate1_fail(&g.session, 0x10fu);
@@ -91,8 +92,11 @@ void pil_gate1_native_alarm(void)
             w->active = g.irq_frame.payload[7] == 1u;
             ++g.output_head;
         }
-        wake_worker();
+        need_wake = true;
     }
+    EI(irq);
+    if (need_wake) { wake_worker(); }
+    DI(irq);
     pil_gate1_rxlog_alarm_done(&g.rxlog, log, g.session.reason,
                                drv_time_us());
     EI(irq);
@@ -131,12 +135,13 @@ static bool tx_fifo(void)
 static void uart_irq(UINT intno)
 {
     UINT irq; DI(irq);
+    bool need_wake = false;
     const uint32_t start = drv_time_us();
     const uint32_t errors = pil_gate1_uart_errors();
     pil_gate1_uart_ack();
     if ((errors & 8u) != 0u) {
         pil_gate1_count(&g.session, G1_OVERRUN);
-        pil_gate1_fail(&g.session, 0x109u); wake_worker();
+        pil_gate1_fail(&g.session, 0x109u); need_wake = true;
     }
     if ((errors & 1u) != 0u) { pil_gate1_count(&g.session, G1_FRAMING); }
     if ((errors & 2u) != 0u) { pil_gate1_count(&g.session, G1_PARITY); }
@@ -156,15 +161,20 @@ static void uart_irq(UINT intno)
                 result == PIL_G1_RX_PACKET ? 1u : 2u);
         }
         if (result == PIL_G1_RX_PACKET) {
-            queue_metric(9u, pil_gate1_queue_depth(&g.rx.queue)); wake_worker();
+            queue_metric(9u, pil_gate1_queue_depth(&g.rx.queue));
+            need_wake = true;
         } else if (result == PIL_G1_RX_FULL) {
-            queue_failure(G1_RX_FULL, 0x107u); wake_worker();
+            queue_failure(G1_RX_FULL, 0x107u); need_wake = true;
         } else if (result == PIL_G1_RX_OVERSIZE) {
             pil_gate1_count(&g.session, G1_BAD);
         }
     }
-    if (tx_fifo()) { wake_worker(); }
+    if (tx_fifo()) { need_wake = true; }
     ClearInt(intno);
+    EI(irq);
+    /* A saved PRIMASK1 suppresses the kernel's PendSV request. */
+    if (need_wake) { wake_worker(); }
+    DI(irq);
     pil_gate1_note(&g.session, 11u, PIL_NO_ACK,
                    start, drv_time_us(), 0u, 0u);
     EI(irq);
@@ -174,8 +184,9 @@ static void lease_irq(UINT intno)
     UINT irq; DI(irq);
     pil_gate1_lease_ack();
     pil_gate1_check_lease(&g.session, drv_time_us());
-    lease_update(); ClearInt(intno); wake_worker();
+    lease_update(); ClearInt(intno);
     EI(irq);
+    wake_worker();
 }
 static bool transmit(const pil_frame_t *f, bool active)
 {
@@ -395,4 +406,8 @@ INT __wrap_usermain(void)
 #ifdef PIL_GATE1_RUNTIME_TEST
 pil_gate1_session_t *pil_gate1_test_session(void) { return &g.session; }
 void pil_gate1_test_service(void) { service(); }
+uint32_t pil_gate1_test_rx_depth(void)
+{
+    return pil_gate1_queue_depth(&g.rx.queue);
+}
 #endif

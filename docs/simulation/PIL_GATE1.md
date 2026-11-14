@@ -2,9 +2,10 @@
 
 Main approved this design on base9831991. The host-tested transport image is
 supplied. Only the operator flashes/opens target ports; coding workers do not.
-The corrected image awaits operator P1. The older image's first attempt failed;
-see the [TX startup correction](PIL_GATE1_TX_PRIME.md). Sensor/physics acceptance
-is not supplied.
+The current image awaits an operator trial after the
+[IRQ dispatch correction](PIL_GATE1_IRQ_WAKE.md). The older image's first
+attempt failed; see the [TX startup correction](PIL_GATE1_TX_PRIME.md).
+Sensor/physics acceptance is not supplied.
 
 ## Current checkpoint
 

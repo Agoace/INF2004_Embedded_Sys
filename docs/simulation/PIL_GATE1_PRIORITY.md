@@ -2,13 +2,17 @@
 
 ## Decision and scope
 
+This is the historical priority9 checkpoint. The current image also fixes
+[IRQ dispatch requests](PIL_GATE1_IRQ_WAKE.md); use the current
+[build handoff](PIL_GATE1_BUILD.md) for flashing, not the old hashes below.
+
 The operator approved optionA after attempt6 localized late SENSOR staging to
 Pico worker scheduling. SENSOR28 reached UART at1215509, about1.8ms before the
 failed alarm1217309; RX-to-worker delay was1631us. Other recorded delays were
 842,978 and920us, versus typical17..80us. This identifies worker scheduling
 interference, but not the specific task consuming that time.
 
-Change ONLY the Gate1 worker's initial priority16->9 in
+That checkpoint changed ONLY the Gate1 worker's initial priority16->9 in
 [`pil_gate1_task.c`](../../app_program/sim/pil_gate1_task.c). Lower numbers have
 higher priority. Keep [RX1 diagnostics](PIL_GATE1_RX_TIMING.md), all application
 tasks, real alarm0/kernel time/watchdog, priority limits, deadlines,250us clock
@@ -68,9 +72,9 @@ that raising priority establishes a timing guarantee.
   checkpoint; the existing PC parser/schema still applies. No clock/serial
   parameter was changed. All RX1 phase meanings are unchanged.
 
-## Exact UP image and operator handoff
+## Historical UP image and operator handoff
 
-Use the restricted flags in [build handoff](PIL_GATE1_BUILD.md).
+These are the priority9-only artifacts, not the current flash handoff.
 File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2`,248320B.
 UF2 SHA256: `4b57af9da21c1d68719efe0c3acf4738b18e750f46501a325aa52dd43cb4f993`.
 ELF SHA256: `e51655db34096911217a4020429ea59df6489124d91a70f8ece6ec40b33b9cd0`.
