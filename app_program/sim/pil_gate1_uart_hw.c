@@ -1,10 +1,22 @@
 #include "pil_gate1_uart_hw.h"
+#include "pil_gate1_reset.h"
+#include "hardware/structs/watchdog.h"
+#include "hardware/structs/vreg_and_chip_reset.h"
 #include "hardware/gpio.h"
 #include "hardware/address_mapped.h"
 #include "hardware/structs/uart.h"
 #include "hardware/structs/resets.h"
 #include "hardware/structs/timer.h"
 #include "hardware/regs/resets.h"
+
+void pil_gate1_reset_snapshot(pil_gate1_reset_t *out)
+{
+    out->reason = watchdog_hw->reason;
+    out->chip_reset = vreg_and_chip_reset_hw->chip_reset;
+    for (unsigned int i = 0u; i < 8u; ++i) {
+        out->scratch[i] = watchdog_hw->scratch[i];
+    }
+}
 
 bool pil_gate1_uart_init(uint32_t hz)
 {

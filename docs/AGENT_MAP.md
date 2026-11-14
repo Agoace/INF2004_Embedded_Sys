@@ -450,6 +450,11 @@ vehicle task described below.
   the Gate1-only priority change and production ready-queue regression.
   The [IRQ-wake record](simulation/PIL_GATE1_IRQ_WAKE.md) records the UART,
   lease and native-hook dispatch correction and short read-only robot audit.
+  The [reset-cause record](simulation/PIL_GATE1_RESET_CAUSE.md) defines the early
+  SDK-boundary raw snapshot and once-per-boot USB row;
+  [`pil_gate1_reset.h`](../app_program/sim/pil_gate1_reset.h) defines its shape.
+  The formatter is in `pil_gate1_dump.c`; the task takes the snapshot before
+  native startup and appends the row without UART text or D1 changes.
   [`generate_pil_critical.py`](../tests/generate_pil_critical.py) imports the
   production critical macros for the PRIMASK/PendSV runtime test double.
   [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks

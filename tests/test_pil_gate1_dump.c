@@ -1,4 +1,5 @@
 #include "pil_gate1_dump.h"
+#include "pil_gate1_reset.h"
 #include "pil_wire.h"
 #include <assert.h>
 #include <stdio.h>
@@ -13,6 +14,17 @@ static const uint8_t golden[] = {
 
 int main(int argc, char **argv)
 {
+    pil_gate1_reset_t reset = {.reason = UINT32_MAX, .chip_reset = 0xabcdef01u};
+    uint8_t line[PIL_GATE1_RESET_LINE + 2u];
+    memset(line, 0xa5, sizeof(line));
+    for (unsigned int i = 0u; i < 8u; ++i) { reset.scratch[i] = i; }
+    pil_gate1_reset_format(&reset, 0x12345678u, line + 1u);
+    static const char reset_expected[] = "[PILG1RESET1 12345678 00000000 "
+        "ffffffff abcdef01 00000000 00000001 00000002 00000003 "
+        "00000004 00000005 00000006 00000007]\n";
+    assert(sizeof(reset_expected) - 1u == PIL_GATE1_RESET_LINE);
+    assert(memcmp(line + 1u, reset_expected, PIL_GATE1_RESET_LINE) == 0);
+    assert(line[0] == 0xa5u && line[sizeof(line) - 1u] == 0xa5u);
     if (argc == 3) {
         uint8_t packet[256];
         const size_t n = strlen(argv[2]) / 2u;

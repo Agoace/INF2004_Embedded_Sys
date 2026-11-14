@@ -8,7 +8,9 @@ slots. Attempt6 localized delay to worker scheduling. Attempt7 had no measured
 Pico fault but retained long RX-to-worker delays and stopped on a PC phase error.
 The current image keeps [RX1](PIL_GATE1_RX_TIMING.md) and
 [priority9](PIL_GATE1_PRIORITY.md), and fixes three Gate1
-[IRQ dispatch requests](PIL_GATE1_IRQ_WAKE.md). It has no physical PASS.
+[IRQ dispatch requests](PIL_GATE1_IRQ_WAKE.md). It now adds an early
+[raw reset-cause USB boot row](PIL_GATE1_RESET_CAUSE.md) after attempt14 lost USB.
+It has no physical PASS.
 Earlier startup failure/correction is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
 This is NOT sensor/physics acceptance.
 Only the operator flashes or opens target ports. Coding workers do neither.
@@ -31,12 +33,12 @@ make -C build_make SIM=1 PIL_GATE1=1 SMP=0 FORCE_CORE0=0 \
 sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
-- File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (248320 bytes).
-- UF2 SHA256: `772d4e433242329264a327c0d24799ec89409b83ac7ce0af16041b8248a5907a`.
-- ELF SHA256: `6870689f252026daf14a4aa357b529ed28cb026ffe8abb75894849af37270ded`.
+- File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (248832 bytes).
+- UF2 SHA256: `a0a53f1a8ec419d433542ad8d0116f64f42a0ca6ca555ab0e6d551405d2c3da9`.
+- ELF SHA256: `fafd09ddfad2d44d9eb3b38c28d904b49bbdf093875c360d8430ea3dfcee1aaa`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/irq-wake/`, with map/size/hashes.
+- Retained copy: `build/pil-gate1/artifacts/reset-cause/`, with map/size/hashes.
 - Appends versioned ASCII after D1 manifest, before the unchanged stopped stack
   line. Use the matching PC RX diagnostic parser; live UART and D1 v1 stay fixed.
 
@@ -97,8 +99,8 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
 
 ## Host/build evidence
 
-The current [IRQ-wake checkpoint](PIL_GATE1_IRQ_WAKE.md) passes GCC598/598,
-Clang ASan/UBSan598/598,45 strict ARM units,38 ordinary builds/SDK proofs and
+The current [reset-cause checkpoint](PIL_GATE1_RESET_CAUSE.md) passes GCC601/601,
+Clang ASan/UBSan601/601,45 strict ARM units,38 ordinary builds/SDK proofs and
 all76 unchanged literal hashes. The following bullets record the original
 runtime checkpoint, not additional physical evidence.
 
@@ -125,10 +127,11 @@ runtime checkpoint, not additional physical evidence.
 ## RAM, stack and ownership proof
 
 The table and frame values below are the original runtime checkpoint record.
-The current diagnostic adds3632B: total added storage14796B, UP `.bss`140076B,
+The RX diagnostic adds3632B and the boot reset record adds164B: total added
+storage14960B, UP `.bss`140236B,
 service440B, native hook40B. The current UART frame is80B. Reviewed maxima are
 204B UP /248B SMP added IRQ chains and896B worker. See the
-[IRQ-wake evidence](PIL_GATE1_IRQ_WAKE.md) for current totals and test logs. No new target reserve is claimed.
+[reset-cause evidence](PIL_GATE1_RESET_CAUSE.md) for current totals and test logs. No new target reserve is claimed.
 
 | Image | `.data` | `.bss` | Total static RAM |
 | --- | ---: | ---: | ---: |

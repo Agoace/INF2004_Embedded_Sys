@@ -1,9 +1,14 @@
 #include "pil_gate1_uart_hw.h"
+#include "pil_gate1_reset.h"
+#include "hardware/structs/watchdog.h"
+#include "hardware/structs/vreg_and_chip_reset.h"
 #include "hardware/structs/uart.h"
 #include "hardware/structs/timer.h"
 #include "hardware/structs/resets.h"
 #include <assert.h>
 
+watchdog_hw_t pil_test_watchdog;
+vreg_and_chip_reset_hw_t pil_test_chip_reset;
 uart_hw_t fake_uart;
 resets_hw_t fake_resets;
 pil_test_timer_t pil_test_timer;
@@ -20,6 +25,24 @@ void gpio_set_function(unsigned int pin, unsigned int function)
 void gpio_pull_up(unsigned int pin) { assert(pin == 1u); }
 int main(void)
 {
+    for (uint32_t reason = 0u; reason < 4u; ++reason) {
+        pil_test_watchdog.reason = reason;
+        pil_test_chip_reset.chip_reset = 0x10100u;
+        for (unsigned int i = 0u; i < 8u; ++i) {
+            pil_test_watchdog.scratch[i] = 0xffff0000u + i;
+        }
+        pil_gate1_reset_t reset;
+        pil_gate1_reset_snapshot(&reset);
+        assert(reset.reason == reason && pil_test_watchdog.reason == reason);
+        assert(reset.chip_reset == 0x10100u);
+        assert(pil_test_chip_reset.chip_reset == 0x10100u);
+        for (unsigned int i = 0u; i < 8u; ++i) {
+            assert(reset.scratch[i] == 0xffff0000u + i);
+            assert(pil_test_watchdog.scratch[i] == reset.scratch[i]);
+        }
+        pil_test_watchdog.scratch[4] = 0u; /* Later SDK overwrite. */
+        assert(reset.scratch[4] == 0xffff0004u);
+    }
     assert(pil_gate1_line_time_us() == 1u);
     real_time = 100u;
     assert(pil_gate1_native_entry() == 1u);

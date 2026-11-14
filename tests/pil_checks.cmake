@@ -123,7 +123,7 @@ foreach(profile up smp control)
         APP_SIM=1 APP_SIM_GATE1=1 PIL_GATE1_RUNTIME_TEST=1
         TK_SUPPORT_SMP=$<IF:$<STREQUAL:${profile},up>,0,1>
         APP_FORCE_CORE0=$<IF:$<STREQUAL:${profile},control>,1,0>)
-    foreach(mode wake wakelease wakenative priority clean lease overrun
+    foreach(mode reset wake wakelease wakenative priority clean lease overrun
                  lateprogress queuefull missing)
         add_test(NAME ${target}_${mode} COMMAND ${target} ${mode})
     endforeach()
