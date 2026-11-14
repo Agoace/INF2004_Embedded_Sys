@@ -446,7 +446,9 @@ vehicle task described below.
   [`pil_gate1_rxlog.c`](../app_program/sim/pil_gate1_rxlog.c) records bounded
   RX/worker/alarm timing without changing live UART or D1 binary framing;
   [RX timing schema](simulation/PIL_GATE1_RX_TIMING.md) defines the stopped ASCII
-  extension. [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks
+  extension. The [priority9 record](simulation/PIL_GATE1_PRIORITY.md) records
+  the Gate1-only scheduling correction and production ready-queue regression.
+  [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks
   wrap, fault retention, post-fault packets, sealing, ordering and CRC.
   The [startup correction](simulation/PIL_GATE1_TX_PRIME.md) records the failed
   first operator attempt and register-double regression.

@@ -118,7 +118,11 @@ completion fields can finish after first-fault ring allocation freezes.
 
 ## Image and verification record
 
-New UP diagnostic image:248320B at
+This is the original priority16 diagnostic checkpoint. The subsequent
+[priority9 change](PIL_GATE1_PRIORITY.md) preserves this schema and fixtures;
+use the current image pin in the [build handoff](PIL_GATE1_BUILD.md).
+
+Original UP diagnostic image:248320B at
 `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2`.
 UF2 SHA256: `71cf7cb2b3bd51fbd798a6d6c7a8e3d6543c0d9fd6ca129ac5d5eba1dc248b4a`.
 ELF SHA256: `0e2767cb8e7465d11ebbfa25cbf6ea4b6a24f338d9523fbdf087061ed3a4fdbd`.

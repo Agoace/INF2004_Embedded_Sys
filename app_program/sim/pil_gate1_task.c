@@ -378,7 +378,7 @@ INT __wrap_usermain(void)
     g.session.fault_context = &g.rxlog;
     pil_gate1_rx_init(&g.rx); g.initialized = true;
     memset(worker_stack, 0xa5, sizeof(worker_stack));
-    T_CTSK c = {.task = (FP)worker, .itskpri = 16,
+    T_CTSK c = {.task = (FP)worker, .itskpri = 9,
         .tskatr = TA_HLNG | TA_RNG0 | TA_USERBUF,
         .stksz = (SZ)sizeof(worker_stack), .bufptr = worker_stack};
 #if TK_SUPPORT_SMP
