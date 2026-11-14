@@ -46,6 +46,11 @@ approved CDC-only reopen, NOT UART auto-rearm.
 
 Numbered `pico-usb-NNN.bin` files retain initial and post-reset data separately.
 `cdc-capture.json` records open/close/chunk RAW times and complete reset records.
+Each raw chunk is written unbuffered, so it is visible before close; this is not
+an fsync/power-loss guarantee. The owned helper explicitly handles SIGTERM and
+SIGINT (including inherited SIGINT-ignore) to close files and export JSON with
+an interrupted/incomplete reason. Repeated stop signals do not interrupt that
+export. SIGKILL cannot run cleanup; raw chunks already written remain visible.
 It stops after a complete reset record on a reopened segment, or a complete
 stopped D1 plus stack line followed by1s RX/reopen reset-watch grace. D1 alone
 must not close the reader before a later watchdog reset. The global duration
@@ -66,6 +71,14 @@ nonce, immutable boot session0, raw WATCHDOG.REASON, raw CHIP_RESET, scratch0..7
 Reason is NOT a D1 stop reason. Raw registers are copied before SDK scratch4
 mutation; ROM may already have affected scratch. The row is not persistent
 history or a HardFault breadcrumb. Once enqueued does not mean delivered.
+
+Stop detection passes immutable bytes to the strict D1 decoder, not its
+bytearray accumulation buffer. A complete stack line may end CRLF and need
+not be at the end of the entire buffer. The tracked regression fixture
+`sim/webots/tests/fixtures/pil_gate1_reset_prefixed_crlf.bin` derives from SW6's
+resetA C-generated runtime stream: a printable boot-banner prefix, RESET1,
+CRC-valid D1, RX1, a CRLF stack line and trailing NUL. Native binary records
+are unchanged; this is a no-device fixture, not a physical timing proof.
 
 Independent checks of SW6's actual C fixtures (122/5602/2393B) found one exact
 row each: nonce7b/session0/reason1/chip100/scratch20..27. Partial/uppercase/wrong

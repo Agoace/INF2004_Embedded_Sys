@@ -7,6 +7,14 @@ import struct
 from .wire import StreamDecoder, Type
 from .gate1_diagnostics import decode_dump, DiagnosticError
 
+class CaptureStopped(Exception):
+    """Owned capture process requested to close/export; never a success verdict."""
+    def __init__(self, signum):
+        self.signum = signum
+        super().__init__(f'signal {signum}')
+
+
+STOPPED = re.compile(rb'(?m)^\[PILG1\] stopped; reset required; worker stack untouched [^\r\n]*\r?\n')
 RESET = re.compile(rb'(?m)^\[PILG1RESET1 ((?:[0-9a-f]{8} ){11}[0-9a-f]{8})\]\n')
 
 
@@ -75,6 +83,7 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
     labels=labels or {};events=[];segments=[];deadline=clock.now_us()+duration_us
     reason='deadline; incomplete';io=None;stream=None;data=bytearray();index=-1
     stopped_seen=None
+    signal_received=None
     stop_grace_us=1000000
     try:
         while clock.now_us()<deadline:
@@ -87,7 +96,7 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
                     clock.sleep_us(10000);continue
                 index+=1
                 if index>=max_segments:reason='segment budget exhausted';break
-                data=bytearray();name=f'pico-usb-{index:03d}.bin';stream=(output/name).open('xb')
+                data=bytearray();name=f'pico-usb-{index:03d}.bin';stream=(output/name).open('xb',buffering=0)
                 segments.append(dict(file=name,opened_pc_us=clock.now_us(),bytes=0,reset_records=[],chunks=[]))
             try:
                 chunk=io.read(4096)
@@ -99,7 +108,9 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
                 io.close();io=None;stream.close();stream=None;continue
             stamp=clock.now_us()
             segments[-1]['chunks'].append([stamp,len(data),len(chunk)])
-            stream.write(chunk);data.extend(chunk);segments[-1]['bytes']=len(data)
+            if stream.write(chunk)!=len(chunk):
+                reason='short raw evidence write; incomplete';break
+            data.extend(chunk);segments[-1]['bytes']=len(data)
             records=parse_reset_records(data)
             for record in records:
                 end=record['offset']+record['length']
@@ -108,11 +119,14 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
             if len(data)>4_000_000 or len(segments[-1]['chunks'])>=4096:reason='segment byte/chunk budget exhausted';break
             if index>0 and segments[-1]['reset_records']:
                 reason='post-reopen boot record captured';break
-            if b'[PILG1] stopped; reset required; worker stack untouched 'in data and data.endswith(b'\n'):
-                try:decode_dump(data)
+            if STOPPED.search(data):
+                try:decode_dump(bytes(data))
                 except DiagnosticError:pass
                 else:
                     if stopped_seen is None:stopped_seen=clock.now_us()
+    except CaptureStopped as error:
+        signal_received=error.signum
+        reason=f'signal {error.signum}; capture interrupted; incomplete'
     finally:
         if io is not None:
             try:io.close()
@@ -124,6 +138,7 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
         result=dict(labels,scope='Pico CDC RX/reopen only; NOT Gate1 acceptance',
                     reason=reason,segments=segments,events=events,
                     stopped_seen_pc_us=stopped_seen,post_stop_reset_watch_us=stop_grace_us,
+                    signal_received=signal_received,
                     pc_clock_domain=getattr(clock,'domain','INJECTED_TEST_CLOCK'),
                     reset_record_scope='complete122B LF row only; enqueue is not delivery ACK; partial/lost UNKNOWN; raw scratch may include ROM effects')
         (output/'cdc-capture.json').write_text(json.dumps(result,indent=2)+'\n')

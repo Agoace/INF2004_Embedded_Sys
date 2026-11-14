@@ -7,11 +7,12 @@ import os
 from pathlib import Path
 import re
 import select
+import signal
 import sys
 import termios
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from pil.gate1 import RealClock
-from pil.gate1_reset_capture import capture_cdc
+from pil.gate1_reset_capture import capture_cdc, CaptureStopped
 from pil.gate1_trial import labels
 
 
@@ -54,8 +55,19 @@ def main():
     if not 1<=a.duration_seconds<=700:p.error('duration1..700 seconds')
     if a.output.exists():p.error('fresh output directory required')
     print('PICO_CDC_CAPTURE_WATCH_READY; RX/reopen only; TRIAL / NOT GATE 1 PASS',flush=True)
-    r=capture_cdc(lambda:PicoCDC(a.device),a.output,RealClock(),
-                  duration_us=a.duration_seconds*1000000,labels=labels(True))
+    interrupted=False
+    def stop(signum,frame):
+        nonlocal interrupted
+        if not interrupted:
+            interrupted=True  # Repeated signals must not interrupt close/export.
+            raise CaptureStopped(signum)
+    previous={sig:signal.getsignal(sig)for sig in (signal.SIGTERM,signal.SIGINT)}
+    try:
+        for sig in previous:signal.signal(sig,stop)
+        r=capture_cdc(lambda:PicoCDC(a.device),a.output,RealClock(),
+                      duration_us=a.duration_seconds*1000000,labels=labels(True))
+    finally:
+        for sig,handler in previous.items():signal.signal(sig,handler)
     print(json.dumps(r,indent=2))
     return 2  # Capture completion never means Gate1 PASS.
 
