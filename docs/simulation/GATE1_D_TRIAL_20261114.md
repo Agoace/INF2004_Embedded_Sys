@@ -16,7 +16,20 @@ C2 `52d0d44` applied on top of that trial. The current trial therefore captures
 first after inhibit/expiry checks; it still uses synchronous C1 logging. RX
 faults can cancel queued SENSOR before TX, and a second expiry/lease check
 follows RX. Queued logging C3 `3326d91` is NOT included. Keep experiments separate.
-The manifest and PC metadata identify capture-first/synchronous logging.
+After attempt11, the operator also approved C2b on `81c5898`: fresh capture
+checks after RX/drain BEFORE SYNC request generation, then again after SYNC
+construction. Each check first uses fresh time for inhibit/expiry. An iteration
+can capture at most one source slot across all three opportunities. A capture
+made after a received SYNC uses fresh start/end timestamps and the same cone
+state; it never revalidates an older capture using a newer observation. RX
+faults still cancel queued TX. No catch-up, skip, epoch shift or early capture
+is added. A fresh post-SYNC expiry check protects TX even if the initial check
+already captured. Sleep remains50us; no timer-slack/deadline-wait/GC/scheduler
+or C3 change is included. C2b restores a missed post-RX opportunity, not a
+latency guarantee.
+
+The manifest and PC metadata identify **C1+C2+C2b**, its three check locations,
+and synchronous logging with no C3.
 The paper review remains operator workspace material:
 `build/wip/pil_plan/GATE1_BOUND_REVIEW_PAPER.md`.
 
