@@ -386,6 +386,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                             raw_before_us=before, raw_after_us=after)
 
     attribution = None
+    host_spans = None
 
     def mark(kind, value=0):
         if attribution is not None:
@@ -393,7 +394,11 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
 
     def sleep(delay):
         mark('sleep_enter', delay)
-        clock.sleep_us(delay)
+        span = host_spans.begin('sleep', attribution.loop if attribution else 0) if host_spans else None
+        try:
+            clock.sleep_us(delay)
+        finally:
+            if host_spans: host_spans.end(span)
         mark('wake', delay)
 
     def read_input():
@@ -405,9 +410,17 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             return data, clock.now_us() if data else None
         entered = clock.now_us()
         if callable(getattr(io, 'read_timed', None)):
-            data, timing = io.read_timed(4096, clock.now_us)
+            if getattr(io, 'host_spans_supported', False):
+                data, timing = io.read_timed(4096, clock.now_us, observer=host_spans,
+                                             loop=attribution.loop if attribution else 0)
+            else:
+                data, timing = io.read_timed(4096, clock.now_us)
         else:
-            data = io.read(4096)
+            span = host_spans.begin('backend_read', attribution.loop if attribution else 0) if host_spans else None
+            try:
+                data = io.read(4096)
+            finally:
+                if host_spans: host_spans.end(span)
             timing = {'select_layer': 'UNKNOWN', 'read_return_pc_us': clock.now_us()}
         returned = timing['read_return_pc_us'] if 'read_return_pc_us' in timing else clock.now_us()
         mark('read_exit', len(data))
@@ -451,6 +464,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     try:
         if measure_io:
             from .gate1_attribution import AttributionRing
+            from .gate1_host_observer import HostSpans, host_snapshot
+            (recorder.output/'host-before.json').write_text(json.dumps(
+                {**host_snapshot(), **labels(trial_clock_400_sync20)}, indent=2)+'\n')
+            host_spans = HostSpans(clock, labels=labels(trial_clock_400_sync20))
             attribution = AttributionRing(clock)
             attribution.qualification = TRIAL_LABEL if trial_clock_400_sync20 else None
             recorder.attribution = attribution
@@ -625,6 +642,11 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             finally:
                 if attribution is not None:
                     attribution.detach()
+    if host_spans is not None:
+        from .gate1_host_observer import host_snapshot
+        (recorder.output/'host-after.json').write_text(json.dumps(
+            {**host_snapshot(), **labels(trial_clock_400_sync20)}, indent=2)+'\n')
+        host_spans.finish(recorder.output, serial_closed=serial_closed)
     # Dedicated rejection evidence bypasses ordinary transport events and is
     # serialized only AFTER local inhibit, bounded DISARM attempt and close.
     rejection = getattr(host, 'capture_rejection', None)

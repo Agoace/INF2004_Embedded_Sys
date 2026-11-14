@@ -66,25 +66,34 @@ class ProbeSerial:
             raise SerialError('Probe disconnected')
         return data
 
-    def read_timed(self, maximum, now_us):
+    host_spans_supported = True
+
+    def read_timed(self, maximum, now_us, *, observer=None, loop=0):
         """Measurement-only stamps around the same nonblocking select/read.
 
         No packet-size wait or changed tty flags. Empty polls are not logged.
         """
         if not 1 <= maximum <= 4096:
             raise ValueError('read bound must be1..4096')
+        span = observer.begin('select', loop) if observer else None
         timing = {'select_enter_pc_us': now_us()}
-        ready = select.select([self.fd], [], [], 0)[0]
-        timing['select_return_pc_us'] = now_us()
+        try:
+            ready = select.select([self.fd], [], [], 0)[0]
+        finally:
+            timing['select_return_pc_us'] = now_us()
+            if observer: observer.end(span)
         if not ready:
             return b'', timing
+        span = observer.begin('read', loop) if observer else None
         timing['read_enter_pc_us'] = now_us()
         try:
             data = os.read(self.fd, maximum)
+            timing['read_return_pc_us'] = now_us()
         except BlockingIOError:
             timing['read_return_pc_us'] = now_us()
             return b'', timing
-        timing['read_return_pc_us'] = now_us()
+        finally:
+            if observer: observer.end(span)
         if not data:
             raise SerialError('Probe disconnected')
         return data, timing
