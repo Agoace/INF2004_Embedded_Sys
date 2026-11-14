@@ -10,6 +10,17 @@ import math
 from .wire import MAX_SOURCE_US
 
 
+# Gate1 UART0 8N1, CLK_PERI125MHz, IBRD8/FBRD31. Count only33
+# complete request chars and41 reply chars: do NOT credit the final stop bit.
+# Causal stamps, PL011 tolerance/100ppm and extra1us margin are proved in
+# docs/simulation/WEBOTS_PIL.md#gate-1-proven-directional-minima.
+# CONDITIONAL until stopped D1 proves zero bad/UART errors and this divisor.
+GATE1_MAX_REQUEST_BAUD = 985000
+GATE1_MAX_REPLY_BAUD = 921000
+GATE1_PROVEN_MIN_TX_US = 33 * 10_000_000 // GATE1_MAX_REQUEST_BAUD - 1  #334us
+GATE1_PROVEN_MIN_RX_US = 41 * 10_000_000 // GATE1_MAX_REPLY_BAUD - 1  #444us
+
+
 class ClockError(ValueError):
     pass
 
@@ -66,6 +77,8 @@ class ClockBounds:
         times = (host_tx_us, host_rx_us, proven_min_tx_us, proven_min_rx_us)
         if any(type(x) is not int or x < 0 for x in times) or host_rx_us < host_tx_us:
             raise ClockError("invalid timestamp observation")
+        if proven_min_tx_us + proven_min_rx_us > host_rx_us - host_tx_us:
+            raise ClockError('proven directional minima exceed observed round trip')
         if self.updated_pc_us is not None and host_rx_us < self.updated_pc_us:
             raise ClockError("SYNC receive time moved backwards")
         anchor = pico_rx32 if self.pico_anchor is None else self.pico_anchor

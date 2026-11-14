@@ -7,7 +7,8 @@ qualify the real serial worker. A successful PC write is NOT device availability
 from collections import deque
 import struct
 
-from .clock import ClockBounds, ClockError, Timeline, unwrap32
+from .clock import (ClockBounds, ClockError, Timeline, unwrap32,
+                    GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US)
 from .wire import (CAPABILITIES, MAX_SOURCE_US, NO_ACK, Frame, ProtocolError,
                    StreamDecoder, Type, encode, newer, u16, u32)
 
@@ -27,6 +28,8 @@ class HostTransport:
         if type(transport_only) is not bool:
             raise ValueError('transport_only must be an explicit boolean')
         self.required_caps = 4 if transport_only else CAPABILITIES
+        self.proven_min_tx_us = GATE1_PROVEN_MIN_TX_US if transport_only else 0
+        self.proven_min_rx_us = GATE1_PROVEN_MIN_RX_US if transport_only else 0
         self.session, self.clock = session, clock if clock is not None else ClockBounds()
         self.decoder = StreamDecoder()
         self.state, self.failure = "NEW", None
@@ -230,7 +233,9 @@ class HostTransport:
                     continue
                 try:
                     self.clock.observe(sent, received_pc_us, u32(frame.payload, 8),
-                                       frame.source_us)
+                                       frame.source_us,
+                                       proven_min_tx_us=self.proven_min_tx_us,
+                                       proven_min_rx_us=self.proven_min_rx_us)
                 except ClockError as error:
                     self._fault(str(error))
                 del self.sync_pending[frame.ack]

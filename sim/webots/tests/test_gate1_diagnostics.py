@@ -99,6 +99,32 @@ class D1Tests(unittest.TestCase):
         self.assertEqual(result['availability_age_lower_us'], 990)
         self.assertIsNone(result['device_availability_percentiles'])
 
+    def test_clock_minima_need_zero_real_d1_uart_and_bad_frame_counters(self):
+        blob, pc, _ = fixture()
+        clean = evaluate(decode_dump(blob), pc)
+        self.assertTrue(clean['clock_minima_proven'])
+        self.assertEqual(clean['clock_minima_proof_verdict'], 'ELIGIBLE')
+        for index in (11, 13, 14, 15, 16):
+            _, pc, rows = fixture()
+            rows[1][1][index] = 1
+            with self.subTest(index=index):
+                result = evaluate(decode_dump(from_rows(rows)), pc)
+                self.assertEqual(result['verdict'], 'FAIL')
+                self.assertFalse(result['clock_minima_proven'])
+                self.assertEqual(result['clock_minima_proof_verdict'], 'INCOMPLETE')
+                self.assertFalse(result['transport_subset_qualified'])
+
+    def test_missing_uart_counter_evidence_cannot_establish_minima(self):
+        from types import SimpleNamespace
+        blob, pc, _ = fixture()
+        dump = decode_dump(blob)
+        unknown = SimpleNamespace(context=dump.context, counts=(),
+                                  boot_nonce=dump.boot_nonce, session=dump.session)
+        result = evaluate(unknown, pc)
+        self.assertEqual(result['verdict'], 'INCOMPLETE')
+        self.assertFalse(result['clock_minima_proven'])
+        self.assertFalse(result['transport_subset_qualified'])
+
     def test_measured_bounds_fail_never_raise_limits(self):
         for params in ({'stage_age': 2990}, {'apply_age': 4990}, {'jitter': 250}):
             blob, pc, _ = fixture(**params)

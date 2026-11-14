@@ -292,9 +292,58 @@ even if BOOT and corrupt bytes arrived in the same read. `decoder_total_*`
 retains all errors; `decoder_*` excludes only pre-BOOT discards. Pico counters
 are never erased. The original attempt2 RX chunk now accepts BOOTseq2 after one
 startup discard. This is an offline regression check, not a hardware result.
-The regression suite ran147 tests OK with the same three expected S3 failures;
+The regression suite ran152 tests OK with the same three expected S3 failures;
 logs are `build/wip/pil_plan/bootstrap-resync-red.log`,
 `bootstrap-resync-green.log` and `attempt2-bootstrap-replay.log`.
+
+### Gate 1 proven directional minima
+
+Only the explicit cap4 transport profile credits these fixed wire-time minima.
+Normal full-simulator sessions and generic `ClockBounds` keep zero defaults.
+The proof is SW6's `docs/simulation/PIL_GATE1_CLOCK_PROOF.md` at commit
+`25b968ae9bf95fea884f6b3098b9e78274c94d4b`, for runtime
+`5c7361a4462d07ab6df6bb60f35a9141fe5c82ca` and unchanged image `0017cfa0...`.
+
+| Direction | Complete characters credited | Safe rate ceiling | Integer minimum |
+| --- | ---: | ---: | ---: |
+| Queued PC request to Pico delimiter receive stamp |33|985000 bit/s|`floor(330000000/985000)-1 =334us` |
+| Pico reply generation stamp to complete PC receive |41|921000 bit/s|`floor(410000000/921000)-1 =444us` |
+
+The request/reply have34/42 wire bytes, respectively. Do not credit the final
+stop bit: RX can complete before that bit ends. Pico t2 follows delimiter DR
+read; t3 precedes encoding, queueing and all reply bytes. USB, processing and
+scheduling add delay; none receives an assumed minimum. Named constants in
+`pil/clock.py` derive the334/444us floors from the stated rate ceilings.
+
+The profile requires125MHz peripheral clock and UART IBRD8/FBRD31:
+`125000000/(16*(8+31/64)) =920810.313...` baud. A successful stop-bit sample
+alone does **not** prove a Probe rate limit. The request's known `00` delimiter,
+normal8N1 framing, stable divisors and matching CRC/echo/sequence must establish
+byte correspondence. Its final LOW data sample precedes HIGH stop/idle.
+PL01116x sampling with early-phase/divider margins gives the conservative
+request ceiling985000; the reply ceiling921000 includes the100ppm conversion.
+The proof record states the complete derivation and association conditions.
+
+PC records identify both minima but keep their proof INCOMPLETE until matching
+stopped D1 arrives. The D1 clock/divisor must match exactly, and COUNTS indices
+BAD_FRAME11, OVERRUN13, FRAMING14, PARITY15 and BREAK16 must all be zero. Missing
+or unknown evidence leaves the proof INCOMPLETE and prevents transport subset
+qualification. A measured UART fault remains an overall FAIL; it is not
+silently downgraded. Clean counters make this proof ELIGIBLE, not a Gate1 PASS.
+Other raw queue, coverage, image and active-cohort checks remain necessary.
+
+The estimator rejects minima whose sum exceeds the observed RTT. It retains
+outward quantization,100ppm drift, eight-observation intersection, refresh
+headroom and the **unchanged250us** ARM limit. No minimum-RTT guess, assumed USB
+latency or statistical reduction is used.
+
+The real attempt4 fixture `sim/webots/tests/fixtures/pil_gate1_attempt4_sync.json`
+contains all eight exchanges and the attempted ARM time. Replay without minima
+has585.5us half-width and correctly refuses ARM. Replay through cap4 transport
+with334/444us gives196.5us at that same time. This is a recomputation of an old
+failed attempt, not a successful new hardware run. Red/green logs are
+`build/wip/pil_plan/wire-minima-red.log`, `wire-minima-integration-red.log` and
+`wire-minima-green.log`.
 
 The no-Webots worker sends a synthetic neutral 1 kHz source. Only timing,
 released buttons and zero encoder endpoints are valid; optical, IMU and sonar
@@ -432,7 +481,7 @@ Expected dry-run result: CLI exit0, `host_fixture_match: true`,
 software recording. Retain `events.csv`, `summary.json` and `dry-run.json`.
 A mismatch fails the host check. No hardware authorization flag is used.
 
-Validation:147 host tests OK, including seven replay checks, with the same
+Validation:152 host tests OK, including seven replay checks, with the same
 three expected S3 model failures. The recorded-soak CLI matched all chunks.
 Logs are `build/wip/pil_plan/home-preflash-host-tests.log` and
 `build/wip/pil_plan/home-dry-run-validation.log`. No serial discovery/open,

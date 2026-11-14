@@ -11,6 +11,7 @@ from pathlib import Path
 import struct
 
 from .wire import NO_ACK, SCHEMA_ID, crc32c
+from .clock import GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US
 
 HEADER = struct.Struct('<IHHIIII')
 LENGTHS = {1: 104, 2: 104, 3: 48, 4: 64, 5: 16}
@@ -202,6 +203,8 @@ def _coverage(dump):
 def evaluate(dump, pc):
     """Combine matching all-frame evidence. A clean transport subset is not Gate1 PASS."""
     result = {'verdict': 'INCOMPLETE', 'physical_gate1_pass': False,
+              'clock_minima_proven': False, 'clock_minima_proof_verdict': 'INCOMPLETE',
+              'transport_subset_qualified': False,
               'device_availability_percentiles': None, 'device_apply_percentiles': None,
               'unmeasured': ['hardware negative campaigns and full Gate1 acceptance'],
               'candidate_bounds_us': {'nominal_pipeline': 4000, 'availability': 3000,
@@ -216,10 +219,25 @@ def evaluate(dump, pc):
         if (identity['boot_nonce'] != dump.boot_nonce or
                 identity['host_session'] != dump.session or epoch & 0xffffffff != c[2]):
             raise DiagnosticError('PC/D1 identity mismatch')
+        if len(n) != 26 or any(type(value) is not int or not 0 <= value <= 0xffffffff for value in n):
+            raise DiagnosticError('D1 UART counter evidence missing/invalid')
+        # Normative COUNTS: BAD11, OVERRUN13, FRAMING14, PARITY15, BREAK16.
+        uart_counts = {name: n[index] for name, index in
+                       (('bad_frame', 11), ('overrun', 13), ('framing', 14), ('parity', 15), ('break', 16))}
+        profile_proved = (c[4], c[6], c[7]) == (125000000, 8, 31)
+        result['clock_minima_uart_counts'] = uart_counts
+        result['clock_minima_proven'] = profile_proved and not any(uart_counts.values())
+        if result['clock_minima_proven']:
+            result['clock_minima_proof_verdict'] = 'ELIGIBLE'
         if (c[22] & 0x3c0 or any(n[8:23]) or n[24] or n[25] or
                 c[20] not in (1, 3)):
             result['verdict'], result['failure'] = 'FAIL', 'Pico fault/error/negative-campaign stop'
             return result
+        used_minima = (pc.get('clock_proven_min_tx_us', 0), pc.get('clock_proven_min_rx_us', 0))
+        if used_minima not in ((0, 0), (GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US)):
+            result['clock_minima_proven'] = False
+            result['clock_minima_proof_verdict'] = 'INCOMPLETE'
+            raise DiagnosticError('PC directional minima are outside the proved profile')
         staged, applied = _coverage(dump)
         if c[21] & ~0x1f:
             raise DiagnosticError('D1 reserved final state flags')
@@ -277,7 +295,8 @@ def evaluate(dump, pc):
         result['image_identity_established'] = (image_known and pc.get('profile_flags') == c[23])
         if pc.get('profile_flags') is not None and pc['profile_flags'] != c[23]:
             failures.append('operator image/profile flags mismatch')
-        result['transport_subset_qualified'] = (not failures and result['ten_minute_duration_met']
+        result['transport_subset_qualified'] = (not failures and result['clock_minima_proven']
+                                               and result['ten_minute_duration_met']
                                                and result['image_identity_established']
                                                and pc.get('stopped_status_observed') is True
                                                and pc.get('required_capabilities') == 4
