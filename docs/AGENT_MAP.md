@@ -421,7 +421,9 @@ vehicle task described below.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
 - [Gate 1 design/status](simulation/PIL_GATE1.md) has a host-tested transport
   image; the corrected image awaits P1 after the first attempt failed. The
-  [build record](simulation/PIL_GATE1_BUILD.md) has its hash, wiring and limits;
+  [build record](simulation/PIL_GATE1_BUILD.md) has its hash, wiring and limits.
+  The [clock proof](simulation/PIL_GATE1_CLOCK_PROOF.md) defines conditional
+  334/444us directional floors, timestamp causality and zero-error eligibility;
   [D1 diagnostics](simulation/PIL_GATE1_DIAGNOSTICS.md) is the approved separate
   stopped-USB contract, not a change to the frozen UART v1 envelope.
   [`pil_gate1_metrics.c`](../app_program/sim/pil_gate1_metrics.c) reduces raw
