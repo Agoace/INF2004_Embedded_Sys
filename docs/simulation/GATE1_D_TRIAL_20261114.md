@@ -10,8 +10,13 @@ could not qualify the default250us clock at bootstrap. Its eight bootstrap
 exchanges had net RTT1453–1892us. Earlier loaded evidence also failed to sustain
 250us. These observations do not prove a new600s bound.
 
-This implementation starts at C1 `005db04` only. It does NOT include capture-first
-C2 `52d0d44` or queued logging C3 `3326d91`. Keep those experiments separate.
+The initial trial implementation `cbe65c2` starts at C1 `005db04` only.
+After attempt10's source-phase failure, the operator approved attempt11 with
+C2 `52d0d44` applied on top of that trial. The current trial therefore captures
+first after inhibit/expiry checks; it still uses synchronous C1 logging. RX
+faults can cancel queued SENSOR before TX, and a second expiry/lease check
+follows RX. Queued logging C3 `3326d91` is NOT included. Keep experiments separate.
+The manifest and PC metadata identify capture-first/synchronous logging.
 The paper review remains operator workspace material:
 `build/wip/pil_plan/GATE1_BOUND_REVIEW_PAPER.md`.
 

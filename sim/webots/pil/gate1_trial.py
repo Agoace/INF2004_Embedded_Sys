@@ -9,7 +9,8 @@ def labels(trial):
 
 def manifest():
     return {**labels(True), 'operator_decision': '2026-11-14 D-TRIAL',
-            'scope': 'C1 only baseline plus explicit opt-in trial; not C2/C3',
+            'scope': 'C1 + C2 capture-first trial; NOT C3 queued logging',
+            'capture_first': True, 'queued_logger': False,
             'clock_halfwidth_us': 400, 'sync_max_period_us': 20000,
             'unchanged_us': {'source_phase': 250, 'native_jitter': 250,
                              'availability': 3000, 'pipeline': 4000, 'expiry': 5000},
