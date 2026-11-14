@@ -11,6 +11,53 @@
 #include <stdio.h>
 #include <stdarg.h>
 
+/* Production UP ready queue; only the consumed TCB fields are modelled. */
+#define Inline static inline
+#define IMPORT extern
+#define TRUE 1
+#define FALSE 0
+#define NUM_TSKPRI 32
+#define INT_BITWIDTH 32
+typedef int BOOL;
+typedef int32_t W;
+#include "../include/sys/queue.h"
+typedef struct {
+    QUEUE tskque;
+    INT priority;
+    BOOL klocked, klockwait;
+} TCB;
+#include "../kernel/tkernel/ready_queue.h"
+void *knl_memset(void *bytes, int value, SZ length)
+{
+    assert(length >= 0); return memset(bytes, value, (size_t)length);
+}
+static void priority_order(INT worker_priority)
+{
+    RDYQUE ready;
+    TCB app[8] = {0}, pil = {0};
+    const INT priorities[8] = {10, 11, 12, 13, 14, 21, 30, 1};
+    knl_ready_queue_initialize(&ready);
+    for (unsigned int i = 0u; i < 7u; ++i) {
+        app[i].priority = priorities[i] - 1;
+        (void)knl_ready_queue_insert(&ready, &app[i]);
+    }
+    assert(knl_ready_queue_top(&ready) == &app[0]);
+    pil.priority = worker_priority - 1;
+    assert(knl_ready_queue_insert(&ready, &pil));
+    assert(knl_ready_queue_top(&ready) == &pil);
+    /* Priority does not bypass a kernel-lock owner or initial task1. */
+    ready.klocktsk = &app[0];
+    assert(knl_ready_queue_top(&ready) == &app[0]);
+    ready.klocktsk = NULL;
+    app[7].priority = 0;
+    (void)knl_ready_queue_insert(&ready, &app[7]);
+    assert(knl_ready_queue_top(&ready) == &app[7]);
+    knl_ready_queue_delete(&ready, &app[7]);
+    assert(knl_ready_queue_top(&ready) == &pil);
+    knl_ready_queue_delete(&ready, &pil);
+    assert(knl_ready_queue_top(&ready) == &app[0]);
+}
+
 extern INT __wrap_usermain(void);
 extern pil_gate1_session_t *pil_gate1_test_session(void);
 extern void pil_gate1_test_service(void);
@@ -28,7 +75,8 @@ static uint8_t rx[256], uart[32768], usb[32768];
 static size_t rx_at, rx_size, uart_size, usb_size;
 ID tk_cre_tsk(const T_CTSK *c)
 {
-    assert(c->itskpri == 16 && c->stksz == 2048);
+    priority_order(c->itskpri);
+    assert(c->itskpri == 9 && c->stksz == 2048);
     assert(c->bufptr != NULL && (c->tskatr & TA_USERBUF) != 0u);
 #if TK_SUPPORT_SMP
     assert((c->tskatr & TA_ASSPRC) != 0u && c->assprc == TP_PRC1);
@@ -147,6 +195,7 @@ int main(int argc, char **argv)
     const uint32_t applied = missing ? 0u : 8u;
     const uint32_t staged = missing ? 1u : 11u;
     assert(__wrap_usermain() == 0 && task != NULL);
+    if (strcmp(mode, "priority") == 0) { return 0; }
     if (setjmp(sleep_exit) == 0) {
         ((void (*)(INT, void *))task)(0, NULL);
     }

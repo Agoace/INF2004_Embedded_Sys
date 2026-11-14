@@ -4,8 +4,9 @@
 
 The image is host-tested and ready for an operator transport trial on a spare
 RP2040 Pico. Attempt5 armed but failed on missing lookahead658 after657 applied
-slots. The current image adds only the approved stopped [RX timing diagnostic](PIL_GATE1_RX_TIMING.md)
-to locate the delay; it has no physical PASS. Earlier startup failure/correction
+slots. Attempt6 localized delay to worker scheduling. The current image keeps
+[RX timing diagnostics](PIL_GATE1_RX_TIMING.md) and raises only the Gate1 worker
+to [priority9](PIL_GATE1_PRIORITY.md); it has no physical PASS. Earlier startup failure/correction
 is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
 This is NOT sensor/physics acceptance.
 Only the operator flashes or opens target ports. Coding workers do neither.
@@ -29,11 +30,11 @@ sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
 - File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (248320 bytes).
-- UF2 SHA256: `71cf7cb2b3bd51fbd798a6d6c7a8e3d6543c0d9fd6ca129ac5d5eba1dc248b4a`.
-- ELF SHA256: `0e2767cb8e7465d11ebbfa25cbf6ea4b6a24f338d9523fbdf087061ed3a4fdbd`.
+- UF2 SHA256: `4b57af9da21c1d68719efe0c3acf4738b18e750f46501a325aa52dd43cb4f993`.
+- ELF SHA256: `e51655db34096911217a4020429ea59df6489124d91a70f8ece6ec40b33b9cd0`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/rx-timing/`, with map/size/hashes.
+- Retained copy: `build/pil-gate1/artifacts/priority9/`, with map/size/hashes.
 - Appends versioned ASCII after D1 manifest, before the unchanged stopped stack
   line. Use the matching PC RX diagnostic parser; live UART and D1 v1 stay fixed.
 
@@ -156,7 +157,7 @@ Kernel owns IRQ20/UART0 and IRQ1/TIMER alarm1. Each UART IRQ transfers at most32
 and32 TX bytes; no CRC/decode/encode occurs in IRQ context. Enqueue also primes
 up to32 FIFO bytes under core0 IRQ exclusion, without waiting for a TX edge. Service-duration
 brackets end before their final metric update; they measure the service body,
-not hardware IRQ entry/exit latency. Worker priority16 and TA_USERBUF stack
+not hardware IRQ entry/exit latency. Worker priority9 and TA_USERBUF stack
 stay core0. Core0 IRQ exclusion protects session mutations; it
 is not a cross-core lock. Whole-word SPSC publication uses ARM DMB.
 

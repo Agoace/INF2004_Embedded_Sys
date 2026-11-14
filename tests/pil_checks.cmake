@@ -107,12 +107,13 @@ foreach(profile up smp control)
         "${REPO}/app_program/sim/pil_wire.c")
     set_property(TARGET ${target} PROPERTY LINK_LIBRARIES "")
     target_include_directories(${target} PRIVATE
-        "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
+        "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim"
+        "${REPO}/kernel/knlinc")
     target_compile_definitions(${target} PRIVATE
         APP_SIM=1 APP_SIM_GATE1=1 PIL_GATE1_RUNTIME_TEST=1
         TK_SUPPORT_SMP=$<IF:$<STREQUAL:${profile},up>,0,1>
         APP_FORCE_CORE0=$<IF:$<STREQUAL:${profile},control>,1,0>)
-    foreach(mode clean lease overrun lateprogress queuefull missing)
+    foreach(mode priority clean lease overrun lateprogress queuefull missing)
         add_test(NAME ${target}_${mode} COMMAND ${target} ${mode})
     endforeach()
 endforeach()
