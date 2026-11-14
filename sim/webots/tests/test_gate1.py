@@ -76,8 +76,16 @@ class FakePair:
                            frame.sequence)
                 self.next_output = self.clock.now + 1000
             elif frame.type == Type.SYNC_REQ:
-                self.queue(Type.SYNC_REPLY, frame.payload + struct.pack('<II', self.clock.now & 0xffffffff, 0),
-                           frame.sequence)
+                if self.capabilities == 4:
+                    # Synthetic cap4 path includes the proven wire minima.
+                    # Request arrives+400us, reply made+500us, PC receives+1000us.
+                    self.queue(Type.SYNC_REPLY, frame.payload + struct.pack('<II',
+                               (self.clock.now + 400) & 0xffffffff, 0), frame.sequence,
+                               source=self.clock.now + 500)
+                    self.pending[-1][0] = self.clock.now + 1000
+                else:
+                    self.queue(Type.SYNC_REPLY, frame.payload + struct.pack('<II', self.clock.now & 0xffffffff, 0),
+                               frame.sequence)
             elif frame.type == Type.ARM:
                 self.armed = True
             elif frame.type == Type.SENSOR:

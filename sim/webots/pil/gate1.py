@@ -187,6 +187,10 @@ class Recorder:
             'stopped_status_observed': self.stopped_status_observed,
             'image_sha256': self.image_sha256, 'profile_flags': self.profile_flags,
             'required_capabilities': host.required_caps,
+            'clock_proven_min_tx_us': host.proven_min_tx_us,
+            'clock_proven_min_rx_us': host.proven_min_rx_us,
+            'clock_minima_proof_verdict': 'INCOMPLETE' if host.proven_min_tx_us else 'NOT_USED',
+            'clock_minima_condition': 'matching stopped D1; 125MHz IBRD8 FBRD31; BAD11/OE13/FE14/PAR15/BRK16 all zero',
             'serial': {'baud': 921600, 'data_bits': 8, 'parity': 'none',
                        'stop_bits': 1, 'flow_control': False},
             'counts': dict(self.counters), 'input_queue_depth_max': self.queue_max,
@@ -286,7 +290,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         raise
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.record('run_metadata', clock.now_us(), image_sha256=image_sha256,
-                    profile_flags=profile_flags, required_capabilities=host.required_caps)
+                    profile_flags=profile_flags, required_capabilities=host.required_caps,
+                    clock_proven_min_tx_us=host.proven_min_tx_us,
+                    clock_proven_min_rx_us=host.proven_min_rx_us,
+                    clock_minima_proof_verdict='INCOMPLETE' if host.proven_min_tx_us else 'NOT_USED')
     start = clock.now_us()
     end = None
     active_start = None

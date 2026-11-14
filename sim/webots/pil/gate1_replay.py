@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 
 from .gate1 import run_soak
+from .clock import GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US
 
 
 class ReplayMismatch(ValueError):
@@ -35,10 +36,11 @@ def load_fixture(path):
     fixture = json.loads(path.read_text())
     fields = {'schema', 'provenance', 'hardware_measured', 'start_pc_us', 'duration_us',
               'session', 'transport_only', 'expected_verdict', 'rx', 'tx',
-              'input_reset_pc_us', 'startup_discard_us'}
+              'input_reset_pc_us', 'startup_discard_us',
+              'clock_proven_min_tx_us', 'clock_proven_min_rx_us'}
     if not isinstance(fixture, dict) or set(fixture) != fields or type(fixture['schema']) is not int:
         raise ReplayMismatch('unknown replay fixture schema')
-    if (fixture['schema'] != 2 or fixture['hardware_measured'] is not False or
+    if (fixture['schema'] != 3 or fixture['hardware_measured'] is not False or
             fixture['transport_only'] is not True or fixture['expected_verdict'] != 'INCOMPLETE' or
             not isinstance(fixture['provenance'], str) or 'SYNTHETIC' not in fixture['provenance']):
         raise ReplayMismatch('fixture must explicitly declare synthetic host-only scope')
@@ -50,6 +52,10 @@ def load_fixture(path):
             fixture['input_reset_pc_us'] != fixture['start_pc_us'] or
             type(fixture['startup_discard_us']) is not int or fixture['startup_discard_us'] != 300000):
         raise ReplayMismatch('fixture must include the reset and300ms discard guard')
+    if (type(fixture['clock_proven_min_tx_us']) is not int or
+            type(fixture['clock_proven_min_rx_us']) is not int or
+            (fixture['clock_proven_min_tx_us'], fixture['clock_proven_min_rx_us']) != (GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US)):
+        raise ReplayMismatch('fixture must declare the334/444us Gate1 wire minima')
     for name in ('rx', 'tx'):
         rows = fixture[name]
         if not isinstance(rows, list) or not 1 <= len(rows) <= 10000:
@@ -127,6 +133,8 @@ def replay_soak(fixture_path, output):
               'physical_gate1_pass': False, 'serial_device_opened': False,
               'fixture_sha256': hashlib.sha256(Path(fixture_path).read_bytes()).hexdigest(),
               'rx_chunks': pair.rx_index, 'tx_chunks': pair.tx_index,
+              'clock_proven_min_tx_us': result['clock_proven_min_tx_us'],
+              'clock_proven_min_rx_us': result['clock_proven_min_rx_us'],
               'expected_rx_chunks': len(fixture['rx']), 'expected_tx_chunks': len(fixture['tx']),
               'failure': result['failure']}
     (Path(output) / 'dry-run.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')

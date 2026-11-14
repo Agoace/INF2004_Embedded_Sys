@@ -83,6 +83,36 @@ def streaming():
 
 
 class ClockTests(unittest.TestCase):
+    def test_attempt4_real_sync_zero_minima_cannot_qualify(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/pil_gate1_attempt4_sync.json').read_text())
+        clock = ClockBounds()
+        for sample in fixture['samples']:
+            clock.observe(*sample)
+        self.assertEqual(clock.observations, 8)
+        self.assertEqual(clock.bounds_at(fixture['arm_pc_us'], qualified=False).halfwidth, 585.5)
+        with self.assertRaises(ClockError):
+            clock.bounds_at(fixture['arm_pc_us'])
+
+    def test_attempt4_real_sync_transport_only_uses_proven_wire_minima(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/pil_gate1_attempt4_sync.json').read_text())
+        host = HostTransport(SESSION, transport_only=True)
+        for seq, (tx, rx, pico_rx, pico_tx) in enumerate(fixture['samples']):
+            host.sync_pending[seq] = tx
+            payload = struct.pack('<QII', tx, pico_rx, 0)
+            host.receive(encode(Frame(Type.SYNC_REPLY, SESSION, seq, pico_tx, seq, payload)), rx)
+        self.assertEqual((host.proven_min_tx_us, host.proven_min_rx_us), (334, 444))
+        self.assertEqual(host.clock.bounds_at(fixture['arm_pc_us']).halfwidth, 196.5)
+        self.assertEqual(host.clock.MAX_HALFWIDTH_US, 250)
+        normal = HostTransport(SESSION)
+        self.assertEqual((normal.proven_min_tx_us, normal.proven_min_rx_us), (0, 0))
+
+    def test_proven_minimum_cannot_exceed_observed_round_trip(self):
+        with self.assertRaises(ClockError):
+            ClockBounds().observe(10000, 10100, 20000, 20000, proven_min_tx_us=101)
+        with self.assertRaises(ClockError):
+            ClockBounds().observe(10000, 10100, 20000, 20000,
+                                  proven_min_tx_us=60, proven_min_rx_us=41)
+
     def test_timestamp_quantization_is_separate_from_drift(self):
         clock = ClockBounds()
         clock.DRIFT_PPM = 0  # Isolate quantization, never use drift as its allowance.
