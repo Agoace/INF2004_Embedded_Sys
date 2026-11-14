@@ -108,6 +108,71 @@ def _containing(calls, offset, ends):
     return calls[index] if index < len(calls) else None
 
 
+class USBStreamMatcher:
+    """Bounded offline association across short, full-payload USB completions.
+
+    Aggregate whole URBs until a unique >=16-byte anchor exists. Backfill only
+    byte-exact adjacent URBs. Never searches inside/repairs a live UART packet.
+    Metadata stays attached to its original URB (including delayed OUT callback).
+    """
+    def __init__(self, data):
+        self.data, self.cursor, self.aligned = data, 0, False
+        self.pending, self.unmatched = [], 0
+
+    @property
+    def pending_records(self):
+        return len(self.pending)
+
+    @property
+    def pending_bytes(self):
+        return sum(len(payload) for payload, _ in self.pending)
+
+    def finish(self):
+        self.unmatched += len(self.pending)
+        self.pending.clear()
+        self.aligned = False
+
+    def feed(self, payload, part):
+        if not payload:
+            return []
+        if self.aligned and self.data[self.cursor:self.cursor+len(payload)] == payload:
+            part.update(stream_start=self.cursor, stream_end=self.cursor+len(payload))
+            self.cursor += len(payload)
+            return [part]
+        self.aligned = False
+        self.pending.append((payload, part))
+        while self.pending_records > 64 or self.pending_bytes > 4096:
+            self.pending.pop(0)
+            self.unmatched += 1
+        candidate = b''
+        stop = min(len(self.data), self.cursor+131072)
+        for index in range(len(self.pending)-1, -1, -1):
+            candidate = self.pending[index][0]+candidate
+            if len(candidate) < 16:
+                continue
+            found = self.data.find(candidate, self.cursor, stop)
+            if found < 0 or self.data.find(candidate, found+1, stop) >= 0:
+                continue
+            # A newer unique anchor may also identify preceding short URBs.
+            while index:
+                previous = self.pending[index-1][0]
+                before = found-len(previous)
+                if before < self.cursor or self.data[before:found] != previous:
+                    break
+                index, found = index-1, before
+            self.unmatched += index
+            matched = []
+            self.cursor = found
+            for data, metadata in self.pending[index:]:
+                metadata.update(stream_start=self.cursor, stream_end=self.cursor+len(data))
+                self.cursor += len(data)
+                matched.append(metadata)
+            self.pending.clear()
+            self.aligned = True
+            return matched
+        return []
+
+
 def _regular(path, maximum=None):
     path = Path(path)
     if not path.is_file() or maximum is not None and path.stat().st_size > maximum:
@@ -181,7 +246,7 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
             identity = summary.get('identity', {})
             if identity.get('boot_nonce') != dump.boot_nonce or identity.get('host_session') != dump.session:
                 raise ValueError('PC/stopped D1 identity mismatch')
-            stack = re.search(rb'\[PILG1\] stopped; reset required; worker stack untouched ([0-9]+)/2048 bytes\n',
+            stack = re.search(rb'\[PILG1\] stopped; reset required; worker stack untouched ([0-9]+)/2048 bytes\r?\n',
                               data[rx1['end_offset']:])
             result['stopped_stack_line_complete'] = bool(stack and int(stack[1]) <= 2048)
             result['diagnostic'] = ('COMPLETE' if rx1['d1_identity_verified'] and result['stopped_stack_line_complete']
@@ -209,7 +274,7 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
                     not 1 <= usb_bus <= 65535 or not 1 <= usb_device <= 127 or
                     not 1 <= out_ep <= 15 or not 0x81 <= in_ep <= 0x8f):
                 raise ValueError('explicit valid Probe bus/device/CDC endpoints required')
-            cursor, aligned = {'tx': 0, 'rx': 0}, {'tx': False, 'rx': False}
+            matchers = {direction: USBStreamMatcher(data) for direction, data in streams.items()}
             pending, selected, incomplete, errors, bad_clock = {}, 0, 0, 0, False
             frames_by_dir = {'tx': tx, 'rx': rx}
             ends = {d: [p['end'] for p in ps] for d, ps in frames_by_dir.items()}
@@ -247,22 +312,9 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
                     payload = urb['payload']
                     if not urb['payload_complete'] or not payload or (kind == 'C' and urb['status']):
                         incomplete += 1
-                        aligned[direction] = False
+                        matchers[direction].finish()
                         continue
-                    data, start = streams[direction], cursor[direction]
-                    if not aligned[direction] or data[start:start+len(payload)] != payload:
-                        # Offline association only. Never resynchronizes live UART.
-                        # Reanchor only on a unique, sufficiently long full payload.
-                        stop = min(len(data), start + 131072)
-                        found = data.find(payload, start, stop)
-                        if len(payload) < 16 or found < 0 or data.find(payload, found+1, stop) >= 0:
-                            incomplete += 1
-                            aligned[direction] = False
-                            continue
-                        start = found
-                    end = start+len(payload)
-                    cursor[direction], aligned[direction] = end, True
-                    part = {'stream_start': start, 'stream_end': end, 'tag': urb['tag'],
+                    part = {'tag': urb['tag'],
                             'submit_realtime_us': (urb['usb_realtime_us'] if kind == 'S' else
                                                    submit['usb_realtime_us'] if submit else None),
                             'complete_realtime_us': urb['usb_realtime_us'] if kind == 'C' else None,
@@ -270,12 +322,16 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
                             'completion_full_length': kind == 'C',
                             'completed_length': urb['length'] if kind == 'C' else None}
                     urb['parts'] = [part]
-                    index = bisect_right(ends[direction], start)
-                    for position in range(index, len(frames_by_dir[direction])):
-                        packet = frames_by_dir[direction][position]
-                        if packet['start'] >= end:
-                            break
-                        packet['urbs'].append(part)
+                    for recovered in matchers[direction].feed(payload, part):
+                        index = bisect_right(ends[direction], recovered['stream_start'])
+                        for position in range(index, len(frames_by_dir[direction])):
+                            packet = frames_by_dir[direction][position]
+                            if packet['start'] >= recovered['stream_end']:
+                                break
+                            packet['urbs'].append(recovered)
+            for matcher in matchers.values():
+                matcher.finish()
+                incomplete += matcher.unmatched
             if not selected:
                 raise ValueError('no bulk URBs match the runtime Probe selectors')
             if bad_clock or not clock.valid:
