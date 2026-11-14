@@ -80,6 +80,7 @@ def fixture(*, base=110000, count=4, stage_age=1000, apply_age=4000, jitter=0):
     manifest = [len(rows), 12, 0, crc32c(b''.join(bodies))]
     packets.append(packet(5, len(rows), manifest)[0])
     pc = {'identity': {'boot_nonce': 7, 'host_session': 123, 'epoch_pico_us': base},
+          'pc_clock_domain': 'CLOCK_MONOTONIC_RAW',  # Synthetic evidence contract only.
           'verdict': 'INCOMPLETE', 'elapsed_us': count*1000,
           'ten_minute_duration_met': False, 'active_output_count': count,
           'active_output_prefix_complete': True,
@@ -113,6 +114,17 @@ class D1Tests(unittest.TestCase):
                 self.assertFalse(result['clock_minima_proven'])
                 self.assertEqual(result['clock_minima_proof_verdict'], 'INCOMPLETE')
                 self.assertFalse(result['transport_subset_qualified'])
+
+    def test_non_raw_pc_clock_cannot_qualify_physical_clock_proof(self):
+        blob, original, _ = fixture()
+        for domain in (None, 'CLOCK_MONOTONIC', 'INJECTED_TEST_CLOCK'):
+            pc = copy.deepcopy(original)
+            pc['pc_clock_domain'] = domain
+            result = evaluate(decode_dump(blob), pc)
+            self.assertFalse(result['clock_minima_proven'])
+            self.assertEqual(result['clock_minima_proof_verdict'], 'INCOMPLETE')
+            self.assertFalse(result['transport_subset_qualified'])
+            self.assertEqual(result['verdict'], 'INCOMPLETE')
 
     def test_missing_uart_counter_evidence_cannot_establish_minima(self):
         from types import SimpleNamespace

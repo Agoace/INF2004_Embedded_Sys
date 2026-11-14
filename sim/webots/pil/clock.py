@@ -5,7 +5,6 @@ A fixed apply epoch is not changed by updating the PC/Pico clock estimate.
 """
 
 from dataclasses import dataclass
-import math
 
 from .wire import MAX_SOURCE_US
 
@@ -55,9 +54,17 @@ class ClockBounds:
         self.updated_pc_us = None
         self.pico_anchor = None
         self.observations = 0
+        # Exact offset cones in millionths of a microsecond. All lower cones
+        # have slope-rho; upper cones slope+rho, so two intercepts retain ALL
+        # SYNC constraints in O(1) space. Never age a previously rounded bound.
+        self._lower_intercept = self._upper_intercept = None
+        self._rho = None
 
-    def _growth(self, elapsed):
-        return (elapsed * self.DRIFT_PPM + 999_999) // 1_000_000
+    def _interval_at(self, pc_us):
+        scale = 1_000_000
+        lower = (self._lower_intercept - self._rho * pc_us) // scale
+        upper = -(-(self._upper_intercept + self._rho * pc_us) // scale)
+        return Interval(lower, upper)
 
     def bounds_at(self, pc_us, *, qualified=True):
         if type(pc_us) is not int or self.interval is None:
@@ -65,8 +72,7 @@ class ClockBounds:
         age = pc_us - self.updated_pc_us
         if age < 0:
             raise ClockError("PC monotonic time moved backwards")
-        growth = self._growth(age)
-        result = Interval(self.interval.lower - growth, self.interval.upper + growth)
+        result = self._interval_at(pc_us)
         if qualified and (self.observations < 8 or age > self.MAX_REFRESH_US or
                           result.halfwidth > self.MAX_HALFWIDTH_US):
             raise ClockError("clock not qualified or uncertainty headroom expired")
@@ -87,17 +93,21 @@ class ClockBounds:
         if transmit < receive:
             raise ClockError("Pico time moved backwards")
         # Optional minima need separate hardware/baud proof. Defaults subtract NOTHING.
-        observation_growth = self._growth(host_rx_us - host_tx_us + 1)
-        # Each floor-to-us TIMER/monotonic read denotes [t,t+1). Offset
-        # differences therefore need a separate outward1us beyond drift.
-        result = Interval(transmit - host_rx_us + proven_min_rx_us - observation_growth - 1,
-                          receive - host_tx_us - proven_min_tx_us + observation_growth + 1)
-        if self.interval is not None:
-            previous = self.bounds_at(host_rx_us, qualified=False)
-            result = Interval(max(previous.lower, result.lower),
-                              min(previous.upper, result.upper))
-        if result.lower > result.upper:
+        rho, scale = self.DRIFT_PPM, 1_000_000
+        if type(rho) is not int or rho < 0 or self._rho is not None and rho != self._rho:
+            raise ClockError('clock drift assumption changed or invalid')
+        growth = (host_rx_us - host_tx_us + 1) * rho
+        # Floor-to-us quantization remains a distinct outward1us. Preserve
+        # fractional drift internally, then round ONCE at the requested time.
+        lower = (transmit - host_rx_us + proven_min_rx_us - 1) * scale - growth + rho * host_rx_us
+        upper = (receive - host_tx_us - proven_min_tx_us + 1) * scale + growth - rho * host_rx_us
+        if self._lower_intercept is not None:
+            lower = max(lower, self._lower_intercept)
+            upper = min(upper, self._upper_intercept)
+        if lower - rho * host_rx_us > upper + rho * host_rx_us:
             raise ClockError("empty clock-offset intersection")
+        self._lower_intercept, self._upper_intercept, self._rho = lower, upper, rho
+        result = self._interval_at(host_rx_us)
         self.interval, self.updated_pc_us = result, host_rx_us
         self.pico_anchor = transmit
         self.observations += 1
@@ -110,12 +120,19 @@ class ClockBounds:
     def refresh_deadline_pc_us(self):
         if self.interval is None:
             raise ClockError("clock uninitialized")
-        headroom = self.MAX_HALFWIDTH_US - self.interval.halfwidth
-        if headroom < 0:
+        if self.interval.halfwidth > self.MAX_HALFWIDTH_US:
             return self.updated_pc_us
-        # Round down: this is a deadline, not a promise that a late reply is safe.
-        lifetime = math.floor(headroom) * 1_000_000 // self.DRIFT_PPM
-        return self.updated_pc_us + min(self.MAX_REFRESH_US, lifetime)
+        # Exact integer-time deadline, including outward rounding. Width is
+        # monotone between observations. Rate history gives NO future credit:
+        # instantaneous skew may change anywhere inside the outer100ppm guard.
+        lo, hi = 0, self.MAX_REFRESH_US
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            if self._interval_at(self.updated_pc_us + mid).halfwidth <= self.MAX_HALFWIDTH_US:
+                lo = mid
+            else:
+                hi = mid - 1
+        return self.updated_pc_us + lo
 
 
 @dataclass(frozen=True)

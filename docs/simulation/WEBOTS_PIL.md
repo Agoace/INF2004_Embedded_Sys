@@ -292,7 +292,7 @@ even if BOOT and corrupt bytes arrived in the same read. `decoder_total_*`
 retains all errors; `decoder_*` excludes only pre-BOOT discards. Pico counters
 are never erased. The original attempt2 RX chunk now accepts BOOTseq2 after one
 startup discard. This is an offline regression check, not a hardware result.
-The regression suite ran152 tests OK with the same three expected S3 failures;
+The regression suite ran157 tests OK with the same three expected S3 failures;
 logs are `build/wip/pil_plan/bootstrap-resync-red.log`,
 `bootstrap-resync-green.log` and `attempt2-bootstrap-replay.log`.
 
@@ -339,11 +339,41 @@ latency or statistical reduction is used.
 
 The real attempt4 fixture `sim/webots/tests/fixtures/pil_gate1_attempt4_sync.json`
 contains all eight exchanges and the attempted ARM time. Replay without minima
-has585.5us half-width and correctly refuses ARM. Replay through cap4 transport
-with334/444us gives196.5us at that same time. This is a recomputation of an old
+had585.5us half-width with the earlier recursive rounding and correctly refused
+ARM; minima gave196.5us. Exact cones now give583us without minima and194us
+with334/444us at that same time. This is a recomputation of an old
 failed attempt, not a successful new hardware run. Red/green logs are
 `build/wip/pil_plan/wire-minima-red.log`, `wire-minima-integration-red.log` and
 `wire-minima-green.log`.
+
+### Safe all-SYNC cones and RAW clock
+
+PC hardware timestamps now use `clock_gettime_ns(CLOCK_MONOTONIC_RAW)`, not
+NTP/chrony-adjusted `CLOCK_MONOTONIC`. There is no slewed-clock fallback. The
+summary and run metadata identify the clock domain. Missing, injected or non-RAW
+clock evidence cannot qualify the physical minima/transport subset. Earlier
+attempts used MONOTONIC: their replays remain conditional, not physical proof.
+
+Keep the100ppm outer rate bound. For each SYNC interval `[lo_i, hi_i]` at`t_i`,
+query bounds at`t` are `max_i(lo_i-rho*(t-t_i))` and
+`min_i(hi_i+rho*(t-t_i))`, where`rho=100/1000000`. Two exact integer-scaled
+intercepts retain all constraints in constant space. Quantization remains a
+separate outward1us; fractional drift is retained and endpoints round outward
+only at query time. An exact integer-time refresh deadline preserves the250us
+limit and1s refresh limit. Empty intersections still fail.
+
+A measured historical rate is for reporting only. Without a proved rate-change
+limit, the next instant can take either physical extreme; fitting a constant
+skew cannot safely narrow future aging. Tests include600s with20ppm skew and a
+later change to-80ppm, plus an abrupt unseen rate change after the last SYNC.
+
+Attempt5's17-SYNC replay ends at241us instead of248us. At SENSOR658's PC write,
+cones give242.5us instead of250us. This removes repeated rounding loss, not the
+physical uncertainty. A seeded600s resampling of nine active exchanges still
+found expiry at100/50/20/10ms periods; even10ms had263us maximum despite243.5us
+p99. These are conditional simulations, not evidence of future latency tails.
+**The production SYNC period remains unchanged:100ms maximum interval.** No
+250us bound,100ppm bound, wire format, baud or physical verdict is changed.
 
 The no-Webots worker sends a synthetic neutral 1 kHz source. Only timing,
 released buttons and zero encoder endpoints are valid; optical, IMU and sonar
@@ -481,7 +511,7 @@ Expected dry-run result: CLI exit0, `host_fixture_match: true`,
 software recording. Retain `events.csv`, `summary.json` and `dry-run.json`.
 A mismatch fails the host check. No hardware authorization flag is used.
 
-Validation:152 host tests OK, including seven replay checks, with the same
+Validation:157 host tests OK, including seven replay checks, with the same
 three expected S3 model failures. The recorded-soak CLI matched all chunks.
 Logs are `build/wip/pil_plan/home-preflash-host-tests.log` and
 `build/wip/pil_plan/home-dry-run-validation.log`. No serial discovery/open,

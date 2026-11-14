@@ -226,7 +226,8 @@ def evaluate(dump, pc):
                        (('bad_frame', 11), ('overrun', 13), ('framing', 14), ('parity', 15), ('break', 16))}
         profile_proved = (c[4], c[6], c[7]) == (125000000, 8, 31)
         result['clock_minima_uart_counts'] = uart_counts
-        result['clock_minima_proven'] = profile_proved and not any(uart_counts.values())
+        result['clock_minima_proven'] = (profile_proved and not any(uart_counts.values())
+                                         and pc.get('pc_clock_domain') == 'CLOCK_MONOTONIC_RAW')
         if result['clock_minima_proven']:
             result['clock_minima_proof_verdict'] = 'ELIGIBLE'
         if (c[22] & 0x3c0 or any(n[8:23]) or n[24] or n[25] or

@@ -19,8 +19,12 @@ from .wire import Type, u16
 
 
 class RealClock:
+    domain = 'CLOCK_MONOTONIC_RAW'
+
     def now_us(self):
-        return time.monotonic_ns() // 1000
+        if not hasattr(time, 'CLOCK_MONOTONIC_RAW'):
+            raise ClockError('CLOCK_MONOTONIC_RAW unavailable; no slewed-clock fallback')
+        return time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) // 1000
 
     def sleep_us(self, delay):
         time.sleep(max(0, delay) / 1_000_000)
@@ -75,6 +79,7 @@ class Recorder:
         self.stopped_status_observed = False
         self.image_sha256 = None
         self.profile_flags = None
+        self.pc_clock_domain = None
         self.bootstrap_bad_frames = 0
         self.bootstrap_crc_errors = 0
         self.bootstrap_oversize_frames = 0
@@ -186,6 +191,7 @@ class Recorder:
                          'epoch_pico_us': host.timeline.epoch_pico_us if host.timeline else None},
             'stopped_status_observed': self.stopped_status_observed,
             'image_sha256': self.image_sha256, 'profile_flags': self.profile_flags,
+            'pc_clock_domain': self.pc_clock_domain,
             'required_capabilities': host.required_caps,
             'clock_proven_min_tx_us': host.proven_min_tx_us,
             'clock_proven_min_rx_us': host.proven_min_rx_us,
@@ -289,7 +295,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         io.close()
         raise
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
-    recorder.record('run_metadata', clock.now_us(), image_sha256=image_sha256,
+    recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
+    recorder.record('run_metadata', clock.now_us(), pc_clock_domain=recorder.pc_clock_domain,
+                    image_sha256=image_sha256,
                     profile_flags=profile_flags, required_capabilities=host.required_caps,
                     clock_proven_min_tx_us=host.proven_min_tx_us,
                     clock_proven_min_rx_us=host.proven_min_rx_us,
