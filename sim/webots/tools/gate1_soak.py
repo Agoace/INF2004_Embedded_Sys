@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--image-sha256', help='operator-identified flashed image SHA256')
     parser.add_argument('--profile-flags', type=lambda value: int(value, 0),
                         help='expected D1 profile flags, for example0x79 for UP')
+    parser.add_argument('--measure-io', action='store_true',
+                        help='approved measurement only: RAW I/O timestamps and clock pairs; adds host overhead')
     parser.add_argument('--duration-seconds', type=int, default=600)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
@@ -42,7 +44,8 @@ def main():
     summary = run_soak(ProbeSerial(device), args.output,
                        duration_us=args.duration_seconds * 1_000_000,
                        transport_only=args.transport_only_cap4,
-                       image_sha256=args.image_sha256, profile_flags=args.profile_flags)
+                       image_sha256=args.image_sha256, profile_flags=args.profile_flags,
+                       measure_io=args.measure_io)
     print(json.dumps(summary, indent=2))
     return {'FAIL': 1, 'INCOMPLETE': 2}[summary['verdict']]
 

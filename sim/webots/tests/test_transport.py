@@ -89,7 +89,7 @@ class ClockTests(unittest.TestCase):
         for sample in fixture['samples']:
             clock.observe(*sample)
         self.assertEqual(clock.observations, 8)
-        self.assertEqual(clock.bounds_at(fixture['arm_pc_us'], qualified=False).halfwidth, 585.5)
+        self.assertEqual(clock.bounds_at(fixture['arm_pc_us'], qualified=False).halfwidth, 583.0)
         with self.assertRaises(ClockError):
             clock.bounds_at(fixture['arm_pc_us'])
 
@@ -101,7 +101,7 @@ class ClockTests(unittest.TestCase):
             payload = struct.pack('<QII', tx, pico_rx, 0)
             host.receive(encode(Frame(Type.SYNC_REPLY, SESSION, seq, pico_tx, seq, payload)), rx)
         self.assertEqual((host.proven_min_tx_us, host.proven_min_rx_us), (334, 444))
-        self.assertEqual(host.clock.bounds_at(fixture['arm_pc_us']).halfwidth, 196.5)
+        self.assertEqual(host.clock.bounds_at(fixture['arm_pc_us']).halfwidth, 194.0)
         self.assertEqual(host.clock.MAX_HALFWIDTH_US, 250)
         normal = HostTransport(SESSION)
         self.assertEqual((normal.proven_min_tx_us, normal.proven_min_rx_us), (0, 0))
@@ -112,6 +112,52 @@ class ClockTests(unittest.TestCase):
         with self.assertRaises(ClockError):
             ClockBounds().observe(10000, 10100, 20000, 20000,
                                   proven_min_tx_us=60, proven_min_rx_us=41)
+
+    def test_attempt5_all_sync_cones_round_once_not_at_every_refresh(self):
+        fixture = json.loads((Path(__file__).parent / 'fixtures/pil_gate1_attempt5_sync.json').read_text())
+        clock = ClockBounds()
+        halves = []
+        for sample in fixture['samples']:
+            halves.append(clock.observe(*sample, proven_min_tx_us=334,
+                                        proven_min_rx_us=444).halfwidth)
+        self.assertEqual(halves, [303.5, 264, 200.5, 200.5, 200.5, 168, 168,
+                                 168.5, 168.5, 178.5, 188.5, 198.5, 208.5,
+                                 218.5, 228.5, 237, 241])
+        self.assertEqual(clock.bounds_at(fixture['sensor658_write_pc_us']).halfwidth, 242.5)
+        deadline = clock.refresh_deadline_pc_us()
+        clock.bounds_at(deadline)
+        with self.assertRaises(ClockError):
+            clock.bounds_at(deadline + 1)
+
+    def test_rate_can_change_after_last_sync_without_lying(self):
+        clock = ClockBounds()
+        for t in range(0, 8000, 1000):
+            clock.observe(t, t + 878, t + 334, t + 434,
+                          proven_min_tx_us=334, proven_min_rx_us=444)
+        # Identical past, two legal future rates: no learned constant-rate credit.
+        future = clock.bounds_at(clock.updated_pc_us + 500000)
+        self.assertLessEqual(future.lower, -50)
+        self.assertGreaterEqual(future.upper, 50)
+        self.assertGreaterEqual(future.halfwidth, 50)
+
+    def test_600_seconds_constant_then_changing_skew_is_covered(self):
+        clock = ClockBounds()
+        def offset(t):
+            return (min(t, 300000000) * 20 - max(0, t - 300000000) * 80) / 1000000
+        for n, t in enumerate(range(0, 600000001, 100000)):
+            tx_delay, rx_delay = 400 + n % 7 * 10, 500 + n % 11 * 10
+            reply_at = t + tx_delay + 100
+            received = reply_at + rx_delay
+            pico_rx = int(t + tx_delay + offset(t + tx_delay)) & 0xffffffff
+            pico_tx = int(reply_at + offset(reply_at)) & 0xffffffff
+            clock.observe(t, received, pico_rx, pico_tx,
+                          proven_min_tx_us=334, proven_min_rx_us=444)
+            if n >= 7:
+                query = received + 50000
+                bounds = clock.bounds_at(query)
+                self.assertLess(bounds.halfwidth, 250)
+                self.assertLessEqual(bounds.lower, offset(query))
+                self.assertGreaterEqual(bounds.upper, offset(query))
 
     def test_timestamp_quantization_is_separate_from_drift(self):
         clock = ClockBounds()

@@ -77,6 +77,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/serial_io.py` | Explicit Linux Debug Probe by-id selection and bounded nonblocking 921600 8N1 I/O. Import opens nothing. |
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
+| `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -181,9 +182,9 @@ No navigation command is synthesized by the transport. Skeleton capabilities
 cannot arm. Reset/new session is required after a fault; no automatic reconnect
 or rearm is implemented.
 
-SYNC uses conservative offset intervals, intersections of eight observations
-and100ppm expansion, including observation-span rounding. It never divides
-jitter by sqrt(N). The candidate250us half-width and phase limits can fail.
+SYNC intersects conservative offset constraints from all accepted observations
+with exact100ppm cones and outward query rounding. At least eight observations
+are required before ARM. It never divides jitter by sqrt(N). The candidate250us half-width and phase limits can fail.
 A refresh must arrive within1s AND before uncertainty headroom expires. No
 minimum serialization subtraction is used without a separate proven bound.
 The timeline epoch never slides when clock estimates change.
@@ -292,7 +293,7 @@ even if BOOT and corrupt bytes arrived in the same read. `decoder_total_*`
 retains all errors; `decoder_*` excludes only pre-BOOT discards. Pico counters
 are never erased. The original attempt2 RX chunk now accepts BOOTseq2 after one
 startup discard. This is an offline regression check, not a hardware result.
-The regression suite ran152 tests OK with the same three expected S3 failures;
+The regression suite ran157 tests OK with the same three expected S3 failures;
 logs are `build/wip/pil_plan/bootstrap-resync-red.log`,
 `bootstrap-resync-green.log` and `attempt2-bootstrap-replay.log`.
 
@@ -339,11 +340,41 @@ latency or statistical reduction is used.
 
 The real attempt4 fixture `sim/webots/tests/fixtures/pil_gate1_attempt4_sync.json`
 contains all eight exchanges and the attempted ARM time. Replay without minima
-has585.5us half-width and correctly refuses ARM. Replay through cap4 transport
-with334/444us gives196.5us at that same time. This is a recomputation of an old
+had585.5us half-width with the earlier recursive rounding and correctly refused
+ARM; minima gave196.5us. Exact cones now give583us without minima and194us
+with334/444us at that same time. This is a recomputation of an old
 failed attempt, not a successful new hardware run. Red/green logs are
 `build/wip/pil_plan/wire-minima-red.log`, `wire-minima-integration-red.log` and
 `wire-minima-green.log`.
+
+### Safe all-SYNC cones and RAW clock
+
+PC hardware timestamps now use `clock_gettime_ns(CLOCK_MONOTONIC_RAW)`, not
+NTP/chrony-adjusted `CLOCK_MONOTONIC`. There is no slewed-clock fallback. The
+summary and run metadata identify the clock domain. Missing, injected or non-RAW
+clock evidence cannot qualify the physical minima/transport subset. Earlier
+attempts used MONOTONIC: their replays remain conditional, not physical proof.
+
+Keep the100ppm outer rate bound. For each SYNC interval `[lo_i, hi_i]` at`t_i`,
+query bounds at`t` are `max_i(lo_i-rho*(t-t_i))` and
+`min_i(hi_i+rho*(t-t_i))`, where`rho=100/1000000`. Two exact integer-scaled
+intercepts retain all constraints in constant space. Quantization remains a
+separate outward1us; fractional drift is retained and endpoints round outward
+only at query time. An exact integer-time refresh deadline preserves the250us
+limit and1s refresh limit. Empty intersections still fail.
+
+A measured historical rate is for reporting only. Without a proved rate-change
+limit, the next instant can take either physical extreme; fitting a constant
+skew cannot safely narrow future aging. Tests include600s with20ppm skew and a
+later change to-80ppm, plus an abrupt unseen rate change after the last SYNC.
+
+Attempt5's17-SYNC replay ends at241us instead of248us. At SENSOR658's PC write,
+cones give242.5us instead of250us. This removes repeated rounding loss, not the
+physical uncertainty. A seeded600s resampling of nine active exchanges still
+found expiry at100/50/20/10ms periods; even10ms had263us maximum despite243.5us
+p99. These are conditional simulations, not evidence of future latency tails.
+**The production SYNC period remains unchanged:100ms maximum interval.** No
+250us bound,100ppm bound, wire format, baud or physical verdict is changed.
 
 The no-Webots worker sends a synthetic neutral 1 kHz source. Only timing,
 released buttons and zero encoder endpoints are valid; optical, IMU and sonar
@@ -384,6 +415,96 @@ Native first-C-entry jitter and logical apply jitter each have a candidate
 250 us upper bound. A measured miss is FAIL and stops the run. No bound is
 increased automatically. The 4 ms value is the fixed nominal schedule; actual
 source-to-apply age is reported separately and must meet the 5 ms upper bound.
+
+### Approved latency measurement, not a timing-bound change
+
+Use `gate1_soak.py --measure-io` only for an approved measurement run. The
+option adds RAW timestamps around write calls, select/read calls and successful
+receive processing. Processing time includes CRC/decode **and** transport
+validation; it is not a pure codec benchmark. Empty polls are not logged.
+The option does not change UART bytes, tty flags, traffic, the adaptive100ms
+maximum SYNC interval, the100ppm guard,250us clock limit or3/4/5ms bounds.
+Logging and clock reads add unmeasured host overhead. Compare with a separate
+uninstrumented baseline; do not attribute all new delay to the Probe.
+
+`pil/gate1_rx_timing.py` reads the stopped `PILG1RX1` block. It checks its
+bounds, canonical order, CRC, reserved fields and matching D1 identity/reason/
+first-stop trace. Native TIMER differences use modulo32-bit arithmetic.
+Allocated but unfinished rows are valid and retain unknown timestamps. A
+completed dispatch is **not** proof that a SENSOR was staged successfully.
+The combined C underflow/clean fixtures and wrapped64-entry plus16-entry tail
+fixture come from SW6 `3af60d18f05f82471a1364ad645b97a0e0ddd802`.
+They are synthetic host tests, not hardware evidence. Decoded fixture hashes:
+underflow `3b11631a8f561df600a8b1e784fedc243a7e5b3333207e9416971d482a110e04`;
+clean `e27320790310ba1ff99b446a1d3f20c541595040e75093cfbd3404814909f1b3`;
+ASCII `8701fc51749a4eaf686fa8da84d9ca0c7b7d3d233872026b40261ee6e9530a98`.
+The binary fixtures are stored as `pil_gate1_rx1_*.hex.txt`; decode with
+`bytes.fromhex()` before use. The released RX1 UP image is248320B,
+SHA256 `71cf7cb2b3bd51fbd798a6d6c7a8e3d6543c0d9fd6ca129ac5d5eba1dc248b4a`.
+A file hash is not proof that the operator installed that image.
+
+`tools/gate1_correlate.py` combines PC evidence, optional full-snaplen classic
+usbmon pcap and the complete stopped Pico CDC file. It uses only the Python
+standard library. It supports USB pcap link types189/220, both byte orders,
+and microsecond/nanosecond file timestamps. It selects the exact runtime bus,
+device and CDC bulk endpoints. It pairs reused URB IDs, matches full payload
+bytes and retains split-frame byte coverage. A USB Request Block (URB) is a
+host-controller transfer request; one URB can contain multiple USB packets.
+Missing/short/failed transfers do not create complete-frame timing. A USB
+completion is not a UART wire stamp.
+
+The binary usbmon clock is REALTIME, not RAW. The reader checks that pcap
+record timestamps match the usbmon header timestamps. RAW-bracketed REALTIME
+samples give enclosing RAW **intervals**, not fitted/interpolated point times.
+These intervals are explicitly conditional on no unobserved backward REALTIME
+step. Missing enclosing samples, observed backward samples or timestamp-domain
+mismatch leave mapping unknown. These mappings NEVER enter the Gate1 clock
+estimator or change a verdict. SENSOR PC-write-to-Pico-RX bounds use retained
+source-clock intervals with the unchanged100ppm guard, only with RAW and matching
+D1 baud/UART proof. They never subtract clock midpoints. Native RX-to-worker,
+decode, dispatch and alarm durations need no PC clock conversion.
+
+The operator must resolve the Probe bus/device again immediately before each
+capture and retain that result. Device numbers change after re-enumeration.
+The operator verified CDC bulk OUT `0x02`, IN `0x83`; notification `0x81` and
+CMSIS-DAP endpoints `0x04`/`0x85` are not UART data. Do not hard-code a previous
+device number or use the notification interval as a bulk timing bound.
+
+After authorization, use a second terminal for this **optional** capture.
+`USB_BUS` must be the resolved Probe bus; `EVIDENCE` must be an existing absolute,
+operator-owned fresh directory with mode0700. The command runs in the foreground,
+records its exact PID, then drops tcpdump to the operator UID. Stop it from the
+run terminal only after the PC and stopped Pico captures finish. Check that the
+PID still identifies this tcpdump command and this evidence path before sending
+`kill -INT`. Do not stop other captures or use a process-name kill.
+
+```sh
+sudo sh -c 'set -eu; test ! -e "$2/usb.pcap"; test ! -e "$2/usbmon.pid"; modprobe usbmon; umask 077; printf "%s\\n" "$$" > "$2/usbmon.pid"; chown "$SUDO_UID:$SUDO_GID" "$2/usbmon.pid"; exec /usr/bin/tcpdump -Z "$SUDO_USER" -i "usbmon$1" -s 0 -U -w "$2/usb.pcap"' sh "$USB_BUS" "$EVIDENCE" 2>"$EVIDENCE/usbmon.stderr"
+```
+
+If permission, module or interface access is unavailable, skip this optional
+step. Do not change permissions on all usbmon devices. A bus capture can contain
+other devices' data; keep it private and capture only the approved bus.
+Wait for tcpdump to finish and retain its packet/drop statistics. Its drops,
+short snapshots and unmatched transfers limit attribution. Do not read a pcap
+while tcpdump is still writing it.
+
+Add `--measure-io` to the approved soak command and keep the existing fresh Pico
+replug watcher, separate binary CDC capture and exact final stack-line wait.
+The RX1 image emits the block between D1 and that stack line. Example offline
+report commands, after both captures close:
+
+```sh
+python3 sim/webots/tools/gate1_correlate.py --pc "$EVIDENCE/pc-soak" \\
+  --stopped "$EVIDENCE/pico-usb.bin" --usbmon "$EVIDENCE/usb.pcap" \\
+  --usb-bus "$USB_BUS" --usb-dev "$USB_DEV" --ep-out 0x02 --ep-in 0x83 \\
+  --output "$EVIDENCE/latency.json"
+# Without usbmon: omit its path and all USB selectors. URB layer stays UNKNOWN.
+```
+
+The tool preserves the PC verdict and stopped D1 fault reason. Missing RX1 is
+INCOMPLETE diagnostic evidence, not a new transport verdict. Report generation
+exit0 means only that the JSON was written. It cannot issue physical Gate1 PASS.
 
 ### Stopped D1 evidence
 
@@ -481,7 +602,7 @@ Expected dry-run result: CLI exit0, `host_fixture_match: true`,
 software recording. Retain `events.csv`, `summary.json` and `dry-run.json`.
 A mismatch fails the host check. No hardware authorization flag is used.
 
-Validation:152 host tests OK, including seven replay checks, with the same
+Validation:157 host tests OK, including seven replay checks, with the same
 three expected S3 model failures. The recorded-soak CLI matched all chunks.
 Logs are `build/wip/pil_plan/home-preflash-host-tests.log` and
 `build/wip/pil_plan/home-dry-run-validation.log`. No serial discovery/open,

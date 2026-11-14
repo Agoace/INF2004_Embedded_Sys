@@ -253,6 +253,14 @@ class Gate1Tests(unittest.TestCase):
         self.assertEqual(hist.summary(), {'count': 100, 'p50': 50, 'p95': 95,
                                          'p99': 99, 'max': 100})
 
+    def test_real_clock_uses_raw_not_ntp_slewed_monotonic(self):
+        import time
+        from pil.gate1 import RealClock
+        with patch('pil.gate1.time.clock_gettime_ns', return_value=1234567890) as raw, \
+                patch('pil.gate1.time.monotonic_ns', side_effect=AssertionError('slewed clock')):
+            self.assertEqual(RealClock().now_us(), 1234567)
+        raw.assert_called_once_with(time.CLOCK_MONOTONIC_RAW)
+
     def test_input_reset_flushes_input_only_without_device_access(self):
         from pil.serial_io import ProbeSerial
         import termios

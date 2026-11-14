@@ -66,7 +66,10 @@ def main():
     for field, value in expected.items():
         assert result.get(field) == value, (field, result)
     assert result['verdict'] == 'INCOMPLETE' and not result['physical_gate1_pass']
-    assert result['transport_subset_qualified'] is True
+    # These declared intervals are synthetic, not measured RAW-clock captures.
+    # Check the math without inventing the physical clock-domain evidence.
+    assert result['transport_subset_qualified'] is False
+    assert result['clock_minima_proof_verdict'] == 'INCOMPLETE'
     for name, data in original.items():
         assert (root / name).read_bytes() == data, 'producer changed during test'
     report = {'scope': 'SYNTHETIC HOST ONLY; no Pico/Probe timing measurement',

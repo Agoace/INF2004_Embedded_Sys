@@ -19,8 +19,12 @@ from .wire import Type, u16
 
 
 class RealClock:
+    domain = 'CLOCK_MONOTONIC_RAW'
+
     def now_us(self):
-        return time.monotonic_ns() // 1000
+        if not hasattr(time, 'CLOCK_MONOTONIC_RAW'):
+            raise ClockError('CLOCK_MONOTONIC_RAW unavailable; no slewed-clock fallback')
+        return time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) // 1000
 
     def sleep_us(self, delay):
         time.sleep(max(0, delay) / 1_000_000)
@@ -75,6 +79,7 @@ class Recorder:
         self.stopped_status_observed = False
         self.image_sha256 = None
         self.profile_flags = None
+        self.pc_clock_domain = None
         self.bootstrap_bad_frames = 0
         self.bootstrap_crc_errors = 0
         self.bootstrap_oversize_frames = 0
@@ -186,6 +191,7 @@ class Recorder:
                          'epoch_pico_us': host.timeline.epoch_pico_us if host.timeline else None},
             'stopped_status_observed': self.stopped_status_observed,
             'image_sha256': self.image_sha256, 'profile_flags': self.profile_flags,
+            'pc_clock_domain': self.pc_clock_domain,
             'required_capabilities': host.required_caps,
             'clock_proven_min_tx_us': host.proven_min_tx_us,
             'clock_proven_min_rx_us': host.proven_min_rx_us,
@@ -221,7 +227,7 @@ class Recorder:
         return summary
 
 
-def receive_chunk(host, recorder, data, pc_us):
+def receive_chunk(host, recorder, data, pc_us, timing_clock=None):
     """Only before valid BOOT, retain/count malformed startup fragments.
 
     Boundaries are delimiters, NEVER a byte-offset search inside a failed
@@ -237,11 +243,23 @@ def receive_chunk(host, recorder, data, pc_us):
         end = len(data) if delimiter < 0 else delimiter + 1
         bootstrap = host.boot is None
         before = (host.decoder.bad_frames, host.decoder.crc_errors, host.decoder.oversize_frames)
-        host.receive(data[start:end], pc_us)
+        try:
+            host.receive(data[start:end], pc_us)
+        except TransportFault:
+            if timing_clock is not None:
+                recorder.record('transport_receive_failed_timing', timing_clock.now_us(),
+                                received_pc_us=pc_us, span_bytes=end-start,
+                                failure_layer='transport validation; raw bytes retained')
+            raise
+        processing_done = timing_clock.now_us() if timing_clock is not None else None
         delta = tuple(after - old for after, old in zip(
             (host.decoder.bad_frames, host.decoder.crc_errors, host.decoder.oversize_frames), before))
         if delta[0]:
             if not bootstrap:
+                if processing_done is not None:
+                    recorder.record('transport_receive_failed_timing', processing_done,
+                                    received_pc_us=pc_us, span_bytes=end-start,
+                                    failure_layer='CRC/codec; raw bytes retained')
                 raise GateFailure('invalid received frame')
             recorder.bootstrap_bad_frames += delta[0]
             recorder.bootstrap_crc_errors += delta[1]
@@ -250,6 +268,11 @@ def receive_chunk(host, recorder, data, pc_us):
                             crc_errors=delta[1], oversize_frames=delta[2],
                             readiness_or_lease_renewed=False)
         for event in host.drain_events():
+            if processing_done is not None and event['event'] == 'rx_complete':
+                recorder.record('transport_receive_timing', processing_done,
+                                received_pc_us=pc_us, type=int(event['type']),
+                                seq=event['seq'], session=event['session'],
+                                includes_decode_and_transport_validation=True)
             if bootstrap and event['event'] == 'rx_complete' and event['type'] != Type.BOOT:
                 recorder.record('bootstrap_frame_ignored', pc_us, frame=event)
             else:
@@ -272,7 +295,7 @@ def neutral_payload(source_us):
 
 
 def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
-             transport_only=False, image_sha256=None, profile_flags=None):
+             transport_only=False, image_sha256=None, profile_flags=None, measure_io=False):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -289,7 +312,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         io.close()
         raise
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
-    recorder.record('run_metadata', clock.now_us(), image_sha256=image_sha256,
+    recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
+    recorder.record('run_metadata', clock.now_us(), pc_clock_domain=recorder.pc_clock_domain,
+                    image_sha256=image_sha256,
                     profile_flags=profile_flags, required_capabilities=host.required_caps,
                     clock_proven_min_tx_us=host.proven_min_tx_us,
                     clock_proven_min_rx_us=host.proven_min_rx_us,
@@ -299,6 +324,43 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     active_start = None
     reason, hello_sent, armed_once = None, False, False
     next_sync = start
+    tx_bytes = rx_bytes = 0
+
+    def clock_pair():
+        # usbmon binary timestamps use REALTIME, NOT MONOTONIC_RAW. This is
+        # diagnostic only. These samples NEVER enter the live clock estimator.
+        if recorder.pc_clock_domain == 'CLOCK_MONOTONIC_RAW':
+            before = clock.now_us()
+            realtime = time.time_ns() // 1000
+            after = clock.now_us()
+            recorder.record('measurement_clock_pair', after, realtime_us=realtime,
+                            raw_before_us=before, raw_after_us=after)
+
+    def read_input():
+        nonlocal rx_bytes
+        if not measure_io:
+            data = io.read(4096)
+            return data, clock.now_us() if data else None
+        entered = clock.now_us()
+        if callable(getattr(io, 'read_timed', None)):
+            data, timing = io.read_timed(4096, clock.now_us)
+        else:
+            data = io.read(4096)
+            timing = {'select_layer': 'UNKNOWN', 'read_return_pc_us': clock.now_us()}
+        returned = timing['read_return_pc_us'] if 'read_return_pc_us' in timing else clock.now_us()
+        if data:
+            clock_pair()
+            recorder.record('io_read_timing', returned, call_enter_pc_us=entered,
+                            bytes=len(data), stream_start=rx_bytes,
+                            stream_end=rx_bytes + len(data), **timing)
+            rx_bytes += len(data)
+        return data, returned
+
+    if measure_io:
+        recorder.record('measurement_enabled', start, production_cadence_changed=False,
+                        observer_overhead_unmeasured=True,
+                        pcap_clock='CLOCK_REALTIME; mapping conditional on no backward steps')
+        clock_pair()
     try:
         if not callable(getattr(io, 'reset_input_buffer', None)):
             raise GateFailure('I/O backend lacks input-buffer reset')
@@ -313,16 +375,16 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 break
             if not armed_once and now - start > 5_000_000:
                 raise GateFailure('bootstrap timeout')
-            chunk = io.read(4096)
+            chunk, received = read_input()
             if chunk:
-                received = clock.now_us()
                 recorder.record('raw_rx', received, packet_hex=chunk.hex())
                 if now < discard_until:
                     recorder.startup_discarded_bytes += len(chunk)
                     recorder.record('startup_discard', received, packet_hex=chunk.hex(),
                                     bytes=len(chunk), used_for_bootstrap=False)
                 else:
-                    receive_chunk(host, recorder, chunk, received)
+                    receive_chunk(host, recorder, chunk, received,
+                                  timing_clock=clock if measure_io else None)
             for event in host.drain_events():
                 recorder.observe(event, host)
             now = clock.now_us()
@@ -358,11 +420,25 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                     pwm=struct.unpack_from('<hh', frame.payload))
             packet = host.peek_tx()
             if packet:
+                if measure_io:
+                    clock_pair()
+                entered = clock.now_us() if measure_io else None
                 written = io.write(packet)
                 completed = clock.now_us()
+                valid_write = type(written) is int and 0 <= written <= len(packet)
+                if measure_io and valid_write:
+                    # Retain the actual OS result even if consume_tx faults.
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
+                                    device_available=False)
+                    clock_pair()
+                    recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
+                                    bytes=written, stream_start=tx_bytes,
+                                    stream_end=tx_bytes + written)
+                    tx_bytes += written
                 host.consume_tx(written, completed)
-                recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
-                                device_available=False)
+                if not measure_io:
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
+                                    device_available=False)
             for event in host.drain_events():
                 recorder.observe(event, host)
             recorder.stream.flush()
@@ -379,10 +455,21 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             packet = host.disarm_packet(3 if reason is None else 7, clock.now_us())
             offset, deadline = 0, clock.now_us() + 5000
             for _ in range(len(packet) + 100):
+                entered = clock.now_us() if measure_io else None
                 count = io.write(packet[offset:])
+                completed = clock.now_us() if measure_io else None
                 if type(count) is not int or not 0 <= count <= len(packet)-offset:
                     raise GateFailure('invalid stop-write result')
+                stop_bytes = packet[offset:offset+count]
                 offset += count
+                if measure_io:
+                    recorder.record('raw_pc_write', completed, packet_hex=stop_bytes.hex(),
+                                    device_available=False, best_effort_stop=True)
+                    clock_pair()
+                    recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
+                                    bytes=count, stream_start=tx_bytes, stream_end=tx_bytes+count,
+                                    best_effort_stop=True)
+                    tx_bytes += count
                 recorder.record('best_effort_disarm', clock.now_us(), bytes=count,
                                 delivered=False, local_model_inhibited=True)
                 if offset == len(packet) or reason is not None or clock.now_us() >= deadline:
@@ -393,8 +480,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             if reason is None and offset == len(packet):
                 drain_end = clock.now_us() + 100_000
                 while clock.now_us() < drain_end and not recorder.stopped_status_observed:
-                    chunk = io.read(4096)
-                    received = clock.now_us()
+                    chunk, received = read_input()
                     if chunk:
                         recorder.record('raw_rx_after_disarm', received, packet_hex=chunk.hex())
                         for frame in host.decoder.feed(chunk):
