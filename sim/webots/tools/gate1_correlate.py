@@ -31,7 +31,9 @@ def main():
             stream.write('\n')
     except (OSError, ValueError) as error:
         parser.error(str(error))
-    print(json.dumps({'report': str(args.output), 'pc_verdict': report['original_pc_verdict'],
+    from pil.gate1_trial import labels
+    print(json.dumps({**labels(report.get('trial_clock_400_sync20') is True),
+                      'report': str(args.output), 'pc_verdict': report['original_pc_verdict'],
                       'URB_layer': report['urb_layer'], 'URB_reason': report['urb_reason'],
                       'sync_samples': len(report['sync']), 'RX1': report['diagnostic'],
                       'physical_gate1_pass': False}, indent=2))

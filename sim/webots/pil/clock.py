@@ -49,7 +49,12 @@ class ClockBounds:
     MAX_REFRESH_US = 1_000_000
     DRIFT_PPM = 100
 
-    def __init__(self):
+    def __init__(self, *, trial_clock_400_sync20=False):
+        if type(trial_clock_400_sync20) is not bool:
+            raise ValueError('trial mode must be an explicit boolean')
+        self.trial_clock_400_sync20 = trial_clock_400_sync20
+        if trial_clock_400_sync20:
+            self.MAX_HALFWIDTH_US = 400
         self.interval = None
         self.updated_pc_us = None
         self.pico_anchor = None
@@ -156,8 +161,11 @@ class Timeline:
         # uncertainty. Include the upper endpoint's floor-to-us quantization.
         target = self.source_target(source_us)
         phase = max(abs(first.midpoint - target), abs(last.midpoint + 1 - target))
-        if phase > 250:
-            error = ClockError("source phase error exceeds250us")
+        early_trial = (getattr(clock, 'trial_clock_400_sync20', False) and
+                       first.midpoint < target)
+        if phase > 250 or early_trial:
+            error = ClockError('TRIAL capture before midpoint target' if early_trial else
+                               'source phase error exceeds250us')
             error.capture_rejection = {
                 'source_us': source_us, 'intended_pico_us': target,
                 'capture_start_pc_us': captured_pc_us, 'capture_end_pc_us': end,
@@ -168,7 +176,8 @@ class Timeline:
                 'start_phase_us': abs(first.midpoint-target),
                 'end_phase_us': abs(last.midpoint+1-target),
                 'endpoint_quantization_us': 1,
-                'phase_us': phase, 'limit_us': 250, 'excess_us': phase-250,
+                'phase_us': phase, 'limit_us': 250, 'excess_us': max(0, phase-250),
+                'no_early_midpoint': first.midpoint >= target,
                 'uncertainty_us': max(first.halfwidth, last.halfwidth),
                 'last_sync_pc_us': clock.updated_pc_us,
                 'reason': str(error)}

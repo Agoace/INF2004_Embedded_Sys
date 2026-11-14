@@ -16,6 +16,7 @@ import time
 from .clock import ClockError, unwrap32
 from .transport import HostTransport, TransportFault
 from .wire import Type, u16
+from .gate1_trial import labels, manifest, TRIAL_LABEL
 
 
 class RealClock:
@@ -67,6 +68,7 @@ class Recorder:
         self.stream = (self.output / 'events.csv').open('x', newline='')
         self.csv = csv.writer(self.stream)
         self.attribution = None
+        self.trial_clock_400_sync20 = False
         self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
@@ -191,12 +193,16 @@ class Recorder:
 
     def finish(self, host, reason, elapsed_us):
         self.flush()
+        trial = self.trial_clock_400_sync20
+        completed = (trial and not reason and elapsed_us >= 600_000_000 and
+                     self.stopped_status_observed)
         summary = {
-            'schema': 1, 'verdict': 'FAIL' if reason else 'INCOMPLETE',
+            **labels(trial), 'sync_max_period_us': 20000 if trial else 100000,
+            'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
             'candidate_bounds_us': {'pipeline': 4000, 'expiry': 5000,
-                                    'endpoint_available': 3000, 'clock_halfwidth': 250,
+                                    'endpoint_available': 3000, 'clock_halfwidth': 400 if trial else 250,
                                     'source_phase': 250},
             'metrics_us': {name: hist.summary() for name, hist in self.metrics.items()},
             'observed_offset_drift_interval': self.drift,
@@ -311,7 +317,8 @@ def neutral_payload(source_us):
 
 
 def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
-             transport_only=False, image_sha256=None, profile_flags=None, measure_io=False):
+             transport_only=False, image_sha256=None, profile_flags=None, measure_io=False,
+             trial_clock_400_sync20=False):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -319,17 +326,27 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     """
     if type(duration_us) is not int or not 1000 <= duration_us <= 1_700_000_000:
         raise ValueError('soak duration must be1ms..1700s')
+    if type(trial_clock_400_sync20) is not bool:
+        raise ValueError('trial mode must be an explicit boolean')
+    if trial_clock_400_sync20 and not transport_only:
+        raise ValueError('TRIAL requires explicit transport-only cap4')
     clock = clock or RealClock()
     host = HostTransport(session or secrets.randbelow(0xffffffff) + 1,
-                         transport_only=transport_only)
+                         transport_only=transport_only,
+                         trial_clock_400_sync20=trial_clock_400_sync20)
     try:
         recorder = Recorder(output)
     except BaseException:
         io.close()
         raise
+    recorder.trial_clock_400_sync20 = trial_clock_400_sync20
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
-    recorder.record('run_metadata', clock.now_us(), pc_clock_domain=recorder.pc_clock_domain,
+    recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
+                    clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
+                    sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
+                    source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
+                    pc_clock_domain=recorder.pc_clock_domain,
                     image_sha256=image_sha256,
                     profile_flags=profile_flags, required_capabilities=host.required_caps,
                     clock_proven_min_tx_us=host.proven_min_tx_us,
@@ -391,6 +408,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         if measure_io:
             from .gate1_attribution import AttributionRing
             attribution = AttributionRing(clock)
+            attribution.qualification = TRIAL_LABEL if trial_clock_400_sync20 else None
             recorder.attribution = attribution
             attribution.install()
             recorder.record('measurement_enabled', start, production_cadence_changed=False,
@@ -439,7 +457,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                     next_sync = now + 1000
                 else:
                     headroom = host.clock.refresh_deadline_pc_us() - now
-                    next_sync = now + min(100_000, max(50, headroom // 2))
+                    next_sync = now + min(20_000 if trial_clock_400_sync20 else 100_000,
+                                          max(50, headroom // 2))
             if host.state == 'NEGOTIATED' and host.clock.observations >= 8:
                 host.arm(now)
                 armed_once = True
@@ -560,7 +579,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     # serialized only AFTER local inhibit, bounded DISARM attempt and close.
     rejection = getattr(host, 'capture_rejection', None)
     if rejection is not None:
-        rejection = dict(rejection, pc_clock_domain=recorder.pc_clock_domain,
+        rejection = dict(rejection, **labels(trial_clock_400_sync20),
+                         pc_clock_domain=recorder.pc_clock_domain,
                          serial_closed_before_log=serial_closed)
         (recorder.output/'capture-rejected.json').write_text(json.dumps(rejection, indent=2)+'\n')
         recorder.record('source_capture_rejected', rejection['capture_end_pc_us'], **rejection)
@@ -569,6 +589,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         recorder.flush()
         recorder.attribution = None
         attribution.finish(recorder.output, serial_closed=serial_closed)
+    if trial_clock_400_sync20:
+        (recorder.output/'trial-manifest.json').write_text(json.dumps(manifest(), indent=2)+'\n')
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
     for event in host.drain_events():
         recorder.record('final_transport_event', clock.now_us(), record=event)

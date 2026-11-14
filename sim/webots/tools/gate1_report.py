@@ -20,18 +20,24 @@ def main():
     args = parser.parse_args()
     if args.output.exists():
         parser.error('select a new summary file; do not overwrite evidence')
-    pc = None
+    from pil.gate1_trial import labels
+    pc, hint = None, {}
     try:
+        summary_path = args.pc_run/'summary.json'
+        if summary_path.is_file() and summary_path.stat().st_size <= 1_000_000:
+            hint = json.loads(summary_path.read_text())
         pc = load_pc_evidence(args.pc_run)
         if not args.usb_dump.is_file() or args.usb_dump.stat().st_size > 4_000_000:
             raise DiagnosticError('USB input must be a regular file within4MB')
         result = evaluate(decode_dump(args.usb_dump.read_bytes()), pc)
     except (DiagnosticError, OSError, ValueError, KeyError, TypeError, IndexError, csv.Error) as error:
-        failed = pc is not None and pc.get('verdict') == 'FAIL'
-        result = {'verdict': 'FAIL' if failed else 'INCOMPLETE', 'physical_gate1_pass': False,
+        retained = pc if pc is not None else hint
+        failed = retained.get('verdict') == 'FAIL'
+        result = {**labels(retained.get('trial_clock_400_sync20') is True),
+                  'verdict': 'FAIL' if failed else 'INCOMPLETE', 'physical_gate1_pass': False,
                   'incomplete_reason': str(error)}
         if failed:
-            result['failure'] = pc.get('failure', 'PC run failed')
+            result['failure'] = retained.get('failure', 'PC run failed')
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open('x') as stream:
         stream.write(json.dumps(result, indent=2, sort_keys=True) + '\n')
