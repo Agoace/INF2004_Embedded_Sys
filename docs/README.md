@@ -88,7 +88,8 @@ not current acceptance reports. Local course originals are not public records.
 - [PIL_GATE1_CLOCK_PROOF.md](simulation/PIL_GATE1_CLOCK_PROOF.md) — conditional334/444us directional serialization floors, timestamp causality, receiver-derived Probe-rate ceiling and required zero-error evidence.
 - [PIL_GATE1_RX_TIMING.md](simulation/PIL_GATE1_RX_TIMING.md) — versioned stopped RX/worker/alarm timing block, bounded pre/post-fault capture, schema and diagnostic image evidence.
 - [PIL_GATE1_PRIORITY.md](simulation/PIL_GATE1_PRIORITY.md) — approved Gate1-only priority9 worker, task inventory, production ready-queue regression and historical image evidence.
-- [PIL_GATE1_IRQ_WAKE.md](simulation/PIL_GATE1_IRQ_WAKE.md) — approved Gate1 IRQ wakes after mask restoration, production dispatch-condition regression, short robot audit and current image evidence.
+- [PIL_GATE1_IRQ_WAKE.md](simulation/PIL_GATE1_IRQ_WAKE.md) — approved Gate1 IRQ wakes after mask restoration, production dispatch-condition regression, short robot audit and historical image evidence.
+- [PIL_GATE1_RESET_CAUSE.md](simulation/PIL_GATE1_RESET_CAUSE.md) — approved early raw reset-register snapshot, versioned USB boot row, capture limits and current image evidence.
 - [PIL_GATE1_DIAGNOSTICS.md](simulation/PIL_GATE1_DIAGNOSTICS.md) — approved separate stopped-USB D1 records, exact coverage, raw extrema and one-time quantization.
 - [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.

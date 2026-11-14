@@ -1,6 +1,26 @@
 #include "pil_gate1_dump.h"
+#include "pil_gate1_reset.h"
 #include "pil_wire.h"
 #include <string.h>
+
+void pil_gate1_reset_format(const pil_gate1_reset_t *reset, uint32_t nonce,
+                            uint8_t out[PIL_GATE1_RESET_LINE])
+{
+    static const char prefix[] = "[PILG1RESET1 ";
+    static const char hex[] = "0123456789abcdef";
+    unsigned int at = sizeof(prefix) - 1u;
+    memcpy(out, prefix, at);
+    for (unsigned int i = 0u; i < 12u; ++i) {
+        const uint32_t word = i == 0u ? nonce : i == 1u ? 0u :
+            i == 2u ? reset->reason : i == 3u ? reset->chip_reset :
+            reset->scratch[i - 4u];
+        if (i != 0u) { out[at++] = ' '; }
+        for (unsigned int digit = 0u; digit < 8u; ++digit) {
+            out[at++] = (uint8_t)hex[(word >> (28u - digit * 4u)) & 15u];
+        }
+    }
+    out[at++] = ']'; out[at] = '\n';
+}
 
 static bool shape(const pil_gate1_record_t *r)
 {

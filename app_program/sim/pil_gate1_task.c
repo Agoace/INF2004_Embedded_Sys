@@ -11,11 +11,13 @@
 #include "pil_gate1_dump.h"
 #include "pil_gate1_rxlog.h"
 #include "pil_gate1_uart_hw.h"
+#include "pil_gate1_reset.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id_hw.h"
 #include "../platform/app_startup.h"
 
-#if !APP_SIM_GATE1 || !APP_SIM || TM_WIFI_CYW43 || TM_NET_LWIP || TM_MQTT
+#if !APP_SIM_GATE1 || !APP_SIM || TM_WIFI_CYW43 || TM_NET_LWIP || TM_MQTT \
+    || TM_CONSOLE_UART
 #error Gate1 runtime requires its isolated radio-free SIM image
 #endif
 
@@ -34,6 +36,9 @@ static struct {
     uint32_t tx_offset, demand, last_boot, freeze_time;
     uint32_t dump_index, dump_chain;
     ID worker;
+    pil_gate1_reset_t reset;
+    uint8_t reset_line[PIL_GATE1_RESET_LINE];
+    bool reset_sent;
     bool initialized, live, final_sent, dump_complete;
 } g;
 static uint64_t worker_stack[256];
@@ -281,6 +286,15 @@ static void dump_one(void)
 }
 static void service(void)
 {
+    if (!g.reset_sent && tm_usb_state() == 3u) {
+        /* UP admission and append are indivisible; no wait or UART mirror. */
+        UINT irq; DI(irq);
+        if (tm_usb_pending() <= 512u) {
+            tm_snd_dat(g.reset_line, (INT)sizeof(g.reset_line));
+            g.reset_sent = true;
+        }
+        EI(irq);
+    }
     const uint32_t start = drv_time_us();
     for (unsigned int i = 0u; i < 8u; ++i) {
         pil_frame_t incoming, reply;
@@ -379,11 +393,13 @@ static void worker(INT stacd, void *exinf)
 extern INT __real_usermain(void);
 INT __wrap_usermain(void)
 {
+    pil_gate1_reset_snapshot(&g.reset);
     uint32_t nonce = 0u;
     if (drv_time_init() < E_OK || !boot_id_hw_generate(&nonce)) {
         tm_printf((UB *)"[PILG1] no boot identity/time; inhibited\n");
         return __real_usermain();
     }
+    pil_gate1_reset_format(&g.reset, nonce, g.reset_line);
     pil_gate1_session_init(&g.session, nonce, real_clock, NULL);
     g.session.fault_observer = pil_gate1_rxlog_fault;
     g.session.fault_context = &g.rxlog;

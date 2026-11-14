@@ -119,7 +119,10 @@ and do not have this lost local request. The ADC template remains untouched.
 TinyUSB internals were not audited line by line. This audit does not attribute
 the robot's vehicle latency to the Gate1 defect. No robot/template/kernel edits.
 
-## Image and operator handoff
+## Historical image and operator handoff
+
+These are the IRQ-wake checkpoint artifacts. The current image also adds the
+[reset-cause boot row](PIL_GATE1_RESET_CAUSE.md); use the current build handoff.
 
 File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2`,248320B.
 UF2 SHA256: `772d4e433242329264a327c0d24799ec89409b83ac7ce0af16041b8248a5907a`.
