@@ -78,6 +78,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
 | `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
+| `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -448,7 +449,10 @@ usbmon pcap and the complete stopped Pico CDC file. It uses only the Python
 standard library. It supports USB pcap link types189/220, both byte orders,
 and microsecond/nanosecond file timestamps. It selects the exact runtime bus,
 device and CDC bulk endpoints. It pairs reused URB IDs, matches full payload
-bytes and retains split-frame byte coverage. A USB Request Block (URB) is a
+bytes and retains split-frame byte coverage. It can combine short full-payload
+URBs to find a unique16-byte-or-longer association. Pending association storage
+is limited to64 URBs/4096 bytes; ambiguity stays unknown. This is offline byte
+association, not live UART resynchronization. A USB Request Block (URB) is a
 host-controller transfer request; one URB can contain multiple USB packets.
 Missing/short/failed transfers do not create complete-frame timing. A USB
 completion is not a UART wire stamp.
@@ -472,14 +476,17 @@ device number or use the notification interval as a bulk timing bound.
 
 After authorization, use a second terminal for this **optional** capture.
 `USB_BUS` must be the resolved Probe bus; `EVIDENCE` must be an existing absolute,
-operator-owned fresh directory with mode0700. The command runs in the foreground,
-records its exact PID, then drops tcpdump to the operator UID. Stop it from the
+operator-owned fresh directory with mode0700. The wrapper runs in the foreground,
+records its exact PID, then drops tcpdump to the operator UID. It creates and
+changes ownership of `usbmon.stderr` before redirecting stderr, including when
+called from a sudo shell. Do not redirect stderr outside the wrapper or reuse
+an existing output. It requires the original non-root sudo identity. Stop it from the
 run terminal only after the PC and stopped Pico captures finish. Check that the
 PID still identifies this tcpdump command and this evidence path before sending
 `kill -INT`. Do not stop other captures or use a process-name kill.
 
 ```sh
-sudo sh -c 'set -eu; test ! -e "$2/usb.pcap"; test ! -e "$2/usbmon.pid"; modprobe usbmon; umask 077; printf "%s\\n" "$$" > "$2/usbmon.pid"; chown "$SUDO_UID:$SUDO_GID" "$2/usbmon.pid"; exec /usr/bin/tcpdump -Z "$SUDO_USER" -i "usbmon$1" -s 0 -U -w "$2/usb.pcap"' sh "$USB_BUS" "$EVIDENCE" 2>"$EVIDENCE/usbmon.stderr"
+sudo bash sim/webots/tools/gate1_usbmon.sh "$USB_BUS" "$EVIDENCE"
 ```
 
 If permission, module or interface access is unavailable, skip this optional
@@ -501,6 +508,15 @@ python3 sim/webots/tools/gate1_correlate.py --pc "$EVIDENCE/pc-soak" \\
   --output "$EVIDENCE/latency.json"
 # Without usbmon: omit its path and all USB selectors. URB layer stays UNKNOWN.
 ```
+
+The attempt6 regression fixture `pil_gate1_attempt6_usb_rx.json` retains only
+selected Probe payloads, PC RX bytes, clock brackets and the stopped stack line.
+After65 discarded USB prefix bytes, the fresh chunks were1–15 bytes each. The
+old single-URB16-byte association threshold never recovered them. Aggregation
+now recovers all13 SYNC completions without changing the capture. The unchanged
+stack line uses CRLF; the reader accepts LF or CRLF for that line only. RX1 rows
+still require their exact LF envelope. These reader fixes do not change the
+original underflow FAIL or turn close-time USB cancellations into UART errors.
 
 The tool preserves the PC verdict and stopped D1 fault reason. Missing RX1 is
 INCOMPLETE diagnostic evidence, not a new transport verdict. Report generation
