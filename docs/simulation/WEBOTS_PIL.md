@@ -80,6 +80,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
 | `pil/gate1_attribution.py` | Optional bounded numeric timing tail. Sleep/wake, loop stages, GC callbacks and CSV serialization/flush stamps. Saved after the serial stop/close attempt. |
+| `pil/gate1_log.py` | Bounded immutable evidence snapshots; one FIFO writer owns JSON/hex/CSV/file work. Overflow inhibits/fails. Stop/fault evidence has reserved storage and close acknowledgement. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -452,8 +453,29 @@ checks and before read/parse/SYNC work. It validates and queues the capture
 before a newer SYNC can change the clock timestamp. RX faults can still cancel
 that queue before write; another expiry check follows RX. No source slot is
 caught up or skipped. The target, epoch,50us sleep and250us phase limit do not
-change. Logging is still synchronous. Test C1, C2 and queued logging in separate
+change. C2 alone keeps synchronous logging. Test C1, C2 and C3 in separate
 operator trials; do not combine them into a single comparison.
+
+C3 moves JSON/RAW-byte hex/CSV serialization and file flush to a writer thread.
+The main thread retains safety checks, metric updates and immutable typed
+snapshots. Its single-producer deque is limited to8192 snapshots, including
+flush requests. It never waits on queue capacity, a queue lock or the writer.
+Empty flush requests are coalesced. The writer yields after four snapshots;
+this is not a scheduling-priority change or a hard wake-time guarantee. Python
+threads still share the GIL, and snapshot copying still costs main-thread time.
+
+A full queue or writer error fails the run. The first rejected submission is
+retained separately; up to4096 stop snapshots and one capture-rejection record
+have reserved storage. Reserved overflow is explicit failure, never silent
+success. After inhibit, the bounded DISARM and serial close attempts run before
+waiting for the writer. FIFO order includes the reserved tail. The post-stop
+join is limited to5s. `logger-status.json` and the summary declare queue/write
+errors, reserved overflow and flush/close acknowledgement. A timeout or writer
+error cannot yield successful evidence closure. The numeric timing tail exports
+only after writer quiescence; otherwise its missing export is explicit.
+The writer does not open a device, change GC, change source targets or relax any
+timing bound. A close acknowledgement refers to evidence files, NOT delivery
+of DISARM to the Pico.
 
 `pil/gate1_rx_timing.py` reads the stopped `PILG1RX1` block. It checks its
 bounds, canonical order, CRC, reserved fields and matching D1 identity/reason/
