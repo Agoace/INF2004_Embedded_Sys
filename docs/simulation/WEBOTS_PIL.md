@@ -79,6 +79,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
 | `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
+| `pil/gate1_attribution.py` | Optional bounded numeric timing tail. Sleep/wake, loop stages, GC callbacks and CSV serialization/flush stamps. Saved after the serial stop/close attempt. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -425,8 +426,27 @@ receive processing. Processing time includes CRC/decode **and** transport
 validation; it is not a pure codec benchmark. Empty polls are not logged.
 The option does not change UART bytes, tty flags, traffic, the adaptive100ms
 maximum SYNC interval, the100ppm guard,250us clock limit or3/4/5ms bounds.
-Logging and clock reads add unmeasured host overhead. Compare with a separate
+Logging and clock reads add host overhead. Compare with a separate
 uninstrumented baseline; do not attribute all new delay to the Probe.
+With `--measure-io`, C1 also retains a65536-row numeric tail in memory, with loop
+IDs and RAW stamps for sleep entry/wake, read/receive, event drain, SYNC/tick,
+capture, GC start/stop, CSV serialization and flush. It does not disable GC.
+`attribution.csv` and `attribution.json` are saved after the serial stop/close
+attempt. Metadata declares overwritten tail rows, nested callbacks not recorded
+and the measured internal array-write bracket. That bracket excludes the first
+clock call and counter maintenance; it is NOT the full observer cost or a hard
+bound. Report whole-call microbenchmarks separately. The bounded tail is not
+complete600s timing evidence.
+
+A rejected capture retains its original computed start/end phase, exact excess,
+clock intervals and limit250 in `capture-rejected.json` and a
+`source_capture_rejected` event. These are written only after local inhibit,
+the bounded DISARM attempt and serial close attempt. A failed close is declared,
+not reported as success. An unqualified clock gives unknown phase, not an
+invented number. Rejection does not queue a SENSOR or advance the source slot.
+C1 changes measurement only: RX-first order, synchronous logging,50us sleep,
+all gate values and stop behavior remain. Capture-first and queued logging need
+separate changes and separate operator trials.
 
 `pil/gate1_rx_timing.py` reads the stopped `PILG1RX1` block. It checks its
 bounds, canonical order, CRC, reserved fields and matching D1 identity/reason/
