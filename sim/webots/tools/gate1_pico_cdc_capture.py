@@ -45,8 +45,12 @@ def main():
     p.add_argument('--duration-seconds',type=int,default=700)
     a=p.parse_args()
     if not a.hardware_authorized:p.error('operator permission required; no device opened')
-    if a.device.parent!=Path('/dev/serial/by-id')or not a.device.name.startswith('usb-Raspberry_Pi_Pico_'):
-        p.error('exact Pico CDC by-id required; Debug Probe/UART forbidden')
+    name=a.device.name
+    mtk3='usb-micro_T-Kernel_Forum_MTK3_Thread-Metric_RP2040_MTK3PICO-if00'
+    forbidden=any(token in name.casefold()for token in ('debug_probe','cmsis-dap'))
+    if (a.device.parent!=Path('/dev/serial/by-id')or forbidden or
+            not (name==mtk3 or name.startswith('usb-Raspberry_Pi_Pico_'))):
+        p.error('exact MTK3PICO/Pico CDC by-id required; Debug Probe/CMSIS-DAP/UART forbidden')
     if not 1<=a.duration_seconds<=700:p.error('duration1..700 seconds')
     if a.output.exists():p.error('fresh output directory required')
     print('PICO_CDC_CAPTURE_WATCH_READY; RX/reopen only; TRIAL / NOT GATE 1 PASS',flush=True)

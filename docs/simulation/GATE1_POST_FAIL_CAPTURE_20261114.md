@@ -33,8 +33,11 @@ python3 sim/webots/tools/gate1_pico_cdc_capture.py \
   --output "$EVIDENCE/pico-cdc" --duration-seconds 700
 ```
 
-`PICO_BY_ID` must be the operator-selected exact `/dev/serial/by-id/usb-Raspberry_Pi_Pico_*`
-path, NOT the Debug Probe. The tool opens RX-only/nonblocking, applies the same
+`PICO_BY_ID` must be the operator-selected exact
+`/dev/serial/by-id/usb-micro_T-Kernel_Forum_MTK3_Thread-Metric_RP2040_MTK3PICO-if00`
+path for the MTK3 image (VID:PID2e8a:000a, serial MTK3PICO). The legacy
+`/dev/serial/by-id/usb-Raspberry_Pi_Pico_*` names remain supported. Debug Probe
+and all CMSIS-DAP names are rejected, including names with a Pico prefix. The tool opens RX-only/nonblocking, applies the same
 CDC line settings as the prior reader, and never calls write. It prints
 PICO_USB_CAPTURE_READY only after opening. On HUP/error it closes and watches
 the SAME by-id identity for re-enumeration. There are at most16 segments,
