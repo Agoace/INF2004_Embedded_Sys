@@ -444,9 +444,16 @@ clock intervals and limit250 in `capture-rejected.json` and a
 the bounded DISARM attempt and serial close attempt. A failed close is declared,
 not reported as success. An unqualified clock gives unknown phase, not an
 invented number. Rejection does not queue a SENSOR or advance the source slot.
-C1 changes measurement only: RX-first order, synchronous logging,50us sleep,
-all gate values and stop behavior remain. Capture-first and queued logging need
-separate changes and separate operator trials.
+The C1 baseline (`005db04`) changes measurement only: RX-first order,
+synchronous logging,50us sleep and all gate values remain.
+
+C2 moves due capture to the start of each loop, after local inhibit/expiry
+checks and before read/parse/SYNC work. It validates and queues the capture
+before a newer SYNC can change the clock timestamp. RX faults can still cancel
+that queue before write; another expiry check follows RX. No source slot is
+caught up or skipped. The target, epoch,50us sleep and250us phase limit do not
+change. Logging is still synchronous. Test C1, C2 and queued logging in separate
+operator trials; do not combine them into a single comparison.
 
 `pil/gate1_rx_timing.py` reads the stopped `PILG1RX1` block. It checks its
 bounds, canonical order, CRC, reserved fields and matching D1 identity/reason/
