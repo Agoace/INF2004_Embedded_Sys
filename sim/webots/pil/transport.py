@@ -22,7 +22,8 @@ class HostTransport:
     EVENT_LIMIT = 1024
     MAX_RX_CHUNK = 4096
 
-    def __init__(self, session, *, clock=None, transport_only=False):
+    def __init__(self, session, *, clock=None, transport_only=False,
+                 trial_clock_400_sync20=False):
         if type(session) is not int or not 1 <= session <= 0xFFFFFFFF:
             raise ValueError("nonzero uint32 host session required")
         if type(transport_only) is not bool:
@@ -30,7 +31,13 @@ class HostTransport:
         self.required_caps = 4 if transport_only else CAPABILITIES
         self.proven_min_tx_us = GATE1_PROVEN_MIN_TX_US if transport_only else 0
         self.proven_min_rx_us = GATE1_PROVEN_MIN_RX_US if transport_only else 0
-        self.session, self.clock = session, clock if clock is not None else ClockBounds()
+        if type(trial_clock_400_sync20) is not bool:
+            raise ValueError('trial mode must be an explicit boolean')
+        self.session = session
+        self.clock = clock if clock is not None else ClockBounds(
+            trial_clock_400_sync20=trial_clock_400_sync20)
+        if trial_clock_400_sync20 and not getattr(self.clock, 'trial_clock_400_sync20', False):
+            raise ValueError('trial transport requires explicitly trial-qualified clock')
         self.decoder = StreamDecoder()
         self.state, self.failure = "NEW", None
         self.boot, self.hello_frame, self.ack_frame, self.timeline = None, None, None, None
@@ -151,8 +158,8 @@ class HostTransport:
         try:
             phase, uncertainty = self.timeline.validate_capture(
                 source_us, captured_pc_us, self.clock, end)
-            lower = self.clock.pico_range(captured_pc_us).lower
-            upper = self.clock.pico_range(end).upper + 1
+            first, last = self.clock.pico_range(captured_pc_us), self.clock.pico_range(end)
+            lower, upper = first.lower, last.upper + 1
             frame = self._queue(Type.SENSOR, payload, end,
                                 self.applied_output, source_us)
         except (ClockError, ProtocolError) as error:
@@ -169,7 +176,9 @@ class HostTransport:
         self.last_sensor_sent = frame.sequence
         self._record("source_capture", source_us=source_us, pc_us=captured_pc_us,
                      capture_end_pc_us=end, source_lower_pico_us=lower,
-                     source_upper_pico_us=upper, phase_us=phase, uncertainty_us=uncertainty)
+                     source_upper_pico_us=upper, phase_us=phase, uncertainty_us=uncertainty,
+                     start_midpoint_error_us=first.midpoint-self.timeline.source_target(source_us),
+                     no_early_midpoint=first.midpoint >= self.timeline.source_target(source_us))
         return frame
 
     def peek_tx(self, maximum=130):

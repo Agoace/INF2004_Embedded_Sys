@@ -80,6 +80,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |
 | `pil/gate1_attribution.py` | Optional bounded numeric timing tail. Sleep/wake, loop stages, GC callbacks and CSV serialization/flush stamps. Saved after the serial stop/close attempt. |
+| `pil/gate1_trial.py` | Explicit D-TRIAL metadata/manifest only. Clock400us/SYNC20ms is opt-in; default clock/phase and native acceptance are not redefined. |
 | `tools/check_d1_interop.py` | Host-compiled real C D1 producer and independent PC age-bound checks, using a synthetic fixture only. |
 | `pil/gate1_replay.py`, `tools/gate1_dry_run.py` | No-device recorded-byte/timestamp replay through the real no-Webots soak worker. |
 | `pil/scene.py` | Convex planar surfaces, oriented boxes, spatial broadphase and immutable first-hit snapshots. |
@@ -417,6 +418,16 @@ Native first-C-entry jitter and logical apply jitter each have a candidate
 250 us upper bound. A measured miss is FAIL and stops the run. No bound is
 increased automatically. The 4 ms value is the fixed nominal schedule; actual
 source-to-apply age is reported separately and must meet the 5 ms upper bound.
+
+### Operator D-TRIAL: opt-in clock400us / SYNC20ms
+
+See the [2026-11-14 operator decision](GATE1_D_TRIAL_20261114.md).
+`--trial-clock-400-sync20` explicitly selects **TRIAL / NOT GATE 1 PASS** on the
+C1 measurement baseline only, not C2/C3. Defaults remain250us/100ms. Source
+phase250, native jitter250, exact upper/lower D1 age checks and3/4/5ms stay.
+All trial callers must reject capture before the estimated midpoint target.
+Keep the trial manifest with external binary captures. Trial completion cannot
+be promoted to standard transport qualification or physical acceptance.
 
 ### Approved latency measurement, not a timing-bound change
 

@@ -20,6 +20,7 @@ class AttributionRing:
         self.cost_count = self.cost_sum = self.cost_max = self.nested = 0
         self.writing = False
         self.installed = False
+        self.qualification = None
 
     def mark(self, kind, loop=None, value=0):
         if self.writing:
@@ -60,11 +61,13 @@ class AttributionRing:
         self.detach()
         with (directory/'attribution.csv').open('x', newline='') as stream:
             writer = csv.writer(stream)
-            writer.writerow(('serial', 'kind', 'loop', 'pc_us', 'value'))
+            writer.writerow(('serial', 'kind', 'loop', 'pc_us', 'value') +
+                            (('qualification',) if self.qualification else ()))
             for serial in range(max(0, self.total-self.capacity), self.total):
                 pos = (serial % self.capacity)*5
                 row = self.data[pos:pos+5]
-                writer.writerow((row[0], self.KINDS[row[1]], row[2], row[3], row[4]))
+                writer.writerow((row[0], self.KINDS[row[1]], row[2], row[3], row[4]) +
+                                ((self.qualification,) if self.qualification else ()))
         meta = {'schema': 1, 'pc_clock_domain': getattr(self.clock, 'domain', 'INJECTED_TEST_CLOCK'),
                 'scope': 'diagnostic tail only; not full-run evidence or safety credit',
                 'capacity_rows': self.capacity, 'total_rows': self.total,
@@ -73,4 +76,7 @@ class AttributionRing:
                 'observer_cost': {'sample_count': self.cost_count,
                     'array_bracket_sum_us': self.cost_sum, 'array_bracket_max_us': self.cost_max,
                     'scope': 'RAW/us-quantized internal array bracket; excludes first clock call and cost counters; whole-call benchmark required'}}
+        if self.qualification:
+            meta.update(qualification=self.qualification, trial_clock_400_sync20=True,
+                        physical_gate1_pass=False)
         (directory/'attribution.json').write_text(json.dumps(meta, indent=2)+'\n')

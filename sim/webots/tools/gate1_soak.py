@@ -21,6 +21,8 @@ def main():
     parser.add_argument('--image-sha256', help='operator-identified flashed image SHA256')
     parser.add_argument('--profile-flags', type=lambda value: int(value, 0),
                         help='expected D1 profile flags, for example0x79 for UP')
+    parser.add_argument('--trial-clock-400-sync20', action='store_true',
+                        help='operator D-TRIAL: clock400us/SYNC max20ms; NOT GATE 1 PASS; cap4 only')
     parser.add_argument('--measure-io', action='store_true',
                         help='approved measurement only: RAW I/O timestamps and clock pairs; adds host overhead')
     parser.add_argument('--duration-seconds', type=int, default=600)
@@ -28,6 +30,8 @@ def main():
     args = parser.parse_args()
     if not args.hardware_authorized:
         parser.error('no hardware access: --hardware-authorized requires operator permission')
+    if args.trial_clock_400_sync20 and not args.transport_only_cap4:
+        parser.error('TRIAL requires --transport-only-cap4; NOT GATE 1 PASS')
     if not 1 <= args.duration_seconds <= 1700:
         parser.error('duration must be1..1700seconds')
     if args.image_sha256 is not None and (len(args.image_sha256) != 64 or
@@ -45,9 +49,10 @@ def main():
                        duration_us=args.duration_seconds * 1_000_000,
                        transport_only=args.transport_only_cap4,
                        image_sha256=args.image_sha256, profile_flags=args.profile_flags,
-                       measure_io=args.measure_io)
+                       measure_io=args.measure_io,
+                       trial_clock_400_sync20=args.trial_clock_400_sync20)
     print(json.dumps(summary, indent=2))
-    return {'FAIL': 1, 'INCOMPLETE': 2}[summary['verdict']]
+    return {'FAIL': 1, 'INCOMPLETE': 2, 'TRIAL_COMPLETE': 2}[summary['verdict']]
 
 
 if __name__ == '__main__':

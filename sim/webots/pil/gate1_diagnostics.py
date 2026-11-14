@@ -202,7 +202,11 @@ def _coverage(dump):
 
 def evaluate(dump, pc):
     """Combine matching all-frame evidence. A clean transport subset is not Gate1 PASS."""
-    result = {'verdict': 'INCOMPLETE', 'physical_gate1_pass': False,
+    from .gate1_trial import labels
+    trial = pc.get('trial_clock_400_sync20') is True
+    result = {**labels(trial), 'clock_halfwidth_limit_us': 400 if trial else 250,
+              'sync_max_period_us': 20000 if trial else 100000,
+              'verdict': 'INCOMPLETE', 'physical_gate1_pass': False,
               'clock_minima_proven': False, 'clock_minima_proof_verdict': 'INCOMPLETE',
               'transport_subset_qualified': False,
               'device_availability_percentiles': None, 'device_apply_percentiles': None,
@@ -312,6 +316,13 @@ def evaluate(dump, pc):
             result['incomplete_reason'] = 'transport subset only; hardware campaigns not closed'
     except (DiagnosticError, KeyError, TypeError, ValueError) as error:
         result['incomplete_reason'] = str(error)
+    if trial:
+        result['trial_transport_subset_qualified'] = (
+            result.get('transport_subset_qualified', False) and result['verdict'] != 'FAIL')
+        result['transport_subset_qualified'] = False
+        if result['trial_transport_subset_qualified'] and result['verdict'] != 'FAIL':
+            result['verdict'] = 'TRIAL_COMPLETE'
+        result['scope'] = 'TRIAL / NOT GATE 1 PASS; standard clock qualification not established'
     return result
 
 
@@ -323,12 +334,36 @@ def load_pc_evidence(directory):
     if (directory / 'summary.json').stat().st_size > 1_000_000:
         raise DiagnosticError('PC summary exceeds1MB')
     summary = json.loads((directory / 'summary.json').read_text())
+    trial = summary.get('trial_clock_400_sync20') is True
+    recorded = summary.get('candidate_bounds_us', {})
+    if recorded.get('clock_halfwidth', 400 if trial else 250) != (400 if trial else 250):
+        raise DiagnosticError('clock bound/mode mismatch; TRIAL requires explicit identification')
+    if trial and (any(recorded.get(key) != value for key, value in
+                         (('source_phase', 250), ('endpoint_available', 3000),
+                          ('pipeline', 4000), ('expiry', 5000))) or
+                  summary.get('qualification') != 'TRIAL / NOT GATE 1 PASS' or
+                  summary.get('verdict') not in ('FAIL', 'INCOMPLETE', 'TRIAL_COMPLETE') or
+                  summary.get('candidate_bounds_us', {}).get('clock_halfwidth') != 400 or
+                  summary.get('sync_max_period_us') != 20000):
+        raise DiagnosticError('TRIAL metadata/qualification mismatch; NOT GATE 1 PASS')
     sources, active, active_prefix = [], 0, True
     capture_count, pending_capture, limits_verified = 0, None, True
+    trial_metadata_verified = not trial
     with (directory / 'events.csv').open(newline='') as stream:
         for row in csv.DictReader(stream):
             details = json.loads(row['details_json'])
-            if row['event'] == 'source_capture':
+            if row['event'] == 'run_metadata':
+                if trial:
+                    trial_metadata_verified = (
+                        details.get('trial_clock_400_sync20') is True and
+                        details.get('qualification') == 'TRIAL / NOT GATE 1 PASS' and
+                        details.get('clock_halfwidth_limit_us') == 400 and
+                        details.get('sync_max_period_us') == 20000 and
+                        details.get('source_phase_limit_us') == 250 and
+                        details.get('no_early_midpoint_required') is True)
+                elif details.get('trial_clock_400_sync20') is True:
+                    limits_verified = False
+            elif row['event'] == 'source_capture':
                 if pending_capture is not None:
                     limits_verified = False
                 capture_count += 1
@@ -337,7 +372,9 @@ def load_pc_evidence(directory):
                 pending_capture = details
                 limits_verified = (limits_verified and
                                    0 <= details['phase_us'] <= 250 and
-                                   0 <= details['uncertainty_us'] <= 250 and
+                                   0 <= details['uncertainty_us'] <= (400 if trial else 250) and
+                                   (not trial or (details.get('no_early_midpoint') is True and
+                                    details.get('start_midpoint_error_us', -1) >= 0)) and
                                    details['capture_end_pc_us'] >= int(row['pc_us']))
             elif row['event'] == 'source_clock_bounds':
                 limits_verified = (limits_verified and pending_capture is not None and
@@ -357,5 +394,6 @@ def load_pc_evidence(directory):
                         raise DiagnosticError('PC OUTPUT evidence exceeds session bound')
     return {**summary, 'sources': sources, 'active_output_count': active,
             'active_output_prefix_complete': active_prefix,
-            'source_limits_verified': (limits_verified and pending_capture is None and
+            'source_limits_verified': (limits_verified and trial_metadata_verified and
+                                       pending_capture is None and
                                        0 < capture_count == len(sources))}
