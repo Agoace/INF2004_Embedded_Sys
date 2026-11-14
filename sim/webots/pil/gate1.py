@@ -198,6 +198,7 @@ class Recorder:
                      self.stopped_status_observed)
         summary = {
             **labels(trial), 'sync_max_period_us': 20000 if trial else 100000,
+            'pc_capture_order': 'capture-first', 'pc_logging': 'synchronous',
             'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
@@ -343,6 +344,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
     recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
+                    pc_capture_order='capture-first', pc_logging='synchronous',
                     clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
                     sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
                     source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
@@ -431,6 +433,22 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 break
             if not armed_once and now - start > 5_000_000:
                 raise GateFailure('bootstrap timeout')
+            # Capture first, but only after inhibit/expiry checks. RX below may
+            # still fault and cancel queued TX before anything reaches write().
+            # Never validate an older capture after processing a newer SYNC.
+            if host.state in ('ARM_PENDING', 'ARMED'):
+                host.tick(now)
+                mark('tick_exit')
+                source = host.next_sensor * 1000
+                bounds = host.clock.pico_range(now)
+                target = host.timeline.source_target(source)
+                if bounds.midpoint >= target:
+                    mark('capture_enter', source)
+                    capture_start = clock.now_us()
+                    payload = neutral_payload(source)
+                    capture_end = clock.now_us()
+                    mark('capture_exit', source)
+                    host.sensor(payload, source, capture_start, capture_end_pc_us=capture_end)
             chunk, received = read_input()
             if chunk:
                 recorder.record('raw_rx', received, packet_hex=chunk.hex())
@@ -464,18 +482,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 armed_once = True
             mark('sync_exit')
             if host.state in ('ARM_PENDING', 'ARMED'):
+                # Recheck after RX/work as well; do not transmit through expiry.
                 host.tick(now)
                 mark('tick_exit')
-                source = host.next_sensor * 1000
-                bounds = host.clock.pico_range(now)
-                target = host.timeline.source_target(source)
-                if bounds.midpoint >= target:
-                    mark('capture_enter', source)
-                    capture_start = clock.now_us()
-                    payload = neutral_payload(source)
-                    capture_end = clock.now_us()
-                    mark('capture_exit', source)
-                    host.sensor(payload, source, capture_start, capture_end_pc_us=capture_end)
                 # No physics exists in this harness. Leave applied_output=NO_ACK.
                 while host.outputs:
                     frame = host.outputs.popleft()
