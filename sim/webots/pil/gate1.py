@@ -206,6 +206,7 @@ class Recorder:
             'pc_capture_revision': 'C1+C2+C2b+C2c',
             'timer_slack': self.timer_slack,
             'interpreter_switch_interval_s': self.interpreter_switch_interval_s,
+            'post_fail_rx_us': getattr(self, 'post_fail_rx_us', 0),
             'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
@@ -326,7 +327,7 @@ def neutral_payload(source_us):
 
 def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
              transport_only=False, image_sha256=None, profile_flags=None, measure_io=False,
-             trial_clock_400_sync20=False):
+             trial_clock_400_sync20=False, post_fail_rx_us=0):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -334,6 +335,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     """
     if type(duration_us) is not int or not 1000 <= duration_us <= 1_700_000_000:
         raise ValueError('soak duration must be1ms..1700s')
+    if type(post_fail_rx_us)is not int or not (post_fail_rx_us==0 or 500000<=post_fail_rx_us<=1000000):
+        raise ValueError('post-fail RX must be disabled or0.5..1s')
     if type(trial_clock_400_sync20) is not bool:
         raise ValueError('trial mode must be an explicit boolean')
     if trial_clock_400_sync20 and not transport_only:
@@ -352,12 +355,13 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     recorder.trial_clock_400_sync20 = trial_clock_400_sync20
     recorder.timer_slack = timer_slack
     recorder.interpreter_switch_interval_s = switch_interval
+    recorder.post_fail_rx_us = post_fail_rx_us
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
     recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
                     pc_capture_order='capture-first', pc_logging='synchronous',
                     pc_capture_revision='C1+C2+C2b+C2c', timer_slack=timer_slack,
-                    interpreter_switch_interval_s=switch_interval,
+                    interpreter_switch_interval_s=switch_interval, post_fail_rx_us=post_fail_rx_us,
                     clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
                     sync_max_period_us=20000 if trial_clock_400_sync20 else 100000,
                     source_phase_limit_us=250, no_early_midpoint_required=trial_clock_400_sync20,
@@ -372,6 +376,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     active_start = None
     reason, hello_sent, armed_once = None, False, False
     serial_closed = False
+    failure_tail = None
     next_sync = start
     tx_bytes = rx_bytes = 0
 
@@ -635,13 +640,25 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             reason = reason or str(error)
         finally:
             try:
-                io.close()
-                serial_closed = True
-            except OSError as error:
-                reason = reason or 'serial close failed: ' + str(error)
+                if reason is not None and post_fail_rx_us:
+                    from .gate1_reset_capture import FailureTail
+                    failure_tail = FailureTail(clock, post_fail_rx_us, reason)
+                    try:
+                        failure_tail.collect(io)  # Same owner; never host.receive().
+                    except (OSError, ValueError, KeyboardInterrupt) as error:
+                        failure_tail.error = 'tail interrupted: ' + str(error)
+                        failure_tail.end = clock.now_us()
             finally:
-                if attribution is not None:
-                    attribution.detach()
+                try:
+                    io.close()
+                    serial_closed = True
+                except OSError as error:
+                    reason = reason or 'serial close failed: ' + str(error)
+                finally:
+                    if attribution is not None:
+                        attribution.detach()
+    if failure_tail is not None:
+        failure_tail.finish(recorder.output, labels(trial_clock_400_sync20), serial_closed=serial_closed)
     if host_spans is not None:
         from .gate1_host_observer import host_snapshot
         (recorder.output/'host-after.json').write_text(json.dumps(

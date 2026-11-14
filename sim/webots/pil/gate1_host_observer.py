@@ -82,11 +82,17 @@ def host_snapshot():
         '/proc/self/cgroup','/proc/interrupts','/proc/softirqs','/proc/sys/kernel/sched_schedstats')}}
     cpu=Path('/sys/devices/system/cpu')
     paths=[]
-    for p in sorted((cpu/'cpufreq').glob('policy*'))[:256]:
+    policies=sorted((cpu/'cpufreq').glob('policy*'))
+    idle=sorted(cpu.glob('cpu[0-9]*/cpuidle/state*'))
+    result['power_discovery']={'cpufreq_status':'KNOWN' if policies else 'UNKNOWN',
+        'cpuidle_status':'KNOWN' if idle else 'UNKNOWN',
+        'policy_count_found':len(policies),'idle_count_found':len(idle),
+        'policy_limit':256,'idle_limit':1024,'truncated':len(policies)>256 or len(idle)>1024}
+    for p in policies[:256]:
         paths += [p/n for n in ('scaling_driver','scaling_governor','scaling_min_freq',
             'scaling_max_freq','scaling_cur_freq','affected_cpus','related_cpus')]
     paths += [cpu/'cpufreq/boost',cpu/'intel_pstate/no_turbo']
-    for p in sorted(cpu.glob('cpu[0-9]*/cpuidle/state*'))[:1024]:
+    for p in idle[:1024]:
         paths += [p/n for n in ('name','latency','residency','usage','time','disable')]
     result['power_files']={str(p):_read(p)for p in paths}
     result['power_scope']='bounded discovery; absent cpufreq/cpuidle data unknown; no causal inference'
@@ -96,5 +102,6 @@ def host_snapshot():
         if '..'in Path(v2).parts:raise ValueError('invalid cgroup path')
         root=Path('/sys/fs/cgroup')/v2.lstrip('/')
         result['cgroup_cpu']={n:_read(root/n)for n in ('cpu.max','cpu.stat','cpuset.cpus.effective')}
+        result['cgroup_scope']='visible direct v2 cgroup only; ancestor/hidden limits unknown'
     except (OSError,StopIteration,ValueError)as e:result['cgroup_cpu']={'status':'UNKNOWN','reason':str(e)}
     return result
