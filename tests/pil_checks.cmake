@@ -95,6 +95,15 @@ set_property(TARGET test_pil_gate1_rxlog PROPERTY LINK_LIBRARIES "")
 target_include_directories(test_pil_gate1_rxlog PRIVATE
     "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
 add_test(NAME test_pil_gate1_rxlog COMMAND test_pil_gate1_rxlog)
+set(pil_critical "${CMAKE_CURRENT_BINARY_DIR}/pil_gate1_critical.h")
+add_custom_command(OUTPUT "${pil_critical}"
+    COMMAND "${Python3_EXECUTABLE}" "${REPO}/tests/generate_pil_critical.py"
+        "${REPO}/kernel/sysdepend/cpu/core/armv6m/cpu_status.h"
+        "${pil_critical}"
+    DEPENDS "${REPO}/tests/generate_pil_critical.py"
+        "${REPO}/kernel/sysdepend/cpu/core/armv6m/cpu_status.h"
+    VERBATIM)
+add_custom_target(pil_gate1_critical DEPENDS "${pil_critical}")
 foreach(profile up smp control)
     set(target test_pil_gate1_runtime_${profile})
     add_executable(${target} "${REPO}/tests/test_pil_gate1_runtime.c"
@@ -106,14 +115,16 @@ foreach(profile up smp control)
         "${REPO}/app_program/sim/pil_gate1_dump.c"
         "${REPO}/app_program/sim/pil_wire.c")
     set_property(TARGET ${target} PROPERTY LINK_LIBRARIES "")
+    add_dependencies(${target} pil_gate1_critical)
     target_include_directories(${target} PRIVATE
         "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim"
-        "${REPO}/kernel/knlinc")
+        "${REPO}/kernel/knlinc" "${CMAKE_CURRENT_BINARY_DIR}")
     target_compile_definitions(${target} PRIVATE
         APP_SIM=1 APP_SIM_GATE1=1 PIL_GATE1_RUNTIME_TEST=1
         TK_SUPPORT_SMP=$<IF:$<STREQUAL:${profile},up>,0,1>
         APP_FORCE_CORE0=$<IF:$<STREQUAL:${profile},control>,1,0>)
-    foreach(mode priority clean lease overrun lateprogress queuefull missing)
+    foreach(mode wake wakelease wakenative priority clean lease overrun
+                 lateprogress queuefull missing)
         add_test(NAME ${target}_${mode} COMMAND ${target} ${mode})
     endforeach()
 endforeach()

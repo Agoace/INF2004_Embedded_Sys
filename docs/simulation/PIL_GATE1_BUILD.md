@@ -4,10 +4,12 @@
 
 The image is host-tested and ready for an operator transport trial on a spare
 RP2040 Pico. Attempt5 armed but failed on missing lookahead658 after657 applied
-slots. Attempt6 localized delay to worker scheduling. The current image keeps
-[RX timing diagnostics](PIL_GATE1_RX_TIMING.md) and raises only the Gate1 worker
-to [priority9](PIL_GATE1_PRIORITY.md); it has no physical PASS. Earlier startup failure/correction
-is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
+slots. Attempt6 localized delay to worker scheduling. Attempt7 had no measured
+Pico fault but retained long RX-to-worker delays and stopped on a PC phase error.
+The current image keeps [RX1](PIL_GATE1_RX_TIMING.md) and
+[priority9](PIL_GATE1_PRIORITY.md), and fixes three Gate1
+[IRQ dispatch requests](PIL_GATE1_IRQ_WAKE.md). It has no physical PASS.
+Earlier startup failure/correction is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
 This is NOT sensor/physics acceptance.
 Only the operator flashes or opens target ports. Coding workers do neither.
 Do not flash a plain Stage0 `_sim` image. Do not connect a robot or actuators.
@@ -30,11 +32,11 @@ sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
 - File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (248320 bytes).
-- UF2 SHA256: `4b57af9da21c1d68719efe0c3acf4738b18e750f46501a325aa52dd43cb4f993`.
-- ELF SHA256: `e51655db34096911217a4020429ea59df6489124d91a70f8ece6ec40b33b9cd0`.
+- UF2 SHA256: `772d4e433242329264a327c0d24799ec89409b83ac7ce0af16041b8248a5907a`.
+- ELF SHA256: `6870689f252026daf14a4aa357b529ed28cb026ffe8abb75894849af37270ded`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/priority9/`, with map/size/hashes.
+- Retained copy: `build/pil-gate1/artifacts/irq-wake/`, with map/size/hashes.
 - Appends versioned ASCII after D1 manifest, before the unchanged stopped stack
   line. Use the matching PC RX diagnostic parser; live UART and D1 v1 stay fixed.
 
@@ -95,6 +97,11 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
 
 ## Host/build evidence
 
+The current [IRQ-wake checkpoint](PIL_GATE1_IRQ_WAKE.md) passes GCC598/598,
+Clang ASan/UBSan598/598,45 strict ARM units,38 ordinary builds/SDK proofs and
+all76 unchanged literal hashes. The following bullets record the original
+runtime checkpoint, not additional physical evidence.
+
 - GCC585/585 and Clang ASan/UBSan585/585. The session test includes10000 continuous
   slots and TIMER wrap. HAL and option-guard tests were RED first. Runtime tests
   compile the actual task/session/stream/D1 sources against explicit single-thread
@@ -119,9 +126,9 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
 
 The table and frame values below are the original runtime checkpoint record.
 The current diagnostic adds3632B: total added storage14796B, UP `.bss`140076B,
-service440B, native hook40B. Reviewed maxima are196B UP /240B SMP added IRQ
-chains and896B worker. See the [RX diagnostic evidence](PIL_GATE1_RX_TIMING.md)
-for exact current totals and test logs. No new target reserve is claimed.
+service440B, native hook40B. The current UART frame is80B. Reviewed maxima are
+204B UP /248B SMP added IRQ chains and896B worker. See the
+[IRQ-wake evidence](PIL_GATE1_IRQ_WAKE.md) for current totals and test logs. No new target reserve is claimed.
 
 | Image | `.data` | `.bss` | Total static RAM |
 | --- | ---: | ---: | ---: |
