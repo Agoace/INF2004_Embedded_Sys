@@ -424,7 +424,10 @@ source-to-apply age is reported separately and must meet the 5 ms upper bound.
 See the [2026-11-14 operator decision](GATE1_D_TRIAL_20261114.md).
 `--trial-clock-400-sync20` explicitly selects **TRIAL / NOT GATE 1 PASS** on the
 initial C1 baseline; the operator-approved attempt11 now adds C2 capture-first,
-not C3 queued logging. Defaults remain250us/100ms. Source
+not C3 queued logging. Operator-approved C2b then adds fresh capture checks
+post-RX/pre-SYNC and post-SYNC, each after inhibit/expiry checks. At most one
+capture occurs per iteration; no extra sleep or timer setting is changed.
+Manifest/metadata name C1+C2+C2b. Defaults remain250us/100ms. Source
 phase250, native jitter250, exact upper/lower D1 age checks and3/4/5ms stay.
 All trial callers must reject capture before the estimated midpoint target.
 Keep the trial manifest with external binary captures. Trial completion cannot
