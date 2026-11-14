@@ -439,6 +439,21 @@ All trial callers must reject capture before the estimated midpoint target.
 Keep the trial manifest with external binary captures. Trial completion cannot
 be promoted to standard transport qualification or physical acceptance.
 
+### Attempt15 post-failure capture
+
+See the [same-reader RX tail and Pico CDC reopen record](GATE1_POST_FAIL_CAPTURE_20261114.md).
+`--post-fail-rx-ms 1000` is explicitly opt-in. Original FAIL remains; no UART
+rearm or source/lease renewal. The separate Pico-only CDC tool retains numbered
+reopen segments and strict SW6 RESET1 records. No hardware action is performed
+by imports/tests. Existing defaults remain unchanged.
+
+### Attempt15 host observation
+
+See [host observer scope and cost](GATE1_HOST_OBSERVER_20261114.md).
+`--measure-io` adds bounded numeric RAW/thread-CPU/rusage span evidence for
+select/read/sleep and before/after host snapshots outside the loop. No procfs
+per loop, kernel tracing, settings or timing-limit changes are included.
+
 ### Approved latency measurement, not a timing-bound change
 
 Use `gate1_soak.py --measure-io` only for an approved measurement run. The

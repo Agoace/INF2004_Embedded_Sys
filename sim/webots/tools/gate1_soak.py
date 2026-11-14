@@ -25,6 +25,8 @@ def main():
                         help='operator D-TRIAL: clock400us/SYNC max20ms; NOT GATE 1 PASS; cap4 only')
     parser.add_argument('--measure-io', action='store_true',
                         help='approved measurement only: RAW I/O timestamps and clock pairs; adds host overhead')
+    parser.add_argument('--post-fail-rx-ms', type=int, choices=(0,500,750,1000), default=0,
+                        help='approved same-owner RX-only tail after FAIL; no rearm or new TX')
     parser.add_argument('--duration-seconds', type=int, default=600)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
@@ -50,7 +52,8 @@ def main():
                        transport_only=args.transport_only_cap4,
                        image_sha256=args.image_sha256, profile_flags=args.profile_flags,
                        measure_io=args.measure_io,
-                       trial_clock_400_sync20=args.trial_clock_400_sync20)
+                       trial_clock_400_sync20=args.trial_clock_400_sync20,
+                       post_fail_rx_us=args.post_fail_rx_ms * 1000)
     print(json.dumps(summary, indent=2))
     return {'FAIL': 1, 'INCOMPLETE': 2, 'TRIAL_COMPLETE': 2}[summary['verdict']]
 
