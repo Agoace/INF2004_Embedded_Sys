@@ -36,7 +36,9 @@
 | `[bench] window open` | Generator still running; counters are not read |
 | `[bench] window_us W sched S delivered D coalesced C overflow O gen_calls N gen_us_sum U gen_us_max M cost_bp B V` | Stopped window; B = U x 10000 / W |
 
-- V: `OK` (B < 300), `COST_HIGH` (B >= 300), `BAD_WINDOW` (W = 0 or W > 60 min).
+- V: `GEN_STOPPED` (O > 0, generator stopped fail-closed; overrides the
+  rest), `OK` (B < 300), `COST_HIGH` (B >= 300), `BAD_WINDOW` (W = 0 or
+  W > 60 min).
 - Timeline sites (bench only): 10 = generator exit (arg = edges), 11 = pending
   overflow.
 

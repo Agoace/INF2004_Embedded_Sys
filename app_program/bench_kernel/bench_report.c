@@ -29,6 +29,9 @@ static void bench_report(void)
         cost_bp = (uint32_t)(((uint64_t)s.gen_us_sum * 10000u) / window);
         verdict = cost_bp < BENCH_COST_LIMIT_BP ? "OK" : "COST_HIGH";
     }
+    if (s.overflow != 0u) {
+        verdict = "GEN_STOPPED"; /* fail-closed generator: invalid run */
+    }
     (void)tm_printf((UB *)"[bench] window_us %lu sched %lu "
                     "delivered %lu coalesced %lu overflow %lu gen_calls %lu "
                     "gen_us_sum %lu gen_us_max %lu cost_bp %lu %s\n",

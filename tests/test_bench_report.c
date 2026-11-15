@@ -128,6 +128,21 @@ static void check_bad_windows(void)
     assert(strstr(out, "cost_bp 0 OK\n") != NULL);
 }
 
+static void check_generator_stopped(void)
+{
+    have_snap = true;
+    /* A fail-closed generator stop overrides the cost verdict. */
+    snap = stopped(0u, 1000000u, 1000u);
+    snap.overflow = 1u;
+    run();
+    assert(strstr(out, "overflow 1 ") != NULL);
+    assert(strstr(out, "cost_bp 10 GEN_STOPPED\n") != NULL);
+    snap = stopped(0u, 0u, 0u);
+    snap.overflow = 2u;
+    run();
+    assert(strstr(out, "cost_bp 0 GEN_STOPPED\n") != NULL);
+}
+
 int main(void)
 {
     check_no_snapshot();
@@ -135,6 +150,7 @@ int main(void)
     check_stopped_ok();
     check_cost_high_and_wrap();
     check_bad_windows();
+    check_generator_stopped();
     puts("test_bench_report: PASS");
     return 0;
 }
