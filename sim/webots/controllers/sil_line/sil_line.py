@@ -70,7 +70,8 @@ def replay_export(project):
 def run(robot,project):
     project=Path(project);config=json.loads((project/'sil-manifest.json').read_text())
     if robot.getBasicTimeStep()!=1:raise ValueError('SIL needs1ms step')
-    scene=FastScene.from_course(build_course(Course.load(project/'course.json')))
+    from pil.sil_optics import make_sampler
+    scene=make_sampler(build_course(Course.load(project/'course.json')),config.get('optical_sampler','fast'))
     profiles={name:SensorProfile(**data)for name,data in config['profiles'].items()}
     native=config.get('motor_fidelity',False)
     if native:
@@ -109,7 +110,10 @@ def run(robot,project):
                 rejections.append(dict(sim_ms=slot+1,left_pct=actual['left_pct'],right_pct=actual['right_pct'],reason=str(exception)))
                 raise
             for wheel,target in zip(wheels,targets):wheel.setVelocity(target)
-            pair_error=position[1]*1000+s*119+c*7.25-157.5
+            if config.get('curve_trial'):
+                from pil.sil_curve import nearest_path
+                pair_error=nearest_path(position[0]*1000+c*119-s*7.25,position[1]*1000+s*119+c*7.25)['error_mm']
+            else:pair_error=position[1]*1000+s*119+c*7.25-157.5
             row=(slot+1,*adc,*list(actual.values())[:9],*position,yaw,*angles,*targets,pair_error,rotation[8])
             if native:row=(*row,*counts,*list(actual.values())[9:])
             if any(not math.isfinite(v)for v in row):raise ValueError('nonfinite SIL state')
@@ -134,6 +138,10 @@ def run(robot,project):
                 final_module=rows[-1][27],shell_fault=rows[-1][29],shell_fault_detail=rows[-1][30])
         complete=len(rows)==10000 and error is None and not rejections
     else:complete=all(checks.values())
+    curve=None
+    if config.get('curve_trial'):
+        from pil.sil_curve import analyze_curve
+        curve=analyze_curve(rows)
     proof=replay(project,rows)if complete else False
     output=project/'sil-result';output.mkdir()
     with (output/'samples.csv').open('w',newline='')as stream:
@@ -143,6 +151,7 @@ def run(robot,project):
     summary=dict(status=success_status if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),
         simulation_only=True,hardware_used=False,serial_used=False,recorded_input_c_replay=proof,error=error,
         calibration=calibration,configuration=controller.metadata()if native else config['controller_config'],checks=checks,recovery=recovery,
+        curve=curve,
         max_pair_error_mm=max((abs(r[20])for r in rows),default=None),
         line_seen_samples=sum(r[5]for r in rows),junction_samples=sum(r[6]for r in rows),
         travel_x_m=rows[-1][12]-rows[0][12]if rows else None,
