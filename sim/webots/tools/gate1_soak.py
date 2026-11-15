@@ -23,6 +23,8 @@ def main():
                         help='expected D1 profile flags, for example0x79 for UP')
     parser.add_argument('--trial-clock-400-sync20', action='store_true',
                         help='operator D-TRIAL: clock400us/SYNC max20ms; NOT GATE 1 PASS; cap4 only')
+    parser.add_argument('--trial-tolerate-late', action='store_true',
+                        help='T1 TRIAL only: <=600us, never consecutive, <=1 late per rolling1000 slots')
     parser.add_argument('--measure-io', action='store_true',
                         help='approved measurement only: RAW I/O timestamps and clock pairs; adds host overhead')
     parser.add_argument('--post-fail-rx-ms', type=int, choices=(0,500,750,1000), default=0,
@@ -32,6 +34,8 @@ def main():
     args = parser.parse_args()
     if not args.hardware_authorized:
         parser.error('no hardware access: --hardware-authorized requires operator permission')
+    if args.trial_tolerate_late and not args.trial_clock_400_sync20:
+        parser.error('late tolerance requires --trial-clock-400-sync20')
     if args.trial_clock_400_sync20 and not args.transport_only_cap4:
         parser.error('TRIAL requires --transport-only-cap4; NOT GATE 1 PASS')
     if not 1 <= args.duration_seconds <= 1700:
@@ -53,9 +57,10 @@ def main():
                        image_sha256=args.image_sha256, profile_flags=args.profile_flags,
                        measure_io=args.measure_io,
                        trial_clock_400_sync20=args.trial_clock_400_sync20,
-                       post_fail_rx_us=args.post_fail_rx_ms * 1000)
+                       post_fail_rx_us=args.post_fail_rx_ms * 1000,
+                       trial_tolerate_late=args.trial_tolerate_late)
     print(json.dumps(summary, indent=2))
-    return {'FAIL': 1, 'INCOMPLETE': 2, 'TRIAL_COMPLETE': 2}[summary['verdict']]
+    return {'FAIL': 1, 'INCOMPLETE': 2, 'TRIAL_COMPLETE': 2, 'TRIAL_COMPLETE_WITH_TOLERATED_LATE': 2}[summary['verdict']]
 
 
 if __name__ == '__main__':

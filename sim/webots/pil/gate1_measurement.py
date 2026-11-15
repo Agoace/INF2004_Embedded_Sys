@@ -223,11 +223,13 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
     path = Path(path)
     summary = json.loads(_regular(path/'summary.json', 4_000_000).read_text())
     streams, calls, metadata, pairs, processing, sources = _pc(path)
-    from .gate1_trial import labels
+    from .gate1_trial import labels, TRIAL_COMPLETIONS
     trial = summary.get('trial_clock_400_sync20') is True
-    if trial and summary['verdict'] not in ('FAIL', 'INCOMPLETE', 'TRIAL_COMPLETE'):
+    if trial and summary['verdict'] not in ('FAIL', 'INCOMPLETE', *TRIAL_COMPLETIONS):
         raise ValueError('TRIAL cannot contain PASS; NOT GATE 1 PASS')
-    result = {**labels(trial), 'clock_halfwidth_limit_us': 400 if trial else 250,
+    result = {**labels(trial, summary.get('trial_tolerate_late') is True),
+              'tolerated_late_count': summary.get('tolerated_late_count', 0),
+              'clock_halfwidth_limit_us': 400 if trial else 250,
               'sync_max_period_us': 20000 if trial else 100000,
               'schema': 1, 'physical_gate1_pass': False,
               'original_pc_verdict': summary['verdict'], 'original_pc_failure': summary.get('failure'),

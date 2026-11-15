@@ -33,7 +33,9 @@ def main():
     except (DiagnosticError, OSError, ValueError, KeyError, TypeError, IndexError, csv.Error) as error:
         retained = pc if pc is not None else hint
         failed = retained.get('verdict') == 'FAIL'
-        result = {**labels(retained.get('trial_clock_400_sync20') is True),
+        result = {**labels(retained.get('trial_clock_400_sync20') is True,
+                           retained.get('trial_clock_400_sync20') is True and retained.get('trial_tolerate_late') is True),
+                  'tolerated_late_count': retained.get('tolerated_late_count', 0),
                   'verdict': 'FAIL' if failed else 'INCOMPLETE', 'physical_gate1_pass': False,
                   'incomplete_reason': str(error)}
         if failed:

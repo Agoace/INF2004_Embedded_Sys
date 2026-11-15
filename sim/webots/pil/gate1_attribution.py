@@ -76,6 +76,9 @@ class AttributionRing:
                 'observer_cost': {'sample_count': self.cost_count,
                     'array_bracket_sum_us': self.cost_sum, 'array_bracket_max_us': self.cost_max,
                     'scope': 'RAW/us-quantized internal array bracket; excludes first clock call and cost counters; whole-call benchmark required'}}
+        if getattr(self, 'trial_tolerate_late', False):
+            from .gate1_trial import labels
+            meta.update(labels(True, True))
         if self.qualification:
             meta.update(qualification=self.qualification, trial_clock_400_sync20=True,
                         physical_gate1_pass=False)

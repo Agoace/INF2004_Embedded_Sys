@@ -9,6 +9,7 @@ import struct
 
 from .clock import (ClockBounds, ClockError, Timeline, unwrap32,
                     GATE1_PROVEN_MIN_TX_US, GATE1_PROVEN_MIN_RX_US)
+from .gate1_trial import LateTolerance, labels, P_MAX_US
 from .wire import (CAPABILITIES, MAX_SOURCE_US, NO_ACK, Frame, ProtocolError,
                    StreamDecoder, Type, encode, newer, u16, u32)
 
@@ -23,7 +24,7 @@ class HostTransport:
     MAX_RX_CHUNK = 4096
 
     def __init__(self, session, *, clock=None, transport_only=False,
-                 trial_clock_400_sync20=False):
+                 trial_clock_400_sync20=False, trial_tolerate_late=False):
         if type(session) is not int or not 1 <= session <= 0xFFFFFFFF:
             raise ValueError("nonzero uint32 host session required")
         if type(transport_only) is not bool:
@@ -33,6 +34,11 @@ class HostTransport:
         self.proven_min_rx_us = GATE1_PROVEN_MIN_RX_US if transport_only else 0
         if type(trial_clock_400_sync20) is not bool:
             raise ValueError('trial mode must be an explicit boolean')
+        if type(trial_tolerate_late) is not bool or (trial_tolerate_late and not (trial_clock_400_sync20 and transport_only)):
+            raise ValueError('late tolerance requires explicit clock400 transport-only trial')
+        self.trial_tolerate_late = trial_tolerate_late
+        self.late_tolerance = LateTolerance() if trial_tolerate_late else None
+        self.tolerated_captures = []
         self.session = session
         self.clock = clock if clock is not None else ClockBounds(
             trial_clock_400_sync20=trial_clock_400_sync20)
@@ -157,7 +163,7 @@ class HostTransport:
             self._fault("initial encoder origin must be zero")
         try:
             phase, uncertainty = self.timeline.validate_capture(
-                source_us, captured_pc_us, self.clock, end)
+                source_us, captured_pc_us, self.clock, end, late_tolerance=self.late_tolerance)
             first, last = self.clock.pico_range(captured_pc_us), self.clock.pico_range(end)
             lower, upper = first.lower, last.upper + 1
             frame = self._queue(Type.SENSOR, payload, end,
@@ -172,6 +178,14 @@ class HostTransport:
                     'excess_us': None, 'uncertainty_us': None, 'limit_us': 250,
                     'reason': str(error)}
             self._fault(str(error), capture_rejection=rejection)
+        if phase > 250:
+            record = self.timeline.capture_record(source_us, captured_pc_us, end, first, last,
+                phase, self.clock.updated_pc_us, 'T1 tolerated late capture; NOT GATE 1 PASS')
+            record.update(labels(True, True), sequence=self.next_sensor,
+                          tolerated_late=True, tolerated_phase_limit_us=P_MAX_US)
+            self.late_tolerance.commit(self.next_sensor)
+            self.tolerated_captures.append(record)
+            self._record('source_capture_tolerated', pc_us=captured_pc_us, **record)
         self.next_sensor += 1
         self.last_sensor_sent = frame.sequence
         self._record("source_capture", source_us=source_us, pc_us=captured_pc_us,

@@ -439,6 +439,20 @@ All trial callers must reject capture before the estimated midpoint target.
 Keep the trial manifest with external binary captures. Trial completion cannot
 be promoted to standard transport qualification or physical acceptance.
 
+### T1 opt-in rare late capture
+
+See the [operator T1 decision and exact bound](GATE1_T1_LATE_TOLERANCE_20261115.md).
+Only `--trial-tolerate-late --trial-clock-400-sync20 --transport-only-cap4`
+selects phase250..600us tolerance: never consecutive, at most1 per rolling1000
+slots. All clock/native/D1 upper AND lower age faults remain fatal. Full late
+records and distinct completion labels never mean Gate1 PASS. Default unchanged.
+
+### C4 CRC32C cost reduction
+
+See the [operator C4 decision and CPU benchmark](GATE1_C4_CRC32C_20261115.md).
+A precomputed pure-Python Castagnoli table replaces bit-at-a-time CRC32C.
+Wire bytes and validation outcomes remain unchanged; no timing-limit change.
+
 ### Attempt15 post-failure capture
 
 See the [same-reader RX tail and Pico CDC reopen record](GATE1_POST_FAIL_CAPTURE_20261114.md).

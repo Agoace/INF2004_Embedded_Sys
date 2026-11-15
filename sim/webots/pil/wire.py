@@ -37,12 +37,24 @@ class ProtocolError(ValueError):
     pass
 
 
+def _crc32c_table():
+    values = []
+    for byte in range(256):
+        crc = byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0x82F63B78 if crc & 1 else 0)
+        values.append(crc)
+    return tuple(values)
+
+
+# Reflected Castagnoli polynomial, prepared once before transport work.
+CRC32C_TABLE = _crc32c_table()
+
+
 def crc32c(data: bytes) -> int:
     crc = 0xFFFFFFFF
     for byte in data:
-        crc ^= byte
-        for _ in range(8):
-            crc = (crc >> 1) ^ (0x82F63B78 if crc & 1 else 0)
+        crc = (crc >> 8) ^ CRC32C_TABLE[(crc ^ byte) & 0xFF]
     return crc ^ 0xFFFFFFFF
 
 
