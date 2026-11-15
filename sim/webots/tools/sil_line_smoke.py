@@ -45,7 +45,7 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
             profile=load_boot5209_line_profile(name)
         else:profile=load_assumed_line_profile(name)
         return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
-    config=dict(optical_sampler=optical_sampler,curve_trial=course.data['name']=='sil_curve_assumed',optical_profile='BOOT_5209_SPIN_FIT_B'if line_search and line_profile=='B'else'ASSUMED_LINE_A',profiles={n:profile_dict(n)for n in('GP26','GP27')},
+    config=dict(optical_sampler=optical_sampler,curve_trial=course.data['name']in('sil_curve_assumed','sil_s_curve_assumed'),s_curve_trial=course.data['name']=='sil_s_curve_assumed',optical_profile='BOOT_5209_SPIN_FIT_B'if line_search and line_profile=='B'else'ASSUMED_LINE_A',profiles={n:profile_dict(n)for n in('GP26','GP27')},
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
         calibration_rows=spin_calibration['calibration_rows']if spin_calibration else[[200,200,0]]*16+[[3700,3700,0]]*4,
         calibration_provenance='ACTUAL aligned simulated spin samples; independent pose reset per trial; sim-owned sequence equivalent to vehicle_task.c'if spin_calibration else'SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
