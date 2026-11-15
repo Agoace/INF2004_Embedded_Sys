@@ -5,7 +5,8 @@
 #define FIELD_LIST(X) \
     X(edges_sched) X(edges_delivered) X(coalesced) X(overflow) \
     X(gen_us_sum) X(gen_us_max) X(gen_calls) \
-    X(window_start_us) X(window_end_us) X(stopped)
+    X(window_start_us) X(window_end_us) X(stopped) \
+    X(stop_late_us) X(stop_position_us)
 static uint32_t sequence;
 static uint32_t valid;
 static bench_stats_t published;
