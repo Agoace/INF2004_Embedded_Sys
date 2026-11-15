@@ -58,13 +58,7 @@ ER tk_slp_tsk(TMO t)
 }
 INT tk_can_wup(ID id) { assert(id == TSK_SELF); return 0; }
 ER tk_wup_tsk(ID id) { assert(id == 3); return E_OK; }
-void drv_motor_hw_init(uint16_t servo) { assert(servo == 1500u); }
-uint8_t drv_motor_hw_ab(unsigned int wheel) { return bk_gpio_ab(wheel); }
-void drv_motor_hw_write(const int16_t duty[2], uint16_t servo)
-{
-    (void)duty; (void)servo; assert(held);
-}
-void drv_motor_hw_stop(void) { }
+bool bk_runtime_button(unsigned int pin) { (void)pin; return false; }
 static void tick(uint32_t at)
 {
     now_us = at; sleeps = 0u;

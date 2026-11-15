@@ -221,6 +221,26 @@ ifeq ($(FORCE_CORE0),1)
 CORE_SUFFIX := _core0
 endif
 
+# Explicit spare-Pico step0, not the BENCH=1 floor-motion application.
+BENCH_KERNEL ?= 0
+ifneq ($(words $(BENCH_KERNEL)),1)
+$(error BENCH_KERNEL must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BENCH_KERNEL),0 1),$(BENCH_KERNEL))
+$(error Unknown BENCH_KERNEL '$(BENCH_KERNEL)'; use 0 or 1)
+endif
+ifeq ($(BENCH_KERNEL),1)
+ifneq ($(WIFI):$(NET):$(MQTT):$(CONSOLE):$(CRASH_REPORT):$(BENCH):$(TEST):$(DIAG),none:none:0:usb_cdc:0:0:0:0)
+$(error BENCH_KERNEL=1 requires radio-free USB robot, CRASH_REPORT=0 TEST=0 BENCH=0 DIAG=0)
+endif
+ifneq ($(filter-out 0,$(strip $(SIM) $(PIL_GATE1))),)
+$(error BENCH_KERNEL=1 excludes SIM and PIL_GATE1)
+endif
+ifneq ($(IMU_STREAM):$(BARCODE_CAPTURE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_CMD),0:0:0:NONE)
+$(error BENCH_KERNEL=1 requires neutral IMU/barcode/junction options)
+endif
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -232,6 +252,9 @@ EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+ifeq ($(BENCH_KERNEL),1)
+EXE_FILE := $(EXE_FILE)_bench_kernel_step0
+endif
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -284,6 +307,11 @@ LFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding \
     -mfloat-abi=soft \
 
 LNKFILE := "../etc/linker/pico_rp2040/tkernel_map.ld"
+ifeq ($(BENCH_KERNEL),1)
+CFLAGS += -DBENCH_KERNEL=1
+LFLAGS += -Wl,--wrap=rt_timeline_report
+LFLAGS += -Wl,--wrap=app_startup_complete_publish
+endif
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
 # otherwise discard anything appended above.
@@ -341,6 +369,9 @@ PROFILE_ID := $(PROFILE_ID)-forcecore$(FORCE_CORE0)
 PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
 PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
 PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
+ifeq ($(BENCH_KERNEL),1)
+PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
+endif
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
