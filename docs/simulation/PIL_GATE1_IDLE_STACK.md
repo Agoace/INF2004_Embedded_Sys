@@ -130,6 +130,39 @@ old numeric IDs identify motion/PIL/app idle in this image.
   target watermarks. Independent PC parser review retains strict identity,
   D1/RX1/stack checks and range-checks the optional suffix.
 
+## Attempt21 — measured app idle stack evidence
+
+The operator ran image6e8ac6c5 (firmware72239a9) with PC revision
+814e41fb1714b18b08ced7ec01b5f1627b43311c. Evidence directory:
+`build/webots/home-gate1-trial-20261115T080329Z/` in the Main checkout.
+Its `image-sha256.txt` matches the full UF2 hash below. The PC summary records
+38775476us (38.775476s),38875 OUTPUTs, and failure `consecutive late source
+captures` under PC T1. It remains TRIAL / NOT GATE1 PASS.
+
+No Pico reset was observed. CDC has one segment, no disconnect/reopen event,
+and a controlled stopped row followed by the capture's1s reset-watch grace.
+The actual row in `pico-cdc/pico-usb-000.bin` is:
+
+```text
+[PILG1] stopped; reset required; worker stack untouched 884/2048 bytes; idle stack high-water 340/512 bytes\r\n
+```
+
+- App idle:340B observed paint high-water,172B untouched. This exceeds the old
+  256B private idle reservation by84B and is consistent with the complete
+  dispatch/IRQ budget. It supports the stack-insufficiency diagnosis, not a
+  direct capture of the earlier corrupting write or its fault PC.
+- Worker:884B untouched means1164B observed use, leaving884B. This includes
+  overlapping interrupt/context frames, not merely the isolated896B worker
+  call-chain review. Other native task stack reserves remain unmeasured here.
+- Capture length16225B; SHA256
+  `dcfe7f8a71c84a220cfd79f08b42c1cab996ebcc5060ae8138eb30ca0d1e4e88`.
+  `cdc-capture.json` records stopped completion and no reopened boot. The earlier
+  PC soak summary's `stopped_status_observed:false` is not the final CDC result.
+
+This is one short A/B observation, not a worst-case stack proof, proof that all
+reset causes are removed, or the required600s transport evidence. The stop was
+PC-side; do not relabel the trial PASS or infer sensor/physics acceptance.
+
 ## Image and operator handoff
 
 `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2`,251392B.
