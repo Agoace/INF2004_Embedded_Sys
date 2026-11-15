@@ -18,6 +18,11 @@ Gate1 rule changes stopped after attempt22; no operational Webots bridge is
 claimed. The Pico sensor/edge runtime is not implemented here. Do not treat
 the host state machine as firmware.
 
+The separately approved [passive codec replay](WEBOTS_PASSIVE_REPLAY_20261115.md)
+samples Webots devices for10s simulation, encodes real SENSOR frames and decodes
+scripted OUTPUTs without applying them. Unpaced wall-time tolerance counts are
+diagnostic only; this is not a driving, firmware or real-time result.
+
 SW6 owns the frozen PIL v1 protocol and C codec. SW4 owns `pil/s3_*` geometry,
 optics and assets. SW5 owns other `sim/webots/` source files. Main owns integration,
 shared documentation indexes, images and hardware operations. No file under
@@ -77,6 +82,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `protos/RoboPico.proto` | Axle-centred body, driven wheel joints, passive swivel/trailing caster, GP15 servo head and IMU/debug sensor mounts. |
 | `controllers/stage0_preview/` | Passive zero-torque preview, no UART or navigation. |
 | `tools/load_smoke.py` | Bounded load/initial-pose test with explicit PID-group cleanup and retained proof/log. |
+| `pil/passive_replay.py`, `controllers/passive_replay/`, `tools/passive_smoke.py` | Bounded passive10s simulation, sampled devices, real-codec scripted I/O, post-step export, deterministic replay and nonfatal unpaced timing counts. No serial or motor application. |
 | `pil/serial_io.py` | Explicit Linux Debug Probe by-id selection and bounded nonblocking 921600 8N1 I/O. Import opens nothing. |
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
