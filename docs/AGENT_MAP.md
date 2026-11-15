@@ -154,6 +154,13 @@ The archived development record retains older CMake bench examples.
 
 See [Branch layout](architecture/BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](archive/architecture/BRANCH_LAYOUT.md#archived-branches) of deleted branches.
 
+The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
+[`bench_stats.c`](../app_program/bench_kernel/bench_stats.c), its
+[public read API](../app_program/bench_kernel/bench_stats.h),
+[core0 publication API](../app_program/bench_kernel/bench_stats_publish.h) and
+[host test](../tests/test_bench_kernel_stats.c). The bench directory is excluded
+from ordinary source selection; it does not yet contain a complete runtime.
+
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
 - [Archived Robo Pico RTOS multicore plan](archive/architecture/robo_pico_rtos_multicore_plan.md) — full historical proposal, not the current task/core contract.
