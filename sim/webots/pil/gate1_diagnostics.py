@@ -204,7 +204,9 @@ def evaluate(dump, pc):
     """Combine matching all-frame evidence. A clean transport subset is not Gate1 PASS."""
     from .gate1_trial import labels
     trial = pc.get('trial_clock_400_sync20') is True
-    result = {**labels(trial), 'clock_halfwidth_limit_us': 400 if trial else 250,
+    result = {**labels(trial, pc.get('trial_tolerate_late') is True),
+              'tolerated_late_count': pc.get('tolerated_late_count', 0),
+              'clock_halfwidth_limit_us': 400 if trial else 250,
               'sync_max_period_us': 20000 if trial else 100000,
               'verdict': 'INCOMPLETE', 'physical_gate1_pass': False,
               'clock_minima_proven': False, 'clock_minima_proof_verdict': 'INCOMPLETE',
@@ -213,6 +215,9 @@ def evaluate(dump, pc):
               'unmeasured': ['hardware negative campaigns and full Gate1 acceptance'],
               'candidate_bounds_us': {'nominal_pipeline': 4000, 'availability': 3000,
                                       'source_expiry': 5000, 'apply_jitter': 250}}
+    if pc.get('late_tolerance_failure'):
+        result['verdict'], result['failure'] = 'FAIL', pc['late_tolerance_failure']
+        return result
     if pc.get('verdict') == 'FAIL':
         result['verdict'], result['failure'] = 'FAIL', pc.get('failure', 'PC run failed')
         return result
@@ -321,7 +326,8 @@ def evaluate(dump, pc):
             result.get('transport_subset_qualified', False) and result['verdict'] != 'FAIL')
         result['transport_subset_qualified'] = False
         if result['trial_transport_subset_qualified'] and result['verdict'] != 'FAIL':
-            result['verdict'] = 'TRIAL_COMPLETE'
+            result['verdict'] = ('TRIAL_COMPLETE_WITH_TOLERATED_LATE'
+                                 if pc.get('tolerated_late_count', 0) else 'TRIAL_COMPLETE')
         result['scope'] = 'TRIAL / NOT GATE 1 PASS; standard clock qualification not established'
     return result
 
@@ -334,7 +340,16 @@ def load_pc_evidence(directory):
     if (directory / 'summary.json').stat().st_size > 1_000_000:
         raise DiagnosticError('PC summary exceeds1MB')
     summary = json.loads((directory / 'summary.json').read_text())
+    from .gate1_trial import LateTolerance, late_policy, P_MAX_US, TRIAL_COMPLETIONS
     trial = summary.get('trial_clock_400_sync20') is True
+    tolerate = summary.get('trial_tolerate_late') is True
+    if tolerate and (not trial or summary.get('late_tolerance_policy') != late_policy()):
+        raise DiagnosticError('T1 requires explicit trial identification and exact policy')
+    if ((not tolerate and summary.get('tolerated_late_count', 0) != 0) or
+        (summary.get('verdict') == 'TRIAL_COMPLETE_WITH_TOLERATED_LATE' and
+         (not tolerate or summary.get('tolerated_late_count', 0) < 1))):
+        raise DiagnosticError('T1 completion/count/mode mismatch')
+    policy, tolerated_records, pending_late, tolerance_failure = LateTolerance(), [], None, None
     recorded = summary.get('candidate_bounds_us', {})
     if recorded.get('clock_halfwidth', 400 if trial else 250) != (400 if trial else 250):
         raise DiagnosticError('clock bound/mode mismatch; TRIAL requires explicit identification')
@@ -342,7 +357,7 @@ def load_pc_evidence(directory):
                          (('source_phase', 250), ('endpoint_available', 3000),
                           ('pipeline', 4000), ('expiry', 5000))) or
                   summary.get('qualification') != 'TRIAL / NOT GATE 1 PASS' or
-                  summary.get('verdict') not in ('FAIL', 'INCOMPLETE', 'TRIAL_COMPLETE') or
+                  summary.get('verdict') not in ('FAIL', 'INCOMPLETE', *TRIAL_COMPLETIONS) or
                   summary.get('candidate_bounds_us', {}).get('clock_halfwidth') != 400 or
                   summary.get('sync_max_period_us') != 20000):
         raise DiagnosticError('TRIAL metadata/qualification mismatch; NOT GATE 1 PASS')
@@ -360,9 +375,15 @@ def load_pc_evidence(directory):
                         details.get('clock_halfwidth_limit_us') == 400 and
                         details.get('sync_max_period_us') == 20000 and
                         details.get('source_phase_limit_us') == 250 and
-                        details.get('no_early_midpoint_required') is True)
+                        details.get('no_early_midpoint_required') is True and
+                        (details.get('trial_tolerate_late') is True) == tolerate and
+                        (not tolerate or details.get('late_tolerance_policy') == late_policy()))
                 elif details.get('trial_clock_400_sync20') is True:
                     limits_verified = False
+            elif row['event'] == 'source_capture_tolerated':
+                tolerated_records.append(details)
+                if pending_late is not None or not tolerate: limits_verified = False
+                pending_late = details
             elif row['event'] == 'source_capture':
                 if pending_capture is not None:
                     limits_verified = False
@@ -370,8 +391,50 @@ def load_pc_evidence(directory):
                 if capture_count > 1_800_000:
                     raise DiagnosticError('PC source evidence exceeds session bound')
                 pending_capture = details
+                if tolerate:
+                    slot = details['source_us']//1000
+                    if details['source_us'] != (capture_count-1)*1000: limits_verified = False
+                    if details['phase_us'] > 250:
+                        rejection = policy.rejection(slot, details['phase_us'])
+                        if rejection: tolerance_failure = rejection
+                        else: policy.commit(slot)
+                        r = pending_late or {}
+                        required = ('start_lower_pico_us','start_upper_pico_us','end_lower_pico_us',
+                            'end_upper_pico_us','intended_pico_us','last_sync_pc_us','excess_us',
+                            'start_midpoint_error_us','end_midpoint_error_plus_quantization_us',
+                            'start_phase_us','end_phase_us','limit_us','reason','uncertainty_us')
+                        limits_verified = (limits_verified and all(k in r for k in required) and
+                            r.get('sequence') == slot and r.get('source_us') == details['source_us'] and
+                            r.get('capture_start_pc_us') == int(row['pc_us']) and
+                            r.get('capture_end_pc_us') == details['capture_end_pc_us'] and
+                            r.get('phase_us') == details['phase_us'] and
+                            r.get('start_lower_pico_us') == details['source_lower_pico_us'] and
+                            r.get('end_upper_pico_us', -2)+1 == details['source_upper_pico_us'] and
+                            r.get('no_early_midpoint') is True and r.get('tolerated_late') is True and
+                            r.get('tolerated_phase_limit_us') == P_MAX_US and
+                            r.get('trial_tolerate_late') is True and
+                            r.get('late_tolerance_policy') == late_policy() and
+                            r.get('qualification') == 'TRIAL / NOT GATE 1 PASS' and
+                            r.get('limit_us') == 250)
+                        if all(k in r for k in required):
+                            mid = (r['start_lower_pico_us']+r['start_upper_pico_us'])/2
+                            end_mid = (r['end_lower_pico_us']+r['end_upper_pico_us'])/2
+                            target = r['intended_pico_us']
+                            limits_verified = (limits_verified and mid >= target and
+                                r['start_midpoint_error_us'] == mid-target and
+                                r['end_midpoint_error_plus_quantization_us'] == end_mid+1-target and
+                                r['start_phase_us'] == abs(mid-target) and r['end_phase_us'] == abs(end_mid+1-target) and
+                                r['phase_us'] == max(abs(mid-target), abs(end_mid+1-target)) and
+                                r['excess_us'] == r['phase_us']-250 and
+                                r.get('endpoint_quantization_us') == 1 and
+                                r.get('uncertainty_us') == max(
+                                    (r['start_upper_pico_us']-r['start_lower_pico_us'])/2,
+                                    (r['end_upper_pico_us']-r['end_lower_pico_us'])/2) and
+                                0 <= r['uncertainty_us'] <= 400)
+                    elif pending_late is not None: limits_verified = False
+                pending_late = None
                 limits_verified = (limits_verified and
-                                   0 <= details['phase_us'] <= 250 and
+                                   0 <= details['phase_us'] <= (P_MAX_US if tolerate else 250) and
                                    0 <= details['uncertainty_us'] <= (400 if trial else 250) and
                                    (not trial or (details.get('no_early_midpoint') is True and
                                     details.get('start_midpoint_error_us', -1) >= 0)) and
@@ -392,7 +455,22 @@ def load_pc_evidence(directory):
                     active += 1
                     if active > 1_800_000:
                         raise DiagnosticError('PC OUTPUT evidence exceeds session bound')
-    return {**summary, 'sources': sources, 'active_output_count': active,
+    if tolerate:
+        sidecar = directory/'tolerated-late-captures.json'
+        limits_verified = (limits_verified and pending_late is None and
+            policy.count == len(tolerated_records) == summary.get('tolerated_late_count') and
+            summary.get('counts', {}).get('tolerated_late') == policy.count)
+        if not sidecar.is_file() or sidecar.stat().st_size > 4_000_000:
+            limits_verified = False
+        else:
+            retained = json.loads(sidecar.read_text())
+            limits_verified = (limits_verified and retained.get('records') == tolerated_records and
+                retained.get('count') == policy.count and retained.get('trial_tolerate_late') is True and
+                retained.get('late_tolerance_policy') == late_policy() and
+                retained.get('pc_clock_domain') == summary.get('pc_clock_domain') and
+                retained.get('serial_closed_before_export') is True)
+    return {**summary, 'late_tolerance_failure': tolerance_failure,
+            'sources': sources, 'active_output_count': active,
             'active_output_prefix_complete': active_prefix,
             'source_limits_verified': (limits_verified and trial_metadata_verified and
                                        pending_capture is None and

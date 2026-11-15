@@ -152,7 +152,8 @@ class Timeline:
     def source_target(self, source_us):
         return self.apply(source_us) - 4000
 
-    def validate_capture(self, source_us, captured_pc_us, clock, capture_end_pc_us=None):
+    def validate_capture(self, source_us, captured_pc_us, clock, capture_end_pc_us=None,
+                         *, late_tolerance=None):
         end = captured_pc_us if capture_end_pc_us is None else capture_end_pc_us
         if type(end) is not int or end < captured_pc_us:
             raise ClockError('invalid source capture bracket')
@@ -163,26 +164,35 @@ class Timeline:
         phase = max(abs(first.midpoint - target), abs(last.midpoint + 1 - target))
         early_trial = (getattr(clock, 'trial_clock_400_sync20', False) and
                        first.midpoint < target)
-        if phase > 250 or early_trial:
-            error = ClockError('TRIAL capture before midpoint target' if early_trial else
-                               'source phase error exceeds250us')
-            error.capture_rejection = {
-                'source_us': source_us, 'intended_pico_us': target,
-                'capture_start_pc_us': captured_pc_us, 'capture_end_pc_us': end,
+        if late_tolerance is not None and not getattr(clock, 'trial_clock_400_sync20', False):
+            raise ClockError('late tolerance requires explicit clock400 trial')
+        rejection = None
+        if early_trial:
+            rejection = 'TRIAL capture before midpoint target'
+        elif phase > 250:
+            rejection = (late_tolerance.rejection(source_us//1000, phase)
+                         if late_tolerance is not None else 'source phase error exceeds250us')
+        if rejection is not None:
+            error = ClockError(rejection)
+            error.capture_rejection = self.capture_record(source_us, captured_pc_us, end,
+                first, last, phase, clock.updated_pc_us, str(error))
+            raise error
+        return phase, max(first.halfwidth, last.halfwidth)
+
+    def capture_record(self, source_us, start, end, first, last, phase, last_sync, reason):
+        target = self.source_target(source_us)
+        return {'source_us': source_us, 'intended_pico_us': target,
+                'capture_start_pc_us': start, 'capture_end_pc_us': end,
                 'start_lower_pico_us': first.lower, 'start_upper_pico_us': first.upper,
                 'end_lower_pico_us': last.lower, 'end_upper_pico_us': last.upper,
                 'start_midpoint_error_us': first.midpoint-target,
                 'end_midpoint_error_plus_quantization_us': last.midpoint+1-target,
                 'start_phase_us': abs(first.midpoint-target),
-                'end_phase_us': abs(last.midpoint+1-target),
-                'endpoint_quantization_us': 1,
+                'end_phase_us': abs(last.midpoint+1-target), 'endpoint_quantization_us': 1,
                 'phase_us': phase, 'limit_us': 250, 'excess_us': max(0, phase-250),
                 'no_early_midpoint': first.midpoint >= target,
                 'uncertainty_us': max(first.halfwidth, last.halfwidth),
-                'last_sync_pc_us': clock.updated_pc_us,
-                'reason': str(error)}
-            raise error
-        return phase, max(first.halfwidth, last.halfwidth)
+                'last_sync_pc_us': last_sync, 'reason': reason}
 
     def validate_available(self, source_us, captured_pc_us, available_pico_us, clock):
         """Reference scheduler check using actual fake/device availability time.

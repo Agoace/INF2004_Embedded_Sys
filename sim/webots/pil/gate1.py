@@ -71,6 +71,7 @@ class Recorder:
         self.csv = csv.writer(self.stream)
         self.attribution = None
         self.trial_clock_400_sync20 = False
+        self.trial_tolerate_late = False
         self.timer_slack = None
         self.interpreter_switch_interval_s = None
         self.csv.writerow(('event', 'pc_us', 'details_json'))
@@ -200,14 +201,19 @@ class Recorder:
         trial = self.trial_clock_400_sync20
         completed = (trial and not reason and elapsed_us >= 600_000_000 and
                      self.stopped_status_observed)
+        late_count = len(host.tolerated_captures)
+        self.counters['tolerated_late'] = late_count
+        completion = 'TRIAL_COMPLETE_WITH_TOLERATED_LATE' if late_count else 'TRIAL_COMPLETE'
         summary = {
-            **labels(trial), 'sync_max_period_us': 20000 if trial else 100000,
+            **labels(trial, self.trial_tolerate_late),
+            'tolerated_late_count': late_count,
+            'completion_label': f'{completion} n={late_count}' if completed else None, 'sync_max_period_us': 20000 if trial else 100000,
             'pc_capture_order': 'capture-first', 'pc_logging': 'synchronous',
             'pc_capture_revision': 'C1+C2+C2b+C2c',
             'timer_slack': self.timer_slack,
             'interpreter_switch_interval_s': self.interpreter_switch_interval_s,
             'post_fail_rx_us': getattr(self, 'post_fail_rx_us', 0),
-            'schema': 1, 'verdict': 'FAIL' if reason else ('TRIAL_COMPLETE' if completed else 'INCOMPLETE'),
+            'schema': 1, 'verdict': 'FAIL' if reason else (completion if completed else 'INCOMPLETE'),
             'failure': reason, 'elapsed_us': elapsed_us,
             'scope': 'transport-only synthetic source; no physics ACK or firmware verdict',
             'candidate_bounds_us': {'pipeline': 4000, 'expiry': 5000,
@@ -327,7 +333,7 @@ def neutral_payload(source_us):
 
 def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
              transport_only=False, image_sha256=None, profile_flags=None, measure_io=False,
-             trial_clock_400_sync20=False, post_fail_rx_us=0):
+             trial_clock_400_sync20=False, post_fail_rx_us=0, trial_tolerate_late=False):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -344,7 +350,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     clock = clock or RealClock()
     host = HostTransport(session or secrets.randbelow(0xffffffff) + 1,
                          transport_only=transport_only,
-                         trial_clock_400_sync20=trial_clock_400_sync20)
+                         trial_clock_400_sync20=trial_clock_400_sync20,
+                         trial_tolerate_late=trial_tolerate_late)
+    run_labels = labels(trial_clock_400_sync20, trial_tolerate_late)
     timer_slack = read_timer_slack()  # GET only, calling thread.
     switch_interval = sys.getswitchinterval()  # Read only; never set.
     try:
@@ -353,12 +361,13 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         io.close()
         raise
     recorder.trial_clock_400_sync20 = trial_clock_400_sync20
+    recorder.trial_tolerate_late = trial_tolerate_late
     recorder.timer_slack = timer_slack
     recorder.interpreter_switch_interval_s = switch_interval
     recorder.post_fail_rx_us = post_fail_rx_us
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
-    recorder.record('run_metadata', clock.now_us(), **labels(trial_clock_400_sync20),
+    recorder.record('run_metadata', clock.now_us(), **run_labels,
                     pc_capture_order='capture-first', pc_logging='synchronous',
                     pc_capture_revision='C1+C2+C2b+C2c', timer_slack=timer_slack,
                     interpreter_switch_interval_s=switch_interval, post_fail_rx_us=post_fail_rx_us,
@@ -476,10 +485,11 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             from .gate1_attribution import AttributionRing
             from .gate1_host_observer import HostSpans, host_snapshot
             (recorder.output/'host-before.json').write_text(json.dumps(
-                {**host_snapshot(), **labels(trial_clock_400_sync20)}, indent=2)+'\n')
-            host_spans = HostSpans(clock, labels=labels(trial_clock_400_sync20))
+                {**host_snapshot(), **run_labels}, indent=2)+'\n')
+            host_spans = HostSpans(clock, labels=run_labels)
             attribution = AttributionRing(clock)
             attribution.qualification = TRIAL_LABEL if trial_clock_400_sync20 else None
+            attribution.trial_tolerate_late = trial_tolerate_late
             recorder.attribution = attribution
             attribution.install()
             recorder.record('measurement_enabled', start, production_cadence_changed=False,
@@ -668,17 +678,17 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                     if attribution is not None:
                         attribution.detach()
     if failure_tail is not None:
-        failure_tail.finish(recorder.output, labels(trial_clock_400_sync20), serial_closed=serial_closed)
+        failure_tail.finish(recorder.output, run_labels, serial_closed=serial_closed)
     if host_spans is not None:
         from .gate1_host_observer import host_snapshot
         (recorder.output/'host-after.json').write_text(json.dumps(
-            {**host_snapshot(), **labels(trial_clock_400_sync20)}, indent=2)+'\n')
+            {**host_snapshot(), **run_labels}, indent=2)+'\n')
         host_spans.finish(recorder.output, serial_closed=serial_closed)
     # Dedicated rejection evidence bypasses ordinary transport events and is
     # serialized only AFTER local inhibit, bounded DISARM attempt and close.
     rejection = getattr(host, 'capture_rejection', None)
     if rejection is not None:
-        rejection = dict(rejection, **labels(trial_clock_400_sync20),
+        rejection = dict(rejection, **run_labels,
                          pc_clock_domain=recorder.pc_clock_domain,
                          serial_closed_before_log=serial_closed)
         (recorder.output/'capture-rejected.json').write_text(json.dumps(rejection, indent=2)+'\n')
@@ -688,8 +698,13 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         recorder.flush()
         recorder.attribution = None
         attribution.finish(recorder.output, serial_closed=serial_closed)
+    if trial_tolerate_late:
+        (recorder.output/'tolerated-late-captures.json').write_text(json.dumps(
+            dict(run_labels, records=host.tolerated_captures, count=len(host.tolerated_captures),
+                 pc_clock_domain=recorder.pc_clock_domain,
+                 serial_closed_before_export=serial_closed), indent=2)+'\n')
     if trial_clock_400_sync20:
-        (recorder.output/'trial-manifest.json').write_text(json.dumps(manifest(), indent=2)+'\n')
+        (recorder.output/'trial-manifest.json').write_text(json.dumps(manifest(trial_tolerate_late), indent=2)+'\n')
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
     for event in host.drain_events():
         recorder.record('final_transport_event', clock.now_us(), record=event)

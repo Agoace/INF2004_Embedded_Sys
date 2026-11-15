@@ -3,6 +3,13 @@
 **TRIAL / NOT GATE 1 PASS.** This is an operator-approved experiment, not a new
 default or a change to physical Gate1 acceptance.
 
+## Separately selected T1 extension
+
+The later [2026-11-15 T1 decision](GATE1_T1_LATE_TOLERANCE_20261115.md) adds
+rare late-phase tolerance ONLY with the additional `--trial-tolerate-late` flag.
+The B400/SYNC20 mode documented here still requires phase250us without that
+flag. T1 changes no native age/lease/jitter limits and never grants Gate1 PASS.
+
 ## Decision and scope
 
 The operator approved an explicit `--trial-clock-400-sync20` mode after attempt9
