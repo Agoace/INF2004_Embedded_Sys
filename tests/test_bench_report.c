@@ -7,10 +7,19 @@
 #include <tk/tkernel.h>
 #include <tm/tmonitor.h>
 #include "../app_program/bench_kernel/bench_report.h"
+#include "../app_program/subsystem2/motion.h"
+static bench_stats_t snap;
+static int32_t native[2] = {499, 499};
+int motion_snapshot_try_read(motion_status_t *s, uint32_t *us)
+{
+    assert(snap.stopped); /* Never read counts for an open window. */
+    s->counts[0] = native[0]; s->counts[1] = native[1];
+    *us = 0u;
+    return E_OK;
+}
 
 static char out[1024];
 static size_t used;
-static bench_stats_t snap;
 static bool have_snap;
 static unsigned int real_calls;
 static unsigned int read_calls;
@@ -66,6 +75,8 @@ static bench_stats_t stopped(uint32_t start, uint32_t end, uint32_t sum)
 {
     return (bench_stats_t){
         .edges_sched = 1000u, .edges_delivered = 998u, .coalesced = 2u,
+        .sched_left = 500u, .sched_right = 500u,
+        .ack_left = 499u, .ack_right = 499u,
         .overflow = 0u, .gen_us_sum = sum, .gen_us_max = 9u,
         .gen_calls = 500u, .window_start_us = start, .window_end_us = end,
         .stopped = 1u};
@@ -93,10 +104,22 @@ static void check_stopped_ok(void)
     /* 10 min window, 2.99 % generator cost: 299 basis points, OK. */
     snap = stopped(1000u, 1000u + 600000000u, 17940000u);
     run();
-    assert(strcmp(out, "[timeline]\n[bench] window_us 600000000 "
-                       "sched 1000 delivered 998 coalesced 2 overflow 0 "
-                       "gen_calls 500 gen_us_sum 17940000 gen_us_max 9 "
-                       "cost_bp 299 OK\n") == 0);
+    assert(strstr(out, "left sched 500 delivered 499 counted 499 diff 0")
+           != NULL);
+    assert(strstr(out, "right sched 500 delivered 499 counted 499 diff 0")
+           != NULL);
+    assert(strstr(out, "COUNT_MATCH") != NULL);
+    native[1] = 498;
+    run();
+    assert(strstr(out, "right sched 500 delivered 499 counted 498 diff -1")
+           != NULL);
+    assert(strstr(out, "COUNT_MISMATCH") != NULL);
+    native[1] = 499;
+    run();
+    const char *prefix = "[timeline]\n[bench] window_us 600000000 "
+        "sched 1000 delivered 998 coalesced 2 overflow 0 "
+        "gen_calls 500 gen_us_sum 17940000 gen_us_max 9 cost_bp 299 OK\n";
+    assert(strncmp(out, prefix, strlen(prefix)) == 0);
 }
 
 static void check_cost_high_and_wrap(void)

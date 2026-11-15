@@ -60,6 +60,8 @@ unsigned int bk_gen_tick(uint32_t now_us)
         return 0u;
     }
     ++g.stats.edges_sched;
+    if (g.wheel == 0u) { ++g.stats.sched_left; }
+    else { ++g.stats.sched_right; }
     /* Missing a source opportunity is fatal; never replay/catch up. */
     if (now_us - g.next_us >= 263u) { bk_gen_abort(now_us); return 0u; }
     if (!bk_gpio_edge(g.wheel, states[g.wheel][g.phase[g.wheel]])) {
@@ -94,6 +96,8 @@ void bench_stats_get(bench_stats_t *out)
 void bk_gen_publish(void)
 {
     g.stats.edges_delivered = bk_gpio_acked();
+    g.stats.ack_left = bk_gpio_wheel_acked(0u);
+    g.stats.ack_right = bk_gpio_wheel_acked(1u);
     (void)bench_stats_publish(&g.stats);
 }
 #endif

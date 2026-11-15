@@ -9,5 +9,7 @@ bool bk_gpio_edge(unsigned int wheel, uint8_t next_ab);
 uint8_t bk_gpio_ab(unsigned int wheel);
 uint32_t bk_gpio_pending(unsigned int group);
 void bk_gpio_ack(unsigned int pin, uint32_t events);
-uint32_t bk_gpio_acked(void); /* Successfully consumed virtual edges. */
+uint32_t bk_gpio_acked(void);
+/* Successfully consumed virtual edges for one wheel. */
+uint32_t bk_gpio_wheel_acked(unsigned int wheel);
 #endif

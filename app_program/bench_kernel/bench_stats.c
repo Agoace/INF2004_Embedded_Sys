@@ -4,6 +4,7 @@
 #include <stddef.h>
 #define FIELD_LIST(X) \
     X(edges_sched) X(edges_delivered) X(coalesced) X(overflow) \
+    X(sched_left) X(sched_right) X(ack_left) X(ack_right) \
     X(gen_us_sum) X(gen_us_max) X(gen_calls) \
     X(window_start_us) X(window_end_us) X(stopped) \
     X(stop_late_us) X(stop_position_us)

@@ -79,6 +79,8 @@ int main(int argc, char **argv)
         assert(s.stop_position_us > 0u);
     } else {
         assert(s.edges_sched == 2280000u && s.edges_delivered == 2280000u);
+        assert(s.sched_left == 1140000u && s.sched_right == 1140000u);
+        assert(s.ack_left == 1140000u && s.ack_right == 1140000u);
         assert(pends == 2280000u && acks == 2280001u);
         assert(s.gen_calls == acks && !s.overflow && !s.coalesced);
         assert(s.window_end_us - s.window_start_us == 600000000u);
