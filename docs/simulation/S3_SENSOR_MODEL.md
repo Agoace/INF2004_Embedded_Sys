@@ -8,8 +8,9 @@ The fixed 1.5 mm edge check fails on the held-out capture. Keep that FAIL.
 The finite-ray sampler is a slow offline reference, not a 1 kHz runtime
 sampler. No firmware, decoder, acceptance gate or action permission changes
 are part of this record. No Pico flash or hardware timing test was done.
-GP28 remains at a nominal minimum clearance of 5.5 mm. Do not reduce it to
-improve a simulated result.
+GP28 reference remains5.5mm. Operator measured approximately5–6mm clearance
+on2026-11-15;5.5mm also remains the recorded minimum constraint. Do not lower
+it to improve a simulated result.
 
 ## Entry points
 
@@ -141,8 +142,10 @@ barcode eligibility.
 
 ## Mount and motion limits
 
-GP28 uses nominal `(forward,left)=(80,77)` mm, with approximately 5 mm
-forward-position uncertainty. Current pose/height surveys are missing.
+GP28 uses `(forward,left)=(80,77)`mm: about80mm forward is operator-measured
+(2026-11-15); lateral datum77mm remains assumed. Operator measured height
+approximately5–6mm on the same date. Existing5.5mm model height is unchanged;
+no override is needed. Frozen JSON retains its original fit provenance.
 For a flat surface datum, use:
 
 ```text
@@ -296,7 +299,8 @@ part of STAGE 0. A later plan can assess analytic/cached stripe-normal
 convolution for 1 kHz, with `first_hit` as a cross-check. That work needs its
 own accuracy and time-budget gate.
 
-Physical generalization remains blocked by sheet/bar measurements, station
-markings/ports, rigid mount/height/optical-axis surveys, transverse footprint,
-height response and slip evidence. Hardware timing, firmware stack margins,
+Physical generalization still needs sheet/bar measurements, station
+markings/ports, optical-axis/lateral-datum surveys, transverse footprint,
+height response and slip evidence. Approximate operator mount measurements
+do not establish an optical height-response law. Hardware timing, firmware stack margins,
 PIL freshness and action enablement require separate approval and tests.
