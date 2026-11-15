@@ -111,7 +111,9 @@ def run(robot,project):
                 raise
             for wheel,target in zip(wheels,targets):wheel.setVelocity(target)
             if config.get('curve_trial'):
-                from pil.sil_curve import nearest_path
+                if config.get('s_curve_trial'):
+                    from pil.sil_s_curve import nearest_s_path as nearest_path
+                else:from pil.sil_curve import nearest_path
                 pair_error=nearest_path(position[0]*1000+c*119-s*7.25,position[1]*1000+s*119+c*7.25)['error_mm']
             else:pair_error=position[1]*1000+s*119+c*7.25-157.5
             row=(slot+1,*adc,*list(actual.values())[:9],*position,yaw,*angles,*targets,pair_error,rotation[8])
@@ -140,7 +142,9 @@ def run(robot,project):
     else:complete=all(checks.values())
     curve=None
     if config.get('curve_trial'):
-        from pil.sil_curve import analyze_curve
+        if config.get('s_curve_trial'):
+            from pil.sil_s_curve import analyze_s_curve as analyze_curve
+        else:from pil.sil_curve import analyze_curve
         curve=analyze_curve(rows)
     proof=replay(project,rows)if complete else False
     output=project/'sil-result';output.mkdir()

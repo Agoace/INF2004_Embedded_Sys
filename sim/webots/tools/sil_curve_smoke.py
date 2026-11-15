@@ -12,12 +12,17 @@ from pil.sil_curve import curve_course
 def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--spin-calibration',type=Path,required=True)
+    parser.add_argument('--s-curve',action='store_true')
     parser.add_argument('--timeout-seconds',type=int,default=1200);args=parser.parse_args()
     if not 20<=args.timeout_seconds<=1200:parser.error('timeout20..1200s; extended runs need explicit approval')
     spin=json.loads(args.spin_calibration.read_text())
     if not spin.get('complete')or spin.get('optical_sampler')!='full':parser.error('completed full-scene aligned spin required')
+    if args.s_curve:
+        from pil.sil_s_curve import s_curve_course
+        course=s_curve_course()
+    else:course=curve_course()
     project,world=prepare_project(args.output,line_search=True,recovery=True,spin_calibration=spin,
-        course_override=curve_course(),optical_sampler='full')
+        course_override=course,optical_sampler='full')
     start=monotonic();status,pid,command,contents=launch_project(project,world,args.timeout_seconds,label='sil-curve')
     wall_seconds=monotonic()-start;summary=None;error=None;proof=False
     try:
