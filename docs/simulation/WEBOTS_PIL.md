@@ -35,6 +35,10 @@ binary rings. Overflow fails/inhibits with independent close proof. Frozen
 artifact equivalence passed; host measurements do NOT show a universal speedup
 or establish hardware timing. No physical trial was restarted.
 
+The approved [straight SIL subset](SIL_LINE_STRAIGHT_20261115.md) runs unchanged
+pure C line-position/steering code with boot5209-fitted optics in fast Webots.
+Two10s straight-strip runs were byte-identical; curves/recovery remain untested.
+
 SW6 owns the frozen PIL v1 protocol and C codec. SW4 owns `pil/s3_*` geometry,
 optics and assets. SW5 owns other `sim/webots/` source files. Main owns integration,
 shared documentation indexes, images and hardware operations. No file under
@@ -99,6 +103,7 @@ manifest also retains their exact content hashes. The recovery review reran all
 | `pil/serial_io.py` | Explicit Linux Debug Probe by-id selection and bounded nonblocking 921600 8N1 I/O. Import opens nothing. |
 | `pil/gate1.py`, `tools/gate1_soak.py` | Transport-only neutral-source soak, CSV events and measured FAIL/INCOMPLETE summary. No Webots or physics ACK. |
 | `pil/gate1_process_log.py`, `tools/gate1_process_bench.py` | Separate-process binary evidence recorder, bounded stop reserve/close mailbox, old-format CSV export and host-only before/after cost/equality bench. |
+| `pil/sil_line.py`, `controllers/sil_line/`, `tools/sil_line_smoke.py`, `courses/sil/` | Pure C subset, all-forward-row DM1 interpolation, fitted optical ADC and synchronous straight-strip SIL. |
 | `pil/gate1_diagnostics.py`, `tools/gate1_report.py` | Offline stopped-USB D1 decode, exact coverage checks and conservative all-frame age bounds. No port access. |
 | `pil/gate1_rx_timing.py`, `pil/gate1_measurement.py`, `tools/gate1_correlate.py` | Strict stopped RX1 parser and offline RAW PC/full-pcap/Pico timing correlation. Optional USB layer stays unknown when absent. Never promotes a verdict. |
 | `tools/gate1_usbmon.sh` | Optional operator-approved sudo capture of one resolved USB bus. Foreground PID, operator-readable stderr and privilege drop; no UART open. |

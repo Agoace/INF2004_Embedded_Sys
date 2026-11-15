@@ -1,0 +1,120 @@
+"""Synchronous SIL: simulated optical ADC -> unchanged pure C -> wheel velocity."""
+import csv
+import hashlib
+import json
+import math
+from pathlib import Path
+import sys
+
+PROJECT=Path(__file__).resolve().parents[2]
+sys.path.insert(0,str(PROJECT/'libraries'))
+from pil.sil_line import LineController,forward_velocity
+from pil.course_builder import Course,build_course
+from pil.s3_fast import FastScene
+from pil.s3_optics import SensorProfile
+
+FIELDS=('sim_ms','left_adc','centre_adc','position','event','line_seen','junction','left_pct','right_pct',
+        'norm_left','norm_centre','fault','x_m','y_m','z_m','yaw_rad','left_rad','right_rad',
+        'target_left_rad_s','target_right_rad_s','pair_error_mm','upright_cos')
+
+
+def replay(project,rows):
+    manifest=json.loads((project/'sil-manifest.json').read_text())
+    controller=LineController(project/'libraries/libsil_line.so');controller.calibrate(manifest['calibration_rows'])
+    for row in rows:
+        actual=controller.update(int(row[1]),int(row[2]),int(row[0]))
+        if list(actual.values())!=list(row[3:12]):raise ValueError('C recorded-input replay mismatch')
+        targets=forward_velocity(actual['left_pct'],actual['right_pct'],32.5)
+        if targets!=tuple(row[18:20]):raise ValueError('plant target replay mismatch')
+    return True
+
+
+def replay_export(project):
+    project=Path(project);path=project/'sil-result/samples.csv'
+    if not path.is_file()or path.stat().st_size>8_000_000:raise ValueError('SIL replay file budget')
+    rows=[]
+    with path.open(newline='')as stream:
+        reader=csv.reader(stream)
+        if next(reader,None)!=list(FIELDS):raise ValueError('SIL replay fields')
+        for row in reader:
+            if len(rows)>=10000 or len(row)!=len(FIELDS):raise ValueError('SIL replay row budget/width')
+            converted=tuple(int(v)if i<12 else float(v)for i,v in enumerate(row))
+            if converted[0]!=len(rows)+1 or any(not math.isfinite(v)for v in converted):raise ValueError('SIL replay time/value')
+            rows.append(converted)
+    if len(rows)!=10000:raise ValueError('SIL incomplete replay')
+    return replay(project,rows)
+
+
+def run(robot,project):
+    project=Path(project);config=json.loads((project/'sil-manifest.json').read_text())
+    if robot.getBasicTimeStep()!=1:raise ValueError('SIL needs1ms step')
+    scene=FastScene.from_course(build_course(Course.load(project/'course.json')))
+    profiles={name:SensorProfile(**data)for name,data in config['profiles'].items()}
+    controller=LineController(project/'libraries/libsil_line.so')
+    calibration=controller.calibrate(config['calibration_rows'])
+    wheels=[robot.getDevice(n)for n in('left_motor','right_motor')]
+    for wheel in wheels:wheel.setPosition(float('inf'));wheel.setAvailableTorque(.12);wheel.setVelocity(0.)
+    robot.getDevice('sonar_servo').setPosition(0.)
+    encoders=[robot.getDevice(n)for n in('left_encoder','right_encoder')]
+    for encoder in encoders:encoder.enable(1)
+    rows=[];rejections=[];error=None;fault=False
+    try:
+        for slot in range(10000):
+            if robot.step(1)==-1 or round(robot.getTime()*1000)!=slot+1:raise ValueError('SIL step sequence')
+            node=robot.getSelf();position=node.getPosition();rotation=node.getOrientation()
+            yaw=math.atan2(rotation[3],rotation[0]);c,s=math.cos(yaw),math.sin(yaw)
+            # Flat F1 projection: actual XY/yaw, fixed9mm clearance above flat
+            # mat. Bounce/tilt response UNMODELLED; reject a gross tilt instead.
+            if rotation[8]<.999:raise ValueError('outside flat optical model tilt domain')
+            adc=[]
+            for name in('GP27','GP26'):
+                mount=config['mounts'][name];f,l=mount['forward_mm'],mount['left_mm']
+                origin=(position[0]*1000+c*f-s*l,position[1]*1000+s*f+c*l,19.)
+                sample=scene.sample(profiles[name],origin,axis_u=(c,s,0),sample_us=(slot+1)*1000)
+                if not sample.valid:raise ValueError('optical sample invalid: '+sample.reason)
+                adc.append(sample.adc)
+            actual=controller.update(*adc,slot+1)
+            if actual['fault']:fault=True
+            try:targets=forward_velocity(actual['left_pct'],actual['right_pct'],32.5)
+            except ValueError as exception:
+                rejections.append(dict(sim_ms=slot+1,left_pct=actual['left_pct'],right_pct=actual['right_pct'],reason=str(exception)))
+                raise
+            for wheel,target in zip(wheels,targets):wheel.setVelocity(target)
+            angles=[encoder.getValue()for encoder in encoders]
+            pair_error=position[1]*1000+s*119+c*7.25-157.5
+            row=(slot+1,*adc,*actual.values(),*position,yaw,*angles,*targets,pair_error,rotation[8])
+            if any(not math.isfinite(v)for v in row):raise ValueError('nonfinite SIL state')
+            if not .015<position[2]<.15 or abs(pair_error)>100:raise ValueError('SIL gross motion bound')
+            rows.append(row)
+            if fault:raise ValueError('native line lost; stop latched')
+    except Exception as exception:error=str(exception)
+    finally:
+        for wheel in wheels:wheel.setVelocity(0.)
+    checks=dict(duration=len(rows)==10000,line_acquired=bool(rows)and rows[0][5]==1,
+        line_retained=len(rows)==10000 and all(r[5]for r in rows),no_false_junctions=bool(rows)and not any(r[6]for r in rows),
+        forward=bool(rows)and rows[-1][12]-rows[0][12]>.5,
+        encoders_forward=bool(rows)and all(rows[-1][i]>rows[0][i]for i in(16,17)),
+        within_strip=bool(rows)and max(abs(r[20])for r in rows)<10,
+        inputs_accepted=error is None and not rejections and not fault)
+    complete=all(checks.values())
+    proof=replay(project,rows)if complete else False
+    output=project/'sil-result';output.mkdir()
+    with (output/'samples.csv').open('w',newline='')as stream:
+        writer=csv.writer(stream);writer.writerow(FIELDS);writer.writerows(rows)
+    (output/'rejections.json').write_text(json.dumps(rejections,indent=2)+'\n')
+    summary=dict(status='SIL_LINE_COMPLETE'if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),
+        simulation_only=True,hardware_used=False,serial_used=False,recorded_input_c_replay=proof,error=error,
+        calibration=calibration,configuration=config['controller_config'],checks=checks,
+        max_pair_error_mm=max((abs(r[20])for r in rows),default=None),
+        line_seen_samples=sum(r[5]for r in rows),junction_samples=sum(r[6]for r in rows),
+        travel_x_m=rows[-1][12]-rows[0][12]if rows else None,
+        encoder_delta_rad=[rows[-1][i]-rows[0][i]for i in(16,17)]if rows else None,
+        samples_sha256=hashlib.sha256((output/'samples.csv').read_bytes()).hexdigest(),
+        limits='ASSUMED fitted optics/flat projection/velocity plant; pure C subset, not full robot or physical control')
+    (output/'summary.json').write_text(json.dumps(summary,indent=2,sort_keys=True)+'\n')
+    robot.simulationQuit(0 if complete and proof else 1)
+
+
+if __name__=='__main__':
+    from controller import Supervisor
+    run(Supervisor(),PROJECT)
