@@ -49,6 +49,11 @@
 - Delivered count increments only when an ACK clears a published edge; duplicate
   or wrong-polarity ACK does not count. No native encoder-count assignment.
 - GCC, Clang ASan/UBSan and strict ARM checks pass; host test covers these seams.
+- `test_bench_kernel_encoder.c` links the real GPIO dispatcher, motion encoder
+  callback, controller and10ms task. Forward/reverse four-edge cycles produce
+  native counts4/4 then0/0; real ACK totals8 then16; spurious dispatch adds0.
+- GCC and Clang ASan/UBSan pass. IRQ entry and cyclic scheduling are host doubles;
+  this checks the source seam, not NVIC delivery or real-time target behavior.
 - No NVIC producer, timer scheduling or complete bench image is included yet.
 
 ## Ownership and gates

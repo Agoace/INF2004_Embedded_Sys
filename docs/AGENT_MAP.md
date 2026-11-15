@@ -165,6 +165,8 @@ from ordinary source selection; it does not yet contain a complete runtime.
 The [virtual GPIO state](../app_program/bench_kernel/bench_gpio.c) and
 [hardware-provider seam](../app_program/bench_kernel/bench_gpio_hw.c) have a
 [host test](../tests/test_bench_kernel_gpio.c); no native dispatcher is replaced.
+The [encoder integration test](../tests/test_bench_kernel_encoder.c) connects
+that real dispatcher to the real motion callback/controller with host scheduling.
 
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
