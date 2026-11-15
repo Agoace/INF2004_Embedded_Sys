@@ -12,16 +12,19 @@ from pil.gate1_trial import labels
 
 
 def main():
-    c=RealClock();s=HostSpans(c);samples=[];baseline=[]
+    c=RealClock();s=HostSpans(c);samples=[];baseline=[];receive_samples=[]
     for _ in range(20000):
         a=time.perf_counter_ns();c.now_us();baseline.append(time.perf_counter_ns()-a)
         a=time.perf_counter_ns();token=s.begin('select');s.end(token)
         samples.append(time.perf_counter_ns()-a)
+        a=time.perf_counter_ns();token=s.begin('receive');s.end(token)
+        receive_samples.append(time.perf_counter_ns()-a)
     def stats(v):
         v=sorted(v)
         return dict(p50_ns=statistics.median(v),p95_ns=v[int(len(v)*.95)-1],
                     p99_ns=v[int(len(v)*.99)-1],max_ns=max(v))
     print(json.dumps(dict(labels(True),samples=len(samples),whole_span=stats(samples),
+        receive_whole_span=stats(receive_samples),
         single_raw_clock_baseline=stats(baseline),
         scope='microbenchmark only; includes begin/end/sample writes, no syscall body; not a hard bound'),indent=2))
 

@@ -24,6 +24,58 @@ class HostObserverTests(unittest.TestCase):
             self.assertEqual(int(rows[0]['thread_cpu_ns']),100)
             self.assertEqual(spans.overwritten,1)
 
+    def test_receive_span_covers_decode_and_serialization_markers(self):
+        from unittest.mock import patch
+        from pil.gate1 import receive_chunk
+        c=FakeClock();io=FakePair(c,capabilities=4)
+        def slow_receive(*args,**kwargs):
+            result=receive_chunk(*args,**kwargs);c.now+=151;return result
+        with tempfile.TemporaryDirectory()as tmp,patch('pil.gate1.receive_chunk',side_effect=slow_receive):
+            out=Path(tmp)/'run'
+            run_soak(io,out,clock=c,session=123,duration_us=1000,transport_only=True,
+                     measure_io=True,trial_clock_400_sync20=True)
+            spans=list(csv.DictReader((out/'host-spans.csv').read_text().splitlines()))
+            spans=[s for s in spans if s['kind']=='receive']
+            self.assertTrue(spans)
+            self.assertTrue(any(int(s['wall_us'])>=151 for s in spans))
+            marks=list(csv.DictReader((out/'attribution.csv').read_text().splitlines()))
+            by_loop={}
+            for r in marks:
+                if r['kind']in ('read_exit','receive_exit'):by_loop.setdefault(r['loop'],[]).append(r)
+            checked=0
+            for s in spans:
+                rows=by_loop.get(s['loop'],[])
+                if len(rows)==2:
+                    self.assertTrue(all(int(s['raw_start_us'])<=int(r['pc_us'])<=int(s['raw_end_us'])for r in rows))
+                    checked+=1
+            self.assertGreater(checked,0)
+
+    def test_receive_span_closes_on_transport_error(self):
+        from unittest.mock import patch
+        from pil.gate1 import GateFailure
+        c=FakeClock();io=FakePair(c,capabilities=4)
+        with tempfile.TemporaryDirectory()as tmp,patch('pil.gate1.receive_chunk',side_effect=GateFailure('receive fault test')):
+            out=Path(tmp)/'run'
+            summary=run_soak(io,out,clock=c,session=123,duration_us=1000,transport_only=True,
+                     measure_io=True,trial_clock_400_sync20=True)
+            self.assertEqual(summary['failure'],'receive fault test')
+            spans=list(csv.DictReader((out/'host-spans.csv').read_text().splitlines()))
+            self.assertEqual(spans[-1]['kind'],'receive')
+            self.assertTrue(io.closed)
+
+    def test_snapshot_records_per_cpu_resume_qos_without_device_access(self):
+        from unittest.mock import patch
+        from pil.gate1_host_observer import host_snapshot
+        cpu=Path('/sys/devices/system/cpu/cpu0')
+        def glob(path,pattern):return [cpu] if pattern=='cpu[0-9]*' else []
+        def read(path):return {'status':'UNKNOWN','reason':'test missing file'}
+        with patch('pil.gate1_host_observer.Path.glob',glob),patch('pil.gate1_host_observer._read',side_effect=read)as reads:
+            snapshot=host_snapshot()
+        key=str(cpu/'power/pm_qos_resume_latency_us')
+        self.assertIn(key,snapshot['power_files'])
+        self.assertEqual(snapshot['power_files'][key]['status'],'UNKNOWN')
+        self.assertFalse(any(str(call.args[0]).startswith('/dev/')for call in reads.call_args_list))
+
     def test_read_return_timestamp_precedes_observer_postwork(self):
         from unittest.mock import patch
         from pil.serial_io import ProbeSerial
