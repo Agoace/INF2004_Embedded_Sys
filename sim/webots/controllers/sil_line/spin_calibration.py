@@ -39,7 +39,6 @@ def run(robot,project):
             counts=[round(e.getValue()*2535/(2*math.pi))for e in encoders]
             centre=controller.sample(adc,ms,sequence.collecting)
             if ms%10==0:
-                previous=sequence.stage
                 command=sequence.advance(ms,counts,centre,controller.peak)
                 if command['end']:controller.finish()
                 if command['stop']:controller.stop()

@@ -15,6 +15,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--motor-fidelity',action='store_true')
     parser.add_argument('--line-search',action='store_true')
+    parser.add_argument('--line-profile',choices=('A','B'),default='B')
     parser.add_argument('--spin-calibration',type=Path,help='calibration.json from aligned physical sim spin')
     args=parser.parse_args();output=args.output.resolve()
     if not output.is_relative_to(SOURCE.parents[1]/'build'):parser.error('output below owned build required')
@@ -29,7 +30,7 @@ def main():
     for offset in(0,5,-5,10,-10,15,-15):
         for yaw in(0,5,-5):
             name=f'offset{offset:+d}-yaw{yaw:+d}'
-            project,world=prepare_project(output/name,offset_mm=offset,yaw_deg=yaw,recovery=True,motor_fidelity=args.motor_fidelity,line_search=args.line_search,spin_calibration=spin)
+            project,world=prepare_project(output/name,offset_mm=offset,yaw_deg=yaw,recovery=True,motor_fidelity=args.motor_fidelity,line_search=args.line_search,spin_calibration=spin,line_profile=args.line_profile)
             status,pid,command,contents=launch_project(project,world,90,label='sil-recovery')
             summary=None;error=None;proof=False
             try:

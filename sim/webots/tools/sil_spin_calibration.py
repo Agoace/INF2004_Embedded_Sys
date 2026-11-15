@@ -8,8 +8,8 @@ import shutil
 from sil_line_smoke import prepare_project,launch_project,SOURCE
 
 
-def run_spin(output):
-    project,world=prepare_project(output,line_search=True)
+def run_spin(output,*,line_profile='B'):
+    project,world=prepare_project(output,line_search=True,line_profile=line_profile)
     world.write_text(world.read_text().replace('controller "sil_line"','controller "spin_calibration"'))
     destination=project/'controllers/spin_calibration';destination.mkdir()
     shutil.copyfile(SOURCE/'controllers/sil_line/spin_calibration.py',destination/'spin_calibration.py')
@@ -26,8 +26,10 @@ def run_spin(output):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True);args=parser.parse_args()
-    project,result=run_spin(args.output)
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--line-profile',choices=('A','B'),default='B')
+    args=parser.parse_args()
+    project,result=run_spin(args.output,line_profile=args.line_profile)
     print(json.dumps({k:v for k,v in result.items()if k!='calibration_rows'},sort_keys=True));print('Evidence:',project)
     return 0
 

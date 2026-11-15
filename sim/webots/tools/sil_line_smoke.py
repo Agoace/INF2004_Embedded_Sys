@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B'):
     course=Course.load(SOURCE/'courses/sil'/('straight_search_assumed.json'if line_search else'straight_assumed.json'))
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -40,9 +40,12 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
         build_motor_library(libs)
     else:build_library(libs)
     def profile_dict(name):
-        profile=load_assumed_line_profile(name)
+        if line_search and line_profile=='B':
+            from pil.s3_assumed_line import load_boot5209_line_profile
+            profile=load_boot5209_line_profile(name)
+        else:profile=load_assumed_line_profile(name)
         return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
-    config=dict(profiles={n:profile_dict(n)for n in('GP26','GP27')},
+    config=dict(optical_profile='BOOT_5209_SPIN_FIT_B'if line_search and line_profile=='B'else'ASSUMED_LINE_A',profiles={n:profile_dict(n)for n in('GP26','GP27')},
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
         calibration_rows=spin_calibration['calibration_rows']if spin_calibration else[[200,200,0]]*16+[[3700,3700,0]]*4,
         calibration_provenance='ACTUAL aligned simulated spin samples; independent pose reset per trial; sim-owned sequence equivalent to vehicle_task.c'if spin_calibration else'SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
