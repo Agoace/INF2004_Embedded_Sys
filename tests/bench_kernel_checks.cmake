@@ -8,8 +8,11 @@ host_test(test_bench_kernel_stats_threads tests/test_bench_kernel_stats.c
     app_program/bench_kernel/bench_stats.c)
 host_test(test_bench_report tests/test_bench_report.c
     app_program/bench_kernel/bench_report.c)
+host_test(test_bench_kernel_gpio tests/test_bench_kernel_gpio.c
+    app_program/bench_kernel/bench_gpio.c
+    app_program/bench_kernel/bench_gpio_hw.c)
 foreach(t test_bench_kernel_stats test_bench_kernel_stats_threads
-        test_bench_report)
+        test_bench_report test_bench_kernel_gpio)
     if(TARGET ${t})
         target_compile_definitions(${t} PRIVATE BENCH_KERNEL=1)
     endif()

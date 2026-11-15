@@ -40,6 +40,17 @@
 - Timeline sites (bench only): 10 = generator exit (arg = edges), 11 = pending
   overflow.
 
+## Virtual GPIO seam
+
+- `bench_gpio.{c,h}` owns AB states and virtual pending bits; `bench_gpio_hw.c`
+  supplies the existing pending/ACK/enable API. Native GPIO code is unchanged.
+- Core0, interrupt-serialized access only. Reject two-bit jumps, unsubscribed
+  edges and a second edge while that wheel has an unacknowledged event.
+- Delivered count increments only when an ACK clears a published edge; duplicate
+  or wrong-polarity ACK does not count. No native encoder-count assignment.
+- GCC, Clang ASan/UBSan and strict ARM checks pass; host test covers these seams.
+- No NVIC producer, timer scheduling or complete bench image is included yet.
+
 ## Ownership and gates
 
 - SW6: stimulus/providers, source selector, isolated reset record and tests.
