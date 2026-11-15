@@ -18,7 +18,8 @@ class AssumedLineTests(unittest.TestCase):
             p = load_assumed_line_profile(channel)
             self.assertEqual(p.name, channel)
             self.assertEqual(p.evidence_status, 'ASSUMED_SIL_STRAIGHT_ONLY')
-            self.assertEqual(p.reference_height_mm, 9)
+            self.assertEqual(p.reference_height_mm, 8)
+            self.assertIn('HEIGHT_APPROX_MEASURED_OPERATOR_2026_11_15', p.assumptions)
             self.assertAlmostEqual(p.sigma_x_mm, 15.924122728751232)
             self.assertEqual(p.sigma_y_mm, p.sigma_x_mm)
             self.assertIn('FITTED_TO_BOOT_5209_SPIN_RECORDING', p.assumptions)
@@ -44,9 +45,14 @@ class AssumedLineTests(unittest.TestCase):
         c, l = (load_assumed_line_mount(ch) for ch in ('GP26', 'GP27'))
         self.assertEqual((c.forward_mm, l.forward_mm), (119, 119))
         self.assertEqual((c.left_mm, l.left_mm), (0, 14.5))
-        self.assertEqual((c.flat_clearance_mm, l.flat_clearance_mm), (9, 9))
-        self.assertTrue(c.forward_assumed)
-        self.assertTrue(l.height_assumed)
+        self.assertEqual((c.flat_clearance_mm, l.flat_clearance_mm), (8, 8))
+        self.assertFalse(c.forward_assumed)
+        self.assertFalse(l.forward_assumed)
+        self.assertEqual(c.forward_evidence, 'MEASURED_OPERATOR_2026_11_15')
+        self.assertEqual(l.forward_evidence, c.forward_evidence)
+        self.assertFalse(c.height_assumed)
+        self.assertFalse(l.height_assumed)
+        self.assertEqual(c.height_evidence, 'MEASURED_OPERATOR_APPROX_2026_11_15')
         self.assertEqual(l.spacing_evidence, 'MEASURED_RELATIVE_GP26')
 
     def test_straight_sampling_deterministic_raw_and_pair_midpoint(self):
@@ -60,10 +66,16 @@ class AssumedLineTests(unittest.TestCase):
         values = []
         for channel in ('GP26', 'GP27'):
             p, m = load_assumed_line_profile(channel), load_assumed_line_mount(channel)
-            a = fast.sample(p, (m.forward_mm, m.left_mm, 19), sample_us=0)
-            b = fast.sample(p, (m.forward_mm, m.left_mm, 19), sample_us=999999)
+            a = fast.sample(p, (m.forward_mm, m.left_mm, 18), sample_us=0)
+            b = fast.sample(p, (m.forward_mm, m.left_mm, 18), sample_us=999999)
             self.assertTrue(a.valid, a.reason)
             self.assertEqual(a.adc, b.adc)
+            from sim.webots.pil.scene import SceneSnapshot
+            from sim.webots.pil.s3_referee import fine_sample
+            reference = fine_sample(SceneSnapshot.from_patches(patches), p,
+                                    (m.forward_mm, m.left_mm, 18))
+            self.assertTrue(reference.valid, reference.reason)
+            self.assertAlmostEqual(a.mean_adc, reference.mean_adc, delta=1)
             values.append(a.adc)
         self.assertEqual(values[0], values[1])
         for adc in values:
@@ -72,7 +84,7 @@ class AssumedLineTests(unittest.TestCase):
         p = load_assumed_line_profile('GP26')
         sums = []
         for shift in range(-100, 101):
-            adc = [fast.sample(p, (0, y+shift, 19)).adc for y in (0, 14.5)]
+            adc = [fast.sample(p, (0, y+shift, 18)).adc for y in (0, 14.5)]
             sums.append(sum((a-200)/3500 for a in adc))
         self.assertLessEqual(max(sums), 1.02)
         self.assertAlmostEqual(max(sums), .78, delta=.001)

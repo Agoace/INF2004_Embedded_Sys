@@ -18,9 +18,11 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(profile["counts_per_revolution"], 2535)
         self.assertEqual(profile["firmware_counts_per_m"], 12414)
         self.assertEqual(profile.mount_mm("barcode"), (80, 77, -27))
-        self.assertEqual(profile.mount_mm("line_l"), (119, 14.5, -23.5))
+        self.assertEqual(profile.mount_mm("line_l"), (119, 14.5, -24.5))
         self.assertTrue(profile.assumption_manifest()["total_mass_kg"]["assumed"])
-        self.assertTrue(profile.assumption_manifest()["imu_axle_height_mm"]["assumed"])
+        self.assertFalse(profile.assumption_manifest()["imu_axle_height_mm"]["assumed"])
+        self.assertFalse(profile.assumption_manifest()["caster_forward_mm"]["assumed"])
+        self.assertEqual(profile.mount_mm("imu"), (60, 0, 97.5))
         self.assertFalse(profile.assumption_manifest()["track_mm"]["assumed"])
 
     def test_missing_unknown_nonfinite_unsourced_rejected(self):

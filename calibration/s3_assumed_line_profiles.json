@@ -9,11 +9,12 @@
     "midpoint_fraction_target": 0.39,
     "plain_line_pair_sum_upper_bound": 1.02,
     "line_width_mm": 18.0,
+    "line_width_evidence": "MEASURED_OPERATOR_2026_11_15",
     "relative_spacing_mm": 14.5,
-    "limits": "Effective longitudinal fit only; transverse isotropy and 9 mm reference height remain assumed. Pair-sum bound is not an equality target."
+    "limits": "Effective longitudinal fit only; transverse isotropy remains assumed. Reference height approximately 8 mm measured by operator 2026-11-15. Spatial sigma unchanged: reference-height coverage is independent of height. Pair-sum bound is not an equality target."
   },
   "profile_parameters": {
-    "reference_height_mm": 9.0,
+    "reference_height_mm": 8.0,
     "sigma_x_mm": 15.924122728751232,
     "sigma_y_mm": 15.924122728751232,
     "noise_sigma_adc": 0.0,
@@ -31,6 +32,7 @@
       "NOT_MEASURED_CALIBRATION",
       "FITTED_TO_BOOT_5209_SPIN_RECORDING",
       "TRANSVERSE_ISOTROPY_ASSUMED_NOT_MEASURED",
+      "HEIGHT_APPROX_MEASURED_OPERATOR_2026_11_15",
       "FLAT_STRAIGHT_MAT_ONLY",
       "PAPER_LEVELS_SCHEMA_PLACEHOLDERS_NOT_SUPPORTED",
       "ADC_POST_EIGHT_AVERAGE_DO_NOT_AVERAGE_AGAIN"
@@ -42,9 +44,11 @@
       "mount": {
         "forward_mm": 119.0,
         "left_mm": 0.0,
-        "flat_clearance_mm": 9.0,
-        "forward_assumed": true,
-        "height_assumed": true,
+        "flat_clearance_mm": 8.0,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
+        "height_assumed": false,
+        "height_evidence": "MEASURED_OPERATOR_APPROX_2026_11_15",
         "spacing_evidence": "GP26_BODY_LATERAL_DATUM_ASSUMED"
       }
     },
@@ -53,9 +57,11 @@
       "mount": {
         "forward_mm": 119.0,
         "left_mm": 14.5,
-        "flat_clearance_mm": 9.0,
-        "forward_assumed": true,
-        "height_assumed": true,
+        "flat_clearance_mm": 8.0,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
+        "height_assumed": false,
+        "height_evidence": "MEASURED_OPERATOR_APPROX_2026_11_15",
         "spacing_evidence": "MEASURED_RELATIVE_GP26"
       }
     }

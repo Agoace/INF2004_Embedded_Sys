@@ -24,8 +24,8 @@ PROTO RoboPico [
   field SFVec3f servoPosition 0.065 0 0.02
   field SFFloat sonarFaceOffset 0
   field SFFloat servoSlew 4.84813681
-  field SFVec3f lineCentrePosition 0.119 0 -0.0235
-  field SFVec3f lineLeftPosition 0.119 0.0145 -0.0235
+  field SFVec3f lineCentrePosition 0.119 0 -0.0245
+  field SFVec3f lineLeftPosition 0.119 0.0145 -0.0245
   field SFVec3f barcodePosition 0.08 0.077 -0.027
   field SFVec3f imuPosition 0.06 0 0.0975
   field SFBool debugCameras FALSE
