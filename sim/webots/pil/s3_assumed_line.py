@@ -25,6 +25,8 @@ class AssumedLineMount:
     forward_assumed: bool
     height_assumed: bool
     spacing_evidence: str
+    forward_evidence: str
+    height_evidence: str
 
 
 def _read(channel, path):
@@ -64,7 +66,10 @@ def load_assumed_line_mount(channel, path=ASSUMED_LINE_PATH):
         raise ValueError('invalid ASSUMED mount fields') from error
     if (not all(type(v) in (float, int) and math.isfinite(v) for v in
                 (mount.forward_mm, mount.left_mm, mount.flat_clearance_mm)) or
-            mount.flat_clearance_mm <= 0 or mount.forward_assumed is not True or
-            mount.height_assumed is not True or not mount.spacing_evidence):
+            mount.flat_clearance_mm <= 0 or mount.forward_assumed is not False or
+            mount.forward_evidence != 'MEASURED_OPERATOR_2026_11_15' or
+            mount.height_assumed is not False or
+            mount.height_evidence != 'MEASURED_OPERATOR_APPROX_2026_11_15' or
+            not mount.spacing_evidence):
         raise ValueError('invalid or unlabelled ASSUMED mount')
     return mount
