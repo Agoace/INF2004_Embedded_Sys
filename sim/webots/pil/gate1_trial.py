@@ -5,19 +5,21 @@ TRIAL_LABEL = 'TRIAL / NOT GATE 1 PASS'
 P_MAX_US = 600
 LATE_WINDOW_SLOTS = 1000
 MAX_LATE_IN_WINDOW = 3
+MAX_CONSECUTIVE_LATE = 2
 TRIAL_COMPLETIONS = ('TRIAL_COMPLETE', 'TRIAL_COMPLETE_WITH_TOLERATED_LATE')
 
 
 def late_policy():
     return {'nominal_phase_us': 250, 'max_phase_us': P_MAX_US,
             'window_slots': LATE_WINDOW_SLOTS, 'max_late_in_window': MAX_LATE_IN_WINDOW,
-            'consecutive_late_allowed': False}
+            'consecutive_late_allowed': True, 'max_consecutive_late': MAX_CONSECUTIVE_LATE}
 
 
 class LateTolerance:
     """At most three late per rolling1000 slots, never an age/deadline waiver."""
     def __init__(self):
         self.last_late_slot = None
+        self.consecutive_late_count = 0
         self.late_slots = []  # Only the most recent three are needed.
         self.count = 0
 
@@ -26,8 +28,8 @@ class LateTolerance:
             return 'source phase exceeds600us T1 cap'
         if self.last_late_slot is not None:
             distance = slot-self.last_late_slot
-            if distance == 1:
-                return 'consecutive late source captures'
+            if distance == 1 and self.consecutive_late_count >= MAX_CONSECUTIVE_LATE:
+                return 'more than two consecutive late source captures'
             if distance <= 0:
                 return 'non-increasing late source slot'
         if len(self.late_slots) == MAX_LATE_IN_WINDOW and slot-self.late_slots[0] < LATE_WINDOW_SLOTS:
@@ -35,6 +37,8 @@ class LateTolerance:
         return None
 
     def commit(self, slot):
+        self.consecutive_late_count = (self.consecutive_late_count + 1
+                                       if self.last_late_slot is not None and slot-self.last_late_slot == 1 else 1)
         self.last_late_slot = slot
         self.late_slots = (self.late_slots + [slot])[-MAX_LATE_IN_WINDOW:]
         self.count += 1
@@ -50,7 +54,7 @@ def labels(trial, tolerate_late=False):
 
 
 def manifest(tolerate_late=False):
-    result = {**labels(True, tolerate_late), 'operator_decision': '2026-11-15 T1 rolling quota3' if tolerate_late else '2026-11-14 D-TRIAL',
+    result = {**labels(True, tolerate_late), 'operator_decision': '2026-11-15 T1 rolling quota3 consecutive2' if tolerate_late else '2026-11-14 D-TRIAL',
             'scope': 'C1 + C2 + C2b + C2c capture opportunities; NOT C3 queued logging',
             'capture_first': True, 'queued_logger': False,
             'pc_capture_revision': 'C1+C2+C2b+C2c',

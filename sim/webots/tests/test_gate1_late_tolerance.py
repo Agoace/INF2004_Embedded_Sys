@@ -30,11 +30,17 @@ class LateToleranceTests(unittest.TestCase):
         self.assertEqual(h.tolerated_captures[0]['phase_us'],600)
         self.assertEqual(h.tolerated_captures[0]['end_upper_pico_us']+1,997000)
 
-    def test_fourth_in_window_and_consecutive_are_fatal(self):
-        for prior,last in(((0,2,4),999),((998,1000,1002),1004),((0,),1),((0,2),3)):
+    def test_two_consecutive_allowed(self):
+        h=self.host()
+        for n in range(2):self.sensor(h,n,600)
+        self.assertEqual(len(h.tolerated_captures),2)
+
+    def test_fourth_in_window_and_third_consecutive_are_fatal(self):
+        for prior,last,reason in(((0,2,4),999,'rolling1000'),((998,1000,1002),1004,'rolling1000'),
+                                  ((0,1),2,'consecutive'),((0,1,3),4,'rolling1000')):
             h=self.host()
             for n in range(last):self.sensor(h,n,300 if n in prior else 1)
-            with self.assertRaises(TransportFault):self.sensor(h,last,300)
+            with self.assertRaisesRegex(TransportFault,reason):self.sensor(h,last,300)
             self.assertEqual(h.state,'FAULT');self.assertFalse(h.tx)
 
     def test_default_cap600_and_noearly_remain_fatal(self):
@@ -99,6 +105,8 @@ class LateToleranceTests(unittest.TestCase):
             self.assertNotEqual(s['verdict'],'FAIL')
             self.assertEqual(s['tolerated_late_count'],1)
             self.assertEqual(s['late_tolerance_policy']['max_late_in_window'],3)
+            self.assertTrue(s['late_tolerance_policy']['consecutive_late_allowed'])
+            self.assertEqual(s['late_tolerance_policy']['max_consecutive_late'],2)
             r=json.loads((out/'tolerated-late-captures.json').read_text())['records'][0]
             for field in('capture_start_pc_us','capture_end_pc_us','start_lower_pico_us',
                 'end_upper_pico_us','last_sync_pc_us','sequence','excess_us'):
