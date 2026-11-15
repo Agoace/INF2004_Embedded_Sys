@@ -41,6 +41,36 @@ class AssumedLineTests(unittest.TestCase):
         self.assertEqual(record['record'], 'boot-5209 spin recording')
         self.assertEqual((record['line_width_mm'], record['relative_spacing_mm']), (18, 14.5))
 
+    def test_boot_5209_joint_endpoints_not_met_by_current_profile(self):
+        # Requested joint evidence: GP27=L, GP26=C. See joint-fit record.
+        for channel, floor, peak in (('GP27', 172, 2487), ('GP26', 158, 2611)):
+            p = load_assumed_line_profile(channel)
+            coverage = math.erf(9/(math.sqrt(2)*p.sigma_x_mm))
+            centre = p.levels_adc[g.MAT_WHITE] + coverage*(
+                p.levels_adc[g.MAT_LINE]-p.levels_adc[g.MAT_WHITE])
+            # Red-first joint endpoint request fails; preserve its residuals.
+            self.assertAlmostEqual(centre, 1698.1709595792897, places=6)
+            self.assertGreater(peak-centre, 788)
+            self.assertNotEqual(p.levels_adc[g.MAT_WHITE], floor)
+
+    def test_endpoint_constrained_gaussian_best_midpoint_still_fails(self):
+        def coverage(x, sigma):
+            return .5*(math.erf((9-x)/(math.sqrt(2)*sigma))-
+                       math.erf((-9-x)/(math.sqrt(2)*sigma)))
+        sigma = 4.488620755525426
+        c0 = coverage(0, sigma)
+        ratio = coverage(7.25, sigma)/c0
+        self.assertAlmostEqual(ratio, .6822072688015883, places=10)
+        for other in (sigma-.01, sigma+.01, .1, 1, 10, 100):
+            self.assertGreater(coverage(7.25, other)/coverage(0, other), ratio)
+        self.assertGreater(ratio, .40)
+        self.assertGreater(2*ratio, 1.02)
+        for floor, peak in ((172, 2487), (158, 2611)):
+            level = floor+(peak-floor)/c0
+            self.assertAlmostEqual(floor+(level-floor)*c0, peak)
+            self.assertGreater(floor+(level-floor)*coverage(7.25, sigma)-
+                               (floor+.39*(peak-floor)), 676)
+
     def test_mounts_preserve_14_point_5_spacing_not_29(self):
         c, l = (load_assumed_line_mount(ch) for ch in ('GP26', 'GP27'))
         self.assertEqual((c.forward_mm, l.forward_mm), (119, 119))

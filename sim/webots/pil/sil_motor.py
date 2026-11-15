@@ -1,5 +1,6 @@
 """Real P7 steer_mm + motor_ctl. Lag fitted ONLY to B3 bootede2 step data."""
 import ctypes
+import bisect
 import hashlib
 import json
 import math
@@ -13,6 +14,32 @@ TAU_MS=80.0
 FIT_SOURCE='docs/archive/s2-motion/MOTOR_CONTROLLER.md B3; main build/steer_logs/text_ede2.txt MB50->61'
 MOTOR_SOURCES=('sim/webots/controllers/sil_line/motor_adapter.c','app_program/subsystem3/line_position.c',
     'app_program/subsystem3/line_steer.c','app_program/subsystem2/motor_ctl.c')
+DM1_REVERSE=((5,0,0),(6,0,0),(7,-4,-1),(8,-29,-26),(9,-39,-36),(10,-48,-45),
+ (11,-56,-53),(12,-65,-63),(14,-82,-80),(16,-98,-99),(18,-116,-117),(20,-131,-134),
+ (25,-171,-175),(30,-214,-217),(35,-256,-262),(40,-299,-304),(45,-335,-342),
+ (50,-379,-380),(60,-463,-462),(70,-548,-543),(80,-617,-618),(90,-690,-697),(100,-759,-734))
+
+
+def signed_velocity(left_pct,right_pct,radius_mm):
+    if not math.isfinite(radius_mm)or radius_mm<=0:raise ValueError('invalid radius')
+    result=[];duties=[0,*[row[0]for row in DM1_FORWARD]]
+    for side,duty in enumerate((left_pct,right_pct),1):
+        if not math.isfinite(duty):raise ValueError(f'DM1 nonfinite duty={duty!r}')
+        if duty==0:result.append(0.);continue
+        magnitude=abs(duty)
+        if magnitude>100:raise ValueError(f'DM1 rejected duty={duty!r}; measured magnitude0..100 only')
+        # DM1 dead band, steady-state only; dynamic braking UNMODELLED.
+        # The0..5% segment interpolates zero endpoints; lag retains coast-down.
+        rows=((0,0,0),*(DM1_REVERSE if duty<0 else DM1_FORWARD))
+        hi=bisect.bisect_left(duties,magnitude)
+        if duties[hi]==magnitude:speed=rows[hi][side]
+        else:
+            lo=hi-1;a,b=rows[lo],rows[hi]
+            speed=a[side]+(b[side]-a[side])*(magnitude-a[0])/(b[0]-a[0])
+        result.append(speed/radius_mm)
+    return tuple(result)
+
+
 CONFIG_HEADERS=('app_program/vehicle/vehicle_robot_config.h','app_program/subsystem2/motor_ctl_robot.h',
     'app_program/subsystem2/motor_ctl.h','app_program/subsystem3/line_position.h','app_program/subsystem3/line_steer.h')
 
@@ -33,11 +60,12 @@ def build_motor_library(directory):
 
 
 class LagPlant:
-    def __init__(self,tau_ms=TAU_MS):
+    def __init__(self,tau_ms=TAU_MS,*,bidirectional=False):
         if not math.isfinite(tau_ms)or tau_ms<=0:raise ValueError('lag tau must be positive')
         self.alpha=-math.expm1(-1/tau_ms);self.velocity=(0.,0.)
+        self.mapping=signed_velocity if bidirectional else forward_velocity
     def advance(self,left_pct,right_pct):
-        try:targets=forward_velocity(left_pct,right_pct,32.5)
+        try:targets=self.mapping(left_pct,right_pct,32.5)
         except ValueError as error:
             raise ValueError(f'DM1 rejected left_pct={left_pct!r} right_pct={right_pct!r}: {error}')from error
         self.velocity=tuple(v+self.alpha*(t-v)for v,t in zip(self.velocity,targets))

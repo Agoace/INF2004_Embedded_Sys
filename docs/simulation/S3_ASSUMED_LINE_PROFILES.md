@@ -1,5 +1,61 @@
 # SIL line profiles — boot-5209 fit
 
+## Joint nonlinear spin + endpoints (opt-in B)
+
+Label: **fitted to boot-5209 spin + endpoints**, not physical calibration.
+Use `load_boot5209_line_profile(channel)` from `pil.s3_assumed_line`.
+Record: `calibration/s3_boot5209_line_profiles.json`.
+The old file and `load_assumed_line_profile` remain unchanged for comparison A.
+Both use the same measured mount geometry; GP28 is unchanged.
+
+| Parameter / result | GP27 left | GP26 centre |
+| --- | ---: | ---: |
+| Floor / centred18mm-line peak ADC |172 /2487 |158 /2611 |
+| Material line level ADC (not the strip peak) |2498.366736 |2623.044321 |
+| Spatial sigma / response power |2.85630798mm /3.00696460 |same |
+| Midpoint after endpoint normalization |39% |39% |
+| Full-spin RMSE / p95 absolute error ADC |101.73 /108.56 |110.39 /110.07 |
+| Full-spin maximum absolute error ADC |1004.61 |1051.54 |
+
+Pair maximum100.002% on a0.01mm grid; runtime ADC sweep at0.1mm stays
+below102%. Floor and centred peaks are exact analytic fit constraints;
+F1 finite-support integration changes peak by less than1ADC and midpoint
+by less than0.1percentage point. Response is monotonic:
+`floor + (line_level-floor)*coverage**power`, with Gaussian coverage over
+unchanged18mm strip and14.5mm centre spacing.
+Old linear model peak1698.17ADC has residuals−788.83L/−912.83C. Its best
+endpoint-constrained Gaussian gives midpoint68.22% each at sigma4.48862mm,
+pair136.44%; changing affine levels cannot meet the midpoint target.
+
+All1634 rows of `tests/fixtures/spin_raw_boot5209.csv` are included, no
+outlier removal or holdout. SHA256 is in the profile. Endpoint source:
+[boot-5209 record](../archive/s3-line-barcode/LINE_POSITION.md#robot-check-spin-recording-2026-11-03-boot-5209).
+Fit minimizes equal-weight raw-ADC squared error; endpoints and39% midpoint
+are exact constraints. Four fixed starts and bounded coordinate descent
+are reproducible with standard-library Python:
+
+```sh
+python3 -S sim/webots/pil/s3_spin_fit.py tests/fixtures/spin_raw_boot5209.csv
+```
+
+Pose is not uniquely known: only left encoder counts were recorded. Split
+at first global count minimum/maximum (rows422/1122). Assume a rigid
+119mm-forward pair on a flat straight line; fit angle=`k*(count-c0)` per
+sweep. Fitted `(k rad/count,c0 counts)` are `(0.00114116,-35.8850)`,
+`(0.00210496,54.5250)`, `(0.00164346,15.8809)`. These absorb unknown
+right-wheel motion,50ms motor stagger and drift. They are not measured
+angular rates or an encoder calibration. Pauses are not in the recording;
+no constant angular rate across sample indices is assumed.
+Large crossing residuals remain: endpoints/midpoint agreement is not
+full-spin acceptance. No controller result was used in the fit.
+
+Shape prior only: operator identifies touching Cytron
+[IR Line Tracking Module](https://sg.cytron.io/p-ir-line-tracking-module)
+boards, underside emitter/receiver, AO high on black. Product information
+does not supply numerical sigma/power or a measured footprint at8mm.
+
+## Original linear fit (comparison A)
+
 **ASSUMED, straight-strip only.** Frozen measured-profile JSON is unchanged.
 
 | Item | Value / result |
