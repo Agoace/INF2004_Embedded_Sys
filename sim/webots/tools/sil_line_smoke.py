@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False):
     course=Course.load(SOURCE/'courses/sil/straight_assumed.json')
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -32,7 +32,10 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False):
     libs=project/'libraries';libs.mkdir(exist_ok=True)
     for source in (SOURCE/'pil').glob('*.py'):
         target=libs/'pil'/source.name;target.parent.mkdir(exist_ok=True);shutil.copyfile(source,target)
-    build_library(libs)
+    if motor_fidelity:
+        from pil.sil_motor import build_motor_library
+        build_motor_library(libs)
+    else:build_library(libs)
     def profile_dict(name):
         profile=load_assumed_line_profile(name)
         return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
@@ -40,7 +43,7 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False):
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
         calibration_rows=[[200,200,0]]*16+[[3700,3700,0]]*4,
         calibration_provenance='SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
-        controller_config=CONFIG,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to9mm fixed clearance; tilt response unmodelled')
+        controller_config=CONFIG,motor_fidelity=motor_fidelity,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to operator approximate8mm clearance; tilt response unmodelled')
     (project/'sil-manifest.json').write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')
     manifest_path=project/'manifest.json';manifest=json.loads(manifest_path.read_text())
     manifest['sil_scope']='unchanged pure line_position+line_steer C, not native tasks/RTOS/PID/vehicle state machine'

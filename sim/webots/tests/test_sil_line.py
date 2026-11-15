@@ -49,7 +49,7 @@ class SILTests(unittest.TestCase):
             scene=FastScene.from_course(build_course(Course.load(project/'course.json')))
             for name in('GP26','GP27'):
                 mount=config['mounts'][name];sample=scene.sample(SensorProfile(**config['profiles'][name]),
-                    (196+mount['forward_mm'],150.25+mount['left_mm'],19))
+                    (196+mount['forward_mm'],150.25+mount['left_mm'],10+mount['flat_clearance_mm']))
                 self.assertTrue(sample.valid,sample.reason)
                 self.assertEqual(sample.adc,1565)
             controller_path=ROOT/'sim/webots/controllers/sil_line/sil_line.py'

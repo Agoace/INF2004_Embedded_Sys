@@ -56,8 +56,10 @@ class LineController:
         self.lib=ctypes.CDLL(str(Path(library).resolve()));self.last_ms=None;self.calibrated=False
         self.lib.sil_calib_add.argtypes=[ctypes.c_uint16,ctypes.c_uint16]
         self.lib.sil_calib_end.argtypes=[ctypes.POINTER(ctypes.c_int32)]
-        self.lib.sil_update.argtypes=[ctypes.c_uint16,ctypes.c_uint16,ctypes.c_uint32,ctypes.POINTER(ctypes.c_int32)]
-        for name in('sil_reset','sil_calib_begin','sil_calib_add','sil_calib_end','sil_update'):getattr(self.lib,name).restype=None
+        if hasattr(self.lib,'sil_update'):
+            self.lib.sil_update.argtypes=[ctypes.c_uint16,ctypes.c_uint16,ctypes.c_uint32,ctypes.POINTER(ctypes.c_int32)]
+            self.lib.sil_update.restype=None
+        for name in('sil_reset','sil_calib_begin','sil_calib_add','sil_calib_end'):getattr(self.lib,name).restype=None
         self.lib.sil_reset()
     def calibrate(self,rows):
         self.lib.sil_reset();self.lib.sil_calib_begin();self.last_ms=None
