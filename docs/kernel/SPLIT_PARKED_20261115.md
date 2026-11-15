@@ -3,7 +3,7 @@
 | Item | Record |
 | --- | --- |
 | Decision | Operator: split is PARKED. The demo uses the UP image. Step 1 and the RAM generator work stop. |
-| Reason 1 | UP system run PASS with about 99 % headroom (Main record). |
+| Reason 1 | UP system run PASS. Idle-meter load, UP core 0: 570-662 permille mean (30-40 % headroom), run peak 957 (P1). Split core 0 / core 1: 621-699 / 569-626 permille. |
 | Reason 2 | Split misses the vehicle deadline on the robot (P1: first overrun at step 20, 9084 us). |
 | Bench step 0 | Both images PASS: 2280000 edges, COUNT_MATCH 1140000/1140000 per wheel, no overflow, no reset. |
 | UP vs split | ISR max 49 vs 193 us; response max 103 vs 482 us; line sample max 132 vs 193 us; motion gap 9983..10017 vs 9909..10064 us; BC_CPU 30.2 vs 49.7 s. |
@@ -17,7 +17,7 @@
 | --- | --- |
 | Step-0 images | 52748fe; UP UF2 sha256 34095b67…c2223, split 73a5bee7…3b64 |
 | Step-0 logs | `~/Projects/mtk3-core-review/build/bench_step0_52748fe/step0_{UP.final,SPLIT}.log` |
-| Robot P1 logs | `build/school_20261113/` in the parent coursework checkout |
+| Robot P1 logs | `build/school_20261113/` in the parent coursework checkout; load: `{ctrl,p1}_smp0_gp20_usb.txt`, `p1_split_gp20_usb.txt` |
 | Step-0 rules | [BENCH_KERNEL_STEP0.md](BENCH_KERNEL_STEP0.md) |
 
 ## If resumed, try first
