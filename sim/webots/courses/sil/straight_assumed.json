@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "name": "sil_straight_assumed",
+  "provenance": {"assumed": true, "source": "Operator-approved SIL strip. Measured18mm line, six315mm straight tiles; start axle y150.25 puts sensor pair midpoint y157.5 on line. Geometry/start/length for software plumbing, NOT surveyed course."},
+  "origin_mm": [0, 0],
+  "start": {"position_mm": [196, 150.25], "yaw_deg": 0},
+  "allow_open_ports": true,
+  "texture_mm_per_pixel": 0.5,
+  "tiles": [
+    {"id":"s0","column":0,"row":0,"kind":"STRAIGHT","rotation_deg":90},
+    {"id":"s1","column":1,"row":0,"kind":"STRAIGHT","rotation_deg":90},
+    {"id":"s2","column":2,"row":0,"kind":"STRAIGHT","rotation_deg":90},
+    {"id":"s3","column":3,"row":0,"kind":"STRAIGHT","rotation_deg":90},
+    {"id":"s4","column":4,"row":0,"kind":"STRAIGHT","rotation_deg":90},
+    {"id":"s5","column":5,"row":0,"kind":"STRAIGHT","rotation_deg":90}
+  ],
+  "boxes": [], "humps": [], "barcodes": []
+}
