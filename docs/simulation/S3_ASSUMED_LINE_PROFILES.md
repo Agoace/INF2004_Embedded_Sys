@@ -8,10 +8,10 @@
 | Explicit loader | [`s3_assumed_line.py`](../../sim/webots/pil/s3_assumed_line.py): `load_assumed_line_profile('GP26'/'GP27')`, `load_assumed_line_mount(...)` |
 | Label | `ASSUMED_SIL_STRAIGHT_ONLY`; fitted to boot-5209 spin recording |
 | Fit source | [Spin recording](../archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md#evidence): midpoint38–40% each; plain-line sum<=102% |
-| Fixed geometry | Line18mm; relative sensor spacing14.5mm |
+| Fixed geometry | Line18mm MEASURED(operator2026-11-15); relative sensor spacing14.5mm MEASURED |
 | Effective Gaussian sigma | 15.924122728751232mm; solve coverage at7.25mm offset=0.39 |
 | ADC / noise | Floor200, line3700, black HIGH; noise0; already post-eight-average |
-| Mount body XY | GP26 `(119,0)`mm; GP27 `(119,+14.5)`mm, not +/-14.5 |
+| Mount body XY | GP26 `(119,0)`mm; GP27 `(119,+14.5)`mm;119forward MEASURED(operator2026-11-15), lateral datum assumed |
 | Height | Assumed flat clearance9mm; axle-relative Z=`9-wheel_radius` |
 | Midpoint output | Raw1565 each; normalized390 each; pair sum780 |
 | Across-strip check | Offsets-100..100mm in1mm steps: maximum normalized pair sum0.78<=1.02 |
@@ -27,7 +27,8 @@
 - Use a long straight strip and continuous floor. F1's conservative guard
   extends about90.08mm from each sensor; no end-cap fallback.
 - Fit is an effective response match, not a measured beam/height survey.
-  Transverse isotropy,119mm forward offset and9mm height remain assumed.
+  Transverse isotropy and9mm height remain assumed;119mm forward is now
+  operator-measured. GP28 already uses80mm forward/77mm left; no axis swap.
 - Paper levels are schema placeholders only; paper/barcode use is unsupported.
 - `load_profile('GP26'/'GP27')` still fails UNMEASURED. No thresholds, controller,
   strip width or frozen profile changes.

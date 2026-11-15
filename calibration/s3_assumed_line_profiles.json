@@ -9,6 +9,7 @@
     "midpoint_fraction_target": 0.39,
     "plain_line_pair_sum_upper_bound": 1.02,
     "line_width_mm": 18.0,
+    "line_width_evidence": "MEASURED_OPERATOR_2026_11_15",
     "relative_spacing_mm": 14.5,
     "limits": "Effective longitudinal fit only; transverse isotropy and 9 mm reference height remain assumed. Pair-sum bound is not an equality target."
   },
@@ -43,7 +44,8 @@
         "forward_mm": 119.0,
         "left_mm": 0.0,
         "flat_clearance_mm": 9.0,
-        "forward_assumed": true,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
         "height_assumed": true,
         "spacing_evidence": "GP26_BODY_LATERAL_DATUM_ASSUMED"
       }
@@ -54,7 +56,8 @@
         "forward_mm": 119.0,
         "left_mm": 14.5,
         "flat_clearance_mm": 9.0,
-        "forward_assumed": true,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
         "height_assumed": true,
         "spacing_evidence": "MEASURED_RELATIVE_GP26"
       }

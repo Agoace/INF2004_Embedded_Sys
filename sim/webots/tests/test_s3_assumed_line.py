@@ -45,7 +45,10 @@ class AssumedLineTests(unittest.TestCase):
         self.assertEqual((c.forward_mm, l.forward_mm), (119, 119))
         self.assertEqual((c.left_mm, l.left_mm), (0, 14.5))
         self.assertEqual((c.flat_clearance_mm, l.flat_clearance_mm), (9, 9))
-        self.assertTrue(c.forward_assumed)
+        self.assertFalse(c.forward_assumed)
+        self.assertFalse(l.forward_assumed)
+        self.assertEqual(c.forward_evidence, 'MEASURED_OPERATOR_2026_11_15')
+        self.assertEqual(l.forward_evidence, c.forward_evidence)
         self.assertTrue(l.height_assumed)
         self.assertEqual(l.spacing_evidence, 'MEASURED_RELATIVE_GP26')
 
