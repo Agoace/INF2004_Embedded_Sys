@@ -11,9 +11,12 @@ explicit robot profile, duty-driven plant, robot PROTO, PNG-textured world
 generator, PC wire codec, conservative clock bounds and bounded host transport.
 Three illustrative worlds pass a Webots R2025a load/initial-pose smoke. That
 smoke uses passive zero wheel torque; it is not a driving or sensor-model test.
-An opt-in host serial soak worker is now under test. It is not connected to
-Webots and has no measured hardware result. The Pico sensor/edge runtime is not
-implemented here. Do not treat the host state machine as firmware.
+The opt-in host serial soak worker was tested separately from Webots. The
+[Gate1 trial closeout](GATE1_TRIAL_CLOSEOUT_20261115.md) records measured link,
+clock, fault and host-latency evidence: TRIAL INCOMPLETE / NOT GATE1 PASS.
+Gate1 rule changes stopped after attempt22; no operational Webots bridge is
+claimed. The Pico sensor/edge runtime is not implemented here. Do not treat
+the host state machine as firmware.
 
 SW6 owns the frozen PIL v1 protocol and C codec. SW4 owns `pil/s3_*` geometry,
 optics and assets. SW5 owns other `sim/webots/` source files. Main owns integration,
