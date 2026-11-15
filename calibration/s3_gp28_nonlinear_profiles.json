@@ -1,0 +1,596 @@
+{
+  "schema_version": 1,
+  "classification": "EXPLORATORY_GP28_OFFLINE_ONLY",
+  "label": "fitted to barcode430 train; large-forward holdout retained",
+  "reference_height_mm": 5.5,
+  "mount_board_rotation_deg": 90,
+  "rotation_evidence": "OPERATOR_2026_11_15_PERPENDICULAR_SAME_CYTRON_MODULE",
+  "board_U_reference": "body-left at zero yaw; line-board reference body-forward assumed",
+  "along_bar_sigma_identified": false,
+  "along_bar_sigma_assumed_family_mm": [
+    1.0,
+    4.0,
+    8.0
+  ],
+  "geometry": {
+    "letter": "F",
+    "narrow_mm": 5.8,
+    "wide_mm": 17.5,
+    "fixed_body_mm": 273.5,
+    "transverse_bar_extent": "unmeasured; infinite-stripe fit"
+  },
+  "photo_constraints_mm": {
+    "narrow": [
+      5.8,
+      0.6
+    ],
+    "wide": [
+      17.5,
+      1.5
+    ],
+    "body": [
+      278,
+      6
+    ]
+  },
+  "fit_limits": "ROI0..430mm; baseline leading-white median; gain bounded85..125percent of99th-percentile train contrast; sigmaCross0.5..5mm,power1..16; no count/width scale fit",
+  "limitations": [
+    "No transverse/height law; no physical acceptance",
+    "Small yaw range cannot identify along-bar width",
+    "Mat levels and arbitrary-yaw F1 runtime unsupported",
+    "Photo dimensions uncertain, not retuned to improve fit",
+    "MQTT and unmatched sheets not used to select parameters"
+  ],
+  "variants": {
+    "sensor_x": {
+      "photo_dimension_sensitivity": [
+        {
+          "narrow_mm": 5.2,
+          "wide_mm": 19.0,
+          "body_mm": 275.0,
+          "method": "fixed nominal optical parameters, translation only",
+          "results": {
+            "train": {
+              "samples": 2193,
+              "rmse_adc": 151.89741593986435,
+              "normalized_rmse": 0.11346089094623994,
+              "max_abs_adc": 882.4255910109882,
+              "edge_p95_error_mm": 2.5502498635061386,
+              "run_width_p95_error_mm": 3.241947311891508,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 62.61563122016577,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            },
+            "holdout": {
+              "samples": 2239,
+              "rmse_adc": 143.3439861231643,
+              "normalized_rmse": 0.1070718436958698,
+              "max_abs_adc": 911.139178994081,
+              "edge_p95_error_mm": 2.5024889652379443,
+              "run_width_p95_error_mm": 3.141557856083864,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 69.82063093868503,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            }
+          }
+        },
+        {
+          "narrow_mm": 6.4,
+          "wide_mm": 16.0,
+          "body_mm": 272.0,
+          "method": "fixed nominal optical parameters, translation only",
+          "results": {
+            "train": {
+              "samples": 2193,
+              "rmse_adc": 212.52536927137393,
+              "normalized_rmse": 0.1587473861685383,
+              "max_abs_adc": 1059.4431030720543,
+              "edge_p95_error_mm": 2.9534841017378994,
+              "run_width_p95_error_mm": 3.6106509651746137,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 64.26563122016577,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            },
+            "holdout": {
+              "samples": 2239,
+              "rmse_adc": 188.96422046367408,
+              "normalized_rmse": 0.14114821294430846,
+              "max_abs_adc": 947.4046773329028,
+              "edge_p95_error_mm": 2.7186953782249077,
+              "run_width_p95_error_mm": 3.334316627658893,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 71.57063093868503,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            }
+          }
+        }
+      ],
+      "train_source_sha256": "0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5",
+      "holdout_source_sha256": "a10e86e72b88944aeb310e1ce2d7a7a5e6c9f3fe22764e6c4d607d2ff667de0f",
+      "train_coverage": {
+        "axis": "sensor_x",
+        "unbracketed_adc": 0,
+        "flagged_adc": 0,
+        "saturated_adc": 0,
+        "input_adc": 2245,
+        "motor_max_gap_us": 39999,
+        "counts_per_mm": 12.414,
+        "pose_assumptions": [
+          "no_slip",
+          "constant_twist_between_motor",
+          "initial_stripe_normal_world_X",
+          "mount_80_forward_77_left_nominal"
+        ],
+        "yaw_rad_range": [
+          -0.03731170296342161,
+          0.027557240362627976
+        ]
+      },
+      "holdout_coverage": {
+        "axis": "sensor_x",
+        "unbracketed_adc": 0,
+        "flagged_adc": 0,
+        "saturated_adc": 0,
+        "input_adc": 3080,
+        "motor_max_gap_us": 49998,
+        "counts_per_mm": 12.414,
+        "pose_assumptions": [
+          "no_slip",
+          "constant_twist_between_motor",
+          "initial_stripe_normal_world_X",
+          "mount_80_forward_77_left_nominal"
+        ],
+        "yaw_rad_range": [
+          -0.009434277196481232,
+          0.053697710518638496
+        ]
+      },
+      "families": {
+        "1.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1339.1636256027225,
+            "sigma_mm": 2.1549999999999994,
+            "response_power": 5.874999999999998,
+            "offset_mm": 63.41063122016577,
+            "search_bound_hit": false
+          },
+          "train": {
+            "samples": 2193,
+            "rmse_adc": 151.17053588383752,
+            "normalized_rmse": 0.11288429060772885,
+            "max_abs_adc": 816.0097063461458,
+            "edge_p95_error_mm": 2.0102586375334823,
+            "run_width_p95_error_mm": 2.065374471878556,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 63.41063122016577,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2239,
+            "rmse_adc": 126.66111403583206,
+            "normalized_rmse": 0.09458225388912068,
+            "max_abs_adc": 659.8379334998432,
+            "edge_p95_error_mm": 1.8831957243365878,
+            "run_width_p95_error_mm": 1.8859266598475983,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 70.69563093868504,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        },
+        "4.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1338.7645264643338,
+            "sigma_mm": 2.1499999999999995,
+            "response_power": 5.899999999999999,
+            "offset_mm": 63.41063122016577,
+            "search_bound_hit": false
+          },
+          "train": {
+            "samples": 2193,
+            "rmse_adc": 151.1674344449929,
+            "normalized_rmse": 0.1129156259048967,
+            "max_abs_adc": 816.734312305564,
+            "edge_p95_error_mm": 2.004485460683668,
+            "run_width_p95_error_mm": 2.055851915841231,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 63.41063122016577,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2239,
+            "rmse_adc": 126.64387082311721,
+            "normalized_rmse": 0.09459756986359852,
+            "max_abs_adc": 660.1671311134859,
+            "edge_p95_error_mm": 1.8798740389533464,
+            "run_width_p95_error_mm": 1.8753145836495264,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 70.69563093868504,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        },
+        "8.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1338.5292835332666,
+            "sigma_mm": 2.1449999999999996,
+            "response_power": 5.924999999999999,
+            "offset_mm": 63.41063122016577,
+            "search_bound_hit": false
+          },
+          "train": {
+            "samples": 2193,
+            "rmse_adc": 151.1573586072943,
+            "normalized_rmse": 0.11292794297954377,
+            "max_abs_adc": 817.8557642417172,
+            "edge_p95_error_mm": 1.9979239384492615,
+            "run_width_p95_error_mm": 2.0463048228971843,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 63.41063122016577,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2239,
+            "rmse_adc": 126.70198793959067,
+            "normalized_rmse": 0.09465761376930065,
+            "max_abs_adc": 659.9601243449204,
+            "edge_p95_error_mm": 1.8766785529063554,
+            "run_width_p95_error_mm": 1.8644325709568648,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 70.69563093868504,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        }
+      }
+    },
+    "mean_wheel": {
+      "photo_dimension_sensitivity": [
+        {
+          "narrow_mm": 5.2,
+          "wide_mm": 19.0,
+          "body_mm": 275.0,
+          "method": "fixed nominal optical parameters, translation only",
+          "results": {
+            "train": {
+              "samples": 2206,
+              "rmse_adc": 152.53262941089062,
+              "normalized_rmse": 0.11517981530687203,
+              "max_abs_adc": 989.9383315326311,
+              "edge_p95_error_mm": 1.9338915300984638,
+              "run_width_p95_error_mm": 1.9246584796399588,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 62.13237112089446,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            },
+            "holdout": {
+              "samples": 2223,
+              "rmse_adc": 164.04799594815398,
+              "normalized_rmse": 0.12387525179200633,
+              "max_abs_adc": 1018.5068492727296,
+              "edge_p95_error_mm": 2.931787648046452,
+              "run_width_p95_error_mm": 1.7942534308308495,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 71.39961323525992,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            }
+          }
+        },
+        {
+          "narrow_mm": 6.4,
+          "wide_mm": 16.0,
+          "body_mm": 272.0,
+          "method": "fixed nominal optical parameters, translation only",
+          "results": {
+            "train": {
+              "samples": 2206,
+              "rmse_adc": 198.71839693154524,
+              "normalized_rmse": 0.15005542319077644,
+              "max_abs_adc": 1188.797558197348,
+              "edge_p95_error_mm": 2.913620570472972,
+              "run_width_p95_error_mm": 2.3540711645154886,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 63.882371120894454,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            },
+            "holdout": {
+              "samples": 2223,
+              "rmse_adc": 238.87670403699693,
+              "normalized_rmse": 0.18037959981650453,
+              "max_abs_adc": 1251.497419445421,
+              "edge_p95_error_mm": 4.797076881954297,
+              "run_width_p95_error_mm": 2.5403807266933995,
+              "observed_edge_count": 30,
+              "model_edge_count": 30,
+              "registration_offset_mm": 72.74961323525991,
+              "check": "FAIL",
+              "limits": {
+                "normalized_rmse_max": 0.1,
+                "edge_p95_mm_max": 1.5,
+                "run_width_p95_mm_max": 2.0,
+                "edge_count_required": 30
+              }
+            }
+          }
+        }
+      ],
+      "train_source_sha256": "0e8c9c04d7c17d618610db8164cb8866ee9e56fe9fda61d5e93b3c0086acccd5",
+      "holdout_source_sha256": "a10e86e72b88944aeb310e1ce2d7a7a5e6c9f3fe22764e6c4d607d2ff667de0f",
+      "train_coverage": {
+        "axis": "mean_wheel",
+        "unbracketed_adc": 0,
+        "flagged_adc": 0,
+        "saturated_adc": 0,
+        "input_adc": 2245,
+        "motor_max_gap_us": 39999,
+        "counts_per_mm": 12.414,
+        "pose_assumptions": [
+          "no_slip",
+          "constant_twist_between_motor",
+          "initial_stripe_normal_world_X",
+          "mount_80_forward_77_left_nominal"
+        ],
+        "yaw_rad_range": [
+          -0.03731170296342161,
+          0.027557240362627976
+        ]
+      },
+      "holdout_coverage": {
+        "axis": "mean_wheel",
+        "unbracketed_adc": 0,
+        "flagged_adc": 0,
+        "saturated_adc": 0,
+        "input_adc": 3080,
+        "motor_max_gap_us": 49998,
+        "counts_per_mm": 12.414,
+        "pose_assumptions": [
+          "no_slip",
+          "constant_twist_between_motor",
+          "initial_stripe_normal_world_X",
+          "mount_80_forward_77_left_nominal"
+        ],
+        "yaw_rad_range": [
+          -0.009434277196481232,
+          0.053697710518638496
+        ]
+      },
+      "families": {
+        "1.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1324.3,
+            "sigma_mm": 1.564999999999999,
+            "response_power": 13.249999999999986,
+            "offset_mm": 62.99237112089447,
+            "search_bound_hit": true
+          },
+          "train": {
+            "samples": 2206,
+            "rmse_adc": 119.6364105522708,
+            "normalized_rmse": 0.09033935705827291,
+            "max_abs_adc": 712.3599651871646,
+            "edge_p95_error_mm": 1.4077188877312707,
+            "run_width_p95_error_mm": 0.9951810398408725,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 62.99237112089447,
+            "check": "PASS",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2223,
+            "rmse_adc": 174.13332596893596,
+            "normalized_rmse": 0.13149084495124666,
+            "max_abs_adc": 1142.630751064628,
+            "edge_p95_error_mm": 3.6816475462578637,
+            "run_width_p95_error_mm": 1.2247213799481642,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 71.92461323525993,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        },
+        "4.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1324.3,
+            "sigma_mm": 1.564999999999999,
+            "response_power": 13.249999999999986,
+            "offset_mm": 62.987371120894466,
+            "search_bound_hit": true
+          },
+          "train": {
+            "samples": 2206,
+            "rmse_adc": 119.63879364851007,
+            "normalized_rmse": 0.09034115657215894,
+            "max_abs_adc": 714.7788215996936,
+            "edge_p95_error_mm": 1.4038027101381587,
+            "run_width_p95_error_mm": 0.9943218019333386,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 62.987371120894466,
+            "check": "PASS",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2223,
+            "rmse_adc": 174.0040070602448,
+            "normalized_rmse": 0.13139319418579234,
+            "max_abs_adc": 1140.2533241883573,
+            "edge_p95_error_mm": 3.690935003551658,
+            "run_width_p95_error_mm": 1.2238301409232122,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 71.92461323525993,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        },
+        "8.0": {
+          "fit": {
+            "letter": "F",
+            "baseline_adc": 164.0,
+            "gain_adc": 1324.3,
+            "sigma_mm": 1.569999999999999,
+            "response_power": 13.124999999999986,
+            "offset_mm": 62.987371120894466,
+            "search_bound_hit": true
+          },
+          "train": {
+            "samples": 2206,
+            "rmse_adc": 119.61869656408759,
+            "normalized_rmse": 0.09032598094396103,
+            "max_abs_adc": 715.6878758757821,
+            "edge_p95_error_mm": 1.4052920338608388,
+            "run_width_p95_error_mm": 1.0008728518505876,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 62.987371120894466,
+            "check": "PASS",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          },
+          "holdout": {
+            "samples": 2223,
+            "rmse_adc": 173.53822282158492,
+            "normalized_rmse": 0.13104147309641692,
+            "max_abs_adc": 1131.2619176069886,
+            "edge_p95_error_mm": 3.7153358859860646,
+            "run_width_p95_error_mm": 1.2296356512560465,
+            "observed_edge_count": 30,
+            "model_edge_count": 30,
+            "registration_offset_mm": 71.92461323525993,
+            "check": "FAIL",
+            "limits": {
+              "normalized_rmse_max": 0.1,
+              "edge_p95_mm_max": 1.5,
+              "run_width_p95_mm_max": 2.0,
+              "edge_count_required": 30
+            }
+          }
+        }
+      }
+    }
+  }
+}
