@@ -32,6 +32,17 @@ void sil_motor_meta(int32_t *v) {
     v[6]=LINE_CFG.steer.far_gain_pct;v[7]=mc.cfg.accel_cpt_q8;v[8]=mc.cfg.max_speed_mm_s;
     v[9]=mc.cfg.tick_ms;
 }
+void sil_cal_spin_config(int32_t *out) {
+    out[0]=CAL_SPEED_MM_S;out[1]=CAL_STEP_COUNTS;out[2]=CAL_STEP_TIMEOUT_MS;
+    out[3]=CAL_PAUSE_MS;out[4]=CAL_CENTRE_STOP;out[5]=CAL_CENTRE_MIN;out[6]=CAL_PEAK_DROP;
+}
+void sil_cal_motor_stop(void) {
+    mc_clear_faults(&mc);output.duty_permille[0]=0;output.duty_permille[1]=0;
+}
+void sil_cal_observe(uint16_t left,uint16_t centre,uint32_t ms,int32_t *out) {
+    const uint16_t raw[3]={left,centre,0};
+    (void)lp_update(&lp,raw,ms);out[0]=lp.norm[LP_CENTRE];
+}
 void sil_motor_tick(uint32_t ms,int32_t left_count,int32_t right_count,int16_t left_mm_s,int16_t right_mm_s,int32_t *out) {
     const int32_t counts[2]={left_count,right_count};
     /* motion notifies vehicle/bench after its tick: new command applies next tick. */

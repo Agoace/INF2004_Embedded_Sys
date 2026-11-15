@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None):
     course=Course.load(SOURCE/'courses/sil'/('straight_search_assumed.json'if line_search else'straight_assumed.json'))
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -44,9 +44,15 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
         return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
     config=dict(profiles={n:profile_dict(n)for n in('GP26','GP27')},
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
-        calibration_rows=[[200,200,0]]*16+[[3700,3700,0]]*4,
-        calibration_provenance='SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
+        calibration_rows=spin_calibration['calibration_rows']if spin_calibration else[[200,200,0]]*16+[[3700,3700,0]]*4,
+        calibration_provenance='ACTUAL aligned simulated spin samples; independent pose reset per trial; sim-owned sequence equivalent to vehicle_task.c'if spin_calibration else'SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
+        spin_endpoints=spin_calibration['calibration']['endpoints']if spin_calibration else None,
         controller_config=CONFIG,motor_fidelity=motor_fidelity or line_search,line_search=line_search,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to operator approximate8mm clearance; tilt response unmodelled')
+    if spin_calibration:
+        profile_hash=hashlib.sha256(json.dumps(config['profiles'],sort_keys=True).encode()).hexdigest()
+        if spin_calibration.get('profiles_sha256')!=profile_hash:raise ValueError('spin/profile provenance mismatch')
+        config['spin_sampled_rows_sha256']=hashlib.sha256(json.dumps(config['calibration_rows'],separators=(',',':')).encode()).hexdigest()
+        if spin_calibration.get('sampled_rows_sha256')!=config['spin_sampled_rows_sha256']:raise ValueError('spin sampled-row hash mismatch')
     (project/'sil-manifest.json').write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')
     manifest_path=project/'manifest.json';manifest=json.loads(manifest_path.read_text())
     manifest['sil_scope']=('unchanged vehicle_sm+LINE(line_trace)+SEARCH(line_search)+native motor_ctl; no other registered modules or RTOS'

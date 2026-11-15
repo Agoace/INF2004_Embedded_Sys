@@ -38,7 +38,8 @@ def replay(project,rows):
     if native:
         controller,plant=native_controller(project,manifest)
     else:controller=LineController(project/'libraries/libsil_line.so')
-    controller.calibrate(manifest['calibration_rows'])
+    calibration=controller.calibrate(manifest['calibration_rows'])
+    if manifest.get('spin_endpoints')and calibration['endpoints']!=manifest['spin_endpoints']:raise ValueError('spin endpoint replay mismatch')
     for row in rows:
         actual=controller.update(int(row[1]),int(row[2]),int(row[0]),*(map(int,row[22:24])if native else()))
         if list(actual.values())[:9]!=list(row[3:12]):raise ValueError('C recorded-input replay mismatch')
@@ -76,6 +77,7 @@ def run(robot,project):
         controller,plant=native_controller(project,config)
     else:controller=LineController(project/'libraries/libsil_line.so')
     calibration=controller.calibrate(config['calibration_rows'])
+    if config.get('spin_endpoints')and calibration['endpoints']!=config['spin_endpoints']:raise ValueError('spin endpoints mismatch')
     wheels=[robot.getDevice(n)for n in('left_motor','right_motor')]
     for wheel in wheels:wheel.setPosition(float('inf'));wheel.setAvailableTorque(.12);wheel.setVelocity(0.)
     robot.getDevice('sonar_servo').setPosition(0.)
