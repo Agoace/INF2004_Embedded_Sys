@@ -69,10 +69,14 @@ class HostTransport:
             self._fault("evidence queue overflow")
         self.events.append({"event": kind, **values})
 
-    def drain_events(self):
+    def drain_events(self, *, binary=False):
         result = tuple(self.events)
         self.events.clear()
-        return result
+        if binary:return result
+        # Compatibility callers get the original public event shape. The soak
+        # selects binary=True and never performs payload hex work in its loop.
+        return tuple(dict(event,payload_hex=event['payload_hex'].hex())
+                     if isinstance(event.get('payload_hex'),bytes)else event for event in result)
 
     def _fault(self, reason, *, capture_rejection=None):
         if self.failure is None:
@@ -233,7 +237,7 @@ class HostTransport:
         for frame in self.decoder.feed(data):
             self._record("rx_complete", pc_us=received_pc_us, type=frame.type,
                          seq=frame.sequence, source_us=frame.source_us,
-                         session=frame.session, ack=frame.ack, payload_hex=frame.payload.hex())
+                         session=frame.session, ack=frame.ack, payload_hex=frame.payload)
             if frame.type == Type.BOOT:
                 if self.boot is not None and u32(frame.payload, 0) != u32(self.boot.payload, 0):
                     self._fault("Pico reset/new nonce; new host session required")
