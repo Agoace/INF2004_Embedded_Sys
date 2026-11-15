@@ -239,7 +239,9 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
               'urb_layer': 'UNKNOWN', 'urb_reason': 'optional usbmon capture not supplied',
               'clock_mapping': 'CONDITIONAL: REALTIME has no unobserved backward steps; interval only',
               'observer_overhead': 'unmeasured; compare with uninstrumented baseline',
-              'sync': [], 'packets': [], 'diagnostic': 'INCOMPLETE'}
+              'sync': [], 'packets': [], 'diagnostic': 'INCOMPLETE',
+              'stopped_worker_stack_untouched_bytes': None,
+              'stopped_idle_stack_high_water_bytes': None}
     rx1, dump = None, None
     if stopped is not None:
         try:
@@ -254,9 +256,14 @@ def correlate(path, *, pcap=None, usb_bus=None, usb_device=None, out_ep=None, in
             identity = summary.get('identity', {})
             if identity.get('boot_nonce') != dump.boot_nonce or identity.get('host_session') != dump.session:
                 raise ValueError('PC/stopped D1 identity mismatch')
-            stack = re.search(rb'\[PILG1\] stopped; reset required; worker stack untouched ([0-9]+)/2048 bytes\r?\n',
+            stack = re.search(rb'(?m)^\[PILG1\] stopped; reset required; worker stack untouched ([0-9]+)/2048 bytes'
+                              rb'(?:; idle stack high-water ([0-9]+)/512 bytes)?\r?\n',
                               data[rx1['end_offset']:])
-            result['stopped_stack_line_complete'] = bool(stack and int(stack[1]) <= 2048)
+            result['stopped_stack_line_complete'] = bool(stack and int(stack[1]) <= 2048 and
+                                                         (stack[2] is None or int(stack[2]) <= 512))
+            if result['stopped_stack_line_complete']:
+                result['stopped_worker_stack_untouched_bytes'] = int(stack[1])
+                result['stopped_idle_stack_high_water_bytes'] = int(stack[2]) if stack[2] is not None else None
             result['diagnostic'] = ('COMPLETE' if rx1['d1_identity_verified'] and result['stopped_stack_line_complete']
                                     else 'INCOMPLETE')
             result['rx1'] = {'header': rx1['header'], 'd1_identity_verified': rx1['d1_identity_verified'],

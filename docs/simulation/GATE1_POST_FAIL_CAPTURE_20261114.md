@@ -77,7 +77,9 @@ history or a HardFault breadcrumb. Once enqueued does not mean delivered.
 
 Stop detection passes immutable bytes to the strict D1 decoder, not its
 bytearray accumulation buffer. A complete stack line may end CRLF and need
-not be at the end of the entire buffer. The tracked regression fixture
+not be at the end of the entire buffer. The optional same-line
+[idle stack watermark](GATE1_IDLE_STACK_CAPTURE_20261115.md) is also supported.
+The tracked regression fixture
 `sim/webots/tests/fixtures/pil_gate1_reset_prefixed_crlf.bin` derives from SW6's
 resetA C-generated runtime stream: a printable boot-banner prefix, RESET1,
 CRC-valid D1, RX1, a CRLF stack line and trailing NUL. Native binary records
