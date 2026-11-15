@@ -136,11 +136,15 @@ static void check_generator_stopped(void)
     snap.overflow = 1u;
     run();
     assert(strstr(out, "overflow 1 ") != NULL);
-    assert(strstr(out, "cost_bp 10 GEN_STOPPED\n") != NULL);
+    assert(strstr(out, "cost_bp 10 GEN_STOPPED stop_late_us 0 "
+                       "stop_at_us 0\n") != NULL);
     snap = stopped(0u, 0u, 0u);
     snap.overflow = 2u;
+    snap.stop_late_us = 512u;
+    snap.stop_position_us = 4000000000u;
     run();
-    assert(strstr(out, "cost_bp 0 GEN_STOPPED\n") != NULL);
+    assert(strstr(out, "cost_bp 0 GEN_STOPPED stop_late_us 512 "
+                       "stop_at_us 4000000000\n") != NULL);
 }
 
 int main(void)

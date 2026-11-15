@@ -34,13 +34,19 @@ static void bench_report(void)
     }
     (void)tm_printf((UB *)"[bench] window_us %lu sched %lu "
                     "delivered %lu coalesced %lu overflow %lu gen_calls %lu "
-                    "gen_us_sum %lu gen_us_max %lu cost_bp %lu %s\n",
+                    "gen_us_sum %lu gen_us_max %lu cost_bp %lu %s",
                     (unsigned long)window, (unsigned long)s.edges_sched,
                     (unsigned long)s.edges_delivered,
                     (unsigned long)s.coalesced, (unsigned long)s.overflow,
                     (unsigned long)s.gen_calls, (unsigned long)s.gen_us_sum,
                     (unsigned long)s.gen_us_max, (unsigned long)cost_bp,
                     verdict);
+    if (s.overflow != 0u) {
+        (void)tm_printf((UB *)" stop_late_us %lu stop_at_us %lu",
+                        (unsigned long)s.stop_late_us,
+                        (unsigned long)s.stop_position_us);
+    }
+    (void)tm_printf((UB *)"\n");
 }
 
 void __wrap_rt_timeline_report(void (*pause)(void))

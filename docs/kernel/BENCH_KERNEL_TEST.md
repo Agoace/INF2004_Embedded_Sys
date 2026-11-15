@@ -39,6 +39,8 @@
 - V: `GEN_STOPPED` (O > 0, generator stopped fail-closed; overrides the
   rest), `OK` (B < 300), `COST_HIGH` (B >= 300), `BAD_WINDOW` (W = 0 or
   W > 60 min).
+- `GEN_STOPPED` appends `stop_late_us L stop_at_us P` (lateness and
+  position from the window start at the fail-closed stop).
 - Timeline sites (bench only): 10 = generator exit (arg = edges), 11 = pending
   overflow.
 
