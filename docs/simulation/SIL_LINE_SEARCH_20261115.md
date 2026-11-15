@@ -10,14 +10,16 @@
 - All measured forward/reverse DM1 rows are used per wheel, including the historically wheelie-limited high rows already present forward. Exact zero and the0–5% segment interpolate zero endpoints: **DM1 dead band, steady-state only; dynamic braking UNMODELLED**. Magnitude>100% and nonfinite values reject and log, never clamp.
 - World: straight test strip, white margins **ASSUMED (real mat wider)**. Three rows of315 mm tiles, ten columns;945×3150 mm. Centre row carries the measured18 mm line, side rows are pure white. Same21 starts. Tile seams are not modelled. No sampler override. Search gross optical-offset guard250 mm permits the119 mm sensor arm to sweep; the old non-search guard stays100 mm.
 
-## Checks and current limit
+## Checks and diagnostic limit
 
 - Red tests precede mapping/shell implementation and the dead-band extension. Tests cover measured rows, interpolation, band edges0/4.9/5/6/7%, actual shell LOST→SEARCH→FOUND→LINE, exhausted search, motor safety and explicit white-margin geometry.
 -317 tests OK,3 existing expected failures. Unchanged native `test_line_trace`, `test_vehicle_sm` and `test_motor_ctl` pass.
-- The first broad-floor diagnostic crosses the line in all8 search cases, but synthetic200/3700 calibration makes the fitted thin-strip peak lower than FOUND500. It is **not a final recovery result**. Final results are held for real simulated spin calibration and SW4's measured-level refit.
+- The first broad-floor diagnostic crosses the line in all8 search cases, but synthetic200/3700 calibration makes the fitted thin-strip peak lower than FOUND500. It is **not the final recovery result**. [Final results](SIL_SEARCH_RESULTS_20261115.md) use actual simulated spin calibration and SW4's measured-level refit:21 settled,6 SEARCH reacquisitions.
 
 ```sh
-python3 sim/webots/tools/sil_recovery_smoke.py --line-search --output build/webots/NEW_SEARCH
+python3 sim/webots/tools/sil_recovery_smoke.py --line-search \
+  --spin-calibration build/webots/NEW_SPIN/spin-result/calibration.json \
+  --output build/webots/NEW_SEARCH
 ```
 
 Use the approved existing-display environment. Simulation only; no hardware/serial. Gate1 remains **TRIAL INCOMPLETE / NOT GATE1 PASS**.

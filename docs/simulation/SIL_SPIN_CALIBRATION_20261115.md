@@ -26,4 +26,4 @@ Both commands use the approved existing-display environment. No hardware or seri
 - `build/webots/sil-spin-A-20261115T130348Z/`:2260 ms,1740 collected ADC rows; L200..1698 / C200..1698, valid public calibration. No synthetic3700 endpoint.
 - OUT− ends440 ms; reverse begins640; OUT+ ends1540; homing begins1740 and ends2260. Clean Webots exit/log.
 -319 tests OK,3 existing expected failures. Unit checks cover config, two OUT goals, homing, timeout/fault and sampled-endpoint replay.
-- Final21-start results are held for SW4's measured optical-level refit. This interim result does not validate the optical footprint or physical recovery.
+- [Final profile-B results](SIL_SEARCH_RESULTS_20261115.md): aligned spin produces L172..2487/C158..2611, then21/21 starts settle,6 through SEARCH. `--line-profile A` retains the old-profile comparison; B is the SEARCH/spin default. This does not validate physical recovery.
