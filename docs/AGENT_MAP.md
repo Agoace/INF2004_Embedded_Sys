@@ -468,6 +468,9 @@ vehicle task described below.
   Gate1-only priority32 always-READY task in `pil_gate1_task.c`,512B painted
   stack and stopped high-water suffix. The ELF checker also checks its leaf
   nonblocking loop; no shared kernel/template stack change is supplied.
+  The later [kernel idle-stack repair plan](kernel/KERNEL_IDLE_STACK_FIX_PLAN.md)
+  is a separate, unapproved proposal; it does not authorize implementation,
+  ordinary-hash baseline changes or removal of the A/B app substitute.
   [`generate_pil_critical.py`](../tests/generate_pil_critical.py) imports the
   production critical macros for the PRIMASK/PendSV runtime test double.
   [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks

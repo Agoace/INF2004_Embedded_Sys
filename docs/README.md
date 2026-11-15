@@ -34,6 +34,7 @@ not current acceptance reports. Local course originals are not public records.
 - [CORE_STAGING_MERGE.md](kernel/CORE_STAGING_MERGE.md) — approved core/staging integration, both-parent suite union, 38 public builds, ABI/static RAM comparisons and remaining hardware gates.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
+- [KERNEL_IDLE_STACK_FIX_PLAN.md](kernel/KERNEL_IDLE_STACK_FIX_PLAN.md) — unapproved shared idle-stack repair plan, complete overlap budgets, baseline/RAM decisions and separate target-validation scope.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
