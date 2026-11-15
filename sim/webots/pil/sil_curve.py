@@ -16,7 +16,7 @@ def curve_course():
             elif column==2 and 1<=row<=3:kind='STRAIGHT'
             tiles.append(dict(id=f't{column+2}_{row+1}',column=column,row=row,kind=kind,rotation_deg=rotation))
     return Course.from_dict(dict(schema=1,name='sil_curve_assumed',
-        provenance=dict(assumed=True,source='Straight -> left90deg arc -> straight on315mm tiles; radius157.5mm from docs/simulation/S3_SENSOR_MODEL.md tile convention, NOT an independent measured-radius survey. White margins ASSUMED(real mat wider), tile seams NOT modelled; no controller tuning.'),
+        provenance=dict(assumed=True,source='Straight -> left90deg arc -> straight on315mm tiles; Cytron315x315x10mm tiles/18mm line; quarter circle centred on tile corner, radius157.5mm: nominal, vendor tile sheet; not ruler-surveyed (operator clarification; vendor link in docs/archive/simulation/SIMULATION.md Published track specification). White margins ASSUMED(real mat wider), tile seams NOT modelled; no controller tuning.'),
         origin_mm=[0,0],start=dict(position_mm=[196,150.25],yaw_deg=0),allow_open_ports=True,
         texture_mm_per_pixel=2,tiles=tiles,boxes=[],humps=[],barcodes=[]))
 
