@@ -30,6 +30,13 @@ def scripted_output(slot):
 
 
 class PassiveReplay:
+    OUTPUT_DIRECTION='OUTPUT_IGNORED'
+
+    def output_packet(self,slot):return scripted_output(slot)
+
+    def consume_output(self,frame):
+        """Passive default intentionally does not actuate anything."""
+
     def __init__(self,counts_per_revolution,*,max_samples=MAX_SAMPLES):
         if type(counts_per_revolution)not in(int,float) or not math.isfinite(counts_per_revolution) or counts_per_revolution<=0:
             raise ValueError('invalid encoder profile')
@@ -60,9 +67,10 @@ class PassiveReplay:
         struct.pack_into('<H',payload,36,valid)
         sensor=encode(Frame(Type.SENSOR,SESSION,slot,slot*1000,slot-1 if slot else NO_ACK,bytes(payload)))
         encoded_at=io_clock() if io_clock is not None else raw_end_us
-        output=scripted_output(slot)
+        output=self.output_packet(slot)
         consumed=decode(output)
-        if consumed.type!=Type.OUTPUT or consumed.ack!=slot:raise ValueError('scripted OUTPUT order')
+        if consumed.type!=Type.OUTPUT or consumed.ack!=slot or consumed.session!=SESSION:raise ValueError('scripted OUTPUT order/session')
+        self.consume_output(consumed)
         consumed_at=io_clock() if io_clock is not None else raw_end_us
         if io_stamps is not None:encoded_at,consumed_at=io_stamps
         if (type(encoded_at)is not int or type(consumed_at)is not int or
@@ -88,7 +96,7 @@ class PassiveReplay:
     def io_rows(self):
         offset=0
         for slot,sample in enumerate(self.samples):
-            for index,(direction,length) in enumerate((('SENSOR',66),('OUTPUT_IGNORED',58))):
+            for index,(direction,length) in enumerate((('SENSOR',66),(self.OUTPUT_DIRECTION,58))):
                 yield (slot*2+index,direction,slot,slot*1000,*sample[:3],sample[15+index],offset,length)
                 offset+=length
 

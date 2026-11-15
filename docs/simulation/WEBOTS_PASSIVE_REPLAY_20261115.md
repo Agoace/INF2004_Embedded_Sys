@@ -4,7 +4,9 @@
 
 Simulation only. No Pico, serial port, firmware control, navigation or motor
 application. The operator approved one existing world,1ms basicTimeStep and
-10s simulated time, headless. Driving remains a separate next step after review.
+10s simulated time, headless. The subsequently approved
+[driving step](WEBOTS_DRIVING_REPLAY_20261115.md) has a separate scope/result;
+it does not change this passive evidence.
 
 Chosen world: `courses/home_mat_1_assumed.json`, with
 `calibration/robot_assumed.json`. Assumptions are retained in the generated
