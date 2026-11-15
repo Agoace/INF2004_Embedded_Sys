@@ -86,7 +86,7 @@ def run(robot,project):
             if any(not math.isfinite(v)for v in row):raise ValueError('nonfinite SIL state')
             if not .015<position[2]<.15 or abs(pair_error)>100:raise ValueError('SIL gross motion bound')
             rows.append(row)
-            if fault:raise ValueError('native line lost; stop latched')
+            if fault and not config.get('recovery_trial'):raise ValueError('native line lost; stop latched')
     except Exception as exception:error=str(exception)
     finally:
         for wheel in wheels:wheel.setVelocity(0.)
@@ -96,15 +96,21 @@ def run(robot,project):
         encoders_forward=bool(rows)and all(rows[-1][i]>rows[0][i]for i in(16,17)),
         within_strip=bool(rows)and max(abs(r[20])for r in rows)<10,
         inputs_accepted=error is None and not rejections and not fault)
-    complete=all(checks.values())
+    recovery=None
+    if config.get('recovery_trial'):
+        from pil.sil_recovery import analyze_recovery
+        recovery=analyze_recovery(rows)if rows else None
+        complete=len(rows)==10000 and error is None and not rejections
+    else:complete=all(checks.values())
     proof=replay(project,rows)if complete else False
     output=project/'sil-result';output.mkdir()
     with (output/'samples.csv').open('w',newline='')as stream:
         writer=csv.writer(stream);writer.writerow(FIELDS);writer.writerows(rows)
     (output/'rejections.json').write_text(json.dumps(rejections,indent=2)+'\n')
-    summary=dict(status='SIL_LINE_COMPLETE'if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),
+    success_status='SIL_RECOVERY_EXPERIMENT_COMPLETE'if config.get('recovery_trial')else'SIL_LINE_COMPLETE'
+    summary=dict(status=success_status if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),
         simulation_only=True,hardware_used=False,serial_used=False,recorded_input_c_replay=proof,error=error,
-        calibration=calibration,configuration=config['controller_config'],checks=checks,
+        calibration=calibration,configuration=config['controller_config'],checks=checks,recovery=recovery,
         max_pair_error_mm=max((abs(r[20])for r in rows),default=None),
         line_seen_samples=sum(r[5]for r in rows),junction_samples=sum(r[6]for r in rows),
         travel_x_m=rows[-1][12]-rows[0][12]if rows else None,

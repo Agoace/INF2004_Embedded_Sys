@@ -18,8 +18,11 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False):
     course=Course.load(SOURCE/'courses/sil/straight_assumed.json')
+    if recovery:
+        data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
+        course=Course.from_dict(data)
     profile=RobotProfile.load(SOURCE/'calibration/robot_assumed.json')
     project=write_project(course,profile,output)
     world=project/'worlds/sil_straight_assumed.wbt'
@@ -37,7 +40,7 @@ def prepare_project(output):
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
         calibration_rows=[[200,200,0]]*16+[[3700,3700,0]]*4,
         calibration_provenance='SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
-        controller_config=CONFIG,flat_projection='ASSUMED actualXY/yaw projected to9mm fixed clearance; tilt response unmodelled')
+        controller_config=CONFIG,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to9mm fixed clearance; tilt response unmodelled')
     (project/'sil-manifest.json').write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')
     manifest_path=project/'manifest.json';manifest=json.loads(manifest_path.read_text())
     manifest['sil_scope']='unchanged pure line_position+line_steer C, not native tasks/RTOS/PID/vehicle state machine'

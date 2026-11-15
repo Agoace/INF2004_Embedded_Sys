@@ -37,7 +37,9 @@ or establish hardware timing. No physical trial was restarted.
 
 The approved [straight SIL subset](SIL_LINE_STRAIGHT_20261115.md) runs unchanged
 pure C line-position/steering code with boot5209-fitted optics in fast Webots.
-Two10s straight-strip runs were byte-identical; curves/recovery remain untested.
+Two10s straight-strip runs were byte-identical. The later
+[21-start recovery grid](SIL_RECOVERY_20261115.md) reports mostly non-settling
+starts and the measured-vs-sim response mismatch; no controller tuning.
 
 SW6 owns the frozen PIL v1 protocol and C codec. SW4 owns `pil/s3_*` geometry,
 optics and assets. SW5 owns other `sim/webots/` source files. Main owns integration,
