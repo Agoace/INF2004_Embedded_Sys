@@ -161,7 +161,14 @@ The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
 [host test](../tests/test_bench_kernel_stats.c), plus the
 [`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
 [host test](../tests/test_bench_report.c). The bench directory is excluded
-from ordinary source selection; it does not yet contain a complete runtime.
+from ordinary source selection. The
+[step-0 procedure](kernel/BENCH_KERNEL_STEP0.md) covers the bench-only
+[`bench_generator.c`](../app_program/bench_kernel/bench_generator.c),
+[`bench_runtime.c`](../app_program/bench_kernel/bench_runtime.c),
+[`bench_timer_hw.c`](../app_program/bench_kernel/bench_timer_hw.c),
+[`bench_motor_hw.c`](../app_program/bench_kernel/bench_motor_hw.c) and
+[`bench_inputs_hw.c`](../app_program/bench_kernel/bench_inputs_hw.c).
+The report reads the stopped native motion board for per-wheel comparison.
 The [virtual GPIO state](../app_program/bench_kernel/bench_gpio.c) and
 [hardware-provider seam](../app_program/bench_kernel/bench_gpio_hw.c) have a
 [host test](../tests/test_bench_kernel_gpio.c); no native dispatcher is replaced.

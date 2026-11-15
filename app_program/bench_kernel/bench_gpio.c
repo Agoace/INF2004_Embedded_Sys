@@ -2,6 +2,7 @@
 #if defined(BENCH_KERNEL) && BENCH_KERNEL
 #include "bench_gpio.h"
 typedef struct {
+    uint32_t acked;
     uint32_t pending; /* Unshifted A/B nibbles, one event until ACK. */
     uint8_t ab;
     uint8_t enabled;
@@ -33,6 +34,10 @@ uint32_t bk_gpio_pending(unsigned int group)
     return 0u;
 }
 uint32_t bk_gpio_acked(void) { return acked; }
+uint32_t bk_gpio_wheel_acked(unsigned int wheel)
+{
+    return wheel < 2u ? wheels[wheel].acked : 0u;
+}
 void bk_gpio_ack(unsigned int pin, uint32_t events)
 {
     unsigned int wheel;
@@ -41,7 +46,10 @@ void bk_gpio_ack(unsigned int pin, uint32_t events)
     else { return; }
     const unsigned int shift = (pin & 1u) != 0u ? 4u : 0u;
     const uint32_t bits = (events & 12u) << shift;
-    if ((wheels[wheel].pending & bits) != 0u) { ++acked; }
+    if ((wheels[wheel].pending & bits) != 0u) {
+        ++acked;
+        ++wheels[wheel].acked;
+    }
     wheels[wheel].pending &= ~bits;
 }
 bool bk_gpio_edge(unsigned int wheel, uint8_t next_ab)

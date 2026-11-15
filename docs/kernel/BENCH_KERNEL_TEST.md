@@ -21,14 +21,18 @@
   end timestamp0 does not mean running. Read stopped data for the final report.
 - `bench_stats_get` is reserved for the core0 runtime owner, not implemented by
   this publication module. Cross-core readers must use `bench_stats_read`.
-- This package does not start a generator or provide an operational bench image.
+- This publication module does not start a generator. The separate
+  [step-0 runtime](BENCH_KERNEL_STEP0.md) provides the bench image.
+- Per-wheel scheduled and ACK-delivered counters are published with totals.
 
 ## Report package
 
 - Files: `app_program/bench_kernel/bench_report.{c,h}`; test:
   `tests/test_bench_report.c`. Link flag (BENCH_KERNEL=1 only):
   `-Wl,--wrap=rt_timeline_report`.
-- One line after the GP20 `[timeline]` dump; it uses `bench_stats_read` only.
+- The cost line after the GP20 `[timeline]` dump uses `bench_stats_read`.
+  A second line reads the public stopped motion snapshot and compares each
+  wheel's native counts with its ACK-delivered count. See the step-0 record.
 
 | Output | Meaning |
 | --- | --- |
@@ -58,7 +62,8 @@
   native counts4/4 then0/0; real ACK totals8 then16; spurious dispatch adds0.
 - GCC and Clang ASan/UBSan pass. IRQ entry and cyclic scheduling are host doubles;
   this checks the source seam, not NVIC delivery or real-time target behavior.
-- No NVIC producer, timer scheduling or complete bench image is included yet.
+- The separate step-0 runtime now supplies alarm1/NVIC production and timer
+  scheduling. Hardware acceptance remains Not run.
 
 ## Ownership and gates
 

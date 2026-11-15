@@ -6,6 +6,8 @@
 typedef struct {
     uint32_t edges_sched;
     uint32_t edges_delivered;
+    uint32_t sched_left, sched_right;
+    uint32_t ack_left, ack_right;
     uint32_t coalesced;
     uint32_t overflow;
     uint32_t gen_us_sum;

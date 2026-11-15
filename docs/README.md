@@ -36,6 +36,7 @@ not current acceptance reports. Local course originals are not public records.
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 - [BENCH_KERNEL_TEST.md](kernel/BENCH_KERNEL_TEST.md) — on-chip stimulus scope, statistics publication, ownership and ordinary-image hash gate.
+- [BENCH_KERNEL_STEP0.md](kernel/BENCH_KERNEL_STEP0.md) — spare-Pico encoder load image, build/run procedure, count/cost pass rules and limits.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
 - [UP_SMP_SHIM.md](kernel/UP_SMP_SHIM.md) — M7 real UP lock/atomic contract, red-to-green tests, ARM ordering and zero static RAM delta.
