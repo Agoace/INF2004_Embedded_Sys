@@ -271,6 +271,13 @@ checks and the failed mean-wheel hold-out check. An unexpected success
 requires review. A normal zero test-process exit does **not** mean that the
 physical model checks passed.
 
+## F1 flat-path follow-up
+
+[S3_FAST_RUNTIME_F1.md](S3_FAST_RUNTIME_F1.md) records the host-only analytic
+rectangle path and independent fine referee. Its fixed accuracy corpus
+passes, but its initial strict maximum-time gate fails. This does not
+replace physical-model failures, enable curves or permit runtime integration.
+
 ## Offline reference speed and numerical error
 
 A local host benchmark used one 6-by-200 mm ink strip, a white plane, the

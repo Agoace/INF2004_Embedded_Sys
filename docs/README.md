@@ -34,6 +34,7 @@ not current acceptance reports. Local course originals are not public records.
 - [CORE_STAGING_MERGE.md](kernel/CORE_STAGING_MERGE.md) — approved core/staging integration, both-parent suite union, 38 public builds, ABI/static RAM comparisons and remaining hardware gates.
 
 - [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
+- [KERNEL_IDLE_STACK_FIX_PLAN.md](kernel/KERNEL_IDLE_STACK_FIX_PLAN.md) — unapproved shared idle-stack repair plan, complete overlap budgets, baseline/RAM decisions and separate target-validation scope.
 - [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
 - [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
@@ -82,10 +83,22 @@ not current acceptance reports. Local course originals are not public records.
 ## Simulation
 
 - [PIL_PROTOCOL.md](simulation/PIL_PROTOCOL.md) — frozen PIL v1 bytes, clocks, safety and host-only Stage 0 / hardware Gate 1 boundary.
+- [PIL_GATE1.md](simulation/PIL_GATE1.md) — approved transport design/status; host-tested UART/session/runtime image, physical P1 not run.
+- [PIL_GATE1_BUILD.md](simulation/PIL_GATE1_BUILD.md) — exact Gate1 image/hash, operator wiring/stop procedure and host/ARM/RAM/identity evidence.
+- [PIL_GATE1_TX_PRIME.md](simulation/PIL_GATE1_TX_PRIME.md) — failed first operator attempt, exact D1 decode and tested UART FIFO startup correction.
+- [PIL_GATE1_CLOCK_PROOF.md](simulation/PIL_GATE1_CLOCK_PROOF.md) — conditional334/444us directional serialization floors, timestamp causality, receiver-derived Probe-rate ceiling and required zero-error evidence.
+- [PIL_GATE1_RX_TIMING.md](simulation/PIL_GATE1_RX_TIMING.md) — versioned stopped RX/worker/alarm timing block, bounded pre/post-fault capture, schema and diagnostic image evidence.
+- [PIL_GATE1_PRIORITY.md](simulation/PIL_GATE1_PRIORITY.md) — approved Gate1-only priority9 worker, task inventory, production ready-queue regression and historical image evidence.
+- [PIL_GATE1_IRQ_WAKE.md](simulation/PIL_GATE1_IRQ_WAKE.md) — approved Gate1 IRQ wakes after mask restoration, production dispatch-condition regression, short robot audit and historical image evidence.
+- [PIL_GATE1_RESET_CAUSE.md](simulation/PIL_GATE1_RESET_CAUSE.md) — approved early raw reset-register snapshot, frozen RESET1 boot row and historical optionA image.
+- [PIL_GATE1_BREADCRUMBS.md](simulation/PIL_GATE1_BREADCRUMBS.md) — approved retained motion/PIL/alarm0/fault records, BC1 boot companion and Reset-B checkpoint.
+- [PIL_GATE1_IDLE_STACK.md](simulation/PIL_GATE1_IDLE_STACK.md) — approved Gate1-only always-READY app idle A/B task, complete stack budget, watermark and current image.
+- [PIL_GATE1_DIAGNOSTICS.md](simulation/PIL_GATE1_DIAGNOSTICS.md) — approved separate stopped-USB D1 records, exact coverage, raw extrema and one-time quantization.
 - [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.
 - [WEBOTS_PIL.md](simulation/WEBOTS_PIL.md) — host-only Webots PIL course/world generator, robot PROTO, explicit assumptions, frozen-v1 PC transport, host tests and R2025a load smokes; no Pico bridge or hardware timing acceptance.
 - [S3_SENSOR_MODEL.md](simulation/S3_SENSOR_MODEL.md) — exploratory S3 geometry/ADC reference, tracked fit and held-out FAIL checks, null GP26/27 profiles, sensor yaw tests and offline-only speed/accuracy limits; not calibration.
+- [S3_FAST_RUNTIME_F1.md](simulation/S3_FAST_RUNTIME_F1.md) — host-only flat rectangle integrals and independent fine-ray referee; accuracy PASS, strict three-channel maximum-time gate FAIL; curves unsupported, no physical calibration claim.
 - [SIMULATION.md](simulation/SIMULATION.md) — implemented host model, interfaces, assumptions, echo-fit and box-sweep summaries; not kernel/track proof.
 
 ## Archive

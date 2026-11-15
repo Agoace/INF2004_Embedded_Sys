@@ -419,6 +419,77 @@ vehicle task described below.
   contracts and real-alarm register surface with host register doubles.
   [`test_pil_make.py`](../tests/test_pil_make.py) checks guards and source order.
   [Stage 0 evidence](simulation/PIL_STAGE0.md) links the full non-SIM hash pairs.
+- [Gate 1 design/status](simulation/PIL_GATE1.md) has a host-tested transport
+  image; the corrected image awaits P1 after the first attempt failed. The
+  [build record](simulation/PIL_GATE1_BUILD.md) has its hash, wiring and limits.
+  The [clock proof](simulation/PIL_GATE1_CLOCK_PROOF.md) defines conditional
+  334/444us directional floors, timestamp causality and zero-error eligibility;
+  [D1 diagnostics](simulation/PIL_GATE1_DIAGNOSTICS.md) is the approved separate
+  stopped-USB contract, not a change to the frozen UART v1 envelope.
+  [`pil_gate1_metrics.c`](../app_program/sim/pil_gate1_metrics.c) reduces raw
+  all-event extrema; [`pil_gate1_dump.c`](../app_program/sim/pil_gate1_dump.c)
+  packs D1 bytes only. Neither module opens UART or supplies a runtime task.
+  [`test_pil_gate1_metrics.c`](../tests/test_pil_gate1_metrics.c) is the wrap/oracle
+  test; [`test_pil_gate1_dump.c`](../tests/test_pil_gate1_dump.c) checks envelopes.
+  [`pil_gate1_fixture.c`](../tests/pil_gate1_fixture.c) generates synthetic host
+  cohorts with the production helpers, not hardware measurements.
+  [`pil_gate1_d1.json`](../tests/fixtures/pil_gate1_d1.json) and
+  [`generate_pil_gate1_fixtures.py`](../tests/generate_pil_gate1_fixtures.py)
+  retain independent D1 envelope bytes. The isolated Gate1 image is available.
+  [`pil_gate1_session.c`](../app_program/sim/pil_gate1_session.c) owns the
+  neutral cap4 lifecycle, deadlines, eight staged slots and all-event metrics.
+  [`pil_gate1_stream.c`](../app_program/sim/pil_gate1_stream.c) supplies core0
+  IRQ/task SPSC packet storage and delimiter recovery, not a UART driver.
+  [`pil_gate1_task.c`](../app_program/sim/pil_gate1_task.c) owns the core0 worker,
+  bounded kernel UART0/lease IRQs, drain and immutable automatic USB dump.
+  Its shared FIFO consumer primes TX during enqueue under core0 IRQ exclusion;
+  [`pil_gate1_rxlog.c`](../app_program/sim/pil_gate1_rxlog.c) records bounded
+  RX/worker/alarm timing without changing live UART or D1 binary framing;
+  [RX timing schema](simulation/PIL_GATE1_RX_TIMING.md) defines the stopped ASCII
+  extension. The [priority9 record](simulation/PIL_GATE1_PRIORITY.md) records
+  the Gate1-only priority change and production ready-queue regression.
+  The [IRQ-wake record](simulation/PIL_GATE1_IRQ_WAKE.md) records the UART,
+  lease and native-hook dispatch correction and short read-only robot audit.
+  The [reset-cause record](simulation/PIL_GATE1_RESET_CAUSE.md) defines the early
+  SDK-boundary raw snapshot and once-per-boot USB row;
+  [`pil_gate1_reset.h`](../app_program/sim/pil_gate1_reset.h) defines its shape.
+  The formatter is in `pil_gate1_dump.c`; the task takes the snapshot before
+  native startup and appends the row without UART text or D1 changes.
+  [Reset diagnostic B](simulation/PIL_GATE1_BREADCRUMBS.md) adds separate BC1:
+  [`pil_gate1_breadcrumb.c`](../app_program/sim/pil_gate1_breadcrumb.c) and
+  [`pil_gate1_breadcrumb.h`](../app_program/sim/pil_gate1_breadcrumb.h) define
+  retained progress/fault writers and the boot companion;
+  [`pil_gate1_retained.ld`](../app_program/sim/pil_gate1_retained.ld) places its
+  KEEP/NOLOAD storage outside startup copy/clear ranges on Gate1 only.
+  [`test_pil_gate1_breadcrumb.c`](../tests/test_pil_gate1_breadcrumb.c) tests
+  publications, interrupted feed and boot copy; the linked Thumb/retention proof
+  is [`check_pil_gate1_breadcrumb_elf.py`](../tests/check_pil_gate1_breadcrumb_elf.py).
+  The [app idle A/B record](simulation/PIL_GATE1_IDLE_STACK.md) explains the
+  Gate1-only priority32 always-READY task in `pil_gate1_task.c`,512B painted
+  stack and stopped high-water suffix. The ELF checker also checks its leaf
+  nonblocking loop; no shared kernel/template stack change is supplied.
+  The later [kernel idle-stack repair plan](kernel/KERNEL_IDLE_STACK_FIX_PLAN.md)
+  is a separate, unapproved proposal; it does not authorize implementation,
+  ordinary-hash baseline changes or removal of the A/B app substitute.
+  [`generate_pil_critical.py`](../tests/generate_pil_critical.py) imports the
+  production critical macros for the PRIMASK/PendSV runtime test double.
+  [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks
+  wrap, fault retention, post-fault packets, sealing, ordering and CRC.
+  The [startup correction](simulation/PIL_GATE1_TX_PRIME.md) records the failed
+  first operator attempt and register-double regression.
+  [`pil_gate1_uart_hw.c`](../app_program/sim/pil_gate1_uart_hw.c) is its separate
+  SDK-only MMIO boundary, with no SDK startup/IRQ/time runtime.
+  [`pil_gate1_device_config.h`](../app_program/sim/pil_gate1_device_config.h)
+  changes only Gate1 devinit.o sample SER startup; ADC/IIC stay unchanged.
+  [`pil_gate1_line_time.c`](../app_program/sim/pil_gate1_line_time.c) retains the
+  real first native C TIMER read through the Gate1-only drv_line.o alias.
+  [`test_pil_gate1_runtime.c`](../tests/test_pil_gate1_runtime.c),
+  [`test_pil_gate1_hw.c`](../tests/test_pil_gate1_hw.c) and
+  [`test_pil_gate1_make.py`](../tests/test_pil_gate1_make.py) test production
+  runtime/register/option seams without device access.
+  [`test_pil_gate1_session.c`](../tests/test_pil_gate1_session.c) and
+  [`test_pil_gate1_stream.c`](../tests/test_pil_gate1_stream.c) test production
+  sources with host clocks and byte streams.
   Runtime UART, virtual edges and IMU register emulation are not implemented.
 - [Webots PIL record](simulation/WEBOTS_PIL.md) — PC side.
   [`course_builder.py`](../sim/webots/pil/course_builder.py),
@@ -434,6 +505,15 @@ vehicle task described below.
   frozen-v1 transport; [`check_c_interop.py`](../sim/webots/tools/check_c_interop.py)
   compares them with the C codec. Tests: [`sim/webots/tests/`](../sim/webots/tests/).
   Host-only; hardware Gate 1 is not run.
+  Gate 1 host side (not hardware acceptance, see
+  [Gate 1 host code](simulation/WEBOTS_PIL.md#gate-1-host-code-not-hardware-acceptance)):
+  [`gate1.py`](../sim/webots/pil/gate1.py),
+  [`serial_io.py`](../sim/webots/pil/serial_io.py) and
+  [`gate1_soak.py`](../sim/webots/tools/gate1_soak.py) run the opt-in by-id
+  Probe soak; [`gate1_diagnostics.py`](../sim/webots/pil/gate1_diagnostics.py),
+  [`gate1_report.py`](../sim/webots/tools/gate1_report.py) and
+  [`check_d1_interop.py`](../sim/webots/tools/check_d1_interop.py) correlate
+  stopped D1 evidence. Tests: [`test_gate1.py`](../sim/webots/tests/test_gate1.py).
 - [S3 sensor model](simulation/S3_SENSOR_MODEL.md) — exploratory, not calibration.
   [`s3_geometry.py`](../sim/webots/pil/s3_geometry.py),
   [`s3_assets.py`](../sim/webots/pil/s3_assets.py),
@@ -443,6 +523,11 @@ vehicle task described below.
   [`s3_profiles.py`](../sim/webots/pil/s3_profiles.py) and
   [`s3_sensor_profiles.json`](../calibration/s3_sensor_profiles.json); tests are
   `sim/webots/tests/test_s3_*`.
+- [S3 fast runtime F1](simulation/S3_FAST_RUNTIME_F1.md) — host-only flat
+  reference: [`s3_fast.py`](../sim/webots/pil/s3_fast.py),
+  [`s3_referee.py`](../sim/webots/pil/s3_referee.py),
+  [`s3_f1_check.py`](../sim/webots/pil/s3_f1_check.py). Straight, barcode,
+  CROSS and T only; the strict time gate FAIL is kept.
 
 ## Approved template deviations
 

@@ -1,0 +1,4 @@
+#ifndef PIL_FAKE_RESET_REGS_H
+#define PIL_FAKE_RESET_REGS_H
+#define RESETS_RESET_UART0_BITS (1u << 22u)
+#endif
