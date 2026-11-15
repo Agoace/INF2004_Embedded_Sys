@@ -19,6 +19,7 @@ TEMP_SRCS := $(filter-out $(SIM_HW_SRCS),$(TEMP_SRCS))
 ifneq ($(PIL_GATE1),1)
 TEMP_SRCS := $(filter-out ../app_program/sim/pil_gate1_task.c \
     ../app_program/sim/pil_gate1_rxlog.c \
+    ../app_program/sim/pil_gate1_breadcrumb.c \
     ../app_program/sim/pil_gate1_uart_hw.c \
     ../app_program/sim/pil_gate1_line_time.c,$(TEMP_SRCS))
 endif

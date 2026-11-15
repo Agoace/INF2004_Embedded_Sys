@@ -21,6 +21,7 @@ ER tk_sta_tsk(ID id, INT code);
 ER tk_del_tsk(ID id);
 ER tk_wup_tsk(ID id);
 ER tk_slp_tsk(INT delay);
+ID tk_get_tid(void);
 ER tk_def_int(UINT n, const T_DINT *d);
 void DisableInt(UINT n);
 void EnableInt(UINT n, UINT priority);

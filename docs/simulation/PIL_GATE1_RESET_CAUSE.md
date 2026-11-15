@@ -2,13 +2,16 @@
 
 ## Approved scope
 
+This is the historical optionA checkpoint. The current image adds separately
+approved [retained diagnostic B](PIL_GATE1_BREADCRUMBS.md). RESET1 stays frozen.
+
 Attempt14 lost Pico USB, then re-enumerated. Its last observed OUTPUT preceded
 USB shutdown by91.832ms, but Probe capture closed about5.3ms after that OUTPUT:
 about86ms were unobserved. This does not prove watchdog starvation, a HardFault
 or even distinguish CPU reset from a USB-only failure. The initial boot banner
 was captured; no post-event reset cause was available.
 
-The operator approved optionA ONLY: a Gate1 early raw reset-register snapshot
+For this checkpoint the operator approved optionA ONLY: a Gate1 early raw reset-register snapshot
 and one versioned USB boot record. No persistent feed/fault breadcrumbs
 (optionB), watchdog change, new watchdog feed, native application/template edit,
 UART text or D1/RX1 schema change is supplied.
@@ -28,7 +31,7 @@ The existing native driver still caches its reset category before SDK watchdog
 start replaces scratch4. Its TEST_MAGIC handling can clear scratch0. The new
 record retains the earlier raw values without changing either behavior. It is
 ordinary per-boot RAM, not persistent history across another reset. The next
-successful boot takes its own fresh snapshot. No RAM crash frame is retained.
+successful boot takes its own fresh snapshot. OptionA alone retains no RAM crash frame; current B storage is separate.
 
 [pil_gate1_reset.h](../../app_program/sim/pil_gate1_reset.h) defines the small
 record and122-byte format. Formatting in

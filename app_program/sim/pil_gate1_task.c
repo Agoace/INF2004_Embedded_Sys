@@ -12,6 +12,7 @@
 #include "pil_gate1_rxlog.h"
 #include "pil_gate1_uart_hw.h"
 #include "pil_gate1_reset.h"
+#include "pil_gate1_breadcrumb.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id_hw.h"
 #include "../platform/app_startup.h"
@@ -38,12 +39,13 @@ static struct {
     ID worker;
     pil_gate1_reset_t reset;
     uint8_t reset_line[PIL_GATE1_RESET_LINE];
-    bool reset_sent;
+    bool reset_sent, bc_sent;
     bool initialized, live, final_sent, dump_complete;
 } g;
 static uint64_t worker_stack[256];
 /* Include the sole extra word in pil_gate1_line_time.c. */
-_Static_assert(sizeof(g) + sizeof(worker_stack) + sizeof(uint32_t) <= 16384u,
+_Static_assert(sizeof(g) + sizeof(worker_stack) + sizeof(uint32_t) +
+               PIL_BC_RAM_BUDGET <= 16384u,
                "Gate1 total static storage exceeds approved16KiB");
 
 static uint32_t real_clock(void *context)
@@ -82,6 +84,7 @@ void pil_gate1_native_alarm(void)
     if (!g.live || !g.session.grid_ready) { return; }
     UINT irq; DI(irq);
     const uint32_t entry = pil_gate1_native_entry();
+    pil_gate1_bc_tick(entry);
     const uint32_t n = g.session.next_apply;
     const uint32_t ready = (g.session.slot[n & 7u].ready ? 1u : 0u) |
                           (g.session.slot[(n + 1u) & 7u].ready ? 2u : 0u);
@@ -294,6 +297,13 @@ static void service(void)
             g.reset_sent = true;
         }
         EI(irq);
+    } else if (g.reset_sent && !g.bc_sent && tm_usb_state() == 3u) {
+        UINT irq; DI(irq);
+        if (tm_usb_pending() <= 512u) {
+            tm_snd_dat(pil_gate1_bc_line(), (INT)PIL_BC_LINE);
+            g.bc_sent = true;
+        }
+        EI(irq);
     }
     const uint32_t start = drv_time_us();
     for (unsigned int i = 0u; i < 8u; ++i) {
@@ -367,7 +377,8 @@ static void service(void)
         }
     }
     EI(irq);
-    if (g.session.frozen) { dump_one(); }
+    /* Boot rows precede all stopped diagnostics, even on a late CDC open. */
+    if (g.session.frozen && g.bc_sent) { dump_one(); }
 }
 static void worker(INT stacd, void *exinf)
 {
@@ -388,7 +399,12 @@ static void worker(INT stacd, void *exinf)
         tm_printf((UB *)"[PILG1] transport-only cap4 UART0 921600 8N1; "
                         "no physical actuators/radio\n");
     }
-    for (;;) { service(); (void)tk_slp_tsk(1); }
+    for (;;) {
+        pil_gate1_bc_pil(1u);
+        service();
+        pil_gate1_bc_pil(2u);
+        (void)tk_slp_tsk(1);
+    }
 }
 extern INT __real_usermain(void);
 INT __wrap_usermain(void)
@@ -399,6 +415,7 @@ INT __wrap_usermain(void)
         tm_printf((UB *)"[PILG1] no boot identity/time; inhibited\n");
         return __real_usermain();
     }
+    pil_gate1_bc_begin(nonce, g.reset.reason);
     pil_gate1_reset_format(&g.reset, nonce, g.reset_line);
     pil_gate1_session_init(&g.session, nonce, real_clock, NULL);
     g.session.fault_observer = pil_gate1_rxlog_fault;
