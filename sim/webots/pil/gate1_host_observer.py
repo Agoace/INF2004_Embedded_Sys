@@ -11,7 +11,7 @@ import time
 
 
 class HostSpans:
-    KINDS = ('select', 'read', 'sleep', 'backend_read')
+    KINDS = ('select', 'read', 'sleep', 'backend_read', 'receive')
     FIELDS = ('serial','kind','loop','raw_start_us','raw_end_us','wall_us',
               'thread_cpu_ns','nvcsw','nivcsw','minflt','majflt')
     def __init__(self,clock,capacity=32768,*,cpu=time.thread_time_ns,usage=None,labels=None):
@@ -57,7 +57,8 @@ class HostSpans:
             clock='CLOCK_MONOTONIC_RAW for hardware; injected in tests',
             cpu_clock='CLOCK_THREAD_CPUTIME_ID via time.thread_time_ns',
             scope='diagnostic tail only; CPU/rusage enclose wall bracket; no timing credit',
-            missing_counter_value=-1,serialized_after_serial_close=serial_closed)
+            missing_counter_value=-1,serialized_after_serial_close=serial_closed,
+            receive_scope='main-loop read_exit through receive_exit, including decode/validation/serialization; empty reads included; bracket closes on error')
         (directory/'host-spans.json').write_text(json.dumps(meta,indent=2)+'\n')
 
 
@@ -84,14 +85,18 @@ def host_snapshot():
     paths=[]
     policies=sorted((cpu/'cpufreq').glob('policy*'))
     idle=sorted(cpu.glob('cpu[0-9]*/cpuidle/state*'))
+    cpus=sorted(cpu.glob('cpu[0-9]*'))
     result['power_discovery']={'cpufreq_status':'KNOWN' if policies else 'UNKNOWN',
         'cpuidle_status':'KNOWN' if idle else 'UNKNOWN',
         'policy_count_found':len(policies),'idle_count_found':len(idle),
-        'policy_limit':256,'idle_limit':1024,'truncated':len(policies)>256 or len(idle)>1024}
+        'policy_limit':256,'idle_limit':1024,'cpu_count_found':len(cpus),'cpu_limit':256,
+        'truncated':len(policies)>256 or len(idle)>1024 or len(cpus)>256}
     for p in policies[:256]:
         paths += [p/n for n in ('scaling_driver','scaling_governor','scaling_min_freq',
             'scaling_max_freq','scaling_cur_freq','affected_cpus','related_cpus')]
     paths += [cpu/'cpufreq/boost',cpu/'intel_pstate/no_turbo']
+    paths += [p/'power/pm_qos_resume_latency_us' for p in cpus[:256]]
+    result['pm_qos_scope']='read-only per-CPU resume latency files; no /dev/cpu_dma_latency access; not proof of operator global FD constraint'
     for p in idle[:1024]:
         paths += [p/n for n in ('name','latency','residency','usage','time','disable')]
     result['power_files']={str(p):_read(p)for p in paths}

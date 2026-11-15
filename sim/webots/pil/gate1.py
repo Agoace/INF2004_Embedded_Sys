@@ -392,6 +392,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
 
     attribution = None
     host_spans = None
+    receive_span = None
 
     def mark(kind, value=0):
         if attribution is not None:
@@ -406,8 +407,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             if host_spans: host_spans.end(span)
         mark('wake', delay)
 
-    def read_input():
-        nonlocal rx_bytes
+    def read_input(*, observe_receive=False):
+        nonlocal rx_bytes, receive_span
         mark('read_enter')
         if not measure_io:
             data = io.read(4096)
@@ -428,6 +429,10 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 if host_spans: host_spans.end(span)
             timing = {'select_layer': 'UNKNOWN', 'read_return_pc_us': clock.now_us()}
         returned = timing['read_return_pc_us'] if 'read_return_pc_us' in timing else clock.now_us()
+        # Enclose read_exit through receive_exit, including I/O evidence
+        # serialization in this helper. Preserve t4 before all observer work.
+        if host_spans is not None and observe_receive:
+            receive_span = host_spans.begin('receive', attribution.loop)
         mark('read_exit', len(data))
         if data:
             clock_pair()
@@ -501,17 +506,22 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             # RX faults still cancel queued SENSOR before any write below.
             capture_used = False
             now = capture_if_due()
-            chunk, received = read_input()
-            if chunk:
-                recorder.record('raw_rx', received, packet_hex=chunk.hex())
-                if now < discard_until:
-                    recorder.startup_discarded_bytes += len(chunk)
-                    recorder.record('startup_discard', received, packet_hex=chunk.hex(),
-                                    bytes=len(chunk), used_for_bootstrap=False)
-                else:
-                    receive_chunk(host, recorder, chunk, received,
-                                  timing_clock=clock if measure_io else None)
-            mark('receive_exit')
+            try:
+                chunk, received = read_input(observe_receive=True)
+                if chunk:
+                    recorder.record('raw_rx', received, packet_hex=chunk.hex())
+                    if now < discard_until:
+                        recorder.startup_discarded_bytes += len(chunk)
+                        recorder.record('startup_discard', received, packet_hex=chunk.hex(),
+                                        bytes=len(chunk), used_for_bootstrap=False)
+                    else:
+                        receive_chunk(host, recorder, chunk, received,
+                                      timing_clock=clock if measure_io else None)
+            finally:
+                mark('receive_exit')
+                if receive_span is not None:
+                    host_spans.end(receive_span)
+                    receive_span = None
             for event in host.drain_events():
                 recorder.observe(event, host)
             mark('drain_exit')
