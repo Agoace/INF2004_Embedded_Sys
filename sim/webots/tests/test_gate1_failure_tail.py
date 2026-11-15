@@ -54,13 +54,15 @@ class FailureTailTests(unittest.TestCase):
         def row(n):return b'[PILG1RESET1 '+b' '.join(f'{v:08x}'.encode()for v in[n,0,*range(2,12)])+b']\n'
         opened=[]
         class Port:
-            def __init__(self,chunks):self.chunks=list(chunks);self.closed=False
+            def __init__(self,chunks,disconnect=True):self.chunks=list(chunks);self.closed=False;self.disconnect=disconnect
             def read(self,n):
-                if not self.chunks:raise OSError('disconnect')
+                if not self.chunks:
+                    if not self.disconnect:raise BlockingIOError()
+                    raise OSError('disconnect')
                 return self.chunks.pop(0)
             def write(self,*a):raise AssertionError('CDC must never transmit')
             def close(self):self.closed=True
-        ports=[Port([row(1)]),Port([row(2)[:60],row(2)[60:]])]
+        ports=[Port([row(1)]),Port([row(2)[:60],row(2)[60:]],disconnect=False)]
         def opener():
             p=ports[len(opened)];opened.append(p);return p
         with tempfile.TemporaryDirectory()as tmp:
@@ -82,7 +84,7 @@ class FailureTailTests(unittest.TestCase):
                 if not self.sent:
                     self.sent=True
                     return row if self.index else b'[PILG1] stopped; reset required; worker stack untouched fixture\n'
-                if c.now<100000:raise BlockingIOError()
+                if self.index or c.now<100000:raise BlockingIOError()
                 raise OSError('reset')
             def close(self):pass
         def opener():

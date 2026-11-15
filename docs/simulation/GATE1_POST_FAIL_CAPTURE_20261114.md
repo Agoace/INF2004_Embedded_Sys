@@ -45,15 +45,18 @@ the SAME by-id identity for re-enumeration. There are at most16 segments,
 approved CDC-only reopen, NOT UART auto-rearm.
 
 Numbered `pico-usb-NNN.bin` files retain initial and post-reset data separately.
-`cdc-capture.json` records open/close/chunk RAW times and complete reset records.
+`cdc-capture.json` records open/close/chunk RAW times, complete reset records
+and [Reset-B BC1 companions](GATE1_RESET_B_CAPTURE_20261115.md).
 Each raw chunk is written unbuffered, so it is visible before close; this is not
 an fsync/power-loss guarantee. The owned helper explicitly handles SIGTERM and
 SIGINT (including inherited SIGINT-ignore) to close files and export JSON with
 an interrupted/incomplete reason. Repeated stop signals do not interrupt that
 export. SIGKILL cannot run cleanup; raw chunks already written remain visible.
-It stops after a complete reset record on a reopened segment, or a complete
-stopped D1 plus stack line followed by1s RX/reopen reset-watch grace. D1 alone
-must not close the reader before a later watchdog reset. The global duration
+After a reopened RESET1 it waits up to1s for the separate BC1 companion; a
+complete matching row closes early, otherwise breadcrumb history stays UNKNOWN.
+Legacy RESET1-only images receive the same bounded wait. A complete stopped D1
+plus stack line starts the existing1s RX/reopen reset-watch grace, but must not
+close a pending companion wait early. The global duration
 still bounds the configured watch; partial/lost records remain UNKNOWN. CLI exit2 never
 means Gate1 PASS; retain the reason/segments, not just an exit status. Stop only
 the owned process if operator cleanup is required.

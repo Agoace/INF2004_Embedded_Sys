@@ -28,6 +28,78 @@ def parse_reset_records(data):
     return records
 
 
+BREADCRUMB = re.compile(rb'(?m)^\[PILG1BC1 ((?:[0-9a-f]{8} ){29}[0-9a-f]{8})\]\n')
+BC_MAGIC, BC_PRODUCER, BC_SALT = 0x50424731, 0x00010001, 0x9e3779b9
+
+
+def _breadcrumb_mask(w, reason):
+    """Mirror the frozen native independent-publication integrity checks."""
+    if ((reason & 3) == 0 or w[0] != BC_MAGIC or w[1] != BC_PRODUCER or not w[2] or
+            w[3] != (BC_SALT ^ w[0] ^ w[1] ^ w[2])):
+        return 0
+    mask = 1
+    for base in (4, 8, 12):
+        if (w[base] and (w[base] & 1) == 0 and
+                w[base+3] == (BC_SALT ^ base ^ w[base] ^ w[base+1] ^ w[base+2])):
+            mask |= 1 << (base//4)
+    if 1 <= w[16] <= 3: mask |= 32
+    check = BC_SALT ^ w[16]
+    for word in w[17:26]: check ^= word
+    if w[16] in (2, 3) and w[26] == check and w[27] == (check ^ 0xffffffff):
+        mask |= 16
+        if w[16] == 2: mask |= 64
+    return mask
+
+
+def parse_breadcrumb_records(data, *, watchdog_reason=None):
+    """Strict BC1 framing/checks. Missing RESET1 reason context is UNKNOWN.
+
+    Explicit reason is for standalone retained fixtures/records. CDC instead
+    requires the preceding same-nonce RESET1. Invalid publications stay null;
+    raw previous words remain available and are never promoted to live state.
+    """
+    if watchdog_reason is not None and (type(watchdog_reason) is not int or not 0 <= watchdog_reason <= 0xffffffff):
+        raise ValueError('watchdog reason must be uint32')
+    resets = parse_reset_records(data) if watchdog_reason is None else []
+    records = []
+    for match in BREADCRUMB.finditer(data):
+        values = [int(word, 16) for word in match[1].split(b' ')]
+        nonce, mask, w = values[0], values[1], values[2:]
+        reason = watchdog_reason
+        if reason is None:
+            preceding = [r for r in resets if r['nonce'] == nonce and r['offset'] < match.start()]
+            if not preceding: continue
+            reason = preceding[-1]['watchdog_reason']
+        if mask & ~0x7f or mask != _breadcrumb_mask(w, reason): continue
+        motion = (dict(sequence=w[4], time_us=w[5], caller_task_id=w[6]) if mask & 2 else None)
+        pil = None
+        if mask & 4:
+            packed = w[10]
+            pil = dict(sequence=w[8], time_us=w[9], packed_tid_state=packed,
+                       task_id=packed >> 8 if packed != 0xffffffff else None,
+                       state=packed & 255 if packed != 0xffffffff else None,
+                       state_name={1:'ENTER', 2:'BEFORE_SLEEP'}.get(packed & 255, 'UNKNOWN'))
+        tick = (dict(sequence=w[12], entry_time_us=w[13], thread_task_id=w[14]) if mask & 8 else None)
+        fault = None
+        if mask & 1:
+            complete = bool(mask & 16)
+            fault = dict(status_raw=w[16], entry_marker_observed=bool(mask & 32),
+                         integrity_valid=complete, frame_valid=bool(mask & 64),
+                         time_us=w[17] if complete else None,
+                         frame=dict(pc=w[18], lr=w[19], xpsr=w[20]) if mask & 64 else None,
+                         original_sp=w[21] if complete else None,
+                         exc_return=w[22] if complete else None,
+                         primask=w[23] if complete else None, ipsr=w[24] if complete else None,
+                         core_id=w[25] if complete else None)
+        records.append(dict(nonce=nonce, validity_mask=mask, raw_previous_words=w,
+            previous_owner_nonce=w[2] if mask & 1 else None,
+            producer_tag=w[1] if mask & 1 else None, header_status='VALID' if mask & 1 else 'UNKNOWN',
+            watchdog_reason=reason, motion=motion, pil=pil, alarm0_tick=tick, fault=fault,
+            offset=match.start(), length=match.end()-match.start(),
+            scope='previous boot only; null fields UNKNOWN; no old/new TIMER subtraction or no-fault inference'))
+    return records
+
+
 class FailureTail:
     def __init__(self,clock,requested_us,reason,capacity=131072):
         self.clock,self.requested_us,self.reason=clock,requested_us,reason
@@ -74,8 +146,8 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
     """Injected opener is ONLY for the separately named Pico USB CDC, never UART.
 
     Each reopen creates a new segment. No write method is called. Completion
-    means a reset record after reconnect, or stopped D1+stack plus1s reset
-    watch; not a PASS. D1 completion alone must not hide a later reset.
+    means a reset+BC1 companion after reconnect, a bounded missing-companion
+    wait, or stopped D1+stack plus1s reset watch; never a PASS.
     """
     if not 1_000<=duration_us<=700_000_000:raise ValueError('invalid CDC capture duration')
     if type(max_segments)is not int or not 1<=max_segments<=16:raise ValueError('invalid segment budget')
@@ -85,9 +157,13 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
     stopped_seen=None
     signal_received=None
     stop_grace_us=1000000
+    companion_wait_us=1000000
+    reopened_reset_seen=None
     try:
         while clock.now_us()<deadline:
-            if stopped_seen is not None and clock.now_us()>=stopped_seen+stop_grace_us:
+            if reopened_reset_seen is not None and clock.now_us()>=reopened_reset_seen+companion_wait_us:
+                reason='post-reopen boot record captured; breadcrumb UNKNOWN';break
+            if reopened_reset_seen is None and stopped_seen is not None and clock.now_us()>=stopped_seen+stop_grace_us:
                 reason='stopped D1 and stack plus1s reset-watch grace';break
             if io is None:
                 try:io=open_io()
@@ -97,7 +173,8 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
                 index+=1
                 if index>=max_segments:reason='segment budget exhausted';break
                 data=bytearray();name=f'pico-usb-{index:03d}.bin';stream=(output/name).open('xb',buffering=0)
-                segments.append(dict(file=name,opened_pc_us=clock.now_us(),bytes=0,reset_records=[],chunks=[]))
+                segments.append(dict(file=name,opened_pc_us=clock.now_us(),bytes=0,reset_records=[],chunks=[],
+                                     breadcrumb_records=[],breadcrumb_status='UNKNOWN'))
             try:
                 chunk=io.read(4096)
                 if not chunk:raise OSError('CDC EOF/disconnected')
@@ -116,9 +193,18 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
                 end=record['offset']+record['length']
                 record['complete_pc_us']=next(t for t,start,size in segments[-1]['chunks'] if start<end<=start+size)
             segments[-1]['reset_records']=records
+            breadcrumbs=parse_breadcrumb_records(data)
+            for record in breadcrumbs:
+                end=record['offset']+record['length']
+                record['complete_pc_us']=next(t for t,start,size in segments[-1]['chunks'] if start<end<=start+size)
+            segments[-1]['breadcrumb_records']=breadcrumbs
+            matched=[r for r in breadcrumbs if records and r['nonce']==records[-1]['nonce'] and r['offset']>records[-1]['offset']]
+            segments[-1]['breadcrumb_status']='COMPLETE_ROW' if matched else 'UNKNOWN'
             if len(data)>4_000_000 or len(segments[-1]['chunks'])>=4096:reason='segment byte/chunk budget exhausted';break
             if index>0 and segments[-1]['reset_records']:
-                reason='post-reopen boot record captured';break
+                if reopened_reset_seen is None:reopened_reset_seen=records[0]['complete_pc_us']
+                if matched:
+                    reason='post-reopen reset and breadcrumb companion captured';break
             if STOPPED.search(data):
                 try:decode_dump(bytes(data))
                 except DiagnosticError:pass
@@ -138,7 +224,9 @@ def capture_cdc(open_io,output,clock,*,duration_us=700000000,labels=None,max_seg
         result=dict(labels,scope='Pico CDC RX/reopen only; NOT Gate1 acceptance',
                     reason=reason,segments=segments,events=events,
                     stopped_seen_pc_us=stopped_seen,post_stop_reset_watch_us=stop_grace_us,
-                    signal_received=signal_received,
+                    signal_received=signal_received,post_reopen_companion_wait_us=companion_wait_us,
+                    reopened_reset_seen_pc_us=reopened_reset_seen,
+                    breadcrumb_record_scope='strict281B BC1; matching RESET1 reason/nonce; independent native checks; previous boot only; missing/invalid UNKNOWN',
                     pc_clock_domain=getattr(clock,'domain','INJECTED_TEST_CLOCK'),
                     reset_record_scope='complete122B LF row only; enqueue is not delivery ACK; partial/lost UNKNOWN; raw scratch may include ROM effects')
         (output/'cdc-capture.json').write_text(json.dumps(result,indent=2)+'\n')
