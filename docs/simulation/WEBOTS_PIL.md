@@ -171,17 +171,17 @@ model tests; it does not make the value measured or physically accepted.
 | Wheel / distance conversion | Nominal 65 mm / firmware 12414 counts per metre | Effective loaded radius and ground travel are unmeasured. |
 | Total mass | **ASSUMED 1 kg** | Weigh the robot with its current battery and fixtures. |
 | Wheel / caster / head mass | **ASSUMED 40 g each / 20 g / 20 g** | Measure component mass or approve the approximation. |
-| Body envelope | 190 x 160 mm; front reach **ASSUMED 123 mm** | Full width is conservative, not a chassis CAD model; front offset is uncertain. |
+| Body envelope | Operator-measured190 x160 mm,2026-10-30; front reach from old echo remains uncertain | Width includes barcode mount, not a chassis CAD model. Line mount119 supersedes calculated123 mm. |
 | Body height / COM | **ASSUMED** 35 mm box, box centre Z25 mm above axle; COM x30/Z20 mm | Survey mass distribution and actual collision shape. |
-| Caster | **ASSUMED** x80 mm, radius10 mm | Retained WB80 is a hypothesis, not a caster survey. |
+| Caster | Operator WB80 mm per [IMU.md](../s4-imu/IMU.md); radius10 mm **ASSUMED** | Plant x80 unchanged. Offline fit79 is separate; servo-axis65 is a different dimension. |
 | Contact / inertia / torque | **ASSUMED** friction0.8, wheel inertia2.1125e-5 kg m², torque cap0.12 Nm | Loaded transient and contact measurements are absent. |
 | Motor response | **ASSUMED** drive/coast50 ms; static threshold12 percent | DM1 used a12 percent kick; static breakaway and time constants were not measured. Zero drive means passive coast, not active braking. |
 | Motor running map | DM1 loaded VIN, separate wheels/directions, 0–70 percent | Recorded steady speeds; not the old unloaded host table. |
 | High-duty model | **ASSUMED / UNVALIDATED** linear extension of60–70 percent slope up to80 percent | High-duty wheelie/unsettled rows are excluded. Larger duty fails model validation; this does not raise firmware drive permission. |
 | Servo / sonar | Axis x65 mm measured; axis Z20 mm and face offset0 **ASSUMED**; slew277.78 deg/s **ASSUMED** | Settle fit is not a measured angular response or face survey. |
-| GP26/GP27 line pose | x119 mm / clearance9 mm **ASSUMED**; separation14.5 mm physical | Do not relabel old fitted20.9 mm spacing or derived x123 mm as a survey. |
-| GP28 pose | x80 +/-5 mm approximate; y77 mm left; flat clearance5.5 mm nominal | Standoff response outside calibration is unvalidated; no terrain-following mount. |
-| IMU pose | x60 mm and axle Z97.5 mm **ASSUMED** | Assumes retained130 mm height was floor-relative; original datum is unconfirmed. |
+| GP26/GP27 line pose | Operator x119 mm / approximate clearance8 mm,2026-11-15; separation14.5 mm measured | Replaces old9 mm clearance; fitted20.9 mm spacing and derived x123 mm are not surveys. |
+| GP28 pose | Operator x80 mm approximate, y77 mm left; clearance5–6 mm (model5.5),2026-11-15 | Standoff response outside calibration is unvalidated; no terrain-following mount. |
+| IMU pose | Operator ahead60 mm / height130 mm per [IMU.md](../s4-imu/IMU.md), also `imu_settings.h` | Plant unchanged: axle Z97.5=130−32.5 mm. Geometry defaults are not sensor bias calibration. |
 | Magnetic field | **ASSUMED** world0/0.3/-0.4 gauss | Illustrative strength/inclination, not local calibration. |
 | Encoder phase | **ASSUMED** nearest/ties-away half-count phase | Counts derive from joint rotation, not ground displacement; fractional phase is retained. |
 | Home mats / props / station | **ASSUMED** 4-tile and 6-tile loops, 12-tile school-like network | Actual home mat photos/layouts are missing. All start/prop placements are illustrative. STATION is omitted until marker and ports are supplied. |
