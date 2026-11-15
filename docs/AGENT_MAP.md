@@ -162,6 +162,9 @@ The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
 [`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
 [host test](../tests/test_bench_report.c). The bench directory is excluded
 from ordinary source selection; it does not yet contain a complete runtime.
+The [virtual GPIO state](../app_program/bench_kernel/bench_gpio.c) and
+[hardware-provider seam](../app_program/bench_kernel/bench_gpio_hw.c) have a
+[host test](../tests/test_bench_kernel_gpio.c); no native dispatcher is replaced.
 
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
