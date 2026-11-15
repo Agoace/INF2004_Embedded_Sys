@@ -12,6 +12,26 @@ stopped on late slots1011(269.5us) and1132(287us),121 slots apart, with no Pico
 reset reported. Only the quota changes. Historical quota1 artifacts retain their
 original policy/verdict; do not relabel them as quota3 evidence.
 
+## Final approved burst revision after attempt21
+
+On2026-11-15 the operator approved at most2 consecutive late captures; a third
+consecutive late fails. Attempt21 had an initial sleep overshoot, then CPU-
+accounted receive/logging and normal sleep crossed the next target. It was not
+one continuous two-slot stall. This change permits that policy pattern, not a
+future delay bound. Rolling quota3 and P600 stay unchanged. Earlier artifacts
+keep their original rules and verdicts.
+
+SW6 confirmed ONLY with independent checks for EACH slot: no-early start/end
+under the SAME qualified B400 cones; H<=400, L<=1000; apply upper<=4650us with
+350us margin and lower>=3000us. EACH availability upper qMax+H<=3000 and lower
+qMin-L>=0 remains fatal (sufficient qMax<=2600 AND qMin>=1000). Exact D1 upper
+AND lower checks, staged n/n+1 readiness, lease, jitter, queue and fault checks
+stay fatal. Adjacent sources can bunch: this policy is not delivery, burst or
+queue safety proof. Never sum or amortize age across captures.
+
+This is the operator's LAST Gate1 rule change. If the next run fails, record
+the Gate1 trial as measured, without acceptance, and move on to Webots.
+
 ## Selection and rules
 
 Add `--trial-tolerate-late` ONLY with `--trial-clock-400-sync20` and
@@ -24,9 +44,11 @@ start/end. Both endpoints require the SAME qualified clock cones, aged half
 end midpoint's existing outward+1us once. No early estimated aim or learned bias.
 
 - Phase<=250us: ordinary capture, no tolerance consumed.
-- 250<phase<=600us: permitted ONLY if the previous slot was not late AND there
-  are fewer than3 tolerated late captures in the previous999 slots.
-- Phase>600us, consecutive late, or a fourth late in ANY rolling1000 slots: FAIL.
+- 250<phase<=600us: permitted ONLY if it is not a third consecutive late AND
+  there are fewer than3 tolerated late captures in the previous999 slots.
+- Phase>600us, a third consecutive late, or a fourth late in ANY rolling1000
+  slots: FAIL. Slots0/1 may both be late; slot2 late then fails. Slots0/1 and3/4
+  form two bursts of2, but slot4 fails the independent rolling quota.
 
 Late at0,2,4 is permitted; another at999 fails, while one at1000 is permitted
 because slot0 has left the rolling window. Late at998,1000,1002 is permitted,
