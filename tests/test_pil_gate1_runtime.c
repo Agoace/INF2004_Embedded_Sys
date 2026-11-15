@@ -5,6 +5,7 @@
 #include "pil_gate1_session.h"
 #include "pil_gate1_uart_hw.h"
 #include "pil_gate1_reset.h"
+#include "pil_gate1_breadcrumb.h"
 #include "pil_gate1_dump.h"
 #include "hardware/structs/uart.h"
 #include <assert.h>
@@ -136,6 +137,8 @@ void EnableInt(UINT n, UINT priority)
     assert(n == 1u || n == 20u); assert(priority == 1u);
 }
 void ClearInt(UINT n) { assert(n == 1u || n == 20u); }
+ID tk_get_tid(void) { return 9; }
+void __real_drv_watchdog_feed(void) { }
 uint32_t drv_time_us(void) { return now++; }
 int drv_time_init(void) { return 0; }
 bool boot_id_hw_generate(uint32_t *out) { *out = 123u; return true; }
@@ -144,6 +147,7 @@ uint32_t pil_gate1_native_entry(void) { return now; }
 INT __real_usermain(void)
 {
     assert(reset_reads == 1u); /* Before native watchdog/scratch overwrite. */
+    assert(pil_bc_active == 1u && pil_bc_live[2] == 123u);
     pil_gate1_native_grid(now + 1000u);
     pil_gate1_motor_seen(0, 0, 1500u); return 0;
 }
@@ -231,7 +235,8 @@ static void alarm_at(uint32_t time)
 int main(int argc, char **argv)
 {
     const char *mode = argc > 1 ? argv[1] : "clean";
-    if (strcmp(mode, "reset") == 0) { usb_state = 0u; }
+    const bool late_usb = strcmp(mode, "lateusb") == 0;
+    if (strcmp(mode, "reset") == 0 || late_usb) { usb_state = 0u; }
     const bool missing = strcmp(mode, "missing") == 0;
     const uint32_t applied = missing ? 0u : 8u;
     const uint32_t staged = missing ? 1u : 11u;
@@ -251,8 +256,14 @@ int main(int argc, char **argv)
         assert(usb_size == PIL_GATE1_RESET_LINE);
         assert(sizeof(expected) - 1u == usb_size);
         assert(memcmp(usb, expected, usb_size) == 0);
+        usb_pending = 513u; pil_gate1_test_service();
+        assert(usb_size == PIL_GATE1_RESET_LINE);
+        usb_pending = 0u;
         for (unsigned int i = 0u; i < 5u; ++i) { pil_gate1_test_service(); }
-        assert(reset_reads == 1u && usb_size == PIL_GATE1_RESET_LINE);
+        assert(reset_reads == 1u &&
+               usb_size == PIL_GATE1_RESET_LINE + PIL_BC_LINE);
+        assert(memcmp(usb + PIL_GATE1_RESET_LINE,
+                      "[PILG1BC1 0000007b ", 19u) == 0);
         return 0;
     }
     /* No RX traffic or synthetic TX interrupt may bootstrap transmission. */
@@ -377,10 +388,18 @@ int main(int argc, char **argv)
         reason = 0x107u; coverage = 0x59fu;
         assert(s->counts[G1_RX_FULL] == 1u);
     } else {
-        assert(strcmp(mode, "clean") == 0);
+        assert(strcmp(mode, "clean") == 0 || late_usb);
         f = (pil_frame_t){.type = PIL_DISARM, .payload_length = 4u,
             .session = 0u, .ack = PIL_NO_ACK};
         pil_put_u32(f.payload, 1u); send(&f);
+    }
+    if (late_usb) {
+        for (unsigned int i = 0u; i < 3u; ++i) {
+            pil_gate1_test_service(); drain();
+        }
+        assert(s->frozen && usb_size == 0u);
+        usb_state = 3u; pil_gate1_test_service();
+        assert(usb_size == PIL_GATE1_RESET_LINE);
     }
     for (unsigned int i = 0u; i < 256u; ++i) {
         pil_gate1_test_service(); drain();
@@ -411,7 +430,7 @@ int main(int argc, char **argv)
     }
     assert(inhibited_seen && pending_seen && output_sequence >= 3u);
     assert(usb_size >= PIL_GATE1_RESET_LINE);
-    size_t pos = PIL_GATE1_RESET_LINE;
+    size_t pos = PIL_GATE1_RESET_LINE + PIL_BC_LINE;
     uint32_t chain = 0u, records = 0u;
     bool manifest = false;
     while (pos < usb_size) {

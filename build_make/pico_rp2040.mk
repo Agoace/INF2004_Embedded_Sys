@@ -340,7 +340,9 @@ CFLAGS  += -DAPP_SIM=1
 endif
 ifeq ($(PIL_GATE1),1)
 CFLAGS += -DAPP_SIM_GATE1=1
-LFLAGS += -Wl,--wrap=usermain
+LFLAGS += -Wl,--wrap=usermain -Wl,--wrap=drv_watchdog_feed \
+          -Wl,--wrap=HardFault_Handler
+LFLAGS += -T ../app_program/sim/pil_gate1_retained.ld
 endif
 CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
 ifeq ($(CRASH_REPORT),0)

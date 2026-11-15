@@ -95,6 +95,18 @@ set_property(TARGET test_pil_gate1_rxlog PROPERTY LINK_LIBRARIES "")
 target_include_directories(test_pil_gate1_rxlog PRIVATE
     "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
 add_test(NAME test_pil_gate1_rxlog COMMAND test_pil_gate1_rxlog)
+add_executable(test_pil_gate1_breadcrumb
+    "${REPO}/tests/test_pil_gate1_breadcrumb.c"
+    "${REPO}/app_program/sim/pil_gate1_breadcrumb.c")
+set_property(TARGET test_pil_gate1_breadcrumb PROPERTY LINK_LIBRARIES "")
+target_include_directories(test_pil_gate1_breadcrumb PRIVATE
+    "${REPO}/tests/pil_stubs" "${REPO}/app_program/sim")
+target_compile_definitions(test_pil_gate1_breadcrumb PRIVATE
+    PIL_GATE1_RUNTIME_TEST=1)
+foreach(mode empty valid partial badframe power inactive interrupted)
+    add_test(NAME test_pil_gate1_breadcrumb_${mode}
+        COMMAND test_pil_gate1_breadcrumb ${mode})
+endforeach()
 set(pil_critical "${CMAKE_CURRENT_BINARY_DIR}/pil_gate1_critical.h")
 add_custom_command(OUTPUT "${pil_critical}"
     COMMAND "${Python3_EXECUTABLE}" "${REPO}/tests/generate_pil_critical.py"
@@ -107,6 +119,7 @@ add_custom_target(pil_gate1_critical DEPENDS "${pil_critical}")
 foreach(profile up smp control)
     set(target test_pil_gate1_runtime_${profile})
     add_executable(${target} "${REPO}/tests/test_pil_gate1_runtime.c"
+        "${REPO}/app_program/sim/pil_gate1_breadcrumb.c"
         "${REPO}/app_program/sim/pil_gate1_task.c"
         "${REPO}/app_program/sim/pil_gate1_rxlog.c"
         "${REPO}/app_program/sim/pil_gate1_session.c"
@@ -123,7 +136,7 @@ foreach(profile up smp control)
         APP_SIM=1 APP_SIM_GATE1=1 PIL_GATE1_RUNTIME_TEST=1
         TK_SUPPORT_SMP=$<IF:$<STREQUAL:${profile},up>,0,1>
         APP_FORCE_CORE0=$<IF:$<STREQUAL:${profile},control>,1,0>)
-    foreach(mode reset wake wakelease wakenative priority clean lease overrun
+    foreach(mode reset wake wakelease wakenative priority clean lateusb lease overrun
                  lateprogress queuefull missing)
         add_test(NAME ${target}_${mode} COMMAND ${target} ${mode})
     endforeach()

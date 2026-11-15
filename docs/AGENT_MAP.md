@@ -455,6 +455,15 @@ vehicle task described below.
   [`pil_gate1_reset.h`](../app_program/sim/pil_gate1_reset.h) defines its shape.
   The formatter is in `pil_gate1_dump.c`; the task takes the snapshot before
   native startup and appends the row without UART text or D1 changes.
+  [Reset diagnostic B](simulation/PIL_GATE1_BREADCRUMBS.md) adds separate BC1:
+  [`pil_gate1_breadcrumb.c`](../app_program/sim/pil_gate1_breadcrumb.c) and
+  [`pil_gate1_breadcrumb.h`](../app_program/sim/pil_gate1_breadcrumb.h) define
+  retained progress/fault writers and the boot companion;
+  [`pil_gate1_retained.ld`](../app_program/sim/pil_gate1_retained.ld) places its
+  KEEP/NOLOAD storage outside startup copy/clear ranges on Gate1 only.
+  [`test_pil_gate1_breadcrumb.c`](../tests/test_pil_gate1_breadcrumb.c) tests
+  publications, interrupted feed and boot copy; the linked Thumb/retention proof
+  is [`check_pil_gate1_breadcrumb_elf.py`](../tests/check_pil_gate1_breadcrumb_elf.py).
   [`generate_pil_critical.py`](../tests/generate_pil_critical.py) imports the
   production critical macros for the PRIMASK/PendSV runtime test double.
   [`test_pil_gate1_rxlog.c`](../tests/test_pil_gate1_rxlog.c) checks
