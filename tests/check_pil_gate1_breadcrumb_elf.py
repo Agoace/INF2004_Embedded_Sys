@@ -193,7 +193,14 @@ def main():
     extra = sum((elf.symbols[n][1]+3) & ~3 for n in
                 ('pil_bc_live', 'previous', 'boot_line', 'pil_bc_active'))
     extra += size + max(0, elf.symbols['g'][1]-12908)
-    assert extra <= 800 and 14960+extra <= 16384
+    idle_address, idle_size = elf.symbols['app_idle_stack']
+    assert idle_size == 512 and (idle_address & 7) == 0
+    idle_fn, idle_code_size = elf.symbols['app_idle']
+    idle_code = elf.bytes_at(idle_fn & ~1, idle_code_size)
+    # A leaf NOP/back-branch loop: no stack use, calls, sleep, WFI or return.
+    assert idle_code in (b'\x00\xbf\xfd\xe7', b'\xc0\x46\xfd\xe7')
+    total = 14960+extra+idle_size
+    assert extra <= 800 and total <= 16384
     vector = elf.bytes_at(addr('vector_tbl'), 48*4)
     hardfault = struct.unpack_from('<I', vector, 12)[0]
     assert hardfault == wrapper
@@ -217,7 +224,8 @@ def main():
     run_stub(elf, 0x20030000, active=False)
     run_stub(elf, 0x20030000, partial=True)
     print(f'PASS Thumb vector, {size}B RAM stub,18 interpreted executions;')
-    print(f'PASS added RAM {extra}B, Gate1 total {14960+extra}B;')
+    print(f'PASS Reset-B RAM {extra}B + idle {idle_size}B, total {total}B;')
+    print('PASS app idle leaf is a nonblocking NOP/back-branch loop;')
     print('PASS guarded MSP/PSP reads, no stack pushes/calls/feed/other writes;')
     print('PASS NOLOAD retention outside startup ranges and below heap boundary.')
 

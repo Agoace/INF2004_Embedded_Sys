@@ -11,6 +11,8 @@ The current image keeps [RX1](PIL_GATE1_RX_TIMING.md) and
 [IRQ dispatch requests](PIL_GATE1_IRQ_WAKE.md). It now adds an early
 [raw reset-cause USB boot row](PIL_GATE1_RESET_CAUSE.md) and approved
 [retained diagnostic B](PIL_GATE1_BREADCRUMBS.md) after repeated watchdog resets.
+The current A/B image adds a [painted app idle stack](PIL_GATE1_IDLE_STACK.md)
+after attempt20 captured a checked invalid-MSP HardFault.
 It has no physical PASS.
 Earlier startup failure/correction is recorded in the [TX startup record](PIL_GATE1_TX_PRIME.md).
 This is NOT sensor/physics acceptance.
@@ -35,11 +37,11 @@ sha256sum build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2
 ```
 
 - File: `build_make/mtk3pico_smp0_usb_cdc_sim_gate1.uf2` (251392 bytes).
-- UF2 SHA256: `f0d5e5508740fc532c037b3c8e873d36e179b99cb6ff05ad6ee35c97e3d19777`.
-- ELF SHA256: `3178fe1e7dc4891ca4e2c1cd9c9c288d37613a2353ed04c7aa70ffd8277bea9b`.
+- UF2 SHA256: `6e8ac6c58275edbc8c5206810c71fd80aff3e19f00a4a523bf940ca4edb15258`.
+- ELF SHA256: `0b0b8145f9849c3e24276aaa7bc86c9c9c9aba404bf46a1b80b024b465d1d010`.
 - Compiler: Arm GNU14.3.1, Cortex-M0+, `-O2 -g3`; Pico SDK2.3.0.
 - D1 profile flags: `0x79` (UP, USB-only, no radio/live actions, SIM, Gate1).
-- Retained copy: `build/pil-gate1/artifacts/breadcrumb/`, with map/size/hashes.
+- Retained copy: `build/pil-gate1/artifacts/idle-stack/`, with map/size/hashes.
 - Capture frozen RESET1 then281-byte BC1, both tied to this boot's nonce.
   A CDC reader must not stop after RESET1; missing B is UNKNOWN.
 - Appends versioned ASCII after D1 manifest, before the unchanged stopped stack
@@ -102,8 +104,8 @@ never physics-applied. No physical PWM, trigger, encoder, ADC or IMU is emulated
 
 ## Host/build evidence
 
-The current [reset-B checkpoint](PIL_GATE1_BREADCRUMBS.md) passes GCC611/611,
-Clang ASan/UBSan611/611,48 strict ARM units,38 ordinary builds/SDK proofs and
+The current [app idle A/B checkpoint](PIL_GATE1_IDLE_STACK.md) passes GCC614/614,
+Clang ASan/UBSan614/614,48 strict ARM units,38 ordinary builds/SDK proofs and
 all76 unchanged literal hashes. Its ELF proof checks retention, the Thumb vector
 and18 interpreted RAM-stub paths; no target fault injection is claimed. The following bullets record the original
 runtime checkpoint, not additional physical evidence.
@@ -132,10 +134,13 @@ runtime checkpoint, not additional physical evidence.
 
 The table and frame values below are the original runtime checkpoint record.
 The RX diagnostic adds3632B, RESET1 adds164B, and retained B adds688B:
-total added storage15648B, UP `.data`872B and `.bss`140748B,
+the app idle A/B stack adds512B: total added storage16160B,
+UP `.data`872B and `.bss`141260B,
 service440B, native hook40B. The current UART frame is80B. Reviewed maxima are
 204B UP /248B SMP added IRQ chains and896B worker. See the
-[reset-B evidence](PIL_GATE1_BREADCRUMBS.md) for current totals and test logs. No new target reserve is claimed.
+[app idle evidence](PIL_GATE1_IDLE_STACK.md) for current totals and test logs.
+The current stopped line appends the512B app idle paint high-water on the same
+line. Missing target watermark data is UNKNOWN, not a proved reserve. No new target reserve is claimed.
 
 | Image | `.data` | `.bss` | Total static RAM |
 | --- | ---: | ---: | ---: |
