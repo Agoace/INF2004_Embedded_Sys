@@ -89,6 +89,13 @@ class AssumedLineTests(unittest.TestCase):
         self.assertLessEqual(max(sums), 1.02)
         self.assertAlmostEqual(max(sums), .78, delta=.001)
 
+    def test_gp28_reference_already_matches_operator_5_to_6mm_height(self):
+        # Operator approximate physical range2026-11-15; no new height law.
+        gp28 = load_profile('GP28')
+        self.assertEqual(gp28.reference_height_mm, 5.5)
+        self.assertTrue(5 <= gp28.reference_height_mm <= 6)
+        self.assertEqual(load_assumed_line_profile('GP26').reference_height_mm, 8)
+
     def test_frozen_file_and_null_loaders_unchanged(self):
         self.assertNotEqual(ASSUMED_LINE_PATH, DEFAULT_PATH)
         self.assertEqual(hashlib.sha256(DEFAULT_PATH.read_bytes()).hexdigest(),
