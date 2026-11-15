@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "classification": "ASSUMED_SIL_STRAIGHT_ONLY",
+  "supported_materials": ["MAT_WHITE", "MAT_LINE"],
+  "footprint_fit": {
+    "source": "docs/archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md",
+    "record": "boot-5209 spin recording",
+    "method": "Isotropic Gaussian integral over fixed 18 mm strip; solve midpoint fraction = 0.39 at 7.25 mm offset",
+    "midpoint_fraction_target": 0.39,
+    "plain_line_pair_sum_upper_bound": 1.02,
+    "line_width_mm": 18.0,
+    "relative_spacing_mm": 14.5,
+    "limits": "Effective longitudinal fit only; transverse isotropy and 9 mm reference height remain assumed. Pair-sum bound is not an equality target."
+  },
+  "profile_parameters": {
+    "reference_height_mm": 9.0,
+    "sigma_x_mm": 15.924122728751232,
+    "sigma_y_mm": 15.924122728751232,
+    "noise_sigma_adc": 0.0,
+    "mat_response_power": 1.0,
+    "paper_response_power": 1.0,
+    "levels_adc": {
+      "MAT_WHITE": 200.0,
+      "MAT_LINE": 3700.0,
+      "PAPER_WHITE": 200.0,
+      "PAPER_INK": 3700.0
+    },
+    "evidence_status": "ASSUMED_SIL_STRAIGHT_ONLY",
+    "assumptions": [
+      "OPERATOR_APPROVED_SYNTHETIC_LINE_PROFILE_2026_11_15",
+      "NOT_MEASURED_CALIBRATION",
+      "FITTED_TO_BOOT_5209_SPIN_RECORDING",
+      "TRANSVERSE_ISOTROPY_ASSUMED_NOT_MEASURED",
+      "FLAT_STRAIGHT_MAT_ONLY",
+      "PAPER_LEVELS_SCHEMA_PLACEHOLDERS_NOT_SUPPORTED",
+      "ADC_POST_EIGHT_AVERAGE_DO_NOT_AVERAGE_AGAIN"
+    ]
+  },
+  "channels": {
+    "GP26": {
+      "role": "CENTRE",
+      "mount": {
+        "forward_mm": 119.0,
+        "left_mm": 0.0,
+        "flat_clearance_mm": 9.0,
+        "forward_assumed": true,
+        "height_assumed": true,
+        "spacing_evidence": "GP26_BODY_LATERAL_DATUM_ASSUMED"
+      }
+    },
+    "GP27": {
+      "role": "LEFT",
+      "mount": {
+        "forward_mm": 119.0,
+        "left_mm": 14.5,
+        "flat_clearance_mm": 9.0,
+        "forward_assumed": true,
+        "height_assumed": true,
+        "spacing_evidence": "MEASURED_RELATIVE_GP26"
+      }
+    }
+  }
+}
