@@ -55,21 +55,16 @@ def verify_result(project,status,contents):
     return (status==0 and valid and 'ERROR:' not in contents and 'WARNING:' not in contents),proof,error
 
 
-def main():
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--timeout-seconds',type=int,default=90)
-    args=parser.parse_args()
-    if not 20<=args.timeout_seconds<=180:parser.error('timeout must be20..180seconds')
+def launch_project(project,world,timeout_seconds,*,label='passive'):
+    """Shared approved headless launcher; only its own process group is signalled."""
     if os.environ.get('DISPLAY')!=':0' or not os.environ.get('XAUTHORITY'):
-        parser.error('this smoke requires operator-approved DISPLAY=:0 and XAUTHORITY; no display server is started')
-    project,world=prepare_project(args.output)
+        raise ValueError('operator-approved DISPLAY=:0/XAUTHORITY required; no display server started')
     env=os.environ.copy();env['XDG_CONFIG_HOME']=str(project/'private-config')
     env['WEBOTS_TMPDIR']=str(SOURCE.parents[1]/'build/wb')
     Path(env['XDG_CONFIG_HOME']).mkdir();Path(env['WEBOTS_TMPDIR']).mkdir(exist_ok=True)
-    command=['timeout',f'{args.timeout_seconds}s','webots','--batch','--mode=fast',
+    command=['timeout',f'{timeout_seconds}s','webots','--batch','--mode=fast',
              '--no-rendering','--minimize','--stdout','--stderr',str(world)]
-    log=project/'passive-smoke.log'
+    log=project/f'{label}-smoke.log'
     with log.open('w')as stream:
         process=subprocess.Popen(command,stdout=stream,stderr=subprocess.STDOUT,env=env,start_new_session=True)
         pid=process.pid
@@ -77,7 +72,7 @@ def main():
             environment=dict(DISPLAY=env['DISPLAY'],XAUTHORITY='existing operator Xwayland authority; contents not read/logged')),
             indent=2)+'\n')
         try:
-            status=process.wait(timeout=args.timeout_seconds+8)
+            status=process.wait(timeout=timeout_seconds+8)
         except subprocess.TimeoutExpired:
             os.killpg(pid,signal.SIGTERM)
             try:process.wait(timeout=3)
@@ -87,7 +82,19 @@ def main():
             # Explicitly owned process group only. Never discover/kill by name.
             try:os.killpg(pid,signal.SIGTERM)
             except ProcessLookupError:pass
-    contents=log.read_text(errors='replace')
+    return status,pid,command,log.read_text(errors='replace')
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--timeout-seconds',type=int,default=90)
+    args=parser.parse_args()
+    if not 20<=args.timeout_seconds<=180:parser.error('timeout must be20..180seconds')
+    if os.environ.get('DISPLAY')!=':0' or not os.environ.get('XAUTHORITY'):
+        parser.error('this smoke requires operator-approved DISPLAY=:0 and XAUTHORITY; no display server is started')
+    project,world=prepare_project(args.output)
+    status,pid,command,contents=launch_project(project,world,args.timeout_seconds)
     complete,proof,error=verify_result(project,status,contents)
     result=dict(passive_smoke_complete=complete,simulation_only=True,hardware_used=False,serial_used=False,
                 motors_applied=False,exit_status=status,owned_pgid=pid,command=command,replay=proof,error=error,
