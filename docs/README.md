@@ -90,7 +90,8 @@ not current acceptance reports. Local course originals are not public records.
 - [PIL_GATE1_PRIORITY.md](simulation/PIL_GATE1_PRIORITY.md) — approved Gate1-only priority9 worker, task inventory, production ready-queue regression and historical image evidence.
 - [PIL_GATE1_IRQ_WAKE.md](simulation/PIL_GATE1_IRQ_WAKE.md) — approved Gate1 IRQ wakes after mask restoration, production dispatch-condition regression, short robot audit and historical image evidence.
 - [PIL_GATE1_RESET_CAUSE.md](simulation/PIL_GATE1_RESET_CAUSE.md) — approved early raw reset-register snapshot, frozen RESET1 boot row and historical optionA image.
-- [PIL_GATE1_BREADCRUMBS.md](simulation/PIL_GATE1_BREADCRUMBS.md) — approved retained motion/PIL/alarm0/fault records, BC1 boot companion, ELF proof and current image.
+- [PIL_GATE1_BREADCRUMBS.md](simulation/PIL_GATE1_BREADCRUMBS.md) — approved retained motion/PIL/alarm0/fault records, BC1 boot companion and Reset-B checkpoint.
+- [PIL_GATE1_IDLE_STACK.md](simulation/PIL_GATE1_IDLE_STACK.md) — approved Gate1-only always-READY app idle A/B task, complete stack budget, watermark and current image.
 - [PIL_GATE1_DIAGNOSTICS.md](simulation/PIL_GATE1_DIAGNOSTICS.md) — approved separate stopped-USB D1 records, exact coverage, raw extrema and one-time quantization.
 - [PIL_STAGE0.md](simulation/PIL_STAGE0.md) — codec/skeleton tests, literal non-SIM identity, RAM and no hardware claim.
 - [PIL_STAGE0_HASHES.json](simulation/PIL_STAGE0_HASHES.json) — all 38 baseline/Stage0 ELF and UF2 SHA256 pairs.

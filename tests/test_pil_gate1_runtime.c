@@ -37,9 +37,11 @@ void *knl_memset(void *bytes, int value, SZ length)
 static void priority_order(INT worker_priority)
 {
     RDYQUE ready;
-    TCB app[8] = {0}, pil = {0};
+    TCB app[8] = {0}, pil = {0}, idle = {0};
     const INT priorities[8] = {10, 11, 12, 13, 14, 21, 30, 1};
     knl_ready_queue_initialize(&ready);
+    idle.priority = 31;
+    (void)knl_ready_queue_insert(&ready, &idle);
     for (unsigned int i = 0u; i < 7u; ++i) {
         app[i].priority = priorities[i] - 1;
         (void)knl_ready_queue_insert(&ready, &app[i]);
@@ -59,6 +61,10 @@ static void priority_order(INT worker_priority)
     assert(knl_ready_queue_top(&ready) == &pil);
     knl_ready_queue_delete(&ready, &pil);
     assert(knl_ready_queue_top(&ready) == &app[0]);
+    for (unsigned int i = 0u; i < 7u; ++i) {
+        knl_ready_queue_delete(&ready, &app[i]);
+    }
+    assert(knl_ready_queue_top(&ready) == &idle);
 }
 
 extern INT __wrap_usermain(void);
@@ -85,7 +91,9 @@ static void knl_dispatch(void) { pendsv = true; }
 #define KNL_KERNEL_LOCK_ENTER() ((void)0)
 #define KNL_KERNEL_LOCK_LEAVE() ((void)0)
 #include "pil_gate1_critical.h"
-static FP task;
+static FP task, idle_task;
+static UB *idle_paint;
+static bool idle_started;
 static void (*handlers[32])(UINT);
 static jmp_buf sleep_exit;
 static uint32_t now = 500000u, deadline;
@@ -107,15 +115,29 @@ void pil_gate1_reset_snapshot(pil_gate1_reset_t *out)
 }
 ID tk_cre_tsk(const T_CTSK *c)
 {
-    priority_order(c->itskpri);
-    assert(c->itskpri == 9 && c->stksz == 2048);
+    if (c->itskpri == 9) { priority_order(c->itskpri); }
+    assert((c->itskpri == 9 && c->stksz == 2048) ||
+           (c->itskpri == 32 && c->stksz == 512));
     assert(c->bufptr != NULL && (c->tskatr & TA_USERBUF) != 0u);
 #if TK_SUPPORT_SMP
     assert((c->tskatr & TA_ASSPRC) != 0u && c->assprc == TP_PRC1);
 #endif
+    if (c->itskpri == 32) {
+        assert(idle_task == NULL && ((uintptr_t)c->bufptr & 7u) == 0u);
+        idle_task = c->task; idle_paint = c->bufptr;
+        for (unsigned int i = 0u; i < 512u; ++i) {
+            assert(idle_paint[i] == 0xa5u);
+        }
+        return 10;
+    }
     task = c->task; return 9;
 }
-ER tk_sta_tsk(ID id, INT code) { assert(id == 9 && code == 0); return 0; }
+ER tk_sta_tsk(ID id, INT code)
+{
+    assert((id == 9 || id == 10) && code == 0);
+    if (id == 10) { idle_started = true; }
+    return 0;
+}
 ER tk_del_tsk(ID id) { (void)id; return 0; }
 ER tk_wup_tsk(ID id)
 {
@@ -148,6 +170,7 @@ INT __real_usermain(void)
 {
     assert(reset_reads == 1u); /* Before native watchdog/scratch overwrite. */
     assert(pil_bc_active == 1u && pil_bc_live[2] == 123u);
+    assert(idle_task != NULL && idle_started);
     pil_gate1_native_grid(now + 1000u);
     pil_gate1_motor_seen(0, 0, 1500u); return 0;
 }
@@ -159,14 +182,18 @@ void tm_printf(UB *fmt, ...)
         return;
     }
     assert(strcmp((const char *)fmt, "[PILG1] stopped; reset required; "
-                  "worker stack untouched %lu/2048 bytes\n") == 0);
+                  "worker stack untouched %lu/2048 bytes; "
+                  "idle stack high-water %lu/512 bytes\n") == 0);
     char text[256]; va_list args;
     va_start(args, fmt);
     const unsigned long untouched = va_arg(args, unsigned long);
+    const unsigned long idle_used = va_arg(args, unsigned long);
+    assert(idle_used <= 512u);
     va_end(args);
     const int n = snprintf(text, sizeof(text),
         "[PILG1] stopped; reset required; "
-        "worker stack untouched %lu/2048 bytes\n", untouched);
+        "worker stack untouched %lu/2048 bytes; "
+        "idle stack high-water %lu/512 bytes\n", untouched, idle_used);
     assert(n > 0 && (size_t)n < sizeof(text));
     assert(usb_size + (size_t)n < sizeof(usb));
     memcpy(usb + usb_size, text, (size_t)n); usb_size += (size_t)n;
@@ -242,6 +269,7 @@ int main(int argc, char **argv)
     const uint32_t staged = missing ? 1u : 11u;
     assert(__wrap_usermain() == 0 && task != NULL);
     if (strcmp(mode, "priority") == 0) { return 0; }
+    if (strcmp(mode, "idle") == 0) { memset(idle_paint + 416u, 0u, 96u); }
     if (setjmp(sleep_exit) == 0) {
         ((void (*)(INT, void *))task)(0, NULL);
     }
@@ -388,7 +416,8 @@ int main(int argc, char **argv)
         reason = 0x107u; coverage = 0x59fu;
         assert(s->counts[G1_RX_FULL] == 1u);
     } else {
-        assert(strcmp(mode, "clean") == 0 || late_usb);
+        assert(strcmp(mode, "clean") == 0 || late_usb ||
+               strcmp(mode, "idle") == 0);
         f = (pil_frame_t){.type = PIL_DISARM, .payload_length = 4u,
             .session = 0u, .ack = PIL_NO_ACK};
         pil_put_u32(f.payload, 1u); send(&f);
@@ -456,6 +485,10 @@ int main(int argc, char **argv)
     const char *stack = strstr(tail, "stopped; reset required");
     assert(begin != NULL && end != NULL && stack != NULL);
     assert(begin < end && end < stack);
+    const char *idle_suffix = strcmp(mode, "idle") == 0 ?
+        "; idle stack high-water 96/512 bytes\n" :
+        "; idle stack high-water 0/512 bytes\n";
+    assert(strstr(stack, idle_suffix) != NULL);
     unsigned int h[8];
     assert(sscanf(begin + strlen("[PILG1RX1 BEGIN "),
         "%x %x %x %x %x %x %x %x", &h[0], &h[1], &h[2], &h[3],

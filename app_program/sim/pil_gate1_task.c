@@ -43,8 +43,11 @@ static struct {
     bool initialized, live, final_sent, dump_complete;
 } g;
 static uint64_t worker_stack[256];
+/* 360B complete idle/PendSV/IRQ bound x1.25=450B, rounded to512B. */
+static uint64_t app_idle_stack[64];
 /* Include the sole extra word in pil_gate1_line_time.c. */
-_Static_assert(sizeof(g) + sizeof(worker_stack) + sizeof(uint32_t) +
+_Static_assert(sizeof(g) + sizeof(worker_stack) + sizeof(app_idle_stack) +
+               sizeof(uint32_t) +
                PIL_BC_RAM_BUDGET <= 16384u,
                "Gate1 total static storage exceeds approved16KiB");
 
@@ -234,9 +237,15 @@ static void dump_one(void)
         const UB *paint = (const UB *)worker_stack;
         while (free_bytes < sizeof(worker_stack) &&
                paint[free_bytes] == 0xa5u) { ++free_bytes; }
+        uint32_t idle_free = 0u;
+        paint = (const UB *)app_idle_stack;
+        while (idle_free < sizeof(app_idle_stack) &&
+               paint[idle_free] == 0xa5u) { ++idle_free; }
         tm_printf((UB *)"[PILG1] stopped; reset required; "
-                        "worker stack untouched %lu/2048 bytes\n",
-                  (unsigned long)free_bytes);
+                        "worker stack untouched %lu/2048 bytes; "
+                        "idle stack high-water %lu/512 bytes\n",
+                  (unsigned long)free_bytes,
+                  (unsigned long)(sizeof(app_idle_stack) - idle_free));
         return;
     }
     pil_gate1_record_t record = {.sequence = g.dump_index,
@@ -406,6 +415,12 @@ static void worker(INT stacd, void *exinf)
         (void)tk_slp_tsk(1);
     }
 }
+/* Always READY: no calls, WFI, yield or sleep; higher priorities preempt it. */
+static void app_idle(INT code, void *exinf)
+{
+    (void)code; (void)exinf;
+    for (;;) { __asm__ volatile ("nop"); }
+}
 extern INT __real_usermain(void);
 INT __wrap_usermain(void)
 {
@@ -422,12 +437,22 @@ INT __wrap_usermain(void)
     g.session.fault_context = &g.rxlog;
     pil_gate1_rx_init(&g.rx); g.initialized = true;
     memset(worker_stack, 0xa5, sizeof(worker_stack));
-    T_CTSK c = {.task = (FP)worker, .itskpri = 9,
+    memset(app_idle_stack, 0xa5, sizeof(app_idle_stack));
+    T_CTSK c = {.task = (FP)app_idle, .itskpri = 32,
         .tskatr = TA_HLNG | TA_RNG0 | TA_USERBUF,
-        .stksz = (SZ)sizeof(worker_stack), .bufptr = worker_stack};
+        .stksz = (SZ)sizeof(app_idle_stack), .bufptr = app_idle_stack};
 #if TK_SUPPORT_SMP
     c.tskatr |= TA_ASSPRC; c.assprc = TP_PRC1;
 #endif
+    const ID idle = tk_cre_tsk(&c);
+    if (idle <= 0 || tk_sta_tsk(idle, 0) < E_OK) {
+        if (idle > 0) { (void)tk_del_tsk(idle); }
+        pil_gate1_fail(&g.session, 0x10cu);
+        tm_printf((UB *)"[PILG1] app idle creation failed; inhibited\n");
+        return __real_usermain();
+    }
+    c.task = (FP)worker; c.itskpri = 9;
+    c.stksz = (SZ)sizeof(worker_stack); c.bufptr = worker_stack;
     g.worker = tk_cre_tsk(&c);
     if (g.worker <= 0 || tk_sta_tsk(g.worker, 0) < E_OK) {
         if (g.worker > 0) { (void)tk_del_tsk(g.worker); }

@@ -2,6 +2,9 @@
 
 ## Scope and evidence
 
+This is the Reset-B checkpoint record. The current A/B image also includes the
+[app idle stack task](PIL_GATE1_IDLE_STACK.md); RESET1/BC1 stay unchanged.
+
 The operator approved reset diagnostic B after repeated watchdog resets. This
 is a Gate1-only diagnostic. It does not change the100ms motion-only watchdog,
 priorities, task load, alarm0, fault checks or frozen UART/D1/RX1 protocols.

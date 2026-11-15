@@ -2,7 +2,8 @@
 
 Main approved this design on base9831991. The host-tested transport image is
 supplied. Only the operator flashes/opens target ports; coding workers do not.
-The current image adds [retained reset-B records](PIL_GATE1_BREADCRUMBS.md)
+The current A/B image adds the [app idle stack task](PIL_GATE1_IDLE_STACK.md),
+[retained reset-B records](PIL_GATE1_BREADCRUMBS.md)
 and the frozen [reset-cause boot row](PIL_GATE1_RESET_CAUSE.md)
 after the [IRQ dispatch correction](PIL_GATE1_IRQ_WAKE.md) and awaits an
 operator trial. The older image's first
