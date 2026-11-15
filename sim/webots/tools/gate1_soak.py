@@ -24,7 +24,7 @@ def main():
     parser.add_argument('--trial-clock-400-sync20', action='store_true',
                         help='operator D-TRIAL: clock400us/SYNC max20ms; NOT GATE 1 PASS; cap4 only')
     parser.add_argument('--trial-tolerate-late', action='store_true',
-                        help='T1 TRIAL only: <=600us, never consecutive, <=1 late per rolling1000 slots')
+                        help='T1 TRIAL only: <=600us, never consecutive, <=3 late per rolling1000 slots')
     parser.add_argument('--measure-io', action='store_true',
                         help='approved measurement only: RAW I/O timestamps and clock pairs; adds host overhead')
     parser.add_argument('--post-fail-rx-ms', type=int, choices=(0,500,750,1000), default=0,

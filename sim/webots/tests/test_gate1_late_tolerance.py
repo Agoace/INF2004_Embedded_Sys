@@ -23,18 +23,18 @@ class LateToleranceTests(unittest.TestCase):
         h.sensor(neutral_payload(slot*1000),slot*1000,10000+slot*1000+phase-1)
         h.tx.clear();h.drain_events()
 
-    def test_cap_and_sliding_window_boundary(self):
+    def test_three_allowed_and_oldest_expires_at_exactly1000(self):
         h=self.host()
-        for n in range(1001):self.sensor(h,n,600 if n in(0,1000)else 1)
-        self.assertEqual(len(h.tolerated_captures),2)
+        for n in range(1001):self.sensor(h,n,600 if n in(0,2,4,1000)else 1)
+        self.assertEqual(len(h.tolerated_captures),4)
         self.assertEqual(h.tolerated_captures[0]['phase_us'],600)
         self.assertEqual(h.tolerated_captures[0]['end_upper_pico_us']+1,997000)
 
-    def test_rolling_not_fixed_buckets_and_no_consecutive(self):
-        for first,second in((0,1),(998,1000),(0,999)):
+    def test_fourth_in_window_and_consecutive_are_fatal(self):
+        for prior,last in(((0,2,4),999),((998,1000,1002),1004),((0,),1),((0,2),3)):
             h=self.host()
-            for n in range(second):self.sensor(h,n,300 if n==first else 1)
-            with self.assertRaises(TransportFault):self.sensor(h,second,300)
+            for n in range(last):self.sensor(h,n,300 if n in prior else 1)
+            with self.assertRaises(TransportFault):self.sensor(h,last,300)
             self.assertEqual(h.state,'FAULT');self.assertFalse(h.tx)
 
     def test_default_cap600_and_noearly_remain_fatal(self):
@@ -98,6 +98,7 @@ class LateToleranceTests(unittest.TestCase):
                        trial_clock_400_sync20=True,trial_tolerate_late=True)
             self.assertNotEqual(s['verdict'],'FAIL')
             self.assertEqual(s['tolerated_late_count'],1)
+            self.assertEqual(s['late_tolerance_policy']['max_late_in_window'],3)
             r=json.loads((out/'tolerated-late-captures.json').read_text())['records'][0]
             for field in('capture_start_pc_us','capture_end_pc_us','start_lower_pico_us',
                 'end_upper_pico_us','last_sync_pc_us','sequence','excess_us'):

@@ -5,6 +5,13 @@ after C4. It is not standard Gate1 qualification or a change to physical ages.
 Defaults remain phase250us, clock250us and adaptive SYNC100ms. B400/SYNC20
 alone still requires phase250us. No hardware action is performed by this code.
 
+## Approved quota revision after attempt19
+
+On2026-11-15 the operator raised the rolling quota from1 to3, after attempt19
+stopped on late slots1011(269.5us) and1132(287us),121 slots apart, with no Pico
+reset reported. Only the quota changes. Historical quota1 artifacts retain their
+original policy/verdict; do not relabel them as quota3 evidence.
+
 ## Selection and rules
 
 Add `--trial-tolerate-late` ONLY with `--trial-clock-400-sync20` and
@@ -18,10 +25,12 @@ end midpoint's existing outward+1us once. No early estimated aim or learned bias
 
 - Phase<=250us: ordinary capture, no tolerance consumed.
 - 250<phase<=600us: permitted ONLY if the previous slot was not late AND there
-  is no other tolerated late in the previous999 slots.
-- Phase>600us, consecutive late, or two late in ANY rolling1000 slots: FAIL.
+  are fewer than3 tolerated late captures in the previous999 slots.
+- Phase>600us, consecutive late, or a fourth late in ANY rolling1000 slots: FAIL.
 
-Thus late at0 and1000 is permitted; late at998 and1000 is forbidden. This is not
+Late at0,2,4 is permitted; another at999 fails, while one at1000 is permitted
+because slot0 has left the rolling window. Late at998,1000,1002 is permitted,
+but another at1004 fails even across a fixed-bucket boundary. This is not
 fixed1000-slot buckets, a time window, a percentile allowance or skip/catch-up.
 Missing/replayed slots remain fatal; sequence continuity is unchanged.
 
@@ -65,7 +74,9 @@ quantization, last SYNC, sequence, excess over250,600us cap and trial policy.
 The ordinary source_capture/source_clock_bounds records are still emitted.
 After inhibit/DISARM/serial close, `tolerated-late-captures.json` retains ALL
 full records, count, RAW clock-domain identification and export-close status.
-Storage is bounded by the1800s source horizon and one event per1000 slots.
+Storage is bounded by the1800s source horizon and at most3 events per1000 slots.
+The policy checker keeps only the latest3 late slots; the total count and full
+capture records are retained independently.
 
 Run metadata, summary, trial manifest, attribution metadata and host observations
 identify T1 explicitly. Summary has `tolerated_late_count`, counts.tolerated_late

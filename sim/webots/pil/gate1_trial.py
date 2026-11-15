@@ -4,19 +4,21 @@ TRIAL_LABEL = 'TRIAL / NOT GATE 1 PASS'
 
 P_MAX_US = 600
 LATE_WINDOW_SLOTS = 1000
+MAX_LATE_IN_WINDOW = 3
 TRIAL_COMPLETIONS = ('TRIAL_COMPLETE', 'TRIAL_COMPLETE_WITH_TOLERATED_LATE')
 
 
 def late_policy():
     return {'nominal_phase_us': 250, 'max_phase_us': P_MAX_US,
-            'window_slots': LATE_WINDOW_SLOTS, 'max_late_in_window': 1,
+            'window_slots': LATE_WINDOW_SLOTS, 'max_late_in_window': MAX_LATE_IN_WINDOW,
             'consecutive_late_allowed': False}
 
 
 class LateTolerance:
-    """One late capture per rolling1000 slots, never a deadline/age waiver."""
+    """At most three late per rolling1000 slots, never an age/deadline waiver."""
     def __init__(self):
         self.last_late_slot = None
+        self.late_slots = []  # Only the most recent three are needed.
         self.count = 0
 
     def rejection(self, slot, phase):
@@ -26,12 +28,15 @@ class LateTolerance:
             distance = slot-self.last_late_slot
             if distance == 1:
                 return 'consecutive late source captures'
-            if distance < LATE_WINDOW_SLOTS:
-                return 'more than one late capture in rolling1000 slots'
+            if distance <= 0:
+                return 'non-increasing late source slot'
+        if len(self.late_slots) == MAX_LATE_IN_WINDOW and slot-self.late_slots[0] < LATE_WINDOW_SLOTS:
+            return 'more than three late captures in rolling1000 slots'
         return None
 
     def commit(self, slot):
         self.last_late_slot = slot
+        self.late_slots = (self.late_slots + [slot])[-MAX_LATE_IN_WINDOW:]
         self.count += 1
 
 
@@ -45,7 +50,7 @@ def labels(trial, tolerate_late=False):
 
 
 def manifest(tolerate_late=False):
-    result = {**labels(True, tolerate_late), 'operator_decision': '2026-11-15 T1' if tolerate_late else '2026-11-14 D-TRIAL',
+    result = {**labels(True, tolerate_late), 'operator_decision': '2026-11-15 T1 rolling quota3' if tolerate_late else '2026-11-14 D-TRIAL',
             'scope': 'C1 + C2 + C2b + C2c capture opportunities; NOT C3 queued logging',
             'capture_first': True, 'queued_logger': False,
             'pc_capture_revision': 'C1+C2+C2b+C2c',
