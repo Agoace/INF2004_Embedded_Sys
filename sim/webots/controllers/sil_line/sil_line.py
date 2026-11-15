@@ -18,18 +18,31 @@ FIELDS=('sim_ms','left_adc','centre_adc','position','event','line_seen','junctio
         'target_left_rad_s','target_right_rad_s','pair_error_mm','upright_cos')
 
 
+def extra_fields(config):
+    if not config.get('motor_fidelity'):return ()
+    from pil.sil_search import NATIVE_FIELDS,SEARCH_FIELDS
+    return (*NATIVE_FIELDS,*(SEARCH_FIELDS if config.get('line_search')else()))
+
+
+def native_controller(project,config):
+    from pil.sil_motor import MotorLineController,LagPlant
+    if config.get('line_search'):
+        from pil.sil_search import SearchController
+        return SearchController(project/'libraries/libsil_line.so'),LagPlant(bidirectional=True)
+    return MotorLineController(project/'libraries/libsil_line.so'),LagPlant()
+
+
 def replay(project,rows):
     manifest=json.loads((project/'sil-manifest.json').read_text())
     native=manifest.get('motor_fidelity',False)
     if native:
-        from pil.sil_motor import MotorLineController,LagPlant
-        controller=MotorLineController(project/'libraries/libsil_line.so');plant=LagPlant()
+        controller,plant=native_controller(project,manifest)
     else:controller=LineController(project/'libraries/libsil_line.so')
     controller.calibrate(manifest['calibration_rows'])
     for row in rows:
         actual=controller.update(int(row[1]),int(row[2]),int(row[0]),*(map(int,row[22:24])if native else()))
         if list(actual.values())[:9]!=list(row[3:12]):raise ValueError('C recorded-input replay mismatch')
-        if native and list(actual.values())[9:]!=list(row[24:27]):raise ValueError('native setpoint replay mismatch')
+        if native and list(actual.values())[9:]!=list(row[24:]):raise ValueError('native setpoint replay mismatch')
         targets=(plant.advance(actual['left_pct'],actual['right_pct'])if native else
                  forward_velocity(actual['left_pct'],actual['right_pct'],32.5))
         if targets!=tuple(row[18:20]):raise ValueError('plant target replay mismatch')
@@ -42,8 +55,7 @@ def replay_export(project):
     rows=[]
     with path.open(newline='')as stream:
         reader=csv.reader(stream)
-        expected=list(FIELDS)+(['count_left','count_right','desired_left_mm_s','desired_right_mm_s','motor_faults']
-            if json.loads((project/'sil-manifest.json').read_text()).get('motor_fidelity')else[])
+        expected=[*FIELDS,*extra_fields(json.loads((project/'sil-manifest.json').read_text()))]
         if next(reader,None)!=expected:raise ValueError('SIL replay fields')
         for row in reader:
             if len(rows)>=10000 or len(row)!=len(expected):raise ValueError('SIL replay row budget/width')
@@ -61,8 +73,7 @@ def run(robot,project):
     profiles={name:SensorProfile(**data)for name,data in config['profiles'].items()}
     native=config.get('motor_fidelity',False)
     if native:
-        from pil.sil_motor import MotorLineController,LagPlant
-        controller=MotorLineController(project/'libraries/libsil_line.so');plant=LagPlant()
+        controller,plant=native_controller(project,config)
     else:controller=LineController(project/'libraries/libsil_line.so')
     calibration=controller.calibrate(config['calibration_rows'])
     wheels=[robot.getDevice(n)for n in('left_motor','right_motor')]
@@ -76,7 +87,7 @@ def run(robot,project):
             if robot.step(1)==-1 or round(robot.getTime()*1000)!=slot+1:raise ValueError('SIL step sequence')
             node=robot.getSelf();position=node.getPosition();rotation=node.getOrientation()
             yaw=math.atan2(rotation[3],rotation[0]);c,s=math.cos(yaw),math.sin(yaw)
-            # Flat F1 projection: actual XY/yaw, fixed9mm clearance above flat
+            # Flat F1 projection: actual XY/yaw, configured clearance above flat
             # mat. Bounce/tilt response UNMODELLED; reject a gross tilt instead.
             if rotation[8]<.999:raise ValueError('outside flat optical model tilt domain')
             adc=[]
@@ -100,7 +111,7 @@ def run(robot,project):
             row=(slot+1,*adc,*list(actual.values())[:9],*position,yaw,*angles,*targets,pair_error,rotation[8])
             if native:row=(*row,*counts,*list(actual.values())[9:])
             if any(not math.isfinite(v)for v in row):raise ValueError('nonfinite SIL state')
-            if not .015<position[2]<.15 or abs(pair_error)>100:raise ValueError('SIL gross motion bound')
+            if not .015<position[2]<.15 or abs(pair_error)>(250 if config.get('line_search')else 100):raise ValueError('SIL gross motion bound')
             rows.append(row)
             if fault and not config.get('recovery_trial'):raise ValueError('native line lost; stop latched')
     except Exception as exception:error=str(exception)
@@ -116,12 +127,15 @@ def run(robot,project):
     if config.get('recovery_trial'):
         from pil.sil_recovery import analyze_recovery
         recovery=analyze_recovery(rows)if rows else None
+        if recovery is not None and config.get('line_search'):
+            recovery.update(searches=rows[-1][32],found_by_search=rows[-1][33],
+                final_module=rows[-1][27],shell_fault=rows[-1][29],shell_fault_detail=rows[-1][30])
         complete=len(rows)==10000 and error is None and not rejections
     else:complete=all(checks.values())
     proof=replay(project,rows)if complete else False
     output=project/'sil-result';output.mkdir()
     with (output/'samples.csv').open('w',newline='')as stream:
-        writer=csv.writer(stream);writer.writerow((*FIELDS,*(['count_left','count_right','desired_left_mm_s','desired_right_mm_s','motor_faults']if native else[])));writer.writerows(rows)
+        writer=csv.writer(stream);writer.writerow((*FIELDS,*extra_fields(config)));writer.writerows(rows)
     (output/'rejections.json').write_text(json.dumps(rejections,indent=2)+'\n')
     success_status='SIL_RECOVERY_EXPERIMENT_COMPLETE'if config.get('recovery_trial')else'SIL_LINE_COMPLETE'
     summary=dict(status=success_status if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),

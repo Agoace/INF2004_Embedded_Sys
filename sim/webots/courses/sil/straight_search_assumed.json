@@ -1,0 +1,236 @@
+{
+  "schema": 1,
+  "name": "sil_straight_assumed",
+  "provenance": {
+    "assumed": true,
+    "source": "Operator-approved straight test strip, white margins ASSUMED (real mat wider). 2026-11-15. Same axle start and measured18mm line. Ten315mm line tiles, pure white315mm tiles on each side: white surface3150x945mm; line spans x-630..2520, centred y157.5. Tile seams NOT modelled. Layout/end positions not a course survey; no optics override."
+  },
+  "origin_mm": [
+    0,
+    0
+  ],
+  "start": {
+    "position_mm": [
+      196,
+      150.25
+    ],
+    "yaw_deg": 0
+  },
+  "allow_open_ports": true,
+  "texture_mm_per_pixel": 2,
+  "tiles": [
+    {
+      "id": "l0",
+      "column": -2,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l1",
+      "column": -1,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l2",
+      "column": 0,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l3",
+      "column": 1,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l4",
+      "column": 2,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l5",
+      "column": 3,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l6",
+      "column": 4,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l7",
+      "column": 5,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l8",
+      "column": 6,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "l9",
+      "column": 7,
+      "row": 0,
+      "kind": "STRAIGHT",
+      "rotation_deg": 90
+    },
+    {
+      "id": "b0",
+      "column": -2,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b1",
+      "column": -1,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b2",
+      "column": 0,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b3",
+      "column": 1,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b4",
+      "column": 2,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b5",
+      "column": 3,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b6",
+      "column": 4,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b7",
+      "column": 5,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b8",
+      "column": 6,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "b9",
+      "column": 7,
+      "row": -1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c0",
+      "column": -2,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c1",
+      "column": -1,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c2",
+      "column": 0,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c3",
+      "column": 1,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c4",
+      "column": 2,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c5",
+      "column": 3,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c6",
+      "column": 4,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c7",
+      "column": 5,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c8",
+      "column": 6,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    },
+    {
+      "id": "c9",
+      "column": 7,
+      "row": 1,
+      "kind": "BLANK",
+      "rotation_deg": 0
+    }
+  ],
+  "boxes": [],
+  "humps": [],
+  "barcodes": []
+}
