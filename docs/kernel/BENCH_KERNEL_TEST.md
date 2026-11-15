@@ -23,6 +23,23 @@
   this publication module. Cross-core readers must use `bench_stats_read`.
 - This package does not start a generator or provide an operational bench image.
 
+## Report package
+
+- Files: `app_program/bench_kernel/bench_report.{c,h}`; test:
+  `tests/test_bench_report.c`. Link flag (BENCH_KERNEL=1 only):
+  `-Wl,--wrap=rt_timeline_report`.
+- One line after the GP20 `[timeline]` dump; it uses `bench_stats_read` only.
+
+| Output | Meaning |
+| --- | --- |
+| `[bench] no snapshot` | No valid publication, or the read overlapped one |
+| `[bench] window open` | Generator still running; counters are not read |
+| `[bench] window_us W sched S delivered D coalesced C overflow O gen_calls N gen_us_sum U gen_us_max M cost_bp B V` | Stopped window; B = U x 10000 / W |
+
+- V: `OK` (B < 300), `COST_HIGH` (B >= 300), `BAD_WINDOW` (W = 0 or W > 60 min).
+- Timeline sites (bench only): 10 = generator exit (arg = edges), 11 = pending
+  overflow.
+
 ## Ownership and gates
 
 - SW6: stimulus/providers, source selector, isolated reset record and tests.

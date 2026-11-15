@@ -365,3 +365,4 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/shim_checks.cmake")
 
 # Keep this last: placement variants copy fully configured fixture targets.
 include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/bench_kernel_checks.cmake")

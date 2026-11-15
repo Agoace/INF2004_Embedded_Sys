@@ -158,7 +158,9 @@ The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
 [`bench_stats.c`](../app_program/bench_kernel/bench_stats.c), its
 [public read API](../app_program/bench_kernel/bench_stats.h),
 [core0 publication API](../app_program/bench_kernel/bench_stats_publish.h) and
-[host test](../tests/test_bench_kernel_stats.c). The bench directory is excluded
+[host test](../tests/test_bench_kernel_stats.c), plus the
+[`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
+[host test](../tests/test_bench_report.c). The bench directory is excluded
 from ordinary source selection; it does not yet contain a complete runtime.
 
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
