@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "classification": "ASSUMED_SIL_STRAIGHT_ONLY",
+  "supported_materials": [
+    "MAT_WHITE",
+    "MAT_LINE"
+  ],
+  "footprint_fit": {
+    "source": "docs/archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md",
+    "record": "boot-5209 spin recording",
+    "method": "Gaussian spatial coverage raised to fitted monotonic power; jointly fitted to full spin plus endpoints",
+    "midpoint_fraction_target": 0.39,
+    "plain_line_pair_sum_upper_bound": 1.02,
+    "line_width_mm": 18.0,
+    "line_width_evidence": "MEASURED_OPERATOR_2026_11_15",
+    "relative_spacing_mm": 14.5,
+    "limits": "In-sample effective response; large crossing residuals retained. Isotropy and pose nuisance parameters not physical calibration."
+  },
+  "profile_parameters": {
+    "reference_height_mm": 8.0,
+    "sigma_x_mm": 2.8563079833984375,
+    "sigma_y_mm": 2.8563079833984375,
+    "noise_sigma_adc": 0.0,
+    "mat_response_power": 3.006964601597004,
+    "paper_response_power": 1.0,
+    "levels_adc": {
+      "MAT_WHITE": 200.0,
+      "MAT_LINE": 3700.0,
+      "PAPER_WHITE": 200.0,
+      "PAPER_INK": 3700.0
+    },
+    "evidence_status": "ASSUMED_SIL_STRAIGHT_ONLY",
+    "assumptions": [
+      "OPERATOR_APPROVED_SYNTHETIC_LINE_PROFILE_2026_11_15",
+      "NOT_MEASURED_CALIBRATION",
+      "FITTED_TO_BOOT_5209_SPIN_RECORDING",
+      "TRANSVERSE_ISOTROPY_ASSUMED_NOT_MEASURED",
+      "HEIGHT_APPROX_MEASURED_OPERATOR_2026_11_15",
+      "FLAT_STRAIGHT_MAT_ONLY",
+      "PAPER_LEVELS_SCHEMA_PLACEHOLDERS_NOT_SUPPORTED",
+      "ADC_POST_EIGHT_AVERAGE_DO_NOT_AVERAGE_AGAIN",
+      "FITTED_TO_BOOT_5209_SPIN_PLUS_ENDPOINTS"
+    ]
+  },
+  "channels": {
+    "GP26": {
+      "role": "CENTRE",
+      "mount": {
+        "forward_mm": 119.0,
+        "left_mm": 0.0,
+        "flat_clearance_mm": 8.0,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
+        "height_assumed": false,
+        "height_evidence": "MEASURED_OPERATOR_APPROX_2026_11_15",
+        "spacing_evidence": "GP26_BODY_LATERAL_DATUM_ASSUMED"
+      },
+      "profile_overrides": {
+        "levels_adc": {
+          "MAT_WHITE": 158,
+          "MAT_LINE": 2623.0443212338823,
+          "PAPER_WHITE": 200,
+          "PAPER_INK": 3700
+        }
+      }
+    },
+    "GP27": {
+      "role": "LEFT",
+      "mount": {
+        "forward_mm": 119.0,
+        "left_mm": 14.5,
+        "flat_clearance_mm": 8.0,
+        "forward_assumed": false,
+        "forward_evidence": "MEASURED_OPERATOR_2026_11_15",
+        "height_assumed": false,
+        "height_evidence": "MEASURED_OPERATOR_APPROX_2026_11_15",
+        "spacing_evidence": "MEASURED_RELATIVE_GP26"
+      },
+      "profile_overrides": {
+        "levels_adc": {
+          "MAT_WHITE": 172,
+          "MAT_LINE": 2498.3667361012795,
+          "PAPER_WHITE": 200,
+          "PAPER_INK": 3700
+        }
+      }
+    }
+  },
+  "joint_fit": {
+    "source_sha256": "482300186e764cdeac6f528eb8b43eaa703f07c0488735d91cd5480c035492c7",
+    "rows": 1634,
+    "sweep_end_indices": [
+      422,
+      1122
+    ],
+    "sigma_mm": 2.8563079833984375,
+    "power": 3.006964601597004,
+    "line_levels_adc": {
+      "GP27": 2498.3667361012795,
+      "GP26": 2623.0443212338823
+    },
+    "pose_parameters": [
+      0.0011411590576171874,
+      -35.885009765625,
+      0.0021049575805664055,
+      54.524993896484375,
+      0.001643463134765625,
+      15.880889892578125
+    ],
+    "rmse_adc": 106.14759333374224,
+    "residuals": {
+      "GP27": {
+        "rmse_adc": 101.7262882160951,
+        "bias_adc": 5.651952173246888,
+        "max_abs_adc": 1004.6073152524425,
+        "p95_abs_adc": 108.55544201931744
+      },
+      "GP26": {
+        "rmse_adc": 110.39196269143416,
+        "bias_adc": -15.247716620175108,
+        "max_abs_adc": 1051.538840398972,
+        "p95_abs_adc": 110.07114405164111
+      }
+    },
+    "midpoint_norm": 0.39,
+    "pair_max_0_01mm_grid": 1.0000196136405912,
+    "starts_mse_adc2": [
+      11267.31157054552,
+      11267.31157054552,
+      11267.31157054552,
+      1e+30
+    ],
+    "label": "fitted to boot-5209 spin + endpoints",
+    "source": "tests/fixtures/spin_raw_boot5209.csv",
+    "shape_prior": "Operator-reported Cytron IR Line Tracking Module, underside emitter/receiver, AO high on black; qualitative nonlinear prior only",
+    "pose_assumptions": "Flat straight18mm line, rigid119mm forward/14.5mm centre spacing, independent angle/count and C-centre count per sweep; right counts absent; no measured rate or slip claim",
+    "method": "All1634rows/equal ADC squared error, endpoints exact, midpoint39percent exact, fixed four starts; bounded coordinate descent; no holdout"
+  }
+}

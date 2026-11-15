@@ -14,6 +14,7 @@ from .s3_optics import SensorProfile
 
 ASSUMED_LINE_PATH = (Path(__file__).resolve().parents[3]/
                      'calibration/s3_assumed_line_profiles.json')
+BOOT_5209_LINE_PATH = ASSUMED_LINE_PATH.with_name('s3_boot5209_line_profiles.json')
 LABEL = 'ASSUMED_SIL_STRAIGHT_ONLY'
 
 
@@ -47,13 +48,26 @@ def _read(channel, path):
 
 def load_assumed_line_profile(channel, path=ASSUMED_LINE_PATH):
     """Explicit opt-in only. Does not alter load_profile or the frozen JSON."""
-    data, _ = _read(channel, path)
+    data, entry = _read(channel, path)
     try:
-        profile = SensorProfile(name=channel, **data['profile_parameters'])
+        params = dict(data['profile_parameters'])
+        params.update(entry.get('profile_overrides', {}))
+        profile = SensorProfile(name=channel, **params)
     except (TypeError, KeyError) as error:
         raise ValueError('invalid ASSUMED profile fields') from error
     if profile.noise_sigma_adc != 0:
         raise ValueError('ASSUMED straight-line profile must be noise-free')
+    return profile
+
+
+def load_boot5209_line_profile(channel, path=BOOT_5209_LINE_PATH):
+    """Opt-in joint nonlinear spin/endpoints fit; original loader stays A."""
+    data, _ = _read(channel, path)
+    if data.get('joint_fit', {}).get('label') != 'fitted to boot-5209 spin + endpoints':
+        raise ValueError('missing boot-5209 joint-fit evidence')
+    profile = load_assumed_line_profile(channel, path)
+    if 'FITTED_TO_BOOT_5209_SPIN_PLUS_ENDPOINTS' not in profile.assumptions:
+        raise ValueError('missing boot-5209 joint-fit assumption label')
     return profile
 
 
