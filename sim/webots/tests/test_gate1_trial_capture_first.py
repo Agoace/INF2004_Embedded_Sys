@@ -31,7 +31,7 @@ class TrialCaptureFirstTests(unittest.TestCase):
             self.assertTrue(manifest['capture_first'])
             self.assertFalse(manifest['queued_logger'])
             self.assertEqual(result['pc_capture_order'],'capture-first')
-            self.assertEqual(result['pc_logging'],'synchronous')
+            self.assertEqual(result['pc_logging'],'process')
             for row in csv.DictReader((out/'events.csv').read_text().splitlines()):
                 if row['event']=='source_capture':
                     d=json.loads(row['details_json'])

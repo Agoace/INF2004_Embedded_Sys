@@ -19,6 +19,12 @@ from .transport import HostTransport, TransportFault
 from .wire import Type, u16
 from .gate1_trial import labels, manifest, TRIAL_LABEL
 from .gate1_timer_slack import read_timer_slack
+from .gate1_process_log import ProcessLog, EvidenceFailure, legacy_details
+
+
+def _event_payload(event):
+    payload=event['payload_hex']
+    return bytes.fromhex(payload) if isinstance(payload,str) else payload
 
 
 class RealClock:
@@ -64,17 +70,20 @@ class Histogram:
 
 
 class Recorder:
-    def __init__(self, output):
+    def __init__(self, output, *, logging_mode='synchronous'):
+        if logging_mode not in ('synchronous','process'):raise ValueError('unknown evidence logging mode')
         self.output = Path(output)
         self.output.mkdir(parents=True, exist_ok=False)
-        self.stream = (self.output / 'events.csv').open('x', newline='')
-        self.csv = csv.writer(self.stream)
+        self.logging_mode=logging_mode
+        self.process_log=ProcessLog(self.output) if logging_mode=='process' else None
+        self.stream = None if self.process_log else (self.output / 'events.csv').open('x', newline='')
+        self.csv = None if self.process_log else csv.writer(self.stream)
         self.attribution = None
         self.trial_clock_400_sync20 = False
         self.trial_tolerate_late = False
         self.timer_slack = None
         self.interpreter_switch_interval_s = None
-        self.csv.writerow(('event', 'pc_us', 'details_json'))
+        if self.csv:self.csv.writerow(('event', 'pc_us', 'details_json'))
         self.metrics = {name: Histogram() for name in (
             'sync_rtt_us', 'output_age_upper_us', 'source_phase_us',
             'clock_halfwidth_us', 'source_uncertainty_us', 'output_interarrival_us')}
@@ -101,7 +110,8 @@ class Recorder:
         if self.attribution:
             self.attribution.mark('serialize_enter')
         try:
-            self.csv.writerow((event, pc_us, json.dumps(details, sort_keys=True)))
+            if self.stream is None:self.process_log.record(event,pc_us,details)
+            else:self.csv.writerow((event, pc_us, json.dumps(legacy_details(details), sort_keys=True)))
         finally:
             if self.attribution:
                 self.attribution.mark('serialize_exit')
@@ -110,10 +120,30 @@ class Recorder:
         if self.attribution:
             self.attribution.mark('flush_enter')
         try:
-            self.stream.flush()
+            if self.stream is None:self.process_log.poll()
+            else:self.stream.flush()
         finally:
             if self.attribution:
                 self.attribution.mark('flush_exit')
+
+    def record_startup(self,io,host,clock,*args,**details):
+        try:self.record(*args,**details)
+        except BaseException:
+            closed=False
+            try:io.close();closed=True
+            finally:self.close_evidence(clock.now_us(),closed,host.model_inhibited)
+            raise
+
+    def begin_stop(self):
+        if self.process_log:self.process_log.begin_stop()
+
+    def close_evidence(self,pc_us,serial_closed,inhibited):
+        if not self.process_log:return None
+        meta=self.process_log.finish(pc_us,serial_closed=serial_closed,inhibited=inhibited)
+        path=self.output/'events.csv';exists=path.exists()
+        self.stream=path.open('a',newline='');self.csv=csv.writer(self.stream)
+        if not exists:self.csv.writerow(('event','pc_us','details_json'))
+        return 'evidence recorder: '+meta['failure'] if meta['failure'] else None
 
     def observe(self, event, host):
         event = dict(event)
@@ -132,7 +162,7 @@ class Recorder:
         kind, seq = event['type'], event['seq']
         # BOOT is a separate reset/session observation, not the1kHz stream.
         if kind == Type.BOOT:
-            nonce = struct.unpack_from('<I', bytes.fromhex(event['payload_hex']))[0]
+            nonce = struct.unpack_from('<I', _event_payload(event))[0]
             seq = event['seq']
             previous = self.bootstrap_last_boot
             consecutive = previous is not None and nonce == previous[0] and seq == ((previous[1] + 1) & 0xffffffff)
@@ -160,7 +190,7 @@ class Recorder:
                 self.counters['missing_frames'] += delta - 1
                 raise GateFailure('frame sequence gap')
         self.previous[kind] = seq
-        payload = bytes.fromhex(event['payload_hex'])
+        payload = _event_payload(event)
         if kind == Type.OUTPUT:
             self.counters['outputs'] += 1
             if struct.unpack_from('<hh', payload) != (0, 0):
@@ -208,7 +238,7 @@ class Recorder:
             **labels(trial, self.trial_tolerate_late),
             'tolerated_late_count': late_count,
             'completion_label': f'{completion} n={late_count}' if completed else None, 'sync_max_period_us': 20000 if trial else 100000,
-            'pc_capture_order': 'capture-first', 'pc_logging': 'synchronous',
+            'pc_capture_order': 'capture-first', 'pc_logging': self.logging_mode,
             'pc_capture_revision': 'C1+C2+C2b+C2c',
             'timer_slack': self.timer_slack,
             'interpreter_switch_interval_s': self.interpreter_switch_interval_s,
@@ -264,7 +294,7 @@ class Recorder:
         return summary
 
 
-def receive_chunk(host, recorder, data, pc_us, timing_clock=None):
+def receive_chunk(host, recorder, data, pc_us, timing_clock=None, *, binary_events=False):
     """Only before valid BOOT, retain/count malformed startup fragments.
 
     Boundaries are delimiters, NEVER a byte-offset search inside a failed
@@ -304,7 +334,7 @@ def receive_chunk(host, recorder, data, pc_us, timing_clock=None):
             recorder.record('bootstrap_discard', pc_us, bad_frames=delta[0],
                             crc_errors=delta[1], oversize_frames=delta[2],
                             readiness_or_lease_renewed=False)
-        for event in host.drain_events():
+        for event in host.drain_events(binary=binary_events):
             if processing_done is not None and event['event'] == 'rx_complete':
                 recorder.record('transport_receive_timing', processing_done,
                                 received_pc_us=pc_us, type=int(event['type']),
@@ -333,7 +363,8 @@ def neutral_payload(source_us):
 
 def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
              transport_only=False, image_sha256=None, profile_flags=None, measure_io=False,
-             trial_clock_400_sync20=False, post_fail_rx_us=0, trial_tolerate_late=False):
+             trial_clock_400_sync20=False, post_fail_rx_us=0, trial_tolerate_late=False,
+             logging_mode='process'):
     """Own the injected nonblocking I/O until close; tests supply fake I/O/time.
 
     No catch-up slots or automatic reconnect. Drain evidence every iteration.
@@ -352,11 +383,12 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                          transport_only=transport_only,
                          trial_clock_400_sync20=trial_clock_400_sync20,
                          trial_tolerate_late=trial_tolerate_late)
+    binary_events=logging_mode=='process'
     run_labels = labels(trial_clock_400_sync20, trial_tolerate_late)
     timer_slack = read_timer_slack()  # GET only, calling thread.
     switch_interval = sys.getswitchinterval()  # Read only; never set.
     try:
-        recorder = Recorder(output)
+        recorder = Recorder(output,logging_mode=logging_mode)
     except BaseException:
         io.close()
         raise
@@ -367,8 +399,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     recorder.post_fail_rx_us = post_fail_rx_us
     recorder.image_sha256, recorder.profile_flags = image_sha256, profile_flags
     recorder.pc_clock_domain = getattr(clock, 'domain', 'INJECTED_TEST_CLOCK')
-    recorder.record('run_metadata', clock.now_us(), **run_labels,
-                    pc_capture_order='capture-first', pc_logging='synchronous',
+    recorder.record_startup(io,host,clock,'run_metadata', clock.now_us(), **run_labels,
+                    pc_capture_order='capture-first', pc_logging=logging_mode,
                     pc_capture_revision='C1+C2+C2b+C2c', timer_slack=timer_slack,
                     interpreter_switch_interval_s=switch_interval, post_fail_rx_us=post_fail_rx_us,
                     clock_halfwidth_limit_us=host.clock.MAX_HALFWIDTH_US,
@@ -444,10 +476,17 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             receive_span = host_spans.begin('receive', attribution.loop)
         mark('read_exit', len(data))
         if data:
-            clock_pair()
-            recorder.record('io_read_timing', returned, call_enter_pc_us=entered,
-                            bytes=len(data), stream_start=rx_bytes,
-                            stream_end=rx_bytes + len(data), **timing)
+            try:
+                clock_pair()
+                recorder.record('io_read_timing', returned, call_enter_pc_us=entered,
+                                bytes=len(data), stream_start=rx_bytes,
+                                stream_end=rx_bytes + len(data), **timing)
+            except EvidenceFailure:
+                # The OS read has already happened. Preserve its bytes in the
+                # reserve even when an earlier timing record caused overflow.
+                try:recorder.record('raw_rx',returned,packet_hex=data)
+                except EvidenceFailure:pass  # Explicit recorder loss/failure counters remain latched.
+                raise
             rx_bytes += len(data)
         return data, returned
 
@@ -519,20 +558,20 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
             try:
                 chunk, received = read_input(observe_receive=True)
                 if chunk:
-                    recorder.record('raw_rx', received, packet_hex=chunk.hex())
+                    recorder.record('raw_rx', received, packet_hex=chunk)
                     if now < discard_until:
                         recorder.startup_discarded_bytes += len(chunk)
-                        recorder.record('startup_discard', received, packet_hex=chunk.hex(),
+                        recorder.record('startup_discard', received, packet_hex=chunk,
                                         bytes=len(chunk), used_for_bootstrap=False)
                     else:
                         receive_chunk(host, recorder, chunk, received,
-                                      timing_clock=clock if measure_io else None)
+                                      timing_clock=clock if measure_io else None,binary_events=binary_events)
             finally:
                 mark('receive_exit')
                 if receive_span is not None:
                     host_spans.end(receive_span)
                     receive_span = None
-            for event in host.drain_events():
+            for event in host.drain_events(binary=binary_events):
                 recorder.observe(event, host)
             mark('drain_exit')
             # Restore the opportunity if the target crossed during RX. Check
@@ -579,7 +618,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 valid_write = type(written) is int and 0 <= written <= len(packet)
                 if measure_io and valid_write:
                     # Retain the actual OS result even if consume_tx faults.
-                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written],
                                     device_available=False)
                     clock_pair()
                     recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
@@ -588,9 +627,9 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                     tx_bytes += written
                 host.consume_tx(written, completed)
                 if not measure_io:
-                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written].hex(),
+                    recorder.record('raw_pc_write', completed, packet_hex=packet[:written],
                                     device_available=False)
-            for event in host.drain_events():
+            for event in host.drain_events(binary=binary_events):
                 recorder.observe(event, host)
             recorder.flush()
             # C2c: the target may cross during TX/log/flush. Same latch/validator;
@@ -604,6 +643,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
         reason = 'operator interrupted; reset/new session required'
     finally:
         active_elapsed = 0 if active_start is None else clock.now_us() - active_start
+        recorder.begin_stop()
         try:
             # Local inhibit happens BEFORE bounded write/drain work. A hardware
             # gate still needs the stopped D1 reason; a write is not delivery.
@@ -618,7 +658,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 stop_bytes = packet[offset:offset+count]
                 offset += count
                 if measure_io:
-                    recorder.record('raw_pc_write', completed, packet_hex=stop_bytes.hex(),
+                    recorder.record('raw_pc_write', completed, packet_hex=stop_bytes,
                                     device_available=False, best_effort_stop=True)
                     clock_pair()
                     recorder.record('io_write_timing', completed, call_enter_pc_us=entered,
@@ -637,7 +677,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 while clock.now_us() < drain_end and not recorder.stopped_status_observed:
                     chunk, received = read_input()
                     if chunk:
-                        recorder.record('raw_rx_after_disarm', received, packet_hex=chunk.hex())
+                        recorder.record('raw_rx_after_disarm', received, packet_hex=chunk)
                         for frame in host.decoder.feed(chunk):
                             if frame.type == Type.BOOT or frame.session != host.session:
                                 raise GateFailure('reset/session change during stopped drain')
@@ -646,7 +686,7 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                                                   'type': frame.type, 'seq': frame.sequence,
                                                   'source_us': frame.source_us,
                                                   'session': frame.session, 'ack': frame.ack,
-                                                  'payload_hex': frame.payload.hex()}, host)
+                                                  'payload_hex': frame.payload}, host)
                                 if frame.payload[7] & 8:
                                     raise GateFailure('underflow during stopped drain')
                                 if frame.payload[7] & 4 and not frame.payload[7] & (1 | 16):
@@ -677,6 +717,8 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
                 finally:
                     if attribution is not None:
                         attribution.detach()
+    recorder_error=recorder.close_evidence(clock.now_us(),serial_closed,host.model_inhibited)
+    reason=reason or recorder_error
     if failure_tail is not None:
         failure_tail.finish(recorder.output, run_labels, serial_closed=serial_closed)
     if host_spans is not None:
@@ -706,6 +748,6 @@ def run_soak(io, output, *, clock=None, duration_us=600_000_000, session=None,
     if trial_clock_400_sync20:
         (recorder.output/'trial-manifest.json').write_text(json.dumps(manifest(trial_tolerate_late), indent=2)+'\n')
     # Preserve queued failure evidence even when receive() faulted mid-chunk.
-    for event in host.drain_events():
+    for event in host.drain_events(binary=binary_events):
         recorder.record('final_transport_event', clock.now_us(), record=event)
     return recorder.finish(host, reason, active_elapsed)
