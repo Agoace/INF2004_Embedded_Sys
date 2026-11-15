@@ -17,7 +17,8 @@ def run(robot,project):
     project=Path(project);config=json.loads((project/'sil-manifest.json').read_text())
     controller=CalibrationController(project/'libraries/libsil_line.so')
     sequence=CalibrationSequence(controller.spin_config);plant=LagPlant(bidirectional=True)
-    scene=FastScene.from_course(build_course(Course.load(project/'course.json')))
+    from pil.sil_optics import make_sampler
+    scene=make_sampler(build_course(Course.load(project/'course.json')),config.get('optical_sampler','fast'))
     profiles={name:SensorProfile(**data)for name,data in config['profiles'].items()}
     motors=[robot.getDevice(n)for n in('left_motor','right_motor')]
     encoders=[robot.getDevice(n)for n in('left_encoder','right_encoder')]
@@ -59,7 +60,7 @@ def run(robot,project):
             'duty_r_pct','x_m','y_m','z_m','yaw_rad','norm_centre','norm_peak','stage'));writer.writerows(rows)
     result=dict(complete=error is None and sequence.done,calibration=controller.info,
         calibration_rows=controller.rows,sequence=sequence.history,config=controller.spin_config,error=error,
-        source='vehicle_task.c689–788 sequencing equivalent; line_service.c141 public lp_calib_add; NOT SDK task execution')
+        optical_sampler=config.get('optical_sampler','fast'),source='vehicle_task.c689–788 sequencing equivalent; line_service.c141 public lp_calib_add; NOT SDK task execution')
     (output/'calibration.json').write_text(json.dumps(result,indent=2)+'\n')
     robot.simulationQuit(0 if result['complete']else 1)
 
