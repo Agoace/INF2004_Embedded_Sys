@@ -63,7 +63,8 @@ This is an encoder/interrupt load test, not a robot or sensor acceptance
 run. Motor and servo writes are retained in RAM; no motor PWM is emitted.
 Line samples are constant 1800. IMU operations return NACK, and sonar has
 no echo. Thus IMU and sonar use error paths, not normal sensor workloads.
-The generator measures its handler body, not kernel IRQ entry/exit cost.
+The generator measures its handler body, not kernel IRQ entry/exit cost
+(approximately 1–2 us per call, not included in `gen_us_sum`).
 Actual interrupt timing, reset behavior and cost require operator evidence.
 No hardware run has been performed by this worker.
 

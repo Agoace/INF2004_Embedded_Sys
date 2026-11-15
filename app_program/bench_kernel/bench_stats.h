@@ -6,8 +6,6 @@
 typedef struct {
     uint32_t edges_sched;
     uint32_t edges_delivered;
-    uint32_t sched_left, sched_right;
-    uint32_t ack_left, ack_right;
     uint32_t coalesced;
     uint32_t overflow;
     uint32_t gen_us_sum;
@@ -18,6 +16,8 @@ typedef struct {
     uint32_t stopped; /* 0 running, 1 stopped/drained; end_us may wrap to0. */
     uint32_t stop_late_us;
     uint32_t stop_position_us; /* From window start;0 if no generator fault. */
+    uint32_t sched_left, sched_right;
+    uint32_t ack_left, ack_right;
 } bench_stats_t;
 /* Called on physical core0 only, after stopping/draining or under IRQ mask.
  * Cross-core reporting must obtain its snapshot on core0, then publish it.
