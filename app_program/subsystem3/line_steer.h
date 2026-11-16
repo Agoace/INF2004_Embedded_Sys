@@ -133,7 +133,7 @@ bool steer_calm_update(steer_calm_t *c, int8_t position, bool trigger, uint32_t 
 
 /*
  * Steering in wheel speed (mm/s), for the motor controller
- * (docs/architecture/ADR_MOTOR_CONTROLLER.md). The same rule as steer_update(),
+ * (docs/architecture/ARCHITECTURE.md). The same rule as steer_update(),
  * with
  * base, min and max in mm/s and no trim: the motor controller holds the
  * wheel speeds, so the wheel differences and the dead zone are not the

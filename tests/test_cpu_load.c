@@ -14,8 +14,43 @@ static void check_load(unsigned int busy)
     assert(cpu_load_sample(&meter, idle_count, 1000000u) == busy);
 }
 
+/* P1: run-peak latch. Odd epoch accumulates, a new odd epoch clears,
+ * an even epoch freezes, CPU_LOAD_UNKNOWN never counts. */
+static void check_peak(void)
+{
+    cpu_peak_t p;
+    cpu_peak_init(&p);
+    assert(p.epoch == 0u && p.samples == 0u);
+    assert(p.peak[0] == CPU_LOAD_UNKNOWN && p.peak[1] == CPU_LOAD_UNKNOWN);
+    /* Even epoch before any run: nothing is latched. */
+    cpu_peak_update(&p, 0u, 500u, 600u);
+    assert(p.samples == 0u && p.peak[0] == CPU_LOAD_UNKNOWN);
+    cpu_peak_update(&p, 1u, 300u, CPU_LOAD_UNKNOWN);
+    assert(p.epoch == 1u && p.samples == 1u);
+    assert(p.peak[0] == 300u && p.peak[1] == CPU_LOAD_UNKNOWN);
+    cpu_peak_update(&p, 1u, 250u, 400u);
+    assert(p.samples == 2u && p.peak[0] == 300u && p.peak[1] == 400u);
+    cpu_peak_update(&p, 1u, 900u, CPU_LOAD_UNKNOWN);
+    assert(p.samples == 3u && p.peak[0] == 900u && p.peak[1] == 400u);
+    /* STOP: even epoch freezes the run values, including the dump load. */
+    cpu_peak_update(&p, 2u, 1000u, 1000u);
+    assert(p.epoch == 1u && p.samples == 3u);
+    assert(p.peak[0] == 900u && p.peak[1] == 400u);
+    /* Next run clears and starts again. */
+    cpu_peak_update(&p, 3u, 100u, 200u);
+    assert(p.epoch == 3u && p.samples == 1u);
+    assert(p.peak[0] == 100u && p.peak[1] == 200u);
+    /* Out-of-range values are unknown; a sample with no known value
+     * is not counted. */
+    cpu_peak_update(&p, 3u, 1001u, 1500u);
+    assert(p.samples == 1u && p.peak[0] == 100u && p.peak[1] == 200u);
+    cpu_peak_update(&p, 3u, CPU_LOAD_UNKNOWN, 250u);
+    assert(p.samples == 2u && p.peak[0] == 100u && p.peak[1] == 250u);
+}
+
 int main(void)
 {
+    check_peak();
     for (unsigned int busy = 0u; busy <= 1000u; ++busy) {
         check_load(busy);
     }

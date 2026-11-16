@@ -25,6 +25,11 @@ void barcode_live_test_read_hook(const uint32_t *sequence, unsigned int index)
 
 int main(void)
 {
+    barcode_live_counts_t counts = {.epoch = 17u, .frames = 19u};
+    const barcode_live_counts_t sentinel = counts;
+    assert(barcode_live_counts_try_read(NULL) == E_PAR);
+    assert(barcode_live_counts_try_read(&counts) == E_NOSPT);
+    assert(memcmp(&counts, &sentinel, sizeof(counts)) == 0);
     barcode_live_record_t record = {.epoch = 77u};
     barcode_live_control_t control = {.epoch = 88u};
     uint32_t tag = 99u;
@@ -37,6 +42,8 @@ int main(void)
     assert(barcode_live_control_publish(NULL) == E_PAR);
     assert(barcode_live_control_publish(&control) == E_OBJ);
     assert(barcode_live_source_init() == E_OK);
+    assert(barcode_live_counts_try_read(&counts) == E_NOSPT);
+    assert(memcmp(&counts, &sentinel, sizeof(counts)) == 0);
     assert(barcode_live_source_try_read(&record) == E_OK);
     assert(record.valid == 0u && record.source == 2u && record.version == 1u);
     assert(record.sequence == 0u && record.flags == BC_LIVE_SHADOW);

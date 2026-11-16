@@ -11,12 +11,42 @@
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
 #include "../subsystem2/motion_diag.h"
 #include "../vehicle/vehicle_task.h"
 #include "../subsystem4/imu_settings.h"
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: multi-writer stats */
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
+
+/*
+ * RT-0071/F1: the CONTROL fields - DUMP reservation, storage full, loss count -
+ * are published as atomics, independent of stats_lock.  Vehicle decides on them
+ * (vehicle_task.c:393, 659, 1311), so reading them unsynchronised or behind the
+ * payload lock is a control defect rather than a diagnostic nicety.  stats_lock
+ * keeps guarding the payload and the diagnostic counters.
+ */
+static UW admit_busy;   /* DUMP reservation: 0 free, 1 held */
+static UW admit_full;   /* log storage full */
+static UW admit_lost;   /* losses, incremented from both cores */
+
+/*
+ * Diagnostic counters published for lock-free readers.  Written only by the
+ * Telemetry task while it holds stats_lock; a reader may mix two instants, which
+ * is exactly why the control fields above are kept as separate atomics.
+ */
+static telemetry_stats_t stats_pub;
+
+/* Publish the diagnostic counters. Caller holds stats_lock.
+ *
+ * RT-0073/F1: per-field atomic stores, so each counter's publication is a defined
+ * operation rather than a plain write that a reader could race. */
+static void publish_stats(void)
+{
+    __atomic_store_n(&stats_pub.rows, stats.rows, __ATOMIC_SEQ_CST);
+    __atomic_store_n(&stats_pub.events, stats.events, __ATOMIC_SEQ_CST);
+}
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_t events[TELEMETRY_EVENTS];
 static telemetry_info_t info;
@@ -35,6 +65,52 @@ static ja_result_t last_junction;
 static jlive_report_t last_source;
 static jlive_counts_t last_source_counts;
 static uint32_t loss_base;
+/*
+ * Guards the multi-writer part of `stats`.  `lost` is incremented by submitters
+ * on core 0 and by the telemetry task on core 1, and `busy` is set by a
+ * submitter and cleared by the dump task.  A seqlock cannot serve these fields:
+ * a sequence assumes a SINGLE writer, so two concurrent begins would leave it
+ * even while a mutation was still in flight.  A spinlock can.  These are touched
+ * only from task context, so plain SpinLock is enough under the lock rule; a
+ * zero-filled static already holds the unlocked state.
+ */
+static T_SPLOCK stats_lock;
+
+#if APP_TEST
+/*
+ * RT-0075/F3: let a test hold the payload lock, so "producer progress while the
+ * core-1 payload lock is held" can actually be exercised. stats_lock is static to
+ * this file, so there is no other way to reach it. TEST builds only. Declared here,
+ * after the lock itself.
+ */
+static UINT stats_test_intsts;
+/* M5: sole consumer publishes disposition before completion. TEST-only. */
+static uint32_t probe_dropped;
+static uint32_t probe_done;
+
+void telemetry_test_hold_payload_lock(void)
+{
+    (void)ISpinLock(&stats_lock, &stats_test_intsts);
+}
+
+void telemetry_test_release_payload_lock(void)
+{
+    (void)ISpinUnlock(&stats_lock, stats_test_intsts);
+}
+#endif /* APP_TEST */
+
+/*
+ * The log has ONE contract: stats_lock.  An earlier revision used a separate
+ * odd/even write sequence here, with readers detecting a changed copy and
+ * retrying.  It was removed after review (RT-0056): a sequence can reject a copy
+ * that changed underneath it, but it cannot make a byte-wise copy of rows[] or a
+ * struct copy of events[] atomic, and it left the index publication outside the
+ * mutation interval.  Mutual exclusion covers all three cases, and a second
+ * mechanism that no longer carries the contract would only invite confusion about
+ * which one is authoritative.
+ */
+
+
 #if TM_MQTT
 #include "../platform/app_board.h"
 static uint32_t log_generation;
@@ -47,7 +123,8 @@ static APP_BOARD(telemetry_log_index_t) log_index;
 static void publish_index(void)
 {
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
-                                     stats.lost, newest_row_ms};
+                                     __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST),
+                                     newest_row_ms};
     app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
 }
 
@@ -77,20 +154,41 @@ int telemetry_log_row(uint32_t generation, uint32_t index,
     if (!out) {
         return E_PAR;
     }
+    /*
+     * RT-0056 defect 3: the payload copy happens with the writer EXCLUDED, not
+     * merely checked afterwards.  A sequence can reject a copy that changed
+     * underneath it, but it cannot make a byte-wise copy of rows[] atomic, so
+     * mutual exclusion is the contract here.  The lock is held only for the
+     * bounded copy.
+     */
+    /*
+     * RT-0063: ONE immediate try, no retry loop. The Wi-Fi task runs above
+     * Telemetry on this core, so spinning here would block the very holder that
+     * must release the lock. ISpinTryLock also keeps this reader non-preemptible
+     * for the short copy.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&stats_lock, &intsts)) {
+        return E_TMOUT;
+    }
     telemetry_log_index_t v;
     const int er = telemetry_log_open(&v);
     if (er < E_OK) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return er;
     }
     if (v.generation != generation) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_OBJ;
     }
     if (index >= v.rows) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
     for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
         out[i] = rows[index][i];
     }
+    (void)ISpinUnlock(&stats_lock, intsts);
     return E_OK;
 }
 
@@ -103,18 +201,27 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
     if (!out) {
         return E_PAR;
     }
+    /* Same contract as the row read: one immediate try, never a spin. */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&stats_lock, &intsts)) {
+        return E_TMOUT;
+    }
     telemetry_log_index_t v;
     const int er = telemetry_log_open(&v);
     if (er < E_OK) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return er;
     }
     if (v.generation != generation) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_OBJ;
     }
     if (index >= v.events) {
+        (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
     *out = events[index];
+    (void)ISpinUnlock(&stats_lock, intsts);
     return E_OK;
 }
 #endif
@@ -142,26 +249,63 @@ static UW dropped(void)
  */
 void telemetry_stats(telemetry_stats_t *out)
 {
-    UINT irq;
-    DI(irq);
-    *out = stats;
-    EI(irq);
+    if (!out) {
+        return;
+    }
+    /*
+     * RT-0071/F1: two different contracts, because these are not the same kind of
+     * field.
+     *
+     * The CONTROL fields - busy, storage_full, lost - drive Vehicle's DUMP
+     * admission and storage-full stop decisions, so they come from the atomics
+     * the writers update. They are exact, and no lock is taken to get them.
+     *
+     * The diagnostic counters - rows and events - come from the snapshot the
+     * Telemetry task publishes under its own lock. Locked state is never read
+     * without synchronisation here, which is what the previous version did when
+     * its try-lock failed.
+     */
+    /* RT-0073/F1: every read here is a defined atomic load.  An aligned word read
+     * keeps the hardware value whole, but it is still a plain C access racing an
+     * atomic RMW on the other core, which is not the contract claimed. */
+    out->busy = (0u != __atomic_load_n(&admit_busy, __ATOMIC_SEQ_CST));
+    out->storage_full = (0u != __atomic_load_n(&admit_full, __ATOMIC_SEQ_CST));
+    out->lost = __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST);
+    out->rows = __atomic_load_n(&stats_pub.rows, __ATOMIC_SEQ_CST);
+    out->events = __atomic_load_n(&stats_pub.events, __ATOMIC_SEQ_CST);
+}
+
+/*
+ * Increment the loss counter with the log lock ALREADY HELD.  The task uses this
+ * inside its own critical section; lose() below takes the lock itself and is for
+ * callers outside one.  Using lose() inside the section would self-deadlock,
+ * because a spinlock is not recursive.
+ */
+static void lose_locked(void)
+{
+    (void)atomic_inc(&admit_lost);
 }
 
 /*
  * Account for a telemetry message that could not be stored.
  */
+/* Lock-free: reached from telemetry_send on core 0, which must never wait. */
 static void lose(void)
 {
-    UINT irq;
-    DI(irq);
-    ++stats.lost;
-    EI(irq);
+    (void)atomic_inc(&admit_lost);
 }
 
 /*
  * Write a bounded RAM-log snapshot to the local USB console.
  */
+/*
+ * P2: the USB yield between timeline lines, so the 4 KB ring can drain.
+ */
+static void dump_pause(void)
+{
+    (void)tk_dly_tsk(DUMP_YIELD_MS);
+}
+
 static void dump(void)
 {
     const UW before = dropped();
@@ -200,6 +344,8 @@ static void dump(void)
         imu_hump_diag_print(&diag);
     }
     app_task_report();
+    dump_pause(); /* let the report lines drain first */
+    rt_timeline_report(dump_pause);
     for (uint32_t i = 0u; i < st.rows; ++i) {
         tm_printf((UB *)"KR %lu ", (unsigned long)i);
         for (unsigned int b = 0u; b < TELEMETRY_BYTES; ++b) {
@@ -224,10 +370,9 @@ static void dump(void)
     const UW after = dropped();
     tm_printf((UB *)"[robot] end tm_usb_dropped %lu (dump delta %lu)\n",
               (unsigned long)after, (unsigned long)(after - before));
-    UINT irq;
-    DI(irq);
-    stats.busy = false;
-    EI(irq);
+    /* The dump is over: release the reservation atomically, so the release can
+     * never strand or clear somebody else's reservation. */
+    (void)atomic_xchg(&admit_busy, 0u);
 }
 
 /*
@@ -242,41 +387,75 @@ static void telemetry_task(INT code, void *ctx)
         if (tk_rcv_mbf(mbf_telemetry, &m, TMO_FEVR) != (INT)sizeof(m)) {
             continue;
         }
+        UINT intsts;
         switch (m.kind) {
         case TELEMETRY_BEGIN:
+            /* One critical section for the whole mutation AND the index
+             * publication, so a reader can never pair a new row with an old
+             * index (RT-0056 defect 2). */
+            (void)ISpinLock(&stats_lock, &intsts);
             last_junction = (ja_result_t){0};
             last_source = (jlive_report_t){0};
             last_source_counts = (jlive_counts_t){0};
             stats.rows = 0u;
             stats.events = 0u;
-            stats.storage_full = false;
+            (void)atomic_xchg(&admit_full, 0u);
             loss_base = m.loss_base;
 #if TM_MQTT
             ++log_generation;
             newest_row_ms = 0u;
+            publish_index();
 #endif
+            publish_stats();
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_ROW:
-            if (stats.rows == TELEMETRY_ROWS) {
-                stats.storage_full = true;
-                lose();
-                break;
-            }
-            for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
-                rows[stats.rows][i] = m.data.row[i];
-            }
-            ++stats.rows;
+#if APP_TEST
+        case TELEMETRY_TEST_ROW:
+#endif
+        {
+            (void)ISpinLock(&stats_lock, &intsts);
+            const bool row_full = stats.rows == TELEMETRY_ROWS;
+            if (row_full) {
+                (void)atomic_xchg(&admit_full, 1u);
+                lose_locked();
+            } else {
+                for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
+                    rows[stats.rows][i] = m.data.row[i];
+                }
+                ++stats.rows;
 #if TM_MQTT
-            newest_row_ms = drv_time_ms();
+                newest_row_ms = drv_time_ms();
+#endif
+            }
+#if TM_MQTT
+            publish_index();
+#endif
+            publish_stats();
+            (void)ISpinUnlock(&stats_lock, intsts);
+#if APP_TEST
+            if (m.kind == TELEMETRY_TEST_ROW) {
+                __atomic_store_n(&probe_dropped,
+                    row_full ? m.data.event.ms : 0u, __ATOMIC_SEQ_CST);
+                __atomic_store_n(&probe_done, m.data.event.ms,
+                                 __ATOMIC_SEQ_CST);
+            }
 #endif
             break;
+        }
         case TELEMETRY_EVENT:
+            (void)ISpinLock(&stats_lock, &intsts);
             if (stats.events == TELEMETRY_EVENTS) {
-                stats.storage_full = true;
-                lose();
-                break;
+                (void)atomic_xchg(&admit_full, 1u);
+                lose_locked();
+            } else {
+                events[stats.events++] = m.data.event;
             }
-            events[stats.events++] = m.data.event;
+#if TM_MQTT
+            publish_index();
+#endif
+            publish_stats();
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_INFO:
             info = m.data.info;
@@ -310,12 +489,14 @@ static void telemetry_task(INT code, void *ctx)
             motion_diag_dump(0);
             break;
         default:
-            lose();
+            (void)ISpinLock(&stats_lock, &intsts);
+            lose_locked();
+#if TM_MQTT
+            publish_index();
+#endif
+            (void)ISpinUnlock(&stats_lock, intsts);
             break;
         }
-#if TM_MQTT
-        publish_index();
-#endif
     }
 }
 
@@ -347,7 +528,8 @@ int telemetry_start(void)
     if (mbf_telemetry <= 0 || task > 0) {
         return E_OBJ;
     }
-    task = app_start_task((FP)telemetry_task, 30, TP_PRC1, "telemetry_task");
+    task = app_start_task((FP)telemetry_task, 30, app_prc_core1(),
+                          "telemetry_task");
     return task < 0 ? (int)task : E_OK;
 }
 
@@ -367,32 +549,69 @@ int telemetry_send(const telemetry_message_t *message)
     if (mbf_telemetry <= 0 || task <= 0) {
         return E_OBJ;
     }
-    if (!message || message->kind > TELEMETRY_JUNCTION_COUNTS) {
+    if (!message || message->kind >= TELEMETRY_KIND_COUNT) {
         return E_PAR;
     }
     telemetry_message_t m = *message;
-    UINT irq;
-    DI(irq);
-    const bool conflict = stats.busy;
-    m.loss_base = stats.lost;
-    if (!conflict && m.kind == TELEMETRY_DUMP) {
-        stats.busy = true;
-    }
-    EI(irq);
-    if (conflict) {
+    /*
+     * RT-0071/F1: reservation and rollback are ONE coherent operation on the
+     * admission atomic, with no payload lock involved.
+     *
+     * Reserve only if the reservation is free - a single compare-exchange, so a
+     * second DUMP is refused rather than admitted beside the first.  Release only
+     * what this call took, so a failed send can never clear another DUMP's
+     * reservation. The producer takes no payload lock. The kernel atomic
+     * operation still uses its hardware-lock/IRQ mechanism.
+     */
+    bool reserved = false;
+    if (m.kind == TELEMETRY_DUMP) {
+        if (0u != atomic_cmpxchg(&admit_busy, 1u, 0u)) {
+            lose();
+            return E_OBJ;
+        }
+        reserved = true;
+    } else if (0u != __atomic_load_n(&admit_busy, __ATOMIC_SEQ_CST)) {
+        /* M3: preserve baseline admission while DUMP owns the reservation.
+         * In particular, BEGIN must not use Vehicle's earlier busy sample
+         * after GP20 has reserved DUMP in the same idle-loop iteration.
+         */
         lose();
         return E_OBJ;
     }
+    m.loss_base = __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST);
     const ER er = tk_snd_mbf(mbf_telemetry, &m, (INT)sizeof(m), TMO_POL);
     if (er < E_OK) {
+        /* A real message-buffer failure: the caller may stop the run. */
         lose();
-        if (m.kind == TELEMETRY_DUMP) {
-            DI(irq);
-            stats.busy = false;
-            EI(irq);
+        if (reserved) {
+            (void)atomic_xchg(&admit_busy, 0u);
         }
     }
     return (int)er;
 }
+
+#if APP_TEST
+int telemetry_test_probe_send(uint32_t token)
+{
+    if (token == 0u) {
+        return E_PAR;
+    }
+    const telemetry_message_t message = {
+        .kind = TELEMETRY_TEST_ROW, .data.event.ms = token};
+    return telemetry_send(&message);
+}
+
+int telemetry_test_probe_result(uint32_t token, bool *discarded)
+{
+    if (token == 0u || !discarded) {
+        return E_PAR;
+    }
+    if (__atomic_load_n(&probe_done, __ATOMIC_SEQ_CST) != token) {
+        return E_TMOUT;
+    }
+    *discarded = __atomic_load_n(&probe_dropped, __ATOMIC_SEQ_CST) == token;
+    return E_OK;
+}
+#endif
 
 _Static_assert(sizeof(telemetry_event_t) == 12u, "VE event layout");

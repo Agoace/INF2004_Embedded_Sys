@@ -8,7 +8,11 @@
 #include "../app_program/subsystem3/barcode.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
 static uint32_t clock_us;
-static bool observing, race, raced;
+static bool observing, race, raced, epoch_test, cancel_test, interrupt_counts;
+static char data_letter = 'A';
+static const barcode_cal_report_t cal = {.generation = 1u,
+    .mode = BC_CAL_LEARNED, .white_samples = 1904u,
+    .white_mean = 167u, .rise = 317u, .fall = 242u};
 static barcode_live_control_t control;
 static char output[16384];
 static unsigned int used;
@@ -50,11 +54,22 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *us)
     *out = (motion_status_t){.counts = {counts, counts}};
     return E_OK;
 }
+void barcode_live_test_read_hook(const uint32_t *sequence, unsigned int index)
+{
+    (void)sequence;
+    if (interrupt_counts && index == 0u) {
+        interrupt_counts = false;
+        ++control.epoch;
+        clock_us += 1000u;
+        assert(barcode_live_control_publish(&control) == E_OK);
+        barcode_live_source_sample(clock_us, 160u, &cal, 0u, 0u);
+    }
+}
 static uint16_t signal(unsigned int ms)
 {
     const float mm = (float)ms * 0.146f;
     float at = 80.0f;
-    const char text[3] = {'*', 'A', '*'};
+    const char text[3] = {'*', data_letter, '*'};
     if (mm < at) {
         return 160u;
     }
@@ -82,16 +97,27 @@ static uint16_t signal(unsigned int ms)
 int main(int argc, char **argv)
 {
     race = argc > 1 && strcmp(argv[1], "race") == 0;
+    epoch_test = argc > 1 && strcmp(argv[1], "counts_epoch") == 0;
+    cancel_test = argc > 1 && strcmp(argv[1], "counts_cancel") == 0;
+    if (argc > 1 && strcmp(argv[1], "none") == 0) data_letter = 'F';
+    barcode_live_counts_t counts = {.epoch = 99u, .frames = 77u,
+                                    .attempts = 66u, .failures = 55u};
+    const barcode_live_counts_t sentinel = counts;
+    assert(barcode_live_counts_try_read(NULL) == E_PAR);
+    assert(barcode_live_counts_try_read(&counts) == E_OBJ);
+    assert(memcmp(&counts, &sentinel, sizeof(counts)) == 0);
     assert(barcode_live_source_init() == E_OK);
-    const barcode_cal_report_t cal = {.generation = 1u,
-        .mode = BC_CAL_LEARNED, .white_samples = 1904u,
-        .white_mean = 167u, .rise = 317u, .fall = 242u};
+    assert(barcode_live_counts_try_read(&counts) == E_TMOUT);
+    assert(memcmp(&counts, &sentinel, sizeof(counts)) == 0);
     control = (barcode_live_control_t){.epoch = 7u,
         .eligibility_revision = 3u, .revision_ms = 999u,
         .mode = BC_LIVE_SHADOW_MODE};
     barcode_live_record_t first = {0}, record;
-    for (unsigned int i = 0u; i < 3100u; ++i) {
+    const unsigned int samples = (epoch_test || cancel_test) ? 850u : 3100u;
+    for (unsigned int i = 0u; i < samples; ++i) {
         clock_us = 1000000u + i * 1000u;
+        if (epoch_test && i == 700u) ++control.epoch;
+        if (cancel_test && i == 700u) control.mode = BC_LIVE_DISABLED;
         if (i % 10u == 0u) {
             assert(barcode_live_control_publish(&control) == E_OK);
         }
@@ -99,24 +125,50 @@ int main(int argc, char **argv)
         barcode_live_source_sample(clock_us, signal(i), &cal, 0u, 0u);
         observing = false;
         assert(barcode_live_source_try_read(&record) == E_OK);
+        if ((epoch_test || cancel_test) && i == 700u) {
+            assert(barcode_live_counts_try_read(&counts) == E_OK);
+            assert(counts.epoch == (epoch_test ? 8u : 7u));
+            assert(counts.frames == 0u && counts.failures == (cancel_test ? 1u : 0u));
+            assert(counts.attempts == counts.failures);
+        }
         if (record.sequence != 0u) {
             if (first.sequence == 0u) {
+                /* Exact publication sample, not the 100 ms dump cadence. */
+                assert(barcode_live_counts_try_read(&counts) == E_OK);
+                assert(counts.frames == 1u && counts.attempts == 1u);
                 first = record;
             }
             assert(memcmp(&first, &record, sizeof(first)) == 0);
         }
     }
-    assert((first.sequence == 1u) == !race);
-    if (!race) {
+    assert(barcode_live_counts_try_read(&counts) == E_OK);
+    assert(counts.epoch == (epoch_test ? 8u : 7u));
+    assert(counts.frames == ((!race && !epoch_test && !cancel_test) ? 1u : 0u));
+    assert(counts.failures == ((race || cancel_test) ? 1u : 0u));
+    assert(counts.attempts == counts.frames + counts.failures);
+    barcode_live_counts_t again;
+    assert(barcode_live_counts_try_read(&again) == E_OK);
+    assert(memcmp(&again, &counts, sizeof(counts)) == 0);
+    assert(barcode_live_source_init() == E_OK); /* Getter/init never reset. */
+    assert(barcode_live_counts_try_read(&again) == E_OK);
+    assert(memcmp(&again, &counts, sizeof(counts)) == 0);
+    assert((first.sequence == 1u) == (!race && !epoch_test && !cancel_test));
+    if (!race && !epoch_test && !cancel_test) {
         assert(first.epoch == 7u && first.eligibility_revision == 3u);
-        assert(first.letter == 'A' && first.command == 1u && first.valid == 0u);
+        assert(first.letter == (uint8_t)data_letter && first.valid == 0u);
+        assert(first.command == (data_letter == 'A' ? 1u : 0u));
         assert(first.flags == (0x3fu | BC_LIVE_SHADOW));
     }
     control.mode = BC_LIVE_DISABLED;
     assert(barcode_live_control_publish(&control) == E_OK);
     barcode_live_source_dump();
     assert(strstr(output, "[BC_CPU]") && strstr(output, "spinW 167 leadW 160"));
-    if (race) {
+    if (epoch_test || cancel_test) {
+        /* The old epoch's late cancellation remains in lifetime diagnostics,
+         * but must not be charged to the new epoch's zero terminal totals. */
+        assert(strstr(output, "attempts 1 failures 1"));
+        assert(strstr(output, "[BC_FRAME] epoch 7"));
+    } else if (race) {
         assert(raced && strstr(output, "reason 102"));
     } else {
         assert(strstr(output, "reason 1"));
@@ -133,6 +185,16 @@ int main(int argc, char **argv)
         }
         assert(count == 2u);
     }
+    /* Interrupt the count copy with a real LINE-writer epoch transition.
+     * Getter returns once, leaves caller bytes unchanged, then reads new data. */
+    interrupt_counts = true;
+    again = sentinel;
+    assert(barcode_live_counts_try_read(&again) == E_TMOUT);
+    assert(memcmp(&again, &sentinel, sizeof(again)) == 0);
+    assert(!interrupt_counts);
+    assert(barcode_live_counts_try_read(&again) == E_OK);
+    assert(again.epoch == control.epoch && again.frames == 0u &&
+           again.failures == 0u && again.attempts == 0u);
     puts(output);
     return 0;
 }

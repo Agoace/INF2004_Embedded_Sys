@@ -1,151 +1,154 @@
 # Documentation — INF2004 Embedded Systems
 
-Each record below has one entry. Use the agent map for source entry points.
+Each record below has one entry: what it is for, then a **Contains:** line
+with its topics, tables and key numbers. Use the agent map for source entry
+points.
 Archive records retain their original revision, evidence and limits; they are
 not current acceptance reports. Local course originals are not public records.
 
 ## Navigation
 
-- [README.md](README.md) — this grouped documentation index.
-- [AGENT_MAP.md](AGENT_MAP.md) — source locations, repository boundaries and map chain.
+- [README.md](README.md) — this index.
+  Contains: one entry per record; the two template-comment exceptions.
+- [AGENT_MAP.md](AGENT_MAP.md) — where to start in the source tree.
+  Contains: map chain, doc directories, what each source group does, entry files per area, repository boundaries, template build layout, kernel platform/task notes.
 - [Repository README](../README.md) — public setup, current build and usage.
 - [Repository instructions](../AGENTS.md) — working rules and validation commands.
 
 ## Project requirements
 
 - [project-requirements/README.md](project-requirements/README.md) — our own course summary; original course files stay local and ignored.
+  Contains: requirements to keep during implementation (data widths from valid range, hump range, evidence types), links to CR1 requirement and implementation records.
 
 ## Architecture
 
-- [ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) — one time-base owner; original bare-metal interrupt contract.
-- [ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) — one actuator owner and value-based interfaces.
-- [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
-- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
-- [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries and archived branch tags.
-- [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
-  and MQTT sizes, measurement tools and shared-access rule.
-- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
-- [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a source2 SHADOW admission, encounter ordering, terminal ACK, limits, counters and action gates.
-- [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
-- [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
+- [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — read first: the state of each area.
+  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch table, merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch state 2026-11-16, archive tags.
+- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — the implemented robot system and its three decisions.
+  Contains: subsystem ownership, tasks and cores, interrupt/polling rules, Vehicle Controller shell and route table, safety settings, results; ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal 1 ms time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
+- [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
+  Contains: 414 rows (value, date, label, source line) in 9 areas: geometry, mass, motors and DM1, encoders, line/junction, GP28/barcode, sonar/servo/obstacle, IMU, timing/CPU/RAM/telemetry; 12 values that do not agree (for example counts 2540/2535, track 111/120/115 mm, sonar offset 58/47 mm).
+- [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, evidence and motion plan.
+  Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
+- [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
+  Contains: scope and approval (2026-11-10, closed at `50426ae`), command table NONE/A–D, ownership and entry points, fixed consumer value, junction detection, phases and bounds, reports and failures (event 7).
+- [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter, SHADOW only.
+  Contains: scope (SHADOW never offered to the consumer, valid 0), entry points, fixed boards and validation, encounter/route ordering, one slot and terminal ACK, build permission, diagnostics and remaining gates.
+- [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — the only list of allowed course-template changes; `check-template-changes.py` reads it.
+  Contains: reference `c3b0954`; 8 deviations (`hw_setting.c`, `devinit.c`, `timer_tick.h`, `cyw43_utk_kernel.c`, `cyw43_utk.c/h`, `usb_console.c`, `mqtt_utk.c`); timing contract; cold-power guarantee; update and check procedure.
 
 ## Kernel
 
-- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
-- [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
+- [KERNEL.md](kernel/KERNEL.md) — the μT-Kernel robot: tasks, timing, RAM and locks.
+  Contains: task/priority table (motion 10, line 11, sonar 12, vehicle 13, IMU 14, Wi-Fi 20, USB 21, telemetry 30, Health 31, idle 32), kernel objects, settings; application stacks (Wi-Fi M9 8320 B, IMU high-water); watchdog and last reset reason; CPU load; P1 run timing and P2 overrun timeline; KERNEL_RAM placement (rule b, robot P1 pairs); F-NVIC (all external IRQs at 0); split parked 2026-11-15, placement and lock rules, M8 startup handoff; RAM budget by group and growth; USB priority; results and limits.
+- [BUILD.md](kernel/BUILD.md) — how to build, flash and read the firmware.
+  Contains: tools, Make profiles and options, demo line, private settings, BOOTSEL/picotool flash, USB output, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe (wiring, GDB on both cores), host tests and link proof.
+- [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — junction hardware evidence and gates.
+  Contains: B2a CLOSED (`50426ae`, 3/3 DONE); B2b STEP4a software candidate; operator evidence 2026-11-10; software evidence; RAM and stack; J0–J6 procedure (J3/J4 operator evidence on `7648081`, J6 open).
 
 ## S1 — Telemetry
 
-- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes and RAM/live/refill ownership.
-- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — current binary topics, versions, bytes, masks, boot/session and decoder contract.
-- [OPERATION.md](s1-telemetry/OPERATION.md) — broker, recorder, dashboard, Tailscale, security, operation and radio-loss troubleshooting.
+- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — the Wi-Fi/MQTT owner and how to run the laptop side.
+  Contains: execution and hook, boards and queues, events and commands, publication settings (RUN/IDLE), RAM log and DUMP refill, results and limits; operation: broker, private settings, recorder and page, data panels (fan, hump, run path), Tailscale remote view, troubleshooting, tests.
+- [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — the binary wire contract, byte by byte.
+  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 24, detour 36, summary 52, status 6; reserved barcode 20, IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
 
 ## S2 — Motion
 
-- [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
-- [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
-- [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
-  approved A1 board packing, ownership limits and approval gates.
+- [MOTION.md](s2-motion/MOTION.md) — the motor controller, hardware and calibration.
+  Contains: interface; settings (feed-forward, P/I, kick 12 %/10 counts/250 ms, stall, servo 1500 µs centre); kernel vs bench time base; heartbeat; pin table; geometry; 50-turn encoder ratio 2535 counts/turn (12414 counts/m); servo and sonar; unloaded RPM at 5 V; power status; DM1 duty map (23 levels, forward/reverse, 8 % running minimum, about 8.5 mm/s per %) and method; B1–B3 results (cap 460 mm/s); SDK subset.
 
 ## S3 — Line and barcode
 
-- [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md).
-- [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md).
-- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md).
-- [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).
-- [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run: system PASS, large A not decoded, findings and the proposal on hold.
-- [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.
-- [BARCODE.md](s3-line-barcode/BARCODE.md) — pure Code 39 WIDTH and B1c PEAK
-  observation; one sheet, 430 mm TEST passes, checked stop, no routing.
-- [USB_CAPTURE_WAIT.md](s3-line-barcode/USB_CAPTURE_WAIT.md) — TEST-only
-  frozen report retention until the USB terminal asserts DTR for one second.
+- [LINE.md](s3-line-barcode/LINE.md) — the current two-sensor LINE and SEARCH.
+  Contains: acquisition and calibration spin, pair detection, interface, settings (P7: base 146, min 62, max 378 mm/s, gains 85/85/340; locked duty P4 reference), results (P4–P9, kernel S3-U01/U02 1009 samples, M1-S7), limits (straight-after-curve swing).
+- [BARCODE.md](s3-line-barcode/BARCODE.md) — TEST-only Code 39 reader (B1c WIDTH and PEAK).
+  Contains: scope (one sheet, 430 mm pass at 100 mm/s, at most 450 mm), input and ownership, build and settings, driven procedure, snapshot health, capture/RAM, decoder rules and fixtures, PEAK contract. No routing.
+- [USB_CAPTURE_WAIT.md](s3-line-barcode/USB_CAPTURE_WAIT.md) — TEST-only USB report hold.
+  Contains: scope (`TEST=1 BARCODE_CAPTURE=1` only), operator procedure (DTR held for one second), implementation, validation.
+- [LIVE_CALIBRATION.md](s3-line-barcode/LIVE_CALIBRATION.md) — GP28 evidence from the LINE spin (B2b step 2).
+  Contains: status, unchanged spin controls, signal evidence and thresholds, report fields, SHADOW procedure, first home-mat result (`a883455`) and policy correction, software validation.
+- [LIVE_SOURCE_CONTRACT.md](s3-line-barcode/LIVE_SOURCE_CONTRACT.md) — the S3-to-vehicle barcode boards.
+  Contains: ownership (S3 writes record, vehicle writes control), final sizes (40 B record, 20 B control), five-word control, coherent read APIs, validation scope.
+- [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode, size-tolerant.
+  Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (narrow 4.0..7.0 mm fitted from the start star, wide by ratio 1.6..3.4, run ceiling min(35, 1.5w+|bias|) mm), historical evidence and limits.
+- [LIVE_COUNTS_SNAPSHOT.md](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — read-only per-run barcode reader totals.
+  Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
+- [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
+  Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
+- [BARCODE_RUN_SUMMARY.md](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — barcode ok/failed in the MQTT run summary.
+  Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
+- [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
+  Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
+- [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
+  Contains: status (merged `b405aef`; table A=LEFT, B=RIGHT, C=STRAIGHT, D=UTURN), results (system PASS, large A not decoded), findings, proposal on hold, evidence.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; diagnostic C hardware on 29d57de; uncorrected LINE height accepted, corrected over-read under investigation (9/9 humps, 0 false in 5 flat); IMU stack free 480 B; H3 full-circuit no-false-hump acceptance compares source-labelled corrected/filtered images, default corrected, and is priority and Not run; accuracy follow-up deferred); step 2d 400 Hz FIFO batch mean into the unchanged step 2c roll-only RIGHT height, cited datasheet/AN3308 facts, alias fixtures, retired INT1 check and TEST raw capture; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
+- [IMU.md](s4-imu/IMU.md) — the IMU hump detector (report only) and its full step history.
+  Contains: step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
 
 ## S5 — Obstacle
 
-- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages, implemented 13-point scan, monitor/profile rules, reverse/reattempt and recovery limits.
-- [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — current kernel trigger/echo service, packed result, timeouts and measured sensor limits.
+- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — obstacle monitor, scan, avoidance and the ultrasonic service.
+  Contains: forward monitor thresholds; 13-point coarse scan (no fine scan); mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
 
 ## Simulation
 
-- [SIMULATION.md](simulation/SIMULATION.md) — implemented host model, interfaces, assumptions, echo-fit and box-sweep summaries; not kernel/track proof.
+- [SIMULATION.md](simulation/SIMULATION.md) — the host simulator: what it models and what it proves.
+  Contains: layers, interface and operation, model assumptions, echo-fit summary (narrow box 160 × 250 mm, beam 5°, incidence 16°), box-sweep results (back-off 25°, gaps 22/54/91/91 mm), limits (bare-metal v1.8 sources, not kernel timing or physical proof).
 
 ## Archive
 
-- [DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) — earlier detour physical-test plan and simulator measurements still owed at that revision.
-- [MOTION_TIMING_INVESTIGATION.md](archive/MOTION_TIMING_INVESTIGATION.md) — timing confound and opt-in diagnostic investigation, with original revision limits.
-- [MTK3_FOLLOWUP_HANDOFF.md](archive/MTK3_FOLLOWUP_HANDOFF.md) — historical STEP 8 owner tips, cleanup/recovery and hardware limits.
-- [MTK3_STEP8_RECORD.md](archive/MTK3_STEP8_RECORD.md) — merged software validation, hardware evidence and boot-session follow-up; each source keeps its own tested revision.
-- [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1, runs and unresolved issues.
-- [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — earlier detour design, D1–D18 evidence and then-open problems.
-- [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
-- [TELEMETRY_SCHEMA.md](archive/TELEMETRY_SCHEMA.md) — older instrument JSON contract; not the current MQTT wire format.
-- [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
-- [WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) — earlier UDP bench dashboard, replaced by the MQTT dashboard.
+Each `HISTORY.md` lists removed records. Read one with
+`git show 569672a:<path>`.
 
-### Architecture history
+### History pointers
 
-- [architecture/BRANCH_LAYOUT.md](archive/architecture/BRANCH_LAYOUT.md) — full source record; only links/paths adjusted.
-- [architecture/INTERRUPT_CONVENTIONS.md](archive/architecture/INTERRUPT_CONVENTIONS.md) — full source record; only links/paths adjusted.
-- [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
-- [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
-- [architecture/robo_pico_rtos_multicore_plan.md](archive/architecture/robo_pico_rtos_multicore_plan.md) — full source record; only links/paths adjusted.
+- [archive/kernel/HISTORY.md](archive/kernel/HISTORY.md) — 19 removed kernel records.
+  Contains: old robot bring-up, stacks, CPU, watchdog, layout, motion checks, USB priority, development setup, RAM budget per step, core placement/lock audit, UP shim, Wi-Fi stack, staging merge, bench step 0, SWD.
+- [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — 9 removed telemetry records.
+  Contains: OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema.
+- [archive/s2-motion/HISTORY.md](archive/s2-motion/HISTORY.md) — 7 removed motion records.
+  Contains: HARDWARE, first motor controller (B1–B3), 2026-10-30 calibration, 50-turn drift, DM1 method, bare-metal heartbeat, STEP 8 motion timing investigation.
+- [archive/s5-obstacle/HISTORY.md](archive/s5-obstacle/HISTORY.md) — 6 removed obstacle records.
+  Contains: ULTRASONIC, first ultrasonic driver (seven bench runs), monitor, scan/profile, R1–R4 and M2-reattempt detour runs, v1.6 detour test plan.
+- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — removed and renamed architecture records.
+  Contains: CR1_EVIDENCE (now CR1.md), CR1_MOTION_PLAN, Week 8 CR1 Tribunal notes (1738 lines, § index), both BRANCH_LAYOUT records, three ADRs, interrupt conventions, first vehicle shell, two-core control proposal, RTOS multicore plan.
 
-### S3 — Line and barcode history
+### Kept in the tree (code cites them)
 
-- [s3-line-barcode/LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md) — full source record; only links/paths adjusted.
-- [s3-line-barcode/LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md) — full source record; only links/paths adjusted.
-- [s3-line-barcode/LINE_STEER_MM.md](archive/s3-line-barcode/LINE_STEER_MM.md) — full source record; only links/paths adjusted.
-- [s3-line-barcode/TWO_SENSOR_LINE_TRACING.md](archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) — full source record; only links/paths adjusted.
-- [s3-line-barcode/VC_LINE_RUN.md](archive/s3-line-barcode/VC_LINE_RUN.md) — full source record; only links/paths adjusted.
-- [s3-line-barcode/BARCODE_READING_IDEAS.md](archive/s3-line-barcode/BARCODE_READING_IDEAS.md) — full source record; only links/paths adjusted.
+- [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1.
+  Contains: assumptions, steps, steering, CR1 command word, failures, `bypass_test` bench, track tests, host test.
+- [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — bare-metal detour v1.5–v1.8.
+  Contains: v1.8 back-off at most 30°, v1.7 line only on return, v1.6 first run 2026-11-03, v1.5 design, track runs D1–D18, open problems, values to measure.
+- [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — bare-metal steering UDP log.
+  Contains: network (UDP port 4243), robot rules, packet format, use, host tests, track test.
+- [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller, superseded by the vehicle shell.
+  Contains: steps, step 1 line following, data representation, host test.
+- [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; not a current procedure.
+  Contains: limit, observed incident, old motor-test procedure, single-motor and spin-calibration exceptions, over-current recovery.
 
-### S5 — Obstacle history
+### Line, barcode and simulation originals (on hold until those areas merge)
 
-- [s5-obstacle/OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/VC_DETOUR_RUN.md](archive/s5-obstacle/VC_DETOUR_RUN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/ULTRASONIC_DRIVER.md](archive/s5-obstacle/ULTRASONIC_DRIVER.md) — full source record; only links/paths adjusted.
-
-### Simulation history
-
-- [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
-- [simulation/SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — full source record; only links/paths adjusted.
-- [simulation/SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — full source record; only links/paths adjusted.
-### Kernel originals
-
-The full original records retain their prose, numbers and revision limits;
-only link/path/anchor repairs follow the move.
-
-- [APPLICATION_TASKS.md](archive/kernel/APPLICATION_TASKS.md) — full historical source, with its measured values and original limits.
-- [CPU_LOAD.md](archive/kernel/CPU_LOAD.md) — full historical source, with its measured values and original limits.
-- [DEVELOPMENT.md](archive/kernel/DEVELOPMENT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_ROBOT.md](archive/kernel/KERNEL_ROBOT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_WATCHDOG.md](archive/kernel/KERNEL_WATCHDOG.md) — full historical source, with its measured values and original limits.
-- [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
-
-### S1 originals
-
-- [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_TELEMETRY.md](archive/s1-telemetry/KERNEL_TELEMETRY.md) — full historical source, with its measured values and original limits.
-- [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
-- [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
-
-### S2 originals
-
-- [CALIBRATION_RESULTS.md](archive/s2-motion/CALIBRATION_RESULTS.md) — full historical source, with its measured values and original limits.
-- [DUTY_MAP.md](archive/s2-motion/DUTY_MAP.md) — full historical source, with its measured values and original limits.
-- [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md) — full historical source, with its measured values and original limits.
-- [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md) — full historical source, with its measured values and original limits.
-- [MOTOR_ROTATION_DRIFT.md](archive/s2-motion/MOTOR_ROTATION_DRIFT.md) — full historical source, with its measured values and original limits.
-- [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; retained evidence, not a current procedure.
+- [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md) — normalised line position.
+  Contains: thresholds, vehicle events, data representation, host and bench tests, pair mode (2026-11-03).
+- [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md) — duty line steering.
+  Contains: trim, limits, D part, far gain (2026-11-03), straight across a junction, calm mode, data representation, tests.
+- [LINE_STEER_MM.md](archive/s3-line-barcode/LINE_STEER_MM.md) — steering in mm/s.
+  Contains: rule, first track-run settings mapped one to one, host test.
+- [TWO_SENSOR_LINE_TRACING.md](archive/s3-line-barcode/TWO_SENSOR_LINE_TRACING.md) — the locked two-sensor duty design (`line-tracing-2sensor-v1`).
+  Contains: hardware, method, evidence, limits, later work.
+- [VC_LINE_RUN.md](archive/s3-line-barcode/VC_LINE_RUN.md) — Vehicle Controller line runs.
+  Contains: layers, modules, spin calibration, log, host test, P5 procedure, runs P5/P6/P7 (2026-11-04), end state.
+- [BARCODE_READING_IDEAS.md](archive/s3-line-barcode/BARCODE_READING_IDEAS.md) — early analog barcode ideas.
+  Contains: known facts, several bars in view, line-tracing weave, barcode length, ideas, proposed chain.
+- [archive/simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full original simulator record.
+  Contains: separation from firmware, SDK surface, clock, world and physics, scenario/trace formats, viewer, editor, layout and commands, risks, operator decisions, narrow beam box, milestone 3, build plan.
+- [SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — echo-model fit to recorded scans.
+  Contains: rule and settings, record constraints, native-probe comparison, checks.
+- [SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — fixed-front box-size sweep.
+  Contains: scope and reproduction, results, main case, checks.
 
 ## Original-template reference exceptions
 
@@ -154,4 +157,4 @@ Two untouched lecturer-template comments cite a missing `RELEASE.md` record:
 [`lwipopts.h`](../lib/liblwip/sysdepend/pico_rp2040/lwipopts.h).
 These are the two known old-path grep exceptions. Do not edit them as part of
 a documentation move or add a ninth template deviation. The current ownership
-rule is the Execution and hook section of the S1 MQTT design listed above.
+rule is the [Execution and hook](s1-telemetry/TELEMETRY.md#execution-and-hook) section of TELEMETRY.md.

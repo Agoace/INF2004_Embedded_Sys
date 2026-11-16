@@ -1,6 +1,6 @@
 /*
  * Motor controller core: the only owner of the actuators
- * (docs/architecture/ADR_MOTOR_CONTROLLER.md).
+ * (docs/architecture/ARCHITECTURE.md).
  *
  * Values in, measurements out. No intent: no steer mixing, no line mode,
  * no "move complete" decision.

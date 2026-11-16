@@ -12,6 +12,7 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
+#include <tk/smp.h>   /* Interrupt-preserving metrics lock. */
 #include "lwip/apps/mqtt.h"
 #include "lwip/ip_addr.h"
 #include "robot_network.h"
@@ -23,6 +24,7 @@
 #include "robot_mqtt_config.h"
 #include "../platform/drv_time.h"
 #include "../platform/boot_id.h"
+#include "../platform/app_startup.h"
 #include "../../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define RETRY_MS 3000u
 
@@ -60,6 +62,12 @@ static uint32_t heartbeat_at;
 static uint32_t state_sequence;
 static uint32_t sonar_cursor;
 static rm_heartbeat_t metrics;
+
+/* B1: Health and Wi-Fi share a core in the control and UP profiles.
+ * Mask local interrupts before the cross-core claim, so Wi-Fi cannot preempt
+ * a Health holder and spin against it. Restore the caller's exact mask.
+ * A zero-filled static already holds the unlocked state. */
+static T_SPLOCK metrics_lock;
 static rm_heartbeat_t health_cache = {.stack_min_free = RM_NO_DATA_U16,
                                       .cpu_load_permille = RM_CPU_LOAD_UNKNOWN};
 static bool health_present;
@@ -86,10 +94,97 @@ static uint8_t will_payload[RM_STATUS_SIZE];
  */
 static void inc(uint32_t *value)
 {
-    UINT irq;
-    DI(irq);
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
     ++*value;
-    EI(irq);
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+/*
+ * RT-0058 finding 1: Health copies this group on core 0, so EVERY write to a
+ * copied field goes through one of these setters and takes metrics_lock.  Before
+ * this, the snapshot was locked but the writers were not, which protected the
+ * reader from nothing.  Each setter is short and contains no lwIP call, so no
+ * network operation ever runs with the lock held.
+ */
+static void metrics_state_set(uint8_t state)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    metrics.mqtt_state = state;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static void metrics_subscribed_set(bool value)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    subscribed = value;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+/* Subscription result and state are one fact; set them in one section so Health
+ * cannot see the flag and the state disagree. */
+static void metrics_subscribed_and_state(bool value, uint8_t state)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    subscribed = value;
+    metrics.mqtt_state = state;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static void metrics_commands_enabled_set(bool value)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    commands_enabled = value;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static void metrics_sonar_missed_add(uint32_t missed)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    metrics.sonar_history_missed += missed;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static void metrics_sonar_sequence_set(uint32_t sequence)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    metrics.latest_sonar_history_sequence = sequence;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static bool metrics_observed_priority_unset(void)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    const bool unset = metrics.wifi_observed_priority == 0u;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+    return unset;
+}
+
+static void metrics_observed_priority_set_if_unset(uint8_t priority)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    if (metrics.wifi_observed_priority == 0u) {
+        metrics.wifi_observed_priority = priority;
+    }
+    (void)ISpinUnlock(&metrics_lock, intsts);
+}
+
+static void metrics_hook_max_update(uint32_t elapsed)
+{
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    if (elapsed > metrics.mqtt_hook_max_us) {
+        metrics.mqtt_hook_max_us = elapsed;
+    }
+    (void)ISpinUnlock(&metrics_lock, intsts);
 }
 
 /*
@@ -137,7 +232,7 @@ static void configure(void)
     }
     /* Absent/empty/all-zero example token: ESTOP-only fallback in decoder.
      * A valid configured token restricts EVERY command, including ESTOP. */
-    commands_enabled = good && any != 0u;
+    metrics_commands_enabled_set(good && any != 0u);
     log_stream_init(boot_id_get());
     pm_init(&mode_tracker);
     configured = true;
@@ -252,27 +347,41 @@ int __attribute__((weak)) robot_network_summary(uint32_t *cursor,
  */
 void robot_network_metrics(rm_heartbeat_t *out)
 {
-    UINT irq;
-    DI(irq);
-    out->connect_attempts = metrics.connect_attempts;
-    out->sonar_history_missed = metrics.sonar_history_missed;
-    out->mqtt_hook_max_us = metrics.mqtt_hook_max_us;
-    out->publish_ok = metrics.publish_ok;
-    out->publish_failed = metrics.publish_failed;
-    out->latest_sonar_history_sequence = metrics.latest_sonar_history_sequence;
-    out->mqtt_state = metrics.mqtt_state;
-    out->wifi_observed_priority = metrics.wifi_observed_priority;
-    const bool connected = metrics.mqtt_state >= 2u;
+    /* Snapshot under the lock, then RELEASE it before any call that takes its own
+     * lock - log_stream_dump_active(), cyw43_utk_get_status() and
+     * cyw43_utk_timing_read() below.  Holding one lock while acquiring another
+     * invites an ordering problem, and the previous code masked interrupts across
+     * all of those calls. */
+    rm_heartbeat_t snapshot;
+    bool connected;
+    bool subscribed_now;
+    bool commands_now;
+    UINT intsts;
+    (void)ISpinLock(&metrics_lock, &intsts);
+    snapshot = metrics;
+    connected = metrics.mqtt_state >= 2u;
+    subscribed_now = subscribed;
+    commands_now = commands_enabled;
+    (void)ISpinUnlock(&metrics_lock, intsts);
+
+    out->connect_attempts = snapshot.connect_attempts;
+    out->sonar_history_missed = snapshot.sonar_history_missed;
+    out->mqtt_hook_max_us = snapshot.mqtt_hook_max_us;
+    out->publish_ok = snapshot.publish_ok;
+    out->publish_failed = snapshot.publish_failed;
+    out->latest_sonar_history_sequence = snapshot.latest_sonar_history_sequence;
+    out->mqtt_state = snapshot.mqtt_state;
+    out->wifi_observed_priority = snapshot.wifi_observed_priority;
     if (connected) {
         out->flags |= 2u;
     }
-    if (subscribed) {
+    if (subscribed_now) {
         out->flags |= 4u;
     }
     if (log_stream_dump_active()) {
         out->flags |= 8u;
     }
-    if (commands_enabled) {
+    if (commands_now) {
         out->flags |= 16u;
     }
     T_CYW43_UTK_STATUS status;
@@ -281,7 +390,6 @@ void robot_network_metrics(rm_heartbeat_t *out)
     if (status.link_status == 3) {
         out->flags |= 1u;
     }
-    EI(irq);
     T_CYW43_TIMING timing;
     (void)cyw43_utk_timing_read(&timing);
     out->wifi_poll_gap_max_us = timing.gap_max_us;
@@ -346,8 +454,8 @@ static void subscription_done(void *arg, err_t error)
 {
     (void)arg;
     subscribe_pending = false;
-    subscribed = error == ERR_OK;
-    metrics.mqtt_state = subscribed ? 3u : 2u;
+    metrics_subscribed_and_state(error == ERR_OK,
+                                 error == ERR_OK ? 3u : 2u);
     subscribe_at = drv_time_ms() + RETRY_MS;
     if (error != ERR_OK) {
         inc(&metrics.publish_failed);
@@ -363,10 +471,10 @@ static void connection_done(mqtt_client_t *c, void *arg,
     (void)c;
     (void)arg;
     connecting = false;
-    subscribed = false;
+    metrics_subscribed_set(false);
     subscribe_pending = false;
     if (status == MQTT_CONNECT_ACCEPTED) {
-        metrics.mqtt_state = 2u;
+        metrics_state_set(2u);
         mqtt_set_inpub_callback(client, incoming_publish, incoming_data, NULL);
         subscribe_at = drv_time_ms();
         status_pending = true;
@@ -376,7 +484,7 @@ static void connection_done(mqtt_client_t *c, void *arg,
         state_at = subscribe_at;
         heartbeat_at = subscribe_at;
     } else {
-        metrics.mqtt_state = 0u;
+        metrics_state_set(0u);
         retry_at = drv_time_ms() + RETRY_MS;
         inc(&metrics.publish_failed); /* asynchronous refusal/timeout/drop */
         /* lwIP mqtt_close deletes pending requests WITHOUT callbacks: the log
@@ -617,7 +725,7 @@ static void service(uint32_t now)
             uint32_t missed = 0u;
             const int er =
                 robot_network_sonar(&sonar_cursor, &pending_sonar, &missed);
-            metrics.sonar_history_missed += missed;
+            metrics_sonar_missed_add(missed);
             if (er == E_TMOUT) {
                 robot_network_busy(ROBOT_BOARD_SONAR);
             }
@@ -633,7 +741,7 @@ static void service(uint32_t now)
             --budget;
             break;
         }
-        metrics.latest_sonar_history_sequence = pending_sonar.history_sequence;
+        metrics_sonar_sequence_set(pending_sonar.history_sequence);
         have_sonar = false;
         --budget;
     }
@@ -645,6 +753,10 @@ static void service(uint32_t now)
 /* Strong symbol replaces the lib weak demo hook; prove binding in the ELF. */
 void cyw43_utk_app_poll(void)
 {
+    /* The radio can run before usermain initializes application providers. */
+    if (!app_startup_complete()) {
+        return;
+    }
     if (boot_id_get() == 0u) {
         /* Failed entropy cannot publish a repeatable boot identity. */
         return;
@@ -654,10 +766,10 @@ void cyw43_utk_app_poll(void)
     if (!configured) {
         configure();
     }
-    if (metrics.wifi_observed_priority == 0u) {
+    if (metrics_observed_priority_unset()) {
         T_RTSK status;
         if (tk_ref_tsk(TSK_SELF, &status) >= E_OK) {
-            metrics.wifi_observed_priority = (uint8_t)status.tskpri;
+            metrics_observed_priority_set_if_unset((uint8_t)status.tskpri);
         }
     }
     if (client != NULL && mqtt_client_is_connected(client)) {
@@ -681,13 +793,13 @@ void cyw43_utk_app_poll(void)
                     .will_qos = QOS_AT_LEAST_ONCE,
                     .will_retain = RETAIN_ON};
                 connecting = true;
-                metrics.mqtt_state = 1u;
+                metrics_state_set(1u);
                 inc(&metrics.connect_attempts);
                 if (mqtt_client_connect(client, &broker, ROBOT_MQTT_BROKER_PORT,
                                         connection_done, NULL,
                                         &info) != ERR_OK) {
                     connecting = false;
-                    metrics.mqtt_state = 0u;
+                    metrics_state_set(0u);
                     inc(&metrics.publish_failed);
                 }
             } else {
@@ -696,8 +808,6 @@ void cyw43_utk_app_poll(void)
         }
     }
     const uint32_t elapsed = drv_time_us() - started;
-    if (elapsed > metrics.mqtt_hook_max_us) {
-        metrics.mqtt_hook_max_us = elapsed;
-    }
+    metrics_hook_max_update(elapsed);
 }
 #endif

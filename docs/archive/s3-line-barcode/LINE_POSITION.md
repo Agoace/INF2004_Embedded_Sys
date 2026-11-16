@@ -10,8 +10,8 @@ sensor learns. The first detector is not changed.
 - Bench test: [`src/line_test.c`](../../../src/line_test.c); spin calibration in [`src/line_spin.c`](../../../src/line_spin.c)
 - Steering from the position: [Line steering](LINE_STEERING.md)
 - Sensor pins, robot's own sides: left **GP28**, centre GP27, right **GP26**, set in
-  [`src/line_sensors.c`](../../../src/line_sensors.c). [`src/ir_module_pins.h`](../../../src/ir_module_pins.h)
-  names them the other way round.
+  [`src/line_sensors.c`](../../../src/line_sensors.c). The retired three-sensor
+  demo named them the other way round.
 - Events go to the [Vehicle Controller](../VEHICLE_CONTROLLER.md)
 
 > **Update 2026-11-03:** the course allows only two line sensors. The robot
@@ -274,7 +274,7 @@ Procedure:
 ### Run 1: 2026-10-27, spin calibration, USB power
 
 > **Update 2026-10-27:** Run 1 and the hand-movement checks below used the
-> pin names from `ir_module_pins.h` (L = GP26, R = GP28). The first steering
+> retired three-sensor demo pin names (L = GP26, R = GP28). The first steering
 > run turned away from the line, and the operator confirmed that GP26 is the
 > robot's **right** sensor and GP28 its **left**. In the tables below, "L"
 > is the physical right sensor and "R" the physical left sensor. The code

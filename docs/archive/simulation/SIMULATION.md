@@ -183,7 +183,7 @@ heading turns left. Record units explicitly. The viewer may show degrees.
 
 ### Geometry
 
-Use the main [robot geometry record](../s2-motion/CALIBRATION_RESULTS.md#robot-geometry):
+Use the main [robot geometry record](../s2-motion/HISTORY.md#files):
 
 | Model value | Source and qualification |
 | --- | --- |
@@ -198,7 +198,7 @@ The operator approved the conservative 160 × 190 mm rectangle for the first
 release. Draw the same shape used for contact. Keep the outline configurable;
 do not claim that the left mount
 fills the full rectangle. The 58 mm offset is an echo mean, not a ruler
-measurement. [Ultrasonic run 7](../s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset)
+measurement. [Ultrasonic run 7](../s5-obstacle/HISTORY.md#files)
 says readings at this short range were about 11 mm high. A 47 mm true
 offset gives front x = 112 mm and corner radius about 138 mm. Provide a
 sensitivity scenario for that alternative. Servo axis and sensor face are
@@ -277,7 +277,7 @@ measure the actual board layout.
 ### Motors, counts, and coast
 
 Use separate left and right speed curves. The initial reference is the
-[5 V VIN unloaded speed table](../s2-motion/CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin):
+[5 V VIN unloaded speed table](../s2-motion/HISTORY.md#files):
 
 | Duty % | Left RPM (motor 1) | Right RPM (motor 2) |
 | ---: | ---: | ---: |
@@ -297,7 +297,7 @@ and check them mechanically. The record's historical RPM used 2540 counts
 for motor 1 and 2539 for motor 2. Apply its correction factors 2540/2535 and
 2539/2535 once. Keep that correction in model metadata.
 
-The [minimum unloaded duty record](../s2-motion/CALIBRATION_RESULTS.md#minimum-unloaded-motor-duty)
+The [minimum unloaded duty record](../s2-motion/HISTORY.md#files)
 reports VIN movement at 6 % left and 7 % right; it recommends 8 % common
 minimum and a 10 % start kick. The [loaded steering record](../../s3-line-barcode/LINE.md#how-it-works)
 uses about 12 % as the loaded start threshold. Do not implement a start
@@ -310,7 +310,7 @@ points; clamp duties to ±100. Reverse uses the same magnitude initially,
 which is another unmeasured assumption.
 
 Wheel speed = corrected RPM × 204.204 / 60 mm/s. Use 2535 counts per wheel
-turn, from [shared encoder calibration](../s2-motion/CALIBRATION_RESULTS.md#current-shared-calibration)
+turn, from [shared encoder calibration](../s2-motion/HISTORY.md#files)
 and the firmware wheel circumference in
 [`obstacle_detour.h`](../../../app_program/subsystem5/obstacle_detour.h). Accumulate fractional counts
 and publish signed integer counts, forward positive on both sides.
@@ -319,7 +319,7 @@ Integrate differential drive: centre speed = (vL + vR)/2; turn rate =
 
 Use a configurable first-order speed response for acceleration and coast;
 a zero command must not force speed instantly to zero. The
-[coast measurements](../s2-motion/MOTOR_ROTATION_DRIFT.md#coast-and-jog-measurements) give
+[coast measurements](../s2-motion/HISTORY.md#files) give
 27–28 counts left and 23 right at 10 % duty, wheels lifted, USB supply.
 They are not loaded coast values. Set response times from explicit scenario
 parameters; fit an unloaded reference profile to those distances, and sweep
@@ -391,12 +391,12 @@ over the next second; unloaded reference stops add 27.5/23 counts.
 
 - Keep `servo_set_pulse_us` return/clamp behaviour: 1100–1900 µs, centre
   1500 µs, positive angle left. Use angle = (pulse − 1500) × 90/1000 degrees
-  ([servo record](../s2-motion/CALIBRATION_RESULTS.md#servo), `servo.h`).
+  ([servo record](../s2-motion/HISTORY.md#files), `servo.h`).
 - Initially move to the commanded angle without a separate mechanical
   delay. Real scan/detour settle waits remain in the firmware. A configurable
   slew model can follow later; no measured slew rate is available here.
 - Use a 30° full beam, ±15° about the servo direction
-  ([scan beam](../s5-obstacle/OBSTACLE_SCAN.md#scan-points)), by default. The scenario
+  ([scan beam](../s5-obstacle/HISTORY.md#files)), by default. The scenario
   value `robot.ultrasonic.beam_deg` (0.5–30, full angle) sets a narrower
   beam; see [narrow beam](#narrow-beam-real-box). Find the nearest surface in
   the sector, not only on the centre ray. Draw the centre ray, sector, and
@@ -406,7 +406,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   The current box defaults use the deterministic specular rule below;
   ideal material remains selectable for old traces. This is not a claim
   about complete real ultrasound: tilted flat faces and thin objects can give no echo; see
-  [driver representation rules](../../s5-obstacle/ULTRASONIC.md#packed-result).
+  [driver representation rules](../../s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service).
 - Preserve the `ultrasonic.h` 16-bit result: bits 0–8 distance, 9–10 status,
   11–13 fault streak, 14–15 zero. VALID below 60 mm has distance code 0;
   60–511 mm is rounded distance. Beyond 511 or no detectable return gives
@@ -417,7 +417,7 @@ over the next second; unloaded reference stops add 27.5/23 counts.
   STUCK_HIGH injection publishes immediately with trigger success and no
   busy state. Other results become available only through service after
   their scheduled completion; do not return an echo synchronously.
-- Timing source: [driver constants](../s5-obstacle/ULTRASONIC_DRIVER.md#timing-constants)
+- Timing source: [driver constants](../s5-obstacle/HISTORY.md#files)
   and `ultrasonic.c`: 10 µs trigger, measured rise latency 212–217 µs,
   2 ms rise timeout, 3 ms echo timeout, sound speed 343 m/s. Choose 215 µs
   fixed latency within that measured range. Pulse duration is 2d/343 with
