@@ -79,6 +79,25 @@ Run `python3 scripts/check-docs.py`,
 committing. A source/layout change must update the agent map in the same
 commit. Keep private Wi-Fi/MQTT settings and generated output out of Git.
 
+## Branch state 2026-11-16
+
+Compared with `origin/mtk3-staging` `a0cd97b`. Update this table when a
+branch changes role.
+
+| Branch | Role | State |
+| --- | --- | --- |
+| `mtk3-staging` | Integration | Tip. Demo image source. |
+| `mtk3-motion`, `-line`, `-search`, `-scan`, `-detour`, `-vehicle`, `-telemetry`, `-dashboard`, `-imu` | Module branches | In staging. Merge staging in before new work. |
+| `mtk3-core-live` | Kernel timing, KERNEL_RAM | In staging. Active (SW7). |
+| `mtk3-b2b` | Barcode reader and B2b helper | Ahead of staging: size-tolerant reader, not hardware-proven. |
+| `mtk3-hil` | SIL (Webots) integration | Ahead of staging. Not for staging until the operator decides. |
+| `mtk3-hil-sw4`, `-sw5-trial*`, `-sw6` | SIL worker branches | In `mtk3-hil`. |
+| `mtk3-hil-sw5` | Gate 1 trial C1..C3 | Not merged. Record only (Gate 1 closed). |
+| `mtk3-cr1`, `mtk3-detour-tri`, `mtk3-core_migration`, `mtk3-core-m8`, `mtk3-core-m9`, `mtk3-core-review-sw5*`, `mtk3-core-staging-merge`, `mtk3-bench-sw6b`, `mtk3` | Finished helper branches | In staging. Record only. |
+| `mtk3-bench-sw6` | Bench record | In staging. Never merge again. |
+| `main` | Original history | Diverged. Do not touch. |
+| `ziven-barcode-algo`, `yanshan`, `jaison-imu` | Reference | Never merge. |
+
 ## Results and archived branches
 
 Earlier branch histories remain reachable through these archive tags. The
