@@ -70,8 +70,14 @@ not current acceptance reports. Local course originals are not public records.
   Contains: status, unchanged spin controls, signal evidence and thresholds, report fields, SHADOW procedure, first home-mat result (`a883455`) and policy correction, software validation.
 - [LIVE_SOURCE_CONTRACT.md](s3-line-barcode/LIVE_SOURCE_CONTRACT.md) — the S3-to-vehicle barcode boards.
   Contains: ownership (S3 writes record, vehicle writes control), final sizes (40 B record, 20 B control), five-word control, coherent read APIs, validation scope.
-- [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode.
-  Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, evidence and limits.
+- [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode, size-tolerant.
+  Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (narrow 4.0..7.0 mm fitted from the start star, wide by ratio 1.6..3.4, run ceiling min(35, 1.5w+|bias|) mm), historical evidence and limits.
+- [LIVE_COUNTS_SNAPSHOT.md](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — read-only per-run barcode reader totals.
+  Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
+- [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
+  Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
+- [BARCODE_RUN_SUMMARY.md](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — barcode ok/failed in the MQTT run summary.
+  Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
 - [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
   Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
 - [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.

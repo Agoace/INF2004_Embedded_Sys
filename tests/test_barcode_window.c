@@ -61,6 +61,12 @@ static uint16_t signal(float mm, const char *kind)
     if (strcmp(kind, "line_only") == 0) {
         return mm > 150.0f && mm < 168.0f ? 1200u : 160u;
     }
+    if (strcmp(kind, "junction") == 0) {
+        /* ASSUMED transverse line/CROSS/T arms, not measured mat optics. */
+        return (mm > 100.0f && mm < 118.0f) ||
+               (mm > 180.0f && mm < 215.0f) ||
+               (mm > 280.0f && mm < 350.0f) ? 1200u : 160u;
+    }
     if (mm < lead) {
         return strcmp(kind, "air") == 0 ? 1200u : white;
     }
@@ -144,7 +150,8 @@ static void run(const char *kind)
             const float valid_mm = distance(state.result.eligible_us - origin,
                                             variable);
             assert(state.elements == 29u);
-            assert(valid_mm >= end + 5.5f && valid_mm < end + 8.0f);
+            assert(valid_mm >= end + state.narrow - 0.4f &&
+                   valid_mm < end + state.narrow + 2.0f);
             uint32_t first = 0u;
             assert(barcode_window_candidate(&state, &first));
             assert(first == state.result.start_us);
@@ -178,13 +185,76 @@ static void alphabet(void)
     }
 }
 
+/* ASSUMED rectangular optics; print body excludes leading/trailing white.
+ * No claim about GP28 along-travel blur or measured minimum print size. */
+static void sizes(void)
+{
+    const float bodies[] = {274.0f, 210.0f, 141.0f};
+    const char *letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (unsigned int size = 0u; size < 3u; ++size) {
+        for (unsigned int ch = 0u; letters[ch] != '\0'; ++ch) {
+            for (unsigned int reverse = 0u; reverse < 2u; ++reverse) {
+                char text[] = {'*', letters[ch], '*', '\0'};
+                const float scale = bodies[size] / 273.5f;
+                make(text, reverse != 0u, scale);
+                lead = 10.0f * 5.8f * scale + 2.0f;
+                run("normal");
+                assert(state.result.accepted == (size < 2u));
+                if (size < 2u) {
+                    assert(state.result.letter == letters[ch]);
+                    assert(state.result.direction == reverse + 1u);
+                }
+            }
+        }
+    }
+    /* Scale extension must not waive framing, gaps, damage or quiet proof. */
+    for (unsigned int test = 0u; test < 7u; ++test) {
+        make("*F*", false, 210.0f / 273.5f);
+        lead = test == 0u ? 35.0f : 60.0f;
+        if (test == 1u) elements[9] *= 2.0f;
+        if (test == 2u) for (unsigned int i = 10u; i < 19u; ++i)
+            elements[i] *= 1.4f;
+        if (test == 3u) missing = 4;
+        if (test == 4u) merged = 5;
+        if (test == 5u) tail_white = 2.0f;
+        if (test == 6u) elements[0] = 40.0f;
+        run("normal");
+        assert(!state.result.accepted);
+        missing = merged = -1;
+        tail_white = 20.0f;
+    }
+    const float narrows[] = {3.9f, 4.05f, 6.95f, 7.1f};
+    for (unsigned int i = 0u; i < 4u; ++i) {
+        make("*F*", false, narrows[i] / 5.8f);
+        lead = 80.0f;
+        run("normal");
+        assert(state.result.accepted == (i == 1u || i == 2u));
+    }
+    for (unsigned int i = 0u; i < 2u; ++i) {
+        make("*F*", false, 210.0f / 273.5f);
+        for (unsigned int j = 0u; j < count; ++j)
+            if (elements[j] > 8.0f)
+                elements[j] = (i == 0u ? 1.5f : 3.6f) * 5.8f *
+                              (210.0f / 273.5f);
+        run("normal");
+        assert(!state.result.accepted);
+    }
+    run("line_only");
+    assert(!state.result.accepted);
+    run("junction");
+    assert(!state.result.accepted);
+    lead = 80.0f;
+}
+
 int main(int argc, char **argv)
 {
     const char *kind = argc > 1 ? argv[1] : "alphabet";
     assert(barcode_window_table_entry(26u) == 0u);
     assert((barcode_window_mapping_id() != 0u) ==
            barcode_window_table_confirmed());
-    if (strcmp(kind, "alphabet") == 0) {
+    if (strcmp(kind, "sizes") == 0) {
+        sizes();
+    } else if (strcmp(kind, "alphabet") == 0) {
         alphabet();
     } else if (strcmp(kind, "missing") == 0 || strcmp(kind, "merged") == 0) {
         for (int i = strcmp(kind, "missing") == 0 ? 0 : 1; i < 29; i += 2) {

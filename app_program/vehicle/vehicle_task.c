@@ -35,6 +35,7 @@
 #include "vehicle_log.h"
 #include "junction_line.h"
 #include "junction_source.h"
+#include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
 #include "run_stats.h"
@@ -122,6 +123,19 @@ static uint32_t obstacle_scans;
 static APP_BOARD(rm_detour_t) detour_board;
 static APP_BOARD(rm_summary_t) summary_board;
 static rs_t run_stats;
+static barcode_live_counts_t run_barcode;
+static bool have_run_barcode;
+
+/* The LINE writer owns epoch counters. Never read its mutable producer. */
+static void barcode_poll(uint32_t epoch)
+{
+    barcode_live_counts_t copy;
+    if (barcode_live_counts_try_read(&copy) == E_OK && copy.epoch == epoch) {
+        run_barcode = copy;
+        have_run_barcode = true;
+    }
+}
+
 static uint8_t pending_action;
 static uint32_t event_sequence;
 static uint32_t seen_commands[8];
@@ -256,6 +270,13 @@ static void publish_run_summary(void)
     if (rs_run_end(&run_stats, drv_time_ms(), stop_code, vsm.fault,
                    vsm.fault_detail, &summary, &aborted)) {
         publish_detour(&aborted);
+    }
+    if (have_run_barcode) {
+        summary.flags |= RM_SUMMARY_BARCODE_IMPLEMENTED;
+        summary.barcode_ok = (uint8_t)(run_barcode.frames > UINT8_MAX ?
+                                      UINT8_MAX : run_barcode.frames);
+        summary.barcode_failed = (uint8_t)(run_barcode.failures > UINT8_MAX ?
+                                          UINT8_MAX : run_barcode.failures);
     }
     summary.hump_peak = run_hump.peak_01mm;
     summary.hump_count = run_hump.count;
@@ -1118,6 +1139,8 @@ static void run_once(void)
     hump_emitted = 0u;
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
+    run_barcode = (barcode_live_counts_t){0};
+    have_run_barcode = false;
 #endif
     ja_init(&junction_line.action, SEARCH_CFG.speed_mm_s, epoch);
     junction_reported = JA_IDLE;
@@ -1153,6 +1176,9 @@ static void run_once(void)
             break;
         }
         hump_poll(epoch);
+#if TM_MQTT
+        barcode_poll(epoch);
+#endif
         const uint32_t now = drv_time_ms();
         sonar_snapshot_t sonar = {0};
         bool fresh = false;
@@ -1370,6 +1396,10 @@ static void run_once(void)
      * miss and replace the real stop reason. */
     finish_step();
     ja_finish(&junction_line.action, final_counts, drv_time_ms());
+#if TM_MQTT
+    /* Take the last same-run copy before STOP changes producer context. */
+    barcode_poll(epoch);
+#endif
     junction_source_stop(drv_time_ms());
     junction_observe();
     barcode_dump_request();
