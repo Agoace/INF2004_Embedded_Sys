@@ -17,7 +17,7 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(profile["track_mm"], 111.5)
         self.assertEqual(profile["counts_per_revolution"], 2535)
         self.assertEqual(profile["firmware_counts_per_m"], 12414)
-        self.assertEqual(profile.mount_mm("barcode"), (73, 77, -27.3))
+        self.assertEqual(profile.mount_mm("barcode"), (73, 73, -27.3))
         self.assertEqual(profile.mount_mm("line_l"), (122, 14.7, -23.5))
         self.assertEqual(profile['body_front_mm']-profile['body_length_mm'],-52.5)
         self.assertEqual(profile['caster_forward_mm'],82)

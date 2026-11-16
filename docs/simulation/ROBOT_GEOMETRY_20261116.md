@@ -27,7 +27,7 @@ and left from the rear driven axle; heights are above the floor.
 | Rear axle forward to sonar front | 85±3 | MEASURED | Face offset20 from retained servo axis65 |
 | Rear axle forward to GP26/27 centre | about122 | MEASURED | Replaces119; yaw lever arm122 |
 | Rear axle forward to GP28 | about73 | MEASURED | Replaces80±5 PHOTO_ESTIMATED on2026-11-11 |
-| GP28 LED centre left of centreline | 77 | MEASURED(operator ruler,2026-11-11) | Retained; Main confirms ledger row328 on2026-11-16 |
+| GP28 LED centre left of centreline | 73 | MEASURED | FINAL operator2026-11-16 clarification; replaces77 |
 | GP26/27 LED-tip floor clearance | 9±1 | PHOTO_ESTIMATED | Replaces8 for task A |
 | GP28 LED-tip floor clearance | 5.2±1 | PHOTO_ESTIMATED | Replaces5.5 |
 | GP26/27 module centre spacing | 14.7±1 | PHOTO_ESTIMATED | Replaces14.5; left sensor from centre sensor |
@@ -35,10 +35,10 @@ and left from the rear driven axle; heights are above the floor.
 
 ## Assumptions not replaced by these measurements
 
-- GP28 LED lateral centre remains **MEASURED** at77mm. Main corrected the
-  initial uncertainty on2026-11-16 using the2026-11-11 ruler/ledger record.
-  New envelope arithmetic64+17.5 minus about5mm half-housing gives76.5mm,
-  consistent with77mm; it is not a new fitted sensor-centre coordinate.
+- **FINAL GP28 clarification before any task A run:** the operator specifies
+  forward73mm **and** sideways73mm, both MEASURED2026-11-16. This supersedes
+  the intermediate73/77,80/73 and80/77 interpretations. No task A run used
+  those intermediate values. Do not infer LED centre from housing arithmetic.
 - Collision chassis width160mm and thickness35mm remain ASSUMED. The previous
   width source described the total mount envelope, not the chassis. Total
   height134mm does not justify a solid134mm-tall body collision box.
