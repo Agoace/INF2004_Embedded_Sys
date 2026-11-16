@@ -19,6 +19,7 @@ static unsigned int junction_results,spins;static ja_result_t junction_result;
 static bool spin_started;static int32_t spin_origin[2];
 static unsigned int junction_start_fail,snapshot_reads;
 static FP entry;static jmp_buf done;static uint32_t now;
+static uint32_t test_end_ms = 8000u;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
 static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,run_overrun,slow_stop,sonar_stale;
 static char last_reason[64];
@@ -85,7 +86,7 @@ ER tk_slp_tsk(TMO t) {
         echo_snapshot.status=SONAR_ECHO;echo_fresh=true;await_ack=true;
         next_ping=now+sonar_command.interval_ms;
     }
-    if (now>=(junction_mode ? 16000u : 8000u)) longjmp(done,1);
+    if (now>=(junction_mode ? 16000u : test_end_ms)) longjmp(done,1);
     return E_OK;
 }
 INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }

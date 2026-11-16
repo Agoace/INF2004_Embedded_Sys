@@ -22,6 +22,7 @@
 #define XOSC_MHz 12
 #define E_SYS (-5)
 #define E_OK 0
+#define E_NOSPT (-9)
 #define E_PAR (-17)
 #define E_CTX (-25)
 #define E_LIMIT (-34)
