@@ -66,8 +66,8 @@ kernel object sizes are in the [kernel record](../kernel/KERNEL.md).
 
 | Work | Implemented method | Rule |
 | --- | --- | --- |
-| Encoder and echo edges | Core-0 GPIO13 dispatcher, IRQ level 1 | Record counts/timestamps, set state and wake a task |
-| ADC sampling | TIMER alarm 0 / IRQ0, level 2; 1 ms absolute targets | Eight conversions per channel, timestamped 128-slot queue |
+| Encoder and echo edges | Core-0 GPIO13 dispatcher, IRQ level 1 requested, 0 on hardware ([F-NVIC](../kernel/NVIC_PRIORITY_FINDING.md)) | Record counts/timestamps, set state and wake a task |
+| ADC sampling | TIMER alarm 0 / IRQ0, level 2 requested, 0 on hardware ([F-NVIC](../kernel/NVIC_PRIORITY_FINDING.md)); 1 ms absolute targets | Eight conversions per channel, timestamped 128-slot queue |
 | Motion scheduling | Kernel cyclic, 10 ms | Complete one tick; do not replay old releases |
 | IMU observation | Separate kernel cyclic, 10 ms, task14 | Bounded bus/count reads; no motion wake-client replacement or driving decision |
 | Missing echo / stalled wheel | Bounded deadline or progress check | A missing edge cannot generate its own interrupt |

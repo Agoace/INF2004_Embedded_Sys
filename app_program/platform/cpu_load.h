@@ -42,4 +42,22 @@ void cpu_load_init(cpu_load_t *meter, uint32_t iterations, uint32_t elapsed_us);
  */
 uint16_t cpu_load_sample(cpu_load_t *meter, uint32_t count, uint32_t now_us);
 
+/*
+ * P1 run-peak latch, owned by one writer (Health, 1 Hz). An odd run epoch
+ * is a run: the first sample of a new odd epoch clears the peaks, and later
+ * samples keep the maximum. An even epoch freezes the values, so the load of
+ * a later dump does not count. CPU_LOAD_UNKNOWN or a value above
+ * CPU_LOAD_FULL is not counted. peak[i] stays CPU_LOAD_UNKNOWN until a
+ * known value is seen.
+ */
+typedef struct {
+    uint32_t epoch;   /* odd run epoch of the values, 0 before any run */
+    uint32_t samples; /* samples counted in that run */
+    uint16_t peak[2]; /* core 0, core 1 */
+} cpu_peak_t;
+
+void cpu_peak_init(cpu_peak_t *p);
+void cpu_peak_update(cpu_peak_t *p, uint32_t run_epoch, uint16_t load0,
+                     uint16_t load1);
+
 #endif

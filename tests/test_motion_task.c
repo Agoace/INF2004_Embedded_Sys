@@ -4,6 +4,7 @@
 #include <string.h>
 #include <tk/tkernel.h>
 #include "../app_program/subsystem2/motion.h"
+#include "../app_program/platform/run_timing.h"
 #include "../app_program/subsystem2/subsystem2.h"
 #include "../app_program/subsystem2/drv_motor_hw.h"
 #include "../app_program/platform/drv_gpio_irq.h"
@@ -61,7 +62,7 @@ INT tk_can_wup(ID id) { assert(id == TSK_SELF); return queued; }
 ER tk_wup_tsk(ID id) {
     assert(!held && !irq_off);
     if (id == 3) ++wake_calls;
-    else { assert(id == 4); ++notify_calls; }
+    else { assert(id == 4); ++notify_calls; now_us += 3u; }
     return E_OK;
 }
 INT tk_get_prc(void) { return 1; }
@@ -140,7 +141,23 @@ int main(int argc, char **argv) {
     }
     motion_status_t s;
     assert(motion_status(&s) == E_OK && s.counts[0] == 0 && s.counts[1] == 0);
+    rt_begin(1u); /* P1: count the notify call during a run */
     tick(20000u);
+    rt_snapshot_t rt;
+    rt_snapshot(&rt);
+    assert(rt.call[RT_K_MOT_WUP].count == 1u);
+    assert(rt.call[RT_K_MOT_WUP].sum_us == 3u);
+    assert(rt_motion_stamp_us() == 20000u + 7u + 3u);
+    /* P2: MOT_START at the tick start, then MOT_NOTIFY at the stamp. */
+    rt_tl_info_t tl;
+    rt_tl_record_t rec;
+    rt_tl_info(&tl);
+    assert(tl.records == 2u);
+    rt_tl_get(0u, &rec);
+    assert(rec.site == RT_TL_MOT_START && rec.us == 20000u);
+    rt_tl_get(1u, &rec);
+    assert(rec.site == RT_TL_MOT_NOTIFY && rec.us == 20000u + 7u + 3u);
+    rt_begin(2u);
     assert(motion_status(&s) == E_OK && s.counts[0] == 4 && s.counts[1] == 4);
     assert(motion_snapshot_try_read(&board_status,&board_us)==E_OK && !held);
     assert(board_us==20000u && board_status.ticks==2u && board_status.counts[0]==4 && board_status.counts[1]==4);

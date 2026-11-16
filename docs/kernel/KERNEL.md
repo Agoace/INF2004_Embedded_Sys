@@ -70,8 +70,11 @@ remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
 | Network | Bounded read-only boards, event/command queues; never a control mutex or PWM writer |
 | IMU | Bounded motion-count copy, own snapshot/hump/diagnostic boards; atomic vehicle calibration, run and LINE epochs; vehicle reads without a wait; diagnostic context prints after STOP/DUMP only; no motion mutex or commands |
 
-Only core 0 enables ADC/GPIO interrupts. GPIO IRQ13 is interrupt priority 1;
-ADC TIMER alarm0 uses 2; USB IRQ5 keeps 0; SysTick/PendSV use 3. These are
+Only core 0 enables ADC/GPIO interrupts. The source requests GPIO IRQ13 at
+interrupt priority 1 and ADC TIMER alarm0 at 2; USB IRQ5 keeps 0;
+SysTick/PendSV use 3. On the hardware IRQ0, IRQ5 and IRQ13 are all at 0,
+because `EnableInt` does not write the priority
+([F-NVIC](NVIC_PRIORITY_FINDING.md)). These are
 **interrupt** priorities, not task priorities. A high-level interrupt wrapper
 permits `tk_wup_tsk(explicit_id)` from the interrupt context.
 
@@ -175,6 +178,101 @@ Clamp to 0..1000. Unknown calibration, first sample or zero elapsed time gives
 The meter counts interrupt and task activity on core 0, not both cores or
 individual tasks. It replaces WFI sleep, so power use increases. Failure is
 diagnostic only and does not gate motion. Target accuracy is not established.
+
+## Run timing report (P1)
+
+P1 adds report-only latches for one vehicle run. The GP20 dump prints them
+after the unchanged `[load]` line (`TM_MQTT` builds). Code:
+[`run_timing.c`](../../app_program/platform/run_timing.c) and
+[`kernel_lock_stats.c`](../../app_program/platform/kernel_lock_stats.c).
+They do not change driving, wire formats, task priorities or placement.
+
+Run scope: Vehicle sets an odd epoch at run start and an even epoch after
+STOP. Each latch has one writer. A writer clears its own latch when it first
+sees a new run. After STOP, writes stop, so the dump shows the run, not the
+idle time after it. A latch that its writer did not touch in the run prints 0.
+
+| Line | Content | Writer |
+| --- | --- | --- |
+| `[load_run]` | peak load per core over the 1 Hz samples of the run; 65535 = unknown | Health |
+| `[bkl]` | big-kernel-lock figures from run start to STOP; `unavailable` with `SMP=0` | Vehicle |
+| `[isr_max]` | line alarm lateness (entry minus target), ADC read, ISR wake call | line ISR |
+| `[line_max]` | one sample, `lp_update`, barcode sample | line_task |
+| `[step_max]` | wake latency and the parts of a vehicle step | Vehicle |
+| `[kcall]` | `n`, `sum`, `max` per call site; mean = `sum / n` | ISR, line, motion, Vehicle |
+| `[first_overrun]` | step, elapsed, motion ticks since release, slowest part, wake latency, uptime | Vehicle |
+
+`[kcall]` sites, all on core 0 in the current placement: `isr_wup`
+(alarm `tk_wup_tsk`), `line_wake` (ISR wake return to line_task running),
+`line_can`, `line_loc`, `line_unl` (line_task `tk_can_wup`, `tk_loc_mtx`,
+`tk_unl_mtx`), `mot_wup` (motion notify `tk_wup_tsk`), `veh_wake` (motion
+notify return to Vehicle running), `veh_can`, `veh_status`
+(`motion_status` in `wait_tick`), `veh_send` (`telemetry_send`).
+Compare the same source built as `SMP=0`, force-core-0 and split.
+
+Limits: all values are wall time from the 1 MHz TIMER. Interrupts and
+higher-priority tasks inside an interval are included, so use the mean for
+`[kcall]`; a maximum can include preemption. Wake latencies above 100 ms are
+not counted. A late step skips `motion_status`; its tick count then comes
+from the motion board copy, and `ticks +4294967295` means it was not
+available. The `[bkl]` reset at run start can race a core-1 update. Runs
+shorter than 1 s can have zero `[load_run]` samples.
+
+Cost, measured at `d8adbcc` against `451e562` (school MQTT profiles):
+
+| Item | Cost |
+| --- | --- |
+| Static RAM (bss) | +408 B (split, force0, `SMP=0`); +384 B USB-only; +280 B capture |
+| Flash (text) | +4456 B split and force0; +4200 B `SMP=0` MQTT; +1672 B USB-only |
+| Hot-path code size | `alarm_irq` 304 -> 388 B, `line_task` 444 -> 572 B, `wait_tick` 780 -> 1010 B, `finish_step` 176 -> 332 B, `motion_task` 480 -> 516 B; all in flash (XIP) |
+| Stack frames | `rt_report` 120 B on the dump caller; `alarm_irq` +8 B (+20 B `rt_call`); `wait_tick` +8 B; `finish_step` +48 B |
+| Time | 2 or 3 extra TIMER reads per measured site |
+
+### Overrun timeline (P2)
+
+P2 adds a ring of the last 128 core-0 events of a run. It shows the order
+of events in a bad step; the P1 maxima cannot show this. It is report only.
+The GP20 dump prints it after the P1 lines with 20 ms USB yields:
+
+```
+[timeline] epoch E frozen F records N end_us T
+[tl] -US SITE ARG gGPIO | ... (8 records per line, oldest first)
+```
+
+`-US` is microseconds before the newest record. `gGPIO` is the low 16 bits
+of a GPIO-IRQ dispatch count (encoder and echo). The difference between two
+records is the number of GPIO interrupts between them.
+
+| Site | Event | ARG |
+| --- | --- | --- |
+| 1 | end of the line alarm ISR | queue depth |
+| 2 | line_task running | 0 |
+| 3 | line_task about to sleep | samples drained |
+| 4 | motion tick start | 0 |
+| 5 | motion notify returned | 0 |
+| 6 | sonar_task wake / ping sent | 0 / 1 |
+| 7 | Vehicle running | 0 |
+| 8 | end of a step part | `rt_max_t` part id |
+| 9 | `finish_step` | 1 = overrun |
+
+Run scope: a new run clears the ring. The first overrun freezes it
+(`frozen 1`), so it keeps the bad step. Without an overrun it holds the
+last events before STOP. Writers are core-0 contexts only. Each record is
+written in one core-local `DI`/`EI` section (index plus two word stores; no
+kernel call). A long gap between records is time in a context with no
+site, for example the USB or SIO interrupt or a kernel masked section.
+
+Cost, measured at the P2 commit against `ddc5436`: static RAM +1040 B
+(all profiles); flash +832 B (MQTT), +800 B (USB-only), +880 B (TEST).
+`rt_tl` (196 B) and `rt_tl_gpio` (32 B) run from RAM, because the line and
+GPIO ISRs call them; a flash (XIP) cache miss would change the times they
+record. They sit in `.data.ramfunc.*` sections, which the template linker
+script copies to RAM; flash callers reach them through a 16 B long-branch
+veneer each. Their interrupt mask uses the inline `get_primask` and
+`set_primask`, because `DI` calls `disint()` in flash. The ISRs that call
+them still run from flash. Cost of the RAM placement: `.data` +224 to
++232 B, `.text` -176 B. The RAM load segment is now RWX on purpose
+(`--no-warn-rwx-segments` in `build_make/app_sdk_hw.mk`).
 
 ## USB priority
 

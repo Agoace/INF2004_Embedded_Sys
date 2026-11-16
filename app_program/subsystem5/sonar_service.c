@@ -15,6 +15,7 @@
 #include "sonar_service.h"
 #include "drv_ultrasonic.h"
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
 /* Only aligned 32-bit atomic loads/stores: Cortex-M0+ needs no libatomic
  * read-modify-write helper. A reader never waits for the lower-priority writer.
  * All shared words are atomic, including the payload (no C data races). */
@@ -196,6 +197,7 @@ static void sonar_task(INT code, void *ctx)
         if (tk_slp_tsk(TMO_FEVR) < E_OK) {
             continue;
         }
+        rt_tl(RT_TL_SONAR_RUN, drv_time_us(), 0u);
         (void)tk_can_wup(TSK_SELF);
         sonar_request_t r;
         while (tk_rcv_mbf(requests, &r, TMO_POL) == (INT)sizeof(r)) {
@@ -230,6 +232,7 @@ static void sonar_task(INT code, void *ctx)
         if (!drv_ultrasonic_trigger()) {
             continue;
         }
+        rt_tl(RT_TL_SONAR_RUN, drv_time_us(), 1u); /* P2: ping sent */
         inflight = current;
         physical = true;
         next_ms = now + current.interval_ms;

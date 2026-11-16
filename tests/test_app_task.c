@@ -9,6 +9,7 @@
 #endif
 
 static int create_error, start_error, deleted, prints;
+static int load_lines, kcall_lines, overrun_lines, run_lines;
 static unsigned char *stack;
 static SZ size;
 static PRI expected_priority = 10;
@@ -61,6 +62,23 @@ int tm_printf(const UB *format, ...)
     assert(test_smp_irq_mask == 0u);
     assert(strstr((const char *)format, "[stack] wifi") == NULL);
     ++prints;
+    const char *f = (const char *)format;
+    if (strncmp(f, "[load] ", 7u) == 0) {
+        /* P1: the existing [load] line stays byte-identical. */
+        assert(strcmp(f, "[load] core 0 %u permille, core 1 %u permille\n")
+                   == 0 ||
+               strcmp(f, "[load] core 0 %u permille\n") == 0);
+        ++load_lines;
+    }
+    if (strncmp(f, "[kcall] ", 8u) == 0) ++kcall_lines;
+    if (strncmp(f, "[first_overrun] ", 16u) == 0) ++overrun_lines;
+    if (strncmp(f, "[load_run] ", 11u) == 0 ||
+        strncmp(f, "[bkl] ", 6u) == 0 ||
+        strncmp(f, "[isr_max] ", 10u) == 0 ||
+        strncmp(f, "[line_max] ", 11u) == 0 ||
+        strncmp(f, "[step_max] ", 11u) == 0) {
+        ++run_lines;
+    }
     return 0;
 }
 static void entry(void) { }
@@ -98,7 +116,13 @@ int main(void)
     assert(app_task_stacks(rows, APP_TASK_MAX_SLOTS) == 1u);
     assert(rows[0].used == 80u); /* Never forget high water. */
     app_task_report();
-    assert(prints == (TM_MQTT ? 2 : 1));
+    /* TM_MQTT: [load], then the P1 run lines: [load_run] [bkl] [isr_max]
+     * [line_max] [step_max], 10 [kcall] and [first_overrun]. */
+    assert(prints == (TM_MQTT ? 2 + 5 + 10 + 1 : 1));
+    assert(load_lines == (TM_MQTT ? 1 : 0));
+    assert(run_lines == (TM_MQTT ? 5 : 0));
+    assert(kcall_lines == (TM_MQTT ? 10 : 0));
+    assert(overrun_lines == (TM_MQTT ? 1 : 0));
     assert(app_task_start((FP)entry, 10, 1u, NULL) == E_PAR);
     expected_id = 8;
 #if APP_BENCH

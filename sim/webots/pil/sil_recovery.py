@@ -7,7 +7,7 @@ def analyze_recovery(rows):
     initial=rows[0][20];sign=1 if initial>1e-6 else -1 if initial< -1e-6 else 0
     settle=None;entered=None;first_hold=None
     for row in rows:
-        if len(row)not in(22,27,36) or any(not math.isfinite(v)for v in row):raise ValueError('invalid recovery row')
+        if len(row)not in(22,27,36,51) or any(not math.isfinite(v)for v in row):raise ValueError('invalid recovery row')
         if abs(row[20])<3:
             if entered is None:entered=int(row[0])
             if row[0]-entered+1>=500 and first_hold is None:first_hold=entered
