@@ -2,6 +2,8 @@
 import ctypes
 import hashlib
 import json
+import math
+import shutil
 from pathlib import Path
 import subprocess
 from .course_builder import Course
@@ -15,9 +17,13 @@ LINE_Y_MM=157.5
 SHEET_START_MM=970.5
 
 
-def junction_barcode_course(*,lead_mm=300):
+def junction_barcode_course(*,lead_mm=300,letter='A',offset_mm=0,yaw_deg=0):
     if lead_mm not in(75,100,200,300):raise ValueError('approved lead75/100/200/300mm')
-    sheet=barcode_sheet(sheet_start_mm=SHEET_START_MM,line_centre_y_mm=LINE_Y_MM,surface_z_mm=10,letter='A')
+    if letter not in ('A','F') or (offset_mm,yaw_deg) not in ((0,0),(5,-5)):
+        raise ValueError('approved A/F and aligned/+5mm,-5deg starts only')
+    sheet=barcode_sheet(sheet_start_mm=SHEET_START_MM,line_centre_y_mm=LINE_Y_MM,surface_z_mm=10,letter=letter)
+    yaw=math.radians(yaw_deg)
+    sensor_forward_x=80*math.cos(yaw)-77*math.sin(yaw)
     tiles=[]
     for col in range(1,6):
         for row in range(-1,2):
@@ -26,9 +32,9 @@ def junction_barcode_course(*,lead_mm=300):
             elif col==4 and abs(row)==1:kind='STRAIGHT'
             tiles.append(dict(id=f't{col+2}_{row+2}',column=col,row=row,kind=kind,rotation_deg=rotation))
     course=Course.from_dict(dict(schema=1,name='sil_junction_barcode_assumed',
-        provenance=dict(assumed=True,source='Observe-only *A* on A4landscape297x210mm; barheight160+/-10mm PHOTO_ESTIMATED; centredprint andinneredge line+25mm ASSUMED; paperEND->junctionCENTRE150mm ASSUMED. Cytron315x315x10mm tiles/18mm line nominalvendor dimensions; white margins/layout/seams ASSUMED. GP28MATproxies178/2321 MEASURED(MQTT2026-11-11,unlocated), assignment/responsepower1 ASSUMED. No action admission or controller tuning.'),
-        origin_mm=[0,0],start=dict(position_mm=[970.5-lead_mm-80,150.25],yaw_deg=0),allow_open_ports=True,
-        texture_mm_per_pixel=2,tiles=tiles,boxes=[],humps=[],barcodes=[dict(id='sheet_a',letter='A',
+        provenance=dict(assumed=True,source=f'Observe-only *{letter}* on A4landscape297x210mm; barheight160+/-10mm PHOTO_ESTIMATED; centredprint andinneredge line+25mm ASSUMED; paperEND->junctionCENTRE150mm ASSUMED. Cytron315x315x10mm tiles/18mm line nominalvendor dimensions; white margins/layout/seams ASSUMED. GP28MATproxies178/2321 MEASURED(MQTT2026-11-11,unlocated), assignment/responsepower1 ASSUMED. No action admission or controller tuning.'),
+        origin_mm=[0,0],start=dict(position_mm=[970.5-lead_mm-sensor_forward_x,150.25+offset_mm],yaw_deg=yaw_deg),allow_open_ports=True,
+        texture_mm_per_pixel=2,tiles=tiles,boxes=[],humps=[],barcodes=[dict(id='sheet_'+letter.lower(),letter=letter,
             centre_mm=list(sheet.sheet_centre_mm),rotation_deg=0,bar_height_mm=160,
             paper_size_mm=[297,210],paper_thickness_mm=0,reverse=False)]))
     assert sheet.junction_centre_x_mm==1417.5
@@ -57,16 +63,27 @@ def barcode_calibration_course():
     return Course.from_dict(data)
 
 
-def build_barcode_library(directory):
+def build_barcode_library(directory,*,window_revision=None):
     directory=Path(directory);directory.mkdir(parents=True,exist_ok=True);library=directory/'libsil_line.so'
+    source_root=ROOT
+    if window_revision is not None:
+        if window_revision not in ('cbcb557','52244f2'):raise ValueError('approved old/new window revisions only')
+        source_root=directory/'native-source'
+        shutil.copytree(ROOT/'app_program',source_root/'app_program')
+        shutil.copytree(ROOT/'sim/webots/controllers/sil_line',source_root/'sim/webots/controllers/sil_line',ignore=shutil.ignore_patterns('__pycache__'))
+        for suffix in ('c','h'):
+            name=f'app_program/subsystem3/barcode_window.{suffix}'
+            (source_root/name).write_bytes(subprocess.check_output(['git','show',f'{window_revision}:{name}'],cwd=ROOT))
     command=['cc','-std=c11','-O2','-fPIC','-shared','-Wall','-Wextra','-Wconversion','-Wshadow','-Werror',
         '-DJUNCTION_TEST_CMD=0','-DBARCODE_LIVE_ENABLE=0','-DBARCODE_MEASURED_CLEAR_MM=0',
-        '-I',str(ROOT),*(str(ROOT/n)for n in BC_SOURCES),'-lm','-o',str(library)]
+        '-I',str(source_root),*(str(source_root/n)for n in BC_SOURCES),'-lm','-o',str(library)]
     subprocess.run(command,check=True,capture_output=True,text=True)
-    sources=(*BC_SOURCES,*CONFIG_HEADERS,'sim/webots/controllers/sil_line/motor_adapter.c')
+    sources=tuple(dict.fromkeys((*BC_SOURCES,*CONFIG_HEADERS,'sim/webots/controllers/sil_line/motor_adapter.c',
+        *(str(p.relative_to(source_root))for p in (source_root/'app_program').rglob('*.h')))))
     (directory/'sil-build.json').write_text(json.dumps(dict(command=command,
         compiler=subprocess.check_output(['cc','--version'],text=True).splitlines()[0],
-        sources_sha256={n:hashlib.sha256((ROOT/n).read_bytes()).hexdigest()for n in sources},
+        window_revision=window_revision or 'current',
+        sources_sha256={n:hashlib.sha256((source_root/n).read_bytes()).hexdigest()for n in sources},
         library_sha256=hashlib.sha256(library.read_bytes()).hexdigest(),
         scope='Unchanged native B2b SHADOW reader and jl_module; synchronous SDK board/acquisition replacement, no flag/command injection'),indent=2)+'\n')
     return library
@@ -81,6 +98,12 @@ class BarcodeController(MotorLineController):
         self.lib.sil_bc_cal_add.argtypes=[ctypes.c_uint32,ctypes.c_uint32,ctypes.c_uint16];self.lib.sil_bc_cal_add.restype=None
         self.lib.sil_bc_cal_end.argtypes=[pointer];self.lib.sil_bc_cal_end.restype=None
         self.lib.sil_bc_events.argtypes=[pointer];self.lib.sil_bc_events.restype=None
+        self.has_diagnostics=hasattr(self.lib,'sil_bc_inputs')
+        if self.has_diagnostics:
+            for name in ('sil_bc_inputs','sil_bc_details','sil_bc_component_row'):
+                getattr(self.lib,name).argtypes=[pointer];getattr(self.lib,name).restype=None
+            self.lib.sil_bc_component_begin.argtypes=[];self.lib.sil_bc_component_begin.restype=None
+            self.lib.sil_bc_trace_full.argtypes=[];self.lib.sil_bc_trace_full.restype=ctypes.c_uint32
         self.lib.sil_barcode_update.argtypes=[ctypes.c_uint16,ctypes.c_uint16,ctypes.c_uint32,ctypes.c_int32,ctypes.c_int32,ctypes.c_uint16,pointer]
         self.lib.sil_barcode_update.restype=None
     def barcode_begin(self):self.lib.sil_bc_cal_begin()
@@ -105,6 +128,25 @@ class BarcodeController(MotorLineController):
             'desired_left_mm_s','desired_right_mm_s','motor_faults',*SEARCH_FIELDS,*BC_FIELDS)
         result=dict(zip(fields,map(int,out)));result['left_pct']/=10;result['right_pct']/=10
         return result
+    def inputs(self):
+        if not self.has_diagnostics:raise ValueError('historical library has no acquisition trace API')
+        out=(ctypes.c_int32*(1+5300*18))();self.lib.sil_bc_inputs(out)
+        return [list(map(int,out[1+i*18:1+(i+1)*18]))for i in range(out[0])]
+    def details(self):
+        if not self.has_diagnostics:raise ValueError('historical library has no detail API')
+        out=(ctypes.c_int32*(1+256*24))();self.lib.sil_bc_details(out)
+        fields=('sim_ms','kind','reason','letter','accepted','bound_before','mode','tag','motor_us',
+            'prior_motor_us','left','right','prior_left','prior_right','prior_valid','serial','start_us','read_us',
+            'leading_um','narrow_um','wide_um','producer_failures','publications','motor_faults')
+        return [dict(zip(fields,map(int,out[1+i*24:1+(i+1)*24])))for i in range(out[0])]
+    def component_replay(self,inputs):
+        if not 1<=len(inputs)<=5300:raise ValueError('component input budget1..5300rows')
+        self.lib.sil_bc_component_begin()
+        for row in inputs:
+            if len(row)!=18:raise ValueError('recorded native input must have18fields')
+            self.lib.sil_bc_component_row((ctypes.c_int32*18)(*row))
+        if self.lib.sil_bc_trace_full():raise ValueError('bounded native trace overflow')
+        return self.details()
     def events(self):
         out=(ctypes.c_int32*(1+128*14))();self.lib.sil_bc_events(out)
         fields=('sim_ms','serial','reason','letter','accepted','start_us','read_us','rise','fall',

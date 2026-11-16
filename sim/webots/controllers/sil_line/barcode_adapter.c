@@ -7,6 +7,7 @@
 #include "app_program/subsystem3/barcode_live_producer.h"
 #include "app_program/vehicle/junction_line.h"
 #include "app_program/vehicle/junction_live.h"
+#include <string.h>
 static lt_t trace;
 static ls_t search;
 static jl_t junction;
@@ -26,6 +27,10 @@ static uint32_t attempts,quiet_pass,start_pass,decoded,frame_admission;
 static uint32_t previous_window_serial;
 static uint32_t event_count,event_full;
 static int32_t events[128][14];
+/* Host-only bounded acquisition/event evidence; never a robot input. */
+static uint32_t input_count,detail_count;
+static int32_t inputs[5300][18],details[256][24];
+static uint32_t prior_us,prior_left,prior_right,prior_valid,prior_bound,observed_motor_faults;
 
 /* Replacement for the SDK publication call: synchronous coherent value + tag.
  * The actual jlive code remains the only control writer. */
@@ -41,7 +46,7 @@ void sil_reset(void) {
     motor_counts[0]=0;motor_counts[1]=0;
     drive=(vsm_drive_t){0,0,0,VSM_ACT_STOP};
     attempts=0u;quiet_pass=0u;start_pass=0u;decoded=0u;frame_admission=0u;previous_window_serial=0u;
-    event_count=0u;event_full=0u;
+    event_count=0u;event_full=0u;input_count=0u;detail_count=0u;
     lt_init(&trace,&LINE_CFG);ls_init(&search,&SEARCH_CFG);jl_init(&junction,&trace,SEARCH_CFG.speed_mm_s);
     ja_init(&junction.action,SEARCH_CFG.speed_mm_s,1u);
     vsm_init(&shell,VSM_DEFAULT_ROUTES,VSM_DEFAULT_ROUTE_COUNT);
@@ -70,10 +75,23 @@ void sil_search_config(int32_t *out) {
     out[0]=SEARCH_CFG.speed_mm_s;out[1]=SEARCH_CFG.turn_counts;
     out[2]=LINE_CFG.straight_counts;out[3]=LINE_CFG.hint_counts;
 }
+static void detail(uint32_t ms,uint32_t kind,uint32_t reason,uint32_t letter,uint32_t accepted) {
+    if (detail_count>=256u) {event_full=1u;return;}
+    const barcode_window_result_t *w=&producer.window.result;
+    const int32_t row[24]={(int32_t)ms,(int32_t)kind,(int32_t)reason,(int32_t)letter,(int32_t)accepted,
+        (int32_t)prior_bound,(int32_t)control_copy.mode,(int32_t)control_tag,
+        (int32_t)motor_us,(int32_t)prior_us,motor_counts[0],motor_counts[1],
+        (int32_t)prior_left,(int32_t)prior_right,(int32_t)prior_valid,(int32_t)w->serial,
+        (int32_t)w->start_us,(int32_t)w->read_us,(int32_t)(w->leading_mm*1000.f),
+        (int32_t)(w->narrow_mm*1000.f),(int32_t)(w->wide_mm*1000.f),
+        (int32_t)producer.failures,(int32_t)producer.publications,(int32_t)observed_motor_faults};
+    memcpy(details[detail_count++],row,sizeof(row));
+}
 static void reader_event(uint32_t ms) {
     const barcode_window_t *w=&producer.window;
+    if (w->result.serial==0u) previous_window_serial=0u;
     if (w->result.serial!=0u && w->result.serial!=previous_window_serial) {
-        ++attempts;
+        ++attempts;detail(ms,1u,w->result.reason,(uint8_t)w->result.letter,w->result.accepted);
         if (event_count<128u) {
             int32_t *r=events[event_count++];
             r[0]=(int32_t)ms;r[1]=(int32_t)w->result.serial;r[2]=(int32_t)w->result.reason;
@@ -87,10 +105,24 @@ static void reader_event(uint32_t ms) {
     previous_window_serial=w->result.serial;
     /* direction is set by native start_star only AFTER fitted10n quiet proof. */
     if (w->direction!=0u) {quiet_pass=1u;start_pass=1u;}
-    if (producer.event_pending) producer.event_pending=false;
+    if (producer.event_pending) {
+        detail(ms,2u,producer.event.reason,producer.event.record.letter,producer.event.reason==BW_OK);
+        producer.event_pending=false;
+    }
     if (producer.record_pending) {
         decoded=producer.slot.letter;producer.record_pending=false;
     }
+}
+static void observe_reader(const barcode_live_input_t *in) {
+    const barcode_window_t *w=&producer.window;
+    observed_motor_faults=in->motor_faults;
+    prior_valid=producer.window_live && w->motor_count!=0u;prior_bound=producer.bound;
+    prior_us=0u;prior_left=0u;prior_right=0u;
+    if (prior_valid) {
+        const barcode_window_motor_t *last=&w->motors[w->motor_count-1u];
+        prior_us=last->us;prior_left=last->left;prior_right=last->right;
+    }
+    barcode_live_producer_observe(&producer,in);reader_event(in->now_ms);
 }
 void sil_barcode_update(uint16_t left,uint16_t centre,uint32_t ms,int32_t left_count,int32_t right_count,uint16_t raw_bc,int32_t *out) {
     const uint16_t raw[3]={left,centre,0};const int32_t counts[2]={left_count,right_count};
@@ -103,7 +135,15 @@ void sil_barcode_update(uint16_t left,uint16_t centre,uint32_t ms,int32_t left_c
         .tag=control_tag,.now_us=ms*1000u,.now_ms=ms,.adc_us=ms*1000u,.motor_us=motor_us,
         .left=(uint32_t)motor_counts[0],.right=(uint32_t)motor_counts[1],.motor_faults=mc_faults(&mc),
         .missed=0u,.dropped=0u,.raw=raw_bc,.control_ok=true,.motor_ok=true};
-    barcode_live_producer_observe(&producer,&input);reader_event(ms);
+    if (input_count<5300u) {
+        const int32_t row[18]={(int32_t)ms,(int32_t)input.now_us,(int32_t)input.adc_us,(int32_t)input.motor_us,
+            (int32_t)input.left,(int32_t)input.right,(int32_t)input.motor_faults,(int32_t)input.missed,(int32_t)input.dropped,
+            input.raw,input.control_ok,input.motor_ok,(int32_t)input.tag,(int32_t)input.control.epoch,
+            (int32_t)input.control.eligibility_revision,(int32_t)input.control.revision_ms,
+            (int32_t)input.control.ack_sequence,(int32_t)input.control.mode};
+        memcpy(inputs[input_count++],row,sizeof(row));
+    } else event_full=1u;
+    observe_reader(&input);
     if (ms%10u==0u) {
         junction.sample=(ja_sample_t){.line_stamp=ms*1000u,.line_age_ms=0u,.valid=true};
         const vsm_inputs_t in={.line=&lp,.line_event=pending_line_event,.counts={left_count,right_count},
@@ -140,6 +180,28 @@ void sil_barcode_update(uint16_t left,uint16_t centre,uint32_t ms,int32_t left_c
     out[29]=producer.slot.valid;out[30]=producer.slot.flags;out[31]=(int32_t)frame_admission;
     out[32]=live.reasons[JLIVE_CONFIRMED];out[33]=junction.action.phase;
     out[34]=junction.action.command.command;out[35]=(int32_t)event_full;
+}
+uint32_t sil_bc_trace_full(void) { return event_full; }
+void sil_bc_inputs(int32_t *out) {
+    out[0]=(int32_t)input_count;
+    memcpy(out+1,inputs,input_count*sizeof(inputs[0]));
+}
+void sil_bc_details(int32_t *out) {
+    out[0]=(int32_t)detail_count;
+    memcpy(out+1,details,detail_count*sizeof(details[0]));
+}
+void sil_bc_component_begin(void) {
+    producer=(barcode_live_producer_t){0};event_count=0u;detail_count=0u;event_full=0u;
+    attempts=0u;quiet_pass=0u;start_pass=0u;decoded=0u;previous_window_serial=0u;
+}
+void sil_bc_component_row(const int32_t *r) {
+    control_copy=(barcode_live_control_t){(uint32_t)r[13],(uint32_t)r[14],(uint32_t)r[15],(uint32_t)r[16],(uint32_t)r[17]};
+    control_tag=(uint32_t)r[12];motor_us=(uint32_t)r[3];motor_counts[0]=r[4];motor_counts[1]=r[5];
+    const barcode_live_input_t in={.calibration=&bc_cal[bc_family].report,.control=control_copy,
+        .tag=control_tag,.now_ms=(uint32_t)r[0],.now_us=(uint32_t)r[1],.adc_us=(uint32_t)r[2],
+        .motor_us=motor_us,.left=(uint32_t)r[4],.right=(uint32_t)r[5],.motor_faults=(uint32_t)r[6],
+        .missed=(uint32_t)r[7],.dropped=(uint32_t)r[8],.raw=(uint16_t)r[9],.control_ok=r[10]!=0,.motor_ok=r[11]!=0};
+    observe_reader(&in);
 }
 void sil_bc_events(int32_t *out) {
     out[0]=(int32_t)event_count;

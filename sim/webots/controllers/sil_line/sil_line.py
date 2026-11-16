@@ -182,7 +182,13 @@ def run(robot,project):
             forward=bool(rows)and rows[-1][12]>rows[0][12],
             shadow_preserved=bool(rows)and all(r[44]==0 and not(int(r[45])&0x40)and r[49]==0 for r in rows))
         complete=all(checks.values())and not fault
+    evidence=None
+    if config.get('barcode_trial')and getattr(controller,'has_diagnostics',False):
+        evidence=(controller.inputs(),controller.details(),controller.events())
     proof=replay(project,rows)if complete else False
+    if proof and evidence is not None:
+        checks['acquisition_replay_match']=evidence==(controller.inputs(),controller.details(),controller.events())
+        proof=checks['acquisition_replay_match']
     output=project/'sil-result';output.mkdir()
     with (output/'samples.csv').open('w',newline='')as stream:
         writer=csv.writer(stream);writer.writerow((*FIELDS,*extra_fields(config)));writer.writerows(rows)
@@ -195,6 +201,10 @@ def run(robot,project):
             junction_detected=any(r[6]for r in rows),junction_phase=last[48],action_command=last[49],
             final_module=last[27],final_shell_state=last[28],final_shell_fault=last[29])
         (output/'barcode-events.json').write_text(json.dumps(controller.events(),indent=2)+'\n')
+        if evidence is not None:
+            (output/'barcode-inputs.json').write_text(json.dumps(evidence[0],separators=(',',':'))+'\n')
+            (output/'barcode-details.json').write_text(json.dumps(evidence[1],indent=2)+'\n')
+            (output/'barcode-events.json').write_text(json.dumps(evidence[2],indent=2)+'\n')
     (output/'rejections.json').write_text(json.dumps(rejections,indent=2)+'\n')
     success_status='SIL_RECOVERY_EXPERIMENT_COMPLETE'if config.get('recovery_trial')else'SIL_LINE_COMPLETE'
     summary=dict(status=success_status if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),

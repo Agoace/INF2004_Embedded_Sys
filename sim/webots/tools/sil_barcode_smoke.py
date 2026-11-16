@@ -45,7 +45,11 @@ def main():
     parser.add_argument('--output',type=Path,required=True);parser.add_argument('--spin-calibration',type=Path,required=True)
     parser.add_argument('--sigma',type=int,choices=FAMILIES,required=True)
     parser.add_argument('--lead-mm',type=int,choices=(75,100,200,300),default=100)
+    parser.add_argument('--letter',choices=('A','F'),default='A');parser.add_argument('--zigzag',action='store_true')
     parser.add_argument('--timeout-seconds',type=int,choices=(1200,1500),default=1200);args=parser.parse_args()
+    if args.letter=='F' and(not args.zigzag or args.sigma!=1 or args.lead_mm!=75 or args.timeout_seconds!=1200):
+        parser.error('F task approved only zigzag/along1/lead75/1200s')
+    if args.zigzag and args.letter!='F':parser.error('zigzag task uses F only')
     if args.timeout_seconds==1500 and(args.sigma!=8 or args.lead_mm!=75):parser.error('1500s approved ONLY for along8/lead75 final task run')
     if os.environ.get('DISPLAY')!=':0'or not os.environ.get('XAUTHORITY'):parser.error('approved existing DISPLAY=:0/XAUTHORITY required')
     if args.output.exists():parser.error('output must be new')
@@ -54,8 +58,9 @@ def main():
     args.output.mkdir(parents=True);results=[]
     for family in(args.sigma,):
         project,world=prepare_project(args.output/f'along{family}',line_search=True,line_profile='B',
-            spin_calibration=spin,course_override=junction_barcode_course(lead_mm=args.lead_mm),optical_sampler='full',
-            barcode=True,sigma_along_mm=family,duration_ms=5300,stop_after_junction=True)
+            spin_calibration=spin,course_override=junction_barcode_course(lead_mm=args.lead_mm,letter=args.letter,
+                offset_mm=5 if args.zigzag else 0,yaw_deg=-5 if args.zigzag else 0),optical_sampler='full',
+            barcode=True,sigma_along_mm=family,duration_ms=5300,stop_after_junction=True,window_revision='52244f2')
         begin=monotonic()
         status,pid,command,contents=launch_project(project,world,args.timeout_seconds,label='sil-barcode')
         wall_seconds=monotonic()-begin
@@ -75,7 +80,8 @@ def main():
         result=dict(complete=complete,along_sigma_mm=family,timeout_seconds=args.timeout_seconds,max_simulated_ms=5300,
             wall_seconds=wall_seconds,lead_mm=args.lead_mm,stop_after_junction=True,
             independent_replay=proof,exit_status=status,owned_pgid=pid,command=command,summary=summary,
-            speed_at_boundaries=speeds,error=error,expected_letter='A',expected_map='LEFT',
+            speed_at_boundaries=speeds,error=error,expected_letter=args.letter,expected_map='LEFT'if args.letter=='A'else'UNMAPPED',
+            zigzag_start=dict(offset_mm=5,yaw_deg=-5,source='SIL_SEARCH_RESULTS_20261115.md;gridB/offset+5-yaw-5')if args.zigzag else None,
             admission='OBSERVE_ONLY_SHADOW_UNCHANGED',physical_gp28_edge_gate='FAIL_RETAINED')
         (project/'barcode-smoke-summary.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n');results.append(result)
         print(json.dumps(dict(along_sigma_mm=family,complete=complete,speeds=speeds,

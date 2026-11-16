@@ -66,3 +66,9 @@ class BarcodeSILTests(unittest.TestCase):
             self.assertTrue(all(e['reason']!=0 for e in c.events()))
             self.assertEqual(r['bc_admission_reason'],1)
             self.assertTrue(r['bc_quiet_pass']);self.assertTrue(r['bc_start_pass'])
+            stream=c.inputs();details=c.details()
+            self.assertEqual(len(stream),4000)
+            self.assertEqual(c.component_replay(stream),details)
+            with self.assertRaises(ValueError):c.component_replay([[0]*17])
+            # Overflow is a failed replay, never silently truncated evidence.
+            with self.assertRaises(ValueError):c.component_replay([[0]*18]*10000)
