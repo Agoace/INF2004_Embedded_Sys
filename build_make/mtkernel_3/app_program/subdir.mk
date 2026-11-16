@@ -32,6 +32,16 @@ ifeq ($(PIL_GATE1),1)
 mtkernel_3/kernel/sysdepend/pico_rp2040/devinit.o: CFLAGS += -include ../app_program/sim/pil_gate1_device_config.h
 mtkernel_3/app_program/subsystem3/drv_line.o: CFLAGS += -Ddrv_time_us=pil_gate1_line_time_us
 endif
+# Empty bench objects can still change veneer ordering and ordinary ELF bytes.
+ifneq ($(BENCH_KERNEL),1)
+TEMP_SRCS := $(filter-out ../app_program/bench_kernel/%.c,$(TEMP_SRCS))
+else
+TEMP_SRCS := $(filter-out ../app_program/platform/drv_gpio_irq_hw.c \
+    ../app_program/subsystem2/drv_motor_hw.c \
+    ../app_program/subsystem3/drv_line_hw.c \
+    ../app_program/subsystem4/imu_hw.c \
+    ../app_program/subsystem5/drv_ultrasonic_hw.c,$(TEMP_SRCS))
+endif
 TEMP_OBJS = $(TEMP_SRCS:.c=.o)
 TEMP_DEPS = $(TEMP_SRCS:.c=.d)
 

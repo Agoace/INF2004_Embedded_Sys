@@ -17,6 +17,8 @@
 #include "../platform/drv_time.h"
 #include "../platform/drv_watchdog.h"
 #include "../platform/idle_meter.h"
+#include "../platform/cpu_load.h"
+#include "../platform/run_timing.h"
 
 /* Default extra health provider. Integration code can override it. */
 void __attribute__((weak)) robot_health_collect(rm_heartbeat_t *out)
@@ -38,6 +40,8 @@ typedef struct {
 } health_snapshot_t;
 
 static APP_BOARD(health_snapshot_t) board;
+/* P1: per-run peak load; Health is the only writer. */
+static cpu_peak_t run_peak;
 
 /* Build one health snapshot and publish it to the board. */
 static void refresh(void)
@@ -50,6 +54,14 @@ static void refresh(void)
     /* RT-0069/C2: Health is the single 1 Hz sampler for both meters. */
     idle_meter_sample_all();
     v.value.cpu_load_permille = idle_meter_load_permille();
+#if TK_SUPPORT_SMP
+    const uint16_t load1 = idle_meter_load_permille_core1();
+#else
+    const uint16_t load1 = CPU_LOAD_UNKNOWN;
+#endif
+    cpu_peak_update(&run_peak, rt_epoch(), v.value.cpu_load_permille, load1);
+    rt_load(run_peak.epoch, run_peak.samples, run_peak.peak[0],
+            run_peak.peak[1]);
     app_stack_t stacks[HEALTH_STACK_SLOTS];
     const unsigned int n = app_task_stacks(stacks, HEALTH_STACK_SLOTS);
     for (unsigned int i = 0u; i < n; ++i) {
@@ -89,6 +101,7 @@ static void health_tick(void *ctx)
 /* Create the 1 s cyclic handler. Returns E_OK or a kernel error. */
 int robot_health_init(void)
 {
+    cpu_peak_init(&run_peak);
     if (health_cyclic > 0) {
         return E_OK;
     }

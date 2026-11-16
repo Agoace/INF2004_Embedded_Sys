@@ -85,7 +85,7 @@ measurement of physical wheel stop time.
 | Motor PWM | Slices4/5, divider1, wrap6249 at 125 MHz =20 kHz; clear opposite pin before duty |
 | Servo | GP15, slice7B, divider125, wrap19999 =50 Hz and1 µs/count |
 | Encoders | Both edges, no pulls; left GP16/17 sign+1, right GP4/5 sign-1 |
-| GPIO interrupt | Shared core-0 IRQ13 dispatcher; acknowledge edge bits before callbacks; interrupt priority1 |
+| GPIO interrupt | Shared core-0 IRQ13 dispatcher; acknowledge edge bits before callbacks; interrupt priority 1 requested, 0 on hardware ([F-NVIC](../kernel/NVIC_PRIORITY_FINDING.md)) |
 | Time | `drv_time_us()` reads TIMER; millisecond read uses a stable high/low pair, not truncated microseconds |
 | Startup | Kernel selects the 1 µs watchdog tick before devices/radio/tasks; application verification is idempotent |
 | Clock checks | Production error limit2%; cold-power S0-U01 limit1%; warm boot alone is insufficient |

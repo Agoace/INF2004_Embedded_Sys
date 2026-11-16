@@ -42,6 +42,7 @@ The archived development record retains older CMake bench examples.
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
 | SWD debug probe | [docs/kernel/SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — wiring, safety, memory reads, GDB on both cores |
+| Interrupt priorities | [docs/kernel/NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: measured IPR, all external IRQs at 0 |
 | Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Current architecture | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — tasks/cores, interrupt/polling rules and shell routes; [`vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), [`test_vehicle_sm.c`](../tests/test_vehicle_sm.c). |
@@ -153,13 +154,34 @@ The archived development record retains older CMake bench examples.
 
 See [Branch layout](architecture/BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](archive/architecture/BRANCH_LAYOUT.md#archived-branches) of deleted branches.
 
+The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
+[`bench_stats.c`](../app_program/bench_kernel/bench_stats.c), its
+[public read API](../app_program/bench_kernel/bench_stats.h),
+[core0 publication API](../app_program/bench_kernel/bench_stats_publish.h) and
+[host test](../tests/test_bench_kernel_stats.c), plus the
+[`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
+[host test](../tests/test_bench_report.c). The bench directory is excluded
+from ordinary source selection. The
+[step-0 procedure](kernel/BENCH_KERNEL_STEP0.md) covers the bench-only
+[`bench_generator.c`](../app_program/bench_kernel/bench_generator.c),
+[`bench_runtime.c`](../app_program/bench_kernel/bench_runtime.c),
+[`bench_timer_hw.c`](../app_program/bench_kernel/bench_timer_hw.c),
+[`bench_motor_hw.c`](../app_program/bench_kernel/bench_motor_hw.c) and
+[`bench_inputs_hw.c`](../app_program/bench_kernel/bench_inputs_hw.c).
+The report reads the stopped native motion board for per-wheel comparison.
+The [virtual GPIO state](../app_program/bench_kernel/bench_gpio.c) and
+[hardware-provider seam](../app_program/bench_kernel/bench_gpio_hw.c) have a
+[host test](../tests/test_bench_kernel_gpio.c); no native dispatcher is replaced.
+The [encoder integration test](../tests/test_bench_kernel_encoder.c) connects
+that real dispatcher to the real motion callback/controller with host scheduling.
+
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
 - [Archived Robo Pico RTOS multicore plan](archive/architecture/robo_pico_rtos_multicore_plan.md) — full historical proposal, not the current task/core contract.
 
 ## Course template layout
 
-See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/`. Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL_RAM.md) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle` start there. `mtk3-telemetry` also starts from `mtk3`.
@@ -184,7 +206,7 @@ vehicle task described below.
   [`test_robot_mqtt.c`](../tests/test_robot_mqtt.c) check publication,
   lifecycle ordering and refusal of early application work.
 
-- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at priority 1.
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/NVIC_PRIORITY_FINDING.md)).
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
 - [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
 - [`testing/subsystem1/TEST_LOG.md`](../testing/subsystem1/TEST_LOG.md) — shared platform S0-U01 cold-power clock test, run by the S1 TEST hook.
@@ -546,7 +568,8 @@ vehicle task described below.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
-- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load](kernel/KERNEL.md#cpu-load).
+- [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic, including the per-run peak; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load](kernel/KERNEL.md#cpu-load).
+- [`run_timing.c`](../app_program/platform/run_timing.c) and [`kernel_lock_stats.c`](../app_program/platform/kernel_lock_stats.c) — P1 report-only per-run latches, `[kcall]` call costs and big-kernel-lock figures; [`test_run_timing.c`](../tests/test_run_timing.c), host double [`kernel_lock_double.c`](../tests/smp_stubs/kernel_lock_double.c), [run timing report](kernel/KERNEL.md#run-timing-report-p1).
 
 - [Design](s1-telemetry/TELEMETRY.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/OPERATION.md).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.

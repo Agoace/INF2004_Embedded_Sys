@@ -7,11 +7,18 @@ get_filename_component(REPO "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 enable_testing()
 add_compile_options(-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror -UNDEBUG)
 # M1: one shared SMP double; target-specific kernel headers still win.
-add_library(host_smp_double STATIC smp_stubs/smp_double.c)
+add_library(host_smp_double STATIC smp_stubs/smp_double.c
+    smp_stubs/kernel_lock_double.c)
 target_include_directories(host_smp_double PRIVATE
     "${REPO}/tests/smp_stubs" "${REPO}/tests/mtk_stubs")
 include_directories(BEFORE "${REPO}/tests/smp_stubs")
+add_compile_definitions(KLS_HOST_TEST=1)
 link_libraries(host_smp_double)
+# P1: the real run-timing latches for every target. An archive member links
+# only for an undefined symbol, so a test with its own rt_* doubles keeps them.
+add_library(host_run_timing STATIC "${REPO}/app_program/platform/run_timing.c")
+target_include_directories(host_run_timing PRIVATE "${REPO}/tests/mtk_stubs")
+link_libraries(host_run_timing)
 include_directories("${REPO}/src" "${REPO}/app_program/subsystem2"
     "${REPO}/app_program/subsystem3" "${REPO}/app_program/subsystem5"
     "${REPO}/app_program/vehicle")
@@ -201,6 +208,8 @@ endif()
 if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
+    add_test(NAME test_vehicle_run_overrun COMMAND test_vehicle_task runoverrun)
+    add_test(NAME test_vehicle_slow_stop COMMAND test_vehicle_task slowstop)
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
 endif()
 
@@ -293,6 +302,8 @@ foreach(test IN ITEMS test_telemetry test_telemetry_log)
 endforeach()
 add_test(NAME test_junction_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_junction_make.py")
+add_test(NAME test_barcode_map COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_barcode_map.py")
 get_target_property(vehicle_test_sources test_vehicle_task SOURCES)
 set(junction_id 0)
 foreach(command IN ITEMS A B C D)
@@ -357,3 +368,4 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/pil_checks.cmake")
 
 # Keep this last: placement variants copy fully configured fixture targets.
 include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/bench_kernel_checks.cmake")

@@ -11,6 +11,8 @@
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/subsystem4/imu_service.h"
 #include "../app_program/vehicle/junction_source.h"
+#include "../app_program/platform/run_timing.h"
+#include "../app_program/platform/kernel_lock_stats.h"
 static bool junction_mode,junction_started,junction_stop,junction_recover;
 static bool junction_pending,pending_recovered,junction_pending_fail;static int32_t junction_origin;
 static unsigned int junction_results,spins;static ja_result_t junction_result;
@@ -18,7 +20,8 @@ static bool spin_started;static int32_t spin_origin[2];
 static unsigned int junction_start_fail,snapshot_reads;
 static FP entry;static jmp_buf done;static uint32_t now;
 static unsigned int starts,notifications,estops,prints,line_drives,rows,requests,max_overruns;
-static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,sonar_stale;
+static int line_error;static bool watchdog_ready,services_ready,calibrating,stale,overrun,run_overrun,slow_stop,sonar_stale;
+static char last_reason[64];
 bool line_service_running(void) { return services_ready; }
 bool sonar_service_running(void) { return services_ready; }
 bool telemetry_running(void) { return services_ready; }
@@ -109,6 +112,7 @@ int tm_printf(const UB *f,...) {
     if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
         const unsigned int mm=va_arg(a,unsigned int),tenth=va_arg(a,unsigned int);
         assert(mm==10u && tenth==8u);++hump_lines;
+        if (slow_stop) now+=15u; /* a slow USB print after the run */
         (void)va_arg(a,const char *);
         for (unsigned int i=0u;i<3u;++i) (void)va_arg(a,unsigned int);
         assert(va_arg(a,unsigned int)==IMU_HUMP_SOURCE);
@@ -166,6 +170,7 @@ int telemetry_send(const telemetry_message_t *m) {
     if (m->kind==TELEMETRY_ROW) ++rows;
     if (m->kind==TELEMETRY_INFO && m->data.info.overruns>max_overruns) max_overruns=m->data.info.overruns;
     if (m->kind==TELEMETRY_INFO && !strcmp(m->data.info.reason,"sonar watch stale")) ++sonar_timeouts;
+    if (m->kind==TELEMETRY_INFO) { strncpy(last_reason,m->data.info.reason,sizeof(last_reason)-1u); }
     return E_OK;
 }
 void drv_motor_hw_buttons_init(void) { }
@@ -197,6 +202,7 @@ int motion_set_speed(int16_t l,int16_t r) {
     }
     asked[0]=l;asked[1]=r;
     if (overrun && (l!=0 || r!=0)) now+=11u;
+    if (run_overrun && (vehicle_run_epoch()&1u) && (l!=0 || r!=0)) now+=11u;
     return E_OK;
 }
 int motion_stop(void) { asked[0]=asked[1]=0;return E_OK; }
@@ -211,6 +217,8 @@ int main(int argc,char **argv) {
     junction_start_fail=argc>1 && !strcmp(argv[1],"junctionbusy") ? 1u :
         (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
+    run_overrun=argc>1 && !strcmp(argv[1],"runoverrun");
+    slow_stop=argc>1 && !strcmp(argv[1],"slowstop");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
     lp_init(&line);lp_set_pair(&line,true,0);
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
@@ -234,7 +242,7 @@ int main(int argc,char **argv) {
     }
     /* The run epoch is odd only inside a run; each finished run prints one
      * hump line from a fresh same-run board, else "unavailable". */
-    if (!overrun && !sonar_stale) {
+    if (!overrun && !run_overrun && !sonar_stale) {
         assert(run_seen!=0u && (vehicle_run_epoch()&1u)==0u && hump_reads>0u);
         assert(vehicle_hump_try_read(&last)==E_OK);
         assert(vehicle_hump_diag_try_read(&diag)==E_OK && diag_lines>=1u);
@@ -265,7 +273,59 @@ int main(int argc,char **argv) {
         assert(JUNCTION_TEST_CMD==JA_STRAIGHT && !junction_recover && !junction_pending ? spins==0u : spins>0u);
         if (junction_pending) assert(pending_recovered);
     } else assert(junction_results==0u);
-    if (overrun) assert(max_overruns>0u);
+    /* P1: the latches belong to the last run and are frozen after STOP. */
+    rt_snapshot_t rt;
+    rt_snapshot(&rt);
+    if (overrun) {
+        /* The overrun stops calibration: no run, so nothing is latched. */
+        assert(vehicle_run_epoch()==0u && rt.epoch==0u && rt.first.step==0u);
+        assert(rt.call[RT_K_VEH_CAN].count==0u && max_overruns>0u);
+        return 0;
+    }
+    assert((rt.epoch&1u)==1u && rt.epoch+1u==vehicle_run_epoch());
+    assert(rt.call[RT_K_VEH_CAN].count>0u && rt.call[RT_K_VEH_STATUS].count>0u);
+    assert(rt.call[RT_K_VEH_SEND].count>0u);
+    assert(rt.call[RT_K_VEH_CAN].count==rt.call[RT_K_VEH_STATUS].count);
+    /* BKL: reset at run start, copied at STOP (host double figures). */
+    assert(test_kls_resets>=1u && rt.bkl.valid==1u);
+    assert(rt.bkl.acquisitions==TEST_KLS_ACQUISITIONS && rt.bkl.run_ms>0u);
+    if (run_overrun) {
+        /* 11 ms in vehicle_speed: the VSM part, one motion tick late. */
+        assert(rt.first.step>=1u && rt.first.elapsed_us>=11000u);
+        assert(rt.first.slow_part==RT_STEP_VSM && rt.first.slow_us==11000u);
+        assert(rt.first.tick_delta==1u && rt.max[RT_STEP_VSM]==11000u);
+        assert(rt.first.uptime_ms!=0u);
+        /* P2: the frozen timeline ends with the late finish; the parts
+         * of the bad step and its wake come before it. */
+        rt_tl_info_t tl;
+        rt_tl_record_t rec;
+        rt_tl_info(&tl);
+        assert(tl.frozen==1u && tl.epoch==rt.epoch && tl.records>=3u);
+        rt_tl_get(tl.records-1u,&rec);
+        assert(rec.site==RT_TL_VEH_FINISH && rec.arg==1u);
+        rt_tl_get(tl.records-2u,&rec);
+        assert(rec.site==RT_TL_VEH_PART && rec.arg==RT_STEP_PUBLISH);
+        bool vsm=false, woke=false;
+        for (uint32_t i=0u;i<tl.records;++i) {
+            rt_tl_get(i,&rec);
+            vsm=vsm || (rec.site==RT_TL_VEH_PART && rec.arg==RT_STEP_VSM);
+            woke=woke || rec.site==RT_TL_VEH_WAKE;
+        }
+        assert(vsm && woke);
+    } else {
+        assert(rt.first.step==0u);
+        /* P2: no overrun, so the ring is not frozen; it holds the run end. */
+        rt_tl_info_t tl;
+        rt_tl_info(&tl);
+        assert(tl.frozen==0u && tl.epoch==rt.epoch && tl.records>0u);
+    }
+    if (slow_stop) {
+        /* The stop work after the run is not a driving step: no overrun,
+         * and the stop reason stays the one that ended the run. */
+        assert(hump_lines==1u && max_overruns==0u);
+        assert(!strcmp(last_reason,"GP21 emergency stop"));
+    }
+    if (run_overrun) assert(max_overruns>0u);
     else if (stale) assert(estops>0u);
     else if (sonar_stale) assert(sonar_timeouts>0u);
     else assert(estops==1u && line_drives>0u && rows>0u && requests>0u);

@@ -57,6 +57,9 @@ APP_SDK_HW_DIRS := \
 CFLAGS += $(addprefix -isystem"$(PICO_SDK_PATH)/,$(addsuffix ",$(APP_SDK_HW_DIRS))) \
           -ffunction-sections -fdata-sections
 LFLAGS += -Wl,--gc-sections
+# P2: rt_tl runs from RAM (.data.ramfunc.*), so the RAM load segment is
+# RWX on purpose; the Pico SDK uses the same flag.
+LFLAGS += -Wl,--no-warn-rwx-segments
 
 APP_SDK_HW_NAMES := adc ticks watchdog
 ifeq ($(WIFI),none)

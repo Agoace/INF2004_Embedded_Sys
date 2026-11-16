@@ -11,6 +11,7 @@
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
 #include "../subsystem2/motion_diag.h"
 #include "../vehicle/vehicle_task.h"
 #include "../subsystem4/imu_settings.h"
@@ -297,6 +298,14 @@ static void lose(void)
 /*
  * Write a bounded RAM-log snapshot to the local USB console.
  */
+/*
+ * P2: the USB yield between timeline lines, so the 4 KB ring can drain.
+ */
+static void dump_pause(void)
+{
+    (void)tk_dly_tsk(DUMP_YIELD_MS);
+}
+
 static void dump(void)
 {
     const UW before = dropped();
@@ -335,6 +344,8 @@ static void dump(void)
         imu_hump_diag_print(&diag);
     }
     app_task_report();
+    dump_pause(); /* let the report lines drain first */
+    rt_timeline_report(dump_pause);
     for (uint32_t i = 0u; i < st.rows; ++i) {
         tm_printf((UB *)"KR %lu ", (unsigned long)i);
         for (unsigned int b = 0u; b < TELEMETRY_BYTES; ++b) {

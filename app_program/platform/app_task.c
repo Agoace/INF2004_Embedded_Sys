@@ -14,6 +14,7 @@
  */
 #include "app_task.h"
 #include "idle_meter.h"   /* Phase 5: per-core load in the report */
+#include "run_timing.h"   /* P1: per-run timing latches in the report */
 #include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
 
 #include <stdbool.h>
@@ -357,5 +358,7 @@ void app_task_report(void)
     tm_printf((UB *)"[load] core 0 %u permille\n",
               (unsigned int)idle_meter_load_permille());
 #endif
+    /* P1: per-run peaks and latches, frozen at STOP (report only). */
+    rt_report();
 #endif
 }

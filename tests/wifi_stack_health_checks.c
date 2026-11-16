@@ -9,6 +9,7 @@
 #include "../app_program/subsystem1/robot_health.h"
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/subsystem1/telemetry.h"
+#include "../app_program/platform/run_timing.h"
 
 static FP health_entry;
 static jmp_buf refreshed;
@@ -45,6 +46,7 @@ void wifi_stack_health_check(uint32_t expected_free)
 {
     assert(robot_health_init() == E_OK);
     assert(robot_health_start() == E_OK && health_entry);
+    rt_begin(1u); /* P1: a run is active during this refresh */
     if (setjmp(refreshed) == 0) {
         ((void (*)(INT, void *))health_entry)(0, NULL);
         assert(0);
@@ -53,5 +55,15 @@ void wifi_stack_health_check(uint32_t expected_free)
     uint32_t at;
     assert(robot_health_try_read(&heartbeat, &at) == E_OK);
     assert(at == 1234000u && heartbeat.stack_min_free == expected_free);
+    rt_snapshot_t rt;
+    rt_snapshot(&rt);
+    assert(rt.load_epoch == 1u && rt.load_samples == 1u);
+    assert(rt.load_peak[0] == 100u);
+#if TK_SUPPORT_SMP
+    assert(rt.load_peak[1] == 200u);
+#else
+    assert(rt.load_peak[1] == 65535u);
+#endif
+    rt_begin(2u);
 }
 #endif
