@@ -19,7 +19,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 
 | Area | State | Evidence | Open |
 | --- | --- | --- | --- |
-| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Opt-in LINE_P_NEAR=60/40 candidates built for the approved straight trial; default P85 retained. Hardware comparison and course regression Not run. |
+| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Family1 lower-P trial rejected on the home straight; P40 entered SEARCH. Default P85 retained. Opt-in LINE_BASE=120/100 speed trial built; hardware/course checks Not run. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
 | Obstacle, scan, detour | Detours 2/2 in each of 6 course runs (2026-11-16). | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md) | DONE_NO_LINE and STALL_RIGHT cases. |

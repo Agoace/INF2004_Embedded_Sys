@@ -388,7 +388,9 @@ vehicle task described below.
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
 - [`line_p_near.h`](../app_program/vehicle/line_p_near.h) — opt-in vehicle
-  P-gain adapter; [trial settings](s3-line-barcode/LINE.md#opt-in-proportional-gain-trial),
+  P-gain/base-speed adapter; [base-speed trial](s3-line-barcode/LINE.md#opt-in-base-speed-trial),
+  [native base test](../tests/test_line_base.c) and
+  [base Make tests](../tests/test_line_base_make.py); [trial settings](s3-line-barcode/LINE.md#opt-in-proportional-gain-trial),
   [configuration/steering test](../tests/test_line_p_near.c) and
   [Make option test](../tests/test_line_p_near_make.py). Default sources and
   flags are unchanged.

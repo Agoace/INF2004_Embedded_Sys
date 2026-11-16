@@ -76,6 +76,13 @@ foreach(gain 85 60 40)
 endforeach()
 add_test(NAME test_line_p_near_make COMMAND "${CMAKE_COMMAND}" -E env
     python3 "${REPO}/tests/test_line_p_near_make.py")
+foreach(base 146 120 100 83 378)
+    host_test(test_line_base_${base} tests/test_line_base.c
+        ${line_steer_source})
+    target_compile_definitions(test_line_base_${base} PRIVATE LINE_BASE=${base})
+endforeach()
+add_test(NAME test_line_base_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_line_base_make.py")
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)
 host_test(test_obstacle tests/test_obstacle.c ${obstacle_source})
