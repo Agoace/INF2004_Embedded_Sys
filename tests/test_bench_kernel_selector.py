@@ -88,5 +88,57 @@ class BenchMode(unittest.TestCase):
                     self.preflight("1", **{key: value}).returncode, 0)
 
 
+    def test_ram_variant_is_up_bench_only(self):
+        self.assertEqual(self.preflight("1", SMP="0").returncode, 0)
+        ok = self.preflight("1", SMP="0", BENCH_KERNEL_RAM="1")
+        self.assertEqual(ok.returncode, 0, ok.stderr)
+        for mode, smp, ram in (("0", "0", "1"), ("1", "1", "1"),
+                               ("1", "0", "2"), ("1", "0", "")):
+            with self.subTest(mode=mode, smp=smp, ram=ram):
+                self.assertNotEqual(self.preflight(
+                    mode, SMP=smp, BENCH_KERNEL_RAM=ram).returncode, 0)
+
+
+class RamHotPath(unittest.TestCase):
+    """The RAM list names real objects and every approved hot function."""
+
+    def entries(self):
+        rows = []
+        for line in (ROOT / "app_program/bench_kernel/ram_hot_path.list"
+                     ).read_text().splitlines():
+            if line.strip() and not line.startswith("#"):
+                rows.append(line.split())
+        return rows
+
+    def test_objects_have_sources(self):
+        for row in self.entries():
+            with self.subTest(row=row):
+                obj = row[0]
+                self.assertTrue(obj.endswith(".o"))
+                base = ROOT / obj[:-2]
+                self.assertTrue(base.with_suffix(".c").exists() or
+                                base.with_suffix(".S").exists(), obj)
+                self.assertTrue(row[1] == ".text" or
+                                row[1].startswith(".text."))
+
+    def test_approved_functions_listed(self):
+        symbols = set()
+        for row in self.entries():
+            symbols.update(row[2:] or [row[1][len(".text."):]])
+        for name in ("knl_dispatch_entry", "knl_dispatch", "disint",
+                     "knl_hll_inthdr", "knl_systim_inthdr",
+                     "knl_timer_handler", "tk_wup_tsk", "tk_slp_tsk",
+                     "tk_can_wup", "tk_loc_mtx", "tk_unl_mtx",
+                     "knl_make_ready", "knl_make_non_ready",
+                     "knl_wait_release_ok", "alarm_irq", "gpio_dispatch",
+                     "encoder_irq", "drv_line_hw_read", "bk_gpio_ack",
+                     "drv_time_us", "drv_time_hw_us", "ClearInt",
+                     "bk_line_timer_ack", "bk_line_timer_alarm",
+                     "drv_motor_hw_ab", "bk_gpio_ab",
+                     "knl_timer_insert_reltim"):
+            with self.subTest(name=name):
+                self.assertIn(name, symbols)
+
+
 if __name__ == "__main__":
     unittest.main()

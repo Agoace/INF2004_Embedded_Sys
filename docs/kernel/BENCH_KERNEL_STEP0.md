@@ -57,7 +57,19 @@ normal motion ticks continue before the dump. A failed board read prints
 count minus ACK-delivered count; extreme invalid differences saturate at
 signed 32-bit limits for the console formatter.
 
-## Pass rule
+## RAM hot-path diagnostic (UP only)
+
+`make SMP=0 FORCE_CORE0=0 WIFI=none BENCH_KERNEL=1 BENCH_KERNEL_RAM=1`
+builds `..._bench_kernel_step0_ramdiag`. Same run procedure and report.
+
+| Item | Rule |
+| --- | --- |
+| What moves | Sections in `app_program/bench_kernel/ram_hot_path.list`: dispatcher, interrupt entry, timer, `disint`, the `[kcall]` kernel calls and their wait/ready helpers, line and encoder ISRs, bench providers, `drv_time_us`. |
+| How | `objcopy --rename-section .text.X=.data.ramfunc.X` on compiled objects; the unchanged template linker copies `.data.*` to RAM. No source or template edit. |
+| Proof | `ram_proof.py` runs after the link and fails the build if a listed symbol is not in RAM. Output: `<image>.ramproof` (count, bytes, flash callees, indirect calls). |
+| Compare | Against the same image with `BENCH_KERNEL_RAM=0`: `[kcall]` mean and max, `[load]`, ISR and line maxima. |
+
+
 
 Pass each image only when all of these conditions hold:
 

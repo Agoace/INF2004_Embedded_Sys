@@ -2,6 +2,8 @@
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 add_test(NAME test_bench_kernel_selector COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_bench_kernel_selector.py")
+add_test(NAME test_bench_ram_proof COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_bench_ram_proof.py")
 host_test(test_bench_kernel_stats tests/test_bench_kernel_stats.c
     app_program/bench_kernel/bench_stats.c)
 host_test(test_bench_kernel_stats_threads tests/test_bench_kernel_stats.c

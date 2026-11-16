@@ -240,6 +240,19 @@ ifneq ($(IMU_STREAM):$(BARCODE_CAPTURE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_C
 $(error BENCH_KERNEL=1 requires neutral IMU/barcode/junction options)
 endif
 endif
+# Diagnostic only: run the listed kernel/ISR hot path from RAM (UP bench).
+BENCH_KERNEL_RAM ?= 0
+ifneq ($(words $(BENCH_KERNEL_RAM)),1)
+$(error BENCH_KERNEL_RAM must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BENCH_KERNEL_RAM),0 1),$(BENCH_KERNEL_RAM))
+$(error Unknown BENCH_KERNEL_RAM '$(BENCH_KERNEL_RAM)'; use 0 or 1)
+endif
+ifeq ($(BENCH_KERNEL_RAM),1)
+ifneq ($(BENCH_KERNEL):$(SMP),1:0)
+$(error BENCH_KERNEL_RAM=1 is a UP bench diagnostic: needs BENCH_KERNEL=1 SMP=0)
+endif
+endif
 
 #
 # Images are named after the profile they were built with.  Every image is
@@ -254,6 +267,9 @@ EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
 ifeq ($(BENCH_KERNEL),1)
 EXE_FILE := $(EXE_FILE)_bench_kernel_step0
+endif
+ifeq ($(BENCH_KERNEL_RAM),1)
+EXE_FILE := $(EXE_FILE)_ramdiag
 endif
 
 GCC := arm-none-eabi-gcc
@@ -311,6 +327,26 @@ ifeq ($(BENCH_KERNEL),1)
 CFLAGS += -DBENCH_KERNEL=1
 LFLAGS += -Wl,--wrap=rt_timeline_report
 LFLAGS += -Wl,--wrap=app_startup_complete_publish
+endif
+ifeq ($(BENCH_KERNEL_RAM),1)
+# Rename each listed section in its compiled object before the link (no
+# source or template change; renaming is idempotent). After the link,
+# ram_proof.py fails the build if a listed symbol is still in flash.
+BENCH_RAM_LIST := ../app_program/bench_kernel/ram_hot_path.list
+BENCH_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
+	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(BENCH_RAM_LIST))
+BENCH_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(BENCH_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
+bench_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(basename $(notdir $(2)))_text,.data.ramfunc.$(patsubst .text.%,%,$(1)))
+$(EXE_FILE).ramstamp: $(BENCH_RAM_OBJS) $(BENCH_RAM_LIST)
+	@echo 'BENCH_KERNEL_RAM: moving $(words $(BENCH_RAM_ROWS)) sections to RAM'
+	$(foreach o,$(BENCH_RAM_OBJS),arm-none-eabi-objcopy $(foreach r,$(BENCH_RAM_ROWS),$(if $(filter $(o),mtkernel_3/$(firstword $(subst :, ,$(r)))),--rename-section $(lastword $(subst :, ,$(r)))=$(call bench_ram_new,$(lastword $(subst :, ,$(r))),$(o)))) $(o) &&) true
+	touch $@
+$(EXE_FILE).elf: $(EXE_FILE).ramstamp
+$(EXE_FILE).ramproof: $(EXE_FILE).elf ../app_program/bench_kernel/ram_proof.py
+	python3 ../app_program/bench_kernel/ram_proof.py $(EXE_FILE).elf \
+	  $(BENCH_RAM_LIST) > $@.tmp; st=$$?; cat $@.tmp; \
+	  if [ $$st -ne 0 ]; then rm -f $@.tmp; exit $$st; fi; mv $@.tmp $@
+all: $(EXE_FILE).ramproof
 endif
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
@@ -371,6 +407,9 @@ PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
 PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
 ifeq ($(BENCH_KERNEL),1)
 PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
+endif
+ifeq ($(BENCH_KERNEL_RAM),1)
+PROFILE_ID := $(PROFILE_ID)-benchram1
 endif
 PROFILE_FILE := .build_profile
 
