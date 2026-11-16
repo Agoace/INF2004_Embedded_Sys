@@ -40,7 +40,7 @@ target_compile_definitions(test_barcode_window_invalid_map PRIVATE
     BW_MAP_VALUES=255 BW_MAP_POLICY_ID=3u)
 target_compile_definitions(test_barcode_window_unconfirmed PRIVATE
     BW_MAP_CONFIRMED=0)
-foreach(case IN ITEMS normal variable wrap two_ms freeze tracking short_quiet
+foreach(case IN ITEMS sizes normal variable wrap two_ms freeze tracking short_quiet
         immutable missing merged calibration queue brackets leading short_tail
         gap extra multi small air reversal motor_fault motor_gap sample_gap
         adc_fault paper flat_dark line_only alias one_missing)

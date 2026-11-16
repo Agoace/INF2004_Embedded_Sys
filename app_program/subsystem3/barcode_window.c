@@ -11,10 +11,10 @@
 #define COMPLETE 4u
 #define WHITE_MIN 120u
 #define WHITE_MAX 220u
-#define N_MIN 4.6f
+/* ASSUMED scope, not an optical resolution measurement. Fit the scale from
+ * the start star; smaller print needs measured along-travel GP28 evidence. */
+#define N_MIN 4.0f
 #define N_MAX 7.0f
-#define W_MIN 13.5f
-#define W_MAX 21.5f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
 #define BW_MAP_VALUES 1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -333,7 +333,7 @@ static bool model(const float *runs, bool reverse, element_model_t *out)
         high[wide] = fmaxf(high[wide], corrected);
     }
     const float n = sum[0] / 6.0f, w = sum[1] / 3.0f;
-    if (n < N_MIN || n > N_MAX || w < W_MIN || w > W_MAX ||
+    if (n < N_MIN || n > N_MAX ||
         w / n < 1.6f || w / n > 3.4f || low[1] / high[0] < 1.4f ||
         low[0] < n * 0.65f || high[0] > n * 1.5f ||
         low[1] < w * 0.65f || high[1] > w * 1.5f) {
@@ -502,7 +502,12 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
     }
     const bool black = state->black ? sample.raw > state->fall :
                                      sample.raw >= state->rise;
-    if (mm - state->edge_mm > 35.0f) {
+    /* Before the star, keep the absolute fail-closed ceiling. Afterwards a
+     * raw run can include the fitted bar/space edge bias; never enlarge the
+     * absolute ceiling when applying the scale-relative class tolerance. */
+    const float run_limit = state->elements >= 9u ?
+        fminf(35.0f, 1.5f * state->wide + fabsf(state->bias)) : 35.0f;
+    if (mm - state->edge_mm > run_limit) {
         reject(state, BW_WIDTH);
         return;
     }
