@@ -47,6 +47,22 @@ cd build_make
 make SMP=0 WIFI=none TEST=1 IMU_STREAM=1 -j8
 ```
 
+This produces `build_make/mtk3pico_smp0_usb_cdc_test_imu_stream.uf2`.
+
+**A TEST image captures motion but cannot validate the stop.** TEST images
+do not run the Vehicle task at all, so no safety gate, latch or restart
+exists in them. Use TEST only to record the acceleration trace. Check the
+stop, the latch, the start gate and the reported reason on a normal robot
+image:
+
+```sh
+make SMP=0 WIFI=none -j8          # normal robot image, no network
+```
+
+Both were checked by building them and searching the linked image: the
+`[S4]` and `cal_mg` strings are in the TEST image, and the safety report
+line is in the normal image.
+
 Flash, then capture the USB console. Assert DTR **and** RTS, or the Pico
 stays silent:
 
@@ -78,6 +94,20 @@ The analyser prints one line per confirmed trigger and a summary:
 trigger t_ms=... reason=lift g_mg=... tilt_ddeg=... vertical_mg=...
 summary rows=... events=... first_reason=... latched=... stops=... min_g_mg=... max_g_mg=... max_tilt_ddeg=... clear_ms=...
 ```
+
+## Reading the stop reason on the robot
+
+A latched reason prints one bounded USB line, once per latch:
+
+```text
+[robot] IMU safety <reason> g_mg <n> tilt_ddeg <n> vertical_mg <n> clear_ms <n> age_ms <n>
+```
+
+`<reason>` is `IMU lift detected`, `IMU overturn detected` or
+`IMU unavailable`. The line is printed from the Vehicle idle loop, not from
+the stop path, so the stop itself stays bounded and free of console writes.
+An MQTT build additionally carries the same reason as stop reason 14, 15 or
+16 in `robot/summary`; a non-MQTT build reports it only on this line.
 
 ## Limits to state with any result
 

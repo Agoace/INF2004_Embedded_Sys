@@ -719,12 +719,32 @@ static bool imu_safety_check(void)
     return false;
 }
 
+/* One bounded USB line per latched reason. This is deliberately NOT inside
+ * imu_safety_check(): the plan forbids a console write in the safety stop
+ * path, and the robot is already stopped by the time this runs. Without it a
+ * non-MQTT image reports no reason at all, because event() is compiled out
+ * there and `reason` is never printed. */
+static bool imu_reported;
+
+static void imu_report_latched(void)
+{
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE || imu_reported) {
+        return;
+    }
+    imu_reported = true;
+    tm_printf((UB *)"[robot] IMU safety %s g_mg %ld tilt_ddeg %ld "
+                    "vertical_mg %ld clear_ms %lu age_ms %ld\n",
+              imu_reason_text(imu_latched), (long)imu_copy.g_mg,
+              (long)imu_copy.tilt_ddeg, (long)imu_copy.vertical_mg,
+              (unsigned long)imu_copy.clear_ms,
+              (long)(int32_t)(drv_time_ms() - imu_copy.observation_ms));
+}
+
 /* A start needs no latched reason, a fresh valid observation and an upright
  * pose. Never waits for the board. The board's own latch is not consulted
  * here: a safe restart has already cleared it, and imu_safety_check() runs
  * first on every wake and re-latches if the pose is still unsafe. */
-static bool imu_start_allowed(void)
-{
+static bool imu_start_allowed(void){
     if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
         return false;
     }
@@ -759,6 +779,7 @@ static bool imu_safety_restart(void)
     }
     (void)imu_safety_clear_request();
     imu_latched = (uint8_t)IMU_SAFETY_NONE;
+    imu_reported = false;
     imu_await_clear = true;
     imu_await_until = drv_time_ms() + IMU_CLEAR_WAIT_MS;
     return true;
@@ -1494,6 +1515,9 @@ static void vehicle_task(INT code, void *ctx)
         motion_diag_phase(MOTION_DIAG_IDLE);
         cancelled = false;
         (void)wait_tick();
+        /* Report a latched reason once, while stopped. This sits in the idle
+         * loop rather than the stop path so the stop stays bounded. */
+        imu_report_latched();
         const uint32_t now = drv_time_ms();
         if (now - button_ms < BUTTON_INTERVAL_MS) {
             continue;
