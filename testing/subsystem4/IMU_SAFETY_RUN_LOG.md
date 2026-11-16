@@ -125,3 +125,33 @@ what the robot did on hardware in step 4.
 
 Not yet verified: the fix on the robot. The running image is the pre-fix
 build, and reflashing needs the board in BOOTSEL.
+
+### Step 6: waiting for BOOTSEL
+
+The robot is stopped and safe: `active = 0`, `state = 0` (IDLE),
+`count_l = count_r = 0`, `duty_* = 0`, `motion_faults = 4` (the boot
+latch). 382 telemetry rows are recorded in `testing/logs/imu-safety-run.csv`.
+
+`picotool info -f` and `picotool reboot -f -u` both report "No accessible
+RP-series devices in BOOTSEL mode were found", with the RP2040 seen only as a
+USB serial connection. picotool cannot reset a running application, so the
+fixed image cannot be flashed without physical access to BOOTSEL.
+
+Blocked on: the board in BOOTSEL mode. No further hardware step can run
+until then.
+
+Tests still to run after reflashing, in this order:
+
+1. Boot with the fixed image: `motion_faults` must be 0 and the robot must
+   sit in IDLE with no stop requested. This is the direct check that the
+   step-4 defect is gone.
+2. Upright gate: boot with the robot held upside down or on its side. The
+   start must be refused and `[robot] IMU safety start refused: ...` must
+   appear on USB.
+3. Restrained calibration spin: GP21 press with the wheels clear of the
+   floor. Record whether a false lift or overturn latches during the spin,
+   and which reason. This is the main untested risk.
+4. Safe restart: after any latch, hold the robot upright and still for at
+   least 1 s, then press GP21. The latch must clear and the normal
+   calibration and start must proceed.
+5. IMU stack high-water against the 256 B minimum.
