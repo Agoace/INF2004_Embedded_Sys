@@ -21,6 +21,7 @@ Rules:
 | `MEASURED(who,date)` | A person or the robot measured it. `who` is operator, bench, robot log, trace or build. The date is in the label when the source gives it. |
 | `ASSUMED` | A design setting, guess, datasheet value or simulator input. Not measured. |
 | `PHOTO-ESTIMATED` | Read from a photo with a ruler. |
+| `MEASURED-UNCERTAIN(who,date)` | Measured, but the person who measured it marked it as not sure. |
 | `DERIVED` | Calculated or fitted from other values. |
 
 Date column: the run date when the source gives one. `doc ≤ YYYY-MM-DD` means
@@ -29,22 +30,45 @@ the source does not give a date; the value was in the document on that date
 
 ## Values that do not agree
 
-These rows are not resolved. The tables below give the sources.
+These rows are not resolved, except where the table says so. The tables
+below give the sources.
 
 | Quantity | Value A (date) | Value B (date) | Other |
 | --- | --- | --- | --- |
 | Sonar face to robot front | 58 mm, echo mean 57.9 mm (2026-10-27) | 47 mm if the echo reads 11 mm high (doc ≤ 2026-11-08) | No ruler value |
 | Line sensors ahead of the wheel axle | 123 mm = 65 + 58, calculated (2026-10-30) | 119 mm, operator (2026-11-15) | Sim guess 119 mm (doc ≤ 2026-11-08) |
 | Counts per wheel revolution | 2540 / 2539 (2026-10-27) | 2535 (doc ≤ 2026-11-08) | Old motor 2 test 2532.9 / 2532.3 |
-| Robot mass | 1 kg SIL placeholder (doc ≤ 2026-11-16) | 671.6 g, operator (2026-11-16) | — |
+| Robot mass | 1 kg SIL placeholder (doc ≤ 2026-11-16) | 671.6 g, operator (2026-11-16) | **Resolved: 671.6 g** |
 | Wheel diameter | 65 mm, "Operator" (2026-10-30, archive) | 65 mm nominal, not calibrated (doc ≤ 2026-11-08) | — |
-| Wheel track | 111 mm, operator (2026-10-30) | 120 mm in old `motion_config.h` (doc ≤ 2026-11-06) | IMU notes "rough 115 mm" |
-| Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | — |
+| Wheel track | 111 mm, operator (2026-10-30) | 120 mm in old `motion_config.h` (doc ≤ 2026-11-06) | IMU notes "rough 115 mm". **Resolved: 111-112 mm** contact centre to contact centre, operator ruler (2026-11-16); the old 120 mm code value is superseded |
+| Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | 82 mm, operator ruler (2026-11-16), marked "?" (uncertain) |
 | Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | — |
 | Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08) |
 | GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm |
 | Floor speed at 100 % duty | 740 mm/s, recollection (2026-10-30) | 770..807 mm/s, still rising (doc ≤ 2026-11-10) | — |
 | Narrowest bar | 5 mm large, 2–3 mm small, planning (2026-11-06) | 5.8 mm (2x F), 2.9 mm (course F) (doc ≤ 2026-11-09) | — |
+
+## Operator ruler session 2026-11-16
+
+The operator measured these with a ruler on 2026-11-16 (reported through
+Main_Worker). Values as given:
+
+- Outer wheel to outer wheel: 128 mm.
+- Robot length: 180 mm.
+- Robot height: 134 mm.
+- IMU height: 132 mm.
+- IR barcode sensor (GP28 module) protrudes 17-18 mm beyond the left outer wheel face.
+- Rear wheel axle to robot rear: 52-53 mm.
+- Wheel track, contact centre to contact centre: 111-112 mm.
+- Wheel width: 16 mm.
+- Rear axle to caster: 82 mm (operator marked "?").
+- Rear axle to back of ultrasonic module: about 70 mm +-3 mm.
+
+Derived from these values:
+
+- Robot front ahead of rear axle: 180 - 52.5 = 127.5 mm.
+- Wheel centre half-track: 111.5 / 2 = 55.75 mm.
+- Outer wheel face from centre: 128 / 2 = 64 mm.
 
 ## Geometry
 
@@ -60,9 +84,16 @@ These rows are not resolved. The tables below give the sources.
 | Line sensor position (old statement) | at the very front of the robot | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
 | Line sensors ahead of rear axle | 123 mm (calculated) | 2026-10-30 | DERIVED | [OBSTACLE_DETOUR_HANDOFF.md#values-to-measure](../archive/OBSTACLE_DETOUR_HANDOFF.md#values-to-measure) |
 | Maximum width (incl. left barcode mount) | 160 mm | doc ≤ 2026-11-08 | MEASURED(operator) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Outer wheel face from centre | 128 / 2 = 64 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Outer wheel to outer wheel | 128 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Overall length | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Rear axle to caster | 82 mm (operator marked "?") | 2026-11-16 | MEASURED-UNCERTAIN(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Rear axle to front line sensors | 123 mm = 65 + 58 | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Rear wheel axle to robot rear | 52-53 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Robot corner to the side of sonar | about 80 mm | 2026-10-30 | DERIVED | [OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit](../archive/OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit) |
+| Robot front ahead of rear axle | 180 - 52.5 = 127.5 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Robot height | 134 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Robot length | 180 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Robot length (overall) | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
 | Robot width (widest point) | 160 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
 | Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
@@ -77,9 +108,12 @@ These rows are not resolved. The tables below give the sources.
 | Sonar face to front, alternative | about 47 mm (echo reads about 11 mm high) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Track (wheel contact to wheel contact) | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/architecture/week8_change_requirement_1_notes.md#27-leftright-clearance` |
 | Wheel axle to caster (wheelbase) | 80 mm | doc ≤ 2026-11-15 | MEASURED(operator) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
+| Wheel centre half-track | 111.5 / 2 = 55.75 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Wheel diameter | 65 mm nominal; loaded rolling diameter not calibrated | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Wheel diameter (archive label) | 65 mm, "Operator, 2026-10-30" | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
 | Wheel track | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Wheel track, contact centre to contact centre | 111-112 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Wheel width | 16 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Wheelbase in Motion's motion_config.h (old) | 120 mm (MEASURE) vs 111 mm here | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Wheelbase, offline fit | 79 mm | doc ≤ 2026-11-15 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 
@@ -273,6 +307,7 @@ These rows are not resolved. The tables below give the sources.
 | GP28 sensor scrape | about 5.5 mm high; scraped on 10 mm hump in all floor drives | doc ≤ 2026-11-09 | MEASURED(operator) | [IMU.md#line-short-course-result-on-d51d27b](../s4-imu/IMU.md#line-short-course-result-on-d51d27b) |
 | GP28 static contrast (B1 70caef0) | paper 151..170, floor 155..172, black 1334..1660 ADC (black HIGH) | doc ≤ 2026-11-09 | MEASURED(operator) | [BARCODE.md#scope-and-evidence](../s3-line-barcode/BARCODE.md#scope-and-evidence) |
 | Hand-push capture encoder travel | 0..70 mm (back-driven wheels slip) | doc ≤ 2026-11-09 | MEASURED(operator) | [BARCODE.md#scope-and-evidence](../s3-line-barcode/BARCODE.md#scope-and-evidence) |
+| IR barcode sensor (GP28 module) beyond the left outer wheel face | 17-18 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Large F first floor capture | full black about 1500, white about 150; 5.8 mm bars peak 600-900, appear 2-3 mm wide; contrast 1839 | 2026-11-09 | MEASURED(operator,2026-11-09) | [TEST_LOG.md#supplied-first-floor-2x-f-capture-and-optical-correction](../../testing/subsystem3/TEST_LOG.md#supplied-first-floor-2x-f-capture-and-optical-correction) |
 | Large F frame span | about 73-348 mm of the pass | 2026-11-09 | MEASURED(trace) | [TEST_LOG.md#supplied-first-floor-2x-f-capture-and-optical-correction](../../testing/subsystem3/TEST_LOG.md#supplied-first-floor-2x-f-capture-and-optical-correction) |
 | Live calibration gen 1 | 2070 samples; range 152..1820; high hold 70003 us; max gap 1027 us | doc ≤ 2026-11-10 | MEASURED(operator) | [LIVE_CALIBRATION.md#first-home-mat-result-and-policy-correction](../s3-line-barcode/LIVE_CALIBRATION.md#first-home-mat-result-and-policy-correction) |
@@ -328,6 +363,7 @@ These rows are not resolved. The tables below give the sources.
 | R3 closest gap (odometry, +-20 mm) | 71-95 mm | 2026-11-05 | DERIVED | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r3-2026-11-05-boot-0491-run-1-straight-450-mm` |
 | R4 closest gap estimate | 42-50 mm (250 face) or 0-10 mm (160 face) | 2026-11-05 | DERIVED | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm` |
 | R4 false line before real line | about 48 mm; L about 2000, C about 150 | 2026-11-05 | MEASURED(robot log,2026-11-05) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm` |
+| Rear axle to back of ultrasonic module | about 70 mm +-3 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Reattempt free side | 5 of 5 runs at 329-435 mm | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#result-m2-reattempt-2026-11-07-mqtt-image-48c69d3-pass` |
 | Reattempt reverse centre echo change | +101..+115 mm (one +27 mm at tile edge) | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#result-m2-reattempt-2026-11-07-mqtt-image-48c69d3-pass` |
 | Reverse distance | 100 mm = 1241 counts at 12414 counts/m, -100 mm/s | doc ≤ 2026-11-08 | DERIVED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
@@ -394,6 +430,7 @@ These rows are not resolved. The tables below give the sources.
 | Hump thresholds | ON 3.0 mm, OFF 1.5 mm; travel 30 / 30 / 600 mm; gate 40 mg; min 30 mm/s; age 50 ms | doc ≤ 2026-11-09 | ASSUMED | [IMU.md#detector](../s4-imu/IMU.md#detector) |
 | I2C clock | high 126 (313 cycles) = about 399.4 kHz; SDA hold 38 cycles | doc ≤ 2026-11-08 | DERIVED | [IMU.md#transfer-bounds-and-timing](../s4-imu/IMU.md#transfer-bounds-and-timing) |
 | IMU geometry defaults | effective track 111 mm (not rough 115); WB 80 mm; sensor 60 mm ahead, 130 mm high | doc ≤ 2026-11-08 | ASSUMED | [IMU.md#step-2b-support-hypotheses-and-peak-quality-now-diagnostic](../s4-imu/IMU.md#step-2b-support-hypotheses-and-peak-quality-now-diagnostic) |
+| IMU height | 132 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | IMU pose: ahead of axle / height | 60 mm / 130 mm | doc ≤ 2026-11-15 | MEASURED(operator) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | IMU read wall time (02f7c37) | 529-542 us, max 624 us; max cycle gap 18975 us | doc ≤ 2026-11-08 | MEASURED(operator) | [IMU.md#transfer-bounds-and-timing](../s4-imu/IMU.md#transfer-bounds-and-timing) |
 | IMU read wall time (second run) | about 530-566 us, max 592 us; max gap 17946 us | doc ≤ 2026-11-08 | MEASURED(operator) | [IMU.md#six-face-stream-evidence-6ed89ad](../s4-imu/IMU.md#six-face-stream-evidence-6ed89ad) |
