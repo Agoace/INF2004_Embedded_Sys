@@ -45,7 +45,8 @@ below give the sources.
 | Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | **Photo supports about 9 mm** (LED tips, ±1 mm, 2026-11-16); the 8 mm value is an older SIL input |
 | Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08). **Photo supports 14.5 mm** (14.7 / 14.2 mm, 2026-11-16); 20.9 mm is an optical fit, not a position |
 | GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm. **Photo about 5.2 mm** (LED tips, ±1 mm, 2026-11-16), consistent with 5.5 mm |
-| GP28 forward from rear axle | about 80 mm +-5, photo estimate (2026-11-11) | about 73 mm, operator ruler (2026-11-16) | **Current: 73 mm** (ruler) |
+| GP28 forward from rear axle | about 80 mm +-5, photo estimate (2026-11-11) | 73 mm to the diode, operator ruler (2026-11-16) | **Current: 73 mm** (ruler) |
+| GP28 lateral (left of robot centre line) | 77 mm, operator ruler (2026-11-11) | about 73 mm to the diode centre, operator ruler (2026-11-16) | About 76.5 mm DERIVED (module edge minus half housing). **Current: 73 mm** (ruler, diode centre) |
 | Floor speed at 100 % duty | 740 mm/s, recollection (2026-10-30) | 770..807 mm/s, still rising (doc ≤ 2026-11-10) | — |
 | Narrowest bar | 5 mm large, 2–3 mm small, planning (2026-11-06) | 5.8 mm (2x F), 2.9 mm (course F) (doc ≤ 2026-11-09) | — |
 
@@ -82,7 +83,8 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 Operator answers, 2026-11-16:
 
 - Rear axle to line sensor (GP26/27) centre: about 122 mm.
-- Rear axle to GP28 sensor: about 73 mm forward.
+- GP28 diode centre about 73 mm left of the robot centre line.
+- Rear axle to GP28 diode: 73 mm forward.
 - Wheel diameter: 65 mm, confirmed.
 - Rear axle to caster: 82 mm, confirmed.
 - Ultrasonic module depth: 15 mm.
@@ -93,9 +95,9 @@ Derived from the answers:
 - Sonar front face behind robot front: 127.5 - 85 = 42.5 mm.
 
 Check (DERIVED, no new value): the operator confirms the GP28 diode sits
-at the module outer edge. Lateral position = 64 + 17.5 - about 5 (half the
-TCRT housing) = about 76.5 mm left of centre, consistent with the 77 mm
-MEASURED lateral offset of 2026-11-11.
+at the module outer edge. Derived lateral = 64 + 17.5 - about 5 (half the
+TCRT housing) = about 76.5 mm; this assumes the LED pair centre is about
+5 mm inside the module edge. The direct 73 mm implies about 8.5 mm.
 
 ## Geometry
 
@@ -329,6 +331,7 @@ MEASURED lateral offset of 2026-11-11.
 | Encoder geometry (barcode) | 12414 counts/m | doc ≤ 2026-11-09 | DERIVED | [BARCODE.md#build-and-settings](../s3-line-barcode/BARCODE.md#build-and-settings) |
 | GP28 at L40/R217 mm/s | body-forward about 5.72 mm/s, lateral about 127.57 mm/s (mean 128.5) | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#mount-and-motion-limits` |
 | GP28 clearance (operator) | approximately 5-6 mm; model stays 5.5 mm | 2026-11-15 | MEASURED(operator,2026-11-15) | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#status-and-limits` |
+| GP28 diode centre left of robot centre line (ruler) | about 73 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | GP28 forward offset | about 80 mm (+-5) ahead of wheel axle | 2026-11-11 | PHOTO-ESTIMATED | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | GP28 forward travel formula | d_s = 1.194 dL - 0.194 dR | 2026-11-11 | DERIVED | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | GP28 lateral offset | 77 mm left of centre line | 2026-11-11 | MEASURED(operator ruler) | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
@@ -361,7 +364,7 @@ MEASURED lateral offset of 2026-11-11.
 | Quiet noise SD (1 mm means) | about 1.3-2.4 counts | doc ≤ 2026-11-09 | MEASURED(trace) | [BARCODE.md#b1c-evidence-and-remaining-physical-tests](../s3-line-barcode/BARCODE.md#b1c-evidence-and-remaining-physical-tests) |
 | Quiet-bin analysis | 792 quiet bins: no maxima reached gate; white returns about 156-179 | doc ≤ 2026-11-09 | MEASURED(trace) | [TEST_LOG.md#approved-real-fixtures-and-analysis](../../testing/subsystem3/TEST_LOG.md#approved-real-fixtures-and-analysis) |
 | Real replay fitted widths, large F | n 5.766 / w 17.551 mm and n 5.776 / w 17.715 mm | 2026-11-16 | DERIVED | [REAL_WINDOW_REPLAY.md#native-retained-data-comparison](../s3-line-barcode/REAL_WINDOW_REPLAY.md#native-retained-data-comparison) |
-| Rear axle to GP28 sensor (ruler) | about 73 mm forward | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Rear axle to GP28 diode (ruler) | 73 mm forward | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Shadow full circuit (b405aef) | 90 s, 9.9 m, 146 mm/s; 45 losses; 7 junctions; 3 attempts 0 frames | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | SIL barcode along-sigma | 1 / 4 / 8 mm | 2026-11-16 | ASSUMED | `mtk3-hil:docs/simulation/SIL_JUNCTION_BARCODE_RESULTS_20261116.md#version-and-protocol` |
 | SIL barcode sheet | 400x50 mm paper, 40 mm bar height, 389.5 mm quiet length | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
