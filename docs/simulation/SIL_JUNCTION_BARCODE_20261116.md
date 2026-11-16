@@ -65,20 +65,24 @@ false178 certificates. Certified and full calls are counted separately.
 
 ## Run protocol
 
-The approved budget is one aligned spin and three independent physics runs,
-each at most1200s wall time. Original protocol: GP28 starts300mm before paper
+The initial budget was one aligned spin and three independent physics runs,
+each at most1200s wall time. Main later approved1500s for the FINAL along8 /
+75mm-lead run ONLY; all other limits remain1200s. Original protocol: GP28 starts300mm before paper
 atx670.5mm (axle590.5mm, y150.25mm), with a5.3s simulation target. Original
 pre-run estimates were spin500–1000s; sigma1/4 each500–700s; sigma8
 850–1100s. The longer lead is cheap only where full MAT support is certified.
 
-The approved continuation for sigma4/8 uses100mm before paper (GP28x870.5mm,
+The approved short protocol for sigma4 uses100mm before paper (GP28x870.5mm,
 axle790.5mm). Stop at the FIRST native junction confirmation, with5300ms as
 a maximum, not a required duration. This criterion is declared BEFORE those
 runs. It must never be applied retroactively to another attempt. The replay
 checks that the first positive native counter is the final recorded row.
 The runner now requires an explicit `--sigma`; it never launches another case.
 Sigma4's updated pre-run wall estimate is650–850s, based on the observed
-original-segment wall time. Re-estimate sigma8 before its launch.
+original-segment wall time. The final sigma8 protocol is75mm before paper
+(axle815.5mm), first native-confirmation stop, estimated1155–1170s before
+launch. Main approved its1500s cap because this estimate is close to1200s.
+The timeout increase is task-specific, not a general run authorization.
 
 Every run must show wheel speeds within5% of146mm/s before the first paper
 support intersection and at first ink. Speed is a post-run observation and
@@ -94,6 +98,10 @@ python3 sim/webots/tools/sil_barcode_smoke.py --output build/webots/NEW-TRIAL \
   --sigma 4 --lead-mm 100 \
   --spin-calibration build/webots/NEW-SPIN/spin-result/calibration.json
 ```
+
+The specifically approved final run uses `--sigma 8 --lead-mm 75
+--timeout-seconds 1500` with a new output directory. No repeat is authorized
+by this record.
 
 Results must report letters, attempts/reasons, native quiet/start proofs,
 junction detection, actual action versus expected LEFT, actual admission

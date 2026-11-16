@@ -31,6 +31,7 @@ class BarcodeSILTests(unittest.TestCase):
         self.assertFalse(module.completed_segment({**config,'stop_after_junction':False},rows))
         rows[-2][47]=1;self.assertFalse(module.completed_segment(config,rows))
         self.assertEqual(junction_barcode_course(lead_mm=100).data['start']['position_mm'],[790.5,150.25])
+        self.assertEqual(junction_barcode_course(lead_mm=75).data['start']['position_mm'],[815.5,150.25])
         with self.assertRaises(ValueError):junction_barcode_course(lead_mm=99)
 
     def test_native_reader_decodes_but_never_admits_or_forces_action(self):

@@ -16,7 +16,7 @@ SHEET_START_MM=970.5
 
 
 def junction_barcode_course(*,lead_mm=300):
-    if lead_mm not in(100,200,300):raise ValueError('approved lead100/200/300mm')
+    if lead_mm not in(75,100,200,300):raise ValueError('approved lead75/100/200/300mm')
     sheet=barcode_sheet(sheet_start_mm=SHEET_START_MM,line_centre_y_mm=LINE_Y_MM,surface_z_mm=10,letter='A')
     tiles=[]
     for col in range(1,6):

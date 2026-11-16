@@ -44,7 +44,9 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,required=True);parser.add_argument('--spin-calibration',type=Path,required=True)
     parser.add_argument('--sigma',type=int,choices=FAMILIES,required=True)
-    parser.add_argument('--lead-mm',type=int,choices=(100,200,300),default=100);args=parser.parse_args()
+    parser.add_argument('--lead-mm',type=int,choices=(75,100,200,300),default=100)
+    parser.add_argument('--timeout-seconds',type=int,choices=(1200,1500),default=1200);args=parser.parse_args()
+    if args.timeout_seconds==1500 and(args.sigma!=8 or args.lead_mm!=75):parser.error('1500s approved ONLY for along8/lead75 final task run')
     if os.environ.get('DISPLAY')!=':0'or not os.environ.get('XAUTHORITY'):parser.error('approved existing DISPLAY=:0/XAUTHORITY required')
     if args.output.exists():parser.error('output must be new')
     spin=json.loads(args.spin_calibration.read_text())
@@ -55,7 +57,7 @@ def main():
             spin_calibration=spin,course_override=junction_barcode_course(lead_mm=args.lead_mm),optical_sampler='full',
             barcode=True,sigma_along_mm=family,duration_ms=5300,stop_after_junction=True)
         begin=monotonic()
-        status,pid,command,contents=launch_project(project,world,1200,label='sil-barcode')
+        status,pid,command,contents=launch_project(project,world,args.timeout_seconds,label='sil-barcode')
         wall_seconds=monotonic()-begin
         summary=None;error=None;proof=False;speeds=None
         try:
@@ -70,7 +72,7 @@ def main():
         complete=bool(status==0 and summary and summary['status']=='SIL_LINE_COMPLETE'and proof and
             summary['recorded_input_c_replay']and speeds and all(v['within5pct146']for v in speeds.values())and
             'ERROR:'not in contents and 'WARNING:'not in contents)
-        result=dict(complete=complete,along_sigma_mm=family,timeout_seconds=1200,max_simulated_ms=5300,
+        result=dict(complete=complete,along_sigma_mm=family,timeout_seconds=args.timeout_seconds,max_simulated_ms=5300,
             wall_seconds=wall_seconds,lead_mm=args.lead_mm,stop_after_junction=True,
             independent_replay=proof,exit_status=status,owned_pgid=pid,command=command,summary=summary,
             speed_at_boundaries=speeds,error=error,expected_letter='A',expected_map='LEFT',
