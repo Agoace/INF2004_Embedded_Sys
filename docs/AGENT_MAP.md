@@ -181,7 +181,7 @@ Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
 ## Course template layout
 
-See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL_RAM.md) lists and placement proof). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL_RAM.md) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle` start there. `mtk3-telemetry` also starts from `mtk3`.
