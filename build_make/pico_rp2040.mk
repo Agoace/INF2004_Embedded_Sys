@@ -240,17 +240,21 @@ ifneq ($(IMU_STREAM):$(BARCODE_CAPTURE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_C
 $(error BENCH_KERNEL=1 requires neutral IMU/barcode/junction options)
 endif
 endif
-# Diagnostic only: run the listed kernel/ISR hot path from RAM (UP bench).
-BENCH_KERNEL_RAM ?= 0
-ifneq ($(words $(BENCH_KERNEL_RAM)),1)
-$(error BENCH_KERNEL_RAM must be one value: 0 or 1)
+# Opt-in: run the listed kernel/ISR hot path from RAM (UP only). The default
+# 0 adds no rule, so ordinary images stay byte-identical.
+ifneq ($(strip $(BENCH_KERNEL_RAM)),)
+$(error BENCH_KERNEL_RAM was replaced: use BENCH_KERNEL=1 KERNEL_RAM=1)
 endif
-ifneq ($(filter $(BENCH_KERNEL_RAM),0 1),$(BENCH_KERNEL_RAM))
-$(error Unknown BENCH_KERNEL_RAM '$(BENCH_KERNEL_RAM)'; use 0 or 1)
+KERNEL_RAM ?= 0
+ifneq ($(words $(KERNEL_RAM)),1)
+$(error KERNEL_RAM must be one value: 0 or 1)
 endif
-ifeq ($(BENCH_KERNEL_RAM),1)
-ifneq ($(BENCH_KERNEL):$(SMP),1:0)
-$(error BENCH_KERNEL_RAM=1 is a UP bench diagnostic: needs BENCH_KERNEL=1 SMP=0)
+ifneq ($(filter $(KERNEL_RAM),0 1),$(KERNEL_RAM))
+$(error Unknown KERNEL_RAM '$(KERNEL_RAM)'; use 0 or 1)
+endif
+ifeq ($(KERNEL_RAM),1)
+ifneq ($(SMP),0)
+$(error KERNEL_RAM=1 is UP only: needs SMP=0)
 endif
 endif
 
@@ -268,8 +272,8 @@ EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
 ifeq ($(BENCH_KERNEL),1)
 EXE_FILE := $(EXE_FILE)_bench_kernel_step0
 endif
-ifeq ($(BENCH_KERNEL_RAM),1)
-EXE_FILE := $(EXE_FILE)_ramdiag
+ifeq ($(KERNEL_RAM),1)
+EXE_FILE := $(EXE_FILE)_kernel_ram
 endif
 
 GCC := arm-none-eabi-gcc
@@ -329,26 +333,35 @@ LFLAGS += -Wl,--wrap=rt_timeline_report
 LFLAGS += -Wl,--wrap=app_startup_complete_publish
 LFLAGS += -Wl,--wrap=rt_call -Wl,--wrap=rt_max
 endif
-ifeq ($(BENCH_KERNEL_RAM),1)
+# Kernel hot path in RAM: rule
 # Rename each listed section in its compiled object before the link (no
 # source or template change; renaming is idempotent). After the link,
 # ram_proof.py fails the build if a listed symbol is still in flash.
-BENCH_RAM_LIST := ../app_program/bench_kernel/ram_hot_path.list
-BENCH_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
-	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(BENCH_RAM_LIST))
-BENCH_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(BENCH_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
-bench_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(basename $(notdir $(2)))_text,.data.ramfunc.$(patsubst .text.%,%,$(1)))
-$(EXE_FILE).ramstamp: $(BENCH_RAM_OBJS) $(BENCH_RAM_LIST)
-	@echo 'BENCH_KERNEL_RAM: moving $(words $(BENCH_RAM_ROWS)) sections to RAM'
-	$(foreach o,$(BENCH_RAM_OBJS),arm-none-eabi-objcopy $(foreach r,$(BENCH_RAM_ROWS),$(if $(filter $(o),mtkernel_3/$(firstword $(subst :, ,$(r)))),--rename-section $(lastword $(subst :, ,$(r)))=$(call bench_ram_new,$(lastword $(subst :, ,$(r))),$(o)))) $(o) &&) true
+KERNEL_RAM ?= 0
+ifeq ($(KERNEL_RAM),1)
+KERNEL_RAM_DIR := ../tools/kernel_ram
+ifeq ($(BENCH_KERNEL),1)
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
+else
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
+endif
+KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
+	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
+KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
+kernel_ram_obj = $(basename $(notdir $(1)))
+kernel_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))_text,$(if $(filter .text.%,$(1)),.data.ramfunc.$(patsubst .text.%,%,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))$(subst .,_,$(1))))
+$(EXE_FILE).ramstamp: $(KERNEL_RAM_OBJS) $(KERNEL_RAM_LISTS)
+	@echo 'KERNEL_RAM: moving $(words $(KERNEL_RAM_ROWS)) sections to RAM'
+	$(foreach o,$(KERNEL_RAM_OBJS),arm-none-eabi-objcopy $(foreach r,$(KERNEL_RAM_ROWS),$(if $(filter $(o),mtkernel_3/$(firstword $(subst :, ,$(r)))),--rename-section $(lastword $(subst :, ,$(r)))=$(call kernel_ram_new,$(lastword $(subst :, ,$(r))),$(o)))) $(o) &&) true
 	touch $@
 $(EXE_FILE).elf: $(EXE_FILE).ramstamp
-$(EXE_FILE).ramproof: $(EXE_FILE).elf ../app_program/bench_kernel/ram_proof.py
-	python3 ../app_program/bench_kernel/ram_proof.py $(EXE_FILE).elf \
-	  $(BENCH_RAM_LIST) > $@.tmp; st=$$?; cat $@.tmp; \
+$(EXE_FILE).ramproof: $(EXE_FILE).elf $(KERNEL_RAM_DIR)/ram_proof.py
+	python3 $(KERNEL_RAM_DIR)/ram_proof.py $(EXE_FILE).elf \
+	  $(KERNEL_RAM_LISTS) > $@.tmp; st=$$?; cat $@.tmp; \
 	  if [ $$st -ne 0 ]; then rm -f $@.tmp; exit $$st; fi; mv $@.tmp $@
 all: $(EXE_FILE).ramproof
 endif
+# End of kernel hot path in RAM
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
 # otherwise discard anything appended above.
@@ -409,8 +422,8 @@ PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
 ifeq ($(BENCH_KERNEL),1)
 PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
 endif
-ifeq ($(BENCH_KERNEL_RAM),1)
-PROFILE_ID := $(PROFILE_ID)-benchram1
+ifeq ($(KERNEL_RAM),1)
+PROFILE_ID := $(PROFILE_ID)-kernelram1
 endif
 PROFILE_FILE := .build_profile
 

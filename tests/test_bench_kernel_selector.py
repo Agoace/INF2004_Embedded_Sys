@@ -88,56 +88,127 @@ class BenchMode(unittest.TestCase):
                     self.preflight("1", **{key: value}).returncode, 0)
 
 
-    def test_ram_variant_is_up_bench_only(self):
-        self.assertEqual(self.preflight("1", SMP="0").returncode, 0)
-        ok = self.preflight("1", SMP="0", BENCH_KERNEL_RAM="1")
-        self.assertEqual(ok.returncode, 0, ok.stderr)
-        for mode, smp, ram in (("0", "0", "1"), ("1", "1", "1"),
+    def test_kernel_ram_is_up_only_opt_in(self):
+        for mode in ("0", "1"):
+            with self.subTest(mode=mode):
+                ok = self.preflight(mode, SMP="0", KERNEL_RAM="1")
+                self.assertEqual(ok.returncode, 0, ok.stderr)
+        for mode, smp, ram in (("1", "1", "1"), ("0", "1", "1"),
                                ("1", "0", "2"), ("1", "0", "")):
             with self.subTest(mode=mode, smp=smp, ram=ram):
                 self.assertNotEqual(self.preflight(
-                    mode, SMP=smp, BENCH_KERNEL_RAM=ram).returncode, 0)
+                    mode, SMP=smp, KERNEL_RAM=ram).returncode, 0)
+
+    def test_old_bench_kernel_ram_name_rejected(self):
+        self.assertNotEqual(self.preflight(
+            "1", SMP="0", BENCH_KERNEL_RAM="1").returncode, 0)
+
+
+LISTS = ROOT / "tools/kernel_ram"
+
+
+def entries(name):
+    rows = []
+    for line in (LISTS / name).read_text().splitlines():
+        if line.strip() and not line.startswith("#"):
+            rows.append(line.split())
+    return rows
+
+
+def symbols(*names):
+    out = set()
+    for name in names:
+        for row in entries(name):
+            out.update(row[2:] or [row[1][len(".text."):]])
+    return out
 
 
 class RamHotPath(unittest.TestCase):
-    """The RAM list names real objects and every approved hot function."""
-
-    def entries(self):
-        rows = []
-        for line in (ROOT / "app_program/bench_kernel/ram_hot_path.list"
-                     ).read_text().splitlines():
-            if line.strip() and not line.startswith("#"):
-                rows.append(line.split())
-        return rows
+    """The lists name real objects and every approved hot function."""
 
     def test_objects_have_sources(self):
-        for row in self.entries():
-            with self.subTest(row=row):
-                obj = row[0]
-                self.assertTrue(obj.endswith(".o"))
-                base = ROOT / obj[:-2]
-                self.assertTrue(base.with_suffix(".c").exists() or
-                                base.with_suffix(".S").exists(), obj)
-                self.assertTrue(row[1] == ".text" or
-                                row[1].startswith(".text."))
+        for name in ("common.list", "robot.list", "bench.list"):
+            for row in entries(name):
+                with self.subTest(list=name, row=row):
+                    obj, section = row[0], row[1]
+                    self.assertTrue(obj.endswith(".o"))
+                    self.assertTrue(section == ".text" or
+                                    section.startswith(".text.") or
+                                    section.startswith(".time_critical."))
+                    if section.startswith(".time_critical.") or \
+                            section == ".text":
+                        self.assertGreater(len(row), 2, "symbols needed")
+                    if obj.startswith("tinyusb/"):
+                        continue  # external TINYUSB_PATH sources
+                    base = ROOT / obj[:-2]
+                    self.assertTrue(base.with_suffix(".c").exists() or
+                                    base.with_suffix(".S").exists(), obj)
 
-    def test_approved_functions_listed(self):
-        symbols = set()
-        for row in self.entries():
-            symbols.update(row[2:] or [row[1][len(".text."):]])
+    def test_common_functions(self):
+        names = symbols("common.list")
         for name in ("knl_dispatch_entry", "knl_dispatch", "disint",
-                     "knl_hll_inthdr", "knl_systim_inthdr",
-                     "knl_timer_handler", "tk_wup_tsk", "tk_slp_tsk",
-                     "tk_can_wup", "tk_loc_mtx", "tk_unl_mtx",
-                     "knl_make_ready", "knl_make_non_ready",
+                     "ClearInt", "knl_hll_inthdr", "knl_systim_inthdr",
+                     "knl_timer_handler", "knl_timer_insert_reltim",
+                     "tk_wup_tsk", "tk_slp_tsk", "tk_can_wup", "tk_loc_mtx",
+                     "tk_unl_mtx", "knl_make_ready", "knl_make_non_ready",
                      "knl_wait_release_ok", "alarm_irq", "gpio_dispatch",
-                     "encoder_irq", "drv_line_hw_read", "bk_gpio_ack",
-                     "drv_time_us", "drv_time_hw_us", "ClearInt",
-                     "bk_line_timer_ack", "bk_line_timer_alarm",
-                     "drv_motor_hw_ab", "bk_gpio_ab",
-                     "knl_timer_insert_reltim"):
+                     "encoder_irq", "drv_time_us", "drv_time_hw_us"):
             with self.subTest(name=name):
-                self.assertIn(name, symbols)
+                self.assertIn(name, names)
+
+    def test_robot_and_bench_providers(self):
+        robot = symbols("robot.list")
+        bench = symbols("bench.list")
+        for name in ("drv_line_hw_alarm", "drv_line_hw_ack",
+                     "drv_line_hw_read", "drv_gpio_irq_hw_ack",
+                     "drv_gpio_irq_hw_pending", "drv_motor_hw_ab",
+                     "echo_irq_handler", "dcd_rp2040_irq",
+                     "dcd_event_handler", "hw_endpoint_xfer_continue",
+                     "_hw_endpoint_buffer_control_update32",
+                     "hw_endpoint_reset_transfer", "tu_fifo_write",
+                     "tud_event_hook_cb", "sync_ep_buffer",
+                     "hw_endpoint_start_next_buffer", "prepare_ep_buffer"):
+            with self.subTest(name=name):
+                self.assertIn(name, robot)
+        for name in ("bk_gpio_ack", "bk_gpio_pending", "bk_gpio_ab",
+                     "bk_line_timer_ack", "bk_line_timer_alarm",
+                     "drv_line_hw_read", "drv_motor_hw_ab"):
+            with self.subTest(name=name):
+                self.assertIn(name, bench)
+        robot_objs = {r[0] for r in entries("robot.list")}
+        self.assertFalse(any("bench_kernel" in o for o in robot_objs))
+        bench_objs = {r[0] for r in entries("bench.list")}
+        self.assertTrue(all("bench_kernel" in o for o in bench_objs))
+
+
+class KernelRamRule(unittest.TestCase):
+    """Evaluate the real make rule block: rows per profile, none by default."""
+
+    def rows(self, **args):
+        text = (ROOT / "build_make/pico_rp2040.mk").read_text()
+        block = text[text.index("# Kernel hot path in RAM: rule"):
+                     text.index("# End of kernel hot path in RAM")]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".mk") as out:
+            out.write(block + "\nprint:\n\t@echo $(KERNEL_RAM_ROWS)\n")
+            out.flush()
+            return subprocess.check_output(
+                ["make", "--no-print-directory", "-f", out.name, "print"] +
+                [f"{k}={v}" for k, v in args.items()],
+                cwd=ROOT / "build_make", text=True).split()
+
+    def test_default_has_no_rows(self):
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.rows(KERNEL_RAM="0", BENCH_KERNEL="1"), [])
+
+    def test_profile_lists(self):
+        robot = " ".join(self.rows(KERNEL_RAM="1", BENCH_KERNEL="0"))
+        bench = " ".join(self.rows(KERNEL_RAM="1", BENCH_KERNEL="1"))
+        for text in (robot, bench):
+            self.assertIn("kernel/tkernel/task_sync.o:.text.tk_wup_tsk", text)
+        self.assertIn("subsystem3/drv_line_hw.o", robot)
+        self.assertNotIn("bench_kernel", robot)
+        self.assertIn("bench_kernel/bench_gpio.o", bench)
+        self.assertNotIn("subsystem3/drv_line_hw.o", bench)
 
 
 if __name__ == "__main__":

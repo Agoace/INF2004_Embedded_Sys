@@ -1,0 +1,26 @@
+# KERNEL_RAM=1 (UP only): sections moved from flash (XIP) to executable RAM.
+# Format: object section [symbols]. The object path is below mtkernel_3/.
+# With no symbols, the symbol is the section name after ".text.". The build
+# renames each section to .data.ramfunc.*; the unchanged template linker
+# script copies .data.* to RAM. ram_proof.py fails the build if a listed
+# symbol stays in flash.
+# robot.list: real hardware providers, the sonar echo ISR and the USB ISR
+# with its transfer helpers. Left in flash: panic and rp2040_chip_version
+# (error and one-time paths), memcpy/memset (C library).
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_alarm
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_ack
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_read
+app_program/platform/drv_gpio_irq_hw.o .text.drv_gpio_irq_hw_ack
+app_program/platform/drv_gpio_irq_hw.o .text.drv_gpio_irq_hw_pending
+app_program/subsystem2/drv_motor_hw.o .text.drv_motor_hw_ab
+app_program/subsystem5/drv_ultrasonic.o .text.echo_irq_handler
+tinyusb/portable/raspberrypi/rp2040/dcd_rp2040.o .text.dcd_rp2040_irq
+tinyusb/device/usbd.o .time_critical.tinyusb dcd_event_handler
+tinyusb/device/usbd.o .text.tud_event_hook_cb
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_xfer_continue
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text._hw_endpoint_buffer_control_update32
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_reset_transfer
+tinyusb/common/tusb_fifo.o .text.tu_fifo_write
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.sync_ep_buffer
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_start_next_buffer
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.prepare_ep_buffer

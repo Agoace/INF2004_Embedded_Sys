@@ -6,7 +6,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "ram_proof", ROOT / "app_program/bench_kernel/ram_proof.py")
+    "ram_proof", ROOT / "tools/kernel_ram/ram_proof.py")
 proof = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(proof)
 
@@ -46,6 +46,15 @@ class Proof(unittest.TestCase):
     def test_size_less_label_bounded_by_next_symbol(self):
         syms = proof.parse_nm(NM)
         self.assertEqual(syms["knl_dispatch_entry"], (0x20000120, 0x20))
+
+    def test_lists_merge(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            a, b = Path(d) / "a.list", Path(d) / "b.list"
+            a.write_text("# c\nx.o .text.f\nd.o .text knl_x l_y\n")
+            b.write_text("\ny.o .time_critical.usb usb_fast\n")
+            self.assertEqual(proof.listed_all([str(a), str(b)]),
+                             ["f", "knl_x", "l_y", "usb_fast"])
 
     def test_flash_callees_through_veneers(self):
         syms = proof.parse_nm(NM)

@@ -1,12 +1,12 @@
-# BENCH_KERNEL_RAM=1 (UP diagnostic only): sections moved from flash (XIP) to
-# executable RAM. Format: object section [symbols]. With no symbols, the
-# symbol is the section name after ".text.". The build renames each section
-# to .data.ramfunc.<name>; the unchanged template linker script copies
-# .data.* to RAM. ram_proof.py fails the build if a symbol stays in flash.
-# Left in flash on purpose: rt_call/rt_max (P1 measurement, same in both
-# images), memset (C library), the generator body (drift control; it
-# still calls drv_time_us, which is in RAM).
-# Kernel: dispatcher (PendSV), interrupt entry, timer, critical sections.
+# KERNEL_RAM=1 (UP only): sections moved from flash (XIP) to executable RAM.
+# Format: object section [symbols]. The object path is below mtkernel_3/.
+# With no symbols, the symbol is the section name after ".text.". The build
+# renames each section to .data.ramfunc.*; the unchanged template linker
+# script copies .data.* to RAM. ram_proof.py fails the build if a listed
+# symbol stays in flash.
+# common.list: kernel and the application hot path in every KERNEL_RAM image.
+# Left in flash on purpose: rt_call/rt_max (P1 measurement), memset (C
+# library), Wi-Fi/lwIP/MQTT (priority-20 poll task, not on the deadline path).
 kernel/sysdepend/cpu/core/armv6m/dispatch.o .text knl_dispatch_entry
 kernel/sysdepend/cpu/core/armv6m/cpu_cntl.o .text.knl_dispatch
 kernel/sysdepend/cpu/core/armv6m/interrupt.o .text.knl_hll_inthdr
@@ -17,7 +17,6 @@ kernel/tkernel/timer.o .text.knl_timer_insert
 kernel/tkernel/timer.o .text.knl_enqueue_tmeb
 kernel/tkernel/timer.o .text.knl_timer_insert_reltim
 lib/libtk/sysdepend/cpu/rp2040/int_rp2040.o .text.ClearInt
-# Kernel calls measured by P1 [kcall], with their wait/ready helpers.
 kernel/tkernel/task_sync.o .text.tk_wup_tsk
 kernel/tkernel/task_sync.o .text.tk_slp_tsk
 kernel/tkernel/task_sync.o .text.tk_can_wup
@@ -38,20 +37,8 @@ kernel/tkernel/wait.o .text.knl_wait_delete
 kernel/tkernel/wait.o .text.knl_gcb_make_wait
 kernel/tkernel/wait.o .text.knl_gcb_change_priority
 kernel/tkernel/wait.o .text.knl_gcb_top_of_wait_queue
-# Line and encoder ISRs with their hardware (bench provider) helpers.
 app_program/subsystem3/drv_line.o .text.alarm_irq
 app_program/platform/drv_gpio_irq.o .text.gpio_dispatch
 app_program/subsystem2/motion.o .text.encoder_irq
-app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_alarm
-app_program/bench_kernel/bench_timer_hw.o .text.bk_line_timer_alarm
-app_program/bench_kernel/bench_timer_hw.o .text.bk_line_timer_ack
-app_program/bench_kernel/bench_motor_hw.o .text.drv_motor_hw_ab
-app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_ack
-app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_read
-app_program/bench_kernel/bench_gpio_hw.o .text.drv_gpio_irq_hw_ack
-app_program/bench_kernel/bench_gpio_hw.o .text.drv_gpio_irq_hw_pending
-app_program/bench_kernel/bench_gpio.o .text.bk_gpio_ack
-app_program/bench_kernel/bench_gpio.o .text.bk_gpio_pending
-app_program/bench_kernel/bench_gpio.o .text.bk_gpio_ab
 app_program/platform/drv_time.o .text.drv_time_us
 app_program/platform/drv_time_hw.o .text.drv_time_hw_us

@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Prove the BENCH_KERNEL_RAM=1 placement in a linked ELF.
 
-Usage: ram_proof.py ELF LIST [PREFIX]
+Usage: ram_proof.py ELF LIST [LIST...]   (tool prefix: $OBJ_PREFIX)
 Checks that every listed symbol is in RAM, then lists the flash functions
 that RAM code still calls (through long-branch veneers) and the indirect
 calls (blx rN) that cannot be resolved statically. Exit 1 if a listed
 symbol is missing or still in flash.
 """
+import os
 import re
 import subprocess
 import sys
@@ -90,15 +91,22 @@ def listed(path):
     return names
 
 
+def listed_all(paths):
+    names = []
+    for path in paths:
+        names.extend(listed(path))
+    return names
+
+
 def main(argv):
     if len(argv) < 3:
         print(__doc__)
         return 2
-    elf, path = argv[1], argv[2]
-    prefix = argv[3] if len(argv) > 3 else "arm-none-eabi-"
+    elf, paths = argv[1], argv[2:]
+    prefix = os.environ.get("OBJ_PREFIX", "arm-none-eabi-")
     syms = parse_nm(subprocess.check_output(
         [prefix + "nm", "-S", "--defined-only", elf], text=True))
-    names = listed(path)
+    names = listed_all(paths)
     ram, flash, missing = placement(syms, names)
     disasm = subprocess.check_output(
         [prefix + "objdump", "-D", "--no-show-raw-insn", "-j", ".data", elf],
