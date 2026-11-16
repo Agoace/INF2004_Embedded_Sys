@@ -236,15 +236,19 @@ target_link_libraries(test_imu_safety PRIVATE m)
 # Trace replay analyser for recorded IMU data (RT-0091). The checked-in
 # fixture is SYNTHETIC: it proves the tool parses a trace and reports the
 # rule outcome, not that the candidate bounds detect a real lift.
-host_test(test_replay_imu_safety tests/replay_imu_safety.c
-    app_program/subsystem4/imu_safety.c)
-target_link_libraries(test_replay_imu_safety PRIVATE m)
-if(TARGET test_replay_imu_safety)
+# Built directly rather than with host_test(): host_test() adds a
+# zero-argument CTest, and this tool needs a trace path, so that test
+# could only fail on its usage message.
+if(EXISTS "${REPO}/tests/replay_imu_safety.c")
+    add_executable(test_replay_imu_safety
+        "${REPO}/tests/replay_imu_safety.c"
+        "${REPO}/app_program/subsystem4/imu_safety.c")
+    target_link_libraries(test_replay_imu_safety PRIVATE m)
+    # Pin the exact onset and the single latch, so a rule or wiring change
+    # that moves or duplicates the trigger fails the test.
     add_test(NAME test_replay_imu_safety_lift
         COMMAND test_replay_imu_safety
             "${REPO}/tests/fixtures/imu_safety_synthetic_lift.csv")
-    # Pin the exact onset and the single latch, so a rule or wiring change
-    # that moves or duplicates the trigger fails the test.
     set_tests_properties(test_replay_imu_safety_lift PROPERTIES
         PASS_REGULAR_EXPRESSION
             "first_reason=lift first_ms=210 latched=lift stops=1")
