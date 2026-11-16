@@ -1,6 +1,6 @@
 /*
  * Motor controller settings for this robot
- * (docs/architecture/ADR_MOTOR_CONTROLLER.md).
+ * (docs/architecture/ARCHITECTURE.md).
  * The hardware quirks live here and nowhere else.
  *
  * Sources:

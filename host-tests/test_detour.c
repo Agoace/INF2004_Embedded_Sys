@@ -1,5 +1,5 @@
 /*
- * Independent module test. See docs/architecture/BRANCH_LAYOUT.md for build
+ * Independent module test. See docs/architecture/PROJECT_STATUS.md for build
  * commands.
  */
 #include <assert.h>
