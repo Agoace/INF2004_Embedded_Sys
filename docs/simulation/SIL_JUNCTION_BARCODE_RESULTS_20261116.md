@@ -6,6 +6,8 @@ Webots runs are finished; all owned process groups are gone.
 
 ## Version and protocol
 
+All runs retain the original1kg model mass in their archived manifests.
+The later671.6g operator measurement does not alter or rerun these results.
 All runs use the **old wheel-midpoint barcode_window**, before52244f2. No result
 in this record tests the new GP28-position width calculation. Native source
 hashes and library bytes are identical across all three letter runs:
