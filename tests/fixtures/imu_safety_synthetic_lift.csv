@@ -1,0 +1,32 @@
+# SYNTHETIC trace, not a measurement. It exists only to prove that
+# tests/replay_imu_safety.c parses a trace, feeds the shipped detector and
+# reports the expected trigger. Do not cite it as lift-detection evidence.
+#
+# Shape: 200 ms quiet upright at 1 g, then a free fall (|a| ~ 0.3 g) that
+# must confirm LIFT on its second low-g sample, which is t_ms = 210.
+#
+# t_ms,ax_mg,ay_mg,az_mg,valid,calibrated,wheels_still
+0,0,0,1000,1,1,1
+10,0,0,1000,1,1,1
+20,0,0,1000,1,1,1
+30,0,0,1000,1,1,1
+40,0,0,1000,1,1,1
+50,0,0,1000,1,1,1
+60,0,0,1000,1,1,1
+70,0,0,1000,1,1,1
+80,0,0,1000,1,1,1
+90,0,0,1000,1,1,1
+100,0,0,1000,1,1,1
+110,0,0,1000,1,1,1
+120,0,0,1000,1,1,1
+130,0,0,1000,1,1,1
+140,0,0,1000,1,1,1
+150,0,0,1000,1,1,1
+160,0,0,1000,1,1,1
+170,0,0,1000,1,1,1
+180,0,0,1000,1,1,1
+190,0,0,1000,1,1,1
+200,0,0,300,1,1,0
+210,0,0,300,1,1,0
+220,0,0,1000,1,1,0
+230,0,0,1000,1,1,0
