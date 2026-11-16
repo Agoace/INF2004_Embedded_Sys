@@ -708,6 +708,19 @@ static bool imu_safety_check(void)
     if (trigger == (uint8_t)IMU_SAFETY_NONE) {
         return imu_latched == (uint8_t)IMU_SAFETY_NONE;
     }
+    /* An unavailable IMU blocks a start and stops active motion, but it is
+     * not a latched fault: the plan reserves the latch for a confirmed
+     * overturn or lift. Latching it here faulted every cold boot, because
+     * the IMU service has not published a board on the first Vehicle wake. */
+    if (trigger == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
+        if (active) {
+            (void)vehicle_estop();
+            cancelled = true;
+            set_reason(RM_STOP_IMU_UNAVAILABLE, imu_reason_text(trigger));
+            event(3u, vsm.state, vsm.running, (uint16_t)trigger);
+        }
+        return false;
+    }
     if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
         /* Exactly one stop request per confirmed reason. */
         imu_latched = trigger;
@@ -1557,11 +1570,20 @@ static void vehicle_task(INT code, void *ctx)
                 imu_latched != (uint8_t)IMU_SAFETY_NONE
                     ? imu_latched
                     : (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE;
-            set_reason(imu_reason_code(why),
-                       imu_latched != (uint8_t)IMU_SAFETY_NONE
-                           ? imu_reason_text(why)
-                           : "IMU not ready");
+            const char *text =
+                imu_latched != (uint8_t)IMU_SAFETY_NONE
+                    ? imu_reason_text(why)
+                    : "IMU not ready";
+            set_reason(imu_reason_code(why), text);
             event(3u, vsm.state, vsm.running, (uint16_t)why);
+            /* Low-rate: one line per refused start request, never in the
+             * stop path. An unavailable IMU does not latch, so this is the
+             * operator's only feedback for a refused press. */
+            tm_printf((UB *)"[robot] IMU safety start refused: %s "
+                            "g_mg %ld tilt_ddeg %ld age_ms %ld\n",
+                      text, (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
+                      (long)(int32_t)(drv_time_ms() -
+                                      imu_copy.observation_ms));
 #if TM_MQTT
             vehicle.phase = 0u;
 #endif

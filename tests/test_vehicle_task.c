@@ -112,9 +112,12 @@ static imu_safety_output_t safety_out={.flags=IMU_SAFETY_FLAG_VALID|
     .clear_ms=IMU_SAFETY_CLEAR_MS};
 static bool safety_busy;
 static bool safety_refuse_clear;
+static unsigned int safety_fail_reads;
 static unsigned int safety_clear_requests;
 int imu_safety_try_read(imu_safety_output_t *o) {
     if (safety_busy) return E_TMOUT;
+    /* Models the interval before the IMU service publishes its board. */
+    if (safety_fail_reads > 0u) { --safety_fail_reads; return E_TMOUT; }
     *o=safety_out;o->observation_ms=now;return E_OK;
 }
 bool imu_safety_clear_request(void) {
@@ -240,6 +243,9 @@ int main(int argc,char **argv) {
     const bool imu_unavail=argc>1 && !strcmp(argv[1],"imunavail");
     const bool imu_clear=argc>1 && !strcmp(argv[1],"imuclear");
     const bool imu_refused=argc>1 && !strcmp(argv[1],"imuclearrefused");
+    /* Boot race: the IMU service has not published its board yet. */
+    const bool imu_boot=argc>1 && !strcmp(argv[1],"imubootrace");
+    if (imu_boot) safety_fail_reads=3u;
     if (imu_lift) {
         safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
         safety_out.clear_ms=0u;
@@ -265,11 +271,27 @@ int main(int argc,char **argv) {
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
     /* IMU safety outcomes, asserted before the run-specific checks so a
      * refused start is not judged by assertions about a completed run. */
-    if (imu_lift || imu_unavail) {
-        /* A confirmed IMU reason stops the robot exactly once, and no run,
-         * calibration spin or motion command may start under the latch. */
+    if (imu_boot) {
+        /* A cold boot where the IMU board is not published yet must NOT
+         * latch a fault: nothing is active, so no stop is requested, and
+         * once the board appears a normal start proceeds. */
+        assert(estops==0u);
+        assert(safety_clear_requests==0u);
+        assert(run_seen!=0u && line_drives>0u);
+        return 0;
+    }
+    if (imu_lift) {
+        /* A confirmed lift reason stops exactly once and blocks the start. */
         assert(estops==1u && run_seen==0u && line_drives==0u);
         assert(vehicle_run_epoch()==0u && spins==0u && asked[0]==0 && asked[1]==0);
+        assert(safety_clear_requests==0u);
+        return 0;
+    }
+    if (imu_unavail) {
+        /* Unavailability blocks the start but must NOT latch a fault:
+         * nothing was active, so no stop is requested. */
+        assert(estops==0u && run_seen==0u && line_drives==0u);
+        assert(spins==0u && asked[0]==0 && asked[1]==0);
         assert(safety_clear_requests==0u);
         return 0;
     }

@@ -58,3 +58,9 @@ app_program/subsystem1/robot_mqtt_secrets.h
 # Public repository: keep course originals local; track only our summary.
 /docs/project-requirements/*
 !/docs/project-requirements/README.md
+
+# Operator captures stay local. The testing/*/logs/ directories hold only
+# .gitkeep, so recorded session data is not committed.
+/testing/logs/*.csv
+/testing/*/logs/*.csv
+/testing/*/logs/*.txt
