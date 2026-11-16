@@ -210,7 +210,7 @@ class CourseIntegrationTests(unittest.TestCase):
         self.assertIn('EXTERNPROTO "../protos/RoboPico.proto"', world)
         self.assertIn('basicTimeStep 1 coordinateSystem "ENU"', world)
         self.assertIn("translation 0.35 0.1575 0.0425", world)
-        self.assertIn("barcodePosition 0.08 0.077 -0.027", world)
+        self.assertIn("barcodePosition 0.073 0.073 -0.0273", world)
         self.assertNotIn("/home/", world)
         self.assertNotIn("http", world)
         self.assertIn("protos/RoboPico.proto", self.files)

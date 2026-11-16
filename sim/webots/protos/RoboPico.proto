@@ -6,28 +6,28 @@ PROTO RoboPico [
   field SFVec3f translation 0 0 0.0425
   field SFRotation rotation 0 0 1 0
   field SFString controller "stage0_preview"
-  field SFFloat track 0.111
+  field SFFloat track 0.1115
   field SFFloat wheelRadius 0.0325
   field SFFloat wheelWidth 0.016
   field SFFloat wheelMass 0.04
   field SFFloat wheelTorqueLimit 0.12
   field SFFloat bodyMass 0.5516
-  field SFVec3f bodySize 0.19 0.16 0.035
-  field SFVec3f bodyCentre 0.028 0 0.025
+  field SFVec3f bodySize 0.18 0.16 0.035
+  field SFVec3f bodyCentre 0.0375 0 0.025
   field MFVec3f centreOfMass [ 0.03 0 0.02 ]
   field SFFloat casterMass 0.02
   field SFFloat casterRadius 0.01
   field SFFloat casterWidth 0.006
   field SFFloat casterTrail 0.008
-  field SFVec3f casterPosition 0.08 0 -0.0225
+  field SFVec3f casterPosition 0.082 0 -0.0225
   field SFFloat headMass 0.02
   field SFVec3f servoPosition 0.065 0 0.02
-  field SFFloat sonarFaceOffset 0
+  field SFFloat sonarFaceOffset 0.02
   field SFFloat servoSlew 4.84813681
-  field SFVec3f lineCentrePosition 0.119 0 -0.0245
-  field SFVec3f lineLeftPosition 0.119 0.0145 -0.0245
-  field SFVec3f barcodePosition 0.08 0.077 -0.027
-  field SFVec3f imuPosition 0.06 0 0.0975
+  field SFVec3f lineCentrePosition 0.122 0 -0.0235
+  field SFVec3f lineLeftPosition 0.122 0.0147 -0.0235
+  field SFVec3f barcodePosition 0.073 0.073 -0.0273
+  field SFVec3f imuPosition 0.06 0 0.0995
   field SFBool debugCameras FALSE
 ]
 {

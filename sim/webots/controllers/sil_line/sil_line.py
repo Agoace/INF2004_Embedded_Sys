@@ -105,6 +105,10 @@ def run(robot,project):
     encoders=[robot.getDevice(n)for n in('left_encoder','right_encoder')]
     for encoder in encoders:encoder.enable(1)
     rows=[];rejections=[];error=None;fault=False;ticks=config.get('duration_ms',10000)
+    optical_history=[]
+    if config.get('taskA_geometry'):
+        from pil.sil_excited_line import DelayPair
+        adc_delay=DelayPair(config.get('sensor_transport_delay_ms',0))
     try:
         for slot in range(ticks):
             if robot.step(1)==-1 or round(robot.getTime()*1000)!=slot+1:raise ValueError('SIL step sequence')
@@ -120,6 +124,9 @@ def run(robot,project):
                 sample=scene.sample(profiles[name],origin,axis_u=(c,s,0),sample_us=(slot+1)*1000)
                 if not sample.valid:raise ValueError('optical sample invalid: '+sample.reason)
                 adc.append(sample.adc)
+            if config.get('taskA_geometry'):
+                fresh=tuple(adc);adc=list(adc_delay.update(slot+1,adc))
+                optical_history.append((slot+1,*fresh,*adc))
             angles=[encoder.getValue()for encoder in encoders]
             counts=[round(a*2535/(2*math.pi))for a in angles]
             if config.get('barcode_trial'):
@@ -142,7 +149,9 @@ def run(robot,project):
                     from pil.sil_s_curve import nearest_s_path as nearest_path
                 else:from pil.sil_curve import nearest_path
                 pair_error=nearest_path(position[0]*1000+c*119-s*7.25,position[1]*1000+s*119+c*7.25)['error_mm']
-            else:pair_error=position[1]*1000+s*119+c*7.25-157.5
+            else:
+                forward=config['mounts']['GP26']['forward_mm'];half_left=config['mounts']['GP27']['left_mm']/2
+                pair_error=position[1]*1000+s*forward+c*half_left-157.5
             row=(slot+1,*adc[:2],*list(actual.values())[:9],*position,yaw,*angles,*targets,pair_error,rotation[8])
             if native:row=(*row,*counts,*list(actual.values())[9:])
             if any(not math.isfinite(v)for v in row):raise ValueError('nonfinite SIL state')
@@ -205,6 +214,9 @@ def run(robot,project):
             (output/'barcode-inputs.json').write_text(json.dumps(evidence[0],separators=(',',':'))+'\n')
             (output/'barcode-details.json').write_text(json.dumps(evidence[1],indent=2)+'\n')
             (output/'barcode-events.json').write_text(json.dumps(evidence[2],indent=2)+'\n')
+    if config.get('taskA_geometry'):
+        with (output/'taskA-optical-inputs.csv').open('w',newline='')as stream:
+            writer=csv.writer(stream);writer.writerow(('ms','fresh_l','fresh_c','delivered_l','delivered_c'));writer.writerows(optical_history)
     (output/'rejections.json').write_text(json.dumps(rejections,indent=2)+'\n')
     success_status='SIL_RECOVERY_EXPERIMENT_COMPLETE'if config.get('recovery_trial')else'SIL_LINE_COMPLETE'
     summary=dict(status=success_status if complete and proof else'SIL_LINE_INCOMPLETE',samples=len(rows),
