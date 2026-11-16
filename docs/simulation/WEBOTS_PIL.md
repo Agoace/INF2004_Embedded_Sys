@@ -169,7 +169,7 @@ model tests; it does not make the value measured or physically accepted.
 | --- | --- | --- |
 | Track / encoder ratio | 111 mm / 2535 counts per revolution | Operator track and unloaded 50-turn ratio; not tyre slip acceptance. |
 | Wheel / distance conversion | Nominal 65 mm / firmware 12414 counts per metre | Effective loaded radius and ground travel are unmeasured. |
-| Total mass | **ASSUMED 1 kg** | Weigh the robot with its current battery and fixtures. |
+| Total mass | **MEASURED 671.6 g**, operator2026-11-16 | Replaces the1 kg placeholder for future projects. Component allocation and COM remain assumed; derived body mass551.6 g after the assumed wheel/caster/head allocation. Completed runs retain their original1 kg manifests and are not rerun. |
 | Wheel / caster / head mass | **ASSUMED 40 g each / 20 g / 20 g** | Measure component mass or approve the approximation. |
 | Body envelope | Operator-measured190 x160 mm,2026-10-30; front reach from old echo remains uncertain | Width includes barcode mount, not a chassis CAD model. Line mount119 supersedes calculated123 mm. |
 | Body height / COM | **ASSUMED** 35 mm box, box centre Z25 mm above axle; COM x30/Z20 mm | Survey mass distribution and actual collision shape. |

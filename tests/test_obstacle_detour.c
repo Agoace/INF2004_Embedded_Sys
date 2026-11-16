@@ -646,6 +646,125 @@ int main(void) {
     w = update(&dt);
     check(w == (dt_word_t)(1u | 4u | (60u << 3)), "word: TURN right, servo +30");
 
+    /* First straight from the wall triangle: L = d / cos(turn away) +
+     * first_extra_mm, at most first_max_mm. d = sensor_ahead_mm +
+     * obstacle_mm (+ any BACK). Off (old rule) when first_max_mm is 0. */
+    {
+        dt_config_t tri = CFG;
+        tri.first_extra_mm = 50u;
+        tri.first_max_mm = 700u;
+        /* Heading 15: d 285, cos 966: 295 + 50 = 345 mm. */
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        line = false;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        (void)turn_to(&dt, counts(5));
+        read(&dt, 250);
+        (void)turn_to(&dt, counts(10));
+        read(&dt, 260);
+        (void)turn_to(&dt, counts(15));
+        read(&dt, NR);
+        check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 15, "triangle: heading 15");
+        check(dt.first_leg_mm == 345u, "triangle: 285 / cos 15 + 50 = 345");
+        (void)drive_to(&dt, 100);
+        read(&dt, 150); /* nearer echo: the first leg does not restart */
+        (void)drive_to(&dt, 344);
+        check(dt_step(&dt) == DT_STRAIGHT, "triangle: 344 mm: still STRAIGHT");
+        (void)drive_to(&dt, 345);
+        check(dt_step(&dt) == DT_TURN_TOWARD && dt.straights == 1u,
+              "triangle: 345 mm: TURN_TOWARD");
+        check(dt.first_leg_mm == 0u, "triangle: later steps use the old rule");
+
+        /* Heading 75: 285 / 0.259 + 50 = 1150 -> capped at 700 mm. */
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 70; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(75));
+        read(&dt, NR);
+        check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 75, "triangle cap: heading 75");
+        check(dt.first_leg_mm == 700u, "triangle cap: 700 mm");
+
+        /* BACK 15 mm first: d = 65 + 100 + 15 = 180; heading 60: 360 + 50. */
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 100u, cl, cr, now);
+        check(dt_step(&dt) == DT_BACK, "triangle back: BACK first");
+        (void)drive_to(&dt, -15);
+        check(dt_step(&dt) == DT_TURN_AWAY, "triangle back: TURN_AWAY");
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 55; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(60));
+        read(&dt, NR);
+        check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 60, "triangle back: heading 60");
+        check(dt.first_leg_mm == 410u, "triangle back: 180 / cos 60 + 50 = 410");
+
+        /* Trim: from the last seen echo of TURN_AWAY (250 mm at turn 40,
+         * servo -30 -> ray 10) the corner is at (296, 85) mm from the
+         * axle. The path clears it by first_clear_mm 110 at 37 degrees,
+         * so after "lost" at 45 the robot turns back 8 degrees first.
+         * First leg: 285 / cos 37 + 50 = 406 mm. */
+        tri.first_clear_mm = 110u;
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 40; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(45));
+        read(&dt, NR);
+        check(dt.heading == 45 && dt_step(&dt) == DT_TURN_TOWARD && dt.trimming &&
+                  dt.trim_deg == 8,
+              "trim: lost at 45, turn back 8 to 37");
+        w = update(&dt);
+        check(dt_move(w) == DT_MOVE_TURN && dt_dir(w) == -1 && !dt_wants_reading(&dt, now + 1000u),
+              "trim: turn toward the obstacle, no readings");
+        (void)turn_to(&dt, -counts(7));
+        check(dt_step(&dt) == DT_TURN_TOWARD, "trim: 7 of 8: still turning");
+        (void)turn_to(&dt, -counts(8));
+        check(dt_step(&dt) == DT_STRAIGHT && dt.heading == 37 && dt.first_leg_mm == 406u,
+              "trim: heading 37, first leg 406");
+
+        /* Trim not possible below the turned angle: straight at once. */
+        tri.first_clear_mm = 300u;
+        now = 1000u;
+        cl = 5000;
+        cr = -3000;
+        dt_init(&dt, &tri, OBSTACLE_SIDE_LEFT, 220u, cl, cr, now);
+        (void)update(&dt);
+        read(&dt, NR);
+        for (int deg = 5; deg <= 40; deg += 5) {
+            (void)turn_to(&dt, counts(deg));
+            read(&dt, 250);
+        }
+        (void)turn_to(&dt, counts(45));
+        read(&dt, NR);
+        check(dt_step(&dt) == DT_STRAIGHT && !dt.trimming && dt.heading == 45,
+              "trim: 300 mm clear needs more than 45: no trim");
+
+        /* Off: first_max_mm 0 keeps vehicle_mm after the nearest reading. */
+        dt = to_straight(OBSTACLE_SIDE_LEFT);
+        check(dt.first_leg_mm == 0u, "triangle off: no first leg");
+    }
+
     if (failures == 0) {
         printf("test_obstacle_detour: all tests passed\n");
         return 0;

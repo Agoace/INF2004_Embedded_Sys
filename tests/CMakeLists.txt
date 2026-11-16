@@ -54,7 +54,7 @@ robot_source(src/obstacle_detour.c app_program/subsystem5/obstacle_detour.c obst
 robot_source(src/motor_ctl.c app_program/subsystem2/motor_ctl.c motor_ctl_source)
 robot_source(src/vehicle_sm.c app_program/vehicle/vehicle_sm.c vehicle_sm_source)
 host_test(test_detour_sweep tests/test_detour_sweep.c ${obstacle_detour_source})
-host_test(test_ir_modules tests/test_ir_modules.c src/barcode_reader.c src/ir_line_data.c)
+host_test(test_ir_line_data tests/test_ir_line_data.c src/ir_line_data.c)
 host_test(test_obstacle_scan tests/test_obstacle_scan.c )
 host_test(test_line_trace tests/test_line_trace.c ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
 host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_source} ${detour_run_source} ${obstacle_detour_source} ${obstacle_profile_source} ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})

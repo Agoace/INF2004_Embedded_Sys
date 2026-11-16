@@ -6,7 +6,7 @@
     "wheel_diameter_mm": {"value": 65, "assumed": false, "source": "MEASURED operator2026-11-15 diameter; loaded rolling radius remains unmeasured"},
     "counts_per_revolution": {"value": 2535, "assumed": false, "source": "HARDWARE.md unloaded 50-turn calibration"},
     "firmware_counts_per_m": {"value": 12414, "assumed": false, "source": "MOTION.md firmware conversion, not measured ground travel"},
-    "total_mass_kg": {"value": 1, "assumed": true, "source": "Stage0 placeholder; operator must weigh robot"},
+    "total_mass_kg": {"value": 0.6716, "assumed": false, "source": "MEASURED(operator 2026-11-16): total robot mass671.6g. Component allocation and COM remain ASSUMED; completed results are not rerun."},
     "wheel_mass_kg": {"value": 0.04, "assumed": true, "source": "Stage0 placeholder per driven wheel"},
     "caster_mass_kg": {"value": 0.02, "assumed": true, "source": "Stage0 placeholder caster assembly"},
     "head_mass_kg": {"value": 0.02, "assumed": true, "source": "Stage0 placeholder servo sonar head"},
