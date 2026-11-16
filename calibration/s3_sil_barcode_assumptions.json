@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "classification": "ASSUMED_SIL_BARCODE_OBSERVE_ONLY",
+  "operator_approval_date": "2026-11-16",
+  "paper": {
+    "scan_length_mm": 297.0,
+    "transverse_width_mm": 210.0,
+    "evidence": "MEASURED_OPERATOR_2026_11_16_A4_LANDSCAPE_IMPLIED_BY_BODY",
+    "inner_edge_left_of_line_mm": 25.0,
+    "inner_edge_evidence": "ASSUMED_OPERATOR_APPROVED",
+    "print_centred": true,
+    "print_centred_evidence": "ASSUMED_OPERATOR_APPROVED",
+    "thickness_mm": 0.0,
+    "thickness_evidence": "ASSUMED_ZERO_COPLANAR_LAYER_NOT_SURVEYED"
+  },
+  "print": {
+    "first_letter": "A",
+    "narrow_mm": 5.8,
+    "wide_mm": 17.5,
+    "ink_body_mm": 273.5,
+    "transverse_height_mm": 160.0,
+    "transverse_height_uncertainty_mm": 10.0,
+    "transverse_height_evidence": "PHOTO_ESTIMATED_IMG_1924_IMG_1938",
+    "quiet_required_each_end_mm": 58.0,
+    "quiet_on_paper_each_end_mm": 11.75
+  },
+  "layout": {
+    "paper_end_to_junction_centre_mm": 150.0,
+    "junction_spacing_evidence": "ASSUMED_OPERATOR_APPROVED",
+    "gp28_forward_mm": 80.0,
+    "gp28_left_mm": 77.0,
+    "gp28_reference_height_mm": 5.5,
+    "mount_rotation_deg": 90.0
+  },
+  "mat_proxy": {
+    "evidence": "MEASURED_MQTT_2026_11_11_UNLOCATED",
+    "source": "build/mtk_logs/robot-mqtt-20261111-163412.csv",
+    "source_sha256": "b59ae3e32169609421c5bc3a1f1960d867cb03d73630ef1026f0f1031b2fd546",
+    "topic": "robot/state",
+    "boot_id": "3162310911",
+    "method": "Keep finite integer raw_bc0..4095 on robot/state matching boot; deterministic2-medians initialized at minimum/maximum, nearest-centre assignment (ties low), median update until stable; no time weighting",
+    "samples": 3233,
+    "low": {"median_adc": 178.0, "mad_adc": 4.0, "samples": 2134},
+    "high": {"median_adc": 2321.0, "mad_adc": 12.0, "samples": 1099},
+    "mat_response_power": 1.0,
+    "response_evidence": "ASSUMED_NOT_FITTED",
+    "limits": "Unlocated moving observations, not surveyed pure material levels or stationary noise; assumed assignment low to mat white and high to mat dark; no inferred height law"
+  }
+}
