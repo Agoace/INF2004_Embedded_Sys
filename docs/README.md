@@ -22,6 +22,7 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations. Read before proposing work.
+- [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries, branch state table and archived branch tags.
 - [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
   and MQTT sizes, measurement tools and shared-access rule.
