@@ -21,7 +21,6 @@ Rules:
 | `MEASURED(who,date)` | A person or the robot measured it. `who` is operator, bench, robot log, trace or build. The date is in the label when the source gives it. |
 | `ASSUMED` | A design setting, guess, datasheet value or simulator input. Not measured. |
 | `PHOTO-ESTIMATED` | Read from a photo with a ruler. |
-| `MEASURED-UNCERTAIN(who,date)` | Measured, but the person who measured it marked it as not sure. |
 | `DERIVED` | Calculated or fitted from other values. |
 
 Date column: the run date when the source gives one. `doc ≤ YYYY-MM-DD` means
@@ -39,6 +38,7 @@ below give the sources.
 | Line sensors ahead of the wheel axle | 123 mm = 65 + 58, calculated (2026-10-30) | 119 mm, operator (2026-11-15) | Sim guess 119 mm (doc ≤ 2026-11-08). **Ruler about 122 mm** to the GP26/27 centre (2026-11-16); both older values are within 3 mm of it |
 | Counts per wheel revolution | 2540 / 2539 (2026-10-27) | 2535 (doc ≤ 2026-11-08) | Old motor 2 test 2532.9 / 2532.3 |
 | Robot mass | 1 kg SIL placeholder (doc ≤ 2026-11-16) | 671.6 g, operator (2026-11-16) | **Resolved: 671.6 g** |
+| Robot length | 190 mm overall, operator (2026-10-30, MOTION.md) | 180 mm, operator ruler (2026-11-16) | **Current: 180 mm** (ruler). The 190 mm value may include a bumper or sensor overhang; its reference is unknown |
 | Wheel diameter | 65 mm, "Operator" (2026-10-30, archive) | 65 mm nominal, not calibrated (doc ≤ 2026-11-08) | **Operator confirmed 65 mm** (2026-11-16); loaded rolling diameter still not calibrated |
 | Wheel track | 111 mm, operator (2026-10-30) | 120 mm in old `motion_config.h` (doc ≤ 2026-11-06) | IMU notes "rough 115 mm". **Resolved: 111-112 mm** contact centre to contact centre, operator ruler (2026-11-16); the old 120 mm code value is superseded |
 | Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | **Resolved: 82 mm**, operator ruler (2026-11-16), confirmed after the first "?"; 80 and 79 mm are older |
