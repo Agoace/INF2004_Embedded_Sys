@@ -67,5 +67,74 @@ never infer navigation correctness from a letter.
 - `sim/webots/tools/sil_barcode_smoke.py --letter F --zigzag --sigma 1 --lead-mm 75 --timeout-seconds 1200`
   — one explicit new project; existing DISPLAY=:0/XAUTHORITY only.
 
-Results are added after the authorized F run. Earlier results remain in the
-[old-window record](SIL_JUNCTION_BARCODE_RESULTS_20261116.md).
+## Results
+
+Exactly one new Webots run completed: F,3390ms simulated /797.419s wall,
+within1200s. Clean exit; owned PGID32503 and orchestrator32461 are gone. No
+retry or additional physics was run. The straight A recording remains
+INCOMPLETE in the [old-window record](SIL_JUNCTION_BARCODE_RESULTS_20261116.md).
+Both fixed-input comparisons reproduce their reference native event stream.
+
+| Input | Reader | Event time | Native reason | Decoded | Truth GP28 net dx / counts |
+| --- | --- | --- | --- | --- | --- |
+| Straight A prefix | Old midpoint |4090ms |BW_OK |A |not a motion rejection |
+| Straight A prefix | New GP28 |20ms |BW_MOTION, pre-bound |none |+0.000079803mm;0/0 counts; no net reversal |
+| Straight A prefix | New GP28 |4090ms |BW_OK |A |not a motion rejection |
+| Offset/yaw F | Old midpoint |2600ms |BW_OK |F |not a motion rejection |
+| Offset/yaw F | New GP28 |20ms |BW_MOTION, pre-bound |none |+0.000060547mm;0/0 counts; no net reversal |
+| Offset/yaw F | New GP28 |2600ms |BW_OK |F |not a motion rejection |
+
+The two motion events use the10..20ms native bracket. New timestamps with zero
+encoder delta meet the new reader's non-increasing-position rejection. These
+are **unbound startup window events**, not failed bound candidates; each
+comparison has one publication and zero producer failures. Net diagnostic
+pose progress is positive but far below one encoder count. This does not
+identify the cause of the operator's physical BW_MOTION event or0/10 reads.
+
+| Input | Old fitted narrow /wide | New fitted narrow /wide |
+| --- | --- | --- |
+| A |5.722 /17.659mm |5.707 /17.685mm |
+| F |5.781 /17.799mm |5.700 /17.562mm |
+
+Both versions decode the expected letter. Changed fit values are not a width
+accuracy or hardware improvement claim. F leading distance changes from
+92.290mm midpoint to86.002mm GP28 estimate on the same ADC/count inputs.
+
+The actual F run has quiet/start proof true, one native junction confirmation,
+SHADOW admission reason1, flags191, valid0, no OFFSET_VERIFIED, command NONE,
+and final LINE/RUNNING/JA_IDLE with fault0. F is decoded independently of its
+unchanged default command0; the day's arbitrary mapping is not tested.
+
+Actual P7 setpoints at first ink677ms are144/148mm/s, yaw-0.017053rad;
+1784/1924samples between first ink and read have unequal setpoints. Their
+L-minus-R range is-20..+26mm/s. SEARCH count is0. This is real native steering,
+not a scripted zigzag or a90degree turn-exit test.
+
+At first paper-support contact /centre crossing /first ink,10ms mean wheel
+speeds are147.665/152.848,149.509/148.739 and147.599/149.635mm/s. All are
+within146mm/s +/-5%; corresponding1ms speeds also pass. GP28 calls are
+2274fine /1116uniform. Eight selected F-pose1e-7 vs1e-8 checks are valid,
+match the recorded ADC integers and differ by at most8.387e-7ADC. They do not
+certify every turning pose or physical optical response.
+
+## Evidence and validation
+
+Retained local evidence under `build/webots/`:
+
+- `sil-F-zigzag-20261116T122633Z/along1/` — actual F recording, original native
+  acquisition/control publications, events, calibration inputs and generated
+  world/controller/native-source seals. Original manifest hashes all match.
+- `bc-A-final-20261116T124535Z/` and `bc-F-final-20261116T124535Z/` — identical
+  input C component comparisons; only window.c/.h source hashes differ.
+- `bc-final-audit-20261116/audit.json` — file hashes, tolerance spots, P7
+  correction, comparison reports and process cleanup. Original F native
+  source/header hashes still match the unchanged application sources.
+
+The wrapper remains unchanged (SHA256
+97bd0839d3e07389a93a5d4b54b03ba2a011ddd90dda6a9f694888cd8b5905a7).
+No newer staging branch was merged during or after this recording.
+
+Final validation:352 host tests pass, with3 expected failures; five freshly
+built native position/steering/motor/LINE/vehicle tests pass. Frozen replay is
+158RX/58TX MATCH, physical_gate1_pass=false. Documentation scans132 files
+with no broken links/anchors. Whitespace check is clean.
