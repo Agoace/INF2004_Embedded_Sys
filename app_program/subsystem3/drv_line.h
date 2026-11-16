@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 /* Core 0 only. TIMER alarm 0 / IRQ0, 1 ms period. Priority 2 requested;
- * the hardware keeps 0 (docs/kernel/NVIC_PRIORITY_FINDING.md). */
+ * the hardware keeps 0 (docs/kernel/KERNEL.md, F-NVIC). */
 /* raw = L/ADC1, C/ADC0, barcode/ADC2; never pass barcode into lp_update. */
 typedef struct { uint32_t us; uint16_t raw[3]; } drv_line_sample_t;
 typedef struct { uint32_t samples, missed, dropped, isr_us, isr_max_us; uint16_t min[3], max[3]; } drv_line_stats_t;

@@ -253,7 +253,7 @@ EXPORT int32_t cyw43_utk_start(void)
      * timing state is guarded by timing_lock in this file, not by a core-local
      * mask. On a single-core build there is only one processor, so the affinity
      * request is dropped rather than passing an ID the kernel does not define.
-     * See docs/kernel/CORE_PLACEMENT.md. */
+     * See docs/kernel/KERNEL.md (core placement). */
 #if TK_SUPPORT_SMP
     ctsk.tskatr = TA_HLNG | TA_RNG1 | TA_ASSPRC;
 #if APP_FORCE_CORE0

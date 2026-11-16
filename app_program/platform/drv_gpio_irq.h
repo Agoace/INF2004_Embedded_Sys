@@ -2,7 +2,7 @@
 #define DRV_GPIO_IRQ_H
 #include <stdint.h>
 #define DRV_GPIO_IRQ_NUMBER 13u
-/* Requested level; hardware keeps 0 (docs/kernel/NVIC_PRIORITY_FINDING.md). */
+/* Requested level; hardware keeps 0 (docs/kernel/KERNEL.md, F-NVIC). */
 #define DRV_GPIO_IRQ_PRIORITY 1
 #define DRV_GPIO_EDGE_FALL 4u
 #define DRV_GPIO_EDGE_RISE 8u
