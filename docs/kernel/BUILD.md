@@ -214,7 +214,7 @@ record/control limits,10 ms LINE age, terminal ACK and stopped diagnostics.
 Use the tracked `.example` headers as shapes, not credentials. In a fresh
 worktree, copy private settings privately and apply `chmod 600`; do not
 print or commit their values. The broker default `0.0.0.0` builds but does
-not connect. [OPERATION.md](../s1-telemetry/OPERATION.md#private-settings)
+not connect. [TELEMETRY.md operation](../s1-telemetry/TELEMETRY.md#private-settings)
 has first-time token setup. UF2/ELF files embed credentials; do not publish
 them or attach them to public evidence. Do not replace existing secrets.
 

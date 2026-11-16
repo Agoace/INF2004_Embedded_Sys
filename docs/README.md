@@ -39,9 +39,8 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S1 — Telemetry
 
-- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes and RAM/live/refill ownership.
+- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes, RAM/live/refill ownership; operation: broker, private settings, recorder, dashboard (fan, hump, run path), commands, Tailscale, security and troubleshooting.
 - [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — current binary topics, versions, bytes, masks, boot/session and decoder contract.
-- [OPERATION.md](s1-telemetry/OPERATION.md) — broker, recorder, dashboard, Tailscale, security, operation and radio-loss troubleshooting.
 
 ## S2 — Motion
 
@@ -80,14 +79,10 @@ not current acceptance reports. Local course originals are not public records.
 
 - [DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) — earlier detour physical-test plan and simulator measurements still owed at that revision.
 - [MOTION_TIMING_INVESTIGATION.md](archive/MOTION_TIMING_INVESTIGATION.md) — timing confound and opt-in diagnostic investigation, with original revision limits.
-- [MTK3_FOLLOWUP_HANDOFF.md](archive/MTK3_FOLLOWUP_HANDOFF.md) — historical STEP 8 owner tips, cleanup/recovery and hardware limits.
-- [MTK3_STEP8_RECORD.md](archive/MTK3_STEP8_RECORD.md) — merged software validation, hardware evidence and boot-session follow-up; each source keeps its own tested revision.
 - [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1, runs and unresolved issues.
 - [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — earlier detour design, D1–D18 evidence and then-open problems.
 - [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
-- [TELEMETRY_SCHEMA.md](archive/TELEMETRY_SCHEMA.md) — older instrument JSON contract; not the current MQTT wire format.
 - [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
-- [WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) — earlier UDP bench dashboard, replaced by the MQTT dashboard.
 
 ### Architecture history
 
@@ -122,12 +117,9 @@ not current acceptance reports. Local course originals are not public records.
 
 - [archive/kernel/HISTORY.md](archive/kernel/HISTORY.md) — `git show 569672a:<path>` pointers for the 19 removed kernel records (old robot bring-up, stacks, CPU, watchdog, layout, motion, USB priority, development setup, RAM budget per step, core placement/lock audit, UP shim, Wi-Fi stack, staging merge, bench, SWD).
 
-### S1 originals
+### Telemetry history
 
-- [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_TELEMETRY.md](archive/s1-telemetry/KERNEL_TELEMETRY.md) — full historical source, with its measured values and original limits.
-- [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
-- [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
+- [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — `git show 569672a:<path>` pointers for 9 removed telemetry records (OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema).
 
 ### S2 originals
 

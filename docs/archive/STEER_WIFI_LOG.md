@@ -36,7 +36,7 @@ Robot (Pico W) ──Wi-Fi──▶ phone hotspot (2.4 GHz) ◀──Wi-Fi──
 - The Pico W supports 2.4 GHz WPA2 only. School networks that need a user
   login, or that block traffic between devices, do not work.
 - Port 4243 is separate from the JSON telemetry on port 4242
-  ([Wi-Fi telemetry dashboard](WIFI_TELEMETRY_DASHBOARD.md)), because the
+  ([Wi-Fi telemetry dashboard](s1-telemetry/HISTORY.md#files)), because the
   packets are binary.
 
 ## Rules on the robot

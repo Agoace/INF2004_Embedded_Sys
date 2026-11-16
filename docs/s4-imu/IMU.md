@@ -937,7 +937,7 @@ LONG (rejected, waits for the mean to stay below OFF for 30 mm).
 `python3 scripts/robot_log_decode.py --hump LOG` writes
 `source,peak_mm,side,count,flags,gated` from the run-end, DUMP and STREAM
 lines. The dashboard shows a HIGHEST HUMP card; see
-[operation](../s1-telemetry/OPERATION.md#highest-hump).
+[operation](../s1-telemetry/TELEMETRY.md#highest-hump).
 
 ### Fixture results (synthetic, not hardware)
 
