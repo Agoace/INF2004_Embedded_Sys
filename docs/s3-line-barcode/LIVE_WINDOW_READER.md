@@ -25,20 +25,27 @@ One task owns all reader calls. These methods are not a cross-task queue API:
 6. An accepted result remains immutable until explicit `rearm()` or `begin()`.
 
 Default source bounds: 12414 counts/m, 1500 us ADC gap for the 1 kHz feed,
-30000 us motor gap. The first home calibration reported gaps near 1024 us.
+30000 us motor gap. GP28 is modelled at 80 mm forward and 77 mm left of the
+drive axle, with a 111 mm track. The axis uses the GP28 point's differential-
+drive position projected onto its direction at the first motor observation,
+instead of mean wheel travel. This compensates a forward zigzag when the
+barcode is perpendicular to that initial direction; it cannot infer an
+unknown print angle. The offsets are physical measurements to recheck on the
+robot. The first home calibration reported gaps near 1024 us.
 A missing 1 ms ADC sample is rejected even without an explicit loss flag.
 The future feeder must ALSO propagate acquisition missed/dropped counters;
 timestamp checks are not a substitute for those counters.
 
 There are 64 ADC slots, eight motor points and 29 run widths. No full-pass
 sample capture, allocation or unbounded scan exists. Excess queue/history,
-invalid raw/flags, nonpositive ADC time, excessive gaps or negative MEAN
-encoder progress abandon the candidate. Exact repeated motor snapshots are
+invalid raw/flags, nonpositive ADC time, excessive gaps, reverse mean wheel
+progress or non-forward GP28-axis progress abandon the candidate. Exact repeated motor snapshots are
 idempotent; changed counts at the same timestamp are not. Per-wheel modular
 counter differences handle wrap before the mean is calculated. Large counter
 jumps are rejected. Stationary samples cannot earn spatial white evidence.
 
-Distance is interpolated only BETWEEN genuine motor observations. No future
+Distance is interpolated only BETWEEN genuine motor observations, on the
+GP28-axis projection. No future
 bracket means wait, not extrapolate. Older-than-history samples fail closed.
 Result counts are ORIGINAL upper motor brackets, not invented interpolated
 counter pairs. ADC edge/start/eligible times and the source bracket times are
