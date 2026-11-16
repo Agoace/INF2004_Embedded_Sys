@@ -21,9 +21,8 @@ not current acceptance reports. Local course originals are not public records.
 - [ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) — one actuator owner and value-based interfaces.
 - [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
-- [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations. Read before proposing work.
+- [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations; branch table, merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch state 2026-11-16 and archive tags. Read before proposing work.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
-- [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries, branch state table and archived branch tags.
 - [CR1.md](architecture/CR1.md) — CR1 requirement summary and Week 8 §11 (IMU snapshot 8 B) and §33–38 (vehicle states 4 bits, mode/enum/fault bits, events) details, baseline RAM, board/queue
   and MQTT sizes, measurement tools, shared-access rule, A1/B1/B2 evidence, A2 plan, M9 accounting and the motion module plan (A1 field table, controller/ISR inventory, tests).
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
@@ -79,7 +78,6 @@ not current acceptance reports. Local course originals are not public records.
 
 ### Architecture history
 
-- [architecture/BRANCH_LAYOUT.md](archive/architecture/BRANCH_LAYOUT.md) — full source record; only links/paths adjusted.
 - [architecture/INTERRUPT_CONVENTIONS.md](archive/architecture/INTERRUPT_CONVENTIONS.md) — full source record; only links/paths adjusted.
 - [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
 - [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
@@ -109,7 +107,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ### Architecture history
 
-- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md) and the 1738-line Week 8 CR1 Tribunal notes.
+- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md), the 1738-line Week 8 CR1 Tribunal notes and both BRANCH_LAYOUT records (current one merged into PROJECT_STATUS.md).
 
 ### Obstacle history
 

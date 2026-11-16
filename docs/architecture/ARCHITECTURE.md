@@ -8,7 +8,7 @@ modules return wheel-speed requests and outcomes. Motion alone writes motor
 and servo PWM. A successful build is not physical acceptance.
 
 This is the implemented system, not the older two-core proposal. The
-[branch rules](BRANCH_LAYOUT.md) define the integration boundary. Keep the
+[branch rules](PROJECT_STATUS.md#branch-layout-and-integration-rules) define the integration boundary. Keep the
 three ADRs separate: [actuator ownership](ADR_MOTOR_CONTROLLER.md),
 [time-base ownership](ADR_HEARTBEAT.md) and
 [module routing](ADR_VEHICLE_CONTROLLER.md).
