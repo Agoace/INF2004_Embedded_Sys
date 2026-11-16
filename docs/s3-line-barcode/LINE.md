@@ -120,6 +120,60 @@ matched measured P4 speed/turn response. Do not replace current 146 with
 (`ki_q8` 128) and rise limit 8. Old GP20 D-step experiments belong to the
 bare-metal test target, not the current kernel operator interface.
 
+### Opt-in proportional-gain trial
+
+`LINE_P_NEAR` accepts a decimal integer from 0 to 85; unset and explicit
+85 retain the original build flags, profile and filename. Values below 85
+add `_pnearN` to the image name and select the vehicle-only
+`app_program/vehicle/line_p_near.h` configuration adapter. The original
+robot configuration and steering sources are unchanged. Changing the value
+invalidates prior objects; do not rename an old image to make a candidate.
+
+Despite its name, the switch changes base P at **all positions**, not only
+inside the centre band. The existing correction before wheel scaling is:
+
+```text
+turn = P * position + 85 * clipped_position_change
+     + sign(position) * 340 * max(abs(position) - 50, 0)
+```
+
+Thus the two slopes meet continuously at both -50 and +50; there is no
+switched-P jump. Extra far gain remains 340. Lower P also reduces total
+correction outside the centre band: curve acceptance is still required.
+D85, base/min/max speeds, detector, SEARCH, calibration, motor PI and rise
+limit remain unchanged. A candidate does not enable barcode LIVE.
+
+Candidates 60 and 40 are ASSUMED trial settings, reducing base P by about
+29 percent and 53 percent from 85. They bracket a moderate and larger
+reduction; neither is an accepted tune. The retained home analysis reports
+380 ms oscillation period, position amplitude 59 and wheel-derived yaw
+amplitude about 50 deg/s. It does not prove that P alone causes the swing.
+Analysis source: `mtk3-hil:docs/simulation/LINE_OSCILLATION_ANALYSIS_20261116.md`.
+
+Build the default and two candidates with identical options, for example:
+
+```sh
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_P_NEAR=60 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_P_NEAR=40 -j12
+```
+
+Operator test: same home straight and placement, one run per image, with
+unchanged paper, sensor height and start procedure. Retain the complete KR
+log and image identity. Compare the same RUNNING/LINE time window using raw
+C-L amplitude, position amplitude, requested wheel difference, wheel-derived
+yaw amplitude/period and line losses. Use the retained analysis method, not
+selected smooth sections. KR time is packed in 20 ms units; wheel-derived
+yaw is not independent body-heading evidence. One run cannot establish
+repeatability. Check curves, SEARCH reacquire, junction detection, DETOUR
+handoff and immediate stop before adopting a candidate on the course.
+
+Host checks compile the real configuration/steering at 85, 60 and 40,
+including both 50/51 boundaries and unchanged other settings. Make checks
+cover invalid values, suffixes, target-only flags and profile invalidation.
+The default-image gate is 76 matching ELF/UF2 hashes against staging
+`1490768`, including debug data. Candidate hardware results are Not run.
+
 ## Results
 
 | Evidence | Result and scope |

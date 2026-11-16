@@ -258,6 +258,16 @@ $(error KERNEL_RAM=1 is UP only: needs SMP=0)
 endif
 endif
 
+# Vehicle-only LINE proportional gain. Default emits no extra flags or suffix.
+LINE_P_NEAR ?= 85
+LINE_P_NEAR_VALID := $(shell printf '%s\n' '$(LINE_P_NEAR)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_P_NEAR)' -le 85 && echo yes)
+ifneq ($(LINE_P_NEAR_VALID),yes)
+$(error LINE_P_NEAR must be one integer from 0 to 85)
+endif
+ifneq ($(LINE_P_NEAR),85)
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_P_NEAR=$(LINE_P_NEAR) -include ../app_program/vehicle/line_p_near.h
+endif
+
 # Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
 # letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
 # nothing, so ordinary images stay byte-identical. Policy id 1 is the
@@ -301,6 +311,9 @@ EXE_FILE := $(EXE_FILE)_kernel_ram
 endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_P_NEAR),85)
+EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -466,6 +479,9 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_P_NEAR),85)
+PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
 endif
 PROFILE_FILE := .build_profile
 

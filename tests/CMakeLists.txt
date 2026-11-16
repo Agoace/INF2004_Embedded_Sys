@@ -68,6 +68,14 @@ host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_sourc
 host_test(test_heartbeat tests/test_heartbeat.c src/heartbeat.c)
 host_test(test_line_position tests/test_line_position.c ${line_position_source})
 host_test(test_line_steer tests/test_line_steer.c ${line_steer_source})
+foreach(gain 85 60 40)
+    host_test(test_line_p_near_${gain} tests/test_line_p_near.c
+        ${line_steer_source})
+    target_compile_definitions(test_line_p_near_${gain} PRIVATE
+        LINE_P_NEAR=${gain})
+endforeach()
+add_test(NAME test_line_p_near_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_line_p_near_make.py")
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)
 host_test(test_obstacle tests/test_obstacle.c ${obstacle_source})
