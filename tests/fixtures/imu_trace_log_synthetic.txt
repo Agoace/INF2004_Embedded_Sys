@@ -1,0 +1,11 @@
+# SYNTHETIC IMU USB log, not a measurement. It exists only to prove the
+# converter -> replay chain parses a [S4] capture and reaches the detector.
+# Shape: two quiet upright observations at 1 g, then a free fall (|a| about
+# 0.3 g) for two observations, so LIFT must confirm at t_ms 30.
+# Lines that are not [S4] observations must be skipped.
+[S4] t_ms 0 source_us 1000 valid 1 motion 1 raw_mg 0 0 1000 cal_mg 0 0 1000 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000
+[S4] t_ms 10 source_us 11000 valid 1 motion 1 raw_mg 0 0 1000 cal_mg 0 0 1000 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000
+[S4] t_ms 20 source_us 21000 valid 1 motion 1 raw_mg 0 0 300 cal_mg 0 0 300 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000
+[S4] t_ms 30 source_us 31000 valid 1 motion 1 raw_mg 0 0 300 cal_mg 0 0 300 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000
+[S4] t_ms 40 source_us 41000 valid 1 motion 1 raw_mg 0 0 1000 cal_mg 0 0 1000 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000
+[S4] t_ms 50 source_us 51000 valid 1 motion 1 raw_mg 0 0 1000 cal_mg 0 0 1000 raw_ddeg 0 0 pitch_ddeg 0 roll_ddeg 0 filt_ddeg 0 0 corrected_ddeg 0 v_mm_s 0 a_mm_s2 0 cal 1 faults 0 travel_mm 0.000

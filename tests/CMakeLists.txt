@@ -252,6 +252,12 @@ if(EXISTS "${REPO}/tests/replay_imu_safety.c")
     set_tests_properties(test_replay_imu_safety_lift PROPERTIES
         PASS_REGULAR_EXPRESSION
             "first_reason=lift first_ms=210 latched=lift stops=1")
+    # End to end: a captured [S4] log -> converter -> analyser -> detector.
+    # The log fixture is synthetic; a pass proves the path, not detection.
+    add_test(NAME test_imu_trace_chain
+        COMMAND "${Python3_EXECUTABLE}"
+            "${REPO}/tests/test_imu_trace_chain.py"
+            "$<TARGET_FILE:test_replay_imu_safety>")
 endif()
 foreach(test IN ITEMS test_imu_service test_imu_capture_service
         test_imu_stream test_vehicle_task test_vehicle_network_task)

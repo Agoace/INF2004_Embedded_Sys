@@ -67,7 +67,19 @@ int main(int argc, char **argv)
     char line[MAX_LINE];
 
     while (fgets(line, (int)sizeof(line), in) != NULL) {
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r') {
+        /* Skip blank lines, '#' comments and a column header: anything that
+         * does not begin with a number is not an observation. A line that
+         * does begin with a number but does not parse is reported. */
+        const char *first = line;
+        while (*first == ' ' || *first == '\t') {
+            ++first;
+        }
+        if (*first == '\0' || *first == '\n' || *first == '\r' ||
+            *first == '#') {
+            continue;
+        }
+        if (!((*first >= '0' && *first <= '9') || *first == '-' ||
+              *first == '+')) {
             continue;
         }
         unsigned long t_ms = 0ul;
