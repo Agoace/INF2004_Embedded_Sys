@@ -40,6 +40,14 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 DIAG=1 -j4 --output-sync=target
 make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 ```
 
+Demo image (operator, 2026-11-15): UP robot with the kernel hot path in RAM.
+Check that `<image>.ramproof` starts with `RAM_PROOF PASS listed 75 in_ram 75`.
+See [KERNEL_RAM.md](KERNEL_RAM.md).
+
+```sh
+make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
+```
+
 | Option | Default / effect |
 | --- | --- |
 | `SMP` | 1; use 0 for the single-core robot acceptance profile |
