@@ -66,6 +66,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md).
 - [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md).
+- [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — bounded read-only epoch totals, terminal semantics, absent-reader result and late-cancellation attribution.
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md) — bounded start-star scale fit, size gates and SHADOW acceptance limits.
 - [Real window replay](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old/new reader comparison on all five real ADC/motor fixtures, source assumptions and regression lock.
 - [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).

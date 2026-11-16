@@ -5,7 +5,11 @@ host_test(test_barcode_live_feed tests/test_barcode_live_feed.c
 target_include_directories(test_barcode_live_feed BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_link_libraries(test_barcode_live_feed PRIVATE m)
+target_compile_definitions(test_barcode_live_feed PRIVATE BC_LIVE_COUNTS_HOST_TEST=1)
 add_test(NAME test_barcode_live_feed_race COMMAND test_barcode_live_feed race)
+add_test(NAME test_barcode_live_feed_counts_epoch COMMAND test_barcode_live_feed counts_epoch)
+add_test(NAME test_barcode_live_feed_counts_cancel COMMAND test_barcode_live_feed counts_cancel)
+add_test(NAME test_barcode_live_feed_none COMMAND test_barcode_live_feed none)
 
 host_test(test_barcode_live_producer tests/test_barcode_live_producer.c
     app_program/subsystem3/barcode_live_producer.c
@@ -47,6 +51,16 @@ foreach(case IN ITEMS sizes normal variable wrap two_ms freeze tracking short_qu
     add_test(NAME test_barcode_window_${case}
         COMMAND test_barcode_window ${case})
 endforeach()
+
+foreach(absent_profile IN ITEMS test bench)
+    host_test(test_barcode_counts_absent_${absent_profile}
+        tests/test_barcode_live_counts_absent.c
+        app_program/subsystem3/barcode_live_source.c)
+    target_include_directories(test_barcode_counts_absent_${absent_profile} BEFORE PRIVATE
+        "${REPO}/tests/mtk_stubs")
+endforeach()
+target_compile_definitions(test_barcode_counts_absent_test PRIVATE APP_TEST=1)
+target_compile_definitions(test_barcode_counts_absent_bench PRIVATE APP_BENCH=1)
 
 host_test(test_barcode_live_source tests/test_barcode_live_source.c
     app_program/subsystem3/barcode_live_source.c)
