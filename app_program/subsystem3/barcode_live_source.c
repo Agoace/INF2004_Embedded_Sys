@@ -1,7 +1,7 @@
 /* Canonical boards and single LINE-task producer. SHADOW only; no actions. */
 #include "subsystem3.h"
 #include "barcode_live_source.h"
-#if BC_LIVE_SOURCE_HOST_TEST
+#if BC_LIVE_SOURCE_HOST_TEST || BC_LIVE_COUNTS_HOST_TEST
 extern void barcode_live_test_read_hook(const uint32_t *sequence,
                                         unsigned int index);
 #define APP_BOARD_READ_HOOK(s, i) barcode_live_test_read_hook((s), (i))
@@ -120,6 +120,9 @@ static APP_BOARD(barcode_live_frame_t) frames[FRAME_ROWS];
 static APP_BOARD(edge_row_t) edges[EDGE_ROWS];
 static APP_BOARD(summary_t) summary_board;
 static summary_t summary;
+static APP_BOARD(barcode_live_counts_t) counts_board;
+static barcode_live_counts_t run_counts;
+_Static_assert(sizeof(counts_board) == 20u, "Live counts board budget");
 static uint32_t frame_count, edge_count;
 static edge_row_t pending_edge;
 static bool edge_pending, edge_black, trace;
@@ -133,7 +136,21 @@ static summary_t dump_summary;
 _Static_assert(sizeof(producer) + sizeof(input) + sizeof(motor) +
     sizeof(frames) + sizeof(edges) + sizeof(summary_board) + sizeof(summary) +
     sizeof(pending_edge) + sizeof(dump_frame) + sizeof(dump_edge) +
-    sizeof(dump_summary) + 192u <= 4096u, "Live storage including boards");
+    sizeof(dump_summary) + sizeof(counts_board) + sizeof(run_counts) +
+    192u <= 4096u, "Live storage including boards");
+
+int barcode_live_counts_try_read(barcode_live_counts_t *out)
+{
+    if (!out) return E_PAR;
+    if (!ready) return E_OBJ;
+    barcode_live_counts_t value;
+    if (!app_board_try_read(&counts_board.sequence, counts_board.words,
+                            &value, sizeof(value))) {
+        return E_TMOUT;
+    }
+    *out = value;
+    return E_OK;
+}
 
 static void resolve_edge(void)
 {
@@ -203,6 +220,11 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
     const uint32_t ms = drv_time_ms();
     input.now_us = drv_time_us();
     input.now_ms = ms + (input.now_us - ms * 1000u) / 1000u;
+    bool counts_changed = false;
+    if (input.control_ok && input.control.epoch != run_counts.epoch) {
+        run_counts = (barcode_live_counts_t){.epoch = input.control.epoch};
+        counts_changed = true;
+    }
     if (input.control_ok && input.control.epoch != summary.epoch) {
         summary = (summary_t){.epoch = input.control.epoch};
         trace = false;
@@ -267,11 +289,24 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         producer.record_pending = false;
     }
     if (producer.event_pending) {
+        /* A context switch may emit a delayed old-run cancellation. Keep
+         * lifetime evidence, but never assign it to the newly observed run. */
+        if (producer.event.record.epoch == run_counts.epoch) {
+            ++run_counts.attempts;
+            if (producer.event.reason == BW_OK) ++run_counts.frames;
+            else ++run_counts.failures;
+            counts_changed = true;
+        }
         producer.event.index = frame_count + 1u;
         const unsigned int at = frame_count++ % FRAME_ROWS;
         app_board_publish(&frames[at].sequence, frames[at].words,
                           &producer.event, sizeof(producer.event));
         producer.event_pending = false;
+    }
+    if (counts_changed) {
+        /* Publish every epoch/terminal change, not the 100-sample CPU cadence. */
+        app_board_publish(&counts_board.sequence, counts_board.words,
+                          &run_counts, sizeof(run_counts));
     }
     summary.frames = producer.publications;
     summary.attempts = frame_count;
@@ -389,6 +424,10 @@ void barcode_live_source_dump(void)
     }
 }
 #else
+int barcode_live_counts_try_read(barcode_live_counts_t *out)
+{
+    return out ? E_NOSPT : E_PAR;
+}
 void barcode_live_source_sample(uint32_t us, uint16_t raw,
                                 const barcode_cal_report_t *calibration,
                                 uint32_t missed, uint32_t dropped)

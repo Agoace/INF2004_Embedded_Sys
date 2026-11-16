@@ -258,13 +258,19 @@ vehicle task described below.
   bind the LINE feed, context/ACK policy and stopped DUMP; no live actions.
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
   record the first course run, GP28 geometry and open findings.
+  [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) specifies
+  `barcode_live_counts_try_read`, the read-only epoch terminal counts in
+  `barcode_live_source.{h,c}`; absence, cancellation and coherent-read tests
+  include [`test_barcode_live_counts_absent.c`](../tests/test_barcode_live_counts_absent.c).
 
-- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
+- [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
   [`barcode_window.c`](../app_program/subsystem3/barcode_window.c) provide
   the pure forward-distance window and one mapping table; synthetic tests in
   [`test_barcode_window.c`](../tests/test_barcode_window.c), original-fixture
   tests in [`test_barcode_window_real.c`](../tests/test_barcode_window_real.c).
+  [Real window replay](s3-line-barcode/REAL_WINDOW_REPLAY.md) compares old/new
+  readers on all five retained ADC/motor fixtures.
   SHADOW feed tests: [`test_barcode_live_feed.c`](../tests/test_barcode_live_feed.c)
   and [`test_barcode_live_producer.c`](../tests/test_barcode_live_producer.c).
   Vehicle merge, stack/CPU and offset hardware acceptance remain pending.
