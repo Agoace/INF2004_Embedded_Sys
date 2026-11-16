@@ -17,10 +17,81 @@ ISR/task shared data, inter-task messages, MQTT telemetry and commands.
 
 Design rule from the Tribunal: size a field from the range that can change
 robot behaviour, not from the full hardware range. Example: the sonar can
-measure metres, but avoidance uses only 0–400 mm. The full Week 8 analysis
-(per-buddy decisions, ultrasonic timing, servo and width geometry,
+measure metres, but avoidance uses only 0–400 mm. The
+[requirement details](#requirement-details) keep §11 and §33–38. The full
+Week 8 analysis (per-buddy decisions, ultrasonic timing, servo and width geometry,
 Spatial Optimizer, vehicle states) is in the
 [architecture history](../archive/architecture/HISTORY.md#files).
+
+## Requirement details
+
+Kept from the Week 8 Tribunal notes (§11, §33–38). Rules and numbers are
+verbatim; the lists are trimmed. Later records can supersede a value; the
+current implementation is in the sections below.
+
+### IMU hump snapshot (Week 8 §11)
+
+| Word | Fields (bits) | Total |
+| --- | --- | ---: |
+| 1 | pitch 8, heading 8, turn rate 8, hump state 2, collision 1, valid 1, spare 4 | 32 |
+| 2 | height 8, peak 8, age/sequence 16 | 32 |
+
+So this exact design is **64 bits = 8 bytes**.
+
+Decision: use **8 B** for the two-word IMU snapshot. The earlier 6 B
+claim is superseded; no 6 B layout is specified.
+
+The reserved MQTT frame adds a 4 B version/kind header to this 8 B snapshot,
+for 12 B total. This is a format reservation only, not an implemented IMU
+publisher. See [the IMU wire layout](../s1-telemetry/MQTT_WIRE.md#imu).
+
+Heading quantisation: 8 bits over 360° is `360 / 256 = 1.40625° per LSB`.
+At 90°/s over 13 ms, `90 × 0.013 = 1.17°`, smaller than one LSB. Decision:
+
+- retain higher internal precision;
+- publish quantised heading if desired;
+- do not derive fine turn rate only from the quantised 8-bit heading;
+- BYPASS / LINE_REACQUIRE should not depend only on published heading;
+- encoder odometry remains important.
+
+Minimum-bit storage does not mean minimum-bit internal computation.
+
+### Vehicle Controller state (Week 8 §33)
+
+Flattened state set: INIT, CALIBRATE, IDLE, LINE_FOLLOW, LINE_SEARCH,
+EXECUTE_NAV, HUMP_TRAVERSE, HUMP_OBST_VALIDATE, OBSTACLE_STOP, BYPASS,
+LINE_REACQUIRE, MISSION_COMPLETE, FAULT. Thirteen states require
+**4 bits**.
+
+### Mode flags, small enums and fault mask (Week 8 §34–36)
+
+| Item | Values | Bits |
+| --- | --- | ---: |
+| Mode flags | RUN, LINE_EN, SCAN_REQ, SLOW (the RTOS object itself may still be wider) | 4 logical |
+| Pending navigation | none, left, straight, right; if more actions are added, recalculate | 2 |
+| Barcode/action | Four basic commands fit in 2 bits; with recovery/none/reverse/reserved semantics the design uses 3 | 3 |
+| Fault mask | One bit per independent fault: motor stall, encoder, IMU, ultrasonic no-echo/sensor, Wi-Fi loss, collision (if a fault), other subsystem faults | Depends on the final fault list |
+
+### Controller events and message rule (Week 8 §37–38)
+
+| Source | Events discussed |
+| --- | --- |
+| Motion | MOTION_DONE, STALL, self-test/encoder status |
+| Line/barcode | BARCODE, JUNCTION, LINE_LOST, LINE_FOUND, sensor status |
+| Obstacle | OBST_NEAR, OBST_CLEAR, OBST_STOP, PROFILE, SENSOR_FAULT, echo self-test |
+| IMU | HUMP_START, HUMP_END, COLLISION, SENSOR_FAULT, self-test/calibration status |
+| Telemetry | START, STOP, ESTOP, RESET |
+
+A flat list of about 20+ unique events would likely need around
+**5 bits**, but the final event enumeration is not fixed. Alternative:
+subsystem/source ID, event ID within subsystem, type-specific compact
+payload.
+
+Do not make every message contain every possible field. Prefer
+**event/command type + type-specific payload**: `OBST_CLEAR` may need no
+payload; `OBST_NEAR` may need bounded distance; `PROFILE` carries compact
+profile; `SENSOR_FAULT` carries compact fault subtype. Motion can use
+**3-bit command type + command-specific parameter**.
 
 ## Status and scope
 

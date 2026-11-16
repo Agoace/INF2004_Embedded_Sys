@@ -24,7 +24,7 @@ not current acceptance reports. Local course originals are not public records.
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations. Read before proposing work.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries, branch state table and archived branch tags.
-- [CR1.md](architecture/CR1.md) — CR1 requirement summary, baseline RAM, board/queue
+- [CR1.md](architecture/CR1.md) — CR1 requirement summary and Week 8 §11 (IMU snapshot 8 B) and §33–38 (vehicle states 4 bits, mode/enum/fault bits, events) details, baseline RAM, board/queue
   and MQTT sizes, measurement tools, shared-access rule, A1/B1/B2 evidence, A2 plan, M9 accounting and the motion module plan (A1 field table, controller/ISR inventory, tests).
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a source2 SHADOW admission, encounter ordering, terminal ACK, limits, counters and action gates.

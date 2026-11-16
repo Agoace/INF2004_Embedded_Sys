@@ -99,7 +99,7 @@
 
 The outcome word uses the packed event format of the Week 8 work
 (type and payload in one 16-bit word,
-[Week 8 notes](../archive/architecture/HISTORY.md#files)).
+[Week 8 notes](CR1.md#vehicle-controller-state-week-8-33)).
 
 ## Consequences
 
