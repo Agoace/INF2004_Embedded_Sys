@@ -155,3 +155,47 @@ Tests still to run after reflashing, in this order:
    least 1 s, then press GP21. The latch must clear and the normal
    calibration and start must proceed.
 5. IMU stack high-water against the 256 B minimum.
+
+### Step 7: reflash with the fix and verify the boot
+
+| Item | Value |
+| --- | --- |
+| Image SHA256 | `C5C896B32A5007119698CE50F7571DC5C7E66245D645E03915DC85D31EDC46DB` |
+| Boot console | captured from the first second; saved as `testing/logs/boot-console.txt` |
+
+The boot console shows the full start sequence and **no** `[robot] IMU
+safety ...` line:
+
+```text
+microT-Kernel Version 3.00
+[S4] hump_source 1 corrected
+=== micro T-Kernel on Raspberry Pi Pico W (spec 0x6300, product 0x0003) ===
+single-core build
+wifi: cyw43_utk_task starting (proc 1)
+all subsystems started
+[robot] GP21 calibrate then run / ESTOP; GP20 telemetry dump. D85.
+wifi: joining configured network ...
+wifi: link up, ip=192.168.72.191
+```
+
+| Check | Observation | Result |
+| --- | --- | --- |
+| Motor fault at boot | `motion_faults = 0` on all sampled `robot/state` rows | **PASS** |
+| Robot position | `active = 0`, `state = 0` (IDLE), `module = 0`, `duty_l = duty_r = 0` | PASS |
+| No boot stop | no IMU safety line on USB; nothing latched | PASS |
+| Wi-Fi / MQTT | `wifi_up = 1`, `mqtt_connected = 1`; robot IP `192.168.72.191` | PASS |
+| Stack | `stack_min_free = 532` bytes, above the 256 B minimum | PASS (this boot) |
+| Timing | `motion_late = 0`, `vehicle_overruns = 0`, `cpu_load_permille = 541` | RECORDED |
+
+Result: **PASS for the boot gate.** The step-4 defect is gone: a cold boot
+with the fixed image latches no fault and sits in IDLE.
+
+Note on the stack figure: `stack_min_free` is the minimum across the
+registered application stacks, so 532 B is the worst task, not the IMU task
+alone. It establishes that no stack is below the 256 B minimum on this boot.
+The IMU-only high-water still needs the TEST/GP20 report.
+
+Next: step 3 of the test order, the restrained calibration spin. This needs
+the wheels clear of the floor. The spin is started with the MQTT
+`calibrate` command, which is the same path a GP21 press takes and is
+gated by the same check, so no button press is needed.
