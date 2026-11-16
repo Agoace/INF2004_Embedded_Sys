@@ -81,11 +81,39 @@ words once and commits a local scratch value only after the sequence check.
 There is no allocation, mutex, wait, decoder call, output or board mutation
 on the read path. The16-byte writer value and20-byte board add36 bytes of
 source storage; the existing4096-byte live-storage assertion includes them.
-This type/board accounting is not a runtime-stack claim. Matched ARM
-UP USB and UP Wi-Fi builds against `95c885d` measure +240 bytes text and
-+40 bytes BSS (the36 bytes plus linker alignment). TEST and BENCH sizes
+This type/board accounting is not a runtime-stack claim. All24 matched
+reader-linked ARM profiles against `95c885d` measure +240 bytes text and
++40 bytes BSS (the36 bytes plus linker alignment). The other14 profile sizes
 match. These source-only images do not yet call the getter from Vehicle;
 getter retention and the vehicle cache need a separate integration budget.
+
+## Source-only firmware matrix
+
+The38-profile matrix completes without warnings. It uses the same export
+path for old/new DWARF. All24 reader-linked profiles (UP/split/control times
+USB, Wi-Fi, lwIP, MQTT and MQTT fake-A/B/C/D) change the source and header-
+dependent `line_service.o`. The other14 profiles change only
+`barcode_live_source.o`. No other object hash changes.
+
+Image hashes:73 differ and3 match. The matches are `up-bench.uf2`,
+`up-bench.elf` and `up-mqtt-test.uf2`. Thus most absent-reader image byte
+hashes change even though all14 absent-reader sizes match. The new absent
+getter adds a symbol/section to the object before link-time removal; an
+unchanged size is NOT a claim of unchanged firmware bytes.
+
+A separate `capture-f1` baseline rebuild matches its recorded old ELF hash
+exactly. Its candidate source object has identical old function instructions
+plus the unused absent-getter stub. In the final image, the two16-byte
+`__rt_tl_veneer` and `__rt_tl_gpio_veneer` blocks exchange positions, and the
+corresponding branch encodings change. After normalization of branch target
+addresses to symbols, all626 disassembled function bodies match; veneer
+bounds come from `nm` symbol sizes, not appended literal data. This explains
+that representative TEST mismatch. It does not assert that all other absent
+profiles were independently normalized.
+
+Local artifacts: `build/live-counts/` and `/tmp/sw10-counts-h76{,.base,.cand,.base-log}`.
+The representative disassembly proof is under `build/live-counts/compare/`.
+These are source-only checks, not permission to flash an operator image.
 
 ## Regression evidence
 
