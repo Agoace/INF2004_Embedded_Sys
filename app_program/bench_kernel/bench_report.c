@@ -13,6 +13,7 @@
 #include "../platform/idle_meter.h"
 #include "../platform/run_timing.h"
 #include "../subsystem2/motion.h"
+#include "bench_top.h"
 
 static void bench_report(void)
 {
@@ -81,7 +82,7 @@ static void bench_report(void)
 
 /* The ordinary [load]/P1 lines are MQTT-only in app_task_report(); the bench
  * (radio-free) prints them here, once per dump, from public readers. */
-static void load_and_p1_report(void)
+static void load_and_p1_report(void (*pause)(void))
 {
 #if defined(TK_SUPPORT_SMP) && TK_SUPPORT_SMP
     (void)tm_printf((UB *)"[load] core 0 %u permille, core 1 %u permille\n",
@@ -99,12 +100,13 @@ static void load_and_p1_report(void)
                     (unsigned long)rate, (unsigned long)limit,
                     rate <= limit ? "OK" : "WRAP_RISK");
     rt_report();
+    bk_top_report(pause);
 }
 
 void __wrap_rt_timeline_report(void (*pause)(void))
 {
     __real_rt_timeline_report(pause);
-    load_and_p1_report();
+    load_and_p1_report(pause);
     bench_report();
 }
 #endif

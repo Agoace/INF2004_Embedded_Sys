@@ -37,6 +37,7 @@ prints these only with MQTT, so the bench prints them here:
 | `[load]` | Core-0 idle-meter load over the whole window: one sample at window open, one at stop. Split prints core 1 as 65535 (no core-1 meter). |
 | `[bench_load]` | Calibrated meter rate; `WRAP_RISK` if over 7146368 per second (the 32-bit count can wrap in 601 s). |
 | P1 | Run epoch 1 opens at window start and closes (epoch 2) at stop. |
+| `[bench_top]` | One line per P1 counter: count of values >= 100 us and the 20 largest values in the window (`--wrap=rt_call/rt_max`, `bench_top.c`). |
 
 The bench starts the robot idle meter (`bench_idle_meter.c`, priority 32,
 768 B stack, not in `[stack]`).

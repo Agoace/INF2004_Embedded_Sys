@@ -327,6 +327,7 @@ ifeq ($(BENCH_KERNEL),1)
 CFLAGS += -DBENCH_KERNEL=1
 LFLAGS += -Wl,--wrap=rt_timeline_report
 LFLAGS += -Wl,--wrap=app_startup_complete_publish
+LFLAGS += -Wl,--wrap=rt_call -Wl,--wrap=rt_max
 endif
 ifeq ($(BENCH_KERNEL_RAM),1)
 # Rename each listed section in its compiled object before the link (no

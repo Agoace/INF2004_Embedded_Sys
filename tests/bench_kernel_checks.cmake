@@ -12,6 +12,8 @@ host_test(test_bench_report tests/test_bench_report.c
     app_program/bench_kernel/bench_report.c)
 host_test(test_bench_report_up tests/test_bench_report.c
     app_program/bench_kernel/bench_report.c)
+host_test(test_bench_top tests/test_bench_top.c
+    app_program/bench_kernel/bench_top.c)
 host_test(test_bench_kernel_gpio tests/test_bench_kernel_gpio.c
     app_program/bench_kernel/bench_gpio.c
     app_program/bench_kernel/bench_gpio_hw.c)
@@ -48,7 +50,8 @@ host_test(test_bench_kernel_inputs tests/test_bench_kernel_inputs.c
     app_program/bench_kernel/bench_motor_hw.c
     app_program/bench_kernel/bench_gpio.c)
 foreach(t test_bench_kernel_stats test_bench_kernel_stats_threads
-        test_bench_report test_bench_report_up test_bench_kernel_gpio test_bench_kernel_encoder
+        test_bench_report test_bench_report_up test_bench_top
+        test_bench_kernel_gpio test_bench_kernel_encoder
         test_bench_kernel_generator test_bench_kernel_runtime
         test_bench_kernel_inputs)
     if(TARGET ${t})
@@ -61,7 +64,7 @@ if(TARGET test_bench_kernel_stats_threads)
         BENCH_STATS_THREADS=1)
     target_link_libraries(test_bench_kernel_stats_threads Threads::Threads)
 endif()
-foreach(t test_bench_report test_bench_report_up)
+foreach(t test_bench_report test_bench_report_up test_bench_top)
     if(TARGET ${t})
         target_include_directories(${t} BEFORE PRIVATE
             "${REPO}/tests/mtk_stubs")

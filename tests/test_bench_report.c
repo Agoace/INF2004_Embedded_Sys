@@ -50,13 +50,14 @@ uint32_t idle_meter_peak_rate(void)
 #define RATE "[bench_load] peak_rate 7146368 limit 7146368 OK\n"
 #if TK_SUPPORT_SMP
 #define HEAD "[timeline]\n[load] core 0 640 permille, core 1 600 permille\n" \
-             RATE "[P1]\n"
+             RATE "[P1]\n[TOP]\n"
 uint16_t idle_meter_load_permille_core1(void)
 {
     return 600u;
 }
 #else
-#define HEAD "[timeline]\n[load] core 0 640 permille\n" RATE "[P1]\n"
+#define HEAD "[timeline]\n[load] core 0 640 permille\n" RATE \
+             "[P1]\n[TOP]\n"
 #endif
 static unsigned int p1_calls;
 uint16_t idle_meter_load_permille(void)
@@ -67,6 +68,15 @@ void rt_report(void)
 {
     ++p1_calls;
     used += (size_t)snprintf(out + used, sizeof(out) - used, "[P1]\n");
+}
+
+static void pause_stub(void);
+static unsigned int top_calls;
+void bk_top_report(void (*pause)(void))
+{
+    assert(pause == pause_stub);
+    ++top_calls;
+    used += (size_t)snprintf(out + used, sizeof(out) - used, "[TOP]\n");
 }
 
 bool bench_stats_read(bench_stats_t *dst)
@@ -96,8 +106,9 @@ static void run(void)
     real_calls = 0u;
     read_calls = 0u;
     p1_calls = 0u;
+    top_calls = 0u;
     __wrap_rt_timeline_report(pause_stub);
-    assert(real_calls == 1u && p1_calls == 1u);
+    assert(real_calls == 1u && p1_calls == 1u && top_calls == 1u);
     assert(read_calls == 1u);
 }
 
