@@ -28,6 +28,13 @@ static APP_BOARD(imu_hump_report_t) hump_board;
 static imu_hump_diag_t hump_diag;
 static imu_hump_diag_report_t diag_value;
 static APP_BOARD(imu_hump_diag_report_t) diag_board;
+/* Safety detector and its small board. Sole writer: this task. The report
+ * carries its own observation_ms, so no extra timestamp wrapper is needed. */
+static imu_safety_t safety;
+static APP_BOARD(imu_safety_output_t) safety_board;
+/* Safe-restart requests from Vehicle. One request is one attempt. */
+static uint32_t safety_clear_requests;
+static uint32_t safety_clears_applied;
 static uint32_t mark_requests;
 static uint32_t wake_lost;
 static uint32_t previous_us;
@@ -195,8 +202,13 @@ static void sample(void)
     }
     encoder_input(&input);
     input.calibration_epoch = vehicle_calibration_epoch();
+    /* Raw mapped acceleration must be inside the upright bounds before a
+     * level bias can be accepted, so the recorded top-up or upside-down
+     * six-face poses can never define an inverted still pose as level.
+     * The same guard refuses a later refresh from a tilted pose. */
     input.calibration_allowed = epoch == input.calibration_epoch &&
-                                (epoch & 1u) == 0u;
+                                (epoch & 1u) == 0u &&
+                                imu_safety_upright_ok(input.accel_mg);
     input.run_epoch = run_epoch();
     const uint32_t compute_start = drv_time_us();
     const uint32_t requested = __atomic_load_n(&mark_requests,
@@ -251,6 +263,31 @@ static void sample(void)
         hump_value.timestamp_ms = input.now_ms;
         app_board_publish(&hump_board.sequence, hump_board.words,
                           &hump_value, sizeof(hump_value));
+        /* Safety uses the bias-corrected mapped acceleration only: never
+         * the yaw/encoder-compensated vector, and never the hump mean,
+         * travel gate or estimated height. */
+        imu_safety_input_t safe_in = {
+            .now_ms = input.now_ms,
+            .accel_valid = core.output.valid,
+            .calibrated = core.output.calibrated,
+            .wheels_still = wheels_still};
+        for (unsigned int axis = 0u; axis < 3u; ++axis) {
+            safe_in.accel_mg[axis] = core.output.accel_mg[axis];
+        }
+        imu_safety_step(&safety, &safe_in);
+        /* Apply at most one queued safe-restart attempt. A refused clear
+         * keeps the latch, and the request is consumed either way so the
+         * writer never spins on it. */
+        const uint32_t clear_requested =
+            __atomic_load_n(&safety_clear_requests, __ATOMIC_SEQ_CST);
+        if (clear_requested != safety_clears_applied) {
+            (void)imu_safety_clear(&safety);
+            safety_clears_applied = clear_requested;
+        }
+        /* Same rule as the hump board: only a real observation refreshes
+         * observation_ms, so a stalled sensor looks stale to Vehicle. */
+        app_board_publish(&safety_board.sequence, safety_board.words,
+                          &safety.output, sizeof(safety.output));
     }
     value.compute_last_us = compute;
     value.compute_total_us += compute;
@@ -309,6 +346,7 @@ int imu_service_init(void)
 #endif
     imu_core_init(&core);
     imu_probe_init(&probe);
+    imu_safety_init(&safety);
     cyclic = tk_cre_cyc(&config);
     return cyclic < 0 ? (int)cyclic : E_OK;
 }
@@ -382,6 +420,35 @@ int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
     return E_OK;
 }
 
+int imu_safety_try_read(imu_safety_output_t *out)
+{
+    imu_safety_output_t scratch;
+
+    if (out == NULL) {
+        return E_PAR;
+    }
+    if (!running) {
+        return E_OBJ;
+    }
+    if (!app_board_try_read(&safety_board.sequence, safety_board.words,
+                            &scratch, sizeof(scratch))) {
+        return E_TMOUT;
+    }
+    *out = scratch;
+    return E_OK;
+}
+
+bool imu_safety_clear_request(void)
+{
+    /* Single requester (Vehicle), so a load/add/store needs no runtime
+     * helper: this build deliberately avoids libatomic. */
+    const uint32_t next =
+        __atomic_load_n(&safety_clear_requests, __ATOMIC_SEQ_CST) + 1u;
+
+    __atomic_store_n(&safety_clear_requests, next, __ATOMIC_SEQ_CST);
+    return true;
+}
+
 uint32_t imu_test_run(bool active)
 {
 #if APP_TEST
@@ -431,6 +498,14 @@ int imu_hump_try_read(imu_hump_report_t *out)
 int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
+}
+int imu_safety_try_read(imu_safety_output_t *out)
+{
+    return out == NULL ? E_PAR : E_OBJ;
+}
+bool imu_safety_clear_request(void)
+{
+    return false;
 }
 uint32_t imu_test_run(bool active)
 {

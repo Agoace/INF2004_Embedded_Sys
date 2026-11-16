@@ -7,6 +7,7 @@
 #include "imu_probe.h"
 #include "imu_capture.h"
 #include "imu_hump_diag.h"
+#include "imu_safety.h"
 
 typedef struct {
     imu_core_output_t value;
@@ -36,6 +37,16 @@ int imu_snapshot_try_read(imu_snapshot_t *out);
 int imu_hump_try_read(imu_hump_report_t *out);
 /* Diagnostic C observation board; same bounded-copy contract. */
 int imu_hump_diag_try_read(imu_hump_diag_report_t *out);
+/* Bounded copy of the newest IMU safety board; same returns as the
+ * snapshot. Small on purpose so Vehicle can read it on the 10 ms path.
+ * observation_ms is the last real observation: check it with
+ * imu_safety_evaluate() before using the trigger. */
+int imu_safety_try_read(imu_safety_output_t *out);
+/* Request an explicit safe restart of the detector latch. The writer
+ * applies it on its next tick and refuses unless the all-clear window has
+ * completed, so a request is not a guarantee. One request is one attempt;
+ * the caller re-reads the board to confirm. */
+bool imu_safety_clear_request(void);
 /* TEST GP21 drive boundary (single TEST writer): active=true makes the
  * run epoch odd, false makes it even. Returns the new epoch; other images
  * return 0 and use vehicle_run_epoch(). */

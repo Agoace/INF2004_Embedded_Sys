@@ -174,7 +174,14 @@ enum {
     RM_STOP_SONAR = 10,
     RM_STOP_TELEMETRY = 11,
     RM_STOP_OTHER = 12,
-    RM_STOP_SCAN_REVERSE_TIMEOUT = 13
+    RM_STOP_SCAN_REVERSE_TIMEOUT = 13,
+    /* IMU safety reasons (RT-0089). Separate values so a lift, an overturn
+     * and an unavailable IMU are distinguishable in the run summary byte
+     * and in the USB stop text. All three classify as RM_STOP_SOURCE_FAULT
+     * through the default arm of rs_stop_source(). */
+    RM_STOP_IMU_LIFT = 14,
+    RM_STOP_IMU_OVERTURN = 15,
+    RM_STOP_IMU_UNAVAILABLE = 16
 };
 
 /* robot/summary flags (byte 1). */

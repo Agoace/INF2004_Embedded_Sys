@@ -403,8 +403,12 @@ the next summary version (v4); v3 keeps no reserved barcode bytes.
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
 line snapshot failure/stale 8; line samples lost 9; sonar failure 10;
-telemetry failure 11; other 12; SCAN reverse timeout 13. Sources describe the run-ending condition,
-not a unified fault mask. Motion faults preserve existing `MC_FAULT_*` bits.
+telemetry failure 11; other 12; SCAN reverse timeout 13; IMU lift detected 14;
+IMU overturn detected 15; IMU unavailable 16. Sources describe the run-ending
+condition, not a unified fault mask. Motion faults preserve existing
+`MC_FAULT_*` bits. Reasons 14 to 16 are the IMU safety stop and report the
+source classification fault; they were added with the IMU safety detector and
+do not change any other field. `robot/imu` remains reserved and unpublished.
 
 Speed error compares commanded versus measured wheel speed only after the
 command has stayed unchanged for at least 300 ms. This excludes early ramp

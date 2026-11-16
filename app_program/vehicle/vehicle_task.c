@@ -624,6 +624,146 @@ static void read_line(void)
     }
 }
 
+/* --- IMU safety gate --------------------------------------------------
+ *
+ * The IMU task owns the sensor and publishes a small safety board. Vehicle
+ * owns the stop. A busy or absent board is never waited for: the last good
+ * copy is kept, so the reported age keeps growing and a stalled IMU becomes
+ * unavailable after IMU_SAFETY_MAX_AGE_MS. One lost read therefore cannot
+ * latch a fault.
+ */
+static imu_safety_output_t imu_copy;
+static bool imu_have_copy;
+/* Vehicle-owned latch: the first confirmed reason, until a safe restart.
+ * Ordinary run cleanup never clears it. */
+static uint8_t imu_latched;
+/* The writer applies a clear on its next tick, so a wake inside that window
+ * must not re-latch the reason that was just cleared. The window is bounded
+ * so a refused clear still stops the robot. */
+#define IMU_CLEAR_WAIT_MS 100u
+static bool imu_await_clear;
+static uint32_t imu_await_until;
+
+static const char *imu_reason_text(uint8_t trigger)
+{
+    if (trigger == (uint8_t)IMU_SAFETY_LIFT) {
+        return "IMU lift detected";
+    }
+    if (trigger == (uint8_t)IMU_SAFETY_OVERTURN) {
+        return "IMU overturn detected";
+    }
+    return "IMU unavailable";
+}
+
+#if TM_MQTT
+/* Only the MQTT build carries a stop reason code: in a non-MQTT build the
+ * set_reason macro keeps the text and discards the code. */
+static uint8_t imu_reason_code(uint8_t trigger)
+{
+    if (trigger == (uint8_t)IMU_SAFETY_LIFT) {
+        return RM_STOP_IMU_LIFT;
+    }
+    if (trigger == (uint8_t)IMU_SAFETY_OVERTURN) {
+        return RM_STOP_IMU_OVERTURN;
+    }
+    return RM_STOP_IMU_UNAVAILABLE;
+}
+#endif
+
+/* Refresh the cached copy, then report the effective trigger right now. */
+static uint8_t imu_safety_now(void)
+{
+    imu_safety_output_t scratch;
+
+    if (imu_safety_try_read(&scratch) >= E_OK) {
+        imu_copy = scratch;
+        imu_have_copy = true;
+    }
+    return imu_safety_evaluate(&imu_copy, imu_have_copy, drv_time_ms(),
+                              IMU_SAFETY_MAX_AGE_MS);
+}
+
+/*
+ * Act on a confirmed trigger. Called on every Vehicle wake, so it covers
+ * line calibration, the start delay, each running module and idle. Returns
+ * false when motion must not continue.
+ */
+static bool imu_safety_check(void)
+{
+    const uint8_t trigger = imu_safety_now();
+
+    if (imu_await_clear) {
+        if (trigger == (uint8_t)IMU_SAFETY_NONE) {
+            /* The requested clear has landed. */
+            imu_await_clear = false;
+        } else if ((int32_t)(drv_time_ms() - imu_await_until) < 0) {
+            /* Not applied yet: give the writer its next tick instead of
+             * re-latching the reason the operator just cleared. */
+            return true;
+        } else {
+            /* The clear was refused, or the reason returned. Stop. */
+            imu_await_clear = false;
+        }
+    }
+    if (trigger == (uint8_t)IMU_SAFETY_NONE) {
+        return imu_latched == (uint8_t)IMU_SAFETY_NONE;
+    }
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+        /* Exactly one stop request per confirmed reason. */
+        imu_latched = trigger;
+        (void)vehicle_estop();
+        cancelled = true;
+        set_reason(imu_reason_code(trigger), imu_reason_text(trigger));
+        event(3u, vsm.state, vsm.running, (uint16_t)trigger);
+    }
+    return false;
+}
+
+/* A start needs no latched reason, a fresh valid observation and an upright
+ * pose. Never waits for the board. The board's own latch is not consulted
+ * here: a safe restart has already cleared it, and imu_safety_check() runs
+ * first on every wake and re-latches if the pose is still unsafe. */
+static bool imu_start_allowed(void)
+{
+    if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
+        return false;
+    }
+    (void)imu_safety_now();
+    if (!imu_have_copy) {
+        return false;
+    }
+    if ((imu_copy.flags & (IMU_SAFETY_FLAG_VALID | IMU_SAFETY_FLAG_UPRIGHT)) !=
+        (IMU_SAFETY_FLAG_VALID | IMU_SAFETY_FLAG_UPRIGHT)) {
+        return false;
+    }
+    return (int32_t)(drv_time_ms() - imu_copy.observation_ms) <=
+           (int32_t)IMU_SAFETY_MAX_AGE_MS;
+}
+
+/*
+ * GP21 safe restart after an IMU latch. Needs a fresh observation, an
+ * upright pose and a completed all-clear window. Only then is the writer
+ * asked to clear. MQTT commands cannot clear a latch.
+ */
+static bool imu_safety_restart(void)
+{
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+        return true;
+    }
+    if (imu_safety_now() == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
+        return false;
+    }
+    if (imu_copy.clear_ms < IMU_SAFETY_CLEAR_MS ||
+        (imu_copy.flags & IMU_SAFETY_FLAG_UPRIGHT) == 0u) {
+        return false;
+    }
+    (void)imu_safety_clear_request();
+    imu_latched = (uint8_t)IMU_SAFETY_NONE;
+    imu_await_clear = true;
+    imu_await_until = drv_time_ms() + IMU_CLEAR_WAIT_MS;
+    return true;
+}
+
 /*
  * Wait for the motion release and collect the next vehicle inputs.
  */
@@ -651,6 +791,14 @@ static bool wait_tick(void)
     }
     release_us = drv_time_us();
     step_open = true;
+    /* IMU safety runs on EVERY Vehicle wake, so it covers line calibration,
+     * the start delay, each running module and idle, before any idle early
+     * continue and before any command is issued. It comes AFTER the tick
+     * wait on purpose: returning before tk_slp_tsk() would make the loop
+     * spin without ever parking and starve the lower-priority tasks. */
+    if (!imu_safety_check()) {
+        return false;
+    }
     read_line();
 #if TM_MQTT
     handle_command();
@@ -709,7 +857,10 @@ static bool cal_spin(int direction, goal_t goal, const int32_t home[2],
     const int sign[2] = {direction, -direction};
     bool running[2] = {true, true};
     const uint32_t t0 = drv_time_ms();
-    (void)motion_clear_faults();
+    /* Never clear a motor fault behind an IMU safety latch. */
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+        (void)motion_clear_faults();
+    }
     while (running[0] || running[1]) {
         if (!wait_tick()) {
             (void)vehicle_stop();
@@ -1010,8 +1161,12 @@ static bool request(sonar_request_t *r)
  */
 static void run_once(void)
 {
-    (void)motion_clear_faults();
-    vsm_reset(&vsm);
+    /* A latched IMU safety reason must survive run cleanup, so the motor
+     * faults are cleared and the shell reset only when none is latched. */
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+        (void)motion_clear_faults();
+        vsm_reset(&vsm);
+    }
     read_line();
     line_event = VC_EVENT_NONE;
     motion_status_t initial = {0};
@@ -1367,6 +1522,27 @@ static void vehicle_task(INT code, void *ctx)
             continue;
         }
 #endif
+        /* IMU start gate. A GP21 press may clear a latched reason, but only
+         * after the full all-clear window; an MQTT command never can. A
+         * stale, invalid or non-upright IMU blocks every start. */
+        if (run_edge) {
+            (void)imu_safety_restart();
+        }
+        if (!imu_start_allowed()) {
+            const uint8_t why =
+                imu_latched != (uint8_t)IMU_SAFETY_NONE
+                    ? imu_latched
+                    : (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE;
+            set_reason(imu_reason_code(why),
+                       imu_latched != (uint8_t)IMU_SAFETY_NONE
+                           ? imu_reason_text(why)
+                           : "IMU not ready");
+            event(3u, vsm.state, vsm.running, (uint16_t)why);
+#if TM_MQTT
+            vehicle.phase = 0u;
+#endif
+            continue;
+        }
         telemetry_message_t begin = {.kind = TELEMETRY_BEGIN};
         if (!send(&begin)) {
             continue;
@@ -1421,7 +1597,10 @@ static void vehicle_task(INT code, void *ctx)
         (void)send(&m);
         active = false;
         cancelled = false;
-        vsm_reset(&vsm);
+        /* Ordinary run cleanup does not clear an IMU safety latch. */
+        if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+            vsm_reset(&vsm);
+        }
 #if TM_MQTT
         vehicle.phase = 0u;
         publish_vehicle();

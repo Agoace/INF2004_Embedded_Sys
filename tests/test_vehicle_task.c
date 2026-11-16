@@ -104,6 +104,27 @@ int imu_hump_diag_try_read(imu_hump_diag_report_t *r) {
         .filtered_mm=9.9f,.ms=100u};
     return E_OK;
 }
+/* Controllable IMU safety board. The default is a fresh, upright, never
+ * latched observation, so every existing scenario behaves as before. The
+ * imulift/imunavail scenarios below set the failing state. */
+static imu_safety_output_t safety_out={.flags=IMU_SAFETY_FLAG_VALID|
+        IMU_SAFETY_FLAG_UPRIGHT|IMU_SAFETY_FLAG_NEAR_ONE_G,
+    .clear_ms=IMU_SAFETY_CLEAR_MS};
+static bool safety_busy;
+static bool safety_refuse_clear;
+static unsigned int safety_clear_requests;
+int imu_safety_try_read(imu_safety_output_t *o) {
+    if (safety_busy) return E_TMOUT;
+    *o=safety_out;o->observation_ms=now;return E_OK;
+}
+bool imu_safety_clear_request(void) {
+    ++safety_clear_requests;
+    /* A refused clear keeps the latch, as the writer does when the pose is
+     * no longer safe by the time it applies the request. */
+    if (!safety_refuse_clear)
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_NONE;
+    return true;
+}
 int tm_printf(const UB *f,...) {
     va_list a;va_start(a,f);
     if (!strncmp((const char *)f,"[robot] hump highest_mm",23u)) {
@@ -212,6 +233,23 @@ int main(int argc,char **argv) {
         (argc>1 && !strcmp(argv[1],"junctionstale") ? 2u : 0u);
     stale=argc>1 && !strcmp(argv[1],"stale");overrun=argc>1 && !strcmp(argv[1],"overrun");
     sonar_stale=argc>1 && !strcmp(argv[1],"sonarstale");
+    /* IMU safety scenarios: a latched lift reason with an incomplete
+     * all-clear window, an unreadable board, and a latch that the safe
+     * GP21 restart may clear. */
+    const bool imu_lift=argc>1 && !strcmp(argv[1],"imulift");
+    const bool imu_unavail=argc>1 && !strcmp(argv[1],"imunavail");
+    const bool imu_clear=argc>1 && !strcmp(argv[1],"imuclear");
+    const bool imu_refused=argc>1 && !strcmp(argv[1],"imuclearrefused");
+    if (imu_lift) {
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+        safety_out.clear_ms=0u;
+    }
+    if (imu_clear || imu_refused) {
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+        safety_out.clear_ms=IMU_SAFETY_CLEAR_MS;
+    }
+    if (imu_refused) safety_refuse_clear=true;
+    if (imu_unavail) safety_busy=true;
     lp_init(&line);lp_set_pair(&line,true,0);
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
     imu_hump_summary_t last;assert(vehicle_hump_try_read(&last)==E_NOEXS);
@@ -225,6 +263,36 @@ int main(int argc,char **argv) {
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
     line_error=E_OK;assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
+    /* IMU safety outcomes, asserted before the run-specific checks so a
+     * refused start is not judged by assertions about a completed run. */
+    if (imu_lift || imu_unavail) {
+        /* A confirmed IMU reason stops the robot exactly once, and no run,
+         * calibration spin or motion command may start under the latch. */
+        assert(estops==1u && run_seen==0u && line_drives==0u);
+        assert(vehicle_run_epoch()==0u && spins==0u && asked[0]==0 && asked[1]==0);
+        assert(safety_clear_requests==0u);
+        return 0;
+    }
+    if (imu_clear) {
+        /* With a complete all-clear window a GP21 press clears the latch
+         * once and the normal calibration and start then proceed. The stop
+         * count is not asserted exactly: this scenario also ends with the
+         * harness's normal GP21 stop, so one safety stop plus one operator
+         * stop is expected. */
+        assert(safety_clear_requests==1u);
+        assert(run_seen!=0u);
+        assert(line_drives>0u);
+        assert(estops>=1u);
+        return 0;
+    }
+    if (imu_refused) {
+        /* The writer refused the clear, so the bounded wait expires and the
+         * stop returns: the robot must not keep driving on a cleared latch
+         * that the detector never actually released. */
+        assert(safety_clear_requests>=1u);
+        assert(estops>=2u);
+        return 0;
+    }
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
     assert(vehicle_calibration_epoch() >= 2u);
     assert((vehicle_calibration_epoch() & 1u) == 0u);

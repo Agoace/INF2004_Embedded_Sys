@@ -191,6 +191,12 @@ if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
+    add_test(NAME test_vehicle_imu_lift_stop COMMAND test_vehicle_task imulift)
+    add_test(NAME test_vehicle_imu_unavailable_stop
+        COMMAND test_vehicle_task imunavail)
+    add_test(NAME test_vehicle_imu_safe_restart COMMAND test_vehicle_task imuclear)
+    add_test(NAME test_vehicle_imu_refused_clear_relatches
+        COMMAND test_vehicle_task imuclearrefused)
 endif()
 
 # TEST runner policy and buffered timing evidence; no real scheduler or hardware.
@@ -224,10 +230,20 @@ host_test(test_imu_hump_diag tests/test_imu_hump_diag.c
 target_include_directories(test_imu_hump_diag BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_link_libraries(test_imu_hump_diag PRIVATE m)
+host_test(test_imu_safety tests/test_imu_safety.c
+    app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_safety PRIVATE m)
 foreach(test IN ITEMS test_imu_service test_imu_capture_service
         test_imu_stream test_vehicle_task test_vehicle_network_task)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+endforeach()
+# vehicle_task.c reads the IMU safety board, so every target that compiles it
+# needs the pure detector. imu_service.c also steps the detector.
+foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task
+        test_imu_service test_imu_capture_service test_imu_stream)
+    target_sources(${test} PRIVATE
+        "${REPO}/app_program/subsystem4/imu_safety.c")
 endforeach()
 foreach(test IN ITEMS test_imu_stream test_vehicle_task
         test_vehicle_network_task test_telemetry test_telemetry_log)
