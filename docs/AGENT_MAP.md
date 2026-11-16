@@ -264,6 +264,8 @@ vehicle task described below.
   the pure forward-distance window and one mapping table; synthetic tests in
   [`test_barcode_window.c`](../tests/test_barcode_window.c), original-fixture
   tests in [`test_barcode_window_real.c`](../tests/test_barcode_window_real.c).
+  [Real window replay](s3-line-barcode/REAL_WINDOW_REPLAY.md) compares old/new
+  readers on all five retained ADC/motor fixtures.
   SHADOW feed tests: [`test_barcode_live_feed.c`](../tests/test_barcode_live_feed.c)
   and [`test_barcode_live_producer.c`](../tests/test_barcode_live_producer.c).
   Vehicle merge, stack/CPU and offset hardware acceptance remain pending.
