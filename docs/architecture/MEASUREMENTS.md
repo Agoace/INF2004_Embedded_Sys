@@ -35,13 +35,13 @@ below give the sources.
 
 | Quantity | Value A (date) | Value B (date) | Other |
 | --- | --- | --- | --- |
-| Sonar face to robot front | 58 mm, echo mean 57.9 mm (2026-10-27) | 47 mm if the echo reads 11 mm high (doc ≤ 2026-11-08) | No ruler value |
-| Line sensors ahead of the wheel axle | 123 mm = 65 + 58, calculated (2026-10-30) | 119 mm, operator (2026-11-15) | Sim guess 119 mm (doc ≤ 2026-11-08) |
+| Sonar face to robot front | 58 mm, echo mean 57.9 mm (2026-10-27) | 47 mm if the echo reads 11 mm high (doc ≤ 2026-11-08) | Not resolved. Both values use the same reference: transducer face to a flat target touching the robot front, read by echo (Run 7, 80/80 VALID); 47 mm only subtracts an assumed 11 mm short-range over-read. Ruler-derived 42.5 mm = 127.5 − 85 (2026-11-16) uses the module front face and the robot front from the ruler session |
+| Line sensors ahead of the wheel axle | 123 mm = 65 + 58, calculated (2026-10-30) | 119 mm, operator (2026-11-15) | Sim guess 119 mm (doc ≤ 2026-11-08). **Ruler about 122 mm** to the GP26/27 centre (2026-11-16); both older values are within 3 mm of it |
 | Counts per wheel revolution | 2540 / 2539 (2026-10-27) | 2535 (doc ≤ 2026-11-08) | Old motor 2 test 2532.9 / 2532.3 |
 | Robot mass | 1 kg SIL placeholder (doc ≤ 2026-11-16) | 671.6 g, operator (2026-11-16) | **Resolved: 671.6 g** |
-| Wheel diameter | 65 mm, "Operator" (2026-10-30, archive) | 65 mm nominal, not calibrated (doc ≤ 2026-11-08) | — |
+| Wheel diameter | 65 mm, "Operator" (2026-10-30, archive) | 65 mm nominal, not calibrated (doc ≤ 2026-11-08) | **Operator confirmed 65 mm** (2026-11-16); loaded rolling diameter still not calibrated |
 | Wheel track | 111 mm, operator (2026-10-30) | 120 mm in old `motion_config.h` (doc ≤ 2026-11-06) | IMU notes "rough 115 mm". **Resolved: 111-112 mm** contact centre to contact centre, operator ruler (2026-11-16); the old 120 mm code value is superseded |
-| Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | 82 mm, operator ruler (2026-11-16), marked "?" (uncertain) |
+| Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | **Resolved: 82 mm**, operator ruler (2026-11-16), confirmed after the first "?"; 80 and 79 mm are older |
 | Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | **Photo supports about 9 mm** (LED tips, ±1 mm, 2026-11-16); the 8 mm value is an older SIL input |
 | Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08). **Photo supports 14.5 mm** (14.7 / 14.2 mm, 2026-11-16); 20.9 mm is an optical fit, not a position |
 | GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm. **Photo about 5.2 mm** (LED tips, ±1 mm, 2026-11-16), consistent with 5.5 mm |
@@ -61,7 +61,7 @@ Main_Worker). Values as given:
 - Rear wheel axle to robot rear: 52-53 mm.
 - Wheel track, contact centre to contact centre: 111-112 mm.
 - Wheel width: 16 mm.
-- Rear axle to caster: 82 mm (operator marked "?").
+- Rear axle to caster: 82 mm (first marked "?"; confirmed by the operator later on 2026-11-16).
 - Rear axle to back of ultrasonic module: about 70 mm +-3 mm.
 
 Derived from these values:
@@ -77,6 +77,19 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 - GP28: LED tips about 5.2 mm above floor (housing bottom about 6.8 mm), +-1 mm.
 - GP26/27 module centre spacing about 14.7 mm; emitter/receiver midpoint spacing about 14.2 mm (supports the 14.5 mm board value).
 - TCRT housing width about 10.6 mm (scale check against the 10.2 mm datasheet value).
+
+Operator answers, 2026-11-16:
+
+- Rear axle to line sensor (GP26/27) centre: about 122 mm.
+- Rear axle to GP28 sensor: about 73 mm forward.
+- Wheel diameter: 65 mm, confirmed.
+- Rear axle to caster: 82 mm, confirmed.
+- Ultrasonic module depth: 15 mm.
+
+Derived from the answers:
+
+- Rear axle to sonar front face: 70 (+-3) + 15 = 85 mm +-3 mm.
+- Sonar front face behind robot front: 127.5 - 85 = 42.5 mm.
 
 ## Geometry
 
@@ -95,7 +108,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | Outer wheel face from centre | 128 / 2 = 64 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Outer wheel to outer wheel | 128 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Overall length | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
-| Rear axle to caster | 82 mm (operator marked "?") | 2026-11-16 | MEASURED-UNCERTAIN(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Rear axle to caster | 82 mm (confirmed) | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Rear axle to front line sensors | 123 mm = 65 + 58 | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Rear wheel axle to robot rear | 52-53 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Robot corner to the side of sonar | about 80 mm | 2026-10-30 | DERIVED | [OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit](../archive/OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit) |
@@ -119,6 +132,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | Wheel centre half-track | 111.5 / 2 = 55.75 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Wheel diameter | 65 mm nominal; loaded rolling diameter not calibrated | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Wheel diameter (archive label) | 65 mm, "Operator, 2026-10-30" | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
+| Wheel diameter (operator confirmed) | 65 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Wheel track | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Wheel track, contact centre to contact centre | 111-112 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Wheel width | 16 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
@@ -275,6 +289,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | P6 | delay 50 ms (0.85); mean 166 mm/s; 1.86 mm/s per position unit; +-45: 78 % | 2026-11-04 | MEASURED(robot log,2026-11-04) | [VC_LINE_RUN.md#run-p6-2026-11-04-boot-3f9e-run-2](../archive/s3-line-barcode/VC_LINE_RUN.md#run-p6-2026-11-04-boot-3f9e-run-2) |
 | P7 | base 146 mm/s, gains 85/85/340; side changes 3.6/s; mean 142 mm/s; 1.40 mm/s per unit; 33 searches/min | 2026-11-04 | MEASURED(robot log,2026-11-04) | [VC_LINE_RUN.md#run-p7-2026-11-04-boot-95bc-run-1](../archive/s3-line-barcode/VC_LINE_RUN.md#run-p7-2026-11-04-boot-95bc-run-1) |
 | P9 (I off) | side changes 3.2/s; straight spread 35; 37 searches/min; 136 mm/s | 2026-11-04 | MEASURED(robot log,2026-11-04) | [VC_LINE_RUN.md#run-p9-2026-11-04-boot-d8fa-run-1](../archive/s3-line-barcode/VC_LINE_RUN.md#run-p9-2026-11-04-boot-d8fa-run-1) |
+| Rear axle to line sensor (GP26/27) centre (ruler) | about 122 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Run 10 calm mode | mean speed 113 counts per 50 ms; calm 55 % of time; wheel stopped 13.2 % | 2026-10-30 | MEASURED(robot log,2026-10-30) | [LINE_STEERING.md#run-10-2026-10-30-vin-wi-fi-log](../archive/s3-line-barcode/LINE_STEERING.md#run-10-2026-10-30-vin-wi-fi-log) |
 | Run 3 (2026-10-27) wheels | L 29192 / R 28543 counts (about 11.5 turns) | 2026-10-27 | MEASURED(robot log,2026-10-27) | [LINE_STEERING.md#run-3-2026-10-27-vin](../archive/s3-line-barcode/LINE_STEERING.md#run-3-2026-10-27-vin) |
 | Run 6 / 7 mean wheel speed | 99 / 101 counts per 50 ms | 2026-10-29 | MEASURED(robot log,2026-10-29) | [LINE_STEERING.md#run-7-2026-10-29-vin-wi-fi-log](../archive/s3-line-barcode/LINE_STEERING.md#run-7-2026-10-29-vin-wi-fi-log) |
@@ -340,6 +355,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | Quiet noise SD (1 mm means) | about 1.3-2.4 counts | doc ≤ 2026-11-09 | MEASURED(trace) | [BARCODE.md#b1c-evidence-and-remaining-physical-tests](../s3-line-barcode/BARCODE.md#b1c-evidence-and-remaining-physical-tests) |
 | Quiet-bin analysis | 792 quiet bins: no maxima reached gate; white returns about 156-179 | doc ≤ 2026-11-09 | MEASURED(trace) | [TEST_LOG.md#approved-real-fixtures-and-analysis](../../testing/subsystem3/TEST_LOG.md#approved-real-fixtures-and-analysis) |
 | Real replay fitted widths, large F | n 5.766 / w 17.551 mm and n 5.776 / w 17.715 mm | 2026-11-16 | DERIVED | [REAL_WINDOW_REPLAY.md#native-retained-data-comparison](../s3-line-barcode/REAL_WINDOW_REPLAY.md#native-retained-data-comparison) |
+| Rear axle to GP28 sensor (ruler) | about 73 mm forward | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Shadow full circuit (b405aef) | 90 s, 9.9 m, 146 mm/s; 45 losses; 7 junctions; 3 attempts 0 frames | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | SIL barcode along-sigma | 1 / 4 / 8 mm | 2026-11-16 | ASSUMED | `mtk3-hil:docs/simulation/SIL_JUNCTION_BARCODE_RESULTS_20261116.md#version-and-protocol` |
 | SIL barcode sheet | 400x50 mm paper, 40 mm bar height, 389.5 mm quiet length | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
@@ -376,6 +392,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | R4 closest gap estimate | 42-50 mm (250 face) or 0-10 mm (160 face) | 2026-11-05 | DERIVED | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm` |
 | R4 false line before real line | about 48 mm; L about 2000, C about 150 | 2026-11-05 | MEASURED(robot log,2026-11-05) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r4-2026-11-05-boot-aff0-run-1-straight-400-mm` |
 | Rear axle to back of ultrasonic module | about 70 mm +-3 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Rear axle to sonar front face | 70 (+-3) + 15 = 85 mm +-3 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Reattempt free side | 5 of 5 runs at 329-435 mm | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#result-m2-reattempt-2026-11-07-mqtt-image-48c69d3-pass` |
 | Reattempt reverse centre echo change | +101..+115 mm (one +27 mm at tile edge) | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#result-m2-reattempt-2026-11-07-mqtt-image-48c69d3-pass` |
 | Reverse distance | 100 mm = 1241 counts at 12414 counts/m, -100 mm/s | doc ≤ 2026-11-08 | DERIVED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
@@ -411,6 +428,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | Sonar echo quantization | about 25 us (one 40 kHz cycle) = about 4.3 mm | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes` |
 | Sonar face ahead of pose point | 65 mm | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
 | Sonar face to robot front (echo) | mean 57.9 mm, SD 2.2 mm (80/80 VALID); about 58 mm, ruler not done | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset` |
+| Sonar front face behind robot front (ruler-derived) | 127.5 - 85 = 42.5 mm | 2026-11-16 | DERIVED | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Sonar module supply / echo level | 3.3 V; carrier input limit 3.6 V | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Sonar short-reading bias | 4-7 mm short at 200 mm; 6-7 mm (about 1.7 %) at 400 mm; 30 C gives about 1.9 % | 2026-11-06 | DERIVED | [TEST_LOG.md#s5-u01-wall-check-2026-11-06](../../testing/subsystem5/TEST_LOG.md#s5-u01-wall-check-2026-11-06) |
 | Sonar timing constants | trigger 10 us; rise timeout 2 ms; min trigger gap 60 ms; WATCH 100 ms | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#sonar-settings](../s5-obstacle/OBSTACLE.md#sonar-settings) |
@@ -420,6 +438,7 @@ Photo estimates: 3 operator photos with a steel ruler beside the sensors
 | STEP 8 box | 17 x 12 x 7 cm; echoes 214..290 mm at -30..+30 deg; closest 212 mm at +10 | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/MTK3_STEP8_RECORD.md#driving-observations` |
 | Target at about 1 m | 48 readings mean 1016.3 mm, std 10.6 mm, range 999-1056 mm | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes` |
 | Turn-away angles needing larger toward limit | away 62/63 deg -> toward 152/153 deg | 2026-11-13 | MEASURED(robot log,2026-11-13) | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
+| Ultrasonic module depth | 15 mm | 2026-11-16 | MEASURED(operator,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | v1.8 detours | 8 detours, 5 DONE, 3 stall stops | 2026-11-03 | MEASURED(robot log,2026-11-03) | [OBSTACLE_DETOUR_HANDOFF.md#two-sensor-runs-2026-11-03-firmware-e4ba9ec-v17](../archive/OBSTACLE_DETOUR_HANDOFF.md#two-sensor-runs-2026-11-03-firmware-e4ba9ec-v17) |
 
 ## IMU
