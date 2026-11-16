@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast'):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast',barcode=False,sigma_along_mm=1,duration_ms=10000):
     course=course_override or Course.load(SOURCE/'courses/sil'/('straight_search_assumed.json'if line_search else'straight_assumed.json'))
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -32,25 +32,47 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
     libs=project/'libraries';libs.mkdir(exist_ok=True)
     for source in (SOURCE/'pil').glob('*.py'):
         target=libs/'pil'/source.name;target.parent.mkdir(exist_ok=True);shutil.copyfile(source,target)
-    if line_search:
+    if barcode:
+        if optical_sampler!='full':raise ValueError('barcode requires full-scene sampler')
+        from pil.sil_junction_barcode import build_barcode_library
+        build_barcode_library(libs)
+    elif line_search:
         from pil.sil_search import build_search_library
         build_search_library(libs)
     elif motor_fidelity:
         from pil.sil_motor import build_motor_library
         build_motor_library(libs)
     else:build_library(libs)
+    def profile_values(profile):
+        return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
     def profile_dict(name):
         if line_search and line_profile=='B':
             from pil.s3_assumed_line import load_boot5209_line_profile
             profile=load_boot5209_line_profile(name)
         else:profile=load_assumed_line_profile(name)
-        return {f.name:dict(getattr(profile,f.name))if f.name=='levels_adc'else getattr(profile,f.name)for f in fields(profile)}
+        return profile_values(profile)
     config=dict(optical_sampler=optical_sampler,curve_trial=course.data['name']in('sil_curve_assumed','sil_s_curve_assumed'),s_curve_trial=course.data['name']=='sil_s_curve_assumed',optical_profile='BOOT_5209_SPIN_FIT_B'if line_search and line_profile=='B'else'ASSUMED_LINE_A',profiles={n:profile_dict(n)for n in('GP26','GP27')},
         mounts={n:asdict(load_assumed_line_mount(n))for n in('GP26','GP27')},
         calibration_rows=spin_calibration['calibration_rows']if spin_calibration else[[200,200,0]]*16+[[3700,3700,0]]*4,
         calibration_provenance='ACTUAL aligned simulated spin samples; independent pose reset per trial; sim-owned sequence equivalent to vehicle_task.c'if spin_calibration else'SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
         spin_endpoints=spin_calibration['calibration']['endpoints']if spin_calibration else None,
         controller_config=CONFIG,motor_fidelity=motor_fidelity or line_search,line_search=line_search,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to operator approximate8mm clearance; tilt response unmodelled')
+    config.update(barcode_trial=barcode,duration_ms=duration_ms)
+    if barcode:
+        from pil.s3_sil_barcode import load_sil_barcode_profile
+        from pil.sil_junction_barcode import FAMILIES
+        config['barcode_profiles']={str(n):profile_values(load_sil_barcode_profile(sigma_along_mm=n))for n in FAMILIES}
+        config['barcode_sigma_along_mm']=sigma_along_mm
+        config['barcode_fine_tolerance']=1e-7
+        config['barcode_uniform_mat']=True
+        config['barcode_mount']=dict(forward_mm=80,left_mm=77,flat_clearance_mm=5.5)
+        if spin_calibration:
+            config['barcode_calibration_rows']=spin_calibration['barcode_calibration_rows']
+            config['barcode_calibration']=spin_calibration['barcode_calibration']
+            h=hashlib.sha256(json.dumps(config['barcode_profiles'],sort_keys=True).encode()).hexdigest()
+            if spin_calibration.get('barcode_profiles_sha256')!=h:raise ValueError('GP28 spin/profile mismatch')
+            h=hashlib.sha256(json.dumps(config['barcode_calibration_rows'],separators=(',',':')).encode()).hexdigest()
+            if spin_calibration.get('barcode_rows_sha256')!=h:raise ValueError('GP28 calibration row hash mismatch')
     if spin_calibration:
         if spin_calibration.get('optical_sampler','fast')!=optical_sampler:raise ValueError('spin/sampler provenance mismatch')
         profile_hash=hashlib.sha256(json.dumps(config['profiles'],sort_keys=True).encode()).hexdigest()
@@ -61,6 +83,7 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
     manifest_path=project/'manifest.json';manifest=json.loads(manifest_path.read_text())
     manifest['sil_scope']=('unchanged vehicle_sm+LINE(line_trace)+SEARCH(line_search)+native motor_ctl; no other registered modules or RTOS'
         if line_search else'unchanged pure line_position+steering C'+(' + native motor_ctl'if motor_fidelity else'')+'; not native tasks/RTOS/full vehicle')
+    if barcode:manifest['sil_scope']='Unchanged native vehicle_sm+LINE(jl_module+line_trace+junction_action)+SEARCH+motor_ctl+B2b SHADOW reader; sim-owned synchronous board/acquisition/publication replacement, not SDK tasks or RTOS'
     for path in project.rglob('*'):
         if path.is_file()and path!=manifest_path:
             manifest['artifacts_sha256'][str(path.relative_to(project))]=hashlib.sha256(path.read_bytes()).hexdigest()
