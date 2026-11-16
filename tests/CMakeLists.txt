@@ -302,6 +302,8 @@ foreach(test IN ITEMS test_telemetry test_telemetry_log)
 endforeach()
 add_test(NAME test_junction_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_junction_make.py")
+add_test(NAME test_barcode_map COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_barcode_map.py")
 get_target_property(vehicle_test_sources test_vehicle_task SOURCES)
 set(junction_id 0)
 foreach(command IN ITEMS A B C D)

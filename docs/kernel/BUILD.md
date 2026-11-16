@@ -64,6 +64,8 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `JUNCTION_TEST_CMD` | NONE (default) selects source2 SHADOW; A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
 | `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
 | `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
+| `BARCODE_MAP` | Empty default = built-in table, image unchanged. `"F=LEFT,K=RIGHT"` sets the barcode_window action table (unlisted letters NONE; NONE/LEFT/RIGHT/STRAIGHT/UTURN) via [`barcode_map.py`](../../tools/barcode_map/barcode_map.py); bad letter, action or a repeat stops make. Adds `_bmap<id>`. Check the boot line `[BARCODE_TABLE] id <id> confirmed 1 A=.. Z=..` (0..4 = N/L/R/S/U). |
+| `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because

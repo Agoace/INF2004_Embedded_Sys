@@ -258,6 +258,30 @@ $(error KERNEL_RAM=1 is UP only: needs SMP=0)
 endif
 endif
 
+# Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
+# letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
+# nothing, so ordinary images stay byte-identical. Policy id 1 is the
+# built-in table, so a custom map uses BARCODE_MAP_ID 2..255 (default 2).
+BARCODE_MAP ?=
+ifeq ($(strip $(BARCODE_MAP)),)
+ifneq ($(origin BARCODE_MAP_ID),undefined)
+$(error BARCODE_MAP_ID needs BARCODE_MAP)
+endif
+else
+BARCODE_MAP_ID ?= 2
+BARCODE_MAP_ID_VALID := $(shell printf '%s\n' '$(BARCODE_MAP_ID)' | grep -Eq '^[1-9][0-9]{0,2}$$' && test '$(BARCODE_MAP_ID)' -ge 2 && test '$(BARCODE_MAP_ID)' -le 255 && echo yes)
+ifneq ($(BARCODE_MAP_ID_VALID),yes)
+$(error BARCODE_MAP_ID must be an integer from 2 to 255)
+endif
+BARCODE_MAP_VALUES := $(shell python3 ../tools/barcode_map/barcode_map.py '$(BARCODE_MAP)' || echo FAIL)
+ifneq ($(filter FAIL,$(BARCODE_MAP_VALUES)),)
+$(error BARCODE_MAP '$(BARCODE_MAP)' is not valid (see message above))
+endif
+BARCODE_MAP_CFLAGS := -DBW_MAP_VALUES=$(BARCODE_MAP_VALUES) -DBW_MAP_POLICY_ID=$(BARCODE_MAP_ID)u
+mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLAGS)
+$(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -274,6 +298,9 @@ EXE_FILE := $(EXE_FILE)_bench_kernel_step0
 endif
 ifeq ($(KERNEL_RAM),1)
 EXE_FILE := $(EXE_FILE)_kernel_ram
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -424,6 +451,10 @@ PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
 endif
 ifeq ($(KERNEL_RAM),1)
 PROFILE_ID := $(PROFILE_ID)-kernelram1
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+BARCODE_MAP_COMMA := ,
+PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
 endif
 PROFILE_FILE := .build_profile
 
