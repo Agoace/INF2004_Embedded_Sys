@@ -3,8 +3,10 @@
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
 #include "../platform/drv_time.h"
+#include "../platform/idle_meter.h"
 #include "../platform/run_timing.h"
 #include "bench_generator.h"
+#include "bench_load.h"
 #include "bench_runtime.h"
 #include "bench_timer_hw.h"
 #define WINDOW_US 600000000u
@@ -41,10 +43,17 @@ void __wrap_app_startup_complete_publish(void)
     const T_DINT irq = {.intatr = TA_HLNG, .inthdr = (FP)generator_irq};
     if (tk_def_int(1u, &irq) < E_OK) { return; }
     ClearInt(1u);
+    /* P1 epoch 1 and the idle-meter sample cover the same window (vehicle
+     * never calls rt_begin in step 0; nothing else samples the meter). */
+    bk_load_start();
+    idle_meter_sample_all();
+    rt_begin(1u);
     if (!bk_gen_start(drv_time_us() + 100000u, WINDOW_US)) { return; }
     if (!bk_timer_arm(bk_gen_next())) {
         bk_gen_abort(drv_time_us());
         bk_gen_publish();
+        idle_meter_sample_all();
+        rt_begin(2u);
         return;
     }
     bk_timer_enable(true);
@@ -63,6 +72,8 @@ bool bk_runtime_button(unsigned int pin)
     if (elapsed >= 20000u &&
         __atomic_load_n(&stopped_valid, __ATOMIC_RELAXED) == 1u) {
         bk_gen_publish();
+        idle_meter_sample_all(); /* window load for [load] */
+        rt_begin(2u);            /* freeze P1 for the dump */
         __atomic_store_n(&stopped_valid, 2u, __ATOMIC_RELEASE);
     }
     return elapsed >= 500000u && elapsed < 700000u;

@@ -28,7 +28,20 @@ button provider publishes stopped statistics before a virtual GP20 press.
 The press starts the normal dump about 500 ms after the stop. Do not press
 GP21; this step does not start a vehicle session.
 
-The report follows `[timeline]`. It gives the measurement window, scheduled
+The report follows `[timeline]`. First come the robot `[load]` line, a
+`[bench_load]` line and the P1 lines (`[kcall]`, maxima, overrun). The robot
+prints these only with MQTT, so the bench prints them here:
+
+| Line | Window and source |
+| --- | --- |
+| `[load]` | Core-0 idle-meter load over the whole window: one sample at window open, one at stop. Split prints core 1 as 65535 (no core-1 meter). |
+| `[bench_load]` | Calibrated meter rate; `WRAP_RISK` if over 7146368 per second (the 32-bit count can wrap in 601 s). |
+| P1 | Run epoch 1 opens at window start and closes (epoch 2) at stop. |
+
+The bench starts the robot idle meter (`bench_idle_meter.c`, priority 32,
+768 B stack, not in `[stack]`).
+
+Then `[bench]` gives the measurement window, scheduled
 and ACK-delivered totals, generator time and the cost verdict. A second
 `[bench]` line gives each wheel's scheduled, delivered, native counted and
 `diff` values, followed by `COUNT_MATCH` or `COUNT_MISMATCH`.

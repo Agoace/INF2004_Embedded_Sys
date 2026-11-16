@@ -37,6 +37,25 @@ bool bk_timer_arm(uint32_t at)
 }
 void bk_timer_enable(bool on) { (void)on; }
 void bk_gpio_pend(void) { assert(irq_context); ++pends; }
+/* P1 run epoch for the bench window: task context, open 1 then close 2.
+ * The idle meter is started once and sampled just before each mark, so
+ * [load] covers the same window as [kcall]. */
+static uint32_t rt_epochs[4];
+static unsigned int rt_begins, load_starts, samples, samples_at_mark[4];
+void bk_load_start(void)
+{
+    assert(!irq_context && rt_begins == 0u); ++load_starts;
+}
+void idle_meter_sample_all(void)
+{
+    assert(!irq_context && load_starts == 1u); ++samples;
+}
+void rt_begin(uint32_t epoch)
+{
+    assert(!irq_context && rt_begins < 4u);
+    samples_at_mark[rt_begins] = samples;
+    rt_epochs[rt_begins++] = epoch;
+}
 void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg)
 {
     (void)us; (void)arg;
@@ -52,6 +71,8 @@ int main(int argc, char **argv)
     assert(!bk_runtime_button(20u));
     __wrap_app_startup_complete_publish();
     assert(enabled == 1u && reg_calls == 1u && handler);
+    assert(rt_begins == 1u && rt_epochs[0] == 1u);
+    assert(load_starts == 1u && samples_at_mark[0] == 1u);
     past_arm = miss;
     bench_stats_t s;
     assert(bench_stats_read(&s) && !s.stopped);
@@ -71,6 +92,9 @@ int main(int argc, char **argv)
             assert(down == (late_poll != 0));
             /* Even a first poll after500ms publishes BEFORE visible press. */
             assert(bench_stats_read(&s) && s.stopped);
+            /* The P1 epoch closes with the stopped publication. */
+            assert(rt_begins == 2u && rt_epochs[1] == 2u);
+            assert(samples_at_mark[1] == 2u);
         }
         assert(bench_stats_read(&s));
     } while (!s.stopped);
@@ -92,6 +116,7 @@ int main(int argc, char **argv)
         return 0;
     }
     assert(!bk_runtime_button(20u) && !bk_runtime_button(21u));
+    assert(rt_begins == 2u && samples == 2u); /* closed once only */
     now_us += 500000u;
     assert(bk_runtime_button(20u));
     assert(!bk_runtime_button(21u));

@@ -7,10 +7,12 @@
  */
 #if defined(BENCH_KERNEL) && BENCH_KERNEL
 #include "bench_report.h"
-#include "../subsystem2/motion.h"
 #include <stdint.h>
-#include <tk/tkernel.h>
+#include <tk/tkernel.h> /* TK_SUPPORT_SMP before idle_meter.h */
 #include <tm/tmonitor.h>
+#include "../platform/idle_meter.h"
+#include "../platform/run_timing.h"
+#include "../subsystem2/motion.h"
 
 static void bench_report(void)
 {
@@ -75,9 +77,34 @@ static void bench_report(void)
                     match ? "COUNT_MATCH" : "COUNT_MISMATCH");
 }
 
+#define BK_LOAD_WINDOW_S 601u
+
+/* The ordinary [load]/P1 lines are MQTT-only in app_task_report(); the bench
+ * (radio-free) prints them here, once per dump, from public readers. */
+static void load_and_p1_report(void)
+{
+#if defined(TK_SUPPORT_SMP) && TK_SUPPORT_SMP
+    (void)tm_printf((UB *)"[load] core 0 %u permille, core 1 %u permille\n",
+                    (unsigned int)idle_meter_load_permille(),
+                    (unsigned int)idle_meter_load_permille_core1());
+#else
+    (void)tm_printf((UB *)"[load] core 0 %u permille\n",
+                    (unsigned int)idle_meter_load_permille());
+#endif
+    /* One sample spans about 601 s: the 32-bit idle count wraps above this
+     * calibrated rate, and [load] is then wrong. */
+    const uint32_t limit = UINT32_MAX / BK_LOAD_WINDOW_S;
+    const uint32_t rate = idle_meter_peak_rate();
+    (void)tm_printf((UB *)"[bench_load] peak_rate %lu limit %lu %s\n",
+                    (unsigned long)rate, (unsigned long)limit,
+                    rate <= limit ? "OK" : "WRAP_RISK");
+    rt_report();
+}
+
 void __wrap_rt_timeline_report(void (*pause)(void))
 {
     __real_rt_timeline_report(pause);
+    load_and_p1_report();
     bench_report();
 }
 #endif

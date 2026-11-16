@@ -18,7 +18,7 @@ int motion_snapshot_try_read(motion_status_t *s, uint32_t *us)
     return E_OK;
 }
 
-static char out[1024];
+static char out[2048];
 static size_t used;
 static bool have_snap;
 static unsigned int real_calls;
@@ -38,6 +38,35 @@ int tm_printf(const UB *format, ...)
     assert(n >= 0 && (size_t)n < sizeof(out) - used);
     used += (size_t)n;
     return n;
+}
+
+/* [load] and the P1 report print after [timeline], before [bench]. */
+/* Over 601 s a 32-bit idle count wraps above 7146368 per second. */
+static uint32_t peak_rate = 7146368u;
+uint32_t idle_meter_peak_rate(void)
+{
+    return peak_rate;
+}
+#define RATE "[bench_load] peak_rate 7146368 limit 7146368 OK\n"
+#if TK_SUPPORT_SMP
+#define HEAD "[timeline]\n[load] core 0 640 permille, core 1 600 permille\n" \
+             RATE "[P1]\n"
+uint16_t idle_meter_load_permille_core1(void)
+{
+    return 600u;
+}
+#else
+#define HEAD "[timeline]\n[load] core 0 640 permille\n" RATE "[P1]\n"
+#endif
+static unsigned int p1_calls;
+uint16_t idle_meter_load_permille(void)
+{
+    return 640u;
+}
+void rt_report(void)
+{
+    ++p1_calls;
+    used += (size_t)snprintf(out + used, sizeof(out) - used, "[P1]\n");
 }
 
 bool bench_stats_read(bench_stats_t *dst)
@@ -66,8 +95,9 @@ static void run(void)
     out[0] = '\0';
     real_calls = 0u;
     read_calls = 0u;
+    p1_calls = 0u;
     __wrap_rt_timeline_report(pause_stub);
-    assert(real_calls == 1u);
+    assert(real_calls == 1u && p1_calls == 1u);
     assert(read_calls == 1u);
 }
 
@@ -86,7 +116,17 @@ static void check_no_snapshot(void)
 {
     have_snap = false;
     run();
-    assert(strcmp(out, "[timeline]\n[bench] no snapshot\n") == 0);
+    assert(strcmp(out, HEAD "[bench] no snapshot\n") == 0);
+}
+
+static void check_wrap_risk(void)
+{
+    have_snap = false;
+    peak_rate = 7146369u;
+    run();
+    assert(strstr(out, "[bench_load] peak_rate 7146369 limit 7146368 "
+                       "WRAP_RISK\n") != NULL);
+    peak_rate = 7146368u;
 }
 
 static void check_open_window(void)
@@ -95,7 +135,7 @@ static void check_open_window(void)
     snap = stopped(0u, 0u, 0u);
     snap.stopped = 0u;
     run();
-    assert(strcmp(out, "[timeline]\n[bench] window open\n") == 0);
+    assert(strcmp(out, HEAD "[bench] window open\n") == 0);
 }
 
 static void check_stopped_ok(void)
@@ -116,7 +156,7 @@ static void check_stopped_ok(void)
     assert(strstr(out, "COUNT_MISMATCH") != NULL);
     native[1] = 500;
     run();
-    const char *prefix = "[timeline]\n[bench] window_us 600000000 "
+    const char *prefix = HEAD "[bench] window_us 600000000 "
         "sched 1000 delivered 1000 coalesced 0 overflow 0 "
         "gen_calls 500 gen_us_sum 17940000 gen_us_max 9 cost_bp 299 OK\n";
     assert(strncmp(out, prefix, strlen(prefix)) == 0);
@@ -193,6 +233,7 @@ static void check_generator_stopped(void)
 int main(void)
 {
     check_no_snapshot();
+    check_wrap_risk();
     check_open_window();
     check_stopped_ok();
     check_cost_high_and_wrap();
