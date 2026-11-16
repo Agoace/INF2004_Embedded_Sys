@@ -12,6 +12,7 @@ This repository contains INF2004 Embedded Systems coursework. Use the [Agent Nav
 1. [Agent Navigation Map](docs/AGENT_MAP.md) — repository structure and map chain.
 2. [Documentation index](docs/README.md) — durable records and current repository documentation.
 3. [README](README.md) — public orientation and repository usage.
+4. [Project status](docs/architecture/PROJECT_STATUS.md) — state and open items per area. Read it before you propose work.
 
 ## Commands
 

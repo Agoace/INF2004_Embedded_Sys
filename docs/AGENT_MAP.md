@@ -37,6 +37,7 @@ The archived development record retains older CMake bench examples.
 | Content | Location |
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
+| Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
