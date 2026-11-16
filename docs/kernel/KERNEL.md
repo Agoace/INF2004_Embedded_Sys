@@ -266,8 +266,10 @@ Cost, measured at the P2 commit against `ddc5436`: static RAM +1040 B
 (all profiles); flash +832 B (MQTT), +800 B (USB-only), +880 B (TEST).
 `rt_tl` (196 B) and `rt_tl_gpio` (32 B) run from RAM, because the line and
 GPIO ISRs call them; a flash (XIP) cache miss would change the times they
-record. They sit in `.data.ramfunc.*` sections, which the template linker
-script copies to RAM; flash callers reach them through a 16 B long-branch
+record. The build renames their `.text.<name>` sections to
+`.data.ramfunc.<name>` with `objcopy` (`build_make/pico_rp2040.mk`; a
+section attribute on code there makes the assembler warn), and the template
+linker script copies `.data.*` to RAM; flash callers reach them through a 16 B long-branch
 veneer each. Their interrupt mask uses the inline `get_primask` and
 `set_primask`, because `DI` calls `disint()` in flash. The ISRs that call
 them still run from flash. Cost of the RAM placement: `.data` +224 to

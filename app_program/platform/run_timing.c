@@ -57,13 +57,14 @@ void test_smp_irq_restore(UINT saved);
 #define TL_RAMFUNC(name)
 #else
 /* The line and GPIO ISRs call rt_tl and rt_tl_gpio: run them from RAM, so
- * a flash (XIP) cache miss does not change the timing they record. The
- * template linker script copies .data.* to executable RAM. Same as DI/EI
- * (disint is in flash): save PRIMASK, mask, restore. */
+ * a flash (XIP) cache miss does not change the timing they record. Each
+ * compiles to its own .text.<name>; build_make/pico_rp2040.mk renames it to
+ * .data.ramfunc.<name>, which the template linker script copies to RAM (a
+ * section attribute on code there makes gas warn). Same as DI/EI (disint is
+ * in flash): save PRIMASK, mask, restore. */
 #define TL_MASK(m)   ((m) = get_primask(), set_primask(1u))
 #define TL_UNMASK(m) set_primask(m)
-#define TL_RAMFUNC(name) \
-    __attribute__((section(".data.ramfunc." #name), noinline))
+#define TL_RAMFUNC(name) __attribute__((noinline))
 #endif
 
 static const char *const part_name[RT_MAX_COUNT] = {
