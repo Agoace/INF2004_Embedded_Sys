@@ -42,9 +42,9 @@ below give the sources.
 | Wheel diameter | 65 mm, "Operator" (2026-10-30, archive) | 65 mm nominal, not calibrated (doc ≤ 2026-11-08) | — |
 | Wheel track | 111 mm, operator (2026-10-30) | 120 mm in old `motion_config.h` (doc ≤ 2026-11-06) | IMU notes "rough 115 mm". **Resolved: 111-112 mm** contact centre to contact centre, operator ruler (2026-11-16); the old 120 mm code value is superseded |
 | Wheel axle to caster | 80 mm, operator | 79 mm, offline fit | 82 mm, operator ruler (2026-11-16), marked "?" (uncertain) |
-| Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | — |
-| Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08) |
-| GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm |
+| Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | **Photo supports about 9 mm** (LED tips, ±1 mm, 2026-11-16); the 8 mm value is an older SIL input |
+| Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08). **Photo supports 14.5 mm** (14.7 / 14.2 mm, 2026-11-16); 20.9 mm is an optical fit, not a position |
+| GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm. **Photo about 5.2 mm** (LED tips, ±1 mm, 2026-11-16), consistent with 5.5 mm |
 | Floor speed at 100 % duty | 740 mm/s, recollection (2026-10-30) | 770..807 mm/s, still rising (doc ≤ 2026-11-10) | — |
 | Narrowest bar | 5 mm large, 2–3 mm small, planning (2026-11-06) | 5.8 mm (2x F), 2.9 mm (course F) (doc ≤ 2026-11-09) | — |
 
@@ -69,6 +69,14 @@ Derived from these values:
 - Robot front ahead of rear axle: 180 - 52.5 = 127.5 mm.
 - Wheel centre half-track: 111.5 / 2 = 55.75 mm.
 - Outer wheel face from centre: 128 / 2 = 64 mm.
+
+Photo estimates: 3 operator photos with a steel ruler beside the sensors
+(same depth, ruler end = floor), 2026-11-16:
+
+- Line sensors GP26/27: LED tips about 9 mm above floor (housing bottom about 10.5 mm), +-1 mm.
+- GP28: LED tips about 5.2 mm above floor (housing bottom about 6.8 mm), +-1 mm.
+- GP26/27 module centre spacing about 14.7 mm; emitter/receiver midpoint spacing about 14.2 mm (supports the 14.5 mm board value).
+- TCRT housing width about 10.6 mm (scale check against the 10.2 mm datasheet value).
 
 ## Geometry
 
@@ -244,6 +252,8 @@ Derived from these values:
 | Kernel S3-U01/U02 (3f889a1) | 1009 samples; age 993/983 us; task max 84/152 us; ISR max 110/108 us | doc ≤ 2026-11-08 | MEASURED(operator) | [LINE.md#results](../s3-line-barcode/LINE.md#results) |
 | Left wheel faster at 20 % duty | about 7 % (right trim +1 %) | 2026-10-27 | MEASURED(robot log,2026-10-27) | [LINE_STEERING.md#trim](../archive/s3-line-barcode/LINE_STEERING.md#trim) |
 | Line acquisition | 1 ms TIMER alarm; 8 ADC conversions per channel; 128-slot queue | doc ≤ 2026-11-08 | ASSUMED | [LINE.md#acquisition-and-calibration](../s3-line-barcode/LINE.md#acquisition-and-calibration) |
+| Line sensor (GP26/27) LED tip height above floor (photo) | about 9 mm (housing bottom about 10.5 mm), +-1 mm | 2026-11-16 | PHOTO-ESTIMATED(operator photos,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
+| Line sensor (GP26/27) spacing (photo) | module centres about 14.7 mm; emitter/receiver midpoints about 14.2 mm | 2026-11-16 | PHOTO-ESTIMATED(operator photos,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Line sensor fitted Gaussian sigma | 15.92 mm (coverage 0.39 at 7.25 mm offset) | doc ≤ 2026-11-15 | DERIVED | `mtk3-hil:docs/simulation/S3_ASSUMED_LINE_PROFILES.md#original-linear-fit-comparison-a` |
 | Line sensor height above floor | about 9 mm | 2026-11-03 | MEASURED(operator,2026-11-03) | [LINE_POSITION.md#pair-mode-two-sensors-2026-11-03](../archive/s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03) |
 | Line sensor spacing, centre to centre | 14.5 mm | 2026-11-03 | MEASURED(operator,2026-11-03) | [LINE_POSITION.md#pair-mode-two-sensors-2026-11-03](../archive/s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03) |
@@ -277,6 +287,7 @@ Derived from these values:
 | Spin calibration run 1 (USB) | 15 % stalled (746 of 2535 counts); 20 %: quarter turn 633 counts; L 807 ms, R 1633 ms, back 712 ms | 2026-10-27 | MEASURED(operator,2026-10-27) | [LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power](../archive/s3-line-barcode/LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power) |
 | Steering start duty (duty mode) | about 6 % wheel start; loaded below about 12 % does not turn | 2026-10-29 | MEASURED(robot log) | [LINE_STEERING.md#trim](../archive/s3-line-barcode/LINE_STEERING.md#trim) |
 | STEP 7 S3-U02 TEST image | age 945/952 us; task max 207/104 us per sample (13 permille); ISR max 114 us (75 permille) | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#test-image](../../testing/integration/KERNEL_ROBOT.md#test-image) |
+| TCRT housing width (photo scale check) | about 10.6 mm (datasheet 10.2 mm) | 2026-11-16 | PHOTO-ESTIMATED(operator photos,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | Travel during 300 ms gap wait at 20 % duty | about 4 cm | doc ≤ 2026-10-28 | DERIVED | [LINE_POSITION.md#events-for-the-vehicle-controller](../archive/s3-line-barcode/LINE_POSITION.md#events-for-the-vehicle-controller) |
 
 ## GP28 and barcode
@@ -300,6 +311,7 @@ Derived from these values:
 | GP28 forward offset | about 80 mm (+-5) ahead of wheel axle | 2026-11-11 | PHOTO-ESTIMATED | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | GP28 forward travel formula | d_s = 1.194 dL - 0.194 dR | 2026-11-11 | DERIVED | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | GP28 lateral offset | 77 mm left of centre line | 2026-11-11 | MEASURED(operator ruler) | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
+| GP28 LED tip height above floor (photo) | about 5.2 mm (housing bottom about 6.8 mm), +-1 mm | 2026-11-16 | PHOTO-ESTIMATED(operator photos,2026-11-16) | [MEASUREMENTS.md#operator-ruler-session-2026-11-16](MEASUREMENTS.md#operator-ruler-session-2026-11-16) |
 | GP28 optical fit (sensor-X profile) | white 164 ADC, contrast 1335.44 ADC, sigma 2.125 mm, power 6; noise robust sigma 4.4478 ADC | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#tracked-fit-and-independent-held-out-check` |
 | GP28 pose: x / y left / clearance | about 80 mm / 77 mm / 5-6 mm (model 5.5) | 2026-11-15 | MEASURED(operator,2026-11-15) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | GP28 sensor height (lowest possible) | 5.5 mm; touches floor on a 10 mm hump | doc ≤ 2026-11-09 | MEASURED(operator) | [BARCODE.md#scope-and-evidence](../s3-line-barcode/BARCODE.md#scope-and-evidence) |
