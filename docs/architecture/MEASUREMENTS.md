@@ -45,6 +45,7 @@ below give the sources.
 | Line sensor height | about 9 mm (2026-11-03) | about 8 mm (2026-11-15) | **Photo supports about 9 mm** (LED tips, ±1 mm, 2026-11-16); the 8 mm value is an older SIL input |
 | Line sensor spacing | 14.5 mm on the board (2026-11-03) | 20.9 mm optical fit (2026-11-03) | Sim guess 22 mm (doc ≤ 2026-11-08). **Photo supports 14.5 mm** (14.7 / 14.2 mm, 2026-11-16); 20.9 mm is an optical fit, not a position |
 | GP28 height | 5.5 mm lowest possible (doc ≤ 2026-11-09) | 5–6 mm (2026-11-15) | Model uses 5.5 mm. **Photo about 5.2 mm** (LED tips, ±1 mm, 2026-11-16), consistent with 5.5 mm |
+| GP28 forward from rear axle | about 80 mm +-5, photo estimate (2026-11-11) | about 73 mm, operator ruler (2026-11-16) | **Current: 73 mm** (ruler) |
 | Floor speed at 100 % duty | 740 mm/s, recollection (2026-10-30) | 770..807 mm/s, still rising (doc ≤ 2026-11-10) | — |
 | Narrowest bar | 5 mm large, 2–3 mm small, planning (2026-11-06) | 5.8 mm (2x F), 2.9 mm (course F) (doc ≤ 2026-11-09) | — |
 
@@ -90,6 +91,11 @@ Derived from the answers:
 
 - Rear axle to sonar front face: 70 (+-3) + 15 = 85 mm +-3 mm.
 - Sonar front face behind robot front: 127.5 - 85 = 42.5 mm.
+
+Check (DERIVED, no new value): the operator confirms the GP28 diode sits
+at the module outer edge. Lateral position = 64 + 17.5 - about 5 (half the
+TCRT housing) = about 76.5 mm left of centre, consistent with the 77 mm
+MEASURED lateral offset of 2026-11-11.
 
 ## Geometry
 
