@@ -233,7 +233,12 @@ Keep barcode SHADOW. No worker flashes or runs hardware.
 Host checks cover actual native config and steering at146/120/100 and
 bounds83/378, invalid Make values, profile changes and combined-option
 suffix consistency. Combined tuning is not the approved hardware trial.
-Default-image identity must pass all76 ELF/UF2 hashes against `7810d07`.
+GCC and Clang ASan/UBSan full suites pass. Default-image identity is MATCH
+for all76 ELF/UF2 hashes against `7810d07`, including debug data. Explicit
+base146/P85 also matches the unset demo ELF/UF2. Default/120/100 UP MQTT
+`KERNEL_RAM=1` builds have no warnings and pass the RAM-placement proof.
+Logs and public-example trial UF2s are under `build/wip/line-base/` in the
+line worktree; they are not operator-credentialed network images.
 Hardware base-speed outcomes are Not run.
 
 ## Results
