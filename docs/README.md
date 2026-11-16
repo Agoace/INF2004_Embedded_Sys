@@ -67,7 +67,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [GP28 spin evidence](s3-line-barcode/LIVE_CALIBRATION.md).
 - [Live source contract](s3-line-barcode/LIVE_SOURCE_CONTRACT.md).
-- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md).
+- [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md) — bounded start-star scale fit, size gates and SHADOW acceptance limits.
 - [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).
 - [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run: system PASS, large A not decoded, findings and the proposal on hold.
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.

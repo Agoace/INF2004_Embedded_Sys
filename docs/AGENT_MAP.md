@@ -258,7 +258,7 @@ vehicle task described below.
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
   record the first course run, GP28 geometry and open findings.
 
-- [Large course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
+- [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
   [`barcode_window.c`](../app_program/subsystem3/barcode_window.c) provide
   the pure forward-distance window and one mapping table; synthetic tests in
