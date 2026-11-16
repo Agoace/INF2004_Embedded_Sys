@@ -61,6 +61,6 @@ app_program/subsystem1/robot_mqtt_secrets.h
 
 # Operator captures stay local. The testing/*/logs/ directories hold only
 # .gitkeep, so recorded session data is not committed.
-/testing/logs/*.csv
+/testing/logs/*
 /testing/*/logs/*.csv
 /testing/*/logs/*.txt
