@@ -171,8 +171,13 @@ handoff and immediate stop before adopting a candidate on the course.
 Host checks compile the real configuration/steering at 85, 60 and 40,
 including both 50/51 boundaries and unchanged other settings. Make checks
 cover invalid values, suffixes, target-only flags and profile invalidation.
-The default-image gate is 76 matching ELF/UF2 hashes against staging
-`1490768`, including debug data. Candidate hardware results are Not run.
+GCC and Clang ASan/UBSan full suites pass. The default-image comparison
+against staging `1490768` is MATCH for all 76 ELF/UF2 files, including debug
+data. Explicit 85 also matches the unset demo image. Default/60/40 UP MQTT
+`KERNEL_RAM=1` images build without warnings and pass the RAM-placement
+proof. Evidence and the three trial UF2s are in
+`build/wip/line-p-near/` of the line worktree. Candidate hardware results
+are Not run.
 
 ## Results
 
