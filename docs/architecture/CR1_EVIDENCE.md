@@ -464,7 +464,7 @@ counts become 16-bit wrapping values. This is not implemented by A1.
 Safety bound: 1000 mm/s, or 12414 counts/s. Measured floor 100-percent
 speeds were about 770..807 mm/s and still rising, with wheelies; the
 controller uses an 80-percent duty cap and a 460 mm/s command cap. See
-[the archived duty map](../archive/s2-motion/DUTY_MAP.md).
+[the archived duty map](../archive/s2-motion/HISTORY.md#files).
 
 The critical bound is distance, not elapsed time: each wheel's difference
 from a retained origin must stay below 32768 counts, about 2.64 m. Audit

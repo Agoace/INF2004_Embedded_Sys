@@ -55,17 +55,17 @@ These rows are not resolved. The tables below give the sources.
 | Course tile | 315 x 315 mm, 10 mm thick; curve radius 157.5 mm (assumed) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#published-track-specification](../archive/simulation/SIMULATION.md#published-track-specification) |
 | Curve stroke radii | inner / outer 148.5 / 166.5 mm (centre radius 157.5) | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#shared-geometry` |
 | Front-corner circle (rear axle to farthest corner) | 146.7 mm calculated; 150 mm in code | 2026-10-30 | DERIVED | [OBSTACLE_DETOUR_HANDOFF.md#values-to-measure](../archive/OBSTACLE_DETOUR_HANDOFF.md#values-to-measure) |
-| Front-corner radius | 146.7 mm = sqrt(123^2 + 80^2) (138 mm if offset 47 mm) | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
+| Front-corner radius | 146.7 mm = sqrt(123^2 + 80^2) (138 mm if offset 47 mm) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Line mount distance from axle (supersedes 123 mm) | 119 mm | 2026-11-15 | MEASURED(operator,2026-11-15) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
-| Line sensor position (old statement) | at the very front of the robot | 2026-10-30 | MEASURED(operator,2026-10-30) | [CALIBRATION_RESULTS.md#robot-geometry](../archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
+| Line sensor position (old statement) | at the very front of the robot | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
 | Line sensors ahead of rear axle | 123 mm (calculated) | 2026-10-30 | DERIVED | [OBSTACLE_DETOUR_HANDOFF.md#values-to-measure](../archive/OBSTACLE_DETOUR_HANDOFF.md#values-to-measure) |
-| Maximum width (incl. left barcode mount) | 160 mm | doc ≤ 2026-11-08 | MEASURED(operator) | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Overall length | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Rear axle to front line sensors | 123 mm = 65 + 58 | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
+| Maximum width (incl. left barcode mount) | 160 mm | doc ≤ 2026-11-08 | MEASURED(operator) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Overall length | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Rear axle to front line sensors | 123 mm = 65 + 58 | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Robot corner to the side of sonar | about 80 mm | 2026-10-30 | DERIVED | [OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit](../archive/OBSTACLE_BYPASS.md#runs-1214-2026-10-30-version-4-spiral-in-corner-hit) |
 | Robot length (overall) | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
 | Robot width (widest point) | 160 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
-| Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
+| Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [week8_change_requirement_1_notes.md#27-leftright-clearance](week8_change_requirement_1_notes.md#27-leftright-clearance) |
 | SIL example box / hump | box 100x180x100 mm; hump 80x30x10 mm | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | SIL other PROTO geometry | wheel width 16 mm; caster width 6 / trail 8 mm; head 30x35x20 mm; servo torque 0.1 Nm | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
@@ -73,14 +73,14 @@ These rows are not resolved. The tables below give the sources.
 | Sim front with 47 mm true sonar offset | front x 112 mm; corner radius about 138 mm | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#geometry](../archive/simulation/SIMULATION.md#geometry) |
 | Sim IR sensing-point x | 119 mm = 123 - 4 (guess) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
 | Sim rear outline x | -67 mm = 123 - 190 | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
-| Sonar face to front | about 58 mm (echo mean 57.9 mm, not ruler) | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Sonar face to front, alternative | about 47 mm (echo reads about 11 mm high) | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
+| Sonar face to front | about 58 mm (echo mean 57.9 mm, not ruler) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Sonar face to front, alternative | about 47 mm (echo reads about 11 mm high) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Track (wheel contact to wheel contact) | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [week8_change_requirement_1_notes.md#27-leftright-clearance](week8_change_requirement_1_notes.md#27-leftright-clearance) |
 | Wheel axle to caster (wheelbase) | 80 mm | doc ≤ 2026-11-15 | MEASURED(operator) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
-| Wheel diameter | 65 mm nominal; loaded rolling diameter not calibrated | doc ≤ 2026-11-08 | ASSUMED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Wheel diameter (archive label) | 65 mm, "Operator, 2026-10-30" | 2026-10-30 | MEASURED(operator,2026-10-30) | [CALIBRATION_RESULTS.md#robot-geometry](../archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry) |
-| Wheel track | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Wheelbase in Motion's motion_config.h (old) | 120 mm (MEASURE) vs 111 mm here | doc ≤ 2026-11-06 | ASSUMED | [MOTOR_CONTROLLER.md#speed-loop](../archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop) |
+| Wheel diameter | 65 mm nominal; loaded rolling diameter not calibrated | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Wheel diameter (archive label) | 65 mm, "Operator, 2026-10-30" | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
+| Wheel track | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Wheelbase in Motion's motion_config.h (old) | 120 mm (MEASURE) vs 111 mm here | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Wheelbase, offline fit | 79 mm | doc ≤ 2026-11-15 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 
 ## Mass
@@ -97,39 +97,39 @@ These rows are not resolved. The tables below give the sources.
 
 | Quantity | Value | Date | Label | Source |
 | --- | --- | --- | --- | --- |
-| B1 hook / heartbeat ISR max | 88 / 102 us | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin) |
-| B1 slow speed hold | within 2 mm/s at 20/40/150 mm/s; 20 mm/s at 75-115 permille | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin) |
-| B1 step fwd/rev 150 overshoot L/R | 18/17 %, 34/24 % | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin) |
-| B1 step fwd/rev 300 overshoot L/R | 11/12 %, 26/17 %; rev 300 ripple sd 18.1/12.2 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin) |
-| B1 wheel lag behind set point | about 100 ms; duty peak 320 vs 230 permille steady | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin) |
-| B2 feed-forward refit | offset 52-60 permille, slope 8.7-9.3 | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin) |
-| B2 overshoot 150/300 | 7/8, 7/8, 5/6, 4/4 % (fwd150, rev150, fwd300, rev300) | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin) |
-| B2 tuning 150/300 mm/s | overshoot 4..8 %; straight heading within 0.7 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B2/B3 hook / heartbeat ISR max | 85 / 99 us | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin) |
-| B3 (2026-11-04) step fwd / rev 40 mm/s | 8/24 % and 12/24 % overshoot; t90 210/70 and 190/60 ms | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B3 (2026-11-04) step fwd 150 mm/s: overshoot L/R, t90 L/R, ripple, heading | 6/11 %, 140/130 ms, 2.5/2.4 mm/s, +0.5 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B3 (2026-11-04) step fwd 300 mm/s | 10/9 %, 160/150 ms, 5.0/4.5 mm/s, +0.2 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B3 (2026-11-04) step rev 150 mm/s | 9/12 %, 180/170 ms, 2.6/3.1 mm/s, -1.3 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B3 (2026-11-04) step rev 300 mm/s | 8/9 %, 200/180 ms, 7.5/7.7 mm/s, -2.2 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| B3 feed-forward refit | offset 53-68 permille, slope 8.4-9.2 | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin](../archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin) |
+| B1 hook / heartbeat ISR max | 88 / 102 us | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin` |
+| B1 slow speed hold | within 2 mm/s at 20/40/150 mm/s; 20 mm/s at 75-115 permille | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin` |
+| B1 step fwd/rev 150 overshoot L/R | 18/17 %, 34/24 % | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin` |
+| B1 step fwd/rev 300 overshoot L/R | 11/12 %, 26/17 %; rev 300 ripple sd 18.1/12.2 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin` |
+| B1 wheel lag behind set point | about 100 ms; duty peak 320 vs 230 permille steady | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b1-2026-11-04-boot-5bf1-ad2404c-floor-vin` |
+| B2 feed-forward refit | offset 52-60 permille, slope 8.7-9.3 | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin` |
+| B2 overshoot 150/300 | 7/8, 7/8, 5/6, 4/4 % (fwd150, rev150, fwd300, rev300) | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b2-2026-11-04-boot-8460-1cf08a1-floor-vin` |
+| B2 tuning 150/300 mm/s | overshoot 4..8 %; straight heading within 0.7 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
+| B2/B3 hook / heartbeat ISR max | 85 / 99 us | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin` |
+| B3 (2026-11-04) step fwd / rev 40 mm/s | 8/24 % and 12/24 % overshoot; t90 210/70 and 190/60 ms | 2026-11-04 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| B3 (2026-11-04) step fwd 150 mm/s: overshoot L/R, t90 L/R, ripple, heading | 6/11 %, 140/130 ms, 2.5/2.4 mm/s, +0.5 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| B3 (2026-11-04) step fwd 300 mm/s | 10/9 %, 160/150 ms, 5.0/4.5 mm/s, +0.2 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| B3 (2026-11-04) step rev 150 mm/s | 9/12 %, 180/170 ms, 2.6/3.1 mm/s, -1.3 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| B3 (2026-11-04) step rev 300 mm/s | 8/9 %, 200/180 ms, 7.5/7.7 mm/s, -2.2 deg | 2026-11-04 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| B3 feed-forward refit | offset 53-68 permille, slope 8.4-9.2 | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin` |
 | B3 reference spin L/R 20 (3 s) | heading +5900 / -5887 cdeg | 2026-11-04 | MEASURED(operator,2026-11-04) | [TEST_LOG.md#b4-reference-b3-measured-values](../../testing/subsystem2/TEST_LOG.md#b4-reference-b3-measured-values) |
-| B3 spin left / right 20 | 44/36 % and 100/116 % overshoot; +59.0 / -58.9 deg | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
+| B3 spin left / right 20 | 44/36 % and 100/116 % overshoot; +59.0 / -58.9 deg | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | B4 floor speeds vs B3 | within 1-2 mm/s (0.3-10.5 %); heading diffs 25..220 cdeg | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-floor-cold-vin-power-on](../../testing/subsystem2/TEST_LOG.md#b4-floor-cold-vin-power-on) |
 | B4-lifted (USB) spin heading | about 69 deg lifted vs about 59 deg floor | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-lifted-usb-after-flash](../../testing/subsystem2/TEST_LOG.md#b4-lifted-usb-after-flash) |
 | Bypass arc radius | planned 179 mm at 20 deg; driven 467 mm (2.6 x) | 2026-10-30 | MEASURED(robot log,2026-10-30) | [OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide](../archive/OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide) |
-| DM1 12 / 20 / 25 % | mean 62 / 131 / 171 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
-| DM1 30 / 40 / 50 / 60 / 70 % | mean 214 / 300 / 378 / 463 / 552 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
-| DM1 80 / 90 / 100 % (wheelies, do not use) | mean 632 / 706 / 770 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
-| DM1 heartbeat interrupt max | 56 us | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
-| DM1 loaded duty map (fwd L/R, rev L/R) 8 % | +24/+24, -29/-26 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
-| DM1 running minimum | 8 % after start kick; 5-6 % stops, 7 % almost | 2026-11-04 | MEASURED(operator,2026-11-04) | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
+| DM1 12 / 20 / 25 % | mean 62 / 131 / 171 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
+| DM1 30 / 40 / 50 / 60 / 70 % | mean 214 / 300 / 378 / 463 / 552 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
+| DM1 80 / 90 / 100 % (wheelies, do not use) | mean 632 / 706 / 770 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
+| DM1 heartbeat interrupt max | 56 us | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
+| DM1 loaded duty map (fwd L/R, rev L/R) 8 % | +24/+24, -29/-26 mm/s | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
+| DM1 running minimum | 8 % after start kick; 5-6 % stops, 7 % almost | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
 | Duty / speed cap | 80 % / +-460 mm/s | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Duty-mode speed table (floor) | 20 % -> 74, 25 % -> 101, 33 % -> 141 counts per 50 ms; wheel stops at about 5.6 % | 2026-10-30 | MEASURED(robot log,2026-10-30) | [OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide](../archive/OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide) |
 | Feed-forward L fwd/rev | offset 48/59 permille; slope 9.66/8.89 permille per count/tick | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Floor 100 % duty speed | about 770..807 mm/s, still rising, wheelies | doc ≤ 2026-11-10 | MEASURED(operator) | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
-| Host model wheel dead zone | about 9 % | doc ≤ 2026-11-06 | ASSUMED | [MOTOR_CONTROLLER.md#host-unit-test](../archive/s2-motion/MOTOR_CONTROLLER.md#host-unit-test) |
-| Loaded duty to speed, 8..70 % | about 8.5 mm/s per duty %; wheels within about 3 %; 5..6 % stop, 7 % nearly | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#duty-map](../s2-motion/MOTION.md#duty-map) |
-| Loaded steady speed at 14 % | about 40-50 mm/s; 20 deg/s sweep needs about 19 mm/s per wheel | 2026-11-04 | MEASURED(operator,2026-11-04) | [MOTOR_CONTROLLER.md#ideas-not-implemented](../archive/s2-motion/MOTOR_CONTROLLER.md#ideas-not-implemented) |
+| Host model wheel dead zone | about 9 % | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#host-unit-test` |
+| Loaded duty to speed, 8..70 % | about 8.5 mm/s per duty %; wheels within about 3 %; 5..6 % stop, 7 % nearly | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Loaded steady speed at 14 % | about 40-50 mm/s; 20 deg/s sweep needs about 19 mm/s per wheel | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#ideas-not-implemented` |
 | Motor PWM | 20 kHz (wrap 6249 at 125 MHz) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#hardware-and-time-boundary](../s2-motion/MOTION.md#hardware-and-time-boundary) |
 | Pi 400 USB peripheral limit | 1.2 A shared | doc ≤ 2026-09-20 | ASSUMED | [USB_POWER_SAFETY.md#limit](../archive/s2-motion/USB_POWER_SAFETY.md#limit) |
 | Pico current, idle / radio 1 Hz | about 30-50 mA / 70-90 mA | doc ≤ 2026-09-21 | ASSUMED | [USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank](../archive/s2-motion/USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank) |
@@ -137,7 +137,7 @@ These rows are not resolved. The tables below give the sources.
 | Retained-origin count limit | 32768 counts, about 2.64 m | doc ≤ 2026-11-10 | DERIVED | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
 | Reverse weaker (left wheel); detour sweep minimum | 14 % duty; second-detour stalls at 14-15 % | doc ≤ 2026-11-08 | MEASURED(operator) | [ADR_MOTOR_CONTROLLER.md#context](ADR_MOTOR_CONTROLLER.md#context) |
 | Rise limit | 8 counts/tick per tick (about 6400 mm/s^2) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
-| Rise limit history | 2 counts/tick per tick (1600 mm/s^2) until 2026-11-04, then 8 | 2026-11-04 | ASSUMED | [MOTOR_CONTROLLER.md#speed-loop](../archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop) |
+| Rise limit history | 2 counts/tick per tick (1600 mm/s^2) until 2026-11-04, then 8 | 2026-11-04 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Robo Pico input range; motor rail on USB | 3.6-6 V; VUSB - 0.4 V | doc ≤ 2026-09-21 | ASSUMED | [USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank](../archive/s2-motion/USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank) |
 | S2-U04 ESTOP during fwd 300 | 330 mm/s, duty 408/403; stopped at once | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s2-u04-run-2026-11-06](../../testing/subsystem2/TEST_LOG.md#s2-u04-run-2026-11-06) |
 | SIL contact / inertia / torque | friction 0.8; wheel inertia 2.1125e-5 kg m^2; torque cap 0.12 Nm | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
@@ -145,46 +145,46 @@ These rows are not resolved. The tables below give the sources.
 | SIL motor response | drive/coast 50 ms; static threshold 12 % | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | Sim loaded speed at 100 % (operator recollection) | 740 mm/s | 2026-10-30 | ASSUMED | [OBSTACLE_DETOUR_HANDOFF.md#evidence](../archive/OBSTACLE_DETOUR_HANDOFF.md#evidence) |
 | Sim wheel time constant | loaded tau 50 ms (assumed); unloaded fit 24.74 / 20.47 ms | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#implemented-motion-equations-and-coast-fit](../archive/simulation/SIMULATION.md#implemented-motion-equations-and-coast-fit) |
-| Speed cap basis | 460 mm/s = DM1 60 % point | 2026-11-04 | DERIVED | [MOTOR_CONTROLLER.md#speed-loop](../archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop) |
+| Speed cap basis | 460 mm/s = DM1 60 % point | 2026-11-04 | DERIVED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Speed loop P / I | 6.0 / 0.5 per tick; I limit +-400 permille | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
-| Speed quantum | 1 count per 10 ms tick = 8.055 mm/s | doc ≤ 2026-11-06 | DERIVED | [DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin](../archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin) |
+| Speed quantum | 1 count per 10 ms tick = 8.055 mm/s | doc ≤ 2026-11-06 | DERIVED | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
 | Speed safety bound / command cap / duty cap | 1000 mm/s (12414 counts/s) / 460 mm/s / 80 % | doc ≤ 2026-11-10 | ASSUMED | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
 | Stale command stop | 100 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Stall detect | duty >= 15 %, no count for 500 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Start kick | at least 12 % until 10 counts; no move by 250 ms = stall | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Turn overshoot at 45 deg/s, 20 ms period | about 1 deg | doc ≤ 2026-11-04 | DERIVED | [ADR_MOTOR_CONTROLLER.md#consequences](ADR_MOTOR_CONTROLLER.md#consequences) |
 | Unloaded coast at 10 % (USB, lifted) | 27-28 counts left, 23 right | doc ≤ 2026-11-08 | MEASURED(operator) | [SIMULATION.md#motors-counts-and-coast](../archive/simulation/SIMULATION.md#motors-counts-and-coast) |
-| Unloaded speed at 5 V VIN, 10..100 % duty L | 26.3, 53.9, 81.5, 109.0, 136.6, 163.4, 190.8, 217.0, 242.7, 260.8 RPM (old ratio 2540) | 2026-10-27 | MEASURED(bench) | [HARDWARE.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/HARDWARE.md#unloaded-motor-speed-at-5-v-vin) |
-| Unloaded speed at 5 V VIN, 10..100 % duty R | 26.6, 54.4, 81.9, 109.3, 136.5, 163.1, 189.0, 214.3, 239.6, 257.9 RPM (old ratio 2539) | 2026-10-27 | MEASURED(bench) | [HARDWARE.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/HARDWARE.md#unloaded-motor-speed-at-5-v-vin) |
-| Unloaded speed USB vs VIN | USB 8.5..10.5 % lower over 10..60 %; USB over-current at 70 % | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/HARDWARE.md#unloaded-motor-speed-at-5-v-vin) |
+| Unloaded speed at 5 V VIN, 10..100 % duty L | 26.3, 53.9, 81.5, 109.0, 136.6, 163.4, 190.8, 217.0, 242.7, 260.8 RPM (old ratio 2540) | 2026-10-27 | MEASURED(bench) | [MOTION.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/MOTION.md#unloaded-motor-speed-at-5-v-vin) |
+| Unloaded speed at 5 V VIN, 10..100 % duty R | 26.6, 54.4, 81.9, 109.3, 136.5, 163.1, 189.0, 214.3, 239.6, 257.9 RPM (old ratio 2539) | 2026-10-27 | MEASURED(bench) | [MOTION.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/MOTION.md#unloaded-motor-speed-at-5-v-vin) |
+| Unloaded speed USB vs VIN | USB 8.5..10.5 % lower over 10..60 %; USB over-current at 70 % | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/MOTION.md#unloaded-motor-speed-at-5-v-vin) |
 | Unloaded start duty (VIN) | 6 % left, 7 % right; recommend 8 % min, 10 % kick | doc ≤ 2026-11-08 | MEASURED(operator) | [SIMULATION.md#motors-counts-and-coast](../archive/simulation/SIMULATION.md#motors-counts-and-coast) |
-| Unloaded start, 5 V VIN | M1 6 % (about 70 ms to 10 counts); M2 7 % (about 80 ms) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#motor-duty-and-speed-results](../s2-motion/HARDWARE.md#motor-duty-and-speed-results) |
-| Unloaded start, USB | 0..5 % none; 6 % M1 one count; 7 % both after about 80 ms | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#motor-duty-and-speed-results](../s2-motion/HARDWARE.md#motor-duty-and-speed-results) |
+| Unloaded start, 5 V VIN | M1 6 % (about 70 ms to 10 counts); M2 7 % (about 80 ms) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#motor-duty-and-speed-results](../s2-motion/MOTION.md#motor-duty-and-speed-results) |
+| Unloaded start, USB | 0..5 % none; 6 % M1 one count; 7 % both after about 80 ms | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#motor-duty-and-speed-results](../s2-motion/MOTION.md#motor-duty-and-speed-results) |
 | USB floor test | 15 % stalled on floor; 20 % completed | doc ≤ 2026-10-28 | MEASURED(bench) | [USB_POWER_SAFETY.md#bounded-spin-calibration-exception](../archive/s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception) |
 | USB over-current event | at 70 % duty settling, both motors | 2026-09-20 | MEASURED(operator,2026-09-20) | [USB_POWER_SAFETY.md#observed-incident](../archive/s2-motion/USB_POWER_SAFETY.md#observed-incident) |
 | Webots replay PWM map (from DM1) | PWM 1000/6250 = 16 % -> L/R +96/+95 mm/s; 1250 = 20 % -> +129/+129 mm/s | 2026-11-15 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_DRIVING_REPLAY_20261115.md#scope-and-one-mapping` |
 | Week 8 calibration citation | about 261 RPM at 100 % duty; about 221 counts per 20 ms | 2026-10-27 | MEASURED(operator) | [week8_change_requirement_1_notes.md#91-speed](week8_change_requirement_1_notes.md#91-speed) |
 | Wheel circumference | 204.204 mm (65 mm nominal diameter) | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#motors-counts-and-coast](../archive/simulation/SIMULATION.md#motors-counts-and-coast) |
 | Wheel radius (SIL) | 32.5 mm | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#mount-and-motion-limits` |
-| Wheelies | at 80..100 % duty | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#duty-map](../s2-motion/MOTION.md#duty-map) |
+| Wheelies | at 80..100 % duty | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#pins-and-interface](../s2-motion/MOTION.md#pins-and-interface) |
 
 ## Encoders
 
 | Quantity | Value | Date | Label | Source |
 | --- | --- | --- | --- | --- |
-| Brake travel at 10 % from 2500 stop | 40 counts (single); typical 33-39 counts | doc ≤ 2026-09-20 | MEASURED(bench) | [CALIBRATION_RESULTS.md#superseded-single-revolution-measurement](../archive/s2-motion/CALIBRATION_RESULTS.md#superseded-single-revolution-measurement) |
-| Counts per metre | 12414 (2535 and nominal 65 mm; not ground travel) | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Counts per wheel revolution | 2535 (L 2535.000, R 2534.940; 50 turns, unloaded) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Differential turn scale | 24.05 counts/deg (2405 per deg x100), 111 mm track | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#geometry-and-distance-settings](../s2-motion/HARDWARE.md#geometry-and-distance-settings) |
-| Encoder 10-cycle drift, run 1 | dir A 2535.7 / B 2532.4 counts; signed -33 counts (-4.68 deg encoder, about 1 deg visual) | doc ≤ 2026-09-20 | MEASURED(bench) | [CALIBRATION_RESULTS.md#ten-cycle-repeatability-test](../archive/s2-motion/CALIBRATION_RESULTS.md#ten-cycle-repeatability-test) |
-| Encoder 10-cycle drift, run 2 | dir A 2532.9 / B 2532.3 counts; signed -6 counts (-0.85 deg) | doc ≤ 2026-09-19 | MEASURED(bench) | [CALIBRATION_RESULTS.md#ten-cycle-repeatability-test-1](../archive/s2-motion/CALIBRATION_RESULTS.md#ten-cycle-repeatability-test-1) |
-| Encoder-calibration stop | 2500 counts, with 2535-35 brake compensation | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
-| First revolution slower (warm-up) | 60-90 ms; about 2602 -> 2530 ms/rev | doc ≤ 2026-09-21 | MEASURED(bench) | [MOTOR_ROTATION_DRIFT.md#speed-observations](../archive/s2-motion/MOTOR_ROTATION_DRIFT.md#speed-observations) |
-| Jog request 3 / 40 counts gives | 3..7 / 56..57 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
-| Mean revolution time at 10 %, USB, L/R | 2491 / 2433 ms (24.08 / 24.66 RPM) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
-| Old counts per revolution L/R | 2540 / 2539 (superseded; 0.197 % high) | doc ≤ 2026-11-08 | MEASURED(bench, old) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
+| Brake travel at 10 % from 2500 stop | 40 counts (single); typical 33-39 counts | doc ≤ 2026-09-20 | MEASURED(bench) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#superseded-single-revolution-measurement` |
+| Counts per metre | 12414 (2535 and nominal 65 mm; not ground travel) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Counts per wheel revolution | 2535 (L 2535.000, R 2534.940; 50 turns, unloaded) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Differential turn scale | 24.05 counts/deg (2405 per deg x100), 111 mm track | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
+| Encoder 10-cycle drift, run 1 | dir A 2535.7 / B 2532.4 counts; signed -33 counts (-4.68 deg encoder, about 1 deg visual) | doc ≤ 2026-09-20 | MEASURED(bench) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#ten-cycle-repeatability-test` |
+| Encoder 10-cycle drift, run 2 | dir A 2532.9 / B 2532.3 counts; signed -6 counts (-0.85 deg) | doc ≤ 2026-09-19 | MEASURED(bench) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#ten-cycle-repeatability-test-1` |
+| Encoder-calibration stop | 2500 counts, with 2535-35 brake compensation | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
+| First revolution slower (warm-up) | 60-90 ms; about 2602 -> 2530 ms/rev | doc ≤ 2026-09-21 | MEASURED(bench) | `569672a:docs/archive/s2-motion/MOTOR_ROTATION_DRIFT.md#speed-observations` |
+| Jog request 3 / 40 counts gives | 3..7 / 56..57 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
+| Mean revolution time at 10 %, USB, L/R | 2491 / 2433 ms (24.08 / 24.66 RPM) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
+| Old counts per revolution L/R | 2540 / 2539 (superseded; 0.197 % high) | doc ≤ 2026-11-08 | MEASURED(bench, old) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
 | Old motor 2 10-cycle test (10 %) | 2532.9 / 2532.3 counts per rev (A/B); drift -6 counts (-0.85 deg); superseded by 2535 | doc ≤ 2026-11-08 | MEASURED(bench) | `569672a:docs/archive/kernel/DEVELOPMENT.md#unloaded-motor-speed` |
-| Unloaded coast at 10 % duty L/R | 27-28 / 23 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
+| Unloaded coast at 10 % duty L/R | 27-28 / 23 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
 
 ## Line sensors and junction
 
@@ -305,12 +305,12 @@ These rows are not resolved. The tables below give the sources.
 | Box flat-face echo loss angle | 20-25 deg (sim assumes 20 deg) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#servo-and-ultrasonic](../archive/simulation/SIMULATION.md#servo-and-ultrasonic) |
 | Bypass forward-watch stop / coast | STOP at 201 mm; coasted about 50 ms | 2026-10-30 | MEASURED(robot log,2026-10-30) | [OBSTACLE_BYPASS.md#run-1-2026-10-30-first-try-hit-the-bottle](../archive/OBSTACLE_BYPASS.md#run-1-2026-10-30-first-try-hit-the-bottle) |
 | Bypass servo settle model | 40 ms + 4 ms per degree | 2026-10-30 | ASSUMED | [OBSTACLE_BYPASS.md#settings](../archive/OBSTACLE_BYPASS.md#settings) |
-| Dashboard sonar cone | approximate +-20 deg | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/s1-telemetry/OPERATION.md#ultrasonic-fan` |
+| Dashboard sonar cone | approximate +-20 deg | 2026-11-07 | MEASURED(operator,2026-11-07) | [TELEMETRY.md#ultrasonic-fan](../s1-telemetry/TELEMETRY.md#ultrasonic-fan) |
 | Detour straight setting | 350 (2026-11-13; was 400, was 450) mm; sweep 150 mm; margin 30 mm | 2026-11-13 | ASSUMED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
 | Detour sweep at 14 % duty | 40-43 deg/s (target 20 deg/s); 14 % does not always turn the left wheel in reverse | 2026-11-03 | MEASURED(robot log,2026-11-03) | [OBSTACLE_DETOUR_HANDOFF.md#two-sensor-runs-2026-11-03-firmware-e4ba9ec-v17](../archive/OBSTACLE_DETOUR_HANDOFF.md#two-sensor-runs-2026-11-03-firmware-e4ba9ec-v17) |
 | Detour sweep speed | 40 deg/s, about 39 mm/s per wheel (was 20 deg/s, 19 mm/s) | 2026-11-13 | DERIVED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
-| Early stationary echo | about 177 mm (functional, not calibration) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
-| Echo lost on tilted targets | above about 15 deg | doc ≤ 2026-09-21 | MEASURED(bench) | [CALIBRATION_RESULTS.md#hc-sr04](../archive/s2-motion/CALIBRATION_RESULTS.md#hc-sr04) |
+| Early stationary echo | about 177 mm (functional, not calibration) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
+| Echo lost on tilted targets | above about 15 deg | doc ≤ 2026-09-21 | MEASURED(bench) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#hc-sr04` |
 | Echo timeout range | 3 ms = about 515 mm; 511 mm echo = about 2.98 ms (343 m/s, about 20 C) | doc ≤ 2026-10-27 | DERIVED | [ULTRASONIC_DRIVER.md#timing-constants](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#timing-constants) |
 | Encoder turn scale | 24.05 difference counts/degree | doc ≤ 2026-11-08 | DERIVED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
 | Full scan time | 1829 ms (run 1); 1833 ms (run 2) | 2026-10-27 | MEASURED(operator,2026-10-27) | [OBSTACLE_SCAN.md#run-1-object-straight-ahead](../archive/s5-obstacle/OBSTACLE_SCAN.md#run-1-object-straight-ahead) |
@@ -339,33 +339,33 @@ These rows are not resolved. The tables below give the sources.
 | Servo centre 1500 us = straight ahead | not confirmed | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#mounted-servo-limits](../s5-obstacle/OBSTACLE.md#mounted-servo-limits) |
 | Servo datasheet range | 500-2500 us, centre 1500, 20000 us period (50 Hz), about +-90 deg | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#19-servo-calibration](week8_change_requirement_1_notes.md#19-servo-calibration) |
 | Servo direction | below 1500 us turns right; above turns left | 2026-10-27 | MEASURED(operator,2026-10-27) | [OBSTACLE_SCAN.md#mounted-servo-limits](../archive/s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits) |
-| Servo mounted collision points | about 1040 / 1960 us (about 41 deg R/L) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
-| Servo mounted direction / collision | below 1500 us = right; touches at about 1040 / 1960 us (41 deg) | 2026-10-27 | MEASURED(operator,2026-10-27) | [CALIBRATION_RESULTS.md#servo](../archive/s2-motion/CALIBRATION_RESULTS.md#servo) |
+| Servo mounted collision points | about 1040 / 1960 us (about 41 deg R/L) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
+| Servo mounted direction / collision | below 1500 us = right; touches at about 1040 / 1960 us (41 deg) | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#servo` |
 | Servo pulse per degree | 1000/90 us per deg | doc ≤ 2026-10-28 | ASSUMED | [OBSTACLE_SCAN.md#scan-points](../archive/s5-obstacle/OBSTACLE_SCAN.md#scan-points) |
-| Servo pulse scale | about 11.1 us/deg around 1500 us, positive left | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Servo pulse scale | about 11.1 us/deg around 1500 us, positive left | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Servo PWM | 50 Hz, 1 us/count (GP15) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#hardware-and-time-boundary](../s2-motion/MOTION.md#hardware-and-time-boundary) |
 | Servo PWM | 50 Hz | doc ≤ 2026-11-06 | ASSUMED | [ADR_HEARTBEAT.md#decision](ADR_HEARTBEAT.md#decision) |
-| Servo safe clamp / scan | 1100..1900 us (about +-36 deg); scan +-30 deg | doc ≤ 2026-11-08 | DERIVED | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Servo safe clamp / scan | 1100..1900 us (about +-36 deg); scan +-30 deg | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Servo settle estimate | 42 ms + 3.6 ms/deg (150 ms for 30 deg, 60 ms for 5 deg) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Servo software clamp / scan range | 1100-1900 us (about +-36 deg) / +-30 deg (1167-1833 us) | doc ≤ 2026-10-28 | ASSUMED | [OBSTACLE_SCAN.md#mounted-servo-limits](../archive/s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits) |
 | Servo touch points (mounted) | about 1040 us (41 deg right) / 1960 us (41 deg left) | 2026-10-27 | MEASURED(operator,2026-10-27) | [OBSTACLE_SCAN.md#mounted-servo-limits](../archive/s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits) |
-| Servo unmounted range | 500/1500/2500 us, about 180 deg | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Servo unmounted range | 500/1500/2500 us, about 180 deg | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Sim bottle diameter | 66 mm (from 33 mm radius) | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
 | Sim box size | 120 x 120 mm (pure guess) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
 | Sim clearance vs straight length (160 mm face) | 22 mm at 350; 54 mm at 400; 91 mm at 450 and 500 | 2026-11-05 | DERIVED | [VC_DETOUR_RUN.md#run-r2-2026-11-05-boot-dcb8-run-1-fixed-25-back-off](../archive/s5-obstacle/VC_DETOUR_RUN.md#run-r2-2026-11-05-boot-dcb8-run-1-fixed-25-back-off) |
 | Sim narrow beam fit | beam 5 deg (+-2.5), 16 deg incidence, corner echoes to 300 mm | 2026-11-05 | DERIVED | [SIMULATION.md#narrow-beam-real-box](../archive/simulation/SIMULATION.md#narrow-beam-real-box) |
 | Sim rise latency used | 215 us | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#servo-and-ultrasonic](../archive/simulation/SIMULATION.md#servo-and-ultrasonic) |
 | Sim sonar face offset from servo axis | 0 mm (guess) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
-| Sonar beam | about +-20 deg | 2026-11-07 | MEASURED(operator,2026-11-07) | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Sonar beam | about +-20 deg | 2026-11-07 | MEASURED(operator,2026-11-07) | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Sonar blind zone | about 40 mm (lowest reading 40 mm; 20 mm target reads about 45 mm) | 2026-10-27 | MEASURED(operator,2026-10-27) | [ULTRASONIC_DRIVER.md#run-6-near-range-check-at-20-mm](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-6-near-range-check-at-20-mm) |
 | Sonar echo quantization | about 25 us (one 40 kHz cycle) = about 4.3 mm | 2026-10-27 | MEASURED(operator,2026-10-27) | [ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes) |
 | Sonar face ahead of pose point | 65 mm | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
 | Sonar face to robot front (echo) | mean 57.9 mm, SD 2.2 mm (80/80 VALID); about 58 mm, ruler not done | 2026-10-27 | MEASURED(operator,2026-10-27) | [ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-7-sensor-to-robot-front-offset) |
-| Sonar module supply / echo level | 3.3 V; carrier input limit 3.6 V | doc ≤ 2026-11-08 | ASSUMED | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Sonar module supply / echo level | 3.3 V; carrier input limit 3.6 V | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Sonar short-reading bias | 4-7 mm short at 200 mm; 6-7 mm (about 1.7 %) at 400 mm; 30 C gives about 1.9 % | 2026-11-06 | DERIVED | [TEST_LOG.md#s5-u01-wall-check-2026-11-06](../../testing/subsystem5/TEST_LOG.md#s5-u01-wall-check-2026-11-06) |
 | Sonar timing constants | trigger 10 us; rise timeout 2 ms; min trigger gap 60 ms; WATCH 100 ms | doc ≤ 2026-11-08 | ASSUMED | [ULTRASONIC.md#settings](../s5-obstacle/ULTRASONIC.md#settings) |
 | Sonar trigger-to-rise latency | 212-217 us | 2026-10-27 | MEASURED(operator,2026-10-27) | [ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes) |
-| Sound speed constant | assumes about 20 C; about 0.17 %/C | doc ≤ 2026-11-08 | ASSUMED | [HARDWARE.md#servo-and-sonar](../s2-motion/HARDWARE.md#servo-and-sonar) |
+| Sound speed constant | assumes about 20 C; about 0.17 %/C | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Speed of sound used | about 343 m/s at about 20 C | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#14-ultrasonic-timing-within-the-100-ms-task-window](week8_change_requirement_1_notes.md#14-ultrasonic-timing-within-the-100-ms-task-window) |
 | STEP 8 box | 17 x 12 x 7 cm; echoes 214..290 mm at -30..+30 deg; closest 212 mm at +10 | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/MTK3_STEP8_RECORD.md#driving-observations` |
 | Target at about 1 m | 48 readings mean 1016.3 mm, std 10.6 mm, range 999-1056 mm | 2026-10-27 | MEASURED(operator,2026-10-27) | [ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes](../archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes) |
@@ -421,9 +421,9 @@ These rows are not resolved. The tables below give the sources.
 | ADC conversion time (8 per channel, 3 channels) | about 48 us before software overhead | doc ≤ 2026-11-06 | DERIVED | `569672a:docs/archive/kernel/KERNEL_ROBOT.md#line-observations-and-calibration` |
 | B4 floor (VIN) motion | 4862 ticks, longest 112 us, gap 9952..10046 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-floor-cold-vin-power-on](../../testing/subsystem2/TEST_LOG.md#b4-floor-cold-vin-power-on) |
 | B4-lifted lifetime | 6211 ticks, max 119 us, gap 9958..10041 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-lifted-usb-after-flash](../../testing/subsystem2/TEST_LOG.md#b4-lifted-usb-after-flash) |
-| Bare-metal heartbeat bench, 45 s | hook gaps 1000/10000 us; work max 30 us; overruns 0 | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
-| Bare-metal heartbeat idle (45 s) | 1 ms gap 1000..1000 us; 10 ms gap 10000..10000 us; ISR work max 30 us (3 %) | 2026-11-04 | MEASURED(operator) | [HEARTBEAT.md#bench-result-2026-11-04-2b64bf2-usb-power](../archive/s2-motion/HEARTBEAT.md#bench-result-2026-11-04-2b64bf2-usb-power) |
-| Bare-metal watchdog | reset 50 ms after heartbeat stop | 2026-11-04 | MEASURED(operator) | [HEARTBEAT.md#bench-test](../archive/s2-motion/HEARTBEAT.md#bench-test) |
+| Bare-metal heartbeat bench, 45 s | hook gaps 1000/10000 us; work max 30 us; overruns 0 | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#encoder-ratio-and-drift-method](../s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
+| Bare-metal heartbeat idle (45 s) | 1 ms gap 1000..1000 us; 10 ms gap 10000..10000 us; ISR work max 30 us (3 %) | 2026-11-04 | MEASURED(operator) | `569672a:docs/archive/s2-motion/HEARTBEAT.md#bench-result-2026-11-04-2b64bf2-usb-power` |
+| Bare-metal watchdog | reset 50 ms after heartbeat stop | 2026-11-04 | MEASURED(operator) | `569672a:docs/archive/s2-motion/HEARTBEAT.md#bench-test` |
 | Bench step 0 window | 600000000 us; 2280000 edges | doc ≤ 2026-11-15 | MEASURED(bench) | `569672a:docs/kernel/BENCH_KERNEL_STEP0.md#pass-rule` |
 | Cold / warm S0-U01 TIMER | warm 1009986 us; cold 1009991 us vs kernel 1010 ms | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#hardware-run-records-2026-11-06](../../testing/subsystem1/TEST_LOG.md#hardware-run-records-2026-11-06) |
 | Cold-power TIMER defect | TIMER gaps 233..235 us; 500 ms rest took about 21 s | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#cold-power-timer-defect-floor-b4-blocked](../../testing/subsystem2/TEST_LOG.md#cold-power-timer-defect-floor-b4-blocked) |
@@ -443,13 +443,13 @@ These rows are not resolved. The tables below give the sources.
 | idle_meter stack free | 216 B (staging 168d705: 240 B); idle stack then 512 -> 768 B | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
 | IMU step-1 read share | 530..566 us per 10 ms = 5.3..5.7 % of one core | doc ≤ 2026-11-08 | DERIVED | `569672a:docs/kernel/RAM_BUDGET.md#cpu-estimate-and-measurement-limit` |
 | IMU work share (dfade14) | 1.3..1.4 ms per 10 ms (13..14 %) | doc ≤ 2026-11-08 | MEASURED(operator) | `569672a:docs/kernel/RAM_BUDGET.md#imu-step-2b-measured-delta` |
-| Kernel motion task gap (first kernel bench) | 9952..10046 us, 2110 rows | doc ≤ 2026-11-06 | MEASURED(bench) | [MOTOR_CONTROLLER.md#bench-and-tests](../archive/s2-motion/MOTOR_CONTROLLER.md#bench-and-tests) |
-| KERNEL_RAM bench (af2e787) | line-path kernel calls 28.0 -> 14.3 us per ms; load 292 -> 243 permille; BC_CPU -34 % | doc ≤ 2026-11-16 | MEASURED(bench) | `569672a:docs/kernel/KERNEL_RAM.md#kernel_ram-kernel-and-isr-hot-path-in-ram-opt-in-up-only` |
-| KERNEL_RAM pair 1 (e06667d) | load_run 923/811; wake max 1419/1458 us; line_wake 394/539 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
-| KERNEL_RAM pair 2 (2413c4a) | load_run 947/798; wake max 1328/1459 us; line_wake 356/455 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
-| KERNEL_RAM pair 3 (b0c3a9a) | load_run 931/676; wake max 2043/1189 us; line_wake 600/136 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
-| KERNEL_RAM v2 image | ramfunc 18152 B; .data 19048 B; RAM 219/264 KB | doc ≤ 2026-11-16 | MEASURED(build) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
-| KERNEL_RAM v2 step max | line sample 1329 -> 854 us; barcode 1229 -> 801 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
+| Kernel motion task gap (first kernel bench) | 9952..10046 us, 2110 rows | doc ≤ 2026-11-06 | MEASURED(bench) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#bench-and-tests` |
+| KERNEL_RAM bench (af2e787) | line-path kernel calls 28.0 -> 14.3 us per ms; load 292 -> 243 permille; BC_CPU -34 % | doc ≤ 2026-11-16 | MEASURED(bench) | [KERNEL.md#ram-placement-kernel_ram](../kernel/KERNEL.md#ram-placement-kernel_ram) |
+| KERNEL_RAM pair 1 (e06667d) | load_run 923/811; wake max 1419/1458 us; line_wake 394/539 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL.md#robot-p1-pairs](../kernel/KERNEL.md#robot-p1-pairs) |
+| KERNEL_RAM pair 2 (2413c4a) | load_run 947/798; wake max 1328/1459 us; line_wake 356/455 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL.md#robot-p1-pairs](../kernel/KERNEL.md#robot-p1-pairs) |
+| KERNEL_RAM pair 3 (b0c3a9a) | load_run 931/676; wake max 2043/1189 us; line_wake 600/136 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL.md#robot-p1-pairs](../kernel/KERNEL.md#robot-p1-pairs) |
+| KERNEL_RAM v2 image | ramfunc 18152 B; .data 19048 B; RAM 219/264 KB | doc ≤ 2026-11-16 | MEASURED(build) | [KERNEL.md#robot-p1-pairs](../kernel/KERNEL.md#robot-p1-pairs) |
+| KERNEL_RAM v2 step max | line sample 1329 -> 854 us; barcode 1229 -> 801 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL.md#robot-p1-pairs](../kernel/KERNEL.md#robot-p1-pairs) |
 | Lifetime motion gap, second boot | 9965..10017 -> 9756..10247 us (TEST runner priority 20 delay < 0.25 ms) | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#test-image](../../testing/integration/KERNEL_ROBOT.md#test-image) |
 | Line snapshot age limit | 10000 us | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#settings-and-timing](../kernel/KERNEL.md#settings-and-timing) |
 | Live batch / ring | max payload 228 B (10 rows 196 B); QoS1 frame 244 of 255 B ring | doc ≤ 2026-11-07 | DERIVED | [MQTT_WIRE.md#batch-frame-kinds-rows-5-and-events-6](../s1-telemetry/MQTT_WIRE.md#batch-frame-kinds-rows-5-and-events-6) |
@@ -469,7 +469,7 @@ These rows are not resolved. The tables below give the sources.
 | PIL source-to-Pico delay / expiry / endpoint | 4 ms / 5 ms / <= 3 ms | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#wire-and-timing-boundary` |
 | PIL UART link | 921600 8N1; SENSOR 66 B (71.6 %), OUTPUT 58 B (62.9 %) | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#wire-and-timing-boundary` |
 | RAM log | 4501 x 16 B KR1 rows (72016 B); 512 x 12 B events (6144 B); one row per 20 ms | doc ≤ 2026-11-08 | ASSUMED | [TELEMETRY.md#ram-log-ownership](../s1-telemetry/TELEMETRY.md#ram-log-ownership) |
-| Robot behind wall | 17 % ping loss | doc ≤ 2026-11-08 | MEASURED(operator) | `569672a:docs/s1-telemetry/OPERATION.md#results-and-troubleshooting` |
+| Robot behind wall | 17 % ping loss | doc ≤ 2026-11-08 | MEASURED(operator) | [TELEMETRY.md#results-and-troubleshooting](../s1-telemetry/TELEMETRY.md#results-and-troubleshooting) |
 | RP2040 RAM | 264 KB: 262144 B main + two 4 KB banks | doc ≤ 2026-11-08 | ASSUMED | `569672a:docs/kernel/RAM_BUDGET.md#what-it-is` |
 | S0-U01 TIMER vs kernel, 1 s | 1009990 us vs 1010 ms | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s2-u05-result-2026-11-06](../../testing/subsystem2/TEST_LOG.md#s2-u05-result-2026-11-06) |
 | Shadow run stacks | all >= 496 B free; line_task 1384 B free | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |

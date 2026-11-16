@@ -44,8 +44,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S2 — Motion
 
-- [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
-- [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
+- [MOTION.md](s2-motion/MOTION.md) — controller interface, settings (feed-forward, P/I, kick, stall, servo), hardware/time boundary, heartbeat, pins, geometry, 50-turn encoder ratio 2535, servo/sonar, unloaded RPM tables, power status, DM1 duty map, B3 results, SDK subset.
 - [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
   approved A1 board packing, ownership limits and approval gates.
 
@@ -78,7 +77,6 @@ not current acceptance reports. Local course originals are not public records.
 ## Archive
 
 - [DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) — earlier detour physical-test plan and simulator measurements still owed at that revision.
-- [MOTION_TIMING_INVESTIGATION.md](archive/MOTION_TIMING_INVESTIGATION.md) — timing confound and opt-in diagnostic investigation, with original revision limits.
 - [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1, runs and unresolved issues.
 - [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — earlier detour design, D1–D18 evidence and then-open problems.
 - [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
@@ -121,13 +119,9 @@ not current acceptance reports. Local course originals are not public records.
 
 - [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — `git show 569672a:<path>` pointers for 9 removed telemetry records (OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema).
 
-### S2 originals
+### Motion history
 
-- [CALIBRATION_RESULTS.md](archive/s2-motion/CALIBRATION_RESULTS.md) — full historical source, with its measured values and original limits.
-- [DUTY_MAP.md](archive/s2-motion/DUTY_MAP.md) — full historical source, with its measured values and original limits.
-- [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md) — full historical source, with its measured values and original limits.
-- [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md) — full historical source, with its measured values and original limits.
-- [MOTOR_ROTATION_DRIFT.md](archive/s2-motion/MOTOR_ROTATION_DRIFT.md) — full historical source, with its measured values and original limits.
+- [archive/s2-motion/HISTORY.md](archive/s2-motion/HISTORY.md) — `git show 569672a:<path>` pointers for 7 removed motion records (HARDWARE, first motor controller with B1–B3, 2026-10-30 calibration, 50-turn drift, DM1 method, bare-metal heartbeat, STEP 8 motion timing investigation).
 - [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; retained evidence, not a current procedure.
 
 ## Original-template reference exceptions

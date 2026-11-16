@@ -143,7 +143,7 @@ rear axle is the back wheel. Operator measurements, 2026-10-30 (about):
 | Robot width (widest point) | 160 mm (versions 2, 4 and 4.1: clearance) |
 | Robot length (overall) | 190 mm (given after the bypass was shelved; not used in the code) |
 
-See the main [robot geometry record](s2-motion/CALIBRATION_RESULTS.md#robot-geometry) for sources, calculated values, and limits.
+See the main [robot geometry record](s2-motion/HISTORY.md#files) for sources, calculated values, and limits.
 
 At steering angle δ the rear axle turns on radius R = L / tan δ. Each wheel
 then runs at speed × (1 ∓ (W/2)·tan δ / L). `line_steer` with gain 100 %
