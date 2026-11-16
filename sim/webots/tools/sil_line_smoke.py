@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast',barcode=False,sigma_along_mm=1,duration_ms=10000,stop_after_junction=False):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast',barcode=False,sigma_along_mm=1,duration_ms=10000,stop_after_junction=False,window_revision=None):
     course=course_override or Course.load(SOURCE/'courses/sil'/('straight_search_assumed.json'if line_search else'straight_assumed.json'))
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -35,7 +35,7 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
     if barcode:
         if optical_sampler!='full':raise ValueError('barcode requires full-scene sampler')
         from pil.sil_junction_barcode import build_barcode_library
-        build_barcode_library(libs)
+        build_barcode_library(libs,window_revision=window_revision)
     elif line_search:
         from pil.sil_search import build_search_library
         build_search_library(libs)
