@@ -167,7 +167,11 @@ class RamHotPath(unittest.TestCase):
                      "_hw_endpoint_buffer_control_update32",
                      "hw_endpoint_reset_transfer", "tu_fifo_write",
                      "tud_event_hook_cb", "sync_ep_buffer",
-                     "hw_endpoint_start_next_buffer", "prepare_ep_buffer"):
+                     "hw_endpoint_start_next_buffer", "prepare_ep_buffer",
+                     "line_task", "barcode_live_source_sample",
+                     "barcode_live_producer_observe", "barcode_window_motor",
+                     "barcode_window_adc", "barcode_window_step",
+                     "lp_update", "update_position"):
             with self.subTest(name=name):
                 self.assertIn(name, robot)
         for name in ("bk_gpio_ack", "bk_gpio_pending", "bk_gpio_ab",

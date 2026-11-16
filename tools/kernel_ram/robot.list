@@ -24,3 +24,29 @@ tinyusb/common/tusb_fifo.o .text.tu_fifo_write
 tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.sync_ep_buffer
 tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_start_next_buffer
 tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.prepare_ep_buffer
+# RAM v2: line task per-sample path (line sample, live barcode, GP28 window
+# geometry, line position). Soft-float and cosf/sinf stay in flash: they are
+# in toolchain archives (libgcc/libm), which this rule does not rename.
+app_program/subsystem3/line_service.o .text.line_task
+app_program/subsystem3/drv_line.o .text.drv_line_take
+app_program/subsystem3/drv_line.o .text.drv_line_stats
+app_program/subsystem3/drv_line.o .text.drv_line_last_wake_us
+app_program/subsystem3/barcode_live_source.o .text.barcode_live_source_sample
+app_program/subsystem3/barcode_live_source.o .text.resolve_edge
+app_program/subsystem3/barcode_live_source.o .text.barcode_live_control_try_read
+app_program/subsystem3/barcode_live_producer.o .text.barcode_live_producer_observe
+app_program/subsystem3/barcode_live_producer.o .text.cancel.isra.0
+app_program/subsystem3/barcode_window.o .text.barcode_window_motor
+app_program/subsystem3/barcode_window.o .text.barcode_window_adc
+app_program/subsystem3/barcode_window.o .text.barcode_window_step
+app_program/subsystem3/barcode_window.o .text.barcode_window_candidate
+app_program/subsystem3/barcode_window.o .text.tail.isra.0
+app_program/subsystem3/barcode_peak.o .text.model
+app_program/subsystem3/barcode_window.o .text.model
+app_program/subsystem3/barcode.o .text.barcode_symbol
+app_program/subsystem3/line_position.o .text.lp_update
+app_program/subsystem3/line_position.o .text.update_position
+app_program/subsystem3/line_position.o .text.pair_position
+app_program/subsystem3/line_position.o .text.pair_flags
+app_program/subsystem2/motion.o .text.motion_snapshot_try_read
+app_program/subsystem2/motion_pack.o .text.motion_unpack
