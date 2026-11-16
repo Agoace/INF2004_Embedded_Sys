@@ -536,6 +536,10 @@ vehicle task described below.
   [`gate1_report.py`](../sim/webots/tools/gate1_report.py) and
   [`check_d1_interop.py`](../sim/webots/tools/check_d1_interop.py) correlate
   stopped D1 evidence. Tests: [`test_gate1.py`](../sim/webots/tests/test_gate1.py).
+- [S3 size-reader SIL](simulation/S3_SIZE_READER_SIL.md) — host-only real C
+  reader and ASSUMED optical stripe sweep:
+  [`s3_size_check.py`](../sim/webots/pil/s3_size_check.py) and
+  [`test_s3_size_check.py`](../sim/webots/tests/test_s3_size_check.py).
 - [S3 sensor model](simulation/S3_SENSOR_MODEL.md) — exploratory, not calibration.
   [`s3_geometry.py`](../sim/webots/pil/s3_geometry.py),
   [`s3_assets.py`](../sim/webots/pil/s3_assets.py),

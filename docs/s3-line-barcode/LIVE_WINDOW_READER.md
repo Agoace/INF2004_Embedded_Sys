@@ -152,8 +152,16 @@ SHADOW and the unverified 150 mm guard cannot enable a real action.
 | Bounds and negatives | 3.9/7.1 mm narrow reject; 4.05/6.95 mm pass. Bad ratio/gap/scale, missing/merged bars, short white, long run, line-only and synthetic junction ink reject. |
 | Original optical fixtures | Existing large forward F fixtures still pass; backward drive still rejects. No measured 210 mm optical fixture yet. |
 | Hash76 against `25f70a7` | 38 warning-free profiles: 48 image hashes differ as expected; 28 match. Only `barcode_window.o` changes in every object comparison. |
-| Host-only optical SIL | Pending after merge into the simulation branch; no Webots run is authorized. |
+| Host-only optical SIL | PASS: 180 ASSUMED stripe cases, 64 correct accepts, no wrong letters/negative decodes; all 141 mm cases reject. No Webots process or hardware test. |
 | Home straight 210 mm SHADOW test | NOT RUN; wait for review. Record body/quiet dimensions and full-rate GP28/encoder data. |
+
+The host-only SIL uses infinite transverse stripes on white paper, a linear
+ASSUMED ADC response and exact no-slip motion, not the finite-paper or fitted
+nonlinear GP28 model. The straight 274/210 mm corpus passes at ASSUMED
+along-sigma 0/0.5/1 mm and rejects at 2.15/4 mm. High-blur/yaw rejections
+remain in the result. This does not demonstrate physical 210 mm readability
+or a safe minimum narrow width. The simulation branch stores the full record
+as `docs/simulation/S3_SIZE_READER_SIL.md`.
 
 Hash76 uses identical export/build paths for baseline and candidate. For each
 of UP, split and forced-core0 control placement, the UF2 and ELF change for
