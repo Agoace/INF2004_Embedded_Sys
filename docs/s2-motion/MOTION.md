@@ -330,8 +330,17 @@ Do not tune from 80..100%: wheelies occurred, and90..100% speed still rose
 within the300 ms window. Running minimum was8% after a12% start kick;
 5..6% stopped and7% nearly stopped. The8..70% region was approximately
 8.5 mm/s per duty percent, with wheels/directions within about 3%.
-DM1 heartbeat max56 µs, no overruns. The source method/settle windows are
-preserved in `DUTY_MAP.md` in the [motion history](../archive/s2-motion/HISTORY.md#files).
+DM1 heartbeat max56 µs, no overruns. B2 held 150 mm/s at 220 permille; this
+map gives 22% for about 150 mm/s.
+
+DM1 method (`src/duty_map_bench.c`): both wheels the same duty, forward then
+reverse; 23 levels (5–12% by 1, 14–20% by 2, 25–50% by 5, 60–100% by 10).
+Start from rest with a 12% kick until 10 counts (at most 250 ms). Settle +
+measure: 5–20% 500 + 500 ms; 25–40% 400 + 400; 45–50% 300 + 400; 60–100%
+300 + 300. Speed = mean counts per 10 ms tick x 8.055 mm/s (12414 counts/m).
+500 ms rest at 0 between drives. Log `build/steer_logs/text_5d51.txt`. The
+original record is `DUTY_MAP.md` in the
+[motion history](../archive/s2-motion/HISTORY.md#files).
 
 ## Results
 
