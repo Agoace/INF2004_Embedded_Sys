@@ -18,7 +18,7 @@ from pil.sil_line import build_library,CONFIG
 from pil.s3_assumed_line import load_assumed_line_profile,load_assumed_line_mount
 
 
-def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast',barcode=False,sigma_along_mm=1,duration_ms=10000):
+def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity=False,line_search=False,spin_calibration=None,line_profile='B',course_override=None,optical_sampler='fast',barcode=False,sigma_along_mm=1,duration_ms=10000,stop_after_junction=False):
     course=course_override or Course.load(SOURCE/'courses/sil'/('straight_search_assumed.json'if line_search else'straight_assumed.json'))
     if recovery:
         data=course.data;data['start']['position_mm'][1]+=offset_mm;data['start']['yaw_deg']=yaw_deg
@@ -57,7 +57,8 @@ def prepare_project(output,*,offset_mm=0,yaw_deg=0,recovery=False,motor_fidelity
         calibration_provenance='ACTUAL aligned simulated spin samples; independent pose reset per trial; sim-owned sequence equivalent to vehicle_task.c'if spin_calibration else'SYNTHETIC broad uniform floor/ink training, NOT a thin-strip sweep',
         spin_endpoints=spin_calibration['calibration']['endpoints']if spin_calibration else None,
         controller_config=CONFIG,motor_fidelity=motor_fidelity or line_search,line_search=line_search,recovery_trial=recovery,start_offset_mm=offset_mm,start_yaw_deg=yaw_deg,flat_projection='ASSUMED actualXY/yaw projected to operator approximate8mm clearance; tilt response unmodelled')
-    config.update(barcode_trial=barcode,duration_ms=duration_ms)
+    config.update(barcode_trial=barcode,duration_ms=duration_ms,stop_after_junction=stop_after_junction)
+    if stop_after_junction and not barcode:raise ValueError('junction completion requires barcode experiment')
     if barcode:
         from pil.s3_sil_barcode import load_sil_barcode_profile
         from pil.sil_junction_barcode import FAMILIES

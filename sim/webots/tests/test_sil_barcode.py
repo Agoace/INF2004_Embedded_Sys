@@ -1,4 +1,5 @@
 import ctypes
+import importlib.util
 from pathlib import Path
 import tempfile
 import unittest
@@ -18,6 +19,19 @@ class BarcodeSILTests(unittest.TestCase):
         expected={(p.material_id,p.vertices_mm)for p in sheet.geometry.patches}
         actual={(p.material_id,p.vertices_mm)for p in built.patches if p.surface_id.startswith('sheet_a:')}
         self.assertEqual(expected,actual)
+
+    def test_predeclared_native_stop_not_retroactive_tail_truncation(self):
+        path=Path(__file__).resolve().parents[1]/'controllers/sil_line/sil_line.py'
+        spec=importlib.util.spec_from_file_location('barcode_duration',path)
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        config=dict(barcode_trial=True,stop_after_junction=True,duration_ms=5300)
+        rows=[[0]*51 for _ in range(12)]
+        self.assertFalse(module.completed_segment(config,rows))
+        rows[-1][47]=1;self.assertTrue(module.completed_segment(config,rows))
+        self.assertFalse(module.completed_segment({**config,'stop_after_junction':False},rows))
+        rows[-2][47]=1;self.assertFalse(module.completed_segment(config,rows))
+        self.assertEqual(junction_barcode_course(lead_mm=100).data['start']['position_mm'],[790.5,150.25])
+        with self.assertRaises(ValueError):junction_barcode_course(lead_mm=99)
 
     def test_native_reader_decodes_but_never_admits_or_forces_action(self):
         with tempfile.TemporaryDirectory()as tmp:

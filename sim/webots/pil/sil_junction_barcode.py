@@ -15,7 +15,8 @@ LINE_Y_MM=157.5
 SHEET_START_MM=970.5
 
 
-def junction_barcode_course():
+def junction_barcode_course(*,lead_mm=300):
+    if lead_mm not in(100,200,300):raise ValueError('approved lead100/200/300mm')
     sheet=barcode_sheet(sheet_start_mm=SHEET_START_MM,line_centre_y_mm=LINE_Y_MM,surface_z_mm=10,letter='A')
     tiles=[]
     for col in range(1,6):
@@ -26,7 +27,7 @@ def junction_barcode_course():
             tiles.append(dict(id=f't{col+2}_{row+2}',column=col,row=row,kind=kind,rotation_deg=rotation))
     course=Course.from_dict(dict(schema=1,name='sil_junction_barcode_assumed',
         provenance=dict(assumed=True,source='Observe-only *A* on A4landscape297x210mm; barheight160+/-10mm PHOTO_ESTIMATED; centredprint andinneredge line+25mm ASSUMED; paperEND->junctionCENTRE150mm ASSUMED. Cytron315x315x10mm tiles/18mm line nominalvendor dimensions; white margins/layout/seams ASSUMED. GP28MATproxies178/2321 MEASURED(MQTT2026-11-11,unlocated), assignment/responsepower1 ASSUMED. No action admission or controller tuning.'),
-        origin_mm=[0,0],start=dict(position_mm=[590.5,150.25],yaw_deg=0),allow_open_ports=True,
+        origin_mm=[0,0],start=dict(position_mm=[970.5-lead_mm-80,150.25],yaw_deg=0),allow_open_ports=True,
         texture_mm_per_pixel=2,tiles=tiles,boxes=[],humps=[],barcodes=[dict(id='sheet_a',letter='A',
             centre_mm=list(sheet.sheet_centre_mm),rotation_deg=0,bar_height_mm=160,
             paper_size_mm=[297,210],paper_thickness_mm=0,reverse=False)]))

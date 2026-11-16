@@ -57,6 +57,14 @@ def replay(project,rows):
     return True
 
 
+def completed_segment(config,rows):
+    ticks=config.get('duration_ms',10000)
+    if config.get('stop_after_junction'):
+        return bool(config.get('barcode_trial')and rows and len(rows)<=ticks and
+            rows[-1][47]>=1 and not any(r[47]for r in rows[:-1]))
+    return len(rows)==ticks
+
+
 def replay_export(project):
     project=Path(project);path=project/'sil-result/samples.csv'
     if not path.is_file()or path.stat().st_size>8_000_000:raise ValueError('SIL replay file budget')
@@ -70,7 +78,7 @@ def replay_export(project):
             converted=tuple(int(v)if i in(0,1,2,3,4,5,6,9,10,11)or i>=22 else float(v)for i,v in enumerate(row))
             if converted[0]!=len(rows)+1 or any(not math.isfinite(v)for v in converted):raise ValueError('SIL replay time/value')
             rows.append(converted)
-    if len(rows)!=ticks:raise ValueError('SIL incomplete replay')
+    if not completed_segment(config,rows):raise ValueError('SIL incomplete replay')
     return replay(project,rows)
 
 
@@ -141,11 +149,13 @@ def run(robot,project):
             if not .015<position[2]<.15 or abs(pair_error)>(250 if config.get('line_search')else 100):raise ValueError('SIL gross motion bound')
             rows.append(row)
             if fault and not config.get('recovery_trial'):raise ValueError('native line lost; stop latched')
+            if config.get('stop_after_junction')and actual['junction_confirmations']>=1:break
     except Exception as exception:error=str(exception)
     finally:
         for wheel in wheels:wheel.setVelocity(0.)
-    checks=dict(duration=len(rows)==ticks,line_acquired=bool(rows)and rows[0][5]==1,
-        line_retained=len(rows)==ticks and all(r[5]for r in rows),no_false_junctions=bool(rows)and not any(r[6]for r in rows),
+    segment_complete=completed_segment(config,rows)
+    checks=dict(duration=segment_complete,line_acquired=bool(rows)and rows[0][5]==1,
+        line_retained=segment_complete and all(r[5]for r in rows),no_false_junctions=bool(rows)and not any(r[6]for r in rows),
         forward=bool(rows)and rows[-1][12]-rows[0][12]>.5,
         encoders_forward=bool(rows)and all(rows[-1][i]>rows[0][i]for i in(16,17)),
         within_strip=bool(rows)and max(abs(r[20])for r in rows)<10,
@@ -165,6 +175,13 @@ def run(robot,project):
             from pil.sil_s_curve import analyze_s_curve as analyze_curve
         else:from pil.sil_curve import analyze_curve
         curve=analyze_curve(rows)
+    if config.get('barcode_trial'):
+        checks.pop('no_false_junctions')
+        checks.update(junction_detected=bool(rows)and any(r[6]for r in rows),
+            native_junction_confirmed=bool(rows)and rows[-1][47]>=1,
+            forward=bool(rows)and rows[-1][12]>rows[0][12],
+            shadow_preserved=bool(rows)and all(r[44]==0 and not(int(r[45])&0x40)and r[49]==0 for r in rows))
+        complete=all(checks.values())and not fault
     proof=replay(project,rows)if complete else False
     output=project/'sil-result';output.mkdir()
     with (output/'samples.csv').open('w',newline='')as stream:

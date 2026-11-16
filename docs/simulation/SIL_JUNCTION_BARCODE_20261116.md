@@ -66,13 +66,24 @@ false178 certificates. Certified and full calls are counted separately.
 ## Run protocol
 
 The approved budget is one aligned spin and three independent physics runs,
-each at most1200s wall time. The GP28 begins300mm before paper, atx670.5mm;
-axle start is590.5mm, y150.25mm. Each letter run records5.3s of simulation.
-The longer lead-in is cheap only when the complete MAT support is certified.
-The run must show wheel speeds within5% of146mm/s before the first paper
+each at most1200s wall time. Original protocol: GP28 starts300mm before paper
+atx670.5mm (axle590.5mm, y150.25mm), with a5.3s simulation target. Original
+pre-run estimates were spin500–1000s; sigma1/4 each500–700s; sigma8
+850–1100s. The longer lead is cheap only where full MAT support is certified.
+
+The approved continuation for sigma4/8 uses100mm before paper (GP28x870.5mm,
+axle790.5mm). Stop at the FIRST native junction confirmation, with5300ms as
+a maximum, not a required duration. This criterion is declared BEFORE those
+runs. It must never be applied retroactively to another attempt. The replay
+checks that the first positive native counter is the final recorded row.
+The runner now requires an explicit `--sigma`; it never launches another case.
+Sigma4's updated pre-run wall estimate is650–850s, based on the observed
+original-segment wall time. Re-estimate sigma8 before its launch.
+
+Every run must show wheel speeds within5% of146mm/s before the first paper
 support intersection and at first ink. Speed is a post-run observation and
-never changes the controller. Estimated wall time before execution: spin
-500–1000s; sigma1/4 each500–700s; sigma8 approximately850–1100s.
+never changes the controller. Different starts/end criteria prevent a claim
+of identical whole-run comparisons across the original and short protocols.
 
 ```sh
 DISPLAY=:0 XAUTHORITY="$(ls /run/user/1000/.mutter-Xwaylandauth.* | head -1)" \
@@ -80,7 +91,8 @@ python3 sim/webots/tools/sil_spin_calibration.py --barcode --full-scene \
   --timeout-seconds 1200 --output build/webots/NEW-SPIN
 DISPLAY=:0 XAUTHORITY="$(ls /run/user/1000/.mutter-Xwaylandauth.* | head -1)" \
 python3 sim/webots/tools/sil_barcode_smoke.py --output build/webots/NEW-TRIAL \
-  --spin-calibration build/webots/NEW-SPIN/spin-calibration.json
+  --sigma 4 --lead-mm 100 \
+  --spin-calibration build/webots/NEW-SPIN/spin-result/calibration.json
 ```
 
 Results must report letters, attempts/reasons, native quiet/start proofs,
