@@ -53,7 +53,7 @@ the straight between the two loops, left of the line.
 | 2 | 69.6 s | 5 START | A, first star rejected |
 | 3 | 70.8 s | 5 START | A, about 166 mm after attempt 2 |
 
-## Findings (not fixed)
+## Findings
 
 1. **Diagnostic defect.** `[BC_LIVE]` and `[BC_CPU]` reset when the epoch
    changes at STOP. Thus the stopped dump shows the time after STOP, not the
@@ -63,8 +63,8 @@ the straight between the two loops, left of the line.
    each sample. Measured cost is about 73 us per 1 ms sample (about 7 %
    CPU). This agrees with the idle CPU increase (about 45 % to 54 %). The
    disabled path must exit before this work.
-3. **Probable cause of the A failure: yaw.** The reader measures distance at
-   the mean of the two wheels. GP28 is far from the centre:
+3. **Probable cause of the A failure: yaw.** The original reader measured
+   distance at the mean of the two wheels. GP28 is far from the centre:
 
    | Offset | Value | Source |
    | --- | --- | --- |
@@ -76,7 +76,9 @@ the straight between the two loops, left of the line.
    `d_s = 1.194 * dL - 0.194 * dR`. Near attempt 2, the wheel counts were
    L 40 and R 217: the mean is 128.5, but GP28 moved about 6 counts. This
    cause is probable for attempt 2. It is not proven, because failed frames
-   keep no element widths.
+   keep no element widths. The current source now uses the exact GP28-point
+   differential-drive projection from these provisional offsets; it remains
+   SHADOW-only until straight and zigzag hardware checks pass.
 
 ## Proposal on hold (not approved)
 
@@ -86,9 +88,9 @@ the straight between the two loops, left of the line.
 | B | Failed-frame record: gate, 29 widths, frozen thresholds, L/R counts at each edge | 0 (reuse diagnostic pools) |
 | C | Optional short raw GP28 snippet (about 0.5 s) | 0 (reuse diagnostic pools) |
 
-After A and B: test the large print on a straight line, once with low yaw
-and once with zigzag. If the low-yaw pass decodes and the zigzag pass does
-not, use GP28-point distance in the reader.
+Test the large print on a straight line, once with low yaw and once with
+zigzag. Check that both decode with the GP28-point projection before any
+live-action approval.
 
 ## Evidence
 

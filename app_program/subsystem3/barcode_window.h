@@ -17,6 +17,9 @@ typedef struct {
     uint32_t counts_per_m;
     uint32_t sample_gap_us;
     uint32_t motor_gap_us;
+    int16_t sensor_forward_mm;
+    int16_t sensor_lateral_mm; /* Positive is left of the drive-centre line. */
+    uint16_t track_mm;
 } barcode_window_config_t;
 extern const barcode_window_config_t barcode_window_default_config;
 
@@ -85,6 +88,9 @@ typedef struct {
     float bias;
     float space;
     float tail_narrow;
+    float centre_x_mm;
+    float centre_y_mm;
+    float heading_rad;
     uint16_t rise;
     uint16_t fall;
     uint16_t white_count;
