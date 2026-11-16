@@ -70,6 +70,7 @@ not current acceptance reports. Local course originals are not public records.
 - [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — bounded read-only epoch totals, terminal semantics, absent-reader result and late-cancellation attribution.
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md) — bounded start-star scale fit, size gates and SHADOW acceptance limits.
 - [Real window replay](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old/new reader comparison on all five real ADC/motor fixtures, source assumptions and regression lock.
+- [Barcode run summary](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — epoch-scoped reader success/failure counters in the existing MQTT summary.
 - [SHADOW live producer](s3-line-barcode/LIVE_PRODUCER.md).
 - [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run: system PASS, large A not decoded, findings and the proposal on hold.
 - [LINE.md](s3-line-barcode/LINE.md) — current kernel pair-mode algorithm, P7 mm/s settings, search and revision-scoped results.

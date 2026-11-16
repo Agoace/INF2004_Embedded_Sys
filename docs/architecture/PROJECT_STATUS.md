@@ -27,7 +27,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
 | Barcode LIVE (steers) | Not enabled. Three gates: build flag with measured clearance, producer valid flag, table. | [JUNCTION_LIVE_ADAPTER.md](JUNCTION_LIVE_ADAPTER.md) | Blocked by reliable read. |
 | IMU humps | Report only. 2 humps per course run (2026-11-16). | [IMU.md](../s4-imu/IMU.md) | Extra IMU requirement: another team member works on staging. H3 Not run. `hump_imu_fault=1` once (2026-11-16 BASE run). |
-| Telemetry, MQTT, dashboard | Done. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [OPERATION.md](../s1-telemetry/OPERATION.md) | Run summary shows barcode ok/failed as "not implemented" (fix in progress). |
+| Telemetry, MQTT, dashboard | Barcode run-summary counters connected; host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md) | Operator check of same-run barcode counts on the dashboard. |
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. Two assembler warnings for `rt_tl` (fix in progress). |
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL_RAM.md](../kernel/KERNEL_RAM.md) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [SPLIT_PARKED_20261115.md](../kernel/SPLIT_PARKED_20261115.md) | None until resumed. |

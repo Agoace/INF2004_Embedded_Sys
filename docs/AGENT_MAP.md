@@ -441,6 +441,9 @@ vehicle task described below.
 - [Follow-up handoff](archive/MTK3_FOLLOWUP_HANDOFF.md) — final owner tips, commit sequence, helper cleanup/recovery and hardware limits.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
+- [Barcode run-summary counters](s3-line-barcode/BARCODE_RUN_SUMMARY.md)
+  describe the vehicle task's bounded same-epoch SHADOW count reads and
+  existing summary fields. No barcode observation changes navigation.
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
 - [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic, including the per-run peak; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load](kernel/KERNEL.md#cpu-load).
 - [`run_timing.c`](../app_program/platform/run_timing.c) and [`kernel_lock_stats.c`](../app_program/platform/kernel_lock_stats.c) — P1 report-only per-run latches, `[kcall]` call costs and big-kernel-lock figures; [`test_run_timing.c`](../tests/test_run_timing.c), host double [`kernel_lock_double.c`](../tests/smp_stubs/kernel_lock_double.c), [run timing report](kernel/KERNEL.md#run-timing-report-p1).
