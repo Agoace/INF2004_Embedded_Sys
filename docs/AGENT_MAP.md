@@ -19,7 +19,7 @@ record once. Use these topic directories before choosing a source entry below:
 | Directory | Scope |
 | --- | --- |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
-| [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout and unchanged CR1 wording. |
+| [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout, measurements table and unchanged CR1 wording. |
 | [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
@@ -38,6 +38,7 @@ The archived development record retains older CMake bench examples.
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
 | Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area |
+| Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
