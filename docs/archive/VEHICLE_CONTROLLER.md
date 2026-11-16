@@ -3,7 +3,7 @@
 This record describes the Vehicle Controller state machine. It is built one
 step at a time on the `vehicle-controller` branch.
 
-New shape (2026-11-04): [ADR: Vehicle Controller](../architecture/ADR_VEHICLE_CONTROLLER.md).
+New shape (2026-11-04): [ADR: Vehicle Controller](../architecture/ARCHITECTURE.md#adr-the-vehicle-controller-runs-one-module-at-a-time-and-maps-outcomes-to-the-next-module).
 The controller will run one module at a time and map module outcomes to the
 next module; step 1 below is the old flat shape.
 

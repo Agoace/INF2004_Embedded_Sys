@@ -1,7 +1,7 @@
 # Vehicle Controller line run (`vc_line_test`)
 
 The first target in the new layers
-([ADR: Vehicle Controller](../../architecture/ADR_VEHICLE_CONTROLLER.md)): line tracing and
+([ADR: Vehicle Controller](../../architecture/ARCHITECTURE.md#adr-the-vehicle-controller-runs-one-module-at-a-time-and-maps-outcomes-to-the-next-module)): line tracing and
 line search as modules in the [shell](../../architecture/ARCHITECTURE.md), wheel
 speeds through the [motor controller](../s2-motion/HISTORY.md#files). Branch:
 `yx-line-steer`. Status: run on the track (P5–P9); **stopped at the P7 settings** on 2026-11-04, see [End state](#end-state-2026-11-04).
@@ -33,7 +33,7 @@ The goal of the first run (P5) is to compare with P4 of the
 | Shell | `vsm_step()` on the 10 ms flag at phase 9 (1 ms before the next `mc_tick`; phase 1 until P5), routes `VSM_DEFAULT_ROUTES` |
 | Motor controller | The only writer of motor and servo PWM. A latched stall stops the run (shell FAULT SAFETY) |
 
-Deviation from the [heartbeat ADR](../../architecture/ADR_HEARTBEAT.md): the line sample and
+Deviation from the [heartbeat ADR](../../architecture/ARCHITECTURE.md#adr-one-hardware-heartbeat-short-work-in-the-interrupt-decisions-in-the-main-loop): the line sample and
 `lp_update()` run in the main loop on a 1 ms flag (as in `detour_test`),
 not in the interrupt. A late main loop is counted as missed frames.
 

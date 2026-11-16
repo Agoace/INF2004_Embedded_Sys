@@ -133,9 +133,9 @@ These rows are not resolved. The tables below give the sources.
 | Motor PWM | 20 kHz (wrap 6249 at 125 MHz) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#hardware-and-time-boundary](../s2-motion/MOTION.md#hardware-and-time-boundary) |
 | Pi 400 USB peripheral limit | 1.2 A shared | doc ≤ 2026-09-20 | ASSUMED | [USB_POWER_SAFETY.md#limit](../archive/s2-motion/USB_POWER_SAFETY.md#limit) |
 | Pico current, idle / radio 1 Hz | about 30-50 mA / 70-90 mA | doc ≤ 2026-09-21 | ASSUMED | [USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank](../archive/s2-motion/USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank) |
-| PWM frequency | 20 kHz | doc ≤ 2026-11-04 | ASSUMED | [ADR_MOTOR_CONTROLLER.md#work-rules](ADR_MOTOR_CONTROLLER.md#work-rules) |
+| PWM frequency | 20 kHz | doc ≤ 2026-11-04 | ASSUMED | [ARCHITECTURE.md#work-rules](ARCHITECTURE.md#work-rules) |
 | Retained-origin count limit | 32768 counts, about 2.64 m | doc ≤ 2026-11-10 | DERIVED | [CR1.md#a2-planned-shared-16-bit-modular-encoder-values](CR1.md#a2-planned-shared-16-bit-modular-encoder-values) |
-| Reverse weaker (left wheel); detour sweep minimum | 14 % duty; second-detour stalls at 14-15 % | doc ≤ 2026-11-08 | MEASURED(operator) | [ADR_MOTOR_CONTROLLER.md#context](ADR_MOTOR_CONTROLLER.md#context) |
+| Reverse weaker (left wheel); detour sweep minimum | 14 % duty; second-detour stalls at 14-15 % | doc ≤ 2026-11-08 | MEASURED(operator) | [ARCHITECTURE.md#context](ARCHITECTURE.md#context) |
 | Rise limit | 8 counts/tick per tick (about 6400 mm/s^2) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Rise limit history | 2 counts/tick per tick (1600 mm/s^2) until 2026-11-04, then 8 | 2026-11-04 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Robo Pico input range; motor rail on USB | 3.6-6 V; VUSB - 0.4 V | doc ≤ 2026-09-21 | ASSUMED | [USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank](../archive/s2-motion/USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank) |
@@ -152,7 +152,7 @@ These rows are not resolved. The tables below give the sources.
 | Stale command stop | 100 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Stall detect | duty >= 15 %, no count for 500 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Start kick | at least 12 % until 10 counts; no move by 250 ms = stall | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
-| Turn overshoot at 45 deg/s, 20 ms period | about 1 deg | doc ≤ 2026-11-04 | DERIVED | [ADR_MOTOR_CONTROLLER.md#consequences](ADR_MOTOR_CONTROLLER.md#consequences) |
+| Turn overshoot at 45 deg/s, 20 ms period | about 1 deg | doc ≤ 2026-11-04 | DERIVED | [ARCHITECTURE.md#consequences](ARCHITECTURE.md#consequences) |
 | Unloaded coast at 10 % (USB, lifted) | 27-28 counts left, 23 right | doc ≤ 2026-11-08 | MEASURED(operator) | [SIMULATION.md#motors-counts-and-coast](../archive/simulation/SIMULATION.md#motors-counts-and-coast) |
 | Unloaded speed at 5 V VIN, 10..100 % duty L | 26.3, 53.9, 81.5, 109.0, 136.6, 163.4, 190.8, 217.0, 242.7, 260.8 RPM (old ratio 2540) | 2026-10-27 | MEASURED(bench) | [MOTION.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/MOTION.md#unloaded-motor-speed-at-5-v-vin) |
 | Unloaded speed at 5 V VIN, 10..100 % duty R | 26.6, 54.4, 81.9, 109.3, 136.5, 163.1, 189.0, 214.3, 239.6, 257.9 RPM (old ratio 2539) | 2026-10-27 | MEASURED(bench) | [MOTION.md#unloaded-motor-speed-at-5-v-vin](../s2-motion/MOTION.md#unloaded-motor-speed-at-5-v-vin) |
@@ -344,7 +344,7 @@ These rows are not resolved. The tables below give the sources.
 | Servo pulse per degree | 1000/90 us per deg | doc ≤ 2026-10-28 | ASSUMED | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#scan-points` |
 | Servo pulse scale | about 11.1 us/deg around 1500 us, positive left | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Servo PWM | 50 Hz, 1 us/count (GP15) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#hardware-and-time-boundary](../s2-motion/MOTION.md#hardware-and-time-boundary) |
-| Servo PWM | 50 Hz | doc ≤ 2026-11-06 | ASSUMED | [ADR_HEARTBEAT.md#decision](ADR_HEARTBEAT.md#decision) |
+| Servo PWM | 50 Hz | doc ≤ 2026-11-06 | ASSUMED | [ARCHITECTURE.md#decision-1](ARCHITECTURE.md#decision-1) |
 | Servo safe clamp / scan | 1100..1900 us (about +-36 deg); scan +-30 deg | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Servo settle estimate | 42 ms + 3.6 ms/deg (150 ms for 30 deg, 60 ms for 5 deg) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Servo software clamp / scan range | 1100-1900 us (about +-36 deg) / +-30 deg (1167-1833 us) | doc ≤ 2026-10-28 | ASSUMED | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits` |
@@ -463,7 +463,7 @@ These rows are not resolved. The tables below give the sources.
 | Motion tick | 10 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | motion_bench stack | 568 / 4096 B | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
 | MQTT payload sizes | state v5 76 B; heartbeat v4 108 B; KR1 row 16 B; live event v2 20 B | doc ≤ 2026-11-07 | ASSUMED | [MQTT_WIRE.md#state](../s1-telemetry/MQTT_WIRE.md#state) |
-| Old design review ESTOP target | stop PWM within 20 ms of safety event | doc ≤ 2026-11-06 | ASSUMED | [robo_pico_rtos_multicore_plan.md#11-test-matrix-and-acceptance-evidence](../archive/architecture/robo_pico_rtos_multicore_plan.md#11-test-matrix-and-acceptance-evidence) |
+| Old design review ESTOP target | stop PWM within 20 ms of safety event | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/architecture/robo_pico_rtos_multicore_plan.md#11-test-matrix-and-acceptance-evidence` |
 | Old UDP broadcast loss | about 75 % of live log lost (run 1) | doc ≤ 2026-10-29 | MEASURED(operator) | [STEER_WIFI_LOG.md#network](../archive/STEER_WIFI_LOG.md#network) |
 | Owner CPU load estimate | approaching 80 % in normal running | doc ≤ 2026-11-12 | ASSUMED | `569672a:docs/kernel/CORE_PLACEMENT.md#performance-gate-rt-0085` |
 | PIL source-to-Pico delay / expiry / endpoint | 4 ms / 5 ms / <= 3 ms | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#wire-and-timing-boundary` |

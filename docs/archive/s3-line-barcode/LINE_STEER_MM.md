@@ -21,7 +21,7 @@ Only the units and the trim differ.
 | --- | --- | --- |
 | Base, min, max | % duty | mm/s |
 | Gain, D, far gain | no unit (turn per position) | the same |
-| Trim | `right_trim_pct` | **none**: the motor controller makes the wheels match (hardware quirks stay in the controller, [ADR](../../architecture/ADR_MOTOR_CONTROLLER.md)) |
+| Trim | `right_trim_pct` | **none**: the motor controller makes the wheels match (hardware quirks stay in the controller, [ADR](../../architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators)) |
 | Min | Duty at which a loaded wheel starts to turn (a motor limit) | **Steering setting**: the inner wheel slows to min, then stops. Kept so that the first track run compares with P4 |
 | Output | Steer word: 7 + 7 bits (duty %) | Steer mm word: 9 + 9 bits (0–511 mm/s), bits 18–31 spare |
 

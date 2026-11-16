@@ -17,10 +17,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Architecture
 
-- [ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) — one time-base owner; original bare-metal interrupt contract.
-- [ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) — one actuator owner and value-based interfaces.
-- [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
-- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
+- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits; the three ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations; branch table, merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch state 2026-11-16 and archive tags. Read before proposing work.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
 - [CR1.md](architecture/CR1.md) — CR1 requirement summary and Week 8 §11 (IMU snapshot 8 B) and §33–38 (vehicle states 4 bits, mode/enum/fault bits, events) details, baseline RAM, board/queue
@@ -76,13 +73,6 @@ not current acceptance reports. Local course originals are not public records.
 - [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
 - [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
 
-### Architecture history
-
-- [architecture/INTERRUPT_CONVENTIONS.md](archive/architecture/INTERRUPT_CONVENTIONS.md) — full source record; only links/paths adjusted.
-- [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
-- [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
-- [architecture/robo_pico_rtos_multicore_plan.md](archive/architecture/robo_pico_rtos_multicore_plan.md) — full source record; only links/paths adjusted.
-
 ### S3 — Line and barcode history
 
 - [s3-line-barcode/LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md) — full source record; only links/paths adjusted.
@@ -107,7 +97,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ### Architecture history
 
-- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md), the 1738-line Week 8 CR1 Tribunal notes and both BRANCH_LAYOUT records (current one merged into PROJECT_STATUS.md).
+- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md), the 1738-line Week 8 CR1 Tribunal notes, both BRANCH_LAYOUT records (current one merged into PROJECT_STATUS.md), the three ADRs (merged into ARCHITECTURE.md), and the old interrupt conventions, first vehicle shell, two-core control proposal and RTOS multicore plan.
 
 ### Obstacle history
 

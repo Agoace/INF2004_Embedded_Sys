@@ -6,7 +6,7 @@ The motor controller is the only owner of motor PWM, servo PWM and wheel
 encoder counts. PWM means pulse-width modulation: duty sets the fraction
 of each cycle for which a driver output is on. Navigation requests wheel
 speed and servo angle, not PWM pins. See the
-[ownership decision](../architecture/ADR_MOTOR_CONTROLLER.md),
+[ownership decision](../architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators),
 [hardware/calibration](#hardware-wiring-and-calibration), and [kernel tasks](../kernel/KERNEL.md).
 
 ## How it works

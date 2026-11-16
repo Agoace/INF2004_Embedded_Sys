@@ -58,9 +58,9 @@ The archived development record retains older CMake bench examples.
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
 | Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/s5-obstacle/HISTORY.md#files) |
-| ADR: motor controller owns the actuators | [docs/architecture/ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) |
-| ADR: one hardware heartbeat | [docs/architecture/ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) |
-| ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
+| ADR: motor controller owns the actuators | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators) |
+| ADR: one hardware heartbeat | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-one-hardware-heartbeat-short-work-in-the-interrupt-decisions-in-the-main-loop) |
+| ADR: Vehicle Controller runs one module at a time | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-vehicle-controller-runs-one-module-at-a-time-and-maps-outcomes-to-the-next-module) |
 | Current kernel LINE/SEARCH | [LINE.md](s3-line-barcode/LINE.md) — pair detection, retained P7 mm/s settings, search and evidence; modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
 | SCAN/DETOUR modules and scoped physical results | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
 | Line steering in mm/s | [docs/s3-line-barcode/LINE.md](s3-line-barcode/LINE.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
@@ -120,13 +120,13 @@ The archived development record retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [obstacle history](archive/s5-obstacle/HISTORY.md#files), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [motion history](archive/s2-motion/HISTORY.md#files), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [obstacle history](archive/s5-obstacle/HISTORY.md#files), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [motion history](archive/s2-motion/HISTORY.md#files), [architecture history](archive/architecture/HISTORY.md#files), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | Legacy IR line-data utilities | [`src/line_detector.c`](../src/line_detector.c), [`src/ir_line_data.c`](../src/ir_line_data.c); host test [`tests/test_ir_line_data.c`](../tests/test_ir_line_data.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
 | Telemetry JSON schema (old) | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
-| Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
+| Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md` in architecture history](archive/architecture/HISTORY.md#files) |
 | Barcode B1c | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
@@ -179,7 +179,7 @@ that real dispatcher to the real motion callback/controller with host scheduling
 
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
-- [Archived Robo Pico RTOS multicore plan](archive/architecture/robo_pico_rtos_multicore_plan.md) — full historical proposal, not the current task/core contract.
+- [Archived Robo Pico RTOS multicore plan](archive/architecture/HISTORY.md#files) — full historical proposal, not the current task/core contract.
 
 ## Course template layout
 
