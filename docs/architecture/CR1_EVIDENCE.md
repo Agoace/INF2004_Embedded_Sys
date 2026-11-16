@@ -495,3 +495,25 @@ Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
 objects, discarded sections, zero-size sections, flash exclusion, padding
 and module classification. The complete linked baseline reconciles with
 ARM `size`. These checks are not hardware performance evidence.
+
+## M9 Wi-Fi stack accounting
+
+This is a later migration measurement, not a change to the CR1 baseline
+or a category-A saving. Against `d91c4c3`, matched public-example SMP1 MQTT
+builds move the Wi-Fi stack from the kernel heap to the static registry.
+Actual capacity stays 8320 B (8192 B request plus the former 128 B kernel
+allowance); radio-only capacity stays 6272 B.
+
+Static RAM rises **192228 -> 200564 B (+8336 B)**: an 8320 B stack, a 24 B
+slot and removal of 8 B of sampled-SP state. The dynamic Wi-Fi stack payload
+request falls **8320 -> 0 B**. The initial kernel pool also shrinks with
+BSS growth. These are two sides of a storage move, not two independent
+savings. The payload accounting difference is +16 B; allocator bookkeeping,
+fragmentation and runtime heap-free space are not measured here.
+
+The [M9 record](../kernel/WIFI_STACK_WATERMARK.md) gives the matched ELF
+figures, tests, template boundaries and device procedure. Persistent paint
+now supplies an ordinary `cyw43` stack row and Health minimum. The actual
+256 B Wi-Fi hardware margin gate remains **Not run**. No stack is reduced,
+no new task is added, and no merged staging B2b RAM or timing acceptance
+is inferred from this helper build.

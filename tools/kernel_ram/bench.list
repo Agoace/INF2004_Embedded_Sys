@@ -1,0 +1,19 @@
+# KERNEL_RAM=1 (UP only): sections moved from flash (XIP) to executable RAM.
+# Format: object section [symbols]. The object path is below mtkernel_3/.
+# With no symbols, the symbol is the section name after ".text.". The build
+# renames each section to .data.ramfunc.*; the unchanged template linker
+# script copies .data.* to RAM. ram_proof.py fails the build if a listed
+# symbol stays in flash.
+# bench.list: BENCH_KERNEL=1 providers. The generator body stays in flash
+# (drift control; it still calls drv_time_us, which is in RAM).
+app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_alarm
+app_program/bench_kernel/bench_timer_hw.o .text.bk_line_timer_alarm
+app_program/bench_kernel/bench_timer_hw.o .text.bk_line_timer_ack
+app_program/bench_kernel/bench_motor_hw.o .text.drv_motor_hw_ab
+app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_ack
+app_program/bench_kernel/bench_inputs_hw.o .text.drv_line_hw_read
+app_program/bench_kernel/bench_gpio_hw.o .text.drv_gpio_irq_hw_ack
+app_program/bench_kernel/bench_gpio_hw.o .text.drv_gpio_irq_hw_pending
+app_program/bench_kernel/bench_gpio.o .text.bk_gpio_ack
+app_program/bench_kernel/bench_gpio.o .text.bk_gpio_pending
+app_program/bench_kernel/bench_gpio.o .text.bk_gpio_ab

@@ -6,6 +6,19 @@ set(CMAKE_C_EXTENSIONS OFF)
 get_filename_component(REPO "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 enable_testing()
 add_compile_options(-Wall -Wextra -Wconversion -Wshadow -Wformat=2 -Werror -UNDEBUG)
+# M1: one shared SMP double; target-specific kernel headers still win.
+add_library(host_smp_double STATIC smp_stubs/smp_double.c
+    smp_stubs/kernel_lock_double.c)
+target_include_directories(host_smp_double PRIVATE
+    "${REPO}/tests/smp_stubs" "${REPO}/tests/mtk_stubs")
+include_directories(BEFORE "${REPO}/tests/smp_stubs")
+add_compile_definitions(KLS_HOST_TEST=1)
+link_libraries(host_smp_double)
+# P1: the real run-timing latches for every target. An archive member links
+# only for an undefined symbol, so a test with its own rt_* doubles keeps them.
+add_library(host_run_timing STATIC "${REPO}/app_program/platform/run_timing.c")
+target_include_directories(host_run_timing PRIVATE "${REPO}/tests/mtk_stubs")
+link_libraries(host_run_timing)
 include_directories("${REPO}/src" "${REPO}/app_program/subsystem2"
     "${REPO}/app_program/subsystem3" "${REPO}/app_program/subsystem5"
     "${REPO}/app_program/vehicle")
@@ -21,6 +34,11 @@ function(host_test name test_file)
         return()
     endif()
     add_executable(${name} ${sources})
+    if("${sources}" MATCHES
+            "imu_service.c|subsystem1/telemetry.c|test_telemetry_log.c")
+        target_sources(${name} PRIVATE
+            "${REPO}/tests/smp_stubs/placement_double.c")
+    endif()
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
@@ -43,7 +61,7 @@ robot_source(src/obstacle_detour.c app_program/subsystem5/obstacle_detour.c obst
 robot_source(src/motor_ctl.c app_program/subsystem2/motor_ctl.c motor_ctl_source)
 robot_source(src/vehicle_sm.c app_program/vehicle/vehicle_sm.c vehicle_sm_source)
 host_test(test_detour_sweep tests/test_detour_sweep.c ${obstacle_detour_source})
-host_test(test_ir_modules tests/test_ir_modules.c src/barcode_reader.c src/ir_line_data.c)
+host_test(test_ir_line_data tests/test_ir_line_data.c src/ir_line_data.c)
 host_test(test_obstacle_scan tests/test_obstacle_scan.c )
 host_test(test_line_trace tests/test_line_trace.c ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
 host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_source} ${detour_run_source} ${obstacle_detour_source} ${obstacle_profile_source} ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
@@ -190,12 +208,21 @@ endif()
 if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
+    add_test(NAME test_vehicle_run_overrun COMMAND test_vehicle_task runoverrun)
+    add_test(NAME test_vehicle_slow_stop COMMAND test_vehicle_task slowstop)
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
 endif()
 
 # TEST runner policy and buffered timing evidence; no real scheduler or hardware.
 host_test(test_test_runner tests/test_test_runner.c app_program/app_main.c)
 host_test(test_production_runner tests/test_test_runner.c app_program/app_main.c)
+host_test(test_startup_mqtt_runner tests/test_test_runner.c
+    app_program/app_main.c)
+target_include_directories(test_startup_mqtt_runner BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_startup_mqtt_runner PRIVATE TM_MQTT=1)
+add_test(NAME test_startup_mqtt_provider_failure
+    COMMAND test_startup_mqtt_runner startup_failure)
 host_test(test_timing_test_hooks tests/test_timing_test_hooks.c
     app_program/subsystem1/subsystem1_test.c app_program/subsystem2/subsystem2_test.c)
 foreach(test IN ITEMS test_test_runner test_production_runner test_timing_test_hooks)
@@ -204,6 +231,8 @@ endforeach()
 target_compile_definitions(test_test_runner PRIVATE APP_TEST=1)
 target_compile_definitions(test_timing_test_hooks PRIVATE APP_TEST=1)
 add_test(NAME test_test_runner_priority_failure COMMAND test_test_runner priority_failure)
+add_test(NAME test_startup_provider_failure
+    COMMAND test_production_runner startup_failure)
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/barcode_checks.cmake")
@@ -273,6 +302,8 @@ foreach(test IN ITEMS test_telemetry test_telemetry_log)
 endforeach()
 add_test(NAME test_junction_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_junction_make.py")
+add_test(NAME test_barcode_map COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_barcode_map.py")
 get_target_property(vehicle_test_sources test_vehicle_task SOURCES)
 set(junction_id 0)
 foreach(command IN ITEMS A B C D)
@@ -299,7 +330,8 @@ add_test(NAME test_vehicle_junction_start_busy
 add_test(NAME test_vehicle_junction_start_stale
     COMMAND test_vehicle_junction_A junctionstale)
 
-foreach(test IN ITEMS test_production_runner test_production_runner_filtered)
+foreach(test IN ITEMS test_production_runner test_production_runner_filtered
+        test_startup_mqtt_runner)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/subsystem3/barcode_window.c"
         "${REPO}/app_program/subsystem3/barcode.c")
@@ -321,3 +353,18 @@ foreach(mode IN ITEMS shadow permitted)
         add_test(NAME ${test}_${case} COMMAND ${test} ${case})
     endforeach()
 endforeach()
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/admission_checks.cmake")
+
+find_package(Threads REQUIRED)
+host_test(test_app_startup tests/test_app_startup.c
+    app_program/platform/app_startup.c)
+target_link_libraries(test_app_startup PRIVATE Threads::Threads)
+set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/review_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/shim_checks.cmake")
+
+# Keep this last: placement variants copy fully configured fixture targets.
+include("${CMAKE_CURRENT_SOURCE_DIR}/smp_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/bench_kernel_checks.cmake")

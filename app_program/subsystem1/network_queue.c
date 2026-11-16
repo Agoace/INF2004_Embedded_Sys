@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
+#include <tk/smp.h>   /* T_SPLOCK, ISpinLock: cross-core queue counters */
 #include "robot_network.h"
 
 /* Message buffer sizing: depth in messages; the kernel adds a header. */
@@ -25,15 +26,23 @@ static uint32_t event_lost;
 static uint32_t command_lost;
 static uint32_t busy[ROBOT_BOARD_COUNT];
 static uint32_t unavailable;
-static uint8_t unavailable_mask;
+/* M2: kernel atomic bit operations require an aligned 32-bit operand. */
+static UW unavailable_mask;
 
-/* Increment a loss counter. Interrupts are masked for the update. */
+/*
+ * RT-0071/F3: these counters are updated from both cores and read from both, and
+ * Vehicle reaches robot_command_lost() on the ESTOP path.  RT-0069 forbids a
+ * blocking wait in Vehicle, so there is no lock here at all: every counter is
+ * updated with the kernel's atomic RMW, which is a hardware-spinlock claim held
+ * for a few instructions on two cores and an interrupt window on one.  The
+ * unavailable mask also has two writers: Wi-Fi and Health. Each bit update
+ * must be one atomic RMW, not an atomic load followed by an atomic store.
+ */
+
+/* Increment a loss counter. Lock-free: no caller can be made to wait. */
 static void lost(uint32_t *counter)
 {
-    UINT irq;
-    DI(irq);
-    ++*counter;
-    EI(irq);
+    (void)atomic_inc((UW *)counter);
 }
 
 /*
@@ -160,23 +169,20 @@ void robot_network_busy(unsigned int board)
 /* Classify a main-board read: absence is not writer contention. */
 void robot_network_board_result(unsigned int board, int result)
 {
-    UINT irq;
-
     if (board >= (unsigned int)ROBOT_BOARD_COUNT) {
         return;
     }
-    const uint8_t mask = (uint8_t)(1u << board);
+    const UW mask = (UW)1u << board;
 
-    DI(irq);
+    /* M2: retain other boards' concurrent updates from either core. */
     if (result >= E_OK) {
-        unavailable_mask = (uint8_t)(unavailable_mask & (uint8_t)~mask);
+        (void)atomic_bitclr(&unavailable_mask, mask);
     } else if (result == E_OBJ || result == E_NOEXS) {
-        ++unavailable;
-        unavailable_mask = (uint8_t)(unavailable_mask | mask);
+        (void)atomic_inc((UW *)&unavailable);
+        (void)atomic_bitset(&unavailable_mask, mask);
     } else if (result == E_TMOUT) {
-        ++busy[board];
+        (void)atomic_inc((UW *)&busy[board]);
     }
-    EI(irq);
 }
 
 /* Count a command dropped before it reached the queue. */
@@ -188,18 +194,22 @@ void robot_command_lost(void)
 /* Copy the queue loss and busy counters into a heartbeat. */
 void robot_queue_metrics(rm_heartbeat_t *out)
 {
-    UINT irq;
-    DI(irq);
-    out->event_lost = event_lost;
-    out->command_lost = command_lost;
-    out->line_busy = busy[0];
-    out->sonar_busy = busy[1];
-    out->motion_busy = busy[2];
-    out->vehicle_busy = busy[3];
-    out->health_busy = busy[4];
-    out->board_unavailable = unavailable;
-    out->board_unavailable_mask = unavailable_mask;
-    EI(irq);
+    /*
+     * RT-0081/F1: the writers use atomic RMW from either core, so every read here
+     * must be an atomic load.  A word-aligned plain read is indivisible in hardware
+     * but is still an undefined concurrent C access against an atomic writer.  The
+     * set may come from two instants, which stays a diagnostic limit.
+     */
+    out->event_lost = __atomic_load_n(&event_lost, __ATOMIC_SEQ_CST);
+    out->command_lost = __atomic_load_n(&command_lost, __ATOMIC_SEQ_CST);
+    out->line_busy = __atomic_load_n(&busy[0], __ATOMIC_SEQ_CST);
+    out->sonar_busy = __atomic_load_n(&busy[1], __ATOMIC_SEQ_CST);
+    out->motion_busy = __atomic_load_n(&busy[2], __ATOMIC_SEQ_CST);
+    out->vehicle_busy = __atomic_load_n(&busy[3], __ATOMIC_SEQ_CST);
+    out->health_busy = __atomic_load_n(&busy[4], __ATOMIC_SEQ_CST);
+    out->board_unavailable = __atomic_load_n(&unavailable, __ATOMIC_SEQ_CST);
+    out->board_unavailable_mask =
+        (uint8_t)__atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
 }
 
 /* Default metrics provider. The MQTT module overrides it. */

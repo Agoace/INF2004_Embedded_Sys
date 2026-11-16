@@ -28,7 +28,37 @@
  * --------------------------------------------------------------------- */
 #define TASK_STACK_SIZE		2048	/* legacy default; app_task.c registers actual sizes */
 
-/* Create/start a registered core-0 task (prc = TP_PRC1).
+/* Physical core a registered task or cyclic handler may run on.
+   Movement and hardware owners stay on core 0.  Observers may move to core 1
+   only in a two-core build (TK_MAX_CORE > 1), and the core-migration plan moves
+   them one phase at a time. */
+typedef enum {
+	APP_CORE_0 = 0,
+	APP_CORE_1 = 1
+} app_core_t;
+
+/*
+ * Build profile switch (RT-0073/F3): APP_FORCE_CORE0=1 pins every application task
+ * to core 0 even in an SMP image. That is the migration's control build - the
+ * dual-core kernel is linked, but placement is single-core - so behaviour can be
+ * compared against the migration image on the same kernel rather than against a
+ * different kernel. Default 0 is the migration placement.
+ *
+ * Build it with:  make SMP=1 FORCE_CORE0=1 ...
+ */
+#ifndef APP_FORCE_CORE0
+#define APP_FORCE_CORE0 0
+#endif
+
+/* PRC value for a core.  TP_PRC1 is core 0, so core 1 is TP_PRC1 + 1.  In a
+   single-core build both answers are TP_PRC1, because there is nowhere else to
+   run.  A cyclic handler must use the same core as the task it feeds. */
+IMPORT UW app_prc_core0(void);
+IMPORT UW app_prc_core1(void);
+
+/* Create/start a registered task.  prc must be app_prc_core0() or
+   app_prc_core1(), and it must agree with the placement recorded in
+   platform/app_task.c, which rejects a mismatch with E_CTX.
    app_main.c delegates to the static-stack helper in platform/app_task.c. */
 IMPORT ID app_start_task(FP entry, PRI pri, UW prc, const char *name);
 
@@ -59,6 +89,12 @@ IMPORT void subsystem2_watchdog_test(void); /* destructive S2-U05; run last */
 IMPORT void subsystem3_test(void);
 IMPORT void subsystem4_test(void);
 IMPORT void subsystem5_test(void);
+/* Phase 1b: handler-versus-task lock stress. See docs/kernel/CORE_PLACEMENT.md */
+IMPORT void app_lock_stress_run(void);
+/* Phase 4: DUMP admission interleaving self-test. See docs/kernel/CORE_PLACEMENT.md */
+IMPORT void log_stream_admission_selftest(void);
+/* RT-0073/F3: contention and admission tests. See docs/kernel/CORE_PLACEMENT.md */
+IMPORT void telemetry_contention_test(void);
 #endif
 
 /* Print a readable message if a kernel call failed (negative error code) */

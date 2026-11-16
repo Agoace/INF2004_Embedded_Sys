@@ -213,6 +213,75 @@ ifeq ($(CONSOLE)$(CRASH_REPORT),usb_cdc1)
 CRASH_SUFFIX := _crash
 endif
 
+# RT-0075/F2: the placement profile changes which core every task lands on, so it
+# changes the object code and must appear in both the artifact name and the
+# invalidation key below. Without this, switching FORCE_CORE0 reuses objects built
+# for the other placement and overwrites an identically named UF2.
+ifeq ($(FORCE_CORE0),1)
+CORE_SUFFIX := _core0
+endif
+
+# Explicit spare-Pico step0, not the BENCH=1 floor-motion application.
+BENCH_KERNEL ?= 0
+ifneq ($(words $(BENCH_KERNEL)),1)
+$(error BENCH_KERNEL must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BENCH_KERNEL),0 1),$(BENCH_KERNEL))
+$(error Unknown BENCH_KERNEL '$(BENCH_KERNEL)'; use 0 or 1)
+endif
+ifeq ($(BENCH_KERNEL),1)
+ifneq ($(WIFI):$(NET):$(MQTT):$(CONSOLE):$(CRASH_REPORT):$(BENCH):$(TEST):$(DIAG),none:none:0:usb_cdc:0:0:0:0)
+$(error BENCH_KERNEL=1 requires radio-free USB robot, CRASH_REPORT=0 TEST=0 BENCH=0 DIAG=0)
+endif
+ifneq ($(filter-out 0,$(strip $(SIM) $(PIL_GATE1))),)
+$(error BENCH_KERNEL=1 excludes SIM and PIL_GATE1)
+endif
+ifneq ($(IMU_STREAM):$(BARCODE_CAPTURE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_CMD),0:0:0:NONE)
+$(error BENCH_KERNEL=1 requires neutral IMU/barcode/junction options)
+endif
+endif
+# Opt-in: run the listed kernel/ISR hot path from RAM (UP only). The default
+# 0 adds no rule, so ordinary images stay byte-identical.
+ifneq ($(strip $(BENCH_KERNEL_RAM)),)
+$(error BENCH_KERNEL_RAM was replaced: use BENCH_KERNEL=1 KERNEL_RAM=1)
+endif
+KERNEL_RAM ?= 0
+ifneq ($(words $(KERNEL_RAM)),1)
+$(error KERNEL_RAM must be one value: 0 or 1)
+endif
+ifneq ($(filter $(KERNEL_RAM),0 1),$(KERNEL_RAM))
+$(error Unknown KERNEL_RAM '$(KERNEL_RAM)'; use 0 or 1)
+endif
+ifeq ($(KERNEL_RAM),1)
+ifneq ($(SMP),0)
+$(error KERNEL_RAM=1 is UP only: needs SMP=0)
+endif
+endif
+
+# Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
+# letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
+# nothing, so ordinary images stay byte-identical. Policy id 1 is the
+# built-in table, so a custom map uses BARCODE_MAP_ID 2..255 (default 2).
+BARCODE_MAP ?=
+ifeq ($(strip $(BARCODE_MAP)),)
+ifneq ($(origin BARCODE_MAP_ID),undefined)
+$(error BARCODE_MAP_ID needs BARCODE_MAP)
+endif
+else
+BARCODE_MAP_ID ?= 2
+BARCODE_MAP_ID_VALID := $(shell printf '%s\n' '$(BARCODE_MAP_ID)' | grep -Eq '^[1-9][0-9]{0,2}$$' && test '$(BARCODE_MAP_ID)' -ge 2 && test '$(BARCODE_MAP_ID)' -le 255 && echo yes)
+ifneq ($(BARCODE_MAP_ID_VALID),yes)
+$(error BARCODE_MAP_ID must be an integer from 2 to 255)
+endif
+BARCODE_MAP_VALUES := $(shell python3 ../tools/barcode_map/barcode_map.py '$(BARCODE_MAP)' || echo FAIL)
+ifneq ($(filter FAIL,$(BARCODE_MAP_VALUES)),)
+$(error BARCODE_MAP '$(BARCODE_MAP)' is not valid (see message above))
+endif
+BARCODE_MAP_CFLAGS := -DBW_MAP_VALUES=$(BARCODE_MAP_VALUES) -DBW_MAP_POLICY_ID=$(BARCODE_MAP_ID)u
+mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLAGS)
+$(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -223,7 +292,16 @@ EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
-EXE_FILE := $(EXE_FILE)$(BARCODE_CAPTURE_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+ifeq ($(BENCH_KERNEL),1)
+EXE_FILE := $(EXE_FILE)_bench_kernel_step0
+endif
+ifeq ($(KERNEL_RAM),1)
+EXE_FILE := $(EXE_FILE)_kernel_ram
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -276,6 +354,41 @@ LFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding \
     -mfloat-abi=soft \
 
 LNKFILE := "../etc/linker/pico_rp2040/tkernel_map.ld"
+ifeq ($(BENCH_KERNEL),1)
+CFLAGS += -DBENCH_KERNEL=1
+LFLAGS += -Wl,--wrap=rt_timeline_report
+LFLAGS += -Wl,--wrap=app_startup_complete_publish
+LFLAGS += -Wl,--wrap=rt_call -Wl,--wrap=rt_max
+endif
+# Kernel hot path in RAM: rule
+# Rename each listed section in its compiled object before the link (no
+# source or template change; renaming is idempotent). After the link,
+# ram_proof.py fails the build if a listed symbol is still in flash.
+KERNEL_RAM ?= 0
+ifeq ($(KERNEL_RAM),1)
+KERNEL_RAM_DIR := ../tools/kernel_ram
+ifeq ($(BENCH_KERNEL),1)
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
+else
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
+endif
+KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
+	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
+KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
+kernel_ram_obj = $(basename $(notdir $(1)))
+kernel_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))_text,$(if $(filter .text.%,$(1)),.data.ramfunc.$(patsubst .text.%,%,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))$(subst .,_,$(1))))
+$(EXE_FILE).ramstamp: $(KERNEL_RAM_OBJS) $(KERNEL_RAM_LISTS)
+	@echo 'KERNEL_RAM: moving $(words $(KERNEL_RAM_ROWS)) sections to RAM'
+	$(foreach o,$(KERNEL_RAM_OBJS),arm-none-eabi-objcopy $(foreach r,$(KERNEL_RAM_ROWS),$(if $(filter $(o),mtkernel_3/$(firstword $(subst :, ,$(r)))),--rename-section $(lastword $(subst :, ,$(r)))=$(call kernel_ram_new,$(lastword $(subst :, ,$(r))),$(o)))) $(o) &&) true
+	touch $@
+$(EXE_FILE).elf: $(EXE_FILE).ramstamp
+$(EXE_FILE).ramproof: $(EXE_FILE).elf $(KERNEL_RAM_DIR)/ram_proof.py
+	python3 $(KERNEL_RAM_DIR)/ram_proof.py $(EXE_FILE).elf \
+	  $(KERNEL_RAM_LISTS) > $@.tmp; st=$$?; cat $@.tmp; \
+	  if [ $$st -ne 0 ]; then rm -f $@.tmp; exit $$st; fi; mv $@.tmp $@
+all: $(EXE_FILE).ramproof
+endif
+# End of kernel hot path in RAM
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
 # otherwise discard anything appended above.
@@ -283,7 +396,9 @@ ifeq ($(SMP),1)
 CFLAGS  += -DCNF_SMP=1
 ASFLAGS += -DCNF_SMP=1
 endif
+FORCE_CORE0 ?= 0
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
+CFLAGS  += -DAPP_FORCE_CORE0=$(FORCE_CORE0)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
 CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
 CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
@@ -327,9 +442,20 @@ PROFILE_ID := $(PROFILE_ID)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)
 PROFILE_ID := $(PROFILE_ID)-diag$(DIAG)-imu_stream$(IMU_STREAM)
 PROFILE_ID := $(PROFILE_ID)-hump_source$(IMU_HUMP_SOURCE)
 PROFILE_ID := $(PROFILE_ID)-junction$(JUNCTION_TEST_CMD_ID)
+PROFILE_ID := $(PROFILE_ID)-forcecore$(FORCE_CORE0)
 PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
 PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
 PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
+ifeq ($(BENCH_KERNEL),1)
+PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
+endif
+ifeq ($(KERNEL_RAM),1)
+PROFILE_ID := $(PROFILE_ID)-kernelram1
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+BARCODE_MAP_COMMA := ,
+PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))

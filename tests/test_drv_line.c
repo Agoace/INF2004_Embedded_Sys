@@ -2,11 +2,12 @@
 #include <tk/tkernel.h>
 #include "../app_program/subsystem3/drv_line.h"
 #include "../app_program/subsystem3/drv_line_hw.h"
+#include "../app_program/platform/run_timing.h"
 static FP handler;
 static uint32_t now, alarm;
 static int disabled, hw_error;
 static unsigned int wakes;
-ER tk_wup_tsk(ID id) { assert(id==7);++wakes;return E_OK; }
+ER tk_wup_tsk(ID id) { assert(id==7);++wakes;now+=9u;return E_OK; }
 int drv_time_init(void) { return E_OK; }
 uint32_t drv_time_us(void) { return now; }
 INT tk_get_prc(void) { return 1; }
@@ -20,6 +21,13 @@ int drv_line_hw_init(void) { return hw_error; }
 int drv_line_hw_read(uint16_t raw[3]) { raw[0] = 1234u; raw[1] = 2345u; raw[2] = 3456u; now+=48u; return hw_error; }
 void drv_line_hw_alarm(uint32_t at) { alarm = at; }
 void drv_line_hw_ack(void) { }
+/* P1 latch double: records the last value per site. */
+static uint32_t maxes[RT_MAX_COUNT], call_us, call_n;
+void rt_max(rt_max_t w, uint32_t us) { if (us > maxes[w]) maxes[w] = us; }
+void rt_call(rt_call_t w, uint32_t us) { assert(w == RT_K_ISR_WUP); call_us = us; ++call_n; }
+/* P2 timeline double: last record. */
+static uint32_t tl_n, tl_us, tl_arg; static rt_tl_site_t tl_site;
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg) { ++tl_n; tl_site = site; tl_us = us; tl_arg = arg; }
 static void fire(uint32_t at) { now = at; ((void (*)(UINT))handler)(0u); }
 int main(void) {
     hw_error = -1; assert(drv_line_init() == E_SYS);
@@ -30,9 +38,16 @@ int main(void) {
     assert(!drv_line_take(&s));
     fire(1000u); assert(alarm == 2000u && drv_line_take(&s));
     assert(s.us == 1000u && s.raw[0] == 1234u && s.raw[1] == 2345u && s.raw[2] == 3456u);
+    /* P1: on time -> late 0, ADC 48 us, wake 9 us measured around the call. */
+    assert(maxes[RT_ISR_LATE] == 0u && maxes[RT_ISR_ADC] == 48u);
+    assert(call_n == 1u && call_us == 9u && maxes[RT_ISR_WUP] == 9u);
+    /* P2: one ISR_EXIT record after the wake, arg = queue depth (1, taken: 0). */
+    assert(tl_n == 1u && tl_site == RT_TL_ISR_EXIT && tl_arg == 1u && tl_us > 1000u);
     fire(4500u); assert(alarm == 5000u);
+    /* Target was 2000: entry at 4500 is 2500 us late. */
+    assert(maxes[RT_ISR_LATE] == 2500u);
     drv_line_stats_t st; drv_line_stats(&st);
-    assert(st.samples == 2u && st.missed == 2u && st.isr_max_us==48u && wakes==2u && st.max[2]==3456u);
+    assert(st.samples == 2u && st.missed == 2u && st.isr_max_us==57u && wakes==2u && st.max[2]==3456u);
     drv_line_flush(); assert(!drv_line_take(&s));
     for (unsigned int i = 0u; i < 130u; ++i) fire(5000u + i * 1000u);
     drv_line_stats(&st); assert(st.dropped == 3u && st.min[0] == 1234u && st.max[1] == 2345u);

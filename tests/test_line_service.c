@@ -6,6 +6,7 @@
 #include "../app_program/subsystem3/line_service.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
 #include "../app_program/subsystem2/motion.h"
+#include "../app_program/platform/run_timing.h"
 
 #if APP_BARCODE_CAPTURE
 #include "../app_program/subsystem3/barcode_capture.h"
@@ -58,9 +59,18 @@ bool drv_line_take(drv_line_sample_t *s) {
     return true;
 }
 uint32_t drv_time_us(void) { return clock_us++; }
+/* P1 latch doubles: last value per site and a call count. */
+static uint32_t wake_ref, rt_last_max[RT_MAX_COUNT], rt_last_call[RT_CALL_COUNT];
+static unsigned int rt_calls[RT_CALL_COUNT];
+uint32_t drv_line_last_wake_us(void) { return wake_ref; }
+void rt_max(rt_max_t w, uint32_t us) { assert(!held || w == RT_LINE_LPU); rt_last_max[w] = us; }
+void rt_call(rt_call_t w, uint32_t us) { rt_last_call[w] = us; ++rt_calls[w]; }
+/* P2 timeline double: site order and args. */
+static rt_tl_site_t tl_sites[8]; static uint32_t tl_args[8], tl_n;
+void rt_tl(rt_tl_site_t site, uint32_t us, uint32_t arg) { (void)us; if (tl_n < 8u) { tl_sites[tl_n] = site; tl_args[tl_n] = arg; } ++tl_n; }
 uint32_t drv_time_ms(void) { return clock_us/1000u; }
 static void sample(uint16_t v) {
-    value=v;clock_us+=1000u;available=true;sleeps=0u;
+    value=v;clock_us+=1000u;wake_ref=clock_us-5u;available=true;sleeps=0u;
     if (setjmp(end)==0) ((void (*)(INT,void *))entry)(0,0);
     assert(!held);
 }
@@ -96,7 +106,23 @@ int main(void) {
     assert(calibration.minimum == 4095u && calibration.maximum == 4095u);
     assert((calibration.faults & BC_CAL_FAULT_RAW) != 0u);
     assert(calibration_logs == 2u);
+    memset(rt_calls, 0, sizeof(rt_calls));
+    tl_n = 0u;
+    memset(rt_last_max, 0, sizeof(rt_last_max));
     sample(3500u);
+    /* P1: ISR-exit -> running is 5 us; each kernel call is timed once. */
+    assert(rt_calls[RT_K_LINE_WAKE] == 1u && rt_last_call[RT_K_LINE_WAKE] == 5u);
+    assert(rt_calls[RT_K_LINE_CAN] == 1u && rt_last_call[RT_K_LINE_CAN] > 0u);
+    assert(rt_calls[RT_K_LINE_LOC] == 1u && rt_last_call[RT_K_LINE_LOC] > 0u);
+    assert(rt_calls[RT_K_LINE_UNL] == 1u && rt_last_call[RT_K_LINE_UNL] > 0u);
+    assert(rt_last_max[RT_LINE_LPU] > 0u);
+    assert(rt_last_max[RT_LINE_SAMPLE] > rt_last_max[RT_LINE_LPU]);
+    /* P2: LINE_RUN at wake, LINE_IDLE before sleep with 1 sample drained. */
+    assert(tl_n == 2u && tl_sites[0] == RT_TL_LINE_RUN && tl_sites[1] == RT_TL_LINE_IDLE);
+    assert(tl_args[1] == 1u);
+#if !APP_TEST && !APP_BENCH
+    assert(rt_last_max[RT_LINE_BARCODE] > 0u);
+#endif
     assert(line_snapshot_read(&s,false)==E_OK);
     const vc_event_t retained_event=s.event;
     assert(line_snapshot_try_read(&view)==E_OK && !held && view.sequence==17u && view.raw_bc==4095u);

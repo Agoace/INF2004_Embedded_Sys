@@ -296,6 +296,8 @@ button task. Read [the kernel robot safety/design record](docs/kernel/KERNEL.md)
 and pass the lifted-wheel checks before floor work. R5 has not run.
 The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
 steps to use if the RAM becomes too small.
+To look at both cores or read memory while the firmware runs, use an SWD
+probe as given in the [SWD debug probe record](docs/kernel/SWD_DEBUG_PROBE.md).
 
 Barcode B1c keeps Code 39 WIDTH and adds a separate PEAK observation path.
 In its exclusive TEST, VIN is required; GP21 runs 430 mm forward/backward
@@ -315,6 +317,9 @@ separate gates. See the [live adapter](docs/architecture/JUNCTION_LIVE_ADAPTER.m
 [junction actions](docs/architecture/JUNCTION_ACTION.md) and
 [revision-scoped validation](docs/kernel/JUNCTION_VALIDATION.md).
 B1c remains in [BARCODE.md](docs/s3-line-barcode/BARCODE.md).
+The first full-circuit SHADOW run passed for the system, but the large A
+was not decoded; see [SHADOW hardware results](docs/s3-line-barcode/SHADOW_HARDWARE_RESULTS.md).
+Barcode work is frozen for the dual-core migration.
 
 ## CR1 data representation
 

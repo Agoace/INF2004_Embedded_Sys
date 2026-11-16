@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
 
 #include "../app_program/subsystem1/log_stream.h"
 #include "../app_program/subsystem1/mqtt_wire.h"
@@ -31,7 +32,7 @@ static unsigned int row_reads;
 static bool row_gen_error;
 static bool bump_generation_on_open;
 static unsigned int opens;
-static unsigned int irq_off;
+#define irq_off test_smp_irq_mask
 static frame_t frames[MAX_FRAMES];
 static unsigned int frame_count;
 static unsigned int publish_fail_count;
@@ -43,15 +44,12 @@ static uint8_t fail_qos;
 
 void mock_di(UINT *irq)
 {
-    assert(!irq_off);
-    *irq = 7u;
-    irq_off = 1u;
+    *irq = test_smp_irq_save();
 }
 
 void mock_ei(UINT irq)
 {
-    assert(irq == 7u && irq_off);
-    irq_off = 0u;
+    test_smp_irq_restore(irq);
 }
 
 uint32_t drv_time_ms(void)
@@ -757,11 +755,54 @@ static void test_live_paused(void)
                  290u, 280u);
 }
 
+/* M4: isolated owner lifecycle; never reset a running network instance. */
+static void test_admission_lifecycle(void)
+{
+    const uint32_t boot_ids[] = {0x11223344u, 0xa1b2c3d4u};
+    for (unsigned int boot = 0u; boot < 2u; ++boot) {
+        reset();
+        log_stream_init(boot_ids[boot]);
+        ram.rows = 25u;
+        ram.events = 3u;
+        for (uint32_t request = 11u; request <= 13u; request += 2u) {
+            assert(!log_stream_dump_active());
+            assert(log_stream_dump_request(request) == E_OK);
+            assert(log_stream_dump_active());
+            assert(log_stream_dump_request(request + 1u) < E_OK);
+            unsigned int acked = frame_count;
+            bool saw_begin = false, saw_end = false;
+            for (unsigned int i = 0u; i < 200u &&
+                 log_stream_dump_active(); ++i) {
+                now_ms += 10u;
+                log_stream_service(publish_sink, false);
+                for (; acked < frame_count; ++acked) {
+                    const frame_t *frame = &frames[acked];
+                    assert(frame->qos == 1u);
+                    assert(u32(frame->data + 4u) == request);
+                    assert(u32(frame->data + 32u) == boot_ids[boot]);
+                    saw_begin = saw_begin || frame->data[1] == RM_LOG_BEGIN;
+                    saw_end = saw_end || frame->data[1] == RM_LOG_END;
+                    ack(acked);
+                }
+            }
+            assert(saw_begin && saw_end && !log_stream_dump_active());
+        }
+        /* Both requests completed; no unsolicited request remains. */
+        const unsigned int complete_frames = frame_count;
+        for (unsigned int i = 0u; i < 5u; ++i) {
+            now_ms += 100u;
+            log_stream_service(publish_sink, false);
+        }
+        assert(frame_count == complete_frames && !log_stream_dump_active());
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *name = (argc == 2) ? argv[1] : "all";
     bool all = (strcmp(name, "all") == 0);
 
+    if (all || !strcmp(name, "admission_lifecycle")) test_admission_lifecycle();
     if (all || !strcmp(name, "two_boot_ids")) test_two_boot_ids();
     if (all || !strcmp(name, "live_batches")) test_live_batches();
     if (all || !strcmp(name, "live_steady")) test_live_steady();

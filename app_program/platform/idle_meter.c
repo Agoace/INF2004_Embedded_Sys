@@ -1,5 +1,5 @@
 /*
- * idle_meter.c - CPU load meter. See idle_meter.h.
+ * idle_meter.c - CPU load meters, one per core. See idle_meter.h.
  */
 #if TM_MQTT
 #define PROHIBIT_DEF_SIZE_T
@@ -13,12 +13,24 @@
 
 /* Lowest priority of this kernel build (CNF_MAX_TSKPRI). */
 #define IDLE_METER_PRIORITY 32
-/* One pass of the idle task runs the loop for this long, then repeats. */
-#define IDLE_METER_PASS_US 1000000u
+/*
+ * One pass of the idle task runs the loop for this long, then repeats.  Kept well
+ * below the 1 Hz Health sample: the task publishes its count at the end of each
+ * pass, so this value is also the maximum age of a published count.  At 1 s the
+ * reader could sample twice inside one pass and see a zero delta, which the load
+ * arithmetic would report as a fully busy core.
+ */
+#define IDLE_METER_PASS_US 100000u
+/* One meter per core: index 0 is core 0, index 1 is core 1 (SMP builds only). */
+#define IDLE_METERS 2u
 
-static volatile uint32_t idle_counter;
-static cpu_load_t meter;
-static bool calibrated;
+static volatile uint32_t idle_counter[IDLE_METERS];
+/* Cross-core view of each counter, published once per pass.  The hot loop's
+ * volatile counter is not a snapshot, so a reader on the other core must never
+ * touch it; it reads this aligned word with an atomic load instead. */
+static uint32_t idle_published[IDLE_METERS];
+static cpu_load_t meter[IDLE_METERS];
+static bool calibrated[IDLE_METERS];
 
 /*
  * The counting loop. Calibration and the idle task both run exactly this
@@ -34,11 +46,20 @@ idle_meter_loop(volatile uint32_t *counter, uint32_t window_us)
     }
 }
 
-int idle_meter_calibrate(void)
+/*
+ * Calibrate one meter. The RP2040's two cores run the same clock, so the rate
+ * measured here is the peak rate for either core; a per-core clock difference
+ * would show up as a constant load offset, which is why these figures are
+ * diagnostics rather than control inputs.
+ */
+static int calibrate_one(unsigned int index)
 {
     volatile uint32_t count = 0u;
     UINT irq;
 
+    if (index >= IDLE_METERS) {
+        return (int)E_PAR;
+    }
     if (!drv_time_ready()) {
         return (int)E_SYS;
     }
@@ -49,40 +70,145 @@ int idle_meter_calibrate(void)
     const uint32_t elapsed = drv_time_us() - start;
 
     EI(irq);
-    cpu_load_init(&meter, count, elapsed);
-    calibrated = (meter.peak_rate != 0u);
-    return calibrated ? (int)E_OK : (int)E_SYS;
+    cpu_load_init(&meter[index], count, elapsed);
+    calibrated[index] = (meter[index].peak_rate != 0u);
+    return calibrated[index] ? (int)E_OK : (int)E_SYS;
 }
 
-/* Task body: count forever. */
+int idle_meter_calibrate(void)
+{
+    return calibrate_one(0u);
+}
+
+/*
+ * Count forever on one meter, publishing a coherent count at the end of each pass.
+ * The publication is deliberately outside the hot loop (RT-0061 finding 1): an
+ * atomic store per iteration would cost more than the measurement is worth, and
+ * the reader only needs a recent value, not the current one.
+ */
+static void idle_meter_body(unsigned int index)
+{
+    for (;;) {
+        idle_meter_loop(&idle_counter[index], IDLE_METER_PASS_US);
+        __atomic_store_n(&idle_published[index], idle_counter[index],
+                         __ATOMIC_SEQ_CST);
+    }
+}
+
+/* Task body: core-0 meter. */
 static void idle_meter_entry(INT code, void *ctx)
 {
     (void)code;
     (void)ctx;
-    for (;;) {
-        idle_meter_loop(&idle_counter, IDLE_METER_PASS_US);
-    }
+    idle_meter_body(0u);
 }
+
+#if TK_SUPPORT_SMP
+/* Task body: core-1 meter. */
+static void idle_meter1_entry(INT code, void *ctx)
+{
+    (void)code;
+    (void)ctx;
+    idle_meter_body(1u);
+}
+#endif
 
 int idle_meter_start(void)
 {
-    if (!calibrated) {
+    if (!calibrated[0]) {
         return (int)E_OBJ; /* no calibration: do not spin for nothing */
     }
     return (int)app_task_start((FP)idle_meter_entry, IDLE_METER_PRIORITY,
-                               TP_PRC1, "idle_meter");
+                               app_prc_core0(), "idle_meter");
+}
+
+#if TK_SUPPORT_SMP
+/*
+ * Phase 5: start the core-1 meter. Only in a two-core build, because in a
+ * single-core build the second counting task would land on core 0 as well and
+ * corrupt the core-0 load reading that the heartbeat publishes.
+ */
+int idle_meter_start_core1(void)
+{
+    if (!calibrated[1]) {
+        const int er = calibrate_one(1u);
+        if (er != (int)E_OK) {
+            return er;
+        }
+    }
+    return (int)app_task_start((FP)idle_meter1_entry, IDLE_METER_PRIORITY,
+                               app_prc_core1(), "idle_meter_1");
+}
+#endif
+
+/* A sample interval shorter than this cannot be interpreted: the rate would be
+ * dominated by scheduling jitter.  Health samples at 1 Hz, so this is half a
+ * period and only rejects a duplicate or an early read. */
+#define IDLE_METER_MIN_INTERVAL_US 500000u
+
+/* Bounded read-only snapshot of the latest two loads.  Written only by
+ * idle_meter_sample_all() and read by any diagnostic.  Each value is an aligned
+ * 16-bit word, so a reader can never see a torn figure, though the pair may come
+ * from different samples when read mid-update. */
+static uint16_t load_pub[IDLE_METERS];
+
+/*
+ * Advance BOTH sampling states and publish the result.
+ *
+ * RT-0069/C2: cpu_load_sample() mutates the meter it is given, so it must have
+ * exactly one caller.  Health is that caller, at 1 Hz; diagnostics such as
+ * app_task_report() read the published values and never touch the sampling state.
+ * The previous version let two cores sample, which raced and let a dump reset the
+ * Health interval.
+ *
+ * RT-0069/C3: after a valid baseline, an unchanged idle count across a full
+ * interval means the core did no idle work at all, which is 1000 permille - not
+ * UNKNOWN.  cpu_load_sample() reports exactly that for a zero delta.  UNKNOWN is
+ * reserved for no calibration, the first sample, and an interval too short to
+ * interpret.
+ */
+void idle_meter_sample_all(void)
+{
+    const uint32_t now = drv_time_us();
+    for (unsigned int i = 0u; i < IDLE_METERS; ++i) {
+        if (!calibrated[i]) {
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
+            continue;
+        }
+        const uint32_t count =
+            __atomic_load_n(&idle_published[i], __ATOMIC_SEQ_CST);
+        if (!meter[i].have_last) {
+            (void)cpu_load_sample(&meter[i], count, now);   /* baseline only */
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
+            continue;
+        }
+        if ((uint32_t)(now - meter[i].last_us) < IDLE_METER_MIN_INTERVAL_US) {
+            __atomic_store_n(&load_pub[i], CPU_LOAD_UNKNOWN, __ATOMIC_SEQ_CST);
+            continue;
+        }
+        /* RT-0081/F1: load_pub is written here on core 0 and read by the diagnostics
+         * report on core 1, so every access must be atomic - a word-aligned plain
+         * access is indivisible in hardware but is still an undefined concurrent C
+         * access against the reader. */
+        const uint16_t value = cpu_load_sample(&meter[i], count, now);
+        __atomic_store_n(&load_pub[i], value, __ATOMIC_SEQ_CST);
+    }
 }
 
 uint16_t idle_meter_load_permille(void)
 {
-    if (!calibrated) {
-        return CPU_LOAD_UNKNOWN;
-    }
-    return cpu_load_sample(&meter, idle_counter, drv_time_us());
+    return __atomic_load_n(&load_pub[0], __ATOMIC_SEQ_CST);
 }
+
+#if TK_SUPPORT_SMP
+uint16_t idle_meter_load_permille_core1(void)
+{
+    return __atomic_load_n(&load_pub[1], __ATOMIC_SEQ_CST);
+}
+#endif
 
 uint32_t idle_meter_peak_rate(void)
 {
-    return meter.peak_rate;
+    return meter[0].peak_rate;
 }
 #endif

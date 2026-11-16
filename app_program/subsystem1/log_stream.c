@@ -75,10 +75,7 @@ typedef struct {
 
 typedef struct {
     dump_stage_t stage;
-    bool requested;
-    bool retry_armed;
-    uint32_t request_id;
-    uint32_t id;
+    uint32_t id;    bool retry_armed;
     uint32_t generation;
     uint32_t rows_total;
     uint32_t events_total;
@@ -95,7 +92,37 @@ typedef struct {
 } dump_t;
 
 static live_t s_live;
+#include <tk/smp.h>   /* T_SPLOCK, SpinLock: cross-core DUMP request state */
+
+/* Phase 4: `log_stream_dump_request()` is called from Vehicle on core 0
+ * (vehicle_task.c:404) while this module's stepping runs in the Wi-Fi task on
+ * core 1, so a core-local mask protects neither.  Task context only, so plain
+ * SpinLock is the right variant under the lock rule.  A zero-filled static
+ * already holds the unlocked state. */
+static T_SPLOCK dump_lock;
+
 static dump_t s_dump;
+
+/*
+ * Phase 4 split (RT-0060).  The admission state is the ONLY DUMP state both cores
+ * touch: Vehicle submits a request from core 0, the Wi-Fi task consumes it and
+ * later returns it to IDLE.  It is a small state machine under dump_lock.
+ * Everything else in dump_t - the transfer stage, cursors, slots and
+ * acknowledgement counters - is owned by the Wi-Fi task and is never read from
+ * core 0.  A plain single-writer board would not be enough here, because Vehicle
+ * writes the request while the Wi-Fi task consumes it, and the request ID must
+ * match the accepted state.
+ */
+typedef enum {
+    DUMP_ADMIT_IDLE = 0,
+    DUMP_ADMIT_PENDING = 1,
+    DUMP_ADMIT_ACTIVE = 2
+} dump_admit_t;
+
+static struct {
+    dump_admit_t state;
+    uint32_t request_id;
+} s_admit;
 static log_stream_stats_t s_stats;
 static uint8_t s_records[RM_LOG_BATCH_MAX_COUNT * RM_LOG_RECORD_SIZE];
 static uint8_t s_frame[RM_LOG_BATCH_MAX_SIZE];
@@ -462,16 +489,22 @@ static void dump_service(log_stream_publish_fn publish)
 {
     uint32_t sends = 0u;
     const uint32_t now = drv_time_ms();
-    UINT irq;
 
     if (s_dump.stage == DUMP_IDLE) {
-        DI(irq);
-        if (s_dump.requested) {
-            s_dump.requested = false;
-            s_dump.id = s_dump.request_id;
+        /* Pending to active handoff: take the request ID under the lock, then
+         * change the Wi-Fi-owned stage outside it. */
+        bool accepted = false;
+        UINT intsts;
+        (void)ISpinLock(&dump_lock, &intsts);
+        if (DUMP_ADMIT_PENDING == s_admit.state) {
+            s_admit.state = DUMP_ADMIT_ACTIVE;
+            s_dump.id = s_admit.request_id;
+            accepted = true;
+        }
+        (void)ISpinUnlock(&dump_lock, intsts);
+        if (accepted) {
             s_dump.stage = DUMP_OPEN;
         }
-        EI(irq);
     }
     if ((s_dump.stage == DUMP_OPEN) && !dump_open()) {
         return;
@@ -516,6 +549,11 @@ void log_stream_init(uint32_t boot_id)
     (void)memset(&s_live, 0, sizeof(s_live));
     (void)memset(&s_dump, 0, sizeof(s_dump));
     (void)memset(&s_stats, 0, sizeof(s_stats));
+    UINT intsts;
+    (void)ISpinLock(&dump_lock, &intsts);
+    s_admit.state = DUMP_ADMIT_IDLE;
+    s_admit.request_id = 0u;
+    (void)ISpinUnlock(&dump_lock, intsts);
 }
 
 /*
@@ -533,15 +571,24 @@ void log_stream_link_down(void)
 int log_stream_dump_request(uint32_t request_id)
 {
     int result = E_OBJ;
-    UINT irq;
 
-    DI(irq);
-    if (!s_dump.requested && (s_dump.stage == DUMP_IDLE)) {
-        s_dump.request_id = request_id;
-        s_dump.requested = true;
+    /*
+     * RT-0069: Vehicle runs at priority 13 on core 0 and Health at 31, so Vehicle
+     * must not wait on a lock a lower-priority holder took and cannot release.
+     * One immediate try.  When it fails the request is refused rather than
+     * delayed, and no duplicate can slip in because the state changes only on
+     * success.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&dump_lock, &intsts)) {
+        return E_TMOUT;
+    }
+    if (DUMP_ADMIT_IDLE == s_admit.state) {
+        s_admit.request_id = request_id;
+        s_admit.state = DUMP_ADMIT_PENDING;
         result = E_OK;
     }
-    EI(irq);
+    (void)ISpinUnlock(&dump_lock, intsts);
     return result;
 }
 
@@ -550,7 +597,14 @@ int log_stream_dump_request(uint32_t request_id)
  */
 bool log_stream_dump_active(void)
 {
-    return s_dump.requested || (s_dump.stage != DUMP_IDLE);
+    /* True for PENDING and ACTIVE, and never reads the Wi-Fi-owned stage.
+     * Interrupt-preserving: Health holds this on core 0 and Vehicle preempts it. */
+    UINT intsts;
+    (void)ISpinLock(&dump_lock, &intsts);
+    const bool active = (DUMP_ADMIT_PENDING == s_admit.state) ||
+                        (DUMP_ADMIT_ACTIVE == s_admit.state);
+    (void)ISpinUnlock(&dump_lock, intsts);
+    return active;
 }
 
 /*
@@ -581,7 +635,13 @@ static void dump_apply(const slot_t *slot)
     } else if (slot->type == FRAME_BEGIN) {
         s_dump.stage = DUMP_DATA;
     } else {
+        /* END or ABORT acknowledged: the transfer is over, so admission returns
+         * to IDLE and a new request can be accepted. */
         s_dump.stage = DUMP_IDLE;
+        UINT intsts;
+        (void)ISpinLock(&dump_lock, &intsts);
+        s_admit.state = DUMP_ADMIT_IDLE;
+        (void)ISpinUnlock(&dump_lock, intsts);
     }
 }
 

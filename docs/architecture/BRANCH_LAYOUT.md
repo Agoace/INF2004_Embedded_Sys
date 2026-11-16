@@ -17,6 +17,7 @@ commit inside this repository before the parent updates its recorded revision.
 | `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
 | `mtk3-imu` | S4 IMU module development |
+| `mtk3-cr1`, `mtk3-b2b` | Helper branches: CR1 data representation; B2b barcode-to-junction (S3 reader + vehicle adapter). Merged into staging; kept as records |
 | `main` | Original course-template history; do not change |
 | `ziven-barcode-algo`, `yanshan`, `jaison-imu` | Reference branches; port approved ideas, do not merge them |
 

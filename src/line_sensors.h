@@ -6,8 +6,8 @@
  *   centre sensor, moved from GP27). The right sensor is disabled: raw[2]
  *   is always 0. Use lp_set_pair() with this wiring.
  * LINE_SENSORS_PAIR 0: the old three-sensor wiring, left GP28, centre
- *   GP27, right GP26. src/ir_module_pins.h has left and right the other way
- *   round (checked on the robot, 2026-10-27).
+ *   GP27, right GP26. An earlier retired three-sensor demo used the opposite
+ *   left/right labels (checked on the robot, 2026-10-27).
  * Each read is the mean of 8 ADC samples per sensor.
  */
 #ifndef LINE_SENSORS_H
