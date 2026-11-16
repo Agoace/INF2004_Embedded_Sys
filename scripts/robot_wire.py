@@ -282,7 +282,11 @@ def _decode_summary(data):
     if data[0] == 1:
         _require(data[1] & ~7 == 0, "summary reserved flags")
     _require(data[2] <= 4, "summary stop source")
-    _require(data[3] <= (12 if data[0] == 1 else 13), "summary stop reason")
+    # Stop reasons grow with the summary version: v1 knew 0..12, v2 added
+    # SCAN reverse timeout 13, and v3 adds the IMU safety reasons 14..16.
+    # Gate by version so an older frame still rejects a newer reason.
+    reason_limit = 12 if data[0] == 1 else (13 if data[0] == 2 else 16)
+    _require(data[3] <= reason_limit, "summary stop reason")
     result = _flags(data[1] & 7, SUMMARY_FLAGS)
     if data[0] >= 2:
         result["scan_reattempts"] = data[1] >> 3

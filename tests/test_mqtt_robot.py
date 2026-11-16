@@ -861,6 +861,29 @@ class BatchTwoTests(unittest.TestCase):
             with self.subTest(**kwargs), self.assertRaises(ValueError):
                 wire.decode("robot/summary", summary_frame(**kwargs))
 
+    def test_summary_stop_reason_range_follows_version(self):
+        # v1 knew reasons 0..12, v2 added SCAN reverse timeout 13, and v3
+        # adds the IMU safety reasons 14..16. A frame must not be accepted
+        # with a reason its own version did not define.
+        def frame(version, reason):
+            body = summary_frame(reason=reason)
+            if version == 2:
+                tail = struct.pack("<I", 0)          # boot id at 44
+            elif version >= 3:
+                tail = struct.pack("<IHBB", 0, 1, 1, 0)  # boot, count, flags, gated
+            else:
+                tail = b""
+            return bytes([version]) + body[1:] + tail
+
+        for reason in (14, 15, 16):
+            wire.decode("robot/summary", frame(3, reason))
+            with self.subTest(version=2, reason=reason), \
+                    self.assertRaises(ValueError):
+                wire.decode("robot/summary", frame(2, reason))
+        wire.decode("robot/summary", frame(2, 13))
+        with self.assertRaises(ValueError):
+            wire.decode("robot/summary", frame(3, 17))
+
     def test_obstacle_scan_stage(self):
         for stage in (0, 1, 2):
             flags = 0b0101 | stage << 4

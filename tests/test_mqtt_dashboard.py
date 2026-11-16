@@ -987,9 +987,22 @@ class SummaryTests(ModelCase):
             self.assertEqual(rows["Run ID"], run)
 
     def test_all_stop_reasons_have_a_name(self):
-        for reason in range(13):
-            self.model.ingest("robot/summary", summary(reason=reason))
-            self.assertNotIn("unknown (", self.rows("summary")["Stop reason"])
+        # Every reason the firmware can send must have a name, so a new
+        # reason cannot silently render as "unknown (n)". The current
+        # firmware sends summary v3, whose reason range is 0..16: unknown
+        # through the IMU safety reasons (14..16). Each ingest needs a NEW
+        # run id: the model deduplicates by run, so a fixed id would leave
+        # only the first reason on the panel and this test would pass
+        # without observing the others.
+        expected = {14: "IMU lift detected", 15: "IMU overturn detected",
+                    16: "IMU unavailable"}
+        for reason in range(17):
+            self.model.ingest("robot/summary",
+                              summary_v3(reason=reason, run=reason + 1))
+            text = self.rows("summary")["Stop reason"]
+            self.assertNotIn("unknown (", text)
+            if reason in expected:
+                self.assertEqual(text, expected[reason])
 
     def test_speed_error_not_measured(self):
         self.model.ingest("robot/summary", summary(flags=0, speed_error=45))  # flag off
