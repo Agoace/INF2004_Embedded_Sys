@@ -9,7 +9,7 @@ import math
 
 from .robot_profile import RobotProfile
 
-DM1_SOURCE = "docs/archive/s2-motion/DUTY_MAP.md#run-dm1"
+DM1_SOURCE = "569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1"
 DUTIES = (0, 5, 6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 25, 30, 35, 40, 45, 50, 60, 70)
 SPEEDS_MM_S = (
     ((0, 0, 0, 0, 24, 34, 43, 52, 60, 78, 96, 114, 129, 168, 211, 253, 296,

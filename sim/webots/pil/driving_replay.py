@@ -9,7 +9,7 @@ from .passive_replay import PassiveReplay,SAMPLE_FIELDS,IO_FIELDS,SESSION
 from .wire import Frame,Type,encode,i16
 
 PWM_FULL_SCALE=6250  # Frozen protocol effective PWM scale, not a fitted constant.
-DM1_SOURCE='docs/archive/s2-motion/DUTY_MAP.md; Run DM1 2026-11-04 boot5d51; forward table rows16% and20%'
+DM1_SOURCE='569672a:docs/archive/s2-motion/DUTY_MAP.md; Run DM1 2026-11-04 boot5d51; forward table rows16% and20%'
 DM1_FORWARD_MM_S={'16':(96.,95.),'20':(129.,129.)}
 # Every threshold here is ASSUMED/UNMEASURED software-smoke acceptance, not calibration.
 THRESHOLDS={'max_travel_m':1.,'min_z_m':.015,'max_z_m':.15,'min_upright_cos':.9,

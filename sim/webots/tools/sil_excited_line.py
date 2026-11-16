@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+"""Three explicitly approved task A cases. One launch/case, no retry."""
+import argparse
+import csv
+import hashlib
+import importlib.util
+import json
+import os
+from pathlib import Path
+import sys
+import time
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from sil_line_smoke import prepare_project,launch_project,SOURCE
+from pil.robot_profile import RobotProfile
+from pil.sil_excited_line import apply_geometry,window_metrics
+
+CASES={'offset10-yaw-10':(10,-10,0),'offset15-yaw0':(15,0,0),'offset10-yaw-10-delay20':(10,-10,20)}
+
+def main():
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--case',choices=CASES,required=True)
+    p.add_argument('--spin',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
+    a=p.parse_args()
+    if a.output.exists():p.error('fresh directory required; no retries')
+    if os.environ.get('DISPLAY')!=':0'or not os.environ.get('XAUTHORITY'):p.error('approved existingDISPLAY=:0/XAUTHORITY required')
+    offset,yaw,delay=CASES[a.case];spin=json.loads(a.spin.read_text())
+    if not spin.get('complete'):p.error('historical spin incomplete')
+    profile=RobotProfile.load(SOURCE/'calibration/robot_assumed.json')
+    project,world=prepare_project(a.output,offset_mm=offset,yaw_deg=yaw,recovery=True,line_search=True,line_profile='B')
+    config_path=project/'sil-manifest.json';config=json.loads(config_path.read_text())
+    config=apply_geometry(config,profile,spin);config['sensor_transport_delay_ms']=delay
+    config['taskA_case']=a.case;config['historical_spin_path']=str(a.spin.resolve())
+    config['historical_spin_sha256']=hashlib.sha256(a.spin.read_bytes()).hexdigest()
+    config_path.write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')
+    (project/'historical-spin.json').write_bytes(a.spin.read_bytes())
+    # Re-seal this NEW project's exact launch inputs; historical seals unchanged.
+    manifest_path=project/'manifest.json';manifest=json.loads(manifest_path.read_text())
+    for path in project.rglob('*'):
+        if path.is_file()and path!=manifest_path:
+            manifest['artifacts_sha256'][str(path.relative_to(project))]=hashlib.sha256(path.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest,indent=2,sort_keys=True)+'\n')
+    start=time.monotonic();status,pid,command,contents=launch_project(project,world,1200,label='taskA-excited-line')
+    elapsed=time.monotonic()-start;summary=None;metrics=[];proof=False;error=None
+    try:
+        summary=json.loads((project/'sil-result/summary.json').read_text())
+        if summary.get('recorded_input_c_replay'):
+            spec=importlib.util.spec_from_file_location('taskA_replay',project/'controllers/sil_line/sil_line.py')
+            module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);proof=module.replay_export(project)
+        with (project/'sil-result/samples.csv').open()as stream:
+            reader=csv.reader(stream);next(reader);rows=[list(map(float,r))for r in reader]
+        for start_ms,end_ms in ((2000,4000),(4000,6000),(6000,8000),(8000,10000)):
+            if rows and rows[-1][0]>=end_ms:metrics.append(window_metrics(rows,start_ms,end_ms))
+    except (ValueError,OSError)as e:error=str(e)
+    result=dict(case=a.case,owned_pgid=pid,exit_status=status,wall_seconds=elapsed,cap_seconds=1200,command=command,
+        complete=bool(status==0 and proof and summary and summary['samples']==10000 and summary['error']is None and 'ERROR:'not in contents and 'WARNING:'not in contents),
+        recorded_input_native_replay=proof,summary=summary,analysis_windows=metrics,error=error)
+    (project/'taskA-result.json').write_text(json.dumps(result,indent=2,sort_keys=True)+'\n')
+    print(json.dumps(result,sort_keys=True),flush=True)
+    return 0 if result['complete']else 1
+
+if __name__=='__main__':raise SystemExit(main())
