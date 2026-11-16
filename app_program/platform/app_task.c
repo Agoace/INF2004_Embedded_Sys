@@ -4,10 +4,21 @@
  *
  * Each slot has a static, 8-byte aligned stack that is filled with a known
  * pattern before the task starts. The unused part of the pattern shows how
- * much stack remains. Only core 0 (TP_PRC1) tasks are registered.
+ * much stack remains.
+ *
+ * Placement.  The slot table below is the single owner of where a registered
+ * task may run.  Movement and hardware owners stay on core 0.  The observers
+ * that the core-migration plan moves later are moved by editing their slot
+ * entry and their call site together, so a call-site edit alone cannot move a
+ * task: app_task_start() rejects a core its slot does not allow.
  */
 #include "app_task.h"
+#include "idle_meter.h"   /* Phase 5: per-core load in the report */
+#include "run_timing.h"   /* P1: per-run timing latches in the report */
+#include "../app.h"   /* app_core_t, app_prc_core0/1: the placement seam */
+
 #include <stdbool.h>
+#include <tk/smp.h>   /* T_SPLOCK, ISpinTryLock: cross-core stack marks */
 #include <tm/tmonitor.h>
 #include <tk/syslib.h>
 /* Fill pattern and stack sizes in 64-bit words (bytes = words * 8). */
@@ -23,6 +34,18 @@
 #define IDLE_STACK_WORDS      96
 #define STACK_LOW_MARGIN      256u
 
+#if TM_WIFI_CYW43
+/* Preserve the old non-USERBUF allocation, including its kernel addition.
+ * USERBUF uses exactly stksz; it does not add DEFAULT_SYS_STKSZ again. */
+#if TM_NET_LWIP
+#define WIFI_REQUEST_BYTES (8u * 1024u)
+#else
+#define WIFI_REQUEST_BYTES (6u * 1024u)
+#endif
+#define WIFI_STACK_BYTES (WIFI_REQUEST_BYTES + DEFAULT_SYS_STKSZ)
+_Static_assert(WIFI_STACK_BYTES % 8u == 0u, "Wi-Fi stack alignment");
+static uint64_t wifi_stack[WIFI_STACK_BYTES / 8u];
+#endif
 static uint64_t motion_stack[MOTION_STACK_WORDS];
 static uint64_t line_stack[LINE_STACK_WORDS];
 static uint64_t sonar_stack[SONAR_STACK_WORDS];
@@ -37,34 +60,60 @@ static uint64_t bench_stack[BENCH_STACK_WORDS];
 #if TM_MQTT
 static uint64_t health_stack[HEALTH_STACK_WORDS];
 static uint64_t idle_stack[IDLE_STACK_WORDS];
+#if TK_SUPPORT_SMP
+/* Phase 5: the core-1 load meter gets its own slot and stack, so its margin is
+ * measured like every other task's instead of being assumed. */
+static uint64_t idle1_stack[IDLE_STACK_WORDS];
+#endif
 #endif
 typedef struct {
     const char *name;
     uint64_t *stack;
     uint32_t size;
     uint32_t high;
-    ID id;
+    ID id;         /* 0 free; positive started; negative quarantined */
+    uint8_t core;   /* physical core this task is allowed to run on */
 } slot_t;
 
-#define SLOT(n, s) {n, s, sizeof(s), 0u, 0}
-static slot_t slots[] = {SLOT("motion_task", motion_stack),
-                         SLOT("line_task", line_stack),
-                         SLOT("sonar_task", sonar_stack),
-#if !APP_BENCH
-                         SLOT("imu_task", imu_stack),
+/* UP and the control profile use physical core 0 for every slot. Keep report
+ * labels consistent with the processor request checked at creation. */
+#if APP_FORCE_CORE0 || !TK_SUPPORT_SMP
+#define SLOT_CORE(c) APP_CORE_0
+#else
+#define SLOT_CORE(c) (c)
 #endif
-                         SLOT("vehicle_task", vehicle_stack),
-                         SLOT("telemetry_task", telemetry_stack)
+#define SLOT(n, s, c) {n, s, sizeof(s), 0u, 0, SLOT_CORE(c)}
+static slot_t slots[] = {SLOT("motion_task", motion_stack, APP_CORE_0),
+                         SLOT("line_task", line_stack, APP_CORE_0),
+                         SLOT("sonar_task", sonar_stack, APP_CORE_0),
+#if !APP_BENCH
+                         SLOT("imu_task", imu_stack, APP_CORE_1),
+#endif
+                         SLOT("vehicle_task", vehicle_stack, APP_CORE_0),
+                         SLOT("telemetry_task", telemetry_stack, APP_CORE_1)
 #if APP_BENCH
                              ,
-                         SLOT("motion_bench", bench_stack)
+                         SLOT("motion_bench", bench_stack, APP_CORE_0)
 #endif
 #if TM_MQTT
                              ,
-                         SLOT("health_task", health_stack),
-                         SLOT("idle_meter", idle_stack)
+                         SLOT("health_task", health_stack, APP_CORE_0),
+                         SLOT("idle_meter", idle_stack, APP_CORE_0)
+#if TK_SUPPORT_SMP
+                             ,
+                         SLOT("idle_meter_1", idle1_stack, APP_CORE_1)
+#endif
+#endif
+#if TM_WIFI_CYW43
+                             ,
+                         SLOT("cyw43", wifi_stack, APP_CORE_1)
 #endif
 };
+
+/* Keep the published bound honest: a slot added here without raising
+ * APP_TASK_MAX_SLOTS would truncate every caller's stack list. */
+_Static_assert(sizeof(slots) / sizeof(slots[0]) <= APP_TASK_MAX_SLOTS,
+               "slot table exceeds APP_TASK_MAX_SLOTS");
 /* Compare two C strings. Returns true when they are equal. */
 static bool equal(const char *a, const char *b)
 {
@@ -76,19 +125,60 @@ static bool equal(const char *a, const char *b)
 }
 
 /*
- * Create and start the task registered under name.
- * entry, priority and core are the usual kernel task parameters.
- * Returns the task ID (> 0) or a negative error: E_CTX for the wrong core,
- * E_PAR for an unknown name, E_OBJ if the slot is already running.
+ * PRC value for a physical core.  TP_PRC1 is core 0, so the value is TP_PRC1
+ * plus the core index.  A single-core build has only core 0, so a core-1
+ * request is answered with core 0 rather than an unmapped PRC.
  */
-ID app_task_start(FP entry, PRI priority, UW core, const char *name)
+UW app_core_prc(app_core_t core)
 {
 #if TK_SUPPORT_SMP
-    if (tk_get_prc() != 1 || core != TP_PRC1) {
-        return E_CTX;
+    if (APP_CORE_1 == core && TK_MAX_CORE > 1) {
+        return TP_PRC1 + 1u;
     }
 #else
     (void)core;
+#endif
+    return TP_PRC1;
+}
+
+/* PRC for core 0.  Cyclic handlers use this for their own core. */
+UW app_prc_core0(void)
+{
+    return app_core_prc(APP_CORE_0);
+}
+
+/* PRC for core 1, or core 0 when the build has one core. */
+UW app_prc_core1(void)
+{
+#if APP_FORCE_CORE0
+    /* Control build: the migration's core-1 placement is collapsed to core 0, so
+     * the same image can be compared with the migration against one kernel. */
+    return app_prc_core0();
+#else
+    return app_core_prc(APP_CORE_1);
+#endif
+}
+
+/*
+ * Check the boot creator, requested placement and slot ownership.
+ * Return E_CTX for the wrong core, E_PAR for an unknown name or core, or
+ * E_OBJ for a started or quarantined slot. Do not paint on failure.
+ */
+static ER checked_slot(UW core, const char *name, slot_t **out)
+{
+#if TK_SUPPORT_SMP
+    /* Creating a task must happen on core 0, as the kernel requires.  The task
+     * itself may be placed on core 1 when the build has a second core. */
+    if (tk_get_prc() != TP_PRC1) {
+        return E_CTX;
+    }
+    if (core != TP_PRC1 && !((TK_MAX_CORE > 1) && (core == TP_PRC1 + 1u))) {
+        return E_PAR;
+    }
+#else
+    if (core != TP_PRC1) {
+        return E_CTX;
+    }
 #endif
     if (!name) {
         return E_PAR;
@@ -103,35 +193,95 @@ ID app_task_start(FP entry, PRI priority, UW core, const char *name)
     if (!s) {
         return E_PAR;
     }
-    if (s->id > 0) {
+    if (s->id != 0) {
         return E_OBJ;
     }
+    /* The slot table owns the placement, so a call site cannot move a task that
+     * the migration has not moved yet. */
+    if (app_core_prc((app_core_t)s->core) != core) {
+        return E_CTX;
+    }
+    *out = s;
+    return E_OK;
+}
+
+/* Creation and start stay outside every diagnostic spinlock. Only the boot
+ * creator on core 0 may change slot ownership, before startup handoff. */
+static ID start_slot(slot_t *s, const T_CTSK *request)
+{
     unsigned char *bytes = (unsigned char *)s->stack;
     for (uint32_t i = 0u; i < s->size; ++i) {
         bytes[i] = FILL;
     }
-    T_CTSK c = {0};
-    c.task = entry;
-    c.itskpri = priority;
+    T_CTSK c = *request;
     c.stksz = (SZ)s->size;
-    c.tskatr = TA_HLNG | TA_RNG3 | TA_USERBUF;
+    c.tskatr |= TA_USERBUF;
     c.bufptr = s->stack;
-#if TK_SUPPORT_SMP
-    c.tskatr |= TA_ASSPRC;
-    c.assprc = TP_PRC1;
-#endif
     const ID id = tk_cre_tsk(&c);
     if (id < 0) {
         return id;
     }
     const ER er = tk_sta_tsk(id, 0);
     if (er < 0) {
-        (void)tk_del_tsk(id);
+        if (tk_del_tsk(id) < E_OK) {
+            /* The dormant object still owns this buffer. Quarantine it:
+             * exclude it from reports and reject retries until reboot. */
+            s->id = -id;
+        }
         return er;
     }
     s->id = id;
     return id;
 }
+
+ID app_task_start(FP entry, PRI priority, UW core, const char *name)
+{
+    slot_t *s;
+    const ER checked = checked_slot(core, name, &s);
+    if (checked < E_OK) {
+        return checked;
+    }
+    T_CTSK c = {0};
+    c.task = entry;
+    c.itskpri = priority;
+    c.tskatr = TA_HLNG | TA_RNG3;
+#if TK_SUPPORT_SMP
+    c.tskatr |= TA_ASSPRC;
+    c.assprc = core;
+#endif
+    return start_slot(s, &c);
+}
+
+/* Convert a kernel-allocated request without changing its task policy or
+ * actual stack capacity. Used by radio startup before application startup. */
+ID app_task_start_config(const T_CTSK *request, const char *name)
+{
+    if (!request || (request->tskatr & TA_USERBUF) != 0u) {
+        return E_PAR;
+    }
+    UW core = TP_PRC1;
+#if TK_SUPPORT_SMP
+    if ((request->tskatr & TA_ASSPRC) == 0u) {
+        return E_PAR; /* A registered task must have fixed placement. */
+    }
+    core = request->assprc;
+#endif
+    slot_t *s;
+    const ER checked = checked_slot(core, name, &s);
+    if (checked < E_OK) {
+        return checked;
+    }
+    if (request->stksz != (SZ)s->size - DEFAULT_SYS_STKSZ) {
+        return E_PAR; /* Do not silently resize the old allocation. */
+    }
+    return start_slot(s, request);
+}
+
+/* Guards the high-water marks, which can now be updated from either core:
+ * Health scans from core 0 and Telemetry scans from core 1 once it moves.  A
+ * zero-filled static already holds the unlocked state, because InitSpinLock()
+ * only stores 0 into the lock word. */
+static T_SPLOCK stacks_lock;
 
 /*
  * Copy stack use of started tasks to out (at most capacity rows).
@@ -153,13 +303,30 @@ unsigned int app_task_stacks(app_stack_t *out, unsigned int capacity)
             ++free;
         }
         const uint32_t used = s->size - free;
-        UINT irq;
-        DI(irq);
-        if (used > s->high) {
-            s->high = used;
+        /*
+         * Phase 2: the imu_task stack is owned by core 1 while this scan may run
+         * on core 0, so a mask on this core no longer covers the state.  EVERY
+         * access to the mark is an atomic load or store: another core's scan can
+         * update it while this one reads, and a plain read carries no cross-core
+         * ordering even though the aligned word cannot tear.  The update stays
+         * monotonic - a smaller value is never stored - so a mark can lag but
+         * never regress.  On contention the last atomically read mark is
+         * reported instead of waiting, because this is a diagnostic path.
+         */
+        uint32_t high = __atomic_load_n(&s->high, __ATOMIC_SEQ_CST);
+        UINT intsts;
+        if (E_OK == ISpinTryLock(&stacks_lock, &intsts)) {
+            const uint32_t prev = __atomic_load_n(&s->high, __ATOMIC_SEQ_CST);
+            if (used > prev) {
+                __atomic_store_n(&s->high, used, __ATOMIC_SEQ_CST);
+                high = used;
+            } else {
+                high = prev;
+            }
+            (void)ISpinUnlock(&stacks_lock, intsts);
         }
-        out[n++] = (app_stack_t){s->name, s->size, s->high, s->size - s->high};
-        EI(irq);
+        out[n++] = (app_stack_t){s->name, s->size, high, s->size - high,
+                                 (uint8_t)s->core};
     }
     return n;
 }
@@ -171,9 +338,27 @@ void app_task_report(void)
     const unsigned int n =
         app_task_stacks(rows, (unsigned int)(sizeof(slots) / sizeof(slots[0])));
     for (unsigned int i = 0u; i < n; ++i) {
-        tm_printf((UB *)"[stack] %s size %lu high_water %lu free %lu %s\n",
-                  rows[i].name, (unsigned long)rows[i].size,
+        tm_printf((UB *)"[stack] %s core %u size %lu high_water %lu free %lu %s\n",
+                  rows[i].name, (unsigned int)rows[i].core,
+                  (unsigned long)rows[i].size,
                   (unsigned long)rows[i].used, (unsigned long)rows[i].free,
                   rows[i].free < STACK_LOW_MARGIN ? "LOW MARGIN" : "OK");
     }
+#if TM_MQTT
+    /*
+     * Phase 5: the per-core load figures. This is the diagnostic consumer that
+     * makes the core-1 meter produce a visible number. The heartbeat wire format
+     * is deliberately untouched and keeps carrying the core-0 value alone.
+     */
+#if TK_SUPPORT_SMP
+    tm_printf((UB *)"[load] core 0 %u permille, core 1 %u permille\n",
+              (unsigned int)idle_meter_load_permille(),
+              (unsigned int)idle_meter_load_permille_core1());
+#else
+    tm_printf((UB *)"[load] core 0 %u permille\n",
+              (unsigned int)idle_meter_load_permille());
+#endif
+    /* P1: per-run peaks and latches, frozen at STOP (report only). */
+    rt_report();
+#endif
 }

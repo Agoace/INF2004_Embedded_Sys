@@ -3,11 +3,24 @@
 
 #include <tk/tkernel.h>
 #include <tk/syslib.h>
+#include <tk/smp.h>   /* Interrupt-preserving cross-core timing locks. */
 #include "cyw43_utk.h"
+#include "../../../../app_program/platform/app_task.h"
 
 extern uint64_t time_us_64(void);
 static T_CYW43_TIMING timing;
 static T_CYW43_TIMING window;
+
+/*
+ * Guards every shared field in this file, instead of a core-local mask.
+ * Phase 4: the poll path runs on the Wi-Fi task and the window, read and status
+ * calls run on the Vehicle task.  Once those are different cores, a DI()/EI() on
+ * either core protects neither, and the begin/end window is a shared state
+ * machine rather than a snapshot, so a seqlock would be the wrong primitive.
+ * Use interrupt-preserving locks: Health and Wi-Fi share core 0 in control
+ * builds. A zero-filled static holds the unlocked state.
+ */
+static T_SPLOCK timing_lock;
 static UW started;
 static UW previous;
 static UW window_previous;
@@ -17,6 +30,13 @@ static UW probe_begin_us;
 static BOOL have_previous;
 static BOOL window_previous_valid;
 static BOOL window_active;
+/* RT-0071/F2: a close request from a caller that could not take the lock.  It is
+ * applied under the lock by the poll path or by the next window begin, so no
+ * caller ever writes window_active from outside the lock. */
+static UW window_close_req;
+
+/* M9: app_task owns and paints the radio stack before kernel creation. The
+ * ordinary stack report scans its persistent watermark, not a poll-frame SP. */
 static ER start_status = E_OBJ;
 #define CYW43_LONG_POLL_GAP_US 10000u
 
@@ -43,11 +63,11 @@ static void timing_add(T_CYW43_TIMING *t, UW work, UW gap, BOOL has_gap)
 void cyw43_utk_poll_begin(void)
 {
     const UW entered = (UW)time_us_64();
-    UINT irq;
-    DI(irq);
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     started = (UW)time_us_64();
     poll_window_id = window_active ? window_id : 0u;
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
     probe_begin_us = (UW)time_us_64() - entered;
 }
 
@@ -56,8 +76,11 @@ void cyw43_utk_poll_end(void)
 {
     const UW end = (UW)time_us_64();
     const UW work = end - started;
-    UINT irq;
-    DI(irq);
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
+    if (0u != atomic_xchg(&window_close_req, 0u)) {
+        window_active = FALSE;   /* apply a deferred close from a missed try */
+    }
     timing_add(&timing, work, started - previous, have_previous);
     previous = started;
     have_previous = TRUE;
@@ -68,40 +91,51 @@ void cyw43_utk_poll_end(void)
         window_previous = started;
         window_previous_valid = TRUE;
     }
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
     /* Probe wall cost excludes its own final two max stores. */
     const UW cost = probe_begin_us + ((UW)time_us_64() - end);
-    DI(irq);
+    (void)ISpinLock(&timing_lock, &intsts);
     if (cost > timing.probe_max_us) {
         timing.probe_max_us = cost;
     }
-    if (in_window && window_active && poll_window_id == window_id &&
+    if (window_active && poll_window_id == window_id &&
         cost > window.probe_max_us) {
         window.probe_max_us = cost;
     }
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
 }
 
-/* Copy lifetime timing counters under a short interrupt mask. */
+/* Copy lifetime timing counters under the cross-core timing lock. */
 int32_t cyw43_utk_timing_read(T_CYW43_TIMING *out)
 {
     if (!out) {
         return E_PAR;
     }
-    UINT irq;
-    DI(irq);
+    /* Interrupt-preserving: a core-0 holder must not be preemptible by Vehicle. */
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
     *out = timing;
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
 /* Start an independent timing window without resetting lifetime counters. */
 int32_t cyw43_utk_timing_window_begin(void)
 {
-    UINT irq;
-    DI(irq);
+    /*
+     * RT-0069: Vehicle must not wait on a lock held by a task it has preempted, so
+     * this fails fast.  On failure no window is opened at all: the caller defers
+     * its measurement and no duplicate or half-open window can result.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        return E_TMOUT;
+    }
+    if (0u != atomic_xchg(&window_close_req, 0u)) {
+        window_active = FALSE;   /* a deferred close beats the stale flag */
+    }
     if (window_active) {
-        EI(irq);
+        (void)ISpinUnlock(&timing_lock, intsts);
         return E_OBJ;
     }
     window = (T_CYW43_TIMING){0};
@@ -110,7 +144,7 @@ int32_t cyw43_utk_timing_window_begin(void)
         ++window_id;
     }
     window_active = TRUE;
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
@@ -120,25 +154,46 @@ int32_t cyw43_utk_timing_window_end(T_CYW43_TIMING *out)
     if (!out) {
         return E_PAR;
     }
-    UINT irq;
-    DI(irq);
+    /*
+     * RT-0069: fail fast, but an active window must never be left behind.  When
+     * the lock cannot be taken, the window is closed with a single aligned store
+     * and no counters are returned: `window_active` is a word, so the store is
+     * atomic, and the poll path only uses it to decide attribution, which is
+     * diagnostics.  Losing one window's counters is the accepted cost.
+     */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        /* RT-0071/F2: never touch window_active outside the lock, because the
+         * poll path owns it under the same lock.  Leave a request the poll path or
+         * the next begin applies, and return no counters for this window. */
+        (void)atomic_inc(&window_close_req);
+        return E_TMOUT;
+    }
     if (!window_active) {
-        EI(irq);
+        (void)ISpinUnlock(&timing_lock, intsts);
         return E_OBJ;
     }
     window_active = FALSE;
     *out = window;
-    EI(irq);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return E_OK;
 }
 
 /* Read the latest task-start result without changing it. */
 int32_t cyw43_utk_start_status(void)
 {
-    UINT irq;
-    DI(irq);
-    const ER result = start_status;
-    EI(irq);
+    /* A 32-bit status word; on contention return the current value without
+     * waiting, since the reader only reports it. */
+    UINT intsts;
+    if (E_OK != ISpinTryLock(&timing_lock, &intsts)) {
+        /* RT-0071/F2: a defined single-word read through the atomic builtin,
+         * rather than an unsynchronised read of state the writer stores under the
+         * lock.  A status word cannot tear, and a momentarily stale value is all
+         * this reader reports. */
+        return (int32_t)__atomic_load_n(&start_status, __ATOMIC_SEQ_CST);
+    }
+    const ER result = __atomic_load_n(&start_status, __ATOMIC_SEQ_CST);
+    (void)ISpinUnlock(&timing_lock, intsts);
     return result;
 }
 
@@ -158,19 +213,57 @@ int32_t cyw43_utk_start_status(void)
 #define CYW43_TASK_STACK     (6 * 1024)
 #endif
 
+#if APP_TEST
+/*
+ * Collision hook for RT-0073/F3. timing_lock is static to this file, so the only
+ * way a test can force the "caller could not take the lock" path in
+ * cyw43_utk_timing_window_end() is to hold it from here. TEST builds only.
+ */
+static UINT timing_test_intsts;
+
+void cyw43_utk_timing_test_hold(void)
+{
+    (void)ISpinLock(&timing_lock, &timing_test_intsts);
+}
+
+void cyw43_utk_timing_test_release(void)
+{
+    (void)ISpinUnlock(&timing_lock, timing_test_intsts);
+}
+
+/* Pointer-free wrapper, so a test in app_program does not need T_CYW43_TIMING. */
+int32_t cyw43_utk_timing_test_window_end(void)
+{
+    T_CYW43_TIMING snapshot;
+    return cyw43_utk_timing_window_end(&snapshot);
+}
+#endif /* APP_TEST */
+
 EXPORT int32_t cyw43_utk_start(void)
 {
     T_CTSK ctsk = {0};
     ID task;
 
-    /* Pinned to processor 1 (core 0) for the same reason usb_console.c pins
-     * its service task: the CYW43439's PIO/DMA and pin ownership, and the
-     * lwIP state serviced alongside it, must not migrate between cores. On a
-     * single-core build there is only one processor, so the affinity request
-     * is dropped rather than being passed an ID the kernel does not define. */
+    /* Phase 4: the radio service runs on core 1. The CYW43439 needs ONE core to
+     * own its PIO/DMA and pin state permanently, and this task is that owner;
+     * what matters is that it never migrates, not that it is core 0. Nothing here
+     * requires core 0: the port does not use the pico-sdk async context or the
+     * SDK IRQ path (the hooks in cyw43_utk_compat.c are weak stubs), the driver
+     * polls, and PIO and DMA are core-independent hardware on RP2040. Its shared
+     * timing state is guarded by timing_lock in this file, not by a core-local
+     * mask. On a single-core build there is only one processor, so the affinity
+     * request is dropped rather than passing an ID the kernel does not define.
+     * See docs/kernel/CORE_PLACEMENT.md. */
 #if TK_SUPPORT_SMP
     ctsk.tskatr = TA_HLNG | TA_RNG1 | TA_ASSPRC;
+#if APP_FORCE_CORE0
+    /* RT-0075/F1: the control profile must be all-core-0, and this task is the one
+     * that would otherwise keep running on core 1. Without this the "control" image
+     * still had the radio isolated on its own core. */
     ctsk.assprc = TP_PRC1;
+#else
+    ctsk.assprc = TP_PRC1 + 1u;   /* core 1 */
+#endif
 #else
     ctsk.tskatr = TA_HLNG | TA_RNG1;
     ctsk.assprc = 0;
@@ -182,14 +275,14 @@ EXPORT int32_t cyw43_utk_start(void)
     ctsk.dsname = (UB*)"cyw43";
 #endif
 
-    task = tk_cre_tsk(&ctsk);
-    if (task < E_OK) {
-        start_status = task;
-        return task;
-    }
-    start_status = tk_sta_tsk(task, 0);
-    if (start_status < E_OK) {
-        (void)tk_del_tsk(task);
-    }
-    return start_status;
+    /* Preserve TA_RNG1, priority, affinity and effective capacity. The registry
+     * paints a static USERBUF before create/start; no live stack is repainted.
+     * Kernel calls stay outside timing_lock because starting may dispatch. */
+    task = app_task_start_config(&ctsk, "cyw43");
+    const ER sta = task < E_OK ? task : E_OK;
+    UINT intsts;
+    (void)ISpinLock(&timing_lock, &intsts);
+    __atomic_store_n(&start_status, sta, __ATOMIC_SEQ_CST);
+    (void)ISpinUnlock(&timing_lock, intsts);
+    return sta;
 }

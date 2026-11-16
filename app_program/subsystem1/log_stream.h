@@ -76,12 +76,13 @@ void log_stream_init(uint32_t boot_id);
 void log_stream_link_down(void);
 
 /**
- * Ask for one DUMP refill. Safe to call from another core-0 task.
+ * Ask for one DUMP refill. Called from the Vehicle task on core 0; the Wi-Fi task
+ * on core 1 consumes it through the shared admission state.
  * @return 0 if queued, or a negative error if a dump is already pending.
  */
 int log_stream_dump_request(uint32_t request_id);
 
-/** True while a DUMP is requested or running. */
+/** True while a DUMP is pending or running. Reads the shared admission state only. */
 bool log_stream_dump_active(void);
 
 /** Run both streams once. Call only on the Wi-Fi task, link up. live false

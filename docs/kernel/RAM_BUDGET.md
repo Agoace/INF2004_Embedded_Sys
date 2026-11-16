@@ -1,5 +1,16 @@
 # RAM budget
 
+## Core migration plus staging
+
+The approved merge of `8f224b2` and `c193fcd` measures 204468 B static RAM
+in matched public-example SMP1 MQTT production: data1032 + BSS203436 B.
+This is +3904 B versus migration and +9328 B versus staging. The latter
+includes M9's relocation of the Wi-Fi stack out of runtime allocation; it
+is not all new runtime demand or a heap-free measurement. The
+[merge record](CORE_STAGING_MERGE.md#matched-ram-comparison) gives both
+exact parent tables, TEST differences and validation limits. Earlier
+single-core measurements below remain scoped to their listed revisions.
+
 ## B2b STEP4a/4b SHADOW delta
 
 Matched public-example single-core MQTT builds measure:

@@ -1,3 +1,4 @@
+#include "../app_program/platform/run_timing.h"
 #include <assert.h>
 #include <setjmp.h>
 #include <string.h>
@@ -37,6 +38,8 @@ ER tk_wup_tsk(ID id) { assert(id==7 && !held);return E_OK; }
 ER tk_slp_tsk(TMO t) { assert(t==TMO_FEVR);if (sleeps++) longjmp(end,1);return E_OK; }
 INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
 uint32_t drv_time_ms(void) { return now; }
+uint32_t drv_time_us(void) { return now * 1000u; }
+INT tm_printf(const UB *format, ...) { (void)format; return 0; }
 int drv_ultrasonic_init(void) { return E_OK; }
 void drv_ultrasonic_listen(int id) { assert(id==7); }
 bool drv_ultrasonic_service(void) { if (!done) return false;done=false;busy=false;return true; }
@@ -57,7 +60,20 @@ int main(int argc,char **argv) {
     }
     assert(sonar_service_start()==E_OK && sonar_service_running());
     sonar_request_t r={.generation=1u,.id=1u,.mode=SONAR_ONCE,.deadline_ms=100u,.interval_ms=60u};
+    rt_begin(1u); /* P2: timeline live during this pump */
     assert(sonar_request(&r)==E_OK);pump(0u);assert(triggers==1u);
+    {
+        /* P2: SONAR_RUN 0 at wake, then SONAR_RUN 1 for the ping. */
+        rt_tl_info_t tl;
+        rt_tl_record_t rec;
+        rt_tl_info(&tl);
+        assert(tl.records == 2u);
+        rt_tl_get(0u, &rec);
+        assert(rec.site == RT_TL_SONAR_RUN && rec.arg == 0u);
+        rt_tl_get(1u, &rec);
+        assert(rec.site == RT_TL_SONAR_RUN && rec.arg == 1u);
+        rt_begin(2u);
+    }
     r.id=2u;assert(sonar_request(&r)==E_OBJ); /* Explicit conflict, no silent overwrite. */
     sonar_snapshot_t s;bool fresh;
     assert(sonar_result_read(&s,&fresh)==E_OK && !fresh && s.pending && s.ping_sequence==1u && s.ping_generation==1u && s.ping_id==1u);
