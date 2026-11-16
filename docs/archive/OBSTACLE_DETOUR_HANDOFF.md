@@ -40,7 +40,7 @@ Operator request 2026-11-03: accept the line only after the last 90° turn.
 
 ## Version 1.6 (first run 2026-11-03)
 
-Source: `detour_test` v1.6. Branch `yx`. The robot still runs v1.4 until the operator flashes v1.6. Test plan: [DETOUR_V1_6_TEST_PLAN.md](DETOUR_V1_6_TEST_PLAN.md).
+Source: `detour_test` v1.6. Branch `yx`. The robot still runs v1.4 until the operator flashes v1.6. Test plan: [DETOUR_V1_6_TEST_PLAN.md](s5-obstacle/HISTORY.md#files).
 
 ### What changed and why
 

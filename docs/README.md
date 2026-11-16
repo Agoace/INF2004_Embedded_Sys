@@ -67,8 +67,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S5 — Obstacle
 
-- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages, implemented 13-point scan, monitor/profile rules, reverse/reattempt and recovery limits.
-- [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — current kernel trigger/echo service, packed result, timeouts and measured sensor limits.
+- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages, implemented 13-point scan, monitor/profile rules, reverse/reattempt, recovery limits, wide-cone finding; HC-SR04+ trigger/echo service, packed 16-bit result, 60–511 mm range, timeouts, bench/kernel sonar results and limits.
 
 ## Simulation
 
@@ -76,7 +75,6 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Archive
 
-- [DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) — earlier detour physical-test plan and simulator measurements still owed at that revision.
 - [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1, runs and unresolved issues.
 - [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — earlier detour design, D1–D18 evidence and then-open problems.
 - [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
@@ -99,13 +97,6 @@ not current acceptance reports. Local course originals are not public records.
 - [s3-line-barcode/VC_LINE_RUN.md](archive/s3-line-barcode/VC_LINE_RUN.md) — full source record; only links/paths adjusted.
 - [s3-line-barcode/BARCODE_READING_IDEAS.md](archive/s3-line-barcode/BARCODE_READING_IDEAS.md) — full source record; only links/paths adjusted.
 
-### S5 — Obstacle history
-
-- [s5-obstacle/OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/VC_DETOUR_RUN.md](archive/s5-obstacle/VC_DETOUR_RUN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/ULTRASONIC_DRIVER.md](archive/s5-obstacle/ULTRASONIC_DRIVER.md) — full source record; only links/paths adjusted.
-
 ### Simulation history
 
 - [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
@@ -118,6 +109,10 @@ not current acceptance reports. Local course originals are not public records.
 ### Telemetry history
 
 - [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — `git show 569672a:<path>` pointers for 9 removed telemetry records (OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema).
+
+### Obstacle history
+
+- [archive/s5-obstacle/HISTORY.md](archive/s5-obstacle/HISTORY.md) — `git show 569672a:<path>` pointers for 6 removed obstacle records (ULTRASONIC, first ultrasonic driver with seven bench runs, monitor, scan/profile, R1–R4 and M2-reattempt detour runs, v1.6 detour test plan).
 
 ### Motion history
 

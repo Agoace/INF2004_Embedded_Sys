@@ -25,7 +25,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results) and CR1_MOTION_PLAN.md. |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
-| [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
+| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
 | [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
 
@@ -52,12 +52,12 @@ The archived development record retains older CMake bench examples.
 | Archived UDP bench dashboard architecture | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/TELEMETRY.md](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard) |
 | Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
-| Current kernel ultrasonic driver/service | [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — bounded request/echo contract, packed result and sensor limits. |
+| Current kernel ultrasonic driver/service | [OBSTACLE.md](s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) — bounded request/echo contract, packed result and sensor limits. |
 | Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
-| Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) |
+| Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/s5-obstacle/HISTORY.md#files) |
 | ADR: motor controller owns the actuators | [docs/architecture/ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) |
 | ADR: one hardware heartbeat | [docs/architecture/ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) |
 | ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
@@ -120,7 +120,7 @@ The archived development record retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [motion history](archive/s2-motion/HISTORY.md#files), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [obstacle history](archive/s5-obstacle/HISTORY.md#files), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [motion history](archive/s2-motion/HISTORY.md#files), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | Legacy IR line-data utilities | [`src/line_detector.c`](../src/line_detector.c), [`src/ir_line_data.c`](../src/ir_line_data.c); host test [`tests/test_ir_line_data.c`](../tests/test_ir_line_data.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |

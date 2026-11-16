@@ -513,7 +513,7 @@ The ±15° mounted servo and 400 mm profile range were a worked example, not the
 > still 9 bits. Code `0` with VALID means TOO_NEAR (less than 60 mm), because
 > the sensor reports wrong distances below about 40 mm. An echo beyond
 > 511 mm is NO_RETURN. See
-> [Ultrasonic driver](../s5-obstacle/ULTRASONIC.md#packed-result).
+> [Ultrasonic driver](../s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service).
 
 ## Chosen application range
 
@@ -632,7 +632,7 @@ Preferred approach:
 > before trigger), and NO_RETURN (sensor works, no echo within 511 mm). The
 > HC-SR04+ holds Echo HIGH when no echo returns, so with three codes open
 > space was reported as a fault. NO_RETURN is still unknown, not clear. See
-> [Ultrasonic driver](../s5-obstacle/ULTRASONIC.md#packed-result).
+> [Ultrasonic driver](../s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service).
 
 At least three outcomes were discussed:
 

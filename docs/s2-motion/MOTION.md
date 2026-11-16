@@ -234,7 +234,7 @@ robot. Ultrasound gives approximate presence/range, not obstacle width.
 Tilted, narrow or soft targets can fail to return an echo. No echo is not
 proof of an empty route. The standard sound-speed constant assumes about
 20°C and varies about 0.17%/°C. Current sensor logic and measured optics:
-[ultrasonic driver](../s5-obstacle/ULTRASONIC.md) and
+[ultrasonic driver](../s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) and
 [scan](../s5-obstacle/OBSTACLE.md).
 
 ### Motor duty and speed results
