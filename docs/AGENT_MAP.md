@@ -19,7 +19,7 @@ record once. Use these topic directories before choosing a source entry below:
 | Directory | Scope |
 | --- | --- |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
-| [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout, measurements table and unchanged CR1 wording. |
+| [architecture/](architecture/) | PROJECT_STATUS (areas, branches), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
 | [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
 | [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
@@ -27,12 +27,12 @@ record once. Use these topic directories before choosing a source entry below:
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
-| [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
+| [archive/](archive/) | `HISTORY.md` pointers per area (`git show 569672a:<path>`), records that code still cites, and line/barcode/sim originals. |
 
 The detailed entries below retain source and test navigation. Archive links do
 not imply current hardware acceptance. Follow the root README for current
 robot orientation; [kernel/BUILD.md](kernel/BUILD.md) is the current Make guide.
-The archived development record retains older CMake bench examples.
+The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake bench examples.
 
 | Content | Location |
 | --- | --- |
@@ -57,7 +57,7 @@ The archived development record retains older CMake bench examples.
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
-| Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/s5-obstacle/HISTORY.md#files) |
+| Detour v1.6 test plan | [obstacle history](archive/s5-obstacle/HISTORY.md#files) |
 | ADR: motor controller owns the actuators | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators) |
 | ADR: one hardware heartbeat | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-one-hardware-heartbeat-short-work-in-the-interrupt-decisions-in-the-main-loop) |
 | ADR: Vehicle Controller runs one module at a time | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-vehicle-controller-runs-one-module-at-a-time-and-maps-outcomes-to-the-next-module) |
@@ -71,6 +71,35 @@ The archived development record retains older CMake bench examples.
 | Steering Wi-Fi log | [docs/archive/STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) |
 | Week 6 design-review diagrams | [`design-review/`](../design-review) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) |
+
+## Source groups: what each does
+
+One line per directory or file group. Checked against the tree at the
+commit that changed this section (header comments and file lists).
+
+| Group | What it does |
+| --- | --- |
+| [`app_program/app_main.c`](../app_program/app_main.c), [`app.h`](../app_program/app.h), [`test_report.h`](../app_program/test_report.h) | Application entry from `usermain`: starts subsystems and the Vehicle task; shared build switches; TEST report helpers. |
+| [`app_program/platform/`](../app_program/platform) | Kernel-facing services: 1 µs time, GPIO IRQ dispatcher (core 0), watchdog, boards (bounded publication), task registry with static stacks, startup handoff, boot ID/entropy, CPU/idle meters, P1 run timing and lock stats, UP SMP shim. |
+| [`app_program/subsystem1/`](../app_program/subsystem1) | S1 telemetry: sole Wi-Fi/MQTT owner, binary wire codec (`mqtt_wire`), network queue, RUN/IDLE rates, RAM log stream and DUMP, Health task. |
+| [`app_program/subsystem2/`](../app_program/subsystem2) | S2 motion: motion task (only PWM writer), pure motor controller and robot settings, encoder/PWM hardware, packed 60 B status board, opt-in timing diagnostics, BENCH bench. |
+| [`app_program/subsystem3/`](../app_program/subsystem3) | S3 line and barcode: 1 ms ADC driver and line service, line position/steer/trace/search modules, TEST barcode (WIDTH, PEAK, capture, drive), B2b SHADOW live window reader, producer and source boards. |
+| [`app_program/subsystem4/`](../app_program/subsystem4) | S4 IMU (GY-511 accelerometer, no gyro): I2C probe/decode, FIFO, roll and height core, report-only hump detector and diagnostics, IMU service task and TEST capture. |
+| [`app_program/subsystem5/`](../app_program/subsystem5) | S5 obstacle: ultrasonic driver and sonar request service, forward watch, servo scan, profile analysis, detour modules. |
+| [`app_program/vehicle/`](../app_program/vehicle) | Vehicle Controller: shell state machine, vehicle task, detector inputs, robot settings, junction action/live adapter/source, odometry, run/detour stats, obstacle report, vehicle log and MQTT glue. |
+| [`app_program/bench_kernel/`](../app_program/bench_kernel) | `BENCH_KERNEL=1` spare-Pico bench: GPIO generator, motor/input stand-ins, load and idle meters, statistics, report and per-counter top lines. |
+| [`src/`](../src) | Earlier bare-metal targets (SDK, no kernel): calibration and probe programs, bench tests (servo, ultrasonic, line, steer, scan, detour, bypass, duty map, heartbeat, motor), bare-metal drivers, Wi-Fi/UDP logs. The simulator compiles some of them. |
+| [`tests/`](../tests) | Host unit test suite (CMake + ctest, strict warnings); one test per module plus fixtures. |
+| [`host-tests/`](../host-tests) | Four standalone module tests (detour, line, scan, search). |
+| [`build_make/`](../build_make) | Course-template Make build: `makefile`, board files, `pico_rp2040.mk`, `app_sdk_hw.mk` SDK subset hook, per-directory source lists under `mtkernel_3/`. |
+| [`kernel/`](../kernel), [`lib/`](../lib), [`device/`](../device), [`include/`](../include), [`config/`](../config), [`etc/`](../etc) | μT-Kernel 3.0 course template and its libraries (`libtk`, `libtm` USB console, `libwifi` CYW43, `liblwip` MQTT, `libbsp`). Change only through [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) (8 deviations). |
+| [`scripts/`](../scripts) | Checks (`check-docs.py`, `check-template-changes.py`, `check-sdk-hw-link.py`), hook installer, RAM and message-size reports, MQTT recorder/dashboard (`mqtt_robot.py`, `mqtt_dashboard.py`, `robot_wire.py`, `dashboard_*`), KR1 log decoder, motor bench report, old UDP receivers and dashboard, port restriction. |
+| [`tools/`](../tools) | `barcode_map/` (letter map to `BW_MAP_VALUES`), `kernel_ram/` (RAM placement lists and `ram_proof.py`), `elf2uf2/`, `verify_phase11_usb.py`. |
+| [`sim/`](../sim) | Separate host simulator of bare-metal sources: core clock/world/scenario/runner, devices, target hooks, scenarios JSON, offline viewer and local editor, box sweep, tests. |
+| [`testing/`](../testing) | Operator test logs per subsystem, integration (`KERNEL_ROBOT.md`) and system; `logs/` placeholders. |
+| [`design-review/`](../design-review) | Week 6 Mermaid sources and images: system statechart, task interaction. |
+| [`videos/`](../videos) | README for hardware test and demo videos. |
+| [`.githooks/`](../.githooks) | Shared pre-commit hook: runs `check-docs.py` when Markdown, docs or hook files are staged. |
 
 ## CR1 measurement and planning
 
