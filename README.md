@@ -294,10 +294,10 @@ GP21 calibrates then starts the robot, or latches ESTOP during a session;
 GP20 dumps saved RAM data instead of changing D. TEST images start neither
 button task. Read [the kernel robot safety/design record](docs/kernel/KERNEL.md)
 and pass the lifted-wheel checks before floor work. R5 has not run.
-The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
+The [RAM budget](docs/kernel/KERNEL.md#ram-budget) shows the RAM use and the
 steps to use if the RAM becomes too small.
 To look at both cores or read memory while the firmware runs, use an SWD
-probe as given in the [SWD debug probe record](docs/kernel/SWD_DEBUG_PROBE.md).
+probe as given in the [SWD debug probe record](docs/kernel/BUILD.md#swd-debug-probe).
 
 Barcode B1c keeps Code 39 WIDTH and adds a separate PEAK observation path.
 In its exclusive TEST, VIN is required; GP21 runs 430 mm forward/backward

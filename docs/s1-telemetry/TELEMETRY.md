@@ -148,7 +148,7 @@ formats rows/events and yields 20 ms every eight records, then prints
 `[robot] hump ...` line from the last finished run (12 B board copy, not a
 larger INFO message). No control task formats the saved
 arrays. A reset destroys RAM data. KR1 remains 128 bits; there is no spare
-barcode byte. [Kernel archive](../archive/kernel/KERNEL_ROBOT.md#kr1-rows-and-ve-events)
+barcode byte. [Kernel archive](../archive/kernel/HISTORY.md#files)
 keeps the exact local KR/VE text description; the binary topic layout is
 [RAM log](MQTT_WIRE.md#ram-log).
 

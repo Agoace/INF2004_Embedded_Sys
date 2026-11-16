@@ -284,7 +284,7 @@ The normal robot/MQTT and TEST images retain IMU hardware/probe; BENCH does
 not. No SDK runtime, interrupt or clock owner was added.
 
 MQTT static RAM increases **3732 B**, including the **2048 B static stack**;
-see [RAM evidence and CPU estimate](../kernel/RAM_BUDGET.md#imu-step-2-measured-delta).
+see [RAM evidence and CPU estimate](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 Stack depth and real task CPU cost remain hardware gates, not size results.
 
 ## Step 2b support hypotheses and peak quality (now diagnostic)
@@ -405,7 +405,7 @@ retained-link proofs pass, and no unresolved or atomic-runtime helpers
 appear. The template deviation count remains8 against c3b0954. UART pin
 conflicts are still compile-time errors; no SDK clock/IRQ/runtime owner is
 added. Public fixtures and generated firmware/proof copies are removed.
-See [current RAM/CPU evidence](../kernel/RAM_BUDGET.md#imu-step-2b-measured-delta).
+See [current RAM/CPU evidence](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 New physical work_us, stack high-water, powered fault-stop timing and
 static/driven accuracy were originally Not run; later step2b observations
 are recorded in the test log, not inferred from these host results.
@@ -545,7 +545,7 @@ Twelve related units/profile pass strict ARM flags (84 compilations).
 Seven retained SDK proofs pass with no unresolved/atomic-runtime helpers.
 UART pin guards and startup pin safety remain enforced. Template deviations
 stay8 against c3b0954; no clock/IRQ/SDK runtime owner is added. See the
-[current RAM/stack evidence](../kernel/RAM_BUDGET.md#imu-step-2c-measured-delta).
+[current RAM/stack evidence](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 These results are software gates, not physical peak accuracy or CPU bounds.
 
 ## Step 2d FIFO input
@@ -808,7 +808,7 @@ headers in a separate copy; generated firmware and proof ELFs removed.
 | MQTT-TEST SMP0 | 385800 | 904 | 187604 |
 | IMU_STREAM SMP0 no radio | 75752 | 688 | 131140 |
 
-See [RAM evidence](../kernel/RAM_BUDGET.md#imu-step-2d-measured-delta).
+See [RAM evidence](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 These are software gates, not physical noise, timing or accuracy results.
 
 ## Step 2d hardware result
@@ -1001,7 +1001,7 @@ headers in a separate copy; generated firmware and proof ELFs removed.
 | MQTT-TEST SMP0 | 388060 | 904 | 187940 | +2260 / +336 |
 | IMU_STREAM SMP0 no radio | 78564 | 688 | 131540 | +2812 / +400 |
 
-RAM detail: [IMU step 3](../kernel/RAM_BUDGET.md#imu-step-3-measured-delta).
+RAM detail: [IMU step 3](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 
 ### Step 3 H1 hardware result
 
@@ -1126,7 +1126,7 @@ Service/vehicle/STREAM/DUMP tests check bounded reads and end-run output.
 Seven clean profiles have no warnings; 126 strict ARM compilations and
 7 SDK retained-link proofs pass. Template deviations remain 8.
 RAM +772 B MQTT; sample frame 944 -> 1000 B (STREAM 952 -> 1016 B).
-See [RAM and stack evidence](../kernel/RAM_BUDGET.md#imu-diagnostic-c-measured-delta).
+See [RAM and stack evidence](../kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 Physical diagnostic C results follow. No new CPU/timing baseline was
 supplied for that session.
 

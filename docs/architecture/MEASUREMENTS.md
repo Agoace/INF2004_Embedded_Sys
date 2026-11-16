@@ -10,6 +10,9 @@ Rules:
 - If two values do not agree, keep both rows with their dates. Do not delete the older row.
 - `mtk3-hil:path` sources are on branch `mtk3-hil` only. Read them with
   `git show origin/mtk3-hil:path`. Do not merge that branch for this.
+- `569672a:path` sources were removed from the tree when documents were
+  merged. Read them with `git show 569672a:path`. The area `HISTORY.md`
+  under `docs/archive/` lists them.
 
 ## Labels
 
@@ -180,7 +183,7 @@ These rows are not resolved. The tables below give the sources.
 | Jog request 3 / 40 counts gives | 3..7 / 56..57 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
 | Mean revolution time at 10 %, USB, L/R | 2491 / 2433 ms (24.08 / 24.66 RPM) | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
 | Old counts per revolution L/R | 2540 / 2539 (superseded; 0.197 % high) | doc ≤ 2026-11-08 | MEASURED(bench, old) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
-| Old motor 2 10-cycle test (10 %) | 2532.9 / 2532.3 counts per rev (A/B); drift -6 counts (-0.85 deg); superseded by 2535 | doc ≤ 2026-11-08 | MEASURED(bench) | [DEVELOPMENT.md#unloaded-motor-speed](../archive/kernel/DEVELOPMENT.md#unloaded-motor-speed) |
+| Old motor 2 10-cycle test (10 %) | 2532.9 / 2532.3 counts per rev (A/B); drift -6 counts (-0.85 deg); superseded by 2535 | doc ≤ 2026-11-08 | MEASURED(bench) | `569672a:docs/archive/kernel/DEVELOPMENT.md#unloaded-motor-speed` |
 | Unloaded coast at 10 % duty L/R | 27-28 / 23 counts | doc ≤ 2026-11-08 | MEASURED(bench) | [HARDWARE.md#encoder-ratio-and-drift-method](../s2-motion/HARDWARE.md#encoder-ratio-and-drift-method) |
 
 ## Line sensors and junction
@@ -415,38 +418,38 @@ These rows are not resolved. The tables below give the sources.
 
 | Quantity | Value | Date | Label | Source |
 | --- | --- | --- | --- | --- |
-| ADC conversion time (8 per channel, 3 channels) | about 48 us before software overhead | doc ≤ 2026-11-06 | DERIVED | [KERNEL_ROBOT.md#line-observations-and-calibration](../archive/kernel/KERNEL_ROBOT.md#line-observations-and-calibration) |
+| ADC conversion time (8 per channel, 3 channels) | about 48 us before software overhead | doc ≤ 2026-11-06 | DERIVED | `569672a:docs/archive/kernel/KERNEL_ROBOT.md#line-observations-and-calibration` |
 | B4 floor (VIN) motion | 4862 ticks, longest 112 us, gap 9952..10046 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-floor-cold-vin-power-on](../../testing/subsystem2/TEST_LOG.md#b4-floor-cold-vin-power-on) |
 | B4-lifted lifetime | 6211 ticks, max 119 us, gap 9958..10041 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#b4-lifted-usb-after-flash](../../testing/subsystem2/TEST_LOG.md#b4-lifted-usb-after-flash) |
 | Bare-metal heartbeat bench, 45 s | hook gaps 1000/10000 us; work max 30 us; overruns 0 | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#results](../s2-motion/MOTION.md#results) |
 | Bare-metal heartbeat idle (45 s) | 1 ms gap 1000..1000 us; 10 ms gap 10000..10000 us; ISR work max 30 us (3 %) | 2026-11-04 | MEASURED(operator) | [HEARTBEAT.md#bench-result-2026-11-04-2b64bf2-usb-power](../archive/s2-motion/HEARTBEAT.md#bench-result-2026-11-04-2b64bf2-usb-power) |
 | Bare-metal watchdog | reset 50 ms after heartbeat stop | 2026-11-04 | MEASURED(operator) | [HEARTBEAT.md#bench-test](../archive/s2-motion/HEARTBEAT.md#bench-test) |
-| Bench step 0 window | 600000000 us; 2280000 edges | doc ≤ 2026-11-15 | MEASURED(bench) | [BENCH_KERNEL_STEP0.md#pass-rule](../kernel/BENCH_KERNEL_STEP0.md#pass-rule) |
+| Bench step 0 window | 600000000 us; 2280000 edges | doc ≤ 2026-11-15 | MEASURED(bench) | `569672a:docs/kernel/BENCH_KERNEL_STEP0.md#pass-rule` |
 | Cold / warm S0-U01 TIMER | warm 1009986 us; cold 1009991 us vs kernel 1010 ms | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#hardware-run-records-2026-11-06](../../testing/subsystem1/TEST_LOG.md#hardware-run-records-2026-11-06) |
 | Cold-power TIMER defect | TIMER gaps 233..235 us; 500 ms rest took about 21 s | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#cold-power-timer-defect-floor-b4-blocked](../../testing/subsystem2/TEST_LOG.md#cold-power-timer-defect-floor-b4-blocked) |
-| Cold-power TIMER defect (bench) | 11165 kernel ticks; TIMER gaps 233..235 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [MTK3_MOTION_CHECKS.md#cold-power-defect-and-remaining-hardware-gate](../archive/kernel/MTK3_MOTION_CHECKS.md#cold-power-defect-and-remaining-hardware-gate) |
-| CPU idle / traffic (S1) | 117 / 139 permille; calibration 4026729 iterations/s; idle-mode 147 permille | 2026-11-07 | MEASURED(operator,2026-11-07) | [KERNEL.md#results-and-limits](../kernel/KERNEL.md#results-and-limits) |
+| Cold-power TIMER defect (bench) | 11165 kernel ticks; TIMER gaps 233..235 us | 2026-11-06 | MEASURED(operator,2026-11-06) | `569672a:docs/archive/kernel/MTK3_MOTION_CHECKS.md#cold-power-defect-and-remaining-hardware-gate` |
+| CPU idle / traffic (S1) | 117 / 139 permille; calibration 4026729 iterations/s; idle-mode 147 permille | 2026-11-07 | MEASURED(operator,2026-11-07) | [KERNEL.md#overrun-timeline-p2](../kernel/KERNEL.md#overrun-timeline-p2) |
 | CR1 A1+B1 motion task gap | 9970..10025 us | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
 | CR1 telemetry period | 110 ms (subject to testing) | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#decision](week8_change_requirement_1_notes.md#decision) |
 | Disabled barcode reader cost | about 73 us per 1 ms sample (about 7 % CPU); idle CPU 45 -> 54 % | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | Full refill time (simulated) | 2.8 / 14.2 / 28.4 s at 20 / 100 / 200 ms RTT | doc ≤ 2026-11-08 | DERIVED | [TELEMETRY.md#results-and-limits](../s1-telemetry/TELEMETRY.md#results-and-limits) |
-| Generator ISR per call UP / split | 5.60 / 7.43 us; 212 / 282 bp | 2026-11-15 | MEASURED(bench,2026-11-15) | [SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15](../kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15) |
-| GP20 dump chunk | 312 B per KR chunk; 20 ms yield every 8 rows | doc ≤ 2026-11-07 | MEASURED(operator) | [MTK3_USB_PRIORITY.md#consequences-checked](../archive/kernel/MTK3_USB_PRIORITY.md#consequences-checked) |
-| Hardware watchdog timeout | 100 ms (SDK loads 200000 on RP2040-E1) | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#watchdog](../kernel/KERNEL.md#watchdog) |
+| Generator ISR per call UP / split | 5.60 / 7.43 us; 212 / 282 bp | 2026-11-15 | MEASURED(bench,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
+| GP20 dump chunk | 312 B per KR chunk; 20 ms yield every 8 rows | doc ≤ 2026-11-07 | MEASURED(operator) | `569672a:docs/archive/kernel/MTK3_USB_PRIORITY.md#consequences-checked` |
+| Hardware watchdog timeout | 100 ms (SDK loads 200000 on RP2040-E1) | doc ≤ 2026-11-16 | ASSUMED | [KERNEL.md#wi-fi-stack-m9](../kernel/KERNEL.md#wi-fi-stack-m9) |
 | Heading constant | 2405 counts per degree x 100 (uses 111 mm track) | doc ≤ 2026-11-07 | DERIVED | [MQTT_WIRE.md#state](../s1-telemetry/MQTT_WIRE.md#state) |
 | Idle ESTOP starts travel | 322 / 354 mm | 2026-11-07 | MEASURED(operator,2026-11-07) | [TELEMETRY.md#results-and-limits](../s1-telemetry/TELEMETRY.md#results-and-limits) |
 | Idle-meter stack (A1/B1 gate) | 296/512 B used, 216 B free | 2026-11-10 | MEASURED(operator,2026-11-10) | [KERNEL.md#application-stacks](../kernel/KERNEL.md#application-stacks) |
-| Idle-meter startup calibration | 4000 us interrupts off | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#cpu-load](../kernel/KERNEL.md#cpu-load) |
+| Idle-meter startup calibration | 4000 us interrupts off | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#watchdog](../kernel/KERNEL.md#watchdog) |
 | idle_meter stack free | 216 B (staging 168d705: 240 B); idle stack then 512 -> 768 B | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
-| IMU step-1 read share | 530..566 us per 10 ms = 5.3..5.7 % of one core | doc ≤ 2026-11-08 | DERIVED | [RAM_BUDGET.md#cpu-estimate-and-measurement-limit](../kernel/RAM_BUDGET.md#cpu-estimate-and-measurement-limit) |
-| IMU work share (dfade14) | 1.3..1.4 ms per 10 ms (13..14 %) | doc ≤ 2026-11-08 | MEASURED(operator) | [RAM_BUDGET.md#imu-step-2b-measured-delta](../kernel/RAM_BUDGET.md#imu-step-2b-measured-delta) |
+| IMU step-1 read share | 530..566 us per 10 ms = 5.3..5.7 % of one core | doc ≤ 2026-11-08 | DERIVED | `569672a:docs/kernel/RAM_BUDGET.md#cpu-estimate-and-measurement-limit` |
+| IMU work share (dfade14) | 1.3..1.4 ms per 10 ms (13..14 %) | doc ≤ 2026-11-08 | MEASURED(operator) | `569672a:docs/kernel/RAM_BUDGET.md#imu-step-2b-measured-delta` |
 | Kernel motion task gap (first kernel bench) | 9952..10046 us, 2110 rows | doc ≤ 2026-11-06 | MEASURED(bench) | [MOTOR_CONTROLLER.md#bench-and-tests](../archive/s2-motion/MOTOR_CONTROLLER.md#bench-and-tests) |
-| KERNEL_RAM bench (af2e787) | line-path kernel calls 28.0 -> 14.3 us per ms; load 292 -> 243 permille; BC_CPU -34 % | doc ≤ 2026-11-16 | MEASURED(bench) | [KERNEL_RAM.md#kernel_ram-kernel-and-isr-hot-path-in-ram-opt-in-up-only](../kernel/KERNEL_RAM.md#kernel_ram-kernel-and-isr-hot-path-in-ram-opt-in-up-only) |
-| KERNEL_RAM pair 1 (e06667d) | load_run 923/811; wake max 1419/1458 us; line_wake 394/539 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL_RAM.md#robot-p1-pairs](../kernel/KERNEL_RAM.md#robot-p1-pairs) |
-| KERNEL_RAM pair 2 (2413c4a) | load_run 947/798; wake max 1328/1459 us; line_wake 356/455 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL_RAM.md#robot-p1-pairs](../kernel/KERNEL_RAM.md#robot-p1-pairs) |
-| KERNEL_RAM pair 3 (b0c3a9a) | load_run 931/676; wake max 2043/1189 us; line_wake 600/136 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL_RAM.md#robot-p1-pairs](../kernel/KERNEL_RAM.md#robot-p1-pairs) |
-| KERNEL_RAM v2 image | ramfunc 18152 B; .data 19048 B; RAM 219/264 KB | doc ≤ 2026-11-16 | MEASURED(build) | [KERNEL_RAM.md#robot-p1-pairs](../kernel/KERNEL_RAM.md#robot-p1-pairs) |
-| KERNEL_RAM v2 step max | line sample 1329 -> 854 us; barcode 1229 -> 801 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL_RAM.md#robot-p1-pairs](../kernel/KERNEL_RAM.md#robot-p1-pairs) |
+| KERNEL_RAM bench (af2e787) | line-path kernel calls 28.0 -> 14.3 us per ms; load 292 -> 243 permille; BC_CPU -34 % | doc ≤ 2026-11-16 | MEASURED(bench) | `569672a:docs/kernel/KERNEL_RAM.md#kernel_ram-kernel-and-isr-hot-path-in-ram-opt-in-up-only` |
+| KERNEL_RAM pair 1 (e06667d) | load_run 923/811; wake max 1419/1458 us; line_wake 394/539 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
+| KERNEL_RAM pair 2 (2413c4a) | load_run 947/798; wake max 1328/1459 us; line_wake 356/455 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
+| KERNEL_RAM pair 3 (b0c3a9a) | load_run 931/676; wake max 2043/1189 us; line_wake 600/136 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
+| KERNEL_RAM v2 image | ramfunc 18152 B; .data 19048 B; RAM 219/264 KB | doc ≤ 2026-11-16 | MEASURED(build) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
+| KERNEL_RAM v2 step max | line sample 1329 -> 854 us; barcode 1229 -> 801 us | doc ≤ 2026-11-16 | MEASURED(operator) | `569672a:docs/kernel/KERNEL_RAM.md#robot-p1-pairs` |
 | Lifetime motion gap, second boot | 9965..10017 -> 9756..10247 us (TEST runner priority 20 delay < 0.25 ms) | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#test-image](../../testing/integration/KERNEL_ROBOT.md#test-image) |
 | Line snapshot age limit | 10000 us | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#settings-and-timing](../kernel/KERNEL.md#settings-and-timing) |
 | Live batch / ring | max payload 228 B (10 rows 196 B); QoS1 frame 244 of 255 B ring | doc ≤ 2026-11-07 | DERIVED | [MQTT_WIRE.md#batch-frame-kinds-rows-5-and-events-6](../s1-telemetry/MQTT_WIRE.md#batch-frame-kinds-rows-5-and-events-6) |
@@ -462,26 +465,26 @@ These rows are not resolved. The tables below give the sources.
 | MQTT payload sizes | state v5 76 B; heartbeat v4 108 B; KR1 row 16 B; live event v2 20 B | doc ≤ 2026-11-07 | ASSUMED | [MQTT_WIRE.md#state](../s1-telemetry/MQTT_WIRE.md#state) |
 | Old design review ESTOP target | stop PWM within 20 ms of safety event | doc ≤ 2026-11-06 | ASSUMED | [robo_pico_rtos_multicore_plan.md#11-test-matrix-and-acceptance-evidence](../archive/architecture/robo_pico_rtos_multicore_plan.md#11-test-matrix-and-acceptance-evidence) |
 | Old UDP broadcast loss | about 75 % of live log lost (run 1) | doc ≤ 2026-10-29 | MEASURED(operator) | [STEER_WIFI_LOG.md#network](../archive/STEER_WIFI_LOG.md#network) |
-| Owner CPU load estimate | approaching 80 % in normal running | doc ≤ 2026-11-12 | ASSUMED | [CORE_PLACEMENT.md#performance-gate-rt-0085](../kernel/CORE_PLACEMENT.md#performance-gate-rt-0085) |
+| Owner CPU load estimate | approaching 80 % in normal running | doc ≤ 2026-11-12 | ASSUMED | `569672a:docs/kernel/CORE_PLACEMENT.md#performance-gate-rt-0085` |
 | PIL source-to-Pico delay / expiry / endpoint | 4 ms / 5 ms / <= 3 ms | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#wire-and-timing-boundary` |
 | PIL UART link | 921600 8N1; SENSOR 66 B (71.6 %), OUTPUT 58 B (62.9 %) | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#wire-and-timing-boundary` |
 | RAM log | 4501 x 16 B KR1 rows (72016 B); 512 x 12 B events (6144 B); one row per 20 ms | doc ≤ 2026-11-08 | ASSUMED | [TELEMETRY.md#ram-log-ownership](../s1-telemetry/TELEMETRY.md#ram-log-ownership) |
 | Robot behind wall | 17 % ping loss | doc ≤ 2026-11-08 | MEASURED(operator) | [OPERATION.md#results-and-troubleshooting](../s1-telemetry/OPERATION.md#results-and-troubleshooting) |
-| RP2040 RAM | 264 KB: 262144 B main + two 4 KB banks | doc ≤ 2026-11-08 | ASSUMED | [RAM_BUDGET.md#what-it-is](../kernel/RAM_BUDGET.md#what-it-is) |
+| RP2040 RAM | 264 KB: 262144 B main + two 4 KB banks | doc ≤ 2026-11-08 | ASSUMED | `569672a:docs/kernel/RAM_BUDGET.md#what-it-is` |
 | S0-U01 TIMER vs kernel, 1 s | 1009990 us vs 1010 ms | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s2-u05-result-2026-11-06](../../testing/subsystem2/TEST_LOG.md#s2-u05-result-2026-11-06) |
 | Shadow run stacks | all >= 496 B free; line_task 1384 B free | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | Shadow run timing | KR1 gap 9931..10066 us; heartbeat CPU up to 917 permille | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | Sim clock quantum | 100 us (compare 50 us) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#clock-choice](../archive/simulation/SIMULATION.md#clock-choice) |
-| Split core 0 / core 1 load | 621-699 / 569-626 permille; first overrun step 20, 9084 us | 2026-11-15 | MEASURED(operator,2026-11-15) | [SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15](../kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15) |
+| Split core 0 / core 1 load | 621-699 / 569-626 permille; first overrun step 20, 9084 us | 2026-11-15 | MEASURED(operator,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
 | Stack free policy | at least 256 B free per named stack | doc ≤ 2026-11-10 | ASSUMED | [CR1_EVIDENCE.md#b-other-ram-savings](CR1_EVIDENCE.md#b-other-ram-savings) |
 | Static NORMAL MQTT data+bss (STEP 8) | 184676 B | 2026-11-07 | MEASURED(build) | [MTK3_STEP8_RECORD.md#runtime-ownership-and-limits](../archive/MTK3_STEP8_RECORD.md#runtime-ownership-and-limits) |
-| Static RAM after core merge | 204468 B (+3904 vs migration, +9328 vs staging) | doc ≤ 2026-11-12 | MEASURED(build) | [RAM_BUDGET.md#core-migration-plus-staging](../kernel/RAM_BUDGET.md#core-migration-plus-staging) |
-| Static RAM after Wi-Fi stack move | 192228 -> 200564 B (+8336 B) | doc ≤ 2026-11-12 | MEASURED(build) | [WIFI_STACK_WATERMARK.md#ram-static-reserve-up-dynamic-allocation-down](../kernel/WIFI_STACK_WATERMARK.md#ram-static-reserve-up-dynamic-allocation-down) |
-| Static RAM budget table (MQTT, early) | 184784 B (70.5 %); RAM log 78160 B (4501 x 16 B = 90 s); lwIP 56881 B; stacks 22528 B; free about 60 KB | doc ≤ 2026-11-08 | MEASURED(build) | [RAM_BUDGET.md#results-static-ram-at-cr1-pre-imu](../kernel/RAM_BUDGET.md#results-static-ram-at-cr1-pre-imu) |
-| STEP 7 ADC work | ISR max 114 us; 69-75 permille | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL.md#results-and-limits](../kernel/KERNEL.md#results-and-limits) |
+| Static RAM after core merge | 204468 B (+3904 vs migration, +9328 vs staging) | doc ≤ 2026-11-12 | MEASURED(build) | `569672a:docs/kernel/RAM_BUDGET.md#core-migration-plus-staging` |
+| Static RAM after Wi-Fi stack move | 192228 -> 200564 B (+8336 B) | doc ≤ 2026-11-12 | MEASURED(build) | `569672a:docs/kernel/WIFI_STACK_WATERMARK.md#ram-static-reserve-up-dynamic-allocation-down` |
+| Static RAM budget table (MQTT, early) | 184784 B (70.5 %); RAM log 78160 B (4501 x 16 B = 90 s); lwIP 56881 B; stacks 22528 B; free about 60 KB | doc ≤ 2026-11-08 | MEASURED(build) | `569672a:docs/kernel/RAM_BUDGET.md#results-static-ram-at-cr1-pre-imu` |
+| STEP 7 ADC work | ISR max 114 us; 69-75 permille | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL.md#overrun-timeline-p2](../kernel/KERNEL.md#overrun-timeline-p2) |
 | STEP 7 S2-U01 gaps (failed gate) | 8991..11024 us and 8535..11475 us; work max 113 / 198 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#step-7-s2-u01-failure-and-approved-windowprobe-correction](../../testing/subsystem2/TEST_LOG.md#step-7-s2-u01-failure-and-approved-windowprobe-correction) |
 | STEP 7 S2-U01 robot image | window gap 9984..10016 and 9791..10210 us; work max 41 / 28 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#test-image](../../testing/integration/KERNEL_ROBOT.md#test-image) |
-| STEP 7 S3 work / ISR share | S3 about 1.3 %, max 207 us/sample; ISR about 7.5 %, max 114 us | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#fix-1-and-probe-a-test-only](../archive/kernel/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only) |
+| STEP 7 S3 work / ISR share | S3 about 1.3 %, max 207 us/sample; ISR about 7.5 %, max 114 us | 2026-11-06 | MEASURED(operator,2026-11-06) | `569672a:docs/archive/kernel/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only` |
 | STEP 8 S0-U01 / S2-U01 | TIMER 1009753 and 1010053 us per 1010 ms; window 9514..10484 / 9520..10255 us | 2026-11-07 | MEASURED(operator,2026-11-07) | [MTK3_STEP8_RECORD.md#bootsession-image-results--2026-11-07](../archive/MTK3_STEP8_RECORD.md#bootsession-image-results--2026-11-07) |
 | STEP 8 timing windows (motion gap) | 9508..10248 us; lifetime 9508..10491 us | 2026-11-07 | MEASURED(operator,2026-11-07) | [TEST_LOG.md#step-8-operator-follow-up--2026-11-07](../../testing/subsystem2/TEST_LOG.md#step-8-operator-follow-up--2026-11-07) |
 | Task periods | motion 10 ms cyclic; line per 1 ms ADC sample; vehicle 10 ms; IMU 10 ms; GP21 poll 20 ms | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#tasks-and-priorities](../kernel/KERNEL.md#tasks-and-priorities) |
@@ -489,13 +492,13 @@ These rows are not resolved. The tables below give the sources.
 | Task stack sizes | motion 3072, line 2048, sonar 2048, IMU 2048, vehicle 4096, telemetry 4096, health 2048, idle meter 512 -> 768 | doc ≤ 2026-11-08 | ASSUMED | [KERNEL.md#tasks-and-priorities](../kernel/KERNEL.md#tasks-and-priorities) |
 | Telemetry fresh limits | line 10 ms, motion 20 ms, vehicle 30 ms, health 2500 ms, KR1 echo 100 ms | doc ≤ 2026-11-08 | ASSUMED | [TELEMETRY.md#interfaces-boards-and-queues](../s1-telemetry/TELEMETRY.md#interfaces-boards-and-queues) |
 | Telemetry rates | RUN state 200 ms, heartbeat 1000 ms; IDLE 1000 / 5000 ms; grace 2 s | doc ≤ 2026-11-08 | ASSUMED | [TELEMETRY.md#publication-settings](../s1-telemetry/TELEMETRY.md#publication-settings) |
-| UP core 0 load (P1) | 570-662 permille mean; run peak 957 | 2026-11-15 | MEASURED(operator,2026-11-15) | [SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15](../kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15) |
-| UP vs split | ISR max 49 vs 193 us; response max 103 vs 482 us; line sample max 132 vs 193 us; motion gap 9983..10017 vs 9909..10064 us | 2026-11-15 | MEASURED(operator,2026-11-15) | [SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15](../kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15) |
-| USB old priority 3 | release 9995 us; dispatch delay 4488 us; worst task gap 14467 us | doc ≤ 2026-11-08 | MEASURED(operator) | [KERNEL.md#results-and-limits](../kernel/KERNEL.md#results-and-limits) |
-| USB21 (94015fd) motion gap | 9963..10041 us | doc ≤ 2026-11-08 | MEASURED(operator) | [KERNEL.md#results-and-limits](../kernel/KERNEL.md#results-and-limits) |
-| USB21 dump motion gap | 9963..10041 us, 0 observations (before: 18, worst 14467 us) | doc ≤ 2026-11-07 | MEASURED(operator) | [MTK3_USB_PRIORITY.md#hardware-result-2026-11-07-pass](../archive/kernel/MTK3_USB_PRIORITY.md#hardware-result-2026-11-07-pass) |
+| UP core 0 load (P1) | 570-662 permille mean; run peak 957 | 2026-11-15 | MEASURED(operator,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
+| UP vs split | ISR max 49 vs 193 us; response max 103 vs 482 us; line sample max 132 vs 193 us; motion gap 9983..10017 vs 9909..10064 us | 2026-11-15 | MEASURED(operator,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
+| USB old priority 3 | release 9995 us; dispatch delay 4488 us; worst task gap 14467 us | doc ≤ 2026-11-13 | MEASURED(operator) | [KERNEL.md#overrun-timeline-p2](../kernel/KERNEL.md#overrun-timeline-p2) |
+| USB21 (94015fd) motion gap | 9963..10041 us | doc ≤ 2026-11-16 | MEASURED(operator) | [KERNEL.md#ram-placement-kernel_ram](../kernel/KERNEL.md#ram-placement-kernel_ram) |
+| USB21 dump motion gap | 9963..10041 us, 0 observations (before: 18, worst 14467 us) | doc ≤ 2026-11-07 | MEASURED(operator) | `569672a:docs/archive/kernel/MTK3_USB_PRIORITY.md#hardware-result-2026-11-07-pass` |
 | Watchdog reset after last feed (S2-U05) | 99 ms (target 100 ms) | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s2-u05-two-boot-watchdog-procedure](../../testing/subsystem2/TEST_LOG.md#s2-u05-two-boot-watchdog-procedure) |
 | Wi-Fi poll cadence | about 20 ms (about 50 polls/s), requested 2 ms | 2026-11-07 | MEASURED(operator,2026-11-07) | [KERNEL_MQTT.md#timing-and-remaining-gates](../archive/s1-telemetry/KERNEL_MQTT.md#timing-and-remaining-gates) |
 | Wi-Fi task sleep | requested 2 ms; observed cadence about 20 ms | doc ≤ 2026-11-08 | MEASURED(operator) | [TELEMETRY.md#publication-settings](../s1-telemetry/TELEMETRY.md#publication-settings) |
-| Wi-Fi task stack | radio only 6272 B; lwIP/MQTT 8320 B | doc ≤ 2026-11-12 | ASSUMED | [WIFI_STACK_WATERMARK.md#ownership-and-creation](../kernel/WIFI_STACK_WATERMARK.md#ownership-and-creation) |
+| Wi-Fi task stack | radio only 6272 B; lwIP/MQTT 8320 B | doc ≤ 2026-11-12 | ASSUMED | `569672a:docs/kernel/WIFI_STACK_WATERMARK.md#ownership-and-creation` |
 | Worst motion gap during USB dump (old USB priority 3) | 14467 us: release 9995, dispatch 4488, mutex wait 15 us; later 12783 us; lifetime 5533..14467 us | 2026-11-07 | MEASURED(operator,2026-11-07) | [MTK3_STEP8_RECORD.md#diag1-motion-timing-capture--2026-11-07](../archive/MTK3_STEP8_RECORD.md#diag1-motion-timing-capture--2026-11-07) |

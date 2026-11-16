@@ -12,7 +12,7 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 [BARCODE_MAP="F=LEFT"]
 ```
 
 Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
-[BUILD.md](../kernel/BUILD.md) and [KERNEL_RAM.md](../kernel/KERNEL_RAM.md).
+[BUILD.md](../kernel/BUILD.md) and [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram).
 
 ## Areas
 
@@ -29,8 +29,8 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | IMU humps | Report only. 2 humps per course run (2026-11-16). | [IMU.md](../s4-imu/IMU.md) | Extra IMU requirement: another team member works on staging. H3 Not run. `hump_imu_fault=1` once (2026-11-16 BASE run). |
 | Telemetry, MQTT, dashboard | Done. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [OPERATION.md](../s1-telemetry/OPERATION.md) | Run summary shows barcode ok/failed as "not implemented" (fix in progress). |
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. Two assembler warnings for `rt_tl` (fix in progress). |
-| KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL_RAM.md](../kernel/KERNEL_RAM.md) | Soft-float helpers stay in flash. |
-| Dual-core split | PARKED. Demo uses UP. | [SPLIT_PARKED_20261115.md](../kernel/SPLIT_PARKED_20261115.md) | None until resumed. |
+| KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
+| Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
 | CR1 change requirement | Motion round done. | [CR1_EVIDENCE.md](CR1_EVIDENCE.md) | Week 13: 110 ms telemetry, before/after tables. Sonar round waits for operator. |
 | SIL (Webots) | LINE, SEARCH, curves, barcode A and F observe-only on `mtk3-hil`. | [SIMULATION.md](../simulation/SIMULATION.md) | Does not reproduce the real zigzag. Records live on `mtk3-hil`. |
 

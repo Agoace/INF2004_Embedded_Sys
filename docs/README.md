@@ -33,23 +33,9 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Kernel
 
-- [CORE_STAGING_MERGE.md](kernel/CORE_STAGING_MERGE.md) — approved core/staging integration, both-parent suite union, 38 public builds, ABI/static RAM comparisons and remaining hardware gates.
-
-- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
-- [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [BENCH_KERNEL_TEST.md](kernel/BENCH_KERNEL_TEST.md) — on-chip stimulus scope, statistics publication, ownership and ordinary-image hash gate.
-- [BENCH_KERNEL_STEP0.md](kernel/BENCH_KERNEL_STEP0.md) — spare-Pico encoder load image, build/run procedure, count/cost pass rules and limits.
-- [SPLIT_PARKED_20261115.md](kernel/SPLIT_PARKED_20261115.md) — split placement parked: decision, UP vs split bench evidence, what to try first if resumed.
-- [KERNEL_RAM.md](kernel/KERNEL_RAM.md) — opt-in UP kernel/ISR hot path in RAM: make switch, lists, placement proof, bench result, acceptance rule.
+- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks (Wi-Fi M9, IMU high-water), watchdog, CPU meter, P1/P2 run timing, KERNEL_RAM (rule b, robot pairs), F-NVIC, core placement and lock rules (split parked), M8 startup handoff, RAM budget, USB21 and measured limits.
+- [BUILD.md](kernel/BUILD.md) — Make profiles and options, demo line, private settings, BOOTSEL/picotool, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe, host checks.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
-- [UP_SMP_SHIM.md](kernel/UP_SMP_SHIM.md) — M7 real UP lock/atomic contract, red-to-green tests, ARM ordering and zero static RAM delta.
-- [SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — SWD probe wiring (Debug Probe at school, Pi 400 at home), safety rules, run-time memory reads, GDB on both cores and firmware load.
-- [NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: `EnableInt` byte store leaves every external IRQ at priority 0; measured values; fix on hold.
-- [WIFI_STACK_WATERMARK.md](kernel/WIFI_STACK_WATERMARK.md) — M9 pre-start painted radio stack, 256 B reporting rule, tests and static-RAM increase versus removed heap allocation; hardware gate Not run.
-- [CORE_PLACEMENT.md](kernel/CORE_PLACEMENT.md) — core placement, lock audit,
-  tests and the [M8 application startup handoff](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
-  through `platform/app_startup.h`; no device result.
 
 ## S1 — Telemetry
 
@@ -132,19 +118,9 @@ not current acceptance reports. Local course originals are not public records.
 - [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — full source record; only links/paths adjusted.
-### Kernel originals
+### Kernel history
 
-The full original records retain their prose, numbers and revision limits;
-only link/path/anchor repairs follow the move.
-
-- [APPLICATION_TASKS.md](archive/kernel/APPLICATION_TASKS.md) — full historical source, with its measured values and original limits.
-- [CPU_LOAD.md](archive/kernel/CPU_LOAD.md) — full historical source, with its measured values and original limits.
-- [DEVELOPMENT.md](archive/kernel/DEVELOPMENT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_ROBOT.md](archive/kernel/KERNEL_ROBOT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_WATCHDOG.md](archive/kernel/KERNEL_WATCHDOG.md) — full historical source, with its measured values and original limits.
-- [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
+- [archive/kernel/HISTORY.md](archive/kernel/HISTORY.md) — `git show 569672a:<path>` pointers for the 19 removed kernel records (old robot bring-up, stacks, CPU, watchdog, layout, motion, USB priority, development setup, RAM budget per step, core placement/lock audit, UP shim, Wi-Fi stack, staging merge, bench, SWD).
 
 ### S1 originals
 

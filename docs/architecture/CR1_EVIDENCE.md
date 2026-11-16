@@ -511,7 +511,7 @@ BSS growth. These are two sides of a storage move, not two independent
 savings. The payload accounting difference is +16 B; allocator bookkeeping,
 fragmentation and runtime heap-free space are not measured here.
 
-The [M9 record](../kernel/WIFI_STACK_WATERMARK.md) gives the matched ELF
+The [M9 record](../kernel/KERNEL.md#wi-fi-stack-m9) gives the matched ELF
 figures, tests, template boundaries and device procedure. Persistent paint
 now supplies an ordinary `cyw43` stack row and Health minimum. The actual
 256 B Wi-Fi hardware margin gate remains **Not run**. No stack is reduced,

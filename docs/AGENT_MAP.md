@@ -20,7 +20,7 @@ record once. Use these topic directories before choosing a source entry below:
 | --- | --- |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
 | [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout, measurements table and unchanged CR1 wording. |
-| [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
+| [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
 | [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
 | [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
@@ -43,8 +43,8 @@ The archived development record retains older CMake bench examples.
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
-| SWD debug probe | [docs/kernel/SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — wiring, safety, memory reads, GDB on both cores |
-| Interrupt priorities | [docs/kernel/NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: measured IPR, all external IRQs at 0 |
+| SWD debug probe | [docs/kernel/BUILD.md](kernel/BUILD.md#swd-debug-probe) — wiring, safety, memory reads, GDB on both cores |
+| Interrupt priorities | [docs/kernel/KERNEL.md](kernel/KERNEL.md#interrupt-priorities-f-nvic) — F-NVIC: measured IPR, all external IRQs at 0 |
 | Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
 | Current architecture | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — tasks/cores, interrupt/polling rules and shell routes; [`vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), [`test_vehicle_sm.c`](../tests/test_vehicle_sm.c). |
@@ -156,7 +156,7 @@ The archived development record retains older CMake bench examples.
 
 See [Branch layout](architecture/BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](archive/architecture/BRANCH_LAYOUT.md#archived-branches) of deleted branches.
 
-The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
+The [on-chip kernel bench section](kernel/BUILD.md#kernel-bench-image-bench_kernel) covers
 [`bench_stats.c`](../app_program/bench_kernel/bench_stats.c), its
 [public read API](../app_program/bench_kernel/bench_stats.h),
 [core0 publication API](../app_program/bench_kernel/bench_stats_publish.h) and
@@ -164,7 +164,7 @@ The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
 [`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
 [host test](../tests/test_bench_report.c). The bench directory is excluded
 from ordinary source selection. The
-[step-0 procedure](kernel/BENCH_KERNEL_STEP0.md) covers the bench-only
+[step-0 procedure](kernel/BUILD.md#kernel-bench-image-bench_kernel) covers the bench-only
 [`bench_generator.c`](../app_program/bench_kernel/bench_generator.c),
 [`bench_runtime.c`](../app_program/bench_kernel/bench_runtime.c),
 [`bench_timer_hw.c`](../app_program/bench_kernel/bench_timer_hw.c),
@@ -183,7 +183,7 @@ Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
 ## Course template layout
 
-See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL_RAM.md) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL.md#ram-placement-kernel_ram) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle` start there. `mtk3-telemetry` also starts from `mtk3`.
@@ -194,21 +194,21 @@ are in [`host-tests/`](../host-tests); run all host tests with
 kernel task. Staging now connects LINE/SEARCH/SCAN/DETOUR through the
 vehicle task described below.
 
-- [Course template layout checks](archive/kernel/MTK3_LAYOUT_CHECKS.md)
+- [Course template layout checks (history)](archive/kernel/HISTORY.md#files)
 
 ## Kernel platform
 
 - [`app_startup.h`](../app_program/platform/app_startup.h) and
   [`app_startup.c`](../app_program/platform/app_startup.c) — one-way boot
   handoff after all init/start attempts; the MQTT hook acquires before
-  application access. [M8 contract](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
+  application access. [M8 contract](kernel/KERNEL.md#startup-handoff-m8)
   lists covered readers and unchanged runtime synchronization.
   [`test_app_startup.c`](../tests/test_app_startup.c),
   [`test_test_runner.c`](../tests/test_test_runner.c) and
   [`test_robot_mqtt.c`](../tests/test_robot_mqtt.c) check publication,
   lifecycle ordering and refusal of early application work.
 
-- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/NVIC_PRIORITY_FINDING.md)).
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/KERNEL.md#interrupt-priorities-f-nvic)).
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
 - [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
 - [`testing/subsystem1/TEST_LOG.md`](../testing/subsystem1/TEST_LOG.md) — shared platform S0-U01 cold-power clock test, run by the S1 TEST hook.
@@ -233,7 +233,7 @@ vehicle task described below.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
 
-- [μT-Kernel motion bring-up checks](archive/kernel/MTK3_MOTION_CHECKS.md) — archived candidate revisions, SDK proof, sizes and then-open hardware checks.
+- [μT-Kernel motion bring-up checks (history)](archive/kernel/HISTORY.md#files) — removed; candidate revisions, SDK proof, sizes and then-open hardware checks.
 
 ## Kernel line acquisition
 
@@ -333,7 +333,7 @@ vehicle task described below.
 - [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, hump detector and corrected/filtered core fixtures, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
 - [`tests/test_imu_source_make.py`](../tests/test_imu_source_make.py) — isolated Make checks for `IMU_HUMP_SOURCE=1/2`, default/invalid values, `_humpfilt` image suffix and source-aware object invalidation. [H3 builds](kernel/BUILD.md#h3-source-comparison-images) compare both images; boot/result USB lines identify the source, default corrected.
 - [`tests/test_imu_hump_diag.c`](../tests/test_imu_hump_diag.c) — peak latch, paired windows/gate history, winners/rejections, run lifecycle, LINE maxima, stale-safe output and USB units; linked in `tests/CMakeLists.txt`.
-- [RAM budget](kernel/RAM_BUDGET.md#imu-diagnostic-c-measured-delta) — measured 5888 B MQTT delta including 2048 B stack (+772 B diagnostic C); IMU diagnostic C hardware high-water 1568/2048 B, free 480 B; sample frame 1000 B. 7888 B raw capture in IMU_STREAM only.
+- [RAM budget](kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings) — measured 5888 B MQTT delta including 2048 B stack (+772 B diagnostic C); IMU diagnostic C hardware high-water 1568/2048 B, free 480 B; sample frame 1000 B. 7888 B raw capture in IMU_STREAM only.
 - [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and step 3 H1 STREAM hardware PASS on 1480b37, H0/H2-short plus diagnostic C hardware on 29d57de (uncorrected LINE height accepted; corrected over-read under investigation), named robot stacks and shared sensor scrape condition; H3 full-circuit no-false-hump acceptance is priority, H3..H9 Not run; absent-device/cold-power/MQTT-TEST gates still pending.
 
 ## Kernel ultrasonic acquisition
@@ -356,7 +356,7 @@ vehicle task described below.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
-- [RAM budget](kernel/RAM_BUDGET.md) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
+- [RAM budget](kernel/KERNEL.md#ram-budget) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
 - [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
@@ -372,7 +372,7 @@ vehicle task described below.
   [architecture seam](../app_program/platform/smp_single_core_arch.h) permits
   [real-source tests](../tests/test_smp_single_core.c), wired by
   [`shim_checks.cmake`](../tests/shim_checks.cmake) in both host test builds.
-  [M7 contract and proof](kernel/UP_SMP_SHIM.md) records red/green results,
+  [M7 contract and proof](kernel/KERNEL.md#lock-rules) records red/green results,
   ARM barriers, provider checks, RAM and hardware limits.
 
 ## Application task stacks
@@ -384,7 +384,7 @@ vehicle task described below.
   [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
   and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
   separates this saving from minimum-bit packing.
-  M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/WIFI_STACK_WATERMARK.md).
+  M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/KERNEL.md#wi-fi-stack-m9).
   [`test_template_wifi.c`](../tests/test_template_wifi.c) links the real
   initializer and registry; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
   checks the real Health minimum at the full slot layout.
@@ -392,7 +392,7 @@ vehicle task described below.
   forces the real registry's diagnostic lock busy in UP/split/control.
   The two existing template ledger rows change; no new deviation path is added.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
-- [Core placement and lock audit](kernel/CORE_PLACEMENT.md) records reviews B1/B2.
+- [Core placement and lock audit](kernel/KERNEL.md#core-placement-and-locks) records reviews B1/B2.
   The isolated [blocker test build](../tests/core_migration/CMakeLists.txt)
   compiles [production lock sections](../tests/core_migration/extract_lock_sections.py)
   for [interrupt-mask/preemption checks](../tests/core_migration/test_b1_lock_sections.c).
@@ -406,7 +406,7 @@ vehicle task described below.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 
-- [Core/staging merge](kernel/CORE_STAGING_MERGE.md) — combined core-placement and B2b SHADOW contract, complete parent test union, profile/ABI/RAM evidence and unchanged hardware gates.
+- [Core/staging merge (history)](archive/kernel/HISTORY.md#files) — combined core-placement and B2b SHADOW contract, complete parent test union, profile/ABI/RAM evidence and unchanged hardware gates.
 
 - [`tests/test_sdk_profiles.py`](../tests/test_sdk_profiles.py) — M6 complete-log SDK proof gate, exact placement/barcode profile schemas, permission and stale-object rejection without invoking a compiler on failed gates.
 
