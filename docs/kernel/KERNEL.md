@@ -503,7 +503,7 @@ Use the steps in this order; measure before and after each.
 
 CR1 order (team, 2026-11-08): build IMU and barcode first, tag
 `cr1-baseline`, measure, then do the minimum-bit work and measure again.
-`cr1-pre-imu` is not the CR1 baseline. See [CR1 evidence](../architecture/CR1_EVIDENCE.md).
+`cr1-pre-imu` is not the CR1 baseline. See [CR1 evidence](../architecture/CR1.md).
 
 ## USB priority
 

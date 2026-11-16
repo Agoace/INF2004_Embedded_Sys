@@ -308,7 +308,7 @@ No source/API test establishes actual stop latency or all surfaces.
 
 - [S5 TEST_LOG](../../testing/subsystem5/TEST_LOG.md).
 - [Kernel integration results and hardware tables](../../testing/integration/KERNEL_ROBOT.md).
-- [CR1 notes](../architecture/week8_change_requirement_1_notes.md) remain historical wording; the packed result above is the current implementation.
+- [Week 8 CR1 notes](../archive/architecture/HISTORY.md#files) (history) remain historical wording; the packed result above is the current implementation.
 - [Obstacle history](../archive/s5-obstacle/HISTORY.md#files): full monitor evidence, scan/profile measurements,
   R1–R4 and M2-reattempt tables, the original ultrasonic driver with all
   seven bench runs, and the v1.6 detour test plan.

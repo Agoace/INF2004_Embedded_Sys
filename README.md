@@ -323,9 +323,9 @@ Barcode work is frozen for the dual-core migration.
 
 ## CR1 data representation
 
-[CR1 evidence](docs/architecture/CR1_EVIDENCE.md) records baseline RAM,
+[CR1.md](docs/architecture/CR1.md) records baseline RAM,
 board/queue and binary MQTT sizes. The
-[motion plan](docs/s2-motion/CR1_MOTION_PLAN.md) records approved motion
+[motion module plan](docs/architecture/CR1.md#motion-module-plan) records approved motion
 board packing (8 B saved). A separate change removes the inactive bench
 stack/slot (4112 B saved in MQTT). A1/B1 hardware passed on 2026-11-10
 with an idle-stack margin note. Its approved safety increase adds 256 B;

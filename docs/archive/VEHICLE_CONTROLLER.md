@@ -10,7 +10,7 @@ next module; step 1 below is the old flat shape.
 - Code: [`src/vehicle_controller.c`](../../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../../app_program/vehicle/vehicle_controller.h)
 - Host unit test: [`tests/test_vehicle_controller.c`](../../tests/test_vehicle_controller.c)
 - Design: [system statechart](../../design-review/system_statechart.mmd), [task interaction](../../design-review/task_interaction.mmd)
-- Bit widths: [Week 8 notes, sections 33–38](../architecture/week8_change_requirement_1_notes.md#33-vehicle-controller-state)
+- Bit widths: [Week 8 notes, sections 33–38](architecture/HISTORY.md#files)
 
 ## Steps
 

@@ -24,12 +24,11 @@ not current acceptance reports. Local course originals are not public records.
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations. Read before proposing work.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
 - [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries, branch state table and archived branch tags.
-- [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
-  and MQTT sizes, measurement tools and shared-access rule.
+- [CR1.md](architecture/CR1.md) — CR1 requirement summary, baseline RAM, board/queue
+  and MQTT sizes, measurement tools, shared-access rule, A1/B1/B2 evidence, A2 plan, M9 accounting and the motion module plan (A1 field table, controller/ISR inventory, tests).
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a source2 SHADOW admission, encounter ordering, terminal ACK, limits, counters and action gates.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
-- [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
 ## Kernel
 
@@ -45,8 +44,6 @@ not current acceptance reports. Local course originals are not public records.
 ## S2 — Motion
 
 - [MOTION.md](s2-motion/MOTION.md) — controller interface, settings (feed-forward, P/I, kick, stall, servo), hardware/time boundary, heartbeat, pins, geometry, 50-turn encoder ratio 2535, servo/sonar, unloaded RPM tables, power status, DM1 duty map, B3 results, SDK subset.
-- [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
-  approved A1 board packing, ownership limits and approval gates.
 
 ## S3 — Line and barcode
 
@@ -109,6 +106,10 @@ not current acceptance reports. Local course originals are not public records.
 ### Telemetry history
 
 - [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — `git show 569672a:<path>` pointers for 9 removed telemetry records (OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema).
+
+### Architecture history
+
+- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md) and the 1738-line Week 8 CR1 Tribunal notes.
 
 ### Obstacle history
 

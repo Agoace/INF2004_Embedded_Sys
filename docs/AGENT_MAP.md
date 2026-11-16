@@ -22,7 +22,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout, measurements table and unchanged CR1 wording. |
 | [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
 | [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
-| [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results) and CR1_MOTION_PLAN.md. |
+| [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
@@ -51,7 +51,7 @@ The archived development record retains older CMake bench examples.
 | Obsolete USB power safety (archive only) | [docs/archive/s2-motion/USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) |
 | Archived UDP bench dashboard architecture | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/TELEMETRY.md](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard) |
-| Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
+| Week 8 Change Requirement 1 notes | [architecture history](archive/architecture/HISTORY.md#files); summary in [CR1.md](architecture/CR1.md#requirement) |
 | Current kernel ultrasonic driver/service | [OBSTACLE.md](s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) — bounded request/echo contract, packed result and sensor limits. |
 | Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
@@ -74,9 +74,9 @@ The archived development record retains older CMake bench examples.
 
 ## CR1 measurement and planning
 
-- [CR1 evidence](architecture/CR1_EVIDENCE.md) records the `168d705`
+- [CR1.md](architecture/CR1.md) records the `168d705`
   baseline, ARM message sizes and the single-writer publication rule.
-- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) records approved A1 packing;
+- [Motion module plan](architecture/CR1.md#motion-module-plan) records approved A1 packing;
   controller ownership changes and derived-copy removal remain separate.
 - [`motion_pack.h`](../app_program/subsystem2/motion_pack.h) and
   [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
@@ -382,7 +382,7 @@ vehicle task described below.
   only with `APP_BENCH`. The MQTT idle-meter stack is now 768 B after
   the approved margin correction; other task stack sizes are unchanged.
   [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
-  and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
+  and TEST slot layouts; [B1 evidence](architecture/CR1.md)
   separates this saving from minimum-bit packing.
   M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/KERNEL.md#wi-fi-stack-m9).
   [`test_template_wifi.c`](../tests/test_template_wifi.c) links the real

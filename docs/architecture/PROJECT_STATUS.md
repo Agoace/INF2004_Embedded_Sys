@@ -31,7 +31,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. Two assembler warnings for `rt_tl` (fix in progress). |
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
-| CR1 change requirement | Motion round done. | [CR1_EVIDENCE.md](CR1_EVIDENCE.md) | Week 13: 110 ms telemetry, before/after tables. Sonar round waits for operator. |
+| CR1 change requirement | Motion round done. | [CR1.md](CR1.md) | Week 13: 110 ms telemetry, before/after tables. Sonar round waits for operator. |
 | SIL (Webots) | LINE, SEARCH, curves, barcode A and F observe-only on `mtk3-hil`. | [SIMULATION.md](../simulation/SIMULATION.md) | Does not reproduce the real zigzag. Records live on `mtk3-hil`. |
 
 ## Robot run logs

@@ -66,7 +66,7 @@ These rows are not resolved. The tables below give the sources.
 | Robot length (overall) | 190 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
 | Robot width (widest point) | 160 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [OBSTACLE_BYPASS.md#steering](../archive/OBSTACLE_BYPASS.md#steering) |
 | Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
-| Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [week8_change_requirement_1_notes.md#27-leftright-clearance](week8_change_requirement_1_notes.md#27-leftright-clearance) |
+| Servo axis to rear axle | 65 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/architecture/week8_change_requirement_1_notes.md#27-leftright-clearance` |
 | SIL example box / hump | box 100x180x100 mm; hump 80x30x10 mm | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | SIL other PROTO geometry | wheel width 16 mm; caster width 6 / trail 8 mm; head 30x35x20 mm; servo torque 0.1 Nm | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | Sim front / IR board tip x | 123 mm = 65 + 58 (calculated) | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#geometry](../archive/simulation/SIMULATION.md#geometry) |
@@ -75,7 +75,7 @@ These rows are not resolved. The tables below give the sources.
 | Sim rear outline x | -67 mm = 123 - 190 | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
 | Sonar face to front | about 58 mm (echo mean 57.9 mm, not ruler) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Sonar face to front, alternative | about 47 mm (echo reads about 11 mm high) | doc ≤ 2026-11-08 | DERIVED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
-| Track (wheel contact to wheel contact) | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | [week8_change_requirement_1_notes.md#27-leftright-clearance](week8_change_requirement_1_notes.md#27-leftright-clearance) |
+| Track (wheel contact to wheel contact) | 111 mm | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/architecture/week8_change_requirement_1_notes.md#27-leftright-clearance` |
 | Wheel axle to caster (wheelbase) | 80 mm | doc ≤ 2026-11-15 | MEASURED(operator) | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | Wheel diameter | 65 mm nominal; loaded rolling diameter not calibrated | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Wheel diameter (archive label) | 65 mm, "Operator, 2026-10-30" | 2026-10-30 | MEASURED(operator,2026-10-30) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#robot-geometry` |
@@ -126,7 +126,7 @@ These rows are not resolved. The tables below give the sources.
 | Duty / speed cap | 80 % / +-460 mm/s | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Duty-mode speed table (floor) | 20 % -> 74, 25 % -> 101, 33 % -> 141 counts per 50 ms; wheel stops at about 5.6 % | 2026-10-30 | MEASURED(robot log,2026-10-30) | [OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide](../archive/OBSTACLE_BYPASS.md#run-3-2026-10-30-version-2-around-the-bottle-wide) |
 | Feed-forward L fwd/rev | offset 48/59 permille; slope 9.66/8.89 permille per count/tick | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
-| Floor 100 % duty speed | about 770..807 mm/s, still rising, wheelies | doc ≤ 2026-11-10 | MEASURED(operator) | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
+| Floor 100 % duty speed | about 770..807 mm/s, still rising, wheelies | doc ≤ 2026-11-10 | MEASURED(operator) | [CR1.md#a2-planned-shared-16-bit-modular-encoder-values](CR1.md#a2-planned-shared-16-bit-modular-encoder-values) |
 | Host model wheel dead zone | about 9 % | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#host-unit-test` |
 | Loaded duty to speed, 8..70 % | about 8.5 mm/s per duty %; wheels within about 3 %; 5..6 % stop, 7 % nearly | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#geometry-and-distance-settings](../s2-motion/MOTION.md#geometry-and-distance-settings) |
 | Loaded steady speed at 14 % | about 40-50 mm/s; 20 deg/s sweep needs about 19 mm/s per wheel | 2026-11-04 | MEASURED(operator,2026-11-04) | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#ideas-not-implemented` |
@@ -134,7 +134,7 @@ These rows are not resolved. The tables below give the sources.
 | Pi 400 USB peripheral limit | 1.2 A shared | doc ≤ 2026-09-20 | ASSUMED | [USB_POWER_SAFETY.md#limit](../archive/s2-motion/USB_POWER_SAFETY.md#limit) |
 | Pico current, idle / radio 1 Hz | about 30-50 mA / 70-90 mA | doc ≤ 2026-09-21 | ASSUMED | [USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank](../archive/s2-motion/USB_POWER_SAFETY.md#conditional-behaviour-of-the-unmarked-power-bank) |
 | PWM frequency | 20 kHz | doc ≤ 2026-11-04 | ASSUMED | [ADR_MOTOR_CONTROLLER.md#work-rules](ADR_MOTOR_CONTROLLER.md#work-rules) |
-| Retained-origin count limit | 32768 counts, about 2.64 m | doc ≤ 2026-11-10 | DERIVED | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
+| Retained-origin count limit | 32768 counts, about 2.64 m | doc ≤ 2026-11-10 | DERIVED | [CR1.md#a2-planned-shared-16-bit-modular-encoder-values](CR1.md#a2-planned-shared-16-bit-modular-encoder-values) |
 | Reverse weaker (left wheel); detour sweep minimum | 14 % duty; second-detour stalls at 14-15 % | doc ≤ 2026-11-08 | MEASURED(operator) | [ADR_MOTOR_CONTROLLER.md#context](ADR_MOTOR_CONTROLLER.md#context) |
 | Rise limit | 8 counts/tick per tick (about 6400 mm/s^2) | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Rise limit history | 2 counts/tick per tick (1600 mm/s^2) until 2026-11-04, then 8 | 2026-11-04 | ASSUMED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
@@ -148,7 +148,7 @@ These rows are not resolved. The tables below give the sources.
 | Speed cap basis | 460 mm/s = DM1 60 % point | 2026-11-04 | DERIVED | `569672a:docs/archive/s2-motion/MOTOR_CONTROLLER.md#speed-loop` |
 | Speed loop P / I | 6.0 / 0.5 per tick; I limit +-400 permille | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Speed quantum | 1 count per 10 ms tick = 8.055 mm/s | doc ≤ 2026-11-06 | DERIVED | `569672a:docs/archive/s2-motion/DUTY_MAP.md#run-dm1-2026-11-04-boot-5d51-7a65c0e-floor-vin` |
-| Speed safety bound / command cap / duty cap | 1000 mm/s (12414 counts/s) / 460 mm/s / 80 % | doc ≤ 2026-11-10 | ASSUMED | [CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values](CR1_EVIDENCE.md#a2-planned-shared-16-bit-modular-encoder-values) |
+| Speed safety bound / command cap / duty cap | 1000 mm/s (12414 counts/s) / 460 mm/s / 80 % | doc ≤ 2026-11-10 | ASSUMED | [CR1.md#a2-planned-shared-16-bit-modular-encoder-values](CR1.md#a2-planned-shared-16-bit-modular-encoder-values) |
 | Stale command stop | 100 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Stall detect | duty >= 15 %, no count for 500 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | Start kick | at least 12 % until 10 counts; no move by 250 ms = stall | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
@@ -163,7 +163,7 @@ These rows are not resolved. The tables below give the sources.
 | USB floor test | 15 % stalled on floor; 20 % completed | doc ≤ 2026-10-28 | MEASURED(bench) | [USB_POWER_SAFETY.md#bounded-spin-calibration-exception](../archive/s2-motion/USB_POWER_SAFETY.md#bounded-spin-calibration-exception) |
 | USB over-current event | at 70 % duty settling, both motors | 2026-09-20 | MEASURED(operator,2026-09-20) | [USB_POWER_SAFETY.md#observed-incident](../archive/s2-motion/USB_POWER_SAFETY.md#observed-incident) |
 | Webots replay PWM map (from DM1) | PWM 1000/6250 = 16 % -> L/R +96/+95 mm/s; 1250 = 20 % -> +129/+129 mm/s | 2026-11-15 | DERIVED | `mtk3-hil:docs/simulation/WEBOTS_DRIVING_REPLAY_20261115.md#scope-and-one-mapping` |
-| Week 8 calibration citation | about 261 RPM at 100 % duty; about 221 counts per 20 ms | 2026-10-27 | MEASURED(operator) | [week8_change_requirement_1_notes.md#91-speed](week8_change_requirement_1_notes.md#91-speed) |
+| Week 8 calibration citation | about 261 RPM at 100 % duty; about 221 counts per 20 ms | 2026-10-27 | MEASURED(operator) | `569672a:docs/architecture/week8_change_requirement_1_notes.md#91-speed` |
 | Wheel circumference | 204.204 mm (65 mm nominal diameter) | doc ≤ 2026-11-08 | DERIVED | [SIMULATION.md#motors-counts-and-coast](../archive/simulation/SIMULATION.md#motors-counts-and-coast) |
 | Wheel radius (SIL) | 32.5 mm | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#mount-and-motion-limits` |
 | Wheelies | at 80..100 % duty | doc ≤ 2026-11-16 | MEASURED(bench) | [MOTION.md#pins-and-interface](../s2-motion/MOTION.md#pins-and-interface) |
@@ -337,7 +337,7 @@ These rows are not resolved. The tables below give the sources.
 | Scan settle times | first 150 ms; step 60 ms; return 150 ms; 2 readings per point | doc ≤ 2026-10-28 | ASSUMED | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#sequence-and-timing` |
 | Servo axis Z / face offset / slew (SIL) | 20 mm / 0 / 277.78 deg/s | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | Servo centre 1500 us = straight ahead | not confirmed | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#mounted-servo-limits](../s5-obstacle/OBSTACLE.md#mounted-servo-limits) |
-| Servo datasheet range | 500-2500 us, centre 1500, 20000 us period (50 Hz), about +-90 deg | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#19-servo-calibration](week8_change_requirement_1_notes.md#19-servo-calibration) |
+| Servo datasheet range | 500-2500 us, centre 1500, 20000 us period (50 Hz), about +-90 deg | doc ≤ 2026-10-27 | ASSUMED | `569672a:docs/architecture/week8_change_requirement_1_notes.md#19-servo-calibration` |
 | Servo direction | below 1500 us turns right; above turns left | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#mounted-servo-limits` |
 | Servo mounted collision points | about 1040 / 1960 us (about 41 deg R/L) | doc ≤ 2026-11-08 | MEASURED(bench) | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
 | Servo mounted direction / collision | below 1500 us = right; touches at about 1040 / 1960 us (41 deg) | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s2-motion/CALIBRATION_RESULTS.md#servo` |
@@ -366,7 +366,7 @@ These rows are not resolved. The tables below give the sources.
 | Sonar timing constants | trigger 10 us; rise timeout 2 ms; min trigger gap 60 ms; WATCH 100 ms | doc ≤ 2026-11-08 | ASSUMED | [OBSTACLE.md#sonar-settings](../s5-obstacle/OBSTACLE.md#sonar-settings) |
 | Sonar trigger-to-rise latency | 212-217 us | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes` |
 | Sound speed constant | assumes about 20 C; about 0.17 %/C | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#servo-and-sonar](../s2-motion/MOTION.md#servo-and-sonar) |
-| Speed of sound used | about 343 m/s at about 20 C | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#14-ultrasonic-timing-within-the-100-ms-task-window](week8_change_requirement_1_notes.md#14-ultrasonic-timing-within-the-100-ms-task-window) |
+| Speed of sound used | about 343 m/s at about 20 C | doc ≤ 2026-10-27 | ASSUMED | `569672a:docs/architecture/week8_change_requirement_1_notes.md#14-ultrasonic-timing-within-the-100-ms-task-window` |
 | STEP 8 box | 17 x 12 x 7 cm; echoes 214..290 mm at -30..+30 deg; closest 212 mm at +10 | 2026-11-07 | MEASURED(operator,2026-11-07) | `569672a:docs/archive/MTK3_STEP8_RECORD.md#driving-observations` |
 | Target at about 1 m | 48 readings mean 1016.3 mm, std 10.6 mm, range 999-1056 mm | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/ULTRASONIC_DRIVER.md#run-1-30-ms-timeouts-three-status-codes` |
 | Turn-away angles needing larger toward limit | away 62/63 deg -> toward 152/153 deg | 2026-11-13 | MEASURED(robot log,2026-11-13) | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
@@ -430,7 +430,7 @@ These rows are not resolved. The tables below give the sources.
 | Cold-power TIMER defect (bench) | 11165 kernel ticks; TIMER gaps 233..235 us | 2026-11-06 | MEASURED(operator,2026-11-06) | `569672a:docs/archive/kernel/MTK3_MOTION_CHECKS.md#cold-power-defect-and-remaining-hardware-gate` |
 | CPU idle / traffic (S1) | 117 / 139 permille; calibration 4026729 iterations/s; idle-mode 147 permille | 2026-11-07 | MEASURED(operator,2026-11-07) | [KERNEL.md#overrun-timeline-p2](../kernel/KERNEL.md#overrun-timeline-p2) |
 | CR1 A1+B1 motion task gap | 9970..10025 us | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
-| CR1 telemetry period | 110 ms (subject to testing) | doc ≤ 2026-10-27 | ASSUMED | [week8_change_requirement_1_notes.md#decision](week8_change_requirement_1_notes.md#decision) |
+| CR1 telemetry period | 110 ms (subject to testing) | doc ≤ 2026-10-27 | ASSUMED | `569672a:docs/architecture/week8_change_requirement_1_notes.md#decision` |
 | Disabled barcode reader cost | about 73 us per 1 ms sample (about 7 % CPU); idle CPU 45 -> 54 % | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#findings](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#findings) |
 | Full refill time (simulated) | 2.8 / 14.2 / 28.4 s at 20 / 100 / 200 ms RTT | doc ≤ 2026-11-16 | DERIVED | [TELEMETRY.md#results-and-limits](../s1-telemetry/TELEMETRY.md#results-and-limits) |
 | Generator ISR per call UP / split | 5.60 / 7.43 us; 212 / 282 bp | 2026-11-15 | MEASURED(bench,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
@@ -458,7 +458,7 @@ These rows are not resolved. The tables below give the sources.
 | M1-MQTT lifetime gap / ESTOP run gap | 9916..10087 us / 8952..11038 us (gate +38 us) | 2026-11-07 | MEASURED(operator,2026-11-07) | [TEST_LOG.md#step-8-operator-follow-up--2026-11-07](../../testing/subsystem2/TEST_LOG.md#step-8-operator-follow-up--2026-11-07) |
 | M2 task gap vs bench | +-0.74 ms vs +-0.05 ms (limit 11 ms) | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06](../../testing/integration/KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06) |
 | Motion BENCH tick work max / gap | 241 us; 9980..10013 us | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
-| Motion board CR1 A1 | 72 -> 64 B; S2 289 -> 281 B; MQTT RAM 190672 -> 190664 B | 2026-11-10 | MEASURED(build) | [CR1_MOTION_PLAN.md#approved-a1-substep-motion-observation-board](../s2-motion/CR1_MOTION_PLAN.md#approved-a1-substep-motion-observation-board) |
+| Motion board CR1 A1 | 72 -> 64 B; S2 289 -> 281 B; MQTT RAM 190672 -> 190664 B | 2026-11-10 | MEASURED(build) | [CR1.md#approved-a1-substep-motion-observation-board](CR1.md#approved-a1-substep-motion-observation-board) |
 | Motion task stack high-water (before CR1) | 440 / 3072 B (2632 B free); +48 B after CR1 | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
 | Motion tick | 10 ms | doc ≤ 2026-11-08 | ASSUMED | [MOTION.md#settings](../s2-motion/MOTION.md#settings) |
 | motion_bench stack | 568 / 4096 B | 2026-11-10 | MEASURED(operator,2026-11-10) | [TEST_LOG.md#a1--b1-result-2026-11-10](../../testing/subsystem2/TEST_LOG.md#a1--b1-result-2026-11-10) |
@@ -476,7 +476,7 @@ These rows are not resolved. The tables below give the sources.
 | Shadow run timing | KR1 gap 9931..10066 us; heartbeat CPU up to 917 permille | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | Sim clock quantum | 100 us (compare 50 us) | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#clock-choice](../archive/simulation/SIMULATION.md#clock-choice) |
 | Split core 0 / core 1 load | 621-699 / 569-626 permille; first overrun step 20, 9084 us | 2026-11-15 | MEASURED(operator,2026-11-15) | `569672a:docs/kernel/SPLIT_PARKED_20261115.md#split-dual-core-placement-parked--2026-11-15` |
-| Stack free policy | at least 256 B free per named stack | doc ≤ 2026-11-10 | ASSUMED | [CR1_EVIDENCE.md#b-other-ram-savings](CR1_EVIDENCE.md#b-other-ram-savings) |
+| Stack free policy | at least 256 B free per named stack | doc ≤ 2026-11-10 | ASSUMED | [CR1.md#b-other-ram-savings](CR1.md#b-other-ram-savings) |
 | Static NORMAL MQTT data+bss (STEP 8) | 184676 B | 2026-11-07 | MEASURED(build) | `569672a:docs/archive/MTK3_STEP8_RECORD.md#runtime-ownership-and-limits` |
 | Static RAM after core merge | 204468 B (+3904 vs migration, +9328 vs staging) | doc ≤ 2026-11-12 | MEASURED(build) | `569672a:docs/kernel/RAM_BUDGET.md#core-migration-plus-staging` |
 | Static RAM after Wi-Fi stack move | 192228 -> 200564 B (+8336 B) | doc ≤ 2026-11-12 | MEASURED(build) | `569672a:docs/kernel/WIFI_STACK_WATERMARK.md#ram-static-reserve-up-dynamic-allocation-down` |
