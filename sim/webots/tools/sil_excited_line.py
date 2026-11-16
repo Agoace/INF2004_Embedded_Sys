@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Three explicitly approved task A cases. One launch/case, no retry."""
+"""Explicitly approved excitation/candidate cases. One launch/case, no retry."""
 import argparse
 import csv
 import hashlib
@@ -15,6 +15,8 @@ from pil.robot_profile import RobotProfile
 from pil.sil_excited_line import apply_geometry,window_metrics
 
 CASES={'offset10-yaw-10':(10,-10,0),'offset15-yaw0':(15,0,0),'offset10-yaw-10-delay20':(10,-10,20)}
+CANDIDATES={f'P{gain}-delay{delay}':(gain,delay)for gain,delay in ((60,20),(40,20),(85,30),(60,30),(40,30))}
+CASES.update({name:(10,-10,delay)for name,(_,delay)in CANDIDATES.items()})
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--case',choices=CASES,required=True)
@@ -28,6 +30,11 @@ def main():
     project,world=prepare_project(a.output,offset_mm=offset,yaw_deg=yaw,recovery=True,line_search=True,line_profile='B')
     config_path=project/'sil-manifest.json';config=json.loads(config_path.read_text())
     config=apply_geometry(config,profile,spin);config['sensor_transport_delay_ms']=delay
+    if a.case in CANDIDATES:
+        from pil.sil_line_candidates import build_candidate
+        gain,_=CANDIDATES[a.case];record=build_candidate(project/'libraries',gain)
+        config['LINE_P_NEAR']=gain;config['candidate_source_commit']=record['source_commit']
+        config['candidate_source_policy']=record['source_policy']
     config['taskA_case']=a.case;config['historical_spin_path']=str(a.spin.resolve())
     config['historical_spin_sha256']=hashlib.sha256(a.spin.read_bytes()).hexdigest()
     config_path.write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')

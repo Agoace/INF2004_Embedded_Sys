@@ -18,10 +18,11 @@ def read_rows(path):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--candidate-comparison',action='store_true');a=p.parse_args()
     if a.output.exists():p.error('fresh supplemental output required')
     runs=[]
-    for name in ('offset10-yaw-10','offset15-yaw0','offset10-yaw-10-delay20'):
+    cases=('P60-delay20','P40-delay20','P85-delay30','P60-delay30','P40-delay30')if a.candidate_comparison else('offset10-yaw-10','offset15-yaw0','offset10-yaw-10-delay20')
+    for name in cases:
         directory=a.root/name;r=json.loads((directory/'taskA-result.json').read_text());config=json.loads((directory/'sil-manifest.json').read_text())
         manifest=json.loads((directory/'manifest.json').read_text());artifact_mismatches=[]
         for path,expected in manifest['artifacts_sha256'].items():
@@ -50,6 +51,7 @@ def main():
         runs.append(dict(case=name,complete=r['complete'],wall_seconds=r['wall_seconds'],owned_pgid=r['owned_pgid'],owned_pgid_gone=gone,
             hashes=files,artifact_mismatches=artifact_mismatches,optical_delay_mismatch_indices=mismatches,
             measured_geometry={key:manifest['robot_parameters'][key]for key in ('track_mm','line_forward_mm','line_left_mm','line_clearance_mm','barcode_forward_mm','barcode_left_mm','total_mass_kg')},
+            native_configuration=r['summary']['configuration'],source_commit=config.get('candidate_source_commit'),
             windows=windows,searches=r['summary']['recovery']['searches'],found_by_search=r['summary']['recovery']['found_by_search']))
     report=dict(scope='Offline supplements only; original launch/result records unchanged',runs=runs,
         complete=all(r['complete']and r['owned_pgid_gone']and not r['artifact_mismatches']and not r['optical_delay_mismatch_indices']for r in runs))

@@ -10,7 +10,7 @@ from .sil_line_oscillation import quantile,correlation
 
 class DelayPair:
     def __init__(self,delay_ms):
-        if type(delay_ms)is not int or not 0<=delay_ms<=20:raise ValueError('delay0..20ms')
+        if type(delay_ms)is not int or not 0<=delay_ms<=30:raise ValueError('delay0..30ms')
         self.delay=delay_ms;self.queue=collections.deque();self.last_ms=0
     def update(self,ms,pair):
         if ms!=self.last_ms+1:raise ValueError('delay requires contiguous1ms samples')
