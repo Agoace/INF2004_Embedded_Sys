@@ -18,7 +18,7 @@
  * and the run completes. A plain SpinLock() variant is deliberately not tried,
  * because on this port it would deadlock the board instead of failing a check.
  *
- * Builds only with make TEST=1. See docs/kernel/CORE_PLACEMENT.md.
+ * Builds only with make TEST=1. See docs/kernel/KERNEL.md (core placement).
  */
 #include "../app.h"
 #include <stdbool.h>

@@ -28,9 +28,9 @@ qualification task. The robot places the network below driving tasks: a
 network problem must not delay a motor update. USB console output is also
 not allowed to delay a motor update, so USB is now 21, below the radio. No priority wrapper, SDK
 runtime or network-linked motor/watchdog path is used. The migration's
-[core placement contract](../kernel/CORE_PLACEMENT.md) controls affinity.
+[core placement contract](../kernel/KERNEL.md#core-placement-and-locks) controls affinity.
 M9 changes only the two existing Wi-Fi rows above: no ninth path. Its
-[watermark record](../kernel/WIFI_STACK_WATERMARK.md) states the static-RAM
+[watermark record](../kernel/KERNEL.md#wi-fi-stack-m9) states the static-RAM
 increase and removed heap allocation separately.
 
 ## Timing contract

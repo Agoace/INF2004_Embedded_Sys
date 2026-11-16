@@ -127,7 +127,7 @@ repeat the checks. Read [watchdog procedure](docs/kernel/KERNEL.md).
 - Vehicle owns its board and is the sole live event producer. Its command
   queues are eight ordinary records plus a separate one-slot ESTOP queue.
 - S1 owns MQTT/health, binary v1 packing and paced log transport.
-  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/OPERATION.md).
+  [Wire layout](docs/s1-telemetry/MQTT_WIRE.md); [broker runbook](docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard).
 - Busy reads, network queues and disconnects count losses, never motor or
   vehicle faults. Boot and RAM logging do not require the network.
 - Valid configured token is required for every command. Without a valid

@@ -17,52 +17,29 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Architecture
 
-- [ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) — one time-base owner; original bare-metal interrupt contract.
-- [ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) — one actuator owner and value-based interfaces.
-- [ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) — one running module, shared detectors and outcome routing.
-- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits.
-- [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations. Read before proposing work.
+- [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — current subsystems, tasks/cores, interrupt/polling rules, shell routes and safety limits; the three ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
+- [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — one row per area: state, evidence, open items, demo build line and robot run-log locations; branch table, merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch state 2026-11-16 and archive tags. Read before proposing work.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every measured or assumed physical/timing value by area (geometry, mass, motors, encoders, line, GP28, sonar/servo, IMU, timing/RAM), with date, label, source and the values that do not agree. Check it before asking the operator for a number.
-- [BRANCH_LAYOUT.md](architecture/BRANCH_LAYOUT.md) — current integration rules, source boundaries, branch state table and archived branch tags.
-- [CR1 evidence](architecture/CR1_EVIDENCE.md) — baseline RAM, board/queue
-  and MQTT sizes, measurement tools and shared-access rule.
+- [CR1.md](architecture/CR1.md) — CR1 requirement summary and Week 8 §11 (IMU snapshot 8 B) and §33–38 (vehicle states 4 bits, mode/enum/fault bits, events) details, baseline RAM, board/queue
+  and MQTT sizes, measurement tools, shared-access rule, A1/B1/B2 evidence, A2 plan, M9 accounting and the motion module plan (A1 field table, controller/ISR inventory, tests).
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — fixed B2a consumer, fake START command, LINE/SEARCH corner job, pending retention and phase/angle event7.
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a source2 SHADOW admission, encounter ordering, terminal ACK, limits, counters and action gates.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — eight approved template deviations and their constraints.
-- [week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) — original CR1 notes; wording and numbers unchanged, rewrite deferred.
 
 ## Kernel
 
-- [CORE_STAGING_MERGE.md](kernel/CORE_STAGING_MERGE.md) — approved core/staging integration, both-parent suite union, 38 public builds, ABI/static RAM comparisons and remaining hardware gates.
-
-- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks, CPU meter, motion-only watchdog, USB21 and measured limits.
-- [BUILD.md](kernel/BUILD.md) — current Make profiles, private settings, BOOTSEL/picotool and host checks.
-- [BENCH_KERNEL_TEST.md](kernel/BENCH_KERNEL_TEST.md) — on-chip stimulus scope, statistics publication, ownership and ordinary-image hash gate.
-- [BENCH_KERNEL_STEP0.md](kernel/BENCH_KERNEL_STEP0.md) — spare-Pico encoder load image, build/run procedure, count/cost pass rules and limits.
-- [SPLIT_PARKED_20261115.md](kernel/SPLIT_PARKED_20261115.md) — split placement parked: decision, UP vs split bench evidence, what to try first if resumed.
-- [KERNEL_RAM.md](kernel/KERNEL_RAM.md) — opt-in UP kernel/ISR hot path in RAM: make switch, lists, placement proof, bench result, acceptance rule.
+- [KERNEL.md](kernel/KERNEL.md) — robot tasks, priorities, stacks (Wi-Fi M9, IMU high-water), watchdog, CPU meter, P1/P2 run timing, KERNEL_RAM (rule b, robot pairs), F-NVIC, core placement and lock rules (split parked), M8 startup handoff, RAM budget, USB21 and measured limits.
+- [BUILD.md](kernel/BUILD.md) — Make profiles and options, demo line, private settings, BOOTSEL/picotool, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe, host checks.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — B2a closure and scoped operator evidence; B2b software/image/resource checks and remaining SHADOW hardware gates.
-- [RAM_BUDGET.md](kernel/RAM_BUDGET.md) — B2b combined +3904 B versus staging235af44, vehicle380 B ceiling account, earlier IMU/junction deltas and pending named-stack/CPU gates.
-- [UP_SMP_SHIM.md](kernel/UP_SMP_SHIM.md) — M7 real UP lock/atomic contract, red-to-green tests, ARM ordering and zero static RAM delta.
-- [SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — SWD probe wiring (Debug Probe at school, Pi 400 at home), safety rules, run-time memory reads, GDB on both cores and firmware load.
-- [NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: `EnableInt` byte store leaves every external IRQ at priority 0; measured values; fix on hold.
-- [WIFI_STACK_WATERMARK.md](kernel/WIFI_STACK_WATERMARK.md) — M9 pre-start painted radio stack, 256 B reporting rule, tests and static-RAM increase versus removed heap allocation; hardware gate Not run.
-- [CORE_PLACEMENT.md](kernel/CORE_PLACEMENT.md) — core placement, lock audit,
-  tests and the [M8 application startup handoff](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
-  through `platform/app_startup.h`; no device result.
 
 ## S1 — Telemetry
 
-- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes and RAM/live/refill ownership.
+- [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — sole Wi-Fi owner, read-only boards, bounded queues, idle/run modes, RAM/live/refill ownership; operation: broker, private settings, recorder, dashboard (fan, hump, run path), commands, Tailscale, security and troubleshooting.
 - [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — current binary topics, versions, bytes, masks, boot/session and decoder contract.
-- [OPERATION.md](s1-telemetry/OPERATION.md) — broker, recorder, dashboard, Tailscale, security, operation and radio-loss troubleshooting.
 
 ## S2 — Motion
 
-- [MOTION.md](s2-motion/MOTION.md) — controller, kernel/bench time-base distinction, settings, duty map and results.
-- [HARDWARE.md](s2-motion/HARDWARE.md) — current pins, geometry, encoder ratio, calibration/drift/speed tables and limits.
-- [CR1 motion plan](s2-motion/CR1_MOTION_PLAN.md) — baseline inventory,
-  approved A1 board packing, ownership limits and approval gates.
+- [MOTION.md](s2-motion/MOTION.md) — controller interface, settings (feed-forward, P/I, kick, stall, servo), hardware/time boundary, heartbeat, pins, geometry, 50-turn encoder ratio 2535, servo/sonar, unloaded RPM tables, power status, DM1 duty map, B3 results, SDK subset.
 
 ## S3 — Line and barcode
 
@@ -83,8 +60,7 @@ not current acceptance reports. Local course originals are not public records.
 
 ## S5 — Obstacle
 
-- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages, implemented 13-point scan, monitor/profile rules, reverse/reattempt and recovery limits.
-- [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — current kernel trigger/echo service, packed result, timeouts and measured sensor limits.
+- [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages, implemented 13-point scan, monitor/profile rules, reverse/reattempt, recovery limits, wide-cone finding; HC-SR04+ trigger/echo service, packed 16-bit result, 60–511 mm range, timeouts, bench/kernel sonar results and limits.
 
 ## Simulation
 
@@ -92,24 +68,10 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Archive
 
-- [DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) — earlier detour physical-test plan and simulator measurements still owed at that revision.
-- [MOTION_TIMING_INVESTIGATION.md](archive/MOTION_TIMING_INVESTIGATION.md) — timing confound and opt-in diagnostic investigation, with original revision limits.
-- [MTK3_FOLLOWUP_HANDOFF.md](archive/MTK3_FOLLOWUP_HANDOFF.md) — historical STEP 8 owner tips, cleanup/recovery and hardware limits.
-- [MTK3_STEP8_RECORD.md](archive/MTK3_STEP8_RECORD.md) — merged software validation, hardware evidence and boot-session follow-up; each source keeps its own tested revision.
 - [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) — shelved edge-following bypass v4.1, runs and unresolved issues.
 - [OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) — earlier detour design, D1–D18 evidence and then-open problems.
 - [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md) — earlier steering UDP log format and receiver.
-- [TELEMETRY_SCHEMA.md](archive/TELEMETRY_SCHEMA.md) — older instrument JSON contract; not the current MQTT wire format.
 - [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md) — preliminary controller design, superseded by the shared vehicle shell.
-- [WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) — earlier UDP bench dashboard, replaced by the MQTT dashboard.
-
-### Architecture history
-
-- [architecture/BRANCH_LAYOUT.md](archive/architecture/BRANCH_LAYOUT.md) — full source record; only links/paths adjusted.
-- [architecture/INTERRUPT_CONVENTIONS.md](archive/architecture/INTERRUPT_CONVENTIONS.md) — full source record; only links/paths adjusted.
-- [architecture/VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md) — full source record; only links/paths adjusted.
-- [architecture/CONTROL_ARCHITECTURE.md](archive/architecture/CONTROL_ARCHITECTURE.md) — full source record; only links/paths adjusted.
-- [architecture/robo_pico_rtos_multicore_plan.md](archive/architecture/robo_pico_rtos_multicore_plan.md) — full source record; only links/paths adjusted.
 
 ### S3 — Line and barcode history
 
@@ -120,46 +82,30 @@ not current acceptance reports. Local course originals are not public records.
 - [s3-line-barcode/VC_LINE_RUN.md](archive/s3-line-barcode/VC_LINE_RUN.md) — full source record; only links/paths adjusted.
 - [s3-line-barcode/BARCODE_READING_IDEAS.md](archive/s3-line-barcode/BARCODE_READING_IDEAS.md) — full source record; only links/paths adjusted.
 
-### S5 — Obstacle history
-
-- [s5-obstacle/OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/VC_DETOUR_RUN.md](archive/s5-obstacle/VC_DETOUR_RUN.md) — full source record; only links/paths adjusted.
-- [s5-obstacle/ULTRASONIC_DRIVER.md](archive/s5-obstacle/ULTRASONIC_DRIVER.md) — full source record; only links/paths adjusted.
-
 ### Simulation history
 
 - [simulation/SIMULATION.md](archive/simulation/SIMULATION.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_ECHO_FIT.md](archive/simulation/SIM_ECHO_FIT.md) — full source record; only links/paths adjusted.
 - [simulation/SIM_BOX_SWEEP.md](archive/simulation/SIM_BOX_SWEEP.md) — full source record; only links/paths adjusted.
-### Kernel originals
+### Kernel history
 
-The full original records retain their prose, numbers and revision limits;
-only link/path/anchor repairs follow the move.
+- [archive/kernel/HISTORY.md](archive/kernel/HISTORY.md) — `git show 569672a:<path>` pointers for the 19 removed kernel records (old robot bring-up, stacks, CPU, watchdog, layout, motion, USB priority, development setup, RAM budget per step, core placement/lock audit, UP shim, Wi-Fi stack, staging merge, bench, SWD).
 
-- [APPLICATION_TASKS.md](archive/kernel/APPLICATION_TASKS.md) — full historical source, with its measured values and original limits.
-- [CPU_LOAD.md](archive/kernel/CPU_LOAD.md) — full historical source, with its measured values and original limits.
-- [DEVELOPMENT.md](archive/kernel/DEVELOPMENT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_ROBOT.md](archive/kernel/KERNEL_ROBOT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_WATCHDOG.md](archive/kernel/KERNEL_WATCHDOG.md) — full historical source, with its measured values and original limits.
-- [MTK3_LAYOUT_CHECKS.md](archive/kernel/MTK3_LAYOUT_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_MOTION_CHECKS.md](archive/kernel/MTK3_MOTION_CHECKS.md) — full historical source, with its measured values and original limits.
-- [MTK3_USB_PRIORITY.md](archive/kernel/MTK3_USB_PRIORITY.md) — full historical source, with its measured values and original limits.
+### Telemetry history
 
-### S1 originals
+- [archive/s1-telemetry/HISTORY.md](archive/s1-telemetry/HISTORY.md) — `git show 569672a:<path>` pointers for 9 removed telemetry records (OPERATION, first MQTT design and refill simulation, first telemetry owner, old dashboard and runbook, STEP 8 record and follow-up handoff, UDP dashboard, JSON schema).
 
-- [KERNEL_MQTT.md](archive/s1-telemetry/KERNEL_MQTT.md) — full historical source, with its measured values and original limits.
-- [KERNEL_TELEMETRY.md](archive/s1-telemetry/KERNEL_TELEMETRY.md) — full historical source, with its measured values and original limits.
-- [MQTT_DASHBOARD.md](archive/s1-telemetry/MQTT_DASHBOARD.md) — full historical source, with its measured values and original limits.
-- [MQTT_RUNBOOK.md](archive/s1-telemetry/MQTT_RUNBOOK.md) — full historical source, with its measured values and original limits.
+### Architecture history
 
-### S2 originals
+- [archive/architecture/HISTORY.md](archive/architecture/HISTORY.md) — `git show 569672a:<path>` pointers for CR1_EVIDENCE (renamed CR1.md), CR1_MOTION_PLAN (merged into CR1.md), the 1738-line Week 8 CR1 Tribunal notes, both BRANCH_LAYOUT records (current one merged into PROJECT_STATUS.md), the three ADRs (merged into ARCHITECTURE.md), and the old interrupt conventions, first vehicle shell, two-core control proposal and RTOS multicore plan.
 
-- [CALIBRATION_RESULTS.md](archive/s2-motion/CALIBRATION_RESULTS.md) — full historical source, with its measured values and original limits.
-- [DUTY_MAP.md](archive/s2-motion/DUTY_MAP.md) — full historical source, with its measured values and original limits.
-- [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md) — full historical source, with its measured values and original limits.
-- [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md) — full historical source, with its measured values and original limits.
-- [MOTOR_ROTATION_DRIFT.md](archive/s2-motion/MOTOR_ROTATION_DRIFT.md) — full historical source, with its measured values and original limits.
+### Obstacle history
+
+- [archive/s5-obstacle/HISTORY.md](archive/s5-obstacle/HISTORY.md) — `git show 569672a:<path>` pointers for 6 removed obstacle records (ULTRASONIC, first ultrasonic driver with seven bench runs, monitor, scan/profile, R1–R4 and M2-reattempt detour runs, v1.6 detour test plan).
+
+### Motion history
+
+- [archive/s2-motion/HISTORY.md](archive/s2-motion/HISTORY.md) — `git show 569672a:<path>` pointers for 7 removed motion records (HARDWARE, first motor controller with B1–B3, 2026-10-30 calibration, 50-turn drift, DM1 method, bare-metal heartbeat, STEP 8 motion timing investigation).
 - [USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) — obsolete by operator decision; retained evidence, not a current procedure.
 
 ## Original-template reference exceptions
