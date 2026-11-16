@@ -106,4 +106,5 @@ by this record.
 Results must report letters, attempts/reasons, native quiet/start proofs,
 junction detection, actual action versus expected LEFT, actual admission
 reason, final state, calibration reports, wheel speeds, and call counts.
-No Webots result is claimed by this wiring record.
+See the [old-window results and limits](SIL_JUNCTION_BARCODE_RESULTS_20261116.md).
+This wiring record alone is not an execution result.
