@@ -177,8 +177,9 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
             const bool zero = (in->accel_mg[0] == 0.0f) &&
                               (in->accel_mg[1] == 0.0f) &&
                               (in->accel_mg[2] == 0.0f);
-            o->flags = (!finite || zero) ? IMU_SAFETY_FLAG_ZERO_VECTOR
-                                         : IMU_SAFETY_FLAG_READ_FAILED;
+            o->flags = !in->read_failed && (!finite || zero)
+                           ? IMU_SAFETY_FLAG_ZERO_VECTOR
+                           : IMU_SAFETY_FLAG_READ_FAILED;
         } else {
             o->flags = IMU_SAFETY_FLAG_NOT_CALIBRATED;
         }

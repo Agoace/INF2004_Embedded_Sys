@@ -336,9 +336,7 @@ static void test_invalid_causes_split(void)
 {
     rig_t r;
 
-    /* 1. Degenerate read. imu_core marks a zero or non-finite vector as
-     * accel_valid=false, so the detector sees the invalid read and the raw
-     * vector is what distinguishes it from an ordinary read failure. */
+    /* 1. A sensor read succeeded, but the mapped vector was degenerate. */
     rig(&r);
     r.in.accel_valid = false;
     feed_n(&r, 3, 0.0f, 0.0f, 0.0f);
@@ -346,6 +344,14 @@ static void test_invalid_causes_split(void)
     CHECK(imu_safety_unavailable_cause(&r.s.output, true, r.now_ms,
                                        IMU_SAFETY_MAX_AGE_MS) ==
           (uint8_t)IMU_SAFETY_CAUSE_ZERO_VECTOR);
+
+    /* A failed probe read can also leave a zero vector. Its explicit read
+     * status takes precedence over the vector's value. */
+    rig(&r);
+    r.in.accel_valid = false;
+    r.in.read_failed = true;
+    feed(&r, 0.0f, 0.0f, 0.0f);
+    CHECK((r.s.output.flags & IMU_SAFETY_FLAG_READ_FAILED) != 0u);
 
     /* 2. Sample present but the level bias is not trusted. */
     rig(&r);

@@ -225,9 +225,10 @@ decided the press:
 | 6 | Wheels moving or commanded duty not zero |
 | 7 | One-second clear window incomplete |
 | 8 | Clear queued and waiting for the writer acknowledgement |
-| 9 | Clear intent expired or was cancelled; the latch stays |
+| 9 | Clear intent expired; the latch stays |
 
-Gate 8 says the press was accepted. The latch is released only by the writer
+An unsafe observation or unavailable board cancels a pending intent with its
+current gate (1 to 6) and cause. Gate 8 says the press was accepted. The latch is released only by the writer
 acknowledgement, which appears as the usual state change from FAULT to IDLE. The word
 contains opcode in bits 0–7 and detail in bits 8–15. Only validated, queued
 commands reach the vehicle and produce these events. Bad tokens, malformed

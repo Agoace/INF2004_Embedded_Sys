@@ -61,7 +61,7 @@ target_link_libraries(test_imu_capture_service PRIVATE m)
 add_test(NAME test_imu_capture_service_handoff
     COMMAND test_imu_capture_service capture)
 foreach(failure create_failure start_failure cyclic_failure count_wrap
-        fifo_empty)
+        fifo_empty zero_sample read_failure_zero)
     add_test(NAME test_imu_service_${failure}
         COMMAND test_imu_service ${failure})
 endforeach()

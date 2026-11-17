@@ -268,12 +268,17 @@ static void sample(void)
             .now_ms = input.now_ms,
             .accel_valid = core.output.valid,
             .calibrated = core.output.calibrated,
+            .read_failed = !valid,
             /* input.wheels_still is counts unchanged AND zero commanded
              * duty. The encoder-only copy would call a wheel that is being
              * driven but is stalled "still" (RT-0092/F3). */
             .wheels_still = input.wheels_still};
         for (unsigned int axis = 0u; axis < 3u; ++axis) {
-            safe_in.accel_mg[axis] = core.output.accel_mg[axis];
+            /* The core retains its last corrected vector when this read is
+             * invalid. Classify the current input, not that old vector. */
+            safe_in.accel_mg[axis] = core.output.valid
+                                         ? core.output.accel_mg[axis]
+                                         : input.accel_mg[axis];
         }
         imu_safety_step(&safety, &safe_in);
         /* Apply at most one queued safe-restart attempt. A refused clear

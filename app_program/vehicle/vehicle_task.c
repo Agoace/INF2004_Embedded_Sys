@@ -643,9 +643,8 @@ static void read_line(void)
  *
  * The IMU task owns the sensor and publishes a small safety board. Vehicle
  * owns the stop. A busy or absent board is never waited for: the last good
- * copy is kept, so the reported age keeps growing and a stalled IMU becomes
- * unavailable after IMU_SAFETY_MAX_AGE_MS. One lost read therefore cannot
- * latch a fault.
+ * copy is kept when a board read is busy, so its age grows until it becomes
+ * unavailable. A new invalid observation is unavailable at once.
  */
 static imu_safety_output_t imu_copy;
 static bool imu_have_copy;
@@ -658,8 +657,8 @@ static uint8_t imu_latched;
  * A press now records ONE bounded operator intent instead of a single 100 ms
  * attempt (recovery plan Phase 2). The intent re-queues the request while the
  * safe gates still hold, so an operator who waits does not lose the press to
- * a scheduling delay. It is cancelled by a new trigger, by an unavailable
- * IMU, by its own expiry, or by the acknowledgement. The latch is still
+ * a scheduling delay. It is cancelled if any safe gate fails, if the IMU
+ * becomes unavailable, or when the intent expires. The latch is still
  * released ONLY by a fresh writer acknowledgement. */
 #define IMU_CLEAR_RETRY_MS 100u  /* re-queue period while the intent lives */
 #define IMU_CLEAR_INTENT_MS 1000u /* maximum lifetime of one intent */
@@ -845,37 +844,45 @@ static bool imu_clear_gates_ok(void)
     return imu_copy.clear_ms >= IMU_SAFETY_CLEAR_MS;
 }
 
-/* Why a press could not queue a clear, for the recovery event. */
-static uint8_t imu_refuse_gate(void)
+typedef struct {
+    uint8_t gate;
+    uint8_t cause;
+} imu_recovery_reason_t;
+
+/* Evaluate the gate and cause from one board copy and one timestamp. */
+static imu_recovery_reason_t imu_recovery_reason(void)
 {
     if (imu_clear_pending) {
-        return (uint8_t)IMU_GATE_PENDING;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_PENDING, 0u};
     }
     if (!imu_have_copy) {
-        return (uint8_t)IMU_GATE_NO_BOARD;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_NO_BOARD,
+                                       (uint8_t)IMU_SAFETY_CAUSE_ABSENT};
     }
     const uint8_t cause = imu_safety_unavailable_cause(
         &imu_copy, imu_have_copy, drv_time_ms(), IMU_SAFETY_MAX_AGE_MS);
 
     if (cause == (uint8_t)IMU_SAFETY_CAUSE_STALE) {
-        return (uint8_t)IMU_GATE_STALE;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_STALE, cause};
     }
     if (cause != (uint8_t)IMU_SAFETY_CAUSE_NONE) {
-        return (uint8_t)IMU_GATE_INVALID;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_INVALID, cause};
     }
     if ((imu_copy.flags & IMU_SAFETY_FLAG_UPRIGHT) == 0u) {
-        return (uint8_t)IMU_GATE_POSE;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_POSE,
+                                       (uint8_t)IMU_SAFETY_CAUSE_POSE};
     }
     if ((imu_copy.clear_blockers & IMU_SAFETY_BLOCK_NOT_UPRIGHT) != 0u) {
-        return (uint8_t)IMU_GATE_POSE;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_POSE,
+                                       (uint8_t)IMU_SAFETY_CAUSE_POSE};
     }
     if ((imu_copy.clear_blockers & IMU_SAFETY_BLOCK_NOT_NEAR_ONE_G) != 0u) {
-        return (uint8_t)IMU_GATE_NEAR_ONE_G;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_NEAR_ONE_G, 0u};
     }
     if ((imu_copy.clear_blockers & IMU_SAFETY_BLOCK_WHEELS_MOVING) != 0u) {
-        return (uint8_t)IMU_GATE_WHEELS;
+        return (imu_recovery_reason_t){(uint8_t)IMU_GATE_WHEELS, 0u};
     }
-    return (uint8_t)IMU_GATE_WINDOW;
+    return (imu_recovery_reason_t){(uint8_t)IMU_GATE_WINDOW, 0u};
 }
 
 static bool imu_safety_check(void)
@@ -899,10 +906,8 @@ static bool imu_safety_check(void)
             /* The IMU stopped being usable: the intent cannot be honoured.
              * Cancel it and keep every latch. */
             imu_clear_pending = false;
-            imu_recovery_event((uint8_t)IMU_GATE_INVALID,
-                               imu_safety_unavailable_cause(
-                                   &imu_copy, imu_have_copy, drv_time_ms(),
-                                   IMU_SAFETY_MAX_AGE_MS));
+            const imu_recovery_reason_t recovery = imu_recovery_reason();
+            imu_recovery_event(recovery.gate, recovery.cause);
             return false;
         }
         if ((int32_t)(drv_time_ms() - imu_clear_deadline) >= 0) {
@@ -912,9 +917,17 @@ static bool imu_safety_check(void)
             imu_recovery_event((uint8_t)IMU_GATE_CANCELLED, 0u);
             return false;
         }
-        /* Retry only while the safe gates still hold. A request the writer
-         * missed is therefore re-queued instead of losing the operator's
-         * press to a scheduling delay (recovery plan Phase 2). */
+        /* A new lift or overturn makes the all-clear window fail even while
+         * the detector retains its original latch. Cancel on any lost safe
+         * gate so an old press cannot clear after another unsafe pose. */
+        if (!imu_clear_gates_ok()) {
+            imu_clear_pending = false;
+            const imu_recovery_reason_t recovery = imu_recovery_reason();
+            imu_recovery_event(recovery.gate, recovery.cause);
+            return false;
+        }
+        /* A request the writer missed is re-queued on the next retry tick
+         * while the safe gates continue to hold (recovery plan Phase 2). */
         if ((int32_t)(drv_time_ms() - imu_clear_retry_at) >= 0) {
             if (imu_clear_gates_ok()) {
                 (void)imu_safety_clear_request();
@@ -1007,40 +1020,6 @@ static bool imu_start_allowed(void)
 }
 
 /*
- * Detail byte for a refused start. The event word says which reason blocked
- * the start; this says why, so a pose refusal is not reported as an
- * unavailable IMU and a latched unavailable fault keeps the cause that
- * stopped the robot (RT-0101/F2). `board` is the effective trigger already
- * read for this press. Diagnostic only: it never changes the decision.
- */
-static uint8_t imu_refuse_detail(uint8_t board)
-{
-    if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
-        /* A latch is in force. Keep the saved cause for an unavailable
-         * latch; lift and overturn have no cause. */
-        return (imu_latched == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE)
-                   ? imu_latch_cause
-                   : (uint8_t)IMU_SAFETY_CAUSE_NONE;
-    }
-    if (imu_clear_pending) {
-        /* A clear is queued; the console reports that separately. */
-        return (uint8_t)IMU_SAFETY_CAUSE_NONE;
-    }
-    if (board == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
-        return imu_safety_unavailable_cause(&imu_copy, imu_have_copy,
-                                            drv_time_ms(),
-                                            IMU_SAFETY_MAX_AGE_MS);
-    }
-    if (board == (uint8_t)IMU_SAFETY_NONE) {
-        /* evaluate() only returns NONE for a published, valid, fresh sample,
-         * so the gate stopped on the upright bounds alone. */
-        return (uint8_t)IMU_SAFETY_CAUSE_POSE;
-    }
-    /* The board reports lift or overturn: the event word says so. */
-    return (uint8_t)IMU_SAFETY_CAUSE_NONE;
-}
-
-/*
  * GP21 safe restart after an IMU latch. Needs a fresh observation, an
  * upright pose and a completed all-clear window. Only then is the writer
  * asked to clear, and the request is bounded: the latch is released only
@@ -1067,7 +1046,6 @@ static bool imu_safety_restart(void)
     imu_clear_pending = true;
     imu_clear_deadline = drv_time_ms() + IMU_CLEAR_INTENT_MS;
     imu_clear_retry_at = drv_time_ms() + IMU_CLEAR_RETRY_MS;
-    imu_recovery_event((uint8_t)IMU_GATE_PENDING, 0u);
     return false;
 }
 
@@ -1860,10 +1838,11 @@ static void vehicle_task(INT code, void *ctx)
             } else {
                 why = (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE;
             }
-            const uint8_t refuse_cause = imu_refuse_detail(board);
             /* One gate value drives both the wire event and the USB line, so
              * a field report and a console capture cannot disagree. */
-            const uint8_t gate = imu_refuse_gate();
+            const imu_recovery_reason_t recovery = imu_recovery_reason();
+            const uint8_t gate = recovery.gate;
+            const uint8_t refuse_cause = recovery.cause;
             const char *text = imu_reason_text(why);
             if ((why == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) &&
                 (refuse_cause == (uint8_t)IMU_SAFETY_CAUSE_POSE)) {

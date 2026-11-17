@@ -124,8 +124,9 @@ the detail byte of the live `robot/event` and printed on the USB line:
 | 4 | Pose: the sample is fresh and valid but outside the upright bounds. A refused start only; the cause helper never returns it |
 
 A stopped robot stores the cause once, at the first latch, because the live
-event suppresses repeats (RT-0101/F3). A later refused start while the latch is
-in force reuses that saved cause instead of reporting NONE (RT-0101/F2).
+stop event suppresses repeats (RT-0101/F3). The stop event keeps that cause.
+A later refused press reports its current recovery gate and cause. This lets
+the operator distinguish the original fault from the present clear blocker.
 
 The IMU `compute_*` counter is **wall elapsed time**, including preemption by
 tasks at priority 10 to 13, not exclusive CPU time. `work_*` also includes
@@ -134,20 +135,25 @@ can attribute CPU load (RT-0101/F1).
 
 ## Bounded operator intent for GP21 recovery
 
-A single 100 ms clear attempt lost the operator's press to timing, and a
-refused press was invisible without USB (recovery plan Phase 1 and 2). Now:
+The old single 100 ms attempt could lose a queued clear if the writer did not
+apply it in time. The device record did not show the failed gate, so timing is
+not a confirmed cause of that GP21 failure. A refused press was invisible
+without USB (recovery plan Phase 1 and 2). Now:
 
 - A press records **one bounded intent** (`IMU_CLEAR_INTENT_MS`, 1000 ms) that
   re-queues the request every 100 ms while the safe gates still hold.
 - The latch is released **only** by a fresh writer acknowledgement, so the F1
-  guarantee is unchanged. A new trigger, an unavailable IMU, expiry or a reboot
-  cancels the intent and keeps every latch.
+  guarantee is unchanged. An unsafe clear gate, an unavailable IMU, expiry or
+  a reboot cancels the intent and keeps every latch. A new lift or overturn
+  makes the clear gate unsafe even while the first reason stays latched.
 - Each press and each recovery state change emits one kind-3 event with bit 15
   set, and one USB line carrying the gate, the effective latch, `clear_ms`,
   the clear blockers and the board age. `docs/s1-telemetry/MQTT_WIRE.md` holds
   the byte table.
 - The detector now splits the legacy INVALID cause into read failure, not
-  calibrated, and zero vector, and publishes `clear_blockers` so the field can
+  calibrated, and zero vector. Read failure uses the probe result, so a failed
+  read with an old zero vector is not called a zero-vector sample. The detector
+  publishes `clear_blockers` so the field can
   say which condition stops the one-second window.
 
 ## Limits

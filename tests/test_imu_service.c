@@ -25,6 +25,7 @@ static int missed;
 static int wake_error;
 static bool sensor_ok = true;
 static bool sensor_empty;
+static bool sensor_zero;
 static bool stale_motion;
 static bool corrupt_read;
 static unsigned int create_calls;
@@ -66,15 +67,15 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now, imu_units_t *out)
     }
     ++probe->reads;
     probe->total_us += 530u;
-    out->accel_mg[0] = -20;
-    out->accel_mg[1] = 80;
-    out->accel_mg[2] = 1375;
+    out->accel_mg[0] = sensor_zero ? 0 : -20;
+    out->accel_mg[1] = sensor_zero ? 0 : 80;
+    out->accel_mg[2] = sensor_zero ? 0 : 1375;
     out->mag_valid = true;
     probe->fifo_last_samples = 4u;
     for (unsigned int i = 0u; i < 4u; ++i) {
-        probe->fifo_raw[i][0] = -320;
-        probe->fifo_raw[i][1] = 1280;
-        probe->fifo_raw[i][2] = 22000;
+        probe->fifo_raw[i][0] = sensor_zero ? 0 : -320;
+        probe->fifo_raw[i][1] = sensor_zero ? 0 : 1280;
+        probe->fifo_raw[i][2] = sensor_zero ? 0 : 22000;
     }
     for (unsigned int axis = 0u; axis < 3u; ++axis) {
         probe->mean_accel_mg[axis] = (float)out->accel_mg[axis];
@@ -242,6 +243,15 @@ int main(int argc, char **argv)
     assert(imu_hump_try_read(&hump) == E_TMOUT);
     assert(memcmp(&hump, &hump_saved, sizeof(hump)) == 0);
     assert(imu_hump_diag_try_read(&diag) == E_TMOUT);
+    if (argc > 1 && strcmp(argv[1], "read_failure_zero") == 0) {
+        imu_safety_output_t safety;
+
+        sensor_ok = false;
+        run(1u);
+        assert(imu_safety_try_read(&safety) == E_OK);
+        assert((safety.flags & IMU_SAFETY_FLAG_READ_FAILED) != 0u);
+        return 0;
+    }
     assert(memcmp(&diag, &diag_saved, sizeof(diag)) == 0);
     if (argc > 1 && strcmp(argv[1], "fifo_empty") == 0) {
         run(103u);
@@ -324,6 +334,20 @@ int main(int argc, char **argv)
     assert(out.probe.reads == 103u && out.probe.faults == 0u);
     assert(out.work_last_us >= 530u && out.work_total_us > 0u);
     assert(out.timestamp_ms > UINT32_MAX / 1000u);
+    if (argc > 1 && strcmp(argv[1], "zero_sample") == 0) {
+        imu_safety_output_t safety;
+
+        assert(imu_safety_try_read(&safety) == E_OK);
+        assert((safety.flags & IMU_SAFETY_FLAG_VALID) != 0u);
+        sensor_zero = true;
+        run(1u);
+        assert(imu_safety_try_read(&safety) == E_OK);
+        assert((safety.flags & IMU_SAFETY_FLAG_ZERO_VECTOR) != 0u);
+        assert(imu_safety_unavailable_cause(&safety, true, safety.observation_ms,
+                                            IMU_SAFETY_MAX_AGE_MS) ==
+               (uint8_t)IMU_SAFETY_CAUSE_ZERO_VECTOR);
+        return 0;
+    }
     saved = out;
     corrupt_read = true;
     assert(imu_snapshot_try_read(&out) == E_TMOUT);

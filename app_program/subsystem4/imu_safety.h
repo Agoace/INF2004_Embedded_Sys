@@ -140,6 +140,7 @@ typedef struct {
     bool accel_valid;  /* Fresh, non-empty sensor read. */
     bool calibrated;   /* Level bias is a usable reference. */
     bool wheels_still; /* Both encoder counts unchanged, zero duty. */
+    bool read_failed;  /* Probe returned no sample; vector may be retained. */
 } imu_safety_input_t;
 
 /* Board copy. Small on purpose: Vehicle reads it on the 10 ms path and the
