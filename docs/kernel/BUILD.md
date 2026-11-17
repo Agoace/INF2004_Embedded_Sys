@@ -68,6 +68,8 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
 | `LINE_KD` | 85 default, image unchanged. 0..85 replaces only the LINE D gain ([D gain trial](../s3-line-barcode/LINE.md#d-gain-trial-opt-in-line_kd)). Adds `_kdN`. Not with `BENCH_KERNEL=1`. |
 | `MOTION_SAME_TICK` | 0 default, image unchanged. 1 applies a new wheel speed in the same 10 ms period ([same-tick retarget](../s2-motion/MOTION.md#same-tick-retarget-opt-in)). Adds `_sametick`. Not with `BENCH_KERNEL=1`. |
+| `BARCODE_FAIL_CAPTURE` |0 default, images unchanged.1 is ROBOT only and keeps raw edge/decimated ADC evidence for the first two failed attempts per run. Adds `_bcfail2`. See [failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md). |
+| `BARCODE_FAIL_SLOTS` |2 default;1 is the smaller fallback. Used only when failed capture is enabled; changes image/profile suffix and invalidates old objects. Recheck combined RAM/headroom before use. |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because

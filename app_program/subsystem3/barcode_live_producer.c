@@ -1,4 +1,7 @@
 #include "barcode_live_producer.h"
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.h"
+#endif
 #include <math.h>
 #include <string.h>
 
@@ -64,6 +67,9 @@ static void evidence(barcode_live_producer_t *p,
                      const barcode_live_input_t *in, uint32_t reason)
 {
     const barcode_window_t *w = &p->window;
+#if BARCODE_FAIL_CAPTURE
+    bcfc_close(w);
+#endif
     p->event = (barcode_live_frame_t){
         .record = {.epoch = p->context.epoch,
                    .eligibility_revision = p->context.eligibility_revision,

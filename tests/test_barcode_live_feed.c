@@ -11,12 +11,17 @@
 #include "../app_program/subsystem3/barcode_window.h"
 static uint32_t clock_us;
 static bool observing, race, raced, epoch_test, cancel_test, interrupt_counts;
+static bool start_test;
 static char data_letter = 'A';
 static const barcode_cal_report_t cal = {.generation = 1u,
     .mode = BC_CAL_LEARNED, .white_samples = 1904u,
     .white_mean = 167u, .rise = 317u, .fall = 242u};
 static barcode_live_control_t control;
+#if BARCODE_FAIL_CAPTURE
+static char output[150000];
+#else
 static char output[16384];
+#endif
 static unsigned int used;
 /* RTOS ABI uses unsigned char, which cannot take printf's char-format
  * attribute. Suppress only Clang's impossible attribute suggestion here. */
@@ -71,7 +76,7 @@ static uint16_t signal(unsigned int ms)
 {
     const float mm = (float)ms * 0.146f;
     float at = 80.0f;
-    const char text[3] = {'*', data_letter, '*'};
+    const char text[3] = {start_test ? 'A' : '*', data_letter, '*'};
     if (mm < at) {
         return 160u;
     }
@@ -98,6 +103,7 @@ static uint16_t signal(unsigned int ms)
 }
 int main(int argc, char **argv)
 {
+    start_test = argc > 1 && strcmp(argv[1], "start_fail") == 0;
     race = argc > 1 && strcmp(argv[1], "race") == 0;
     epoch_test = argc > 1 && strcmp(argv[1], "counts_epoch") == 0;
     cancel_test = argc > 1 && strcmp(argv[1], "counts_cancel") == 0;
@@ -115,7 +121,8 @@ int main(int argc, char **argv)
         .eligibility_revision = 3u, .revision_ms = 999u,
         .mode = BC_LIVE_SHADOW_MODE};
     barcode_live_record_t first = {0}, record;
-    const unsigned int samples = (epoch_test || cancel_test) ? 850u : 3100u;
+    const unsigned int samples = start_test ? 1600u :
+        ((epoch_test || cancel_test) ? 850u : 3100u);
     for (unsigned int i = 0u; i < samples; ++i) {
         clock_us = 1000000u + i * 1000u;
         if (epoch_test && i == 700u) ++control.epoch;
@@ -145,8 +152,8 @@ int main(int argc, char **argv)
     }
     assert(barcode_live_counts_try_read(&counts) == E_OK);
     assert(counts.epoch == (epoch_test ? 8u : 7u));
-    assert(counts.frames == ((!race && !epoch_test && !cancel_test) ? 1u : 0u));
-    assert(counts.failures == ((race || cancel_test) ? 1u : 0u));
+    assert(counts.frames == ((!race && !epoch_test && !cancel_test && !start_test) ? 1u : 0u));
+    assert(counts.failures == ((race || cancel_test || start_test) ? 1u : 0u));
     assert(counts.attempts == counts.frames + counts.failures);
     barcode_live_counts_t again;
     assert(barcode_live_counts_try_read(&again) == E_OK);
@@ -154,8 +161,8 @@ int main(int argc, char **argv)
     assert(barcode_live_source_init() == E_OK); /* Getter/init never reset. */
     assert(barcode_live_counts_try_read(&again) == E_OK);
     assert(memcmp(&again, &counts, sizeof(counts)) == 0);
-    assert((first.sequence == 1u) == (!race && !epoch_test && !cancel_test));
-    if (!race && !epoch_test && !cancel_test) {
+    assert((first.sequence == 1u) == (!race && !epoch_test && !cancel_test && !start_test));
+    if (!race && !epoch_test && !cancel_test && !start_test) {
         assert(first.epoch == 7u && first.eligibility_revision == 3u);
         assert(first.letter == (uint8_t)data_letter && first.valid == 0u);
         assert(first.command == (data_letter == 'A' ? 1u : 0u));
@@ -166,7 +173,7 @@ int main(int argc, char **argv)
     assert(attempt.epoch == 7u && attempt.sequence == 1u);
     assert(attempt.uptime_ms >= attempt.start_ms);
     assert((attempt.flags & RM_BARCODE_SHADOW) != 0u);
-    const bool ok_attempt = !race && !epoch_test && !cancel_test;
+    const bool ok_attempt = !race && !epoch_test && !cancel_test && !start_test;
     assert((attempt.reason == BW_OK) == ok_attempt);
     assert(attempt.letter == (ok_attempt ? (uint8_t)data_letter : 0u));
     assert(barcode_attempt_ack(attempt.sequence));
@@ -181,6 +188,8 @@ int main(int argc, char **argv)
          * but must not be charged to the new epoch's zero terminal totals. */
         assert(strstr(output, "attempts 1 failures 1"));
         assert(strstr(output, "[BC_FRAME] epoch 7"));
+    } else if (start_test) {
+        assert(attempt.reason==BW_START && strstr(output,"reason 5"));
     } else if (race) {
         assert(raced && strstr(output, "reason 102"));
     } else {
@@ -198,6 +207,19 @@ int main(int argc, char **argv)
         }
         assert(count == 2u);
     }
+#if BARCODE_FAIL_CAPTURE
+    if ((race || cancel_test || start_test) && !epoch_test) {
+        char *ref=strstr(output,"[BC_REF]");
+        char *capture=strstr(output,"[BC_FAIL_CAPTURE]");
+        assert(ref && capture && capture>ref);
+        assert(strstr(capture,"index 1 ") && strstr(capture,"[BC_FAIL_EDGE]"));
+        assert(strstr(capture,"[BC_FAIL_ADC]"));
+        if (start_test) {
+            assert(strstr(capture,"elements 9 "));
+            assert(strstr(capture,"edge 10 adc_lost 0 edge_lost 0"));
+        }
+    } else assert(!strstr(output,"[BC_FAIL_CAPTURE]"));
+#endif
     /* An epoch0 stopped control must not erase the last run's reason line. */
     control.epoch = 0u;
     clock_us += 1000u;

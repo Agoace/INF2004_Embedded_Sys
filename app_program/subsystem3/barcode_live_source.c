@@ -100,6 +100,9 @@ void barcode_live_test_publish(const barcode_live_record_t *value)
 #if !APP_TEST && !APP_BENCH && !BC_LIVE_SOURCE_HOST_TEST
 #include "barcode_live_producer.h"
 #include "barcode_attempt.h"
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.h"
+#endif
 #include <math.h>
 #include "../subsystem2/motion.h"
 #include "../platform/drv_time.h"
@@ -263,6 +266,9 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         edge_pending = false;
     }
     after_window_edge(us, raw);
+#if BARCODE_FAIL_CAPTURE
+    if (input.control_ok) bcfc_epoch(input.control.epoch);
+#endif
     barcode_live_producer_observe(&producer, &input);
     if (producer.record_pending) {
         barcode_live_control_t current;
@@ -325,6 +331,9 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         }
         producer.event.index = frame_count + 1u;
         producer.event.terminal_us = drv_time_us();
+#if BARCODE_FAIL_CAPTURE
+        bcfc_terminal(&producer.event);
+#endif
 #if TM_MQTT
         const uint32_t terminal_ms = input.now_ms +
             (producer.event.terminal_us - input.now_us +
@@ -394,6 +403,9 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
 
 void barcode_live_source_dump(void)
 {
+#if BARCODE_FAIL_CAPTURE
+    bcfc_dump_begin();
+#endif
     if (app_board_try_read(&reason_board.sequence, reason_board.words,
                            &dump_reasons, sizeof(dump_reasons))) {
         uint32_t attempts = 0u;
@@ -473,7 +485,13 @@ void barcode_live_source_dump(void)
                   (long)f->record.read_counts[0],
                   (long)f->record.read_counts[1],
                   (unsigned long)f->terminal_us);
+#if BARCODE_FAIL_CAPTURE
+        bcfc_dump(f->record.epoch, f->index);
+#endif
     }
+#if BARCODE_FAIL_CAPTURE
+    bcfc_dump_remaining();
+#endif
     const uint32_t edge_first = dump_summary.edges > EDGE_ROWS ?
                                dump_summary.edges - EDGE_ROWS : 0u;
     tm_printf((UB *)"[BC_EDGES] total %lu retained %lu lost %lu\n",
@@ -499,6 +517,9 @@ void barcode_live_source_dump(void)
                   (unsigned int)dump_edge.raw, (unsigned int)dump_edge.black);
     }
 }
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.inc"
+#endif
 #else
 int barcode_live_counts_try_read(barcode_live_counts_t *out)
 {

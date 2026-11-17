@@ -1,3 +1,24 @@
+add_test(NAME test_barcode_fail_make COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_make.py")
+host_test(test_barcode_fail_capture tests/test_barcode_fail_capture.c)
+target_include_directories(test_barcode_fail_capture BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_capture PRIVATE BARCODE_FAIL_CAPTURE=1)
+target_link_libraries(test_barcode_fail_capture PRIVATE m)
+host_test(test_barcode_fail_capture_one tests/test_barcode_fail_capture.c)
+target_include_directories(test_barcode_fail_capture_one BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_capture_one PRIVATE BARCODE_FAIL_CAPTURE=1 BCFC_FAILED_SLOTS=1)
+target_link_libraries(test_barcode_fail_capture_one PRIVATE m)
+host_test(test_barcode_fail_feed tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_attempt.c
+    app_program/subsystem3/barcode_live_source.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_include_directories(test_barcode_fail_feed BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_feed PRIVATE
+    BC_LIVE_COUNTS_HOST_TEST=1 TM_MQTT=1 BARCODE_FAIL_CAPTURE=1)
+target_link_libraries(test_barcode_fail_feed PRIVATE m)
+foreach(scenario start_fail counts_cancel counts_epoch race)
+    add_test(NAME test_barcode_fail_feed_${scenario} COMMAND test_barcode_fail_feed ${scenario})
+endforeach()
 host_test(test_barcode_wire tests/test_barcode_wire.c app_program/subsystem1/mqtt_wire.c)
 host_test(test_barcode_attempt tests/test_barcode_attempt.c app_program/subsystem3/barcode_attempt.c)
 target_compile_definitions(test_barcode_attempt PRIVATE TM_MQTT=1)
