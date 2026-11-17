@@ -227,3 +227,92 @@ The capture-ON image adds two flash callees under RAM_PROOF (still PASS):
 `bcfc_epoch` from `barcode_live_source_sample`. Hardware cost and stack
 high-water are NOT measured. No flash and no push were done.
 
+
+## Powered results on staging `e6bf80b`
+
+Image `e6bf80b` contains changes A–D, a detour fix, KD30, same-tick and
+`BARCODE_FAIL_CAPTURE=1` with two slots. Times are milliseconds after run
+start. Line contrast is the per-200 ms peak of the normalized line pair
+(GP26/GP27), DERIVED from KR rows with the printed calibration ends.
+
+**OPERATOR course information (2026-11-17):**
+
+- Barcode 1 (the original) is at a place where the line was repaired.
+  Masking tape lies beside the line, and black tape over the masking tape
+  replaces the original black line. The line pair sees a weaker black there.
+- Run FX_1 had only barcode 1. Run FX2 had two barcodes: barcode 1 and a
+  new barcode 2 on a clean straight. Both are crossed once per ~30 s cycle.
+
+### FX_1 (boot 2583341417, run start 44909)
+
+- All four attempts failed: BP_DISABLED x3, BW_WIDTH x1.
+- Two attempts were on barcode 1, at 3261 ms and 44529 ms (one lap apart):
+  - The first had a valid start-star fit: n 5.83 mm, w 17.27 mm, lead 56.6 mm.
+  - Both were cancelled by LINE_LOST and then SEARCH (19 ms and 9 ms).
+- The other attempts, at +6.7 s and +6.05 s after them, were a different
+  dark course mark.
+- Over barcode 1, line contrast fell from 70–94 % to 32–47 % for 1.4–2 s.
+  - The bars do not show on the line pair, and the floor value did not change.
+  - The zigzag crossing then falls below the 30 % lost level.
+- Context times: the source was enabled 11.6 ms after RUN. The last unbound
+  reset was BW_MOTION, 460 ms before the first bar.
+
+### FX2 (boot 3158032322, run start 41669)
+
+| Attempt | First bar ms | Barcode | Result | End event |
+| ---: | ---: | --- | --- | --- |
+| 1 | 3320 | 1 | BP_DISABLED, 14 elements | LINE_LOST side unknown at 4312 |
+| 2 | 9775 | Not a barcode | BW_WIDTH, 1 element | None |
+| 3 | 18735 | 2 | BP_DISABLED | Normal right overshoot at 19452, contrast 70–84 % |
+| 4 | 33306 | 1 | BP_DISABLED | LINE_LOST side unknown at 34292 |
+| 5 | 48250 | 2 | **F**, n 5.28 / w 16.98 mm, direction 1 | None during read |
+| 6 | 62921 | 1 | BP_DISABLED | LINE_LOST side unknown at 63892 |
+| 7 | 78203 | 2 | **F**, n 5.50 / w 16.60 mm, direction 1 | None during read |
+
+- **Barcode 1:** contrast fell to 28–41 % within 0.4 s of the first bar.
+  LINE_LOST followed 0.97–0.99 s in, and SEARCH lasted 99–559 ms. The
+  contrast profile matches FX_1. Fits on this sheet were smaller
+  (n ≈ 4.8 mm, w ≈ 13.5 mm); the cause is not established.
+- **Barcode 2:** contrast stayed 70–87 % while the code was read.
+  Two of three passes decoded F, 1.84 s after the first bar.
+- **Context:** the source was enabled 11.6 ms after RUN. The last unbound
+  BW_MOTION reset was 1010 ms before the first bar, and white re-qualified
+  after it.
+- **Counts:** MQTT v2 sequences 1–7 are contiguous: 2 OK and 5 failed. The
+  reason histogram and the summary agree. The last terminal attempt was well
+  before the time limit, so no stop-cut mismatch occurred.
+
+**Result:** the corrected reader admits and decodes real start stars.
+On barcode 1, every pass was cancelled by LINE_LOST/SEARCH caused by the
+repaired line. A 30 ms SEARCH-blip pause would not help, because those
+SEARCH intervals were 99–559 ms. Course or line-detector options remain a
+separate decision.
+
+### B120 (staging `1104752`, LINE_BASE=120, boot 3216784438, run start 48929)
+
+| Attempt | First bar ms | Sheet | Result | End event |
+| ---: | ---: | --- | --- | --- |
+| 1 | 4556 | Barcode 1 | BP_DISABLED, 13 elements | LINE_LOST side unknown at 5621; SEARCH 550 ms |
+| 2 | 12371 | Not a barcode | BW_WIDTH | None |
+| 3 | 23152 | Barcode 2 | **F**, n 5.66 / w 16.36 mm | None during read |
+| 4 | 40829 | Barcode 1 | BP_DISABLED | LINE_LOST side unknown at 42032; SEARCH 539 ms |
+| 5 | 48643 | Not a barcode | BW_WIDTH | None |
+| 6 | 59517 | Barcode 2 | **F**, n 5.48 / w 16.94 mm | None during read |
+| 7 | 77655 | Barcode 1 | BP_DISABLED | LINE_LOST side unknown at 78792; SEARCH 549 ms |
+| 8 | 85430 | Not a barcode | BW_WIDTH | None |
+
+- **Measured speed:** about 118–120 mm/s over the codes (KR mean of
+  measured wheel speeds).
+- **Barcode 1 loss point does not move with speed.** LINE_LOST came
+  126–143 mm after the first bar, versus 139–145 mm at base 146. The loss
+  is tied to the repaired line, not to time.
+- **Barcode 2 reads:** first bar to decision was 264–266 mm at both speeds.
+  The fits match those at base 146.
+- **Barcode 1 fits are consistently smaller:** n 4.0–4.9 mm, w 12.9–14.0 mm.
+  Its narrow black bars measured about 1.7 mm raw. The cause is not
+  established.
+- **Counts:** MQTT v2 sequences 1–8 are contiguous: 2 OK, 3 BP_DISABLED and
+  3 BW_WIDTH. The histogram and the summary agree (2 OK / 6 failed).
+- **Dump:** delta 35. Capture 2 (not a barcode) has corrupted context and
+  edge lines and is marked incomplete. Capture 1 has all 14 edges and
+  301/326 ADC rows.
