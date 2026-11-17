@@ -16,6 +16,9 @@ static void clear_profile(ss_t *ss)
         ss->profile.point[i] = OBSTACLE_SCAN_POINT_EMPTY;
     }
     ss->measured_mask = 0u;
+    ss->fine_mask = 0u;
+    ss->coarse_hits = 0u;
+    ss->duration_ms = 0u;
     ss->stage = SS_STAGE_COARSE;
     ss->coarse_done = false;
     ss->fine_first = 0u;
@@ -70,6 +73,7 @@ void ss_start(void *ctx, uint16_t payload, uint32_t now_ms)
     ss->completed_attempt = 0u;
     ss->notice = SS_NOTICE_NONE;
     ss->failure = 0u;
+    ss->started_ms = now_ms;
     phase(ss, SS_WAIT, ss->cfg.stop_ms, now_ms);
     ++ss->scans;
 }
@@ -83,6 +87,24 @@ static unsigned int next_point(ss_t *ss)
             if ((ss->measured_mask & (1u << i)) == 0u) { return i; }
         }
         ss->coarse_done = true;
+        uint16_t nearest = ULTRASONIC_DISTANCE_MAX_MM;
+        for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; i += 3u) {
+            const obstacle_scan_point_t p = ss->profile.point[i];
+            if (ultrasonic_result_status(p) == ULTRASONIC_STATUS_VALID &&
+                ultrasonic_result_distance(p) < nearest) {
+                nearest = ultrasonic_result_distance(p);
+            }
+        }
+        if (nearest < ULTRASONIC_DISTANCE_MAX_MM) {
+            for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; i += 3u) {
+                const obstacle_scan_point_t p = ss->profile.point[i];
+                if (ultrasonic_result_status(p) == ULTRASONIC_STATUS_VALID &&
+                    ultrasonic_result_distance(p) <=
+                        (uint32_t)nearest + OBSTACLE_PROFILE_GAP_MM) {
+                    ++ss->coarse_hits;
+                }
+            }
+        }
         if (obstacle_fine_bounds(&ss->profile, &ss->fine_first,
                                  &ss->fine_last)) {
             ss->stage = SS_STAGE_FINE;
@@ -122,6 +144,10 @@ static bool take_echo(ss_t *ss, const vsm_inputs_t *in, uint32_t now_ms)
     if (++ss->readings >= OBSTACLE_SCAN_READINGS) {
         ss->readings = 0u;
         ss->measured_mask |= (uint16_t)(1u << ss->index);
+        if (ss->stage == SS_STAGE_FINE && ss->index >= ss->fine_first &&
+            ss->index <= ss->fine_last) {
+            ss->fine_mask |= (uint16_t)(1u << ss->index);
+        }
         const unsigned int previous = ss->index;
         const unsigned int next = next_point(ss);
         if (next < OBSTACLE_SCAN_POINTS) {
@@ -143,6 +169,7 @@ static vsm_outcome_t finish_profile(ss_t *ss, const vsm_inputs_t *in,
     ss->word = obstacle_profile_build(&ss->profile);
     side = obstacle_profile_side(ss->word, &ss->profile);
     ss->completed_attempt = ss->attempt;
+    ss->duration_ms = now_ms - ss->started_ms;
     ++ss->completed_scans;
     if ((side != OBSTACLE_SIDE_NONE) || (ss->attempt >= SS_MAX_REATTEMPTS)) {
         const uint16_t mm = obstacle_profile_distance(ss->word);
@@ -204,6 +231,7 @@ vsm_outcome_t ss_step(void *ctx, const vsm_inputs_t *in, uint32_t now_ms,
         if (reverse_complete(ss, in)) {
             /* Stop and settle again before the new full sweep. */
             clear_profile(ss);
+            ss->started_ms = now_ms;
             phase(ss, SS_WAIT, ss->cfg.stop_ms, now_ms);
             ss->notice = SS_NOTICE_REVERSE_END;
         } else if (waited) {

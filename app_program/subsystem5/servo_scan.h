@@ -92,6 +92,9 @@ enum { SS_STAGE_COARSE = 1u, SS_STAGE_FINE = 2u };
 typedef struct {
     ss_config_t cfg;
     uint16_t measured_mask;
+    uint16_t fine_mask; /* Newly acquired refinement rays, not coarse reuse. */
+    uint32_t started_ms, duration_ms;
+    uint8_t coarse_hits;
     uint8_t stage;
     uint8_t fine_first, fine_last;
     bool coarse_done;

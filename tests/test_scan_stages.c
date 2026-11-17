@@ -47,6 +47,14 @@ static uint32_t run(unsigned int lo, unsigned int hi)
                 coarse_hit |= i >= lo && i <= hi;
             }
             assert(saw_fine == coarse_hit);
+            assert(scan.duration_ms == t);
+            assert((scan.fine_mask & 0x1249u) == 0u); /* Coarse rays reused. */
+            unsigned int hits = 0u;
+            for (unsigned int i = 0u; i < 13u; i += 3u) {
+                if (i >= lo && i <= hi) { ++hits; }
+            }
+            assert(scan.coarse_hits == hits);
+            assert(!saw_fine || scan.fine_mask != 0u);
             return t;
         }
         at = (unsigned int)((drive.servo_deg + 30) / 5);
