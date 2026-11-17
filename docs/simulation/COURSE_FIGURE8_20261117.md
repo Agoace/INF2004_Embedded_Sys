@@ -122,14 +122,31 @@ which is not on this branch: in a `mtk3-hil` checkout run
 The generator reports 18 open ports: the free ends of the loose arcs
 (`allow_open_ports` is true for this reason).
 
-Known issue for SW8 (generator not changed here): `pil/world.py` writes
-`Viewpoint { ... orientation 0 0 1 0 }`, so the camera looks horizontally
-and Webots shows a black screen. Main_Worker's local fix in the generated
-world only: `position <cx> <cy> 3.6 orientation -0.57735 0.57735 0.57735
-2.0944` (top-down, north up).
+Known issues for SW8 (generator not changed here):
+- `pil/world.py` writes `Viewpoint { ... orientation 0 0 1 0 }`: the camera looks horizontally and Webots shows a black screen.
+- A hump has material `MAT_WHITE`, so the ramp is invisible on the white tiles.
+
+[`course8_world_patch.py`](../../sim/webots/tools/course8_world_patch.py)
+fixes both in a generated `.wbt` only: top-down view (`position <cx> <cy>
+3.6 orientation -0.57735 0.57735 0.57735 2.0944`, north up) and ramp
+`baseColor 0.85 0.1 0.55` (magenta, visual only). Run it after
+`pil.world`. The obstacle keeps the generator's brown `BOX` colour. The
+patched file no longer matches its hash in the generated `manifest.json`.
+
+## Robot drive in Webots: blocked
+
+The SIL controller on `mtk3-hil` 448fcef (`controllers/sil_line/sil_line.py`)
+cannot drive this course without SW8 changes:
+
+| Need | Current SIL | Effect on the figure-8 |
+| --- | --- | --- |
+| Line error reference | Straight course at y = 157.5 mm, or the fixed SIL curve / S-curve paths | Error bound (250 mm) trips at once: the course line is at y = 2362 mm |
+| Ramp under one wheel | Flat optical model; tilt above about 2.6 deg (`rotation[8] < .999`) aborts | The 10 mm ramp under one wheel (roll about 5 deg = asin(10 / 111.5)) ends the run |
+| Crossing | No junction wrapper in the LINE+SEARCH mode | Crossing behaviour not the full vehicle path |
+| LINE_KD 30 + same-tick | Same-tick yes; gain list 85/60/40 only, kd checked = 85 | KD 30 case not buildable |
 
 ## Status
 
-Built and host-checked: 10 unit checks; world generated on `mtk3-hil`
+Built and host-checked: 11 unit checks; world generated on `mtk3-hil`
 448fcef. The top-down render was compared with IMG_1962. No Webots
-robot run yet.
+robot run (blocked, see above).

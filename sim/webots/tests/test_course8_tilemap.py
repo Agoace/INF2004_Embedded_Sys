@@ -11,6 +11,7 @@ import unittest
 HERE = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(HERE / "tools"))
 import course8_tilemap as t  # noqa: E402
+import course8_world_patch as wp  # noqa: E402
 
 MAP = (HERE / "courses/course_figure8_tilemap.txt").read_text(encoding="utf-8")
 
@@ -136,6 +137,24 @@ class TileMap(unittest.TestCase):
         self.assertAlmostEqual(t.wheel_overlap_mm(75.0, shift_mm=27.25), 16.0)
         self.assertAlmostEqual(t.wheel_overlap_mm(40.0), 16.0)
         self.assertAlmostEqual(t.wheel_overlap_mm(55.0), 8.75)
+
+
+    def test_world_patch(self):
+        world = ("Viewpoint { position 1.2 1.3 4.5 orientation 0 0 1 0 }\n"
+                 'Solid { name "ramp_0" contactMaterial "course" children '
+                 "[ Shape { appearance PBRAppearance { baseColor 0.93 0.93 "
+                 "0.93 roughness 1 } } ] }\n"
+                 'Solid { name "r3c3" children [ Shape { appearance '
+                 "PBRAppearance { baseColor 0.93 0.93 0.93 } } ] }")
+        text, views, ramps = wp.patch(world)
+        self.assertEqual((views, ramps), (1, 1))
+        self.assertIn("position 1.2 1.3 3.6 orientation -0.57735", text)
+        self.assertIn('"ramp_0" contactMaterial "course" children [ Shape { '
+                      "appearance PBRAppearance { baseColor 0.85 0.1 0.55",
+                      text)
+        self.assertIn('"r3c3" children [ Shape { appearance PBRAppearance '
+                      "{ baseColor 0.93 0.93 0.93", text)
+        self.assertEqual(wp.patch(text)[1:], (1, 1))
 
 
 if __name__ == "__main__":
