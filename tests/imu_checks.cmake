@@ -40,6 +40,7 @@ endforeach()
 target_compile_definitions(test_imu_hump_core_filtered PRIVATE
     IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
 host_test(test_imu_service tests/test_imu_service.c
+    app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c)
@@ -50,6 +51,7 @@ target_compile_options(test_imu_service PRIVATE
     -include "${REPO}/tests/imu_service_hook.h")
 target_link_libraries(test_imu_service PRIVATE m)
 host_test(test_imu_capture_service tests/test_imu_service.c
+    app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c
@@ -64,7 +66,7 @@ target_link_libraries(test_imu_capture_service PRIVATE m)
 add_test(NAME test_imu_capture_service_handoff
     COMMAND test_imu_capture_service capture)
 foreach(failure create_failure start_failure cyclic_failure count_wrap
-        fifo_empty)
+        fifo_empty safety)
     add_test(NAME test_imu_service_${failure}
         COMMAND test_imu_service ${failure})
 endforeach()

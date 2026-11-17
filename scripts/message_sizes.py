@@ -25,6 +25,9 @@ ENTRIES = [
     ("subsystem3/barcode_live_source.h",
      ["barcode_live_record_t", "barcode_live_control_t"], []),
     ("subsystem4/imu_service.h", ["imu_snapshot_t"], []),
+    ("subsystem4/imu_safety.h",
+     ["imu_safety_input_t", "imu_safety_output_t", "imu_safety_report_t",
+      "imu_safety_t"], []),
     ("subsystem4/imu_hump.h",
      ["imu_hump_report_t", "imu_hump_summary_t"], []),
     ("subsystem4/imu_hump_diag.h", ["imu_hump_diag_report_t"], []),
@@ -63,6 +66,7 @@ def measure(cc, nm):
     expressions.append(("sizeof(rm_heartbeat_t) + sizeof(uint32_t)",
                         "app_program/subsystem1/robot_health.c"))
     board_types = ["motion_packed_t", "line_snapshot_t", "imu_snapshot_t",
+                   "imu_safety_report_t",
                    "barcode_cal_report_t", "barcode_live_record_t",
                    "barcode_live_control_t",
                    "imu_hump_report_t", "imu_hump_diag_report_t",

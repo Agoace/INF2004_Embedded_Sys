@@ -28,6 +28,11 @@ static APP_BOARD(imu_hump_report_t) hump_board;
 static imu_hump_diag_t hump_diag;
 static imu_hump_diag_report_t diag_value;
 static APP_BOARD(imu_hump_diag_report_t) diag_board;
+/* Port of smojjofy 8ac6e38..038ff23; UP placement seam is unchanged. */
+static imu_safety_t safety;
+static APP_BOARD(imu_safety_report_t) safety_board;
+static uint32_t safety_clear_requests, safety_requests_consumed;
+static uint32_t safety_applied_request;
 static uint32_t mark_requests;
 static uint32_t wake_lost;
 static uint32_t previous_us;
@@ -180,6 +185,32 @@ static void diagnostic_tick(const imu_core_input_t *input)
                       &diag_value, sizeof(diag_value));
 }
 
+static void safety_tick(const imu_core_input_t *input, bool read_valid)
+{
+    imu_safety_input_t in = {
+        .now_ms = input->now_ms, .accel_valid = core.output.valid,
+        .calibrated = core.output.calibrated, .read_failed = !read_valid,
+        .wheels_still = input->wheels_still};
+    for (unsigned int i = 0u; i < 3u; ++i) {
+        in.accel_mg[i] = core.output.valid ? core.output.accel_mg[i] :
+                                           input->accel_mg[i];
+    }
+    imu_safety_step(&safety, &in);
+    const uint32_t request =
+        __atomic_load_n(&safety_clear_requests, __ATOMIC_SEQ_CST);
+    if (request != safety_requests_consumed) {
+        if (imu_safety_clear(&safety)) {
+            safety_applied_request = request;
+        }
+        /* A refusal consumes the attempt but never acknowledges success. */
+        safety_requests_consumed = request;
+    }
+    const imu_safety_report_t report = {
+        .value = safety.output, .applied_request = safety_applied_request};
+    app_board_publish(&safety_board.sequence, safety_board.words,
+                      &report, sizeof(report));
+}
+
 static void sample(void)
 {
     const uint32_t started = drv_time_us();
@@ -196,7 +227,8 @@ static void sample(void)
     encoder_input(&input);
     input.calibration_epoch = vehicle_calibration_epoch();
     input.calibration_allowed = epoch == input.calibration_epoch &&
-                                (epoch & 1u) == 0u;
+                                (epoch & 1u) == 0u &&
+                                imu_safety_upright_ok(input.accel_mg);
     input.run_epoch = run_epoch();
     const uint32_t compute_start = drv_time_us();
     const uint32_t requested = __atomic_load_n(&mark_requests,
@@ -230,8 +262,6 @@ static void sample(void)
     if (!empty) {
         diagnostic_tick(&input);
     }
-    const uint32_t ended = drv_time_us();
-    const uint32_t compute = ended - compute_start;
     const uint32_t gap = started - previous_us;
 
     if (core.output.samples > 1u && gap > value.gap_max_us) {
@@ -243,7 +273,7 @@ static void sample(void)
     /* EMPTY is not a new observation. Publish counters but retain the
      * actual data timestamp so consumers can detect age/duplicates. */
     if (!empty) {
-        value.timestamp_us = ended;
+        value.timestamp_us = drv_time_us();
         value.timestamp_ms = input.now_ms;
         /* Only a real observation refreshes the hump board time, so a
          * stalled sensor makes the copy stale for every reader. */
@@ -251,7 +281,10 @@ static void sample(void)
         hump_value.timestamp_ms = input.now_ms;
         app_board_publish(&hump_board.sequence, hump_board.words,
                           &hump_value, sizeof(hump_value));
+        safety_tick(&input, valid);
     }
+    /* Wall elapsed time includes preemption and all safety work. */
+    const uint32_t compute = drv_time_us() - compute_start;
     value.compute_last_us = compute;
     value.compute_total_us += compute;
     if (compute > value.compute_max_us) {
@@ -310,6 +343,7 @@ int imu_service_init(void)
 #endif
     imu_core_init(&core);
     imu_probe_init(&probe);
+    imu_safety_init(&safety);
     cyclic = tk_cre_cyc(&config);
     return cyclic < 0 ? (int)cyclic : E_OK;
 }
@@ -383,6 +417,33 @@ int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
     return E_OK;
 }
 
+int imu_safety_try_read(imu_safety_report_t *out)
+{
+    imu_safety_report_t copy;
+    if (out == NULL) { return E_PAR; }
+    if (!running) { return E_OBJ; }
+    if (__atomic_load_n(&safety_board.sequence, __ATOMIC_SEQ_CST) == 0u) {
+        return E_NOEXS;
+    }
+    if (!app_board_try_read(&safety_board.sequence, safety_board.words,
+                            &copy, sizeof(copy))) {
+        return E_TMOUT;
+    }
+    *out = copy;
+    return E_OK;
+}
+
+uint32_t imu_safety_clear_request(void)
+{
+    if (!running) { return 0u; }
+    /* Sole requester: no libatomic read/modify/write helper on ARMv6-M. */
+    uint32_t next =
+        __atomic_load_n(&safety_clear_requests, __ATOMIC_SEQ_CST) + 1u;
+    if (next == 0u) { next = 1u; }
+    __atomic_store_n(&safety_clear_requests, next, __ATOMIC_SEQ_CST);
+    return next;
+}
+
 uint32_t imu_test_run(bool active)
 {
 #if APP_TEST
@@ -432,6 +493,14 @@ int imu_hump_try_read(imu_hump_report_t *out)
 int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
+}
+int imu_safety_try_read(imu_safety_report_t *out)
+{
+    return out == NULL ? E_PAR : E_OBJ;
+}
+uint32_t imu_safety_clear_request(void)
+{
+    return 0u;
 }
 uint32_t imu_test_run(bool active)
 {

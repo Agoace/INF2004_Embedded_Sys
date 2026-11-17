@@ -170,6 +170,13 @@ typedef struct {
                                 * not advancing. Diagnostic only. */
 } imu_safety_output_t;
 
+/* One coherent writer report. The token changes only after a successful
+ * clear attempt. Readers must not infer acknowledgement from NONE alone. */
+typedef struct {
+    imu_safety_output_t value;
+    uint32_t applied_request;
+} imu_safety_report_t;
+
 typedef struct {
     imu_safety_output_t output;
     float gravity_mg[3]; /* Quiet gravity history; frozen in a transient. */
