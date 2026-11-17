@@ -287,3 +287,32 @@ On barcode 1, every pass was cancelled by LINE_LOST/SEARCH caused by the
 repaired line. A 30 ms SEARCH-blip pause would not help, because those
 SEARCH intervals were 99–559 ms. Course or line-detector options remain a
 separate decision.
+
+### B120 (staging `1104752`, LINE_BASE=120, boot 3216784438, run start 48929)
+
+| Attempt | First bar ms | Sheet | Result | End event |
+| ---: | ---: | --- | --- | --- |
+| 1 | 4556 | Barcode 1 | BP_DISABLED, 13 elements | LINE_LOST side unknown at 5621; SEARCH 550 ms |
+| 2 | 12371 | Not a barcode | BW_WIDTH | None |
+| 3 | 23152 | Barcode 2 | **F**, n 5.66 / w 16.36 mm | None during read |
+| 4 | 40829 | Barcode 1 | BP_DISABLED | LINE_LOST side unknown at 42032; SEARCH 539 ms |
+| 5 | 48643 | Not a barcode | BW_WIDTH | None |
+| 6 | 59517 | Barcode 2 | **F**, n 5.48 / w 16.94 mm | None during read |
+| 7 | 77655 | Barcode 1 | BP_DISABLED | LINE_LOST side unknown at 78792; SEARCH 549 ms |
+| 8 | 85430 | Not a barcode | BW_WIDTH | None |
+
+- **Measured speed:** about 118–120 mm/s over the codes (KR mean of
+  measured wheel speeds).
+- **Barcode 1 loss point does not move with speed.** LINE_LOST came
+  126–143 mm after the first bar, versus 139–145 mm at base 146. The loss
+  is tied to the repaired line, not to time.
+- **Barcode 2 reads:** first bar to decision was 264–266 mm at both speeds.
+  The fits match those at base 146.
+- **Barcode 1 fits are consistently smaller:** n 4.0–4.9 mm, w 12.9–14.0 mm.
+  Its narrow black bars measured about 1.7 mm raw. The cause is not
+  established.
+- **Counts:** MQTT v2 sequences 1–8 are contiguous: 2 OK, 3 BP_DISABLED and
+  3 BW_WIDTH. The histogram and the summary agree (2 OK / 6 failed).
+- **Dump:** delta 35. Capture 2 (not a barcode) has corrupted context and
+  edge lines and is marked incomplete. Capture 1 has all 14 edges and
+  301/326 ADC rows.
