@@ -79,6 +79,10 @@ endforeach()
 add_test(NAME test_line_kd_make COMMAND python3 "${REPO}/tests/test_line_kd_make.py")
 host_test(test_line_steer tests/test_line_steer.c ${line_steer_source})
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
+# MOTION_SAME_TICK=1: the tests/sametick units force-include the same
+# headers as the firmware make rules.
+host_test(test_motor_ctl_sametick tests/test_motor_ctl_sametick.c
+    tests/sametick/motor_ctl_tu.c)
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)
 host_test(test_obstacle tests/test_obstacle.c ${obstacle_source})
 host_test(test_obstacle_detour tests/test_obstacle_detour.c ${obstacle_detour_source})
@@ -181,6 +185,14 @@ host_test(test_motion_watchdog tests/test_motion_task.c
 if(TARGET test_motion_watchdog)
     target_include_directories(test_motion_watchdog BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_watchdog PRIVATE APP_TEST=1 APP_BENCH=1)
+endif()
+
+host_test(test_motion_task_sametick tests/test_motion_task.c
+    tests/sametick/motion_tu.c tests/sametick/motor_ctl_tu.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
+if(TARGET test_motion_task_sametick)
+    target_include_directories(test_motion_task_sametick BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_motion_task_sametick PRIVATE MOTION_SAME_TICK=1)
 endif()
 
 foreach(mode IN ITEMS normal bench mqtt test)
