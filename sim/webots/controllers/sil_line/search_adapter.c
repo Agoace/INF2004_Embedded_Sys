@@ -9,6 +9,20 @@ static vsm_t shell;
 static vc_event_t pending_line_event;
 static uint32_t found_by_search;
 static vsm_drive_t drive;
+#ifndef SIL_SAME_TICK_APPLY
+#define SIL_SAME_TICK_APPLY 0
+#endif
+static int32_t timing[7];
+static void observed_motor_tick(const int32_t counts[2],uint32_t ms) {
+    timing[0]=(int32_t)ms;timing[1]=(int32_t)mc.command_ms;
+    timing[2]=mc.w[0].target_q8;timing[3]=mc.w[1].target_q8;
+    timing[4]=SIL_SAME_TICK_APPLY;timing[5]=mc.has_command;
+    timing[6]=(int32_t)(ms-mc.command_ms);
+    mc_tick(&mc,counts,ms,&output);
+}
+void sil_search_timing(int32_t *out) {
+    for (unsigned int i=0u;i<7u;++i) out[i]=timing[i];
+}
 
 void sil_reset(void) {
     sil_motor_baseline_reset();
@@ -19,6 +33,7 @@ void sil_reset(void) {
     (void)vsm_start(&shell,VSM_MOD_LINE,0u,0u);
     pending_line_event=VC_EVENT_NONE;found_by_search=0u;
     drive=(vsm_drive_t){0,0,0,VSM_ACT_STOP};
+    for (unsigned int i=0u;i<7u;++i) timing[i]=0;
 }
 static void shell_step(uint32_t ms,const int32_t counts[2],vc_event_t event,uint8_t motor_fault) {
     const vsm_inputs_t in={.line=&lp,.line_event=event,.counts={counts[0],counts[1]},
@@ -48,8 +63,14 @@ void sil_search_update(uint16_t left,uint16_t centre,uint32_t ms,int32_t left_co
     if (vc_event_type(event)==VC_EVENT_LINE_LOST || vc_event_type(event)==VC_EVENT_LINE_FOUND)
         pending_line_event=event;
     if (ms%10u==0u) {
-        mc_tick(&mc,counts,ms,&output);
+#if SIL_SAME_TICK_APPLY
+        /* Timing experiment only: compute/publish before this motor tick. */
         shell_step(ms,counts,pending_line_event,(uint8_t)(mc_faults(&mc)&MC_FAULT_LATCHED));
+        observed_motor_tick(counts,ms);
+#else
+        observed_motor_tick(counts,ms);
+        shell_step(ms,counts,pending_line_event,(uint8_t)(mc_faults(&mc)&MC_FAULT_LATCHED));
+#endif
         pending_line_event=VC_EVENT_NONE;
     }
     shell_result(event,out);
