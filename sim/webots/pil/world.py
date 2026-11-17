@@ -187,7 +187,8 @@ def project_files(built, profile):
             '  ContactProperties { material1 "tyre" material2 "course" coulombFriction [ ' +
             f'{profile["contact_friction"]:.12g}' + ' ] bounce 0 } ] }',
             f"Viewpoint {{ position {cx / 1000:.12g} {cy / 1000:.12g} {height:.12g} "
-            "orientation 0 0 1 0 }",
+            # R2025a FLU: local +X looks down, local +Z points north.
+            "orientation -0.57735 0.57735 0.57735 2.0944 }",
             "Background { skyColor [ 0.15 0.15 0.15 ] }",
             "DirectionalLight { direction -0.5 -0.5 -1 intensity 1 }"]
     for collider in built.colliders:

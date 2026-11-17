@@ -76,6 +76,21 @@ The frozen host dry-run matched 158 RX chunks and 58 TX writes, with
 and no opened serial device. Fresh output is under
 `build/webots/course8-merge-host-dryrun-20261117/`. No Webots was launched.
 
-The current generator camera orientation is a separate follow-up change.
-Generate a fresh project after a generator change; do not patch historical
-worlds or their sealed manifests in place.
+## Generator camera follow-up
+
+The shared `world.py` generator now emits the approved top-down Viewpoint:
+`orientation -0.57735 0.57735 0.57735 2.0944`. Its existing centre and height
+calculation is unchanged. In Webots R2025a's FLU frame, local +X is camera
+forward and local +Z is camera up; the rotation maps these to world -Z and
+world +Y. Identity rotation previously left the camera horizontal.
+
+A regression test rotates both basis vectors, checks the unchanged position
+calculation and verifies the generated-world manifest hash. It covers all
+three example courses and the course8 pinned overlay. All four cases failed
+before the generator fix. The complete integration suite then passed 391
+tests with three existing expected failures and no skips. This checks world
+text and geometry, not rendered pixels or framing on a specific display.
+No Webots was launched.
+
+Generate a fresh project after this change; do not patch historical worlds
+or their sealed manifests in place.

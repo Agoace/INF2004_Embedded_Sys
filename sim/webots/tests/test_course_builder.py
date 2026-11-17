@@ -2,6 +2,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import struct
 import tempfile
@@ -197,6 +198,48 @@ class CourseIntegrationTests(unittest.TestCase):
         world = self.files["worlds/school_like_assumed.wbt"].decode()
         self.assertNotIn("solid FALSE", world)
         self.assertIn("texCoord TextureCoordinate", world)
+
+    def test_generated_viewpoint_faces_floor_and_keeps_world_up(self):
+        from pil.sil_course8 import course8_course
+
+        # Webots R2025a uses FLU: local +X looks forward, local +Z is up.
+        # Rotating identity around world Z leaves the camera horizontal.
+        def rotate(vector, axis, angle):
+            dot = sum(a * v for a, v in zip(axis, vector))
+            cross = (axis[1] * vector[2] - axis[2] * vector[1],
+                     axis[2] * vector[0] - axis[0] * vector[2],
+                     axis[0] * vector[1] - axis[1] * vector[0])
+            return tuple(v * math.cos(angle) + c * math.sin(angle)
+                         + a * dot * (1 - math.cos(angle))
+                         for v, c, a in zip(vector, cross, axis))
+
+        courses = [Course.load(p) for p in sorted((ROOT / "courses").glob("*.json"))]
+        courses.append(course8_course())  # Use the pinned overlay, not a branch merge.
+        for course in courses:
+            with self.subTest(course=course.name):
+                built = build_course(course)
+                files = project_files(built, self.profile)
+                name = f"worlds/{course.name}.wbt"
+                line = next(row for row in files[name].decode().splitlines()
+                            if row.startswith("Viewpoint {"))
+                fields = line.split()
+                i = fields.index("orientation") + 1
+                ax, ay, az, angle = map(float, fields[i:i + 4])
+                norm = math.sqrt(ax * ax + ay * ay + az * az)
+                self.assertAlmostEqual(norm, 1, delta=1e-5)
+                axis = (ax / norm, ay / norm, az / norm)
+                for vector, expected in (((1, 0, 0), (0, 0, -1)),
+                                         ((0, 0, 1), (0, 1, 0))):
+                    for actual, target in zip(rotate(vector, axis, angle), expected):
+                        self.assertAlmostEqual(actual, target, delta=1e-5)
+                i = fields.index("position") + 1
+                x, y, z = map(float, fields[i:i + 3])
+                support = next(c for c in built.colliders if c.kind == "support")
+                self.assertAlmostEqual(x, support.centre_mm[0] / 1000)
+                self.assertAlmostEqual(y, support.centre_mm[1] / 1000)
+                self.assertAlmostEqual(z, max(support.size_mm[:2]) / 1000 + 0.5)
+                digest = json.loads(files["manifest.json"])["artifacts_sha256"][name]
+                self.assertEqual(hashlib.sha256(files[name]).hexdigest(), digest)
 
     def test_project_deterministic_self_contained_and_hashed(self):
         self.assertEqual(self.files, project_files(self.built, self.profile))
