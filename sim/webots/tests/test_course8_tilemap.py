@@ -92,7 +92,7 @@ class TileMap(unittest.TestCase):
     def test_placement_parse(self):
         self.assertEqual(t.placement("L2r:900"), ("L2r", 900.0, "C", 0.0))
         self.assertEqual(t.placement("L2r:900", "ramp"),
-                         ("L2r", 900.0, "R", 75.0))
+                         ("L2r", 900.0, "R", 34.0))
         self.assertEqual(t.placement("L2:600:L:80", "ramp"),
                          ("L2", 600.0, "L", 80.0))
         self.assertEqual(t.placement("L1:600", "barcode"),
@@ -116,14 +116,20 @@ class TileMap(unittest.TestCase):
             a = math.radians(h)
             left = -math.sin(a) * (hx - x) + math.cos(a) * (hy - y)
             along = math.cos(a) * (hx - x) + math.sin(a) * (hy - y)
-            # Near edge 75 mm right of the line centre; long axis along it.
-            self.assertAlmostEqual(-left - hump["width_mm"] / 2, 75.0)
+            # Near edge 34 mm right of the line centre; long axis along it.
+            self.assertAlmostEqual(-left - hump["width_mm"] / 2, 34.0)
+            self.assertEqual((hump["width_mm"], hump["length_mm"],
+                              hump["height_mm"]), (50.0, 195.0, 10.0))
             self.assertAlmostEqual(along, 0.0)
             self.assertAlmostEqual(hump["rotation_deg"], h)
 
     def test_right_wheel_overlap(self):
-        # Tyre 47.75..63.75 mm; default ramp near edge 75 mm: no overlap
-        # when the robot is on the line; touch from 11.25 mm right shift.
+        # Tyre 47.75..63.75 mm. Default gap 34 (25 from the line edge) and
+        # 25 from the centre: the full tyre (16 mm) is on the 50 mm ramp.
+        self.assertEqual(t.wheel_overlap_mm(34.0, 50.0), 16.0)
+        self.assertEqual(t.wheel_overlap_mm(25.0, 50.0), 16.0)
+        # Photo estimate 75 mm: no overlap when the robot is on the line;
+        # touch from 11.25 mm right shift.
         self.assertEqual(t.wheel_overlap_mm(75.0), 0.0)
         self.assertEqual(t.wheel_overlap_mm(75.0, shift_mm=11.25), 0.0)
         self.assertAlmostEqual(t.wheel_overlap_mm(75.0, shift_mm=19.25), 8.0)

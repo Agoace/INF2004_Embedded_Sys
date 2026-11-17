@@ -11,7 +11,7 @@ parameters (default: none placed).
 | Tile grid, track, loose arcs | Operator photos IMG_1960, IMG_1961, IMG_1962 (local only, not in the repository) | PHOTO-ESTIMATED |
 | Tile, line, arc | 315 mm tile, 18 mm line, arc radius 157.5 mm (MEASUREMENTS "Course tile") | ASSUMED |
 | Obstacle box | 170 × 120 mm footprint (STEP 8 box); 120 mm high | MEASURED / PHOTO-ESTIMATED |
-| Ramp | 195 mm long, 10 mm high (test hump); 55 mm wide; beside the line, right side, near edge 75 mm from the line centre | MEASURED / PHOTO-ESTIMATED |
+| Ramp | 50 mm wide, 195 mm long, 10 mm high; beside the line, right side, about 25 mm from the line edge (34 mm from the centre) | ASSUMED(operator estimate, 2026-11-17) |
 | Barcode sheet | SIL sheet 400 × 50 mm, 40 mm bars, 77 mm left of the line centre | ASSUMED |
 | Start pose | `L1:1190` (top straight, heading west) | ASSUMED |
 
@@ -53,31 +53,34 @@ A placement is `LOOP:MM[:SIDE[:GAP_MM]]`:
 | Object | Default | Notes |
 | --- | --- | --- |
 | Obstacle | `C`, gap 0 | Box centred on the line, 170 mm along it, 120 mm across |
-| Ramp | `R`, gap 75 mm | Beside the line (one-wheel hump); long axis along the line |
+| Ramp | `R`, gap 34 mm | Beside the line (one-wheel hump); long axis along the line |
 | Barcode | `L`, 77 mm (fixed) | Sheet centre 77 mm left of the line centre |
 
-### Ramp offset (PHOTO-ESTIMATED)
+### Ramp offset
 
-The photos show the ramp beside the r3 line, north of it, so on the right
-when the robot drives west (`L2r`). Scale from features at floor level
-next to the ramp:
-
-| Photo | Scale | Line centre → ramp near edge | Ramp width | Ramp length |
-| --- | --- | --- | --- | --- |
-| IMG_1960 (top-down) | tile seams 953 px per 315 mm = 0.33 mm/px | 80 mm | 56 mm | 211 mm |
-| IMG_1961 (top-down) | 18 mm line = 35 px, 0.51 mm/px | 69 mm | 54 mm | 225 mm |
-| Default | | 75 mm | 55 mm | 195 mm (MEASURED test hump), height 10 mm |
-
-The photo lengths include perspective from the ramp top; the measured
-195 mm is used.
+Operator estimate (2026-11-17, not a ruler value): the ramp lies about
+25 mm beside the line; ramp 50 mm wide, 195 mm long, 10 mm high. The 25 mm
+is read as line edge → ramp near edge, so the default gap (line centre →
+near edge) is 9 + 25 = 34 mm. The photos show the ramp beside the r3
+line, north of it: on the right when the robot drives west (`L2r`).
 
 Right wheel check (MEASUREMENTS: half-track 55.75 mm, wheel width 16 mm):
-the tyre spans 47.75–63.75 mm right of the robot centre. With the ramp near
-edge at 75 mm and the robot centred on the line, the gap is 11.25 mm: the
-right wheel does **not** touch the ramp. It touches when the robot is more
-than 11.25 mm right of the line, and the full tyre is on the ramp from
-27.25 mm. A near edge of 47.75 mm or less puts the full tyre on the ramp
-when centred (for example `R:45`).
+the tyre spans 47.75–63.75 mm right of the robot centre.
+
+| Gap (line centre → near edge) | Ramp spans | Right tyre on the ramp, robot centred |
+| --- | --- | --- |
+| 34 mm (default: 25 mm from the line edge) | 34–84 mm | Full 16 mm |
+| 25 mm (25 mm read from the centre) | 25–75 mm | Full 16 mm |
+
+Both readings of the 25 mm give the same result: the full right tyre is on
+the ramp. With the default, it stays fully on for a robot shift from
+−13.75 mm (left) to +20.25 mm (right) of the line.
+
+Photo estimate (PHOTO-ESTIMATED, note only, not used): line centre → ramp
+near edge 80 mm in IMG_1960 (tile seams 953 px per 315 mm = 0.33 mm/px)
+and 69 mm in IMG_1961 (18 mm line = 35 px, 0.51 mm/px); width 56 / 54 mm.
+At 69–80 mm a centred robot would miss the ramp, so the ramp was likely
+moved between the photos and the runs (placement is free on the day).
 
 Straight runs (distance in mm along L1 / L2; for `L1r`/`L2r` use loop
 length − value):
@@ -99,7 +102,7 @@ at once. The render uses obstacle `L1:400`, ramp `L2r:4790`, barcode
 | Barcode | `L2r:3300` | Loop 2 right-side straight, driving north, after the corner |
 | Barcode | `L1r:250` | Loop 1 driven the other way, after the crossing |
 | Ramp | `L2r:4790` | Photo position: north of the r3 line, driving west |
-| Ramp | `L2:600:R:45` | Loop 2 top straight, right wheel fully on the ramp |
+| Ramp | `L2:600` | Loop 2 top straight, right side |
 | Ramp | `L1:2250` | Loop 1 left straight, right (outer) side |
 
 ## Build

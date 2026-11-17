@@ -200,16 +200,15 @@ def offset(x, y, heading, left_mm):
 # Placement: LOOP:MM[:SIDE[:GAP_MM]]. SIDE is L, R or C (centre); GAP_MM
 # is the lateral gap from the line centre to the near edge of the object.
 # Obstacle: default C, gap 0 (centred on the line).
-# Ramp: default R, gap 75 mm: it lies BESIDE the line on the right of the
-# drive direction (one-wheel hump). PHOTO-ESTIMATED from IMG_1960/1961:
-# line centre -> ramp near edge 80 mm (IMG_1960, tile seams 953 px per
-# 315 mm = 0.33 mm/px) and 69 mm (IMG_1961, 18 mm line = 35 px,
-# 0.51 mm/px); width 56 / 54 mm; length 211 / 225 mm (MEASURED 195 mm).
+# Ramp: default R, gap 34 mm: it lies BESIDE the line on the right of the
+# drive direction (one-wheel hump). Operator estimate 2026-11-17: about
+# 25 mm from the line edge (9 + 25 = 34 mm from the centre); ramp 50 x 195
+# x 10 mm. (Photo estimate, not used: 69-80 mm from the centre.)
 # Barcode: always 77 mm left of the line centre (SIL sheet, ASSUMED).
 SIDES = {"L": 1.0, "R": -1.0, "C": 0.0}
-DEFAULTS = {"obstacle": ("C", 0.0), "ramp": ("R", 75.0),
+DEFAULTS = {"obstacle": ("C", 0.0), "ramp": ("R", 34.0),
             "barcode": ("L", 77.0)}
-RAMP_LENGTH_MM, RAMP_WIDTH_MM, RAMP_HEIGHT_MM = 195.0, 55.0, 10.0
+RAMP_LENGTH_MM, RAMP_WIDTH_MM, RAMP_HEIGHT_MM = 195.0, 50.0, 10.0
 BARCODE_LEFT_MM = 77.0
 
 
@@ -274,8 +273,8 @@ def course(cells, obstacles=(), ramps=(), barcodes=(),
         x, y, h = pose(cells, loop, dist)
         lateral = gap + (RAMP_WIDTH_MM / 2 if side != "C" else 0.0)
         x, y = offset(x, y, h, SIDES[side] * lateral)
-        # 195 mm long, 10 mm high (test hump, MEASURED); 55 mm wide
-        # PHOTO-ESTIMATED. Long axis along the line.
+        # 50 x 195 x 10 mm (operator estimate, 2026-11-17). Long axis
+        # along the line.
         humps.append({"id": "ramp_%d" % n, "centre_mm": [x, y, 10],
                       "length_mm": RAMP_LENGTH_MM, "width_mm": RAMP_WIDTH_MM,
                       "height_mm": RAMP_HEIGHT_MM,
