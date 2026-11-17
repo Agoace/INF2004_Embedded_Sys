@@ -35,7 +35,7 @@ app_program/subsystem3/barcode_live_source.o .text.barcode_live_source_sample
 app_program/subsystem3/barcode_live_source.o .text.resolve_edge
 app_program/subsystem3/barcode_live_source.o .text.barcode_live_control_try_read
 app_program/subsystem3/barcode_live_producer.o .text.barcode_live_producer_observe
-app_program/subsystem3/barcode_live_producer.o .text.cancel.isra.0
+app_program/subsystem3/barcode_live_producer.o .text.cancel
 app_program/subsystem3/barcode_window.o .text.barcode_window_motor
 app_program/subsystem3/barcode_window.o .text.barcode_window_adc
 app_program/subsystem3/barcode_window.o .text.barcode_window_step

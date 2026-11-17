@@ -33,6 +33,10 @@ function(host_test name test_file)
     if(NOT EXISTS "${REPO}/${test_file}")
         return()
     endif()
+    if("${sources}" MATCHES "subsystem3/barcode_live_source.c" AND
+            NOT "${sources}" MATCHES "subsystem3/barcode_attempt.c")
+        list(APPEND sources "${REPO}/app_program/subsystem3/barcode_attempt.c")
+    endif()
     add_executable(${name} ${sources})
     if("${sources}" MATCHES
             "imu_service.c|subsystem1/telemetry.c|test_telemetry_log.c")
@@ -289,6 +293,7 @@ endforeach()
 foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/vehicle/junction_live.c"
+        "${REPO}/app_program/subsystem3/barcode_attempt.c"
         "${REPO}/app_program/subsystem3/barcode_live_source.c"
         "${REPO}/app_program/subsystem3/barcode_live_producer.c"
         "${REPO}/app_program/subsystem3/barcode_window.c"

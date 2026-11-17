@@ -7,6 +7,8 @@
 #include "../app_program/subsystem2/motion.h"
 #include "../app_program/subsystem3/barcode.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
+#include "../app_program/subsystem3/barcode_attempt.h"
+#include "../app_program/subsystem3/barcode_window.h"
 static uint32_t clock_us;
 static bool observing, race, raced, epoch_test, cancel_test, interrupt_counts;
 static char data_letter = 'A';
@@ -159,9 +161,20 @@ int main(int argc, char **argv)
         assert(first.command == (data_letter == 'A' ? 1u : 0u));
         assert(first.flags == (0x3fu | BC_LIVE_SHADOW));
     }
+    rm_barcode_t attempt;
+    assert(barcode_attempt_peek(&attempt));
+    assert(attempt.epoch == 7u && attempt.sequence == 1u);
+    assert(attempt.uptime_ms >= attempt.start_ms);
+    assert((attempt.flags & RM_BARCODE_SHADOW) != 0u);
+    const bool ok_attempt = !race && !epoch_test && !cancel_test;
+    assert((attempt.reason == BW_OK) == ok_attempt);
+    assert(attempt.letter == (ok_attempt ? (uint8_t)data_letter : 0u));
+    assert(barcode_attempt_ack(attempt.sequence));
+    assert(!barcode_attempt_peek(&attempt));
     control.mode = BC_LIVE_DISABLED;
     assert(barcode_live_control_publish(&control) == E_OK);
     barcode_live_source_dump();
+    assert(strstr(output, "[BC_REASON_COUNTS]") && strstr(output, "terminal_us "));
     assert(strstr(output, "[BC_CPU]") && strstr(output, "spinW 167 leadW 160"));
     if (epoch_test || cancel_test) {
         /* The old epoch's late cancellation remains in lifetime diagnostics,
@@ -185,6 +198,15 @@ int main(int argc, char **argv)
         }
         assert(count == 2u);
     }
+    /* An epoch0 stopped control must not erase the last run's reason line. */
+    control.epoch = 0u;
+    clock_us += 1000u;
+    assert(barcode_live_control_publish(&control) == E_OK);
+    barcode_live_source_sample(clock_us, 160u, &cal, 0u, 0u);
+    used = 0u; output[0] = '\0';
+    barcode_live_source_dump();
+    assert(strstr(output, epoch_test ? "[BC_REASON_COUNTS] epoch 8" :
+                                      "[BC_REASON_COUNTS] epoch 7"));
     /* Interrupt the count copy with a real LINE-writer epoch transition.
      * Getter returns once, leaves caller bytes unchanged, then reads new data. */
     interrupt_counts = true;

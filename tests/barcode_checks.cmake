@@ -1,11 +1,17 @@
+host_test(test_barcode_wire tests/test_barcode_wire.c app_program/subsystem1/mqtt_wire.c)
+host_test(test_barcode_attempt tests/test_barcode_attempt.c app_program/subsystem3/barcode_attempt.c)
+target_compile_definitions(test_barcode_attempt PRIVATE TM_MQTT=1)
+add_test(NAME test_barcode_v2_python COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_v2.py")
+
 host_test(test_barcode_live_feed tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_attempt.c
     app_program/subsystem3/barcode_live_source.c
     app_program/subsystem3/barcode_live_producer.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_include_directories(test_barcode_live_feed BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_link_libraries(test_barcode_live_feed PRIVATE m)
-target_compile_definitions(test_barcode_live_feed PRIVATE BC_LIVE_COUNTS_HOST_TEST=1)
+target_compile_definitions(test_barcode_live_feed PRIVATE BC_LIVE_COUNTS_HOST_TEST=1 TM_MQTT=1)
 add_test(NAME test_barcode_live_feed_race COMMAND test_barcode_live_feed race)
 add_test(NAME test_barcode_live_feed_counts_epoch COMMAND test_barcode_live_feed counts_epoch)
 add_test(NAME test_barcode_live_feed_counts_cancel COMMAND test_barcode_live_feed counts_cancel)
@@ -148,6 +154,7 @@ target_compile_definitions(test_barcode_line_copy PRIVATE
 if(TARGET test_line_service)
     target_sources(test_line_service PRIVATE
         "${REPO}/app_program/subsystem3/barcode_calibration.c"
+        "${REPO}/app_program/subsystem3/barcode_attempt.c"
         "${REPO}/app_program/subsystem3/barcode_live_source.c"
         "${REPO}/app_program/subsystem3/barcode_live_producer.c"
         "${REPO}/app_program/subsystem3/barcode_window.c"

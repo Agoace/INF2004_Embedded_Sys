@@ -51,7 +51,7 @@ not current acceptance reports. Local course originals are not public records.
 - [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — the Wi-Fi/MQTT owner and how to run the laptop side.
   Contains: execution and hook, boards and queues, events and commands, publication settings (RUN/IDLE), RAM log and DUMP refill, results and limits; operation: broker, private settings, recorder and page, data panels (fan, hump, run path), Tailscale remote view, troubleshooting, tests.
 - [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — the binary wire contract, byte by byte.
-  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 32, detour 36, summary 52, status 6; reserved barcode 20, IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
+  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 32, detour 36, summary 52, status 6; barcode v2 28 (legacy v1 20), reserved IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
 
 ## S2 — Motion
 
@@ -76,6 +76,8 @@ not current acceptance reports. Local course originals are not public records.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
 - [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
   Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
+- [BARCODE_ATTEMPT_TELEMETRY.md](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) — immutable terminal attempts and early diagnostics.
+  Contains: v2/kind1 28-byte MQTT contract, 8-slot FIFO/drop and QoS1 retry behavior, known/unknown widths, epoch reason histogram before KR, terminal timestamps, software gates and hardware limits.
 - [BARCODE_RUN_SUMMARY.md](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — barcode ok/failed in the MQTT run summary.
   Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
 - [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.

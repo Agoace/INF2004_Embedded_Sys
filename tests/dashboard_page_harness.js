@@ -14,7 +14,8 @@ function makeNode(id) {
     children: [],
     appendChild(child) { this.children.push(child); return child; },
     replaceChildren() { this.children = []; },
-    insertRow() { return { insertCell: () => makeNode(""), appendChild() {} }; },
+    insertRow() { const row = makeNode(""); this.children.push(row); return row; },
+    insertCell() { const cell = makeNode(""); this.children.push(cell); return cell; },
     // One child per selector, so a test can read text the page wrote there.
     querySelector(sel) {
       this.found = this.found || {};

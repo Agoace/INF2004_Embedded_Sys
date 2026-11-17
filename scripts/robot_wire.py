@@ -13,7 +13,7 @@ VERSION = 1
 # Recorded topics and their newest payload size. The log has variable batch sizes.
 SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
          "obstacle": 32, "status": 6, "detour": 36, "summary": 52,
-         "barcode": 20, "imu": 12}
+         "barcode": 28, "imu": 12}
 # State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity,
 # v5 adds the telemetry mode word (u16 at 70, bit 0 idle).
 STATE_SIZES = {1: 48, 2: 60, 3: 72, 4: 76, 5: 76}
@@ -24,12 +24,12 @@ TOPIC_SIZES = {
     "sonar": {1: 32, 2: 36}, "event": {1: 16, 2: 20},
     "obstacle": {1: 20, 2: 24, 3: 32}, "detour": {1: 32, 2: 36},
     "summary": {1: 44, 2: 48, 3: 52}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
-    "barcode": {1: 20}, "imu": {1: 12}}
+    "barcode": {1: 20, 2: 28}, "imu": {1: 12}}
 BOOT_OFFSETS = {"state": (4, 72), "heartbeat": (3, 100), "sonar": (2, 32),
                 "event": (2, 16), "obstacle": (2, 20), "detour": (2, 32),
                 "summary": (2, 44), "status": (2, 2), "log": (2, 32)}
 CPU_UNKNOWN = 0xFFFF
-RESERVED_TOPICS = ("barcode", "imu")  # reserved, never published yet
+RESERVED_TOPICS = ("barcode", "imu")  # dispatch includes legacy reserved frames
 RESERVED_SIZES = {("barcode", 1): 20, ("imu", 1): 12, ("imu", 2): 12}  # (topic, kind) -> size
 BARCODE_FLAGS = ("detected", "decoded", "unreadable", "command_issued", "executed")
 DETOUR_OUTCOMES = (3, 4, 7, 8)  # DONE_LINE, DONE_NO_LINE, FAILED, ABORTED
@@ -330,13 +330,14 @@ def decode_reserved(topic, data):
     name = topic.removeprefix("robot/")
     _require(len(data) >= 2, "reserved topic header")
     result = {"version": data[0], "kind": data[1], "length": len(data), "known": 0}
-    size = RESERVED_SIZES.get((name, data[1])) if data[0] == 1 else None
+    size = (28 if name == 'barcode' and data[0:2] == bytes((2, 1)) else
+            RESERVED_SIZES.get((name, data[1])) if data[0] == 1 else None)
     if size is None:
         return result
     _require(len(data) == size, "wrong payload length")
     result["known"] = 1
     if name == "barcode":
-        result.update(_decode_barcode(data))
+        result.update(_decode_barcode_v2(data) if data[0] == 2 else _decode_barcode(data))
     elif data[1] == 1:
         result.update(_decode_imu_snapshot(data))
     else:
@@ -344,6 +345,34 @@ def decode_reserved(topic, data):
         _require(1 <= data[2] <= 6, "imu event")
         result.update(event=data[2], sequence=_u32(data, 4), uptime_ms=_u32(data, 8))
     return result
+
+
+BARCODE_REASONS = dict(enumerate(('BW_WAIT', 'BW_OK', 'BW_CALIBRATION',
+    'BW_LOSS', 'BW_MOTION', 'BW_START', 'BW_WIDTH', 'BW_GAP', 'BW_EXTENT',
+    'BW_TAIL', 'BW_NOT_LETTER')))
+BARCODE_REASONS.update(dict(enumerate(('BP_CONTROL', 'BP_DISABLED', 'BP_CONTEXT',
+    'BP_CUT', 'BP_CALIBRATION', 'BP_RECORD_AGE', 'BP_MOTOR_AGE', 'BP_CLOCK'), 100)))
+
+
+def _decode_barcode_v2(data):
+    flags, letter, reason = data[2], data[3], _u16(data, 4)
+    ok, failed, widths = bool(flags & 1), bool(flags & 2), bool(flags & 8)
+    n, w = _u16(data, 24), _u16(data, 26)
+    _require(flags & ~15 == 0 and ok != failed, 'barcode v2 flags')
+    _require(data[6] <= 2 and data[7] <= 4, 'barcode v2 direction/command')
+    _require(_u32(data, 8) != 0 and _u32(data, 12) != 0, 'barcode v2 identity')
+    _require((ok and 65 <= letter <= 90 and reason == 1) or
+             (failed and letter == 0 and data[7] == 0 and
+              reason in BARCODE_REASONS and reason not in (0, 1)), 'barcode v2 result')
+    _require((widths and 0 < n < 65535 and 0 < w < 65535) or
+             (not widths and n == w == 65535), 'barcode v2 widths')
+    return dict(detected=1, decoded=int(ok), unreadable=int(failed), failed=int(failed),
+        shadow=int(bool(flags & 4)), widths_valid=int(widths), letter=chr(letter) if ok else '',
+        reason=reason, reason_name=BARCODE_REASONS[reason], direction=data[6],
+        nav_command=data[7], command_issued=0, executed=0,
+        sequence=_u32(data, 8), epoch=_u32(data, 12), start_ms=_u32(data, 16),
+        uptime_ms=_u32(data, 20), narrow_mm=n/100 if widths else None,
+        wide_mm=w/100 if widths else None)
 
 
 def _decode_barcode(data):
@@ -744,6 +773,10 @@ def csv_fields():
                 sample[1] = 1
             elif name == "detour":
                 sample[1] = 3
+            if name == 'barcode' and version == 2:
+                sample[2], sample[3], sample[4] = 5, 65, 1
+                sample[8] = sample[12] = 1
+                sample[24:28] = b'\xff' * 4
             elif name == "obstacle" and version == 3:
                 sample[24:30] = b"\xff" * 6
             fields.update(decode("robot/" + name, sample))

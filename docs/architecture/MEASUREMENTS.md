@@ -1,5 +1,19 @@
 # Measurements
 
+## Barcode terminal telemetry software budget
+
+These values are design bounds or compiler measurements, not robot timing.
+The matched build compares `a2a5f39` with the terminal-telemetry candidate,
+public example settings, UP MQTT, `KERNEL_RAM=1`, GCC14.3.1.
+
+| Quantity | Value | Date | Label | Source |
+| --- | --- | --- | --- | --- |
+| Attempt FIFO capacity and width unit |8 records, drop newest;0.01 mm width quantization, not physical accuracy |2026-11-17 |ASSUMED |[Terminal telemetry](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) |
+| Attempt FIFO ARM storage |236 B:8 padded28 B values +12 B counters;240 B compile-time ceiling |2026-11-17 |MEASURED(build) |[Terminal telemetry](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#bounded-fifo-and-delivery) |
+| UP MQTT RAM sections |vector+.data+.bss219432 ->220728 B (+1296); flash .text418320 ->419728 B (+1408) |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail) |
+| RAM-function placement |75/75 symbols;18424 ->19156 B;34 vs32 distinct flash callees |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail) |
+| Terminal telemetry individual stack frames |source88 ->96 B; producer72 ->88; cancel48 ->64; enqueue16; packer16; LINE task96, DUMP96, MQTT service312 unchanged |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail); not full-call-chain or device high-water |
+
 One table of the measured or assumed physical and timing values in this project.
 Network values (addresses, secrets) are not included.
 

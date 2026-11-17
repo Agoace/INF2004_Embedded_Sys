@@ -27,7 +27,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/detour` | 36 | Finished detour, QoS 0, not retained |
 | `robot/summary` | 52 | End-of-run totals (v3), QoS 1, retained |
 | `robot/status` | 6 | Online/offline and last will, QoS 1, retained |
-| `robot/barcode` | 20 | Reserved; not implemented |
+| `robot/barcode` | 28 | v2 terminal SHADOW attempt, QoS 1, not retained; legacy v1 20 B still decodes |
 | `robot/imu` | 12 | Reserved; 4-byte header plus 8-byte snapshot; not implemented |
 
 ## Boot identity and sessions
@@ -85,7 +85,7 @@ adds a 32-bit unavailable counter and reuses its reserved byte for the mask.
 | `robot/status` | 2 / v1 | 6 / v2 | Associate retained ONLINE/OFFLINE with the correct boot |
 | `robot/cmd` | 22 / v1 | 22 / v1 | Unchanged; command/token contract is not a stored observation |
 | Embedded log event | 16 / v1 | 16 / v1 | Inherits the enclosing log-frame ID; no per-record duplication |
-| Reserved barcode / IMU | 20 / 12 | 20 / 12 | Not implemented; no extra fields added |
+| Barcode / reserved IMU | 20 / 12 | 28 / 12 | Barcode v2 terminal attempt; IMU topic remains reserved |
 
 State at 5 Hz adds only 20 payload bytes/second. Dropping its ID is not
 unambiguous: subscriber reconnect can deliver state before retained status,
@@ -513,15 +513,65 @@ Retained ONLINE alone does not prove a current connection: require recent
 state messages too. Broker restart and stale retained data can mean unknown
 or silent status. MQTT ESTOP remains best effort; GP21 is the real ESTOP.
 
-## Reserved barcode and IMU formats
+## Barcode results and reserved IMU formats
 
-These formats reserve topics only. Firmware does not publish them or execute
-barcode commands. Clients ignore unknown versions/kinds and display **not
-implemented**. They must not infer sensor availability from a reserved topic.
+Barcode v2 is a terminal-attempt observation. It does not execute commands.
+Legacy barcode v1 and the IMU formats remain reserved. Clients ignore unknown
+versions/kinds; a reserved payload alone does not establish sensor capability.
 
-### Barcode
+### Barcode v2
 
-`robot/barcode`, 20 bytes, future QoS 1, not retained:
+`robot/barcode`, **28 bytes, QoS 1, not retained**, little-endian:
+
+| Offset | Type | Field |
+| --- | --- | --- |
+| 0, 1 | u8 each | Version 2, kind 1 (terminal result) |
+| 2 | u8 | Flags: decoded bit0, failed bit1, SHADOW bit2, widths-valid bit3; bits4--7 zero |
+| 3 | u8 | ASCII uppercase A--Z on decode, zero on failure |
+| 4 | u16 | Reason: BW_OK1; BW_CALIBRATION2, LOSS3, MOTION4, START5, WIDTH6, GAP7, EXTENT8, TAIL9, NOT_LETTER10; BP_CONTROL100, DISABLED101, CONTEXT102, CUT103, CALIBRATION104, RECORD_AGE105, MOTOR_AGE106, CLOCK107 |
+| 6 | u8 | Print direction: unknown0, forward1, reverse2; robot motion remains forward |
+| 7 | u8 | Mapped command0..4, observation only; zero on failure, NONE0 is valid on decode |
+| 8 | u32 | Lifetime terminal-attempt sequence, skips zero, includes failures |
+| 12 | u32 | Candidate's run epoch, nonzero; not the epoch of a later cancellation sample |
+| 16 | u32 | Candidate start uptime ms |
+| 20 | u32 | Terminal processing uptime ms, after final source recheck |
+| 24, 26 | u16 each | Fitted narrow/wide in0.01 mm; both65535 if unavailable |
+
+Exactly one decoded/failed flag is set. A decode requires reason1 and A--Z;
+a failure has no decoded letter or mapped command. BW_NOT_LETTER is a failed
+course-window attempt, not a decoded course instruction. Widths-valid requires
+both widths nonzero and below65535; no-valid-fit does not mean physical0 mm.
+Failures can carry the already-fitted start-star widths, NOT an accepted full
+frame. Known malformed v2 is rejected; unknown versions/kinds remain ignored.
+
+Current producer sets SHADOW, including valid0 decoded records. Issued and
+executed remain NO; the mapped command never grants action permission.
+No source/control/ACK behavior changes. v2 is not a reinterpretation of v1
+votes, action or executed-result fields. The Python decoder retains v1 and
+adds `letter`, `reason`, `reason_name`, `epoch`, `start_ms`, `failed`, `shadow`,
+`widths_valid`, `narrow_mm` and `wide_mm` to decoded/CSV fields. All v2 width
+unavailability becomes `None` (blank CSV), not invented zero.
+
+LINE posts one immutable value per terminal bound attempt after final source
+recheck. An8-entry SPSC FIFO drops the NEWEST event if full, not an old
+unacknowledged result. LINE never waits. Wi-Fi alone encodes and publishes
+at most one new QoS1 request per poll, with one barcode request in flight.
+The FIFO head is retired only after successful PUBACK. Immediate publish
+refusal, asynchronous error and reconnect retry the same immutable head.
+Connection tokens reject stale callbacks. Reconnect can duplicate delivery;
+clients identify an attempt by boot session + epoch + sequence. This payload
+has no embedded boot ID; it uses the established MQTT boot-session tracking.
+It cannot resolve a new boot before state/status identifies that boot.
+
+No durable flash spool exists. Power loss loses pending events. Full-ring
+losses are exposed by the lifetime `dropped` count in early
+`[BC_REASON_COUNTS]`, and later sequence gaps; no-event periods do not imply
+zero drops. An IDLE publisher still drains pending attempts. Before the first
+attempt, do not fabricate a result to fill a panel.
+
+### Barcode v1 (legacy reserved)
+
+`robot/barcode`, 20 bytes, reserved QoS 1, not retained:
 
 | Offset | Type | Field |
 | --- | --- | --- |

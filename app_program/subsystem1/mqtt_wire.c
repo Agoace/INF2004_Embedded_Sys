@@ -51,6 +51,32 @@ static void put32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)(v >> WIRE_HIGH_BYTE_BITS);
 }
 
+bool rm_pack_barcode(uint8_t out[RM_BARCODE_SIZE], const rm_barcode_t *v)
+{
+    if (!out || !v) return false;
+    const bool ok = (v->flags & RM_BARCODE_DECODED) != 0u;
+    const bool failed = (v->flags & RM_BARCODE_FAILED) != 0u;
+    const bool widths = (v->flags & RM_BARCODE_WIDTHS) != 0u;
+    if ((v->flags & ~15u) != 0u || ok == failed || v->direction > 2u ||
+        v->command > 4u || v->sequence == 0u || v->epoch == 0u ||
+        (ok && (v->letter < 'A' || v->letter > 'Z' || v->reason != 1u)) ||
+        (failed && (v->letter != 0u || v->command != 0u ||
+                    !((v->reason >= 2u && v->reason <= 10u) ||
+                      (v->reason >= 100u && v->reason <= 107u)))) ||
+        (widths && (v->narrow_cmm == 0u || v->wide_cmm == 0u ||
+                    v->narrow_cmm == 65535u || v->wide_cmm == 65535u)) ||
+        (!widths && (v->narrow_cmm != 65535u || v->wide_cmm != 65535u))) {
+        return false;
+    }
+    out[0] = RM_BARCODE_VERSION; out[1] = 1u;
+    out[2] = v->flags; out[3] = v->letter;
+    put16(out + 4, v->reason); out[6] = v->direction; out[7] = v->command;
+    put32(out + 8, v->sequence); put32(out + 12, v->epoch);
+    put32(out + 16, v->start_ms); put32(out + 20, v->uptime_ms);
+    put16(out + 24, v->narrow_cmm); put16(out + 26, v->wide_cmm);
+    return true;
+}
+
 /*
  * Read a 32-bit value in little-endian byte order.
  */

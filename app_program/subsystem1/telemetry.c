@@ -504,11 +504,13 @@ static void telemetry_task(INT code, void *ctx)
             info.reason[sizeof(info.reason) - 1u] = '\0';
             motion_diag_dump(1);
             motion_diag_print();
+            /* Bounded barcode diagnostics precede thousands of KR rows so
+             * a shortened USB capture still contains terminal outcomes. */
+            dump_barcode_source();
             dump();
             ja_print(&last_junction);
             jlive_print(&last_source);
             jlive_print_counts(&last_source_counts);
-            dump_barcode_source();
             motion_diag_dump(0);
             break;
         default:
