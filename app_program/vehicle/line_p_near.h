@@ -27,5 +27,8 @@ static inline const lt_config_t *line_p_near_config(void)
     candidate.steer.base_mm_s = LINE_BASE;
     return &candidate;
 }
+/* Both opt-in headers may stack (LINE_KD + LINE_BASE); each wraps the
+ * previous LINE_CFG, so replace the macro without a redefinition warning. */
+#undef LINE_CFG
 #define LINE_CFG (*line_p_near_config())
 #endif

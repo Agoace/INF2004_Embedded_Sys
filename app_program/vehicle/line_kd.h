@@ -29,5 +29,8 @@ static inline const lt_config_t *line_kd_config(void)
     return &candidate;
 }
 
+/* Both opt-in headers may stack (LINE_KD + LINE_BASE); each wraps the
+ * previous LINE_CFG, so replace the macro without a redefinition warning. */
+#undef LINE_CFG
 #define LINE_CFG (*line_kd_config())
 #endif
