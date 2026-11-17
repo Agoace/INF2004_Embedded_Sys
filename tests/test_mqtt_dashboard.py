@@ -908,6 +908,37 @@ class ApprovedContractPanelTests(ModelCase):
         self.assertNotIn('Mode (wire)', self.rows('barcode'))
         self.assertEqual(self.model.discarded, 0)
 
+    def test_old_obstacle_history_keeps_elapsed_age_and_report_identity(self):
+        self.geometry(closest_mm=221, closest_angle_deg=0, width_mm=174,
+                      left_clear_mm=25, right_clear_mm=23)
+        self.model.ingest('robot/detour', detour(duration=17900, distance=1070, lateral=291))
+        before = self.panel('obstacle')['table']
+        self.clock.advance(90000)
+        self.model.ingest('robot/status', OFFLINE)
+        panel = self.panel('obstacle')
+        self.assertEqual(panel['age_ms'], 90000)
+        self.assertEqual(panel['age_kind'], 'report')
+        self.assertFalse(panel['stale'])
+        self.assertEqual(panel['table'], before)
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], '174 mm (observed span)')
+
+    def test_barcode_receive_ages_use_laptop_time_and_stop_boundary_counts_stay_separate(self):
+        self.model.ingest('robot/summary', summary_v3(flags=3, barcode_failed=6,
+                                                   start=33919, duration=90002))
+        self.attempt(decoded=0, failed=1, letter='', reason=100, reason_name='BP_CONTROL',
+                     sequence=7, start_ms=123562, uptime_ms=123921,
+                     widths_valid=0, narrow_mm=None, wide_mm=None)
+        self.clock.advance(90000)
+        rows = self.rows('barcode')
+        self.assertEqual(rows['Summary received age'], '90000 ms')
+        self.assertEqual(rows['Attempt report received age'], '90000 ms')
+        self.assertEqual(rows['Barcode ok / failed'], '0 / 6')
+        self.assertEqual(rows['Producer epoch / sequence'], '5 / 7')
+        self.assertEqual(rows['Attempt start / terminal uptime'], '123562 / 123921 ms')
+        self.assertIn('separate', self.panel('barcode')['note'])
+        self.assertNotIn('missed', self.panel('barcode')['note'])
+        self.assertNotIn('dropped', self.panel('barcode')['note'])
+
     def test_geometry_displays_observed_spans_and_sensor_frame_location(self):
         self.geometry()
         rows = self.rows('obstacle')
@@ -1392,7 +1423,7 @@ class HumpTests(ModelCase):
         self.clock.advance(600000)
         panel = self.panel("summary")
         self.assertFalse(panel["stale"])
-        self.assertEqual(panel["age_ms"], 65535)  # age is capped like every other age
+        self.assertEqual(panel['age_ms'], 600000)  # laptop receive time is not a u16 board age
         self.model.set_broker_connected(False)
         self.assertEqual(self.rows("summary")["Run ID"], 2)
 
@@ -2568,6 +2599,35 @@ class RedesignPageTests(AppCase):
         for view in trace['views']:
             self.assertIn('previous boot/session', view['text'])
             self.assertIn('retained copy', view['text'])
+
+    def test_old_scan_and_detour_badges_are_reports_not_missing_sensor_data(self):
+        for history in ('scan', 'detour', 'both'):
+            with self.subTest(history=history):
+                self.model.obstacle = None
+                self.model.detours.clear()
+                if history in ('scan', 'both'):
+                    ApprovedContractPanelTests.geometry(self)
+                if history in ('detour', 'both'):
+                    self.model.ingest('robot/detour', detour())
+                self.clock.advance(90000)
+                self.model.ingest('robot/status', OFFLINE)
+                trace = self.trace(views=[['panel-obstacle', '.age']])
+                self.assertEqual(trace['views'][0]['text'], '90.0 s since report')
+        # Missing board data must still say no data, rather than a fake age.
+        trace = self.trace(expressions=['fmtAge(65535)', 'fmtAge(65535, false)',
+                                        'fmtAge(90000)'])
+        self.assertEqual(trace['values'], ['no data', '65.5 s', '90.0 s'])
+
+    def test_detour_grid_has_a_scroll_container_and_nonoverlapping_header_rules(self):
+        page = self.request('GET', '/')[2].decode()
+        self.assertIn('<div class="table-scroll"><table class="rows" hidden></table></div>', page)
+        self.assertRegex(page, r'\.table-scroll\s*\{[^}]*overflow-x:\s*auto')
+        self.assertRegex(page, r'\.panel table\.rows\s*\{[^}]*min-width:\s*640px')
+        self.assertRegex(page, r'\.panel table\.rows th\s*\{[^}]*overflow-wrap:\s*anywhere')
+        self.model.ingest('robot/detour', detour())
+        table = next(p for p in self.model.snapshot()['panels'] if p['id'] == 'obstacle')['table']
+        self.assertEqual(len(table['columns']), 7)
+        self.assertEqual(len(table['rows'][0]), 7)
 
     def test_hump_card_is_a_primary_card(self):
         self.model.ingest("robot/summary", SAMPLES["summary_hump"])

@@ -380,7 +380,10 @@ A new active run does not turn the previous completed summary into current
 run totals. Hump events reset at an observed run start or new boot. A
 retained hump event is not assigned to the current run.
 
-Report age means time since receipt, not age of a continuous sensor sample.
+Report age means laptop time since receipt, not a 16-bit sensor-board age.
+It continues past 65535 ms. Completed scan/detour badges show elapsed time
+`since report`, including when the robot is stopped or offline. The detour
+table scrolls horizontally on narrow screens; its column headings can wrap.
 The page marks historical cards `since report`; it does not expire completed
 results as if they were samples. GP28, legacy barcode reports and legacy IMU
 snapshots keep their own source ages. A new summary or state frame cannot
@@ -389,7 +392,10 @@ a newer motion event arrives.
 
 The v2 attempt has no boot ID or run ID. Its displayed source session is
 inferred from other messages, not proved by the producer epoch. Do not join
-an attempt to a summary by matching epoch and run ID. Legacy barcode v1
+an attempt to a summary by matching epoch and run ID. Summary totals and
+attempt sequence remain separate; a difference does not establish lost
+reports. Stop-boundary inclusion follows the producer's rule, not a
+comparison inferred by the page. Legacy barcode v1
 keeps its raw fields and read-agreement rows. Unknown barcode versions show
 `unsupported version N`; their content is not interpreted.
 
