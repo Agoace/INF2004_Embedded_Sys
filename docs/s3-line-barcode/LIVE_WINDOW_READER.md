@@ -26,8 +26,8 @@ One task owns all reader calls. These methods are not a cross-task queue API:
 6. An accepted result remains immutable until explicit `rearm()` or `begin()`.
 
 Default source bounds: 12414 counts/m, 1500 us ADC gap for the 1 kHz feed,
-30000 us motor gap. GP28 is modelled at 80 mm forward and 77 mm left of the
-drive axle, with a 111 mm track. The axis uses the GP28 point's differential-
+30000 us motor gap. GP28 is modelled at 73 mm forward and 73 mm left of the
+drive axle (operator ruler, 2026-11-16; earlier 80/77 mm), with a 111 mm track. The axis uses the GP28 point's differential-
 drive position projected onto its direction at the first motor observation,
 instead of mean wheel travel. This compensates a forward zigzag when the
 barcode is perpendicular to that initial direction; it cannot infer an

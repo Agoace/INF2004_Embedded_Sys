@@ -37,8 +37,8 @@ const barcode_window_config_t barcode_window_default_config = {
     .sample_gap_us = 1500u,
     .motor_gap_us = 30000u,
     /* GP28: measured from the drive axle; verify on the robot. */
-    .sensor_forward_mm = 80,
-    .sensor_lateral_mm = 77,
+    .sensor_forward_mm = 73, /* MEASURED operator ruler 2026-11-16 */
+    .sensor_lateral_mm = 73,
     .track_mm = 111u,
 };
 _Static_assert(sizeof(barcode_window_t) <= 2048u, "Window RAM budget");

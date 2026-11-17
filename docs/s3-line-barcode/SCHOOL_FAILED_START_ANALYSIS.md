@@ -188,5 +188,10 @@ read F. A 120 ms twitch (retreat above 2.5 mm), both-wheel reverse, and a
 stationary motor step still end in BW_MOTION. GCC passes 580/580 tests.
 The recovery motor interval maps its ADC rows from the furthest point; edge
 error there is at most the held retreat (ASSUMED linear interpolation).
-Firmware matrix and sanitizer validation will be recorded with the remaining
-changes; no flash or push is authorized.
+Geometry change C: default GP28 offsets are now 73/73 mm (operator ruler,
+2026-11-16) instead of 80/77 mm. Geometry and fit code are unchanged. A
+config test is RED before the value change. On the five older real fixtures,
+every accept/reject result and reason is unchanged. Accepted retained fits
+move by at most 0.022 mm: large forward n/w 5.766/17.551 to 5.769/17.573 mm;
+430 large forward 5.776/17.715 to 5.778/17.727 mm. GCC passes 581/581 tests.
+Firmware matrix and sanitizer validation are in the final hand-off below.

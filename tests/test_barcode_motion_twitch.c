@@ -164,6 +164,11 @@ int main(int argc, char **argv)
                state.result.accepted, (unsigned long)state.result.reason);
         assert(!motion);
         assert(state.result.accepted && state.result.letter == 'F');
+    } else if (strcmp(kind, "geometry") == 0) {
+        /* MEASURED operator ruler 2026-11-16: 73 mm forward, 73 mm left. */
+        assert(barcode_window_default_config.sensor_forward_mm == 73);
+        assert(barcode_window_default_config.sensor_lateral_mm == 73);
+        assert(barcode_window_default_config.track_mm == 111u);
     } else if (strcmp(kind, "straight") == 0) {
         assert(!run("none", 1e9) && state.result.accepted &&
                state.result.letter == 'F');
