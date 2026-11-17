@@ -358,6 +358,50 @@ RUN/IDLE. Idle state arrives at 1 Hz, heartbeat every 5 s; sonar/live log pause.
 Their last data is labelled `idle (paused)`; the fan is held grey and its
 age continues to increase. Silent remains a3 s state gap in both modes.
 
+#### IMU and barcode reports
+
+HEALTH includes IMU and Barcode cards. These cards use existing messages;
+they do not require a new firmware image.
+
+| Data | Source and display rule |
+| --- | --- |
+| Hump event run count, highest peak and side | `robot/event` kind 9; heights use 0.1 mm units on wire and mm on the page. The count is the reported run count, not the number of received messages. Duplicate delivery does not increase it. |
+| Completed hump result and warnings | `robot/summary` v3; includes count, peak, side, missing IMU data, open hump at stop, long-hump rejection and curve gating. |
+| Barcode ok / failed | `robot/summary`; zero is a reported count, not missing data. These are completed-run totals, not individual attempts. |
+| Raw GP28 | `robot/state`; its age includes the line-board age. The board-valid row is separate from the raw value. RUN and idle age limits apply. |
+| IMU attitude | Current state/status messages do not contain IMU attitude samples. State heading and turn rate are wheel odometry; do not use them as IMU values. Legacy `robot/imu` v1 raw fields still appear if received. |
+| SHADOW | Deployment context only. Current messages do not confirm this mode on wire. A decoded letter or summary count does not prove that a command was issued. |
+
+Each summary shows its run ID, boot/session, received age and retained-copy
+warning when applicable. An earlier boot's summary stays labelled as history.
+A new active run does not turn the previous completed summary into current
+run totals. Hump events reset at an observed run start or new boot. A
+retained hump event is not assigned to the current run.
+
+Report age means time since receipt, not age of a continuous sensor sample.
+The page marks historical cards `since report`; it does not expire completed
+results as if they were samples. GP28, legacy barcode reports and legacy IMU
+snapshots keep their own source ages. A new summary or state frame cannot
+refresh an old IMU snapshot. Legacy IMU snapshot age is shown separately if
+a newer motion event arrives.
+
+The per-attempt barcode row and obstacle width/clearance rows are labelled
+future slots. This panel change adds no decoder for their proposed message
+versions. Existing clearance angles remain degrees. Future millimetre side
+spans must not be described as guaranteed body clearance or passability.
+A clipped width is only a lower bound.
+
+The host tests use report fixtures reconstructed from decoded fields in
+`mqtt_B120_1.csv` (source SHA256
+`a2fc22e835c2b109c3cc0dfd73c55625fdb2b44083878ffc564bb425f4ede640`).
+This is not a raw-packet recording. The CSV has no retain flag; tests apply
+retained delivery to startup history explicitly. The fixtures check two
+hump reports, 11.7 and 12.3 mm, a current summary of 0 barcode successes and
+7 failures, and an earlier boot's separate 1-success/3-failure summary.
+These are telemetry reports, not a new physical height measurement or a
+hardware acceptance result. Host model/page tests do not change Gate1's
+INCOMPLETE status or the physical GP28 FAIL status.
+
 #### Ultrasonic fan
 
 Forward is up, LEFT positive angle, RIGHT negative. Rings show0..511 mm;

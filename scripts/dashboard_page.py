@@ -405,6 +405,7 @@ function renderPanel(panel) {
   text(node.querySelector(".title"), titles[panel.id] || panel.title);
   text(node.querySelector(".age"), panel.id === "path" ? (panel.paused ? "idle (paused)" : "live rows")
        : panel.placeholder ? "placeholder"
+       : panel.age_kind === "report" && panel.age_ms !== null ? fmtAge(panel.age_ms) + " since report"
        : panel.paused ? "idle (paused)" + (panel.age_ms === null ? "" : ", data " +
                                            fmtAge(panel.age_ms))
        : fmtAge(panel.age_ms) + (panel.stale && panel.age_ms !== null ? " - stale" : ""));

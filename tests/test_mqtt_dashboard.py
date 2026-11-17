@@ -153,6 +153,22 @@ def obstacle(flags=0b0001, decision=1, angle=-15, scan=7, uptime=5000, closest=2
                        right_step, left_step, right_clear, left_clear)
 
 
+# Repacked from decoded mqtt_B120_1.csv fields (not recorded raw packets).
+# Source SHA256 a2fc22e835c2b109c3cc0dfd73c55625fdb2b44083878ffc564bb425f4ede640.
+# CSV has no MQTT retain flag: tests explicitly apply retained delivery to its
+# startup history and live delivery to its later reports.
+CAPTURE_HUMP_REPORTS = (
+    ('robot/status', '0202afd3a375'),
+    ('robot/summary', '03030403010000009dd90000925f010099300000300000000000000000000000'
+     '00000b000000000001030000afd3a3750000014e'),
+    ('robot/status', '02013de5b4c9'),
+    ('robot/status', '02018f9f3210'),
+    ('robot/event', '020900006500000050e10000750001008f9f3210'),
+    ('robot/event', '02090000b2000000b86e01007b0002008f9f3210'),
+    ('robot/summary', '0303040301000000b74c0000915f010078280000320000000000000000000000'
+     '000009000000000000077b008f9f321002000123'),
+)
+
 ONLINE = bytes([1, 1])
 OFFLINE = bytes([1, 2])
 
@@ -207,7 +223,7 @@ class PanelTests(ModelCase):
         self.assertEqual(wheels["Encoder counts left / right"], "1000 / -2000")
         self.assertEqual(wheels["Servo"], "-15 deg")
         self.assertEqual(self.rows("barcode")["Raw GP28 sample"], 777)
-        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+        self.assertEqual(self.rows("barcode")["Per-attempt details"], model_module.FUTURE_BARCODE)
         self.assertEqual(self.panel("line")["chart"]["values"], [-25])
         self.feed("state_running")
         vehicle = self.rows("vehicle")
@@ -260,13 +276,13 @@ class PanelTests(ModelCase):
         self.assertEqual(rows["Publish ok / failed"], "100 / 2")
         self.assertEqual(rows["Motion late / missed"], "12 / 13")
 
-    def test_imu_is_a_placeholder(self):
-        panel = self.panel("imu")
-        self.assertTrue(panel["placeholder"] and panel["stale"])
-        self.assertEqual(list(self.rows("imu")),
-                         ["Pitch", "Heading", "Turn rate", "Hump state", "Height", "Peak",
-                          "Collision", "Motion event"])
-        self.assertTrue(all(row["value"] == "not implemented yet" for row in panel["rows"]))
+    def test_imu_waits_for_available_reports_not_an_unimplemented_feature(self):
+        panel = self.panel('imu')
+        self.assertFalse(panel['placeholder'])
+        self.assertTrue(panel['stale'])
+        self.assertEqual(self.rows('imu')['Hump run result'], 'waiting for run summary')
+        self.assertIn(model_module.NOT_REPORTED, self.rows('imu')['IMU attitude stream'])
+        self.assertNotIn('not implemented', json.dumps(panel))
 
     def test_new_panel_needs_only_a_builder(self):
         @model_module.register_panel
@@ -288,7 +304,7 @@ class StaleTests(ModelCase):
         self.assertEqual(self.panel("line")["age_ms"], 5)
         self.assertEqual(self.panel("wheels")["age_ms"], 8)
         self.assertEqual(self.panel("vehicle")["age_ms"], 10)
-        self.assertEqual(self.panel("barcode")["age_ms"], 0)
+        self.assertEqual(self.panel("barcode")["age_ms"], 5)
         self.clock.advance(990)
         self.assertEqual(self.panel("line")["age_ms"], 995)
         self.assertFalse(self.panel("line")["stale"])
@@ -524,8 +540,8 @@ class ObstacleTests(ModelCase):
 
     def test_before_any_scan(self):
         panel = self.panel("obstacle")
-        self.assertEqual((panel["age_ms"], panel["note"]),
-                         (None, "no completed scan or detour yet"))
+        self.assertIsNone(panel['age_ms'])
+        self.assertTrue(panel['note'].startswith('no completed scan or detour yet'))
 
     def test_summary_rows(self):
         self.feed_obstacle()
@@ -620,15 +636,14 @@ class CPackedNewTopicTests(ModelCase):
 
 
 class ReservedTopicTests(ModelCase):
-    def test_not_implemented_until_data_arrives(self):
-        self.assertEqual(self.panel("imu")["note"], "not implemented: no data on robot/imu yet")
-        self.assertTrue(self.panel("imu")["placeholder"])
-        for label in ("Decoded command", "Confidence", "Direction", "Navigation command",
-                      "Result", "Detected / decoded / unreadable", "Command issued / executed"):
-            self.assertEqual(self.rows("barcode")[label], "not implemented yet")
-        self.feed("state_idle")
-        self.assertEqual(self.rows("barcode")["Raw GP28 sample"], 777)
-        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+    def test_missing_streams_do_not_claim_features_are_unimplemented(self):
+        self.assertIn('waiting for robot/summary', self.panel('imu')['note'])
+        self.assertFalse(self.panel('imu')['placeholder'])
+        self.assertEqual(self.rows('barcode')['Per-attempt details'], model_module.FUTURE_BARCODE)
+        self.assertNotIn('Decoded command', self.rows('barcode'))
+        self.feed('state_idle')
+        self.assertEqual(self.rows('barcode')['Raw GP28 sample'], 777)
+        self.assertNotIn('not implemented', json.dumps(self.panel('barcode')))
 
     def test_barcode_layout_once_data_arrives(self):
         self.model.ingest("robot/barcode", barcode())
@@ -664,7 +679,7 @@ class ReservedTopicTests(ModelCase):
                          (2, 7, 9))
         self.assertEqual((rows["Collision"], rows["Sample valid"]), ("yes", "yes"))
         self.assertEqual(rows["Sample age or sequence (raw)"], 0xBEEF)
-        self.assertEqual(rows["Motion event"], "not implemented yet")
+        self.assertEqual(rows["Motion event"], "not received")
         self.assertIn("units are not fixed", panel["note"])
         self.assertFalse(panel["stale"])
         self.clock.advance(1500)
@@ -674,7 +689,7 @@ class ReservedTopicTests(ModelCase):
         self.model.ingest("robot/imu", imu_event(event=4, sequence=5, uptime=99))
         rows = self.rows("imu")
         self.assertEqual(rows["Motion event"], "climbing #5 at robot uptime 99 ms")
-        self.assertEqual(rows["Pitch"], "not implemented yet")
+        self.assertIn(model_module.NOT_REPORTED, rows['IMU attitude stream'])
         self.assertFalse(self.panel("imu")["placeholder"])
         self.model.ingest("robot/imu", imu_snapshot())
         self.model.ingest("robot/imu", imu_event(event=6, sequence=6, uptime=120))
@@ -683,16 +698,126 @@ class ReservedTopicTests(ModelCase):
         self.assertEqual(rows["Pitch (raw)"], 3)  # the snapshot is kept
 
     def test_unknown_versions_and_kinds_are_ignored_not_counted_as_errors(self):
-        self.model.ingest("robot/barcode", bytes([2, 1, 5]))
+        self.model.ingest("robot/barcode", bytes([3, 1, 5]))
         self.model.ingest("robot/imu", bytes([9, 1, 5]))
         self.model.ingest("robot/imu", bytes([1, 9, 5, 5]))
         self.assertEqual((self.model.ignored_reserved, self.model.snapshot()["discarded"]), (3, 0))
-        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
-        self.assertTrue(self.panel("imu")["placeholder"])
+        self.assertNotIn('Decoded command', self.rows('barcode'))
+        self.assertFalse(self.panel('imu')['placeholder'])
         self.model.ingest("robot/imu", b"\x01")  # too short to read a header
         self.model.ingest("robot/barcode", barcode()[:-1])  # known frame, wrong size
         self.assertEqual(self.model.snapshot()["discarded"], 2)
-        self.assertEqual(self.rows("barcode")["Decoded command"], "not implemented yet")
+        self.assertNotIn('Decoded command', self.rows('barcode'))
+
+
+class ExistingReportPanelTests(ModelCase):
+    def capture(self, first=0, last=None):
+        for i, (topic, encoded) in enumerate(CAPTURE_HUMP_REPORTS[first:last], first):
+            self.model.ingest(topic, bytes.fromhex(encoded), retained=i < 2)
+
+    def test_capture_humps_and_barcode_keep_previous_boot_summary_separate(self):
+        self.capture(0, 5)
+        imu, barcode_rows = self.rows('imu'), self.rows('barcode')
+        self.assertEqual(barcode_rows['Barcode ok / failed'], '1 / 3')
+        self.assertIn('75a3d3af', barcode_rows['Summary boot / session'])
+        self.assertIn('previous boot/session', self.panel('barcode')['note'])
+        self.assertIn('retained copy', self.panel('imu')['note'])
+        self.assertEqual(imu['Highest hump event'], '11.7 mm')
+        self.assertEqual(imu['Hump event run count'], 1)
+        self.assertFalse(self.panel('imu')['placeholder'])
+        self.capture(4, 5)  # duplicate QoS delivery must not count as another hump
+        self.assertEqual(self.rows('imu')['Hump event run count'], 1)
+        self.capture(5)
+        imu, barcode_rows = self.rows('imu'), self.rows('barcode')
+        self.assertEqual(imu['Hump event run count'], 2)
+        self.assertEqual((imu['Highest hump'], imu['Humps counted'], imu['Side of highest']),
+                         ('12.3 mm', 2, 'right wheel'))
+        self.assertEqual(barcode_rows['Barcode ok / failed'], '0 / 7')
+        self.assertIn('10329f8f', barcode_rows['Summary boot / session'])
+        self.assertNotIn('previous boot/session', self.panel('barcode')['note'])
+        self.assertNotIn('retained copy', self.panel('imu')['note'])
+        self.assertNotIn('not implemented', json.dumps(self.panel('imu')))
+        self.capture(1, 2)  # delayed retained earlier boot must not replace current result
+        self.assertEqual(self.rows('barcode')['Barcode ok / failed'], '0 / 7')
+        self.assertEqual(self.model.discarded, 0)
+
+    def test_retained_hump_event_does_not_become_current_run_data(self):
+        topic, encoded = CAPTURE_HUMP_REPORTS[4]
+        self.capture(2, 4)
+        self.model.ingest(topic, bytes.fromhex(encoded), retained=True)
+        self.assertNotIn('Highest hump event', self.rows('imu'))
+        self.assertIn('retained event', self.model.events[-1]['text'])
+
+    def test_zeros_and_idle_freshness_are_not_missing_or_unimplemented(self):
+        self.model.ingest('robot/state', idle_mode(SAMPLES['state_idle']))
+        self.model.ingest('robot/summary', summary_v3(hump=0, count=0, flags=3))
+        self.assertEqual(self.rows('barcode')['Barcode ok / failed'], '0 / 0')
+        self.assertEqual((self.rows('imu')['Highest hump'], self.rows('imu')['Humps counted']),
+                         ('no hump detected', 0))
+        self.clock.advance(1500)
+        self.assertFalse(self.panel('barcode')['stale'])  # idle limit is 2500 ms
+        self.clock.advance(1000)
+        self.assertTrue(self.panel('barcode')['stale'])
+        self.assertEqual(self.rows('barcode')['Barcode ok / failed'], '0 / 0')
+        self.assertFalse(self.panel('imu')['stale'])  # completed result, not a sample stream
+        self.assertEqual(self.panel('imu')['age_kind'], 'report')
+
+    def test_summary_and_raw_samples_do_not_refresh_an_old_imu_snapshot(self):
+        self.model.ingest('robot/imu', imu_snapshot())
+        self.clock.advance(1500)
+        self.feed('state_idle')
+        self.model.ingest('robot/summary', summary_v3())
+        self.assertTrue(self.panel('imu')['stale'])
+        self.assertIn('1500 ms', self.rows('imu')['IMU snapshot received age'])
+        self.assertIn('stale', self.rows('imu')['IMU snapshot received age'])
+        self.assertEqual(self.rows('barcode')['GP28 sample age'], '5 ms')
+        self.assertEqual(self.rows('barcode')['Summary received age'], '0 ms')
+        self.model.ingest('robot/imu', imu_event())
+        self.assertIn('stale', self.rows('imu')['IMU snapshot received age'])
+
+    def test_wheel_odometry_is_not_imu_attitude_or_wire_confirmed_shadow(self):
+        self.model.ingest('robot/state', state_v3(heading=9000, rate=600))
+        self.assertNotIn('Pitch (raw)', self.rows('imu'))
+        self.assertNotIn('Heading (raw)', self.rows('imu'))
+        self.assertIn('not IMU attitude', self.panel('imu')['note'])
+        self.assertIn('not reported on wire', self.rows('barcode')['Mode (deployment)'])
+        self.assertNotIn('Command issued / executed', self.rows('barcode'))
+        self.assertEqual(self.rows('barcode')['Per-attempt details'], model_module.FUTURE_BARCODE)
+
+    def test_new_run_and_boot_clear_live_humps_not_attributed_history(self):
+        self.model.ingest('robot/summary', summary_v3())
+        self.feed('state_running')
+        self.feed('event_hump')
+        self.assertIn('Highest hump event', self.rows('imu'))
+        self.feed('state_idle')
+        self.feed('state_running')
+        self.assertNotIn('Highest hump event', self.rows('imu'))
+        self.assertEqual(self.rows('imu')['Highest hump'], '10.8 mm')
+        self.assertIn('previous completed run', self.panel('imu')['note'])
+        self.feed('event_hump')
+        self.capture(2, 4)  # a different boot must clear this run's event data
+        self.assertNotIn('Highest hump event', self.rows('imu'))
+        self.assertIn('previous boot/session', self.panel('imu')['note'])
+
+    def test_imu_missing_data_and_hump_warning_flags_are_preserved(self):
+        self.model.ingest('robot/summary', summary_v3(hump=0xffff, count=0, hump_flags=3))
+        self.assertEqual(self.rows('imu')['Highest hump'], 'unavailable (no fresh IMU data)')
+        self.assertEqual(self.rows('imu')['Humps counted'], 0)
+        self.assertIn('IMU data was missing', self.panel('imu')['note'])
+        for flag, warning in ((4, 'stopped on a hump'), (16, 'longer than 600 mm'),
+                              (8, 'curve froze')):
+            self.model.ingest('robot/summary', summary_v3(hump_flags=1 | flag))
+            self.assertIn(warning, self.panel('imu')['note'])
+
+    def test_geometry_slots_do_not_relabel_old_clearance_angles_as_millimetres(self):
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], model_module.FUTURE_GEOMETRY)
+        self.model.ingest('robot/obstacle', obstacle(right_clear=15))
+        rows = self.rows('obstacle')
+        self.assertEqual(rows['Width (mm)'], model_module.FUTURE_GEOMETRY)
+        self.assertEqual(rows['Left / right clearance (mm)'], model_module.FUTURE_GEOMETRY)
+        self.assertIn('15 deg', rows['Right clearance'])
+        self.assertIn('not guaranteed passability', self.panel('obstacle')['note'])
+        self.assertIn('lower bound', self.panel('obstacle')['note'])
 
 
 class RobotStatusTests(ModelCase):
@@ -1761,14 +1886,15 @@ class DashboardRebootTests(ModelCase):
         self.model.ingest("robot/obstacle", boot_frame(obstacle(scan=1), 200))
         self.assertEqual(self.rows("obstacle")["Scans missed (ID gaps)"], 0)
 
-    def test_sonar_sequence_reuse_and_imu_placeholders_reset(self):
+    def test_sonar_sequence_reuse_and_imu_streams_reset(self):
         self.online(100)
         self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_valid"][:32], 100))
         self.model.ingest("robot/imu", imu_snapshot())
         self.assertTrue(self.model.sonar_profile)
         self.online(200)
         self.assertFalse(self.model.sonar_profile)
-        self.assertTrue(self.panel("imu")["placeholder"])
+        self.assertIn(model_module.NOT_REPORTED, self.rows('imu')['IMU attitude stream'])
+        self.assertNotIn('Pitch (raw)', self.rows('imu'))
         self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_valid"][:32], 200))
         self.assertTrue(self.model.sonar_profile)
         self.model.ingest("robot/sonar", boot_frame(SAMPLES["sonar_error"][:32], 100))
@@ -2227,6 +2353,32 @@ class RedesignPageTests(AppCase):
         self.assertEqual(trace["views"][0]["className"],"active")
         self.assertIn("details",trace["views"][1]["text"])
         self.assertIn("details",trace["views"][2]["text"])
+
+    def test_imu_and_barcode_render_actual_reports_and_separate_future_slots(self):
+        for i, (topic, encoded) in enumerate(CAPTURE_HUMP_REPORTS):
+            self.model.ingest(topic, bytes.fromhex(encoded), retained=i < 2)
+        expression = """['imu', 'barcode', 'obstacle'].map(id =>
+          document.getElementById('panel-' + id).querySelector('table.facts').children.map(
+            row => row.children.map(cell => cell.textContent)))"""
+        trace = self.trace(expressions=[expression], views=[['panel-imu', '.age'],
+                                                           ['panel-barcode', '.note']])
+        imu, barcode_rows, obstacle_rows = map(dict, trace['values'][0])
+        self.assertEqual((imu['Highest hump'], imu['Humps counted'], imu['Side of highest']),
+                         ('12.3 mm', '2', 'right wheel'))
+        self.assertEqual(barcode_rows['Barcode ok / failed'], '0 / 7')
+        self.assertEqual(barcode_rows['Per-attempt details'], model_module.FUTURE_BARCODE)
+        self.assertEqual(obstacle_rows['Width (mm)'], model_module.FUTURE_GEOMETRY)
+        self.assertIn('since report', trace['views'][0]['text'])
+        self.assertIn('not a transmitted mode', trace['views'][1]['text'])
+        self.assertNotIn('not implemented', json.dumps(trace['values'][0][:2]))
+
+    def test_rendered_older_summary_retains_boot_and_retained_warning(self):
+        for i, (topic, encoded) in enumerate(CAPTURE_HUMP_REPORTS[:5]):
+            self.model.ingest(topic, bytes.fromhex(encoded), retained=i < 2)
+        trace = self.trace(views=[['panel-imu', '.note'], ['panel-barcode', '.note']])
+        for view in trace['views']:
+            self.assertIn('previous boot/session', view['text'])
+            self.assertIn('retained copy', view['text'])
 
     def test_hump_card_is_a_primary_card(self):
         self.model.ingest("robot/summary", SAMPLES["summary_hump"])
