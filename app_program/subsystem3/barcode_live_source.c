@@ -267,7 +267,10 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
     }
     after_window_edge(us, raw);
 #if BARCODE_FAIL_CAPTURE
-    if (input.control_ok) bcfc_epoch(input.control.epoch);
+    if (input.control_ok) {
+        bcfc_epoch(input.control.epoch);
+        bcfc_control(input.control.mode, input.now_us);
+    }
 #endif
     barcode_live_producer_observe(&producer, &input);
     if (producer.record_pending) {

@@ -313,6 +313,20 @@ ifneq ($(filter $(BARCODE_FAIL_SLOTS),1 2),$(BARCODE_FAIL_SLOTS))
 $(error BARCODE_FAIL_SLOTS must be 1 or 2)
 endif
 endif
+# Vehicle-only LINE proportional gain. Default emits no extra flags or suffix.
+LINE_P_NEAR ?= 85
+LINE_P_NEAR_VALID := $(shell printf '%s\n' '$(LINE_P_NEAR)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_P_NEAR)' -le 85 && echo yes)
+ifneq ($(LINE_P_NEAR_VALID),yes)
+$(error LINE_P_NEAR must be one integer from 0 to 85)
+endif
+LINE_BASE ?= 146
+LINE_BASE_VALID := $(shell printf '%s\n' '$(LINE_BASE)' | grep -Eq '^[1-9][0-9]{1,2}$$' && test '$(LINE_BASE)' -gt 82 && test '$(LINE_BASE)' -le 378 && echo yes)
+ifneq ($(LINE_BASE_VALID),yes)
+$(error LINE_BASE must be one integer greater than 82 and at most 378)
+endif
+ifneq ($(LINE_P_NEAR):$(LINE_BASE),85:146)
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_P_NEAR=$(LINE_P_NEAR) -DLINE_BASE=$(LINE_BASE) -include ../app_program/vehicle/line_p_near.h
+endif
 
 # Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
 # letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
@@ -367,6 +381,12 @@ endif
 
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifneq ($(LINE_P_NEAR),85)
+EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),146)
+EXE_FILE := $(EXE_FILE)_base$(LINE_BASE)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -548,6 +568,12 @@ PROFILE_ID := $(PROFILE_ID)-sametick
 endif
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifneq ($(LINE_P_NEAR),85)
+PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),146)
+PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
 endif
 PROFILE_FILE := .build_profile
 

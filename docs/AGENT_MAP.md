@@ -301,6 +301,16 @@ vehicle task described below.
   FIFO tests: [`test_barcode_attempt.c`](../tests/test_barcode_attempt.c);
   codec tests: [`test_barcode_wire.c`](../tests/test_barcode_wire.c) and
   [`test_barcode_v2.py`](../tests/test_barcode_v2.py).
+  [School failed-start analysis](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md)
+  records FC1/FC2 evidence and timing limits. The host validator is
+  [`scripts/barcode_fail_analyze.py`](../scripts/barcode_fail_analyze.py), with
+  [`test_barcode_fail_analyze.py`](../tests/test_barcode_fail_analyze.py).
+  [`test_barcode_quiet_real.c`](../tests/test_barcode_quiet_real.c) checks the
+  three retained vectors and complete FC2 ADC trace. The older
+  [`test_barcode_peak_real.c`](../tests/test_barcode_peak_real.c) also feeds
+  its measured quiet distance bins through the live reader.
+  [`test_barcode_motion_twitch.c`](../tests/test_barcode_motion_twitch.c)
+  checks the 2.5 mm retreat hold, reverse, stall and FC1 KR twitch rows.
   [Opt-in failed-attempt capture](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md)
   uses [`barcode_fail_capture.h`](../app_program/subsystem3/barcode_fail_capture.h)
   and [`barcode_fail_capture.inc`](../app_program/subsystem3/barcode_fail_capture.inc),
@@ -404,6 +414,13 @@ vehicle task described below.
 
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
+- [`line_p_near.h`](../app_program/vehicle/line_p_near.h) — opt-in vehicle
+  P-gain/base-speed adapter; [base-speed trial](s3-line-barcode/LINE.md#opt-in-base-speed-trial),
+  [native base test](../tests/test_line_base.c) and
+  [base Make tests](../tests/test_line_base_make.py); [trial settings](s3-line-barcode/LINE.md#opt-in-proportional-gain-trial),
+  [configuration/steering test](../tests/test_line_p_near.c) and
+  [Make option test](../tests/test_line_p_near_make.py). Default sources and
+  flags are unchanged.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.

@@ -23,7 +23,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 
 | Area | State | Evidence | Open |
 | --- | --- | --- | --- |
-| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
+| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. LINE_P_NEAR (lower P) rejected; default P85 kept. Opt-in LINE_BASE (83..378) in staging; base 120/100 rejected for zigzag on 2026-11-16 runs. |
 | LINE D gain trial (`LINE_KD`) | Opt-in, in staging. Lowers the D kick after a small drift on straights. Robot 2026-11-17 with same-tick: kd 30 gave the fewest SEARCH entries (19.3/min vs 26.7). Default image unchanged. | [LINE.md (D gain trial)](../s3-line-barcode/LINE.md#d-gain-trial-opt-in-line_kd) | Confirmation run with kd 30 + same-tick; then decide the default. kd 0 not run. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |

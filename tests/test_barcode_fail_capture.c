@@ -80,5 +80,20 @@ int main(void) {
         .start_us=w.start_us,.terminal_us=101u};
     bcfc_terminal(&f);used=0u;text[0]='\0';bcfc_dump_begin();bcfc_dump_remaining();
     assert(strstr(text,"raw 0 flags 32770"));
+    /* Context times: zero means unobserved, never a measured time 0. */
+    assert(strstr(text,"[BC_FAIL_CONTEXT] epoch 9 index 8 enable_us 0 reset_us 0 reset_reason 0"));
+    bcfc_epoch(14u);bcfc_epoch(9u);
+    bcfc_control(0u,1000u);bcfc_control(2u,5000u);bcfc_control(2u,6000u);
+    barcode_window_t seek={.phase=1u};
+    bcfc_control(2u,7000u);bcfc_reject(&seek,BW_MOTION);
+    attempt(10u,BW_START,10u); /* Bound reject is not an unbound reset. */
+    bcfc_control(0u,90000000u);bcfc_control(1u,95000000u);
+    attempt(11u,BW_WIDTH,10u);
+    used=0u;text[0]='\0';bcfc_dump_begin();bcfc_dump_remaining();
+    assert(strstr(text,"[BC_FAIL_CONTEXT] epoch 9 index 10 enable_us 5000 reset_us 7000 reset_reason 4"));
+    assert((strstr(text,"[BC_FAIL_CONTEXT] epoch 9 index 11 enable_us 95000000 reset_us 7000 reset_reason 4")!=NULL)==(BCFC_FAILED_SLOTS==2u));
+    /* A new run forgets old context. */
+    bcfc_epoch(15u);
+    assert(bcfc_enable_us==0u && bcfc_reset_us==0u && bcfc_reset_reason==0u);
     return 0;
 }

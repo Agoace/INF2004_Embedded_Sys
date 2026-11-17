@@ -1,3 +1,4 @@
+add_test(NAME test_barcode_fail_analyze COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_analyze.py")
 add_test(NAME test_barcode_fail_make COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_make.py")
 host_test(test_barcode_fail_capture tests/test_barcode_fail_capture.c)
 target_include_directories(test_barcode_fail_capture BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
@@ -49,6 +50,19 @@ foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
         nonletter)
     add_test(NAME test_barcode_producer_${case}
         COMMAND test_barcode_live_producer ${case})
+endforeach()
+
+host_test(test_barcode_quiet_real tests/test_barcode_quiet_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_quiet_real PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_quiet_real PRIVATE m)
+
+host_test(test_barcode_motion_twitch tests/test_barcode_motion_twitch.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_motion_twitch PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_motion_twitch PRIVATE m)
+foreach(case IN ITEMS geometry straight twitch_star twitch_edge kr retreat reverse stall)
+    add_test(NAME test_barcode_motion_${case} COMMAND test_barcode_motion_twitch ${case})
 endforeach()
 
 host_test(test_barcode_window_real tests/test_barcode_window_real.c
@@ -145,6 +159,7 @@ host_test(test_barcode_peak tests/test_barcode_peak.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak PRIVATE m)
 host_test(test_barcode_peak_real tests/test_barcode_peak_real.c
+    app_program/subsystem3/barcode_window.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak_real PRIVATE m)
 target_compile_definitions(test_barcode_peak_real PRIVATE
