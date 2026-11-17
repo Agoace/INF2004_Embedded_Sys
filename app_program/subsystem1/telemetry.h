@@ -39,6 +39,16 @@ typedef struct {
     uint8_t faults;
 } telemetry_info_t;
 
+/* Stopped USB evidence; never printed from the navigation task. */
+typedef struct {
+    uint32_t scan_id;
+    uint32_t duration_ms;
+    uint16_t fine_mask;
+    uint8_t coarse_hits;
+    uint8_t attempt;
+} telemetry_scan_t;
+#define TELEMETRY_SCAN_ROWS 48u
+
 typedef enum {
     TELEMETRY_BEGIN,
     TELEMETRY_ROW,
@@ -49,6 +59,7 @@ typedef enum {
     TELEMETRY_JUNCTION_SOURCE,
     TELEMETRY_BARCODE_DUMP,
     TELEMETRY_JUNCTION_COUNTS,
+    TELEMETRY_SCAN,
 #if APP_TEST
     TELEMETRY_TEST_ROW,
 #endif
@@ -66,6 +77,7 @@ typedef struct {
         ja_result_t junction;
         jlive_report_t junction_source;
         jlive_counts_t junction_counts;
+        telemetry_scan_t scan;
     } data;
 } telemetry_message_t;
 _Static_assert(sizeof(telemetry_info_t) == 108u, "Preserve INFO size");

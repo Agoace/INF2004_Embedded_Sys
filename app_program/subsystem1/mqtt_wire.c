@@ -172,7 +172,14 @@ void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
     out[LEFT_FREE_STEP_OFFSET] = v->left_free_step;
     out[RIGHT_CLEAR_DEG_OFFSET] = v->right_clear_deg;
     out[LEFT_CLEAR_DEG_OFFSET] = v->left_clear_deg;
-    put32(out + RM_OBSTACLE_SIZE - sizeof(uint32_t), v->boot_id);
+    put32(out + 20u, v->boot_id);
+    put16(out + 24u, (v->geometry_flags & RM_OBSTACLE_WIDTH_VALID) != 0u ?
+                      v->width_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    put16(out + 26u, (v->geometry_flags & RM_OBSTACLE_LEFT_CLEAR_VALID) != 0u ?
+                      v->left_clear_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    put16(out + 28u, (v->geometry_flags & RM_OBSTACLE_RIGHT_CLEAR_VALID) != 0u ?
+                      v->right_clear_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    out[30] = v->geometry_flags; /* Byte31 stays reserved zero. */
 }
 
 /*

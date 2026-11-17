@@ -216,10 +216,17 @@ static void publish_obstacle(const ss_t *scan)
     obstacle_report_make(&scan->profile, scan->word, side, obstacle_scans,
                          drv_time_ms(), &report);
     report.flags = (uint8_t)(report.flags |
+                             (scan->stage << RM_OBSTACLE_STAGE_SHIFT) |
                              ((uint8_t)scan->completed_attempt
                               << RM_OBSTACLE_ATTEMPT_SHIFT));
     app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
                       sizeof(report));
+    telemetry_message_t message = {.kind = TELEMETRY_SCAN};
+    message.data.scan = (telemetry_scan_t){
+        .scan_id = obstacle_scans, .duration_ms = scan->duration_ms,
+        .fine_mask = scan->fine_mask, .coarse_hits = scan->coarse_hits,
+        .attempt = scan->completed_attempt};
+    (void)telemetry_send(&message); /* Bounded value copy; print at dump only. */
 }
 
 /* Report one scan retry edge. It is an observation only. */
