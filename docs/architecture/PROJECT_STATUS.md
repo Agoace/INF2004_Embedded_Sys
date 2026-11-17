@@ -20,6 +20,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Area | State | Evidence | Open |
 | --- | --- | --- | --- |
 | LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
+| LINE D gain trial (`LINE_KD`) | Opt-in, on `mtk3-line-kd`. Lowers the D kick after a small drift on straights (2026-11-17). Built and host-tested; default image unchanged. | [LINE.md (D gain trial)](../s3-line-barcode/LINE.md#d-gain-trial-opt-in-line_kd) | Robot trial kd 30 and 0. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
 | Obstacle, scan, detour | Detours 2/2 in each of 6 course runs (2026-11-16). | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md) | DONE_NO_LINE and STALL_RIGHT cases. |

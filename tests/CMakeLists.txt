@@ -67,6 +67,12 @@ host_test(test_line_trace tests/test_line_trace.c ${line_trace_source} ${line_se
 host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_source} ${detour_run_source} ${obstacle_detour_source} ${obstacle_profile_source} ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
 host_test(test_heartbeat tests/test_heartbeat.c src/heartbeat.c)
 host_test(test_line_position tests/test_line_position.c ${line_position_source})
+# LINE_KD=<n>: the make rule force-includes app_program/vehicle/line_kd.h.
+foreach(kd 85 60 30 0)
+    host_test(test_line_kd_${kd} tests/test_line_kd.c ${line_steer_source})
+    target_compile_definitions(test_line_kd_${kd} PRIVATE LINE_KD=${kd})
+endforeach()
+add_test(NAME test_line_kd_make COMMAND python3 "${REPO}/tests/test_line_kd_make.py")
 host_test(test_line_steer tests/test_line_steer.c ${line_steer_source})
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)

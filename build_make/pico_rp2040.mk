@@ -194,6 +194,22 @@ endif
 BARCODE_CAPTURE_SUFFIX := _barcode_capture
 endif
 
+# Opt-in LINE D gain: LINE_KD=<0..85> replaces only kd_pct (default 85) in
+# vehicle_task.o through a forced header (line_kd.h). The default 85 adds
+# nothing, so ordinary images stay byte-identical. See
+# docs/s3-line-barcode/LINE.md.
+LINE_KD ?= 85
+LINE_KD_VALID := $(shell printf '%s\n' '$(LINE_KD)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_KD)' -le 85 && echo yes)
+ifneq ($(LINE_KD_VALID),yes)
+$(error LINE_KD must be one integer from 0 to 85)
+endif
+ifneq ($(LINE_KD),85)
+ifeq ($(BENCH_KERNEL),1)
+$(error LINE_KD is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_KD=$(LINE_KD) -include ../app_program/vehicle/line_kd.h
+endif
+
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
 # GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
 # the last messages and the kernel's crash report after a crash, when the
@@ -301,6 +317,9 @@ EXE_FILE := $(EXE_FILE)_kernel_ram
 endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),85)
+EXE_FILE := $(EXE_FILE)_kd$(LINE_KD)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -466,6 +485,9 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),85)
+PROFILE_ID := $(PROFILE_ID)-kd$(LINE_KD)
 endif
 PROFILE_FILE := .build_profile
 
