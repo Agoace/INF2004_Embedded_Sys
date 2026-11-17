@@ -492,6 +492,9 @@ ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
 endif
+ifeq ($(LINE_GAP),1)
+PROFILE_ID := $(PROFILE_ID)-gap
+endif
 PROFILE_FILE := .build_profile
 
 ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
