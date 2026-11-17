@@ -67,9 +67,11 @@ through all 29 elements and short white confirmation. Mat black never sets
 the threshold scale. A short bounded transition from white to the first bar
 is allowed; it is not counted as credible leading white.
 
-Leading white must cover ten fitted narrow widths at the start star. The
-pre-search gate is only provisional; matching the first star cannot waive
-that final leading-white test. Mid-window adaptation is forbidden.
+Leading white must cover 40 mm both before admission and after fitting the
+start star. Any above-rise black that is not admitted clears the white
+qualification, even if the black run is short. Transition-band handling
+below rise stays bounded as before. Mid-window adaptation is forbidden.
+See the [FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md).
 
 ## The course window, not a trailing quiet-zone repair
 
@@ -99,7 +101,7 @@ scale; a second fixed absolute wide band does not constrain it:
 | Data/stop scale against start | Within 20% |
 | Corrected inter-character gaps | 0.65--1.5 start narrow |
 | Total corrected body extent | Within two narrows of `20n + 9w` |
-| Provisional leading white | 40 mm; final leading proof remains ten fitted narrows |
+| Leading white | 40 mm before and after fitting; unadmitted black clears qualification |
 | Pre-star white-to-ink transition allowance | 7 mm maximum candidate narrow (unchanged) |
 | Candidate time/body limits | 5 s / 360 mm (unchanged absolute watchdogs) |
 | Run limit before start-star fit | 35 mm absolute ceiling |

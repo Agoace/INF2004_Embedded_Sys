@@ -173,5 +173,11 @@ captures. The approved 40 mm policy avoids that extra early-admission risk.
 Analysis tests: seven unit tests pass. The pre-change native baseline
 confirms fragment admission at all three assumed speeds. The new native
 quiet test fails on the old post-fit guard before reader changes.
-Firmware validation and final commit references will be recorded with the
-implementation; no flash or push is authorized.
+Quiet change A: the new native test is RED on `024d01a`, then GREEN after
+black-reset and the single 40 mm policy. GCC passes 572/572 tests. The five
+older fixtures retain their expected results. An additional quiet check
+feeds 829 actual DISTANCE bins from PEAK-framed quiet crops into the live
+reader, in both orientations, with no candidate. These crops use the existing
+120 ms frame-centre guard; this count is not the historical 792-bin analysis.
+Firmware matrix and sanitizer validation will be recorded with the remaining
+changes; no flash or push is authorized.

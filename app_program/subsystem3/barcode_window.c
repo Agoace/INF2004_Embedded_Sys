@@ -17,6 +17,7 @@
 /* ASSUMED scope, not an optical resolution measurement. Fit the scale from
  * the start star; smaller print needs measured along-travel GP28 evidence. */
 #define N_MIN 4.0f
+#define QUIET_MIN_MM 40.0f
 #define N_MAX 7.0f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
@@ -365,7 +366,7 @@ static bool start_star(barcode_window_t *state)
     for (unsigned int reverse = 0u; reverse < 2u; ++reverse) {
         if (model(state->runs, reverse != 0u, &first) &&
             first.symbol == '*') {
-            if (state->leading_mm < 10.0f * first.narrow) {
+            if (state->leading_mm < QUIET_MIN_MM) {
                 return false;
             }
             state->direction = (uint8_t)(reverse + 1u);
@@ -484,7 +485,7 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
         const float rise = fminf(state->white_mean + 150.0f, 350.0f);
         const float fall = fminf(state->white_mean + 75.0f, rise - 75.0f);
         if (state->white_started && state->white_count >= 16u &&
-            state->white_end - state->white_start >= 10.0f * N_MIN &&
+            state->white_end - state->white_start >= QUIET_MIN_MM &&
             (float)sample.raw >= rise) {
             state->leading_mm = state->white_end - state->white_start;
             state->rise = (uint16_t)lroundf(rise);
@@ -498,6 +499,11 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
 #if BARCODE_FAIL_CAPTURE
             bcfc_start(state, sample, mm, upper);
 #endif
+        } else if ((float)sample.raw >= rise) {
+            /* Unadmitted ink ends white, even when its run is short. */
+            state->white_started = false;
+            state->white_count = 0u;
+            state->transitioning = false;
         } else if (state->white_started) {
             if (!state->transitioning) {
                 state->transition_start = mm;

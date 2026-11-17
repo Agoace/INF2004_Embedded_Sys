@@ -52,6 +52,11 @@ foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
         COMMAND test_barcode_live_producer ${case})
 endforeach()
 
+host_test(test_barcode_quiet_real tests/test_barcode_quiet_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_quiet_real PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_quiet_real PRIVATE m)
+
 host_test(test_barcode_window_real tests/test_barcode_window_real.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_compile_definitions(test_barcode_window_real PRIVATE
@@ -146,6 +151,7 @@ host_test(test_barcode_peak tests/test_barcode_peak.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak PRIVATE m)
 host_test(test_barcode_peak_real tests/test_barcode_peak_real.c
+    app_program/subsystem3/barcode_window.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak_real PRIVATE m)
 target_compile_definitions(test_barcode_peak_real PRIVATE

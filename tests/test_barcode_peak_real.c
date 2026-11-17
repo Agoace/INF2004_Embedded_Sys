@@ -1,5 +1,6 @@
 /* Only the four Main-approved extracted CSVs. Ignore old BC_RUN output. */
 #include "../app_program/subsystem3/barcode_peak.h"
+#include "../app_program/subsystem3/barcode_window.h"
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,6 +14,31 @@ static barcode_peak_workspace_t workspace;
 static barcode_peak_report_t report;
 static unsigned int frames;
 static uint32_t first_frame, last_frame;
+static unsigned int quiet_bins;
+static barcode_window_t live_window;
+
+/* Actual DISTANCE mean-ADC bins from the quiet crops below. Inject synthetic
+ * increasing brackets only: this isolates quiet noise from motor geometry. */
+static void live_quiet(bool count_bins)
+{
+    const barcode_cal_report_t cal = {.mode = BC_CAL_FALLBACK,
+        .white_mean = 160u, .white_samples = 32u, .rise = 310u,
+        .fall = 235u, .faults = BC_CAL_NO_BLACK};
+    assert(barcode_window_begin(&live_window, &cal, NULL));
+    for (size_t i = 0u; i < workspace.bin_count; ++i) {
+        const uint32_t us = 1000u + (uint32_t)i * 1000u;
+        const float mm = (float)i;
+        live_window.motor_count = 2u;
+        live_window.motors[0] = (barcode_window_motor_t){us - 1u, 0u, 0u, mm - 0.001f};
+        live_window.motors[1] = (barcode_window_motor_t){us + 1u, 1u, 1u, mm + 0.001f};
+        assert(workspace.bins[i] >= 120u && workspace.bins[i] <= 220u);
+        barcode_window_adc(&live_window, us, workspace.bins[i], 0u);
+        assert(barcode_window_step(&live_window, 1u) == 1u);
+        assert(!barcode_window_candidate(&live_window, NULL));
+        assert(live_window.result.reason == BW_WAIT);
+        if (count_bins) ++quiet_bins;
+    }
+}
 
 static void frame(const barcode_frame_t *v, void *context)
 {
@@ -146,6 +172,7 @@ int main(void)
                 assert(report.time.baseline > 140.0f &&
                        report.distance.baseline > 140.0f);
                 assert(report.time.peaks == 0u && report.distance.peaks == 0u);
+                live_quiet(reversed == 0u);
             }
             if (reversed == 0u) {
                 const uint32_t origin = rows[0].us, end = rows[n - 1u].us;
@@ -168,5 +195,7 @@ int main(void)
             }
         }
     }
+    printf("quiet DISTANCE bins, forward fixture orientation: %u\n", quiet_bins);
+    assert(quiet_bins == 829u);
     return 0;
 }
