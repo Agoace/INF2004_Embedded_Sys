@@ -741,16 +741,16 @@ static const char *imu_stop_text(uint8_t trigger)
 #if TM_MQTT
 static uint8_t imu_stop_code(uint8_t trigger)
 {
-    if (trigger == IMU_SAFETY_LIFT) { return 14u; }
-    if (trigger == IMU_SAFETY_OVERTURN) { return 15u; }
-    return 16u;
+    if (trigger == IMU_SAFETY_LIFT) { return RM_STOP_IMU_LIFT; }
+    if (trigger == IMU_SAFETY_OVERTURN) { return RM_STOP_IMU_OVERTURN; }
+    return RM_STOP_IMU_UNAVAILABLE;
 }
 #endif
 
 static void imu_recovery(uint8_t gate)
 {
     const uint16_t word = (uint16_t)(0x8000u |
-                          ((uint16_t)imu_gate.latched << 8u) | gate);
+                          ((uint32_t)imu_gate.latched << 8u) | gate);
     event_detail(3u, vsm.state, vsm.running, word, imu_gate.cause);
 }
 
@@ -769,6 +769,10 @@ static bool imu_check_tick(void)
         imu_announced = false;
         set_reason(imu_stop_code(imu_gate.latched),
                    imu_stop_text(imu_gate.latched));
+#if TM_MQTT
+        /* This is a new stop edge, not a repeated motor-fault observation. */
+        last_network_fault = UINT16_MAX;
+#endif
         event_detail(3u, vsm.state, module, imu_gate.latched, imu_gate.cause);
         publish_vehicle();
     }
@@ -829,7 +833,7 @@ static bool wait_tick(void)
     ++run_steps;
     step_open = true;
     /* Always park before checking safety. A fault must not create a spin. */
-    if (!imu_check_tick()) {
+    if (!imu_check_tick() && active) {
         part_end(RT_STEP_COMMAND);
         return false;
     }

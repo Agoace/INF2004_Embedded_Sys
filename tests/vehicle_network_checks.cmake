@@ -18,7 +18,7 @@ if(TARGET test_vehicle_network_task)
     target_include_directories(test_vehicle_network_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_link_libraries(test_vehicle_network_task PRIVATE m)
     target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
-    foreach(imu_case imulift imustale)
+    foreach(imu_case imulift imustale imuabsent)
         add_test(NAME test_vehicle_network_${imu_case}
             COMMAND test_vehicle_network_task ${imu_case})
     endforeach()

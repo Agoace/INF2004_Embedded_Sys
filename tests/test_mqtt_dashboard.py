@@ -1346,6 +1346,17 @@ class SummaryTests(ModelCase):
         self.assertEqual(self.rows("hump")["Highest hump"], "10.8 mm")
 
 
+class ImuSafetyTests(ModelCase):
+    def test_summary_stop_labels(self):
+        for reason, text in ((14, "IMU lift detected"),
+                             (15, "IMU overturn detected"),
+                             (16, "IMU unavailable")):
+            self.model.ingest("robot/summary", summary_v3(
+                reason=reason, shell=6, shell_detail=2, source=3))
+            self.assertEqual(self.rows("summary")["Stop reason"], text)
+            self.assertIn("IMU safety", str(self.rows("summary")))
+
+
 class HumpTests(ModelCase):
     def test_before_any_run(self):
         panel = self.panel("hump")

@@ -424,8 +424,12 @@ the next summary version (v4); v3 keeps no reserved barcode bytes.
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
 line snapshot failure/stale 8; line samples lost 9; sonar failure 10;
-telemetry failure 11; other 12; SCAN reverse timeout 13. Sources describe the run-ending condition,
-not a unified fault mask. Motion faults preserve existing `MC_FAULT_*` bits.
+telemetry failure 11; other 12; SCAN reverse timeout 13; IMU lift 14;
+IMU overturn 15; IMU unavailable 16. Reasons 14–16 apply to summary v3 only.
+The decoder keeps the old v1 limit of 12 and v2 limit of 13. The IMU stop
+uses source FAULT (3) and shell fault IMU (6). No field or size changes.
+Sources describe the run-ending condition, not a unified fault mask.
+Motion faults preserve existing `MC_FAULT_*` bits.
 
 Speed error compares commanded versus measured wheel speed only after the
 command has stayed unchanged for at least 300 ms. This excludes early ramp
