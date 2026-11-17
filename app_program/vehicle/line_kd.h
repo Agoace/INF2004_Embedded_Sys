@@ -1,7 +1,7 @@
 /*
  * LINE_KD=<0..85> only: force-included (-include) into vehicle_task.o, so
- * vehicle_task.c and vehicle_robot_config.h do not change. The default 85
- * adds nothing (ordinary images stay byte-identical).
+ * vehicle_task.c and vehicle_robot_config.h do not change. The default 30
+ * (vehicle_robot_config.h since 2026-11-17) adds nothing.
  *
  * Why: school run 2026-11-17 (LINE_GAP + MOTION_SAME_TICK), on straights a
  * 2-3 mm drift flips the pair position 0 -> 32 -> 50 in 40 ms; the D term

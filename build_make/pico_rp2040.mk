@@ -194,26 +194,32 @@ endif
 BARCODE_CAPTURE_SUFFIX := _barcode_capture
 endif
 
-# Opt-in LINE D gain: LINE_KD=<0..85> replaces only kd_pct (default 85) in
-# vehicle_task.o through a forced header (line_kd.h). The default 85 adds
-# nothing, so ordinary images stay byte-identical. See
-# docs/s3-line-barcode/LINE.md.
-LINE_KD ?= 85
+# LINE D gain override: LINE_KD=<0..85> replaces only kd_pct in
+# vehicle_task.o through a forced header (line_kd.h). The default 30 is the
+# vehicle_robot_config.h value (demo default 2026-11-17; was 85) and adds
+# nothing. See docs/s3-line-barcode/LINE.md.
+LINE_KD ?= 30
 LINE_KD_VALID := $(shell printf '%s\n' '$(LINE_KD)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_KD)' -le 85 && echo yes)
 ifneq ($(LINE_KD_VALID),yes)
 $(error LINE_KD must be one integer from 0 to 85)
 endif
-ifneq ($(LINE_KD),85)
+ifneq ($(LINE_KD),30)
 ifeq ($(BENCH_KERNEL),1)
 $(error LINE_KD is for the robot image, not BENCH_KERNEL=1)
 endif
 mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_KD=$(LINE_KD) -include ../app_program/vehicle/line_kd.h
 endif
-# Opt-in same-tick motion: motion_set_speed() applies the new target in the
+# Same-tick motion: motion_set_speed() applies the new target in the
 # current 10 ms period (mc_retarget). Only motion.o and motor_ctl.o get a
-# forced header; the default 0 adds nothing, so ordinary images stay
-# byte-identical. See docs/s2-motion/MOTION.md.
+# forced header. Default 1 for robot images (demo default 2026-11-17);
+# MOTION_SAME_TICK=0 gives the old next-period timing (suffix _sametick0).
+# BENCH_KERNEL=1 has no motion task path for it: default 0, and 1 fails.
+# See docs/s2-motion/MOTION.md.
+ifeq ($(BENCH_KERNEL),1)
 MOTION_SAME_TICK ?= 0
+else
+MOTION_SAME_TICK ?= 1
+endif
 ifneq ($(words $(MOTION_SAME_TICK)),1)
 $(error MOTION_SAME_TICK must be one value: 0 or 1)
 endif
@@ -226,7 +232,6 @@ $(error MOTION_SAME_TICK=1 is for the robot image, not BENCH_KERNEL=1)
 endif
 mtkernel_3/app_program/subsystem2/motion.o: CFLAGS += -include ../app_program/subsystem2/motion_same_tick.h
 mtkernel_3/app_program/subsystem2/motor_ctl.o: CFLAGS += -include ../app_program/subsystem2/motor_ctl_same_tick_impl.h
-$(info MOTION_SAME_TICK: same-tick retarget on)
 endif
 
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
@@ -313,18 +318,19 @@ ifneq ($(filter $(BARCODE_FAIL_SLOTS),1 2),$(BARCODE_FAIL_SLOTS))
 $(error BARCODE_FAIL_SLOTS must be 1 or 2)
 endif
 endif
-# Vehicle-only LINE proportional gain. Default emits no extra flags or suffix.
+# Vehicle-only LINE proportional gain and base speed. The defaults (85, 120)
+# are the vehicle_robot_config.h values and emit no extra flags or suffix.
 LINE_P_NEAR ?= 85
 LINE_P_NEAR_VALID := $(shell printf '%s\n' '$(LINE_P_NEAR)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_P_NEAR)' -le 85 && echo yes)
 ifneq ($(LINE_P_NEAR_VALID),yes)
 $(error LINE_P_NEAR must be one integer from 0 to 85)
 endif
-LINE_BASE ?= 146
+LINE_BASE ?= 120
 LINE_BASE_VALID := $(shell printf '%s\n' '$(LINE_BASE)' | grep -Eq '^[1-9][0-9]{1,2}$$' && test '$(LINE_BASE)' -gt 82 && test '$(LINE_BASE)' -le 378 && echo yes)
 ifneq ($(LINE_BASE_VALID),yes)
 $(error LINE_BASE must be one integer greater than 82 and at most 378)
 endif
-ifneq ($(LINE_P_NEAR):$(LINE_BASE),85:146)
+ifneq ($(LINE_P_NEAR):$(LINE_BASE),85:120)
 mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_P_NEAR=$(LINE_P_NEAR) -DLINE_BASE=$(LINE_BASE) -include ../app_program/vehicle/line_p_near.h
 endif
 
@@ -372,11 +378,11 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
 endif
-ifneq ($(LINE_KD),85)
+ifneq ($(LINE_KD),30)
 EXE_FILE := $(EXE_FILE)_kd$(LINE_KD)
 endif
-ifeq ($(MOTION_SAME_TICK),1)
-EXE_FILE := $(EXE_FILE)_sametick
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+EXE_FILE := $(EXE_FILE)_sametick0
 endif
 
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
@@ -385,7 +391,7 @@ endif
 ifneq ($(LINE_P_NEAR),85)
 EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
 endif
-ifneq ($(LINE_BASE),146)
+ifneq ($(LINE_BASE),120)
 EXE_FILE := $(EXE_FILE)_base$(LINE_BASE)
 endif
 
@@ -560,11 +566,11 @@ ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
 endif
-ifneq ($(LINE_KD),85)
+ifneq ($(LINE_KD),30)
 PROFILE_ID := $(PROFILE_ID)-kd$(LINE_KD)
 endif
-ifeq ($(MOTION_SAME_TICK),1)
-PROFILE_ID := $(PROFILE_ID)-sametick
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+PROFILE_ID := $(PROFILE_ID)-sametick0
 endif
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
@@ -572,7 +578,7 @@ endif
 ifneq ($(LINE_P_NEAR),85)
 PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
 endif
-ifneq ($(LINE_BASE),146)
+ifneq ($(LINE_BASE),120)
 PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
 endif
 PROFILE_FILE := .build_profile

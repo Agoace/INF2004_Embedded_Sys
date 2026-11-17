@@ -7,7 +7,7 @@
 #define LINE_P_NEAR 85
 #endif
 #ifndef LINE_BASE
-#define LINE_BASE 146
+#define LINE_BASE 120
 #endif
 #if LINE_BASE <= 82 || LINE_BASE > 378
 #error "LINE_BASE must be an integer greater than 82 and at most 378"

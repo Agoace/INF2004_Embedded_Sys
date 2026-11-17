@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""LINE_KD make guards: bad values stop make; 85 adds nothing; n adds _kdn."""
+"""LINE_KD make guards: bad values stop make; 30 (default) adds nothing;
+n adds _kdn."""
 import pathlib
 import subprocess
 import sys
@@ -26,9 +27,9 @@ for bad in ("86", "-1", "x", "08", "3 4", ""):
     if r.returncode == 0 or "LINE_KD" not in r.stderr:
         print("FAIL: LINE_KD=%r accepted" % bad)
         fail += 1
-r = make("LINE_KD=30", "BENCH_KERNEL=1")
+r = make("LINE_KD=85", "BENCH_KERNEL=1")
 if r.returncode == 0 or "LINE_KD" not in r.stderr:
-    print("FAIL: LINE_KD=30 with BENCH_KERNEL=1 accepted")
+    print("FAIL: LINE_KD=85 with BENCH_KERNEL=1 accepted")
     fail += 1
 base = make()
 d85 = make("LINE_KD=85")
@@ -39,19 +40,22 @@ for r in (base, d85, d30, d0):
         print("FAIL: make -n:", r.stderr[-300:])
         sys.exit(1)
 exe = var(base.stdout, "EXE_FILE")
-if var(d85.stdout, "EXE_FILE") != exe or "line_kd.h" in d85.stdout:
-    print("FAIL: LINE_KD=85 changes the build")
+if var(d30.stdout, "EXE_FILE") != exe or "line_kd.h" in d30.stdout:
+    print("FAIL: LINE_KD=30 (default) changes the build")
     fail += 1
-if var(d30.stdout, "EXE_FILE") != exe + "_kd30":
-    print("FAIL: suffix", var(d30.stdout, "EXE_FILE"))
+if "line_kd.h" in base.stdout:
+    print("FAIL: the default build force-includes line_kd.h")
+    fail += 1
+if var(d85.stdout, "EXE_FILE") != exe + "_kd85":
+    print("FAIL: suffix", var(d85.stdout, "EXE_FILE"))
     fail += 1
 if var(d0.stdout, "EXE_FILE") != exe + "_kd0":
     print("FAIL: suffix", var(d0.stdout, "EXE_FILE"))
     fail += 1
-if "-DLINE_KD=30 -include ../app_program/vehicle/line_kd.h" not in d30.stdout:
+if "-DLINE_KD=85 -include ../app_program/vehicle/line_kd.h" not in d85.stdout:
     print("FAIL: vehicle_task.o rule missing")
     fail += 1
-if var(d30.stdout, "PROFILE_ID") == var(base.stdout, "PROFILE_ID"):
+if var(d85.stdout, "PROFILE_ID") == var(base.stdout, "PROFILE_ID"):
     print("FAIL: PROFILE_ID does not change, stale objects can be reused")
     fail += 1
 print("test_line_kd_make:", "ok" if fail == 0 else "%d failure(s)" % fail)

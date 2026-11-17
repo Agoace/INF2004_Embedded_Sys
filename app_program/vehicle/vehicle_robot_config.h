@@ -1,4 +1,5 @@
-/* Extracted from src/vc_line_test.c: fixed P7 D85, detour v1.8.
+/* Extracted from src/vc_line_test.c: P7 with base 120 and D 30 (demo
+ * default 2026-11-17), detour v1.8.
  * Only NULL is spelled 0; numeric settings are not retyped. */
 #ifndef VEHICLE_ROBOT_CONFIG_H
 #define VEHICLE_ROBOT_CONFIG_H
@@ -7,7 +8,8 @@
 #include "../subsystem5/servo_scan.h"
 #include "../subsystem5/detour_run.h"
 static const lt_config_t LINE_CFG = {
-    .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
+    /* Demo default 2026-11-17 (run B120_1): base 120, D 30 (was 146, 85). */
+    .steer = {.base_mm_s = 120, .gain_pct = 85u, .kd_pct = 30u, .min_mm_s = 62,
               .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},
     .straight_counts = 450,
     .hint_counts = 20,

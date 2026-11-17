@@ -140,6 +140,13 @@ log each. Main_Worker's `feel.py` on the KR1 rows (20 ms):
 | GAP+ST | `5d063ac` + same-tick, `d9d228ac` | 5.6 / 32.4 / 70.7 | 12.0 | 36.7 (55) |
 | KD30+ST | trial `474cc70` kd 30, `c8729500` | 8.4 / 29.7 / 68.5 | 9.7 | 19.3 (29) |
 | KD30+GAP+ST | `474cc70` + `24e2051`, `642eff1c` | 6.3 / 31.8 / 73.4 | 10.3 | 35.3 (53) |
+| FX_1 base 146 (KD30+ST, detours) | staging `e6bf80b` | 9.3 / 32.8 / 77.2 | 9.1 | 54.7 (82) |
+| B120_1 base 120 (KD30+ST) | staging `1104752` `LINE_BASE=120`, `2f4b2ba1` | 5.7 / 23.1 / 60.2 | 8.6 | 20.0 (30) |
+
+B120_1 is the base for the demo default (base 120, kd 30, same-tick;
+2026-11-17). FX_1 also contains two detours; its SEARCH count is not a
+like-for-like comparison. B120_1: 0 faults, 0 overruns, response max
+1643 us.
 
 ## Operator estimates 2026-11-17 (ramp)
 
@@ -334,6 +341,7 @@ Reported through Main_Worker; estimates, not ruler values:
 | LINE_KD 30 + same-tick run (474cc70): straights yaw deviation median / p90 / p99; flips; SEARCH | 8.4 / 29.7 / 68.5 deg/s; 9.7 /s; 19.3 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
 | LINE_BASE candidate speeds | 120 and 100 mm/s; P85, minimum62 and maximum378 unchanged | 2026-11-16 | ASSUMED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
 | LINE_BASE native position53 correction | requested left-minus-right92/64/42 mm/s at base146/120/100 on first update; not a time far-share prediction | 2026-11-16 | DERIVED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
+| Demo default LINE steering | base 120 mm/s, gain 85, D 30, far gain 340, min 62, max 378; same-tick on | 2026-11-17 | ASSUMED(operator decision,2026-11-17) | [LINE.md#settings](../s3-line-barcode/LINE.md#settings) |
 | LINE_BASE permitted range | integer83–378 mm/s; base must exceed minimum62+20 | 2026-11-16 | ASSUMED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
 | LINE_LOST delay / gap delay / junction hold | 50 ms / 300 ms / 300 ms | doc ≤ 2026-10-28 | ASSUMED | [LINE_POSITION.md#thresholds](../archive/s3-line-barcode/LINE_POSITION.md#thresholds) |
 | LINE_P_NEAR candidate gains | 60 and 40; base P at all positions, extra far gain 340 unchanged | 2026-11-16 | ASSUMED | [LINE.md#opt-in-proportional-gain-trial](../s3-line-barcode/LINE.md#opt-in-proportional-gain-trial) |
