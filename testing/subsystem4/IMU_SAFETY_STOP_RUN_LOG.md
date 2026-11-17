@@ -85,63 +85,131 @@ IDLE.
 path adds locals and one more board read. The figure is still above the 256 B
 gate, but the IMU-specific high-water gate is still NOT RUN.
 
-## Step 3: calibration spin with no false stop
+## Step 3: physical actions by the operator
 
-NOT RUN. The operator must press GP21 with the robot on the stand. The spin is
-the first motor-enabled movement, so it also proves that the new acknowledged
-clear path does not block a normal start that has no latch.
+The operator performed these actions while the recorder and the USB console
+capture were running:
 
-## Step 4: lift produces STOP
+1. A quick short lift.
+2. A slow lift of about 3 s.
+3. An overturn to +X for about 2 s, then to -X for about 2 s.
+4. A GP21 press to clear, then a second GP21 press to start.
 
-NOT RUN. Needs the operator to lift the robot.
+The actions were not instrumented. They are the operator's description, not a
+measured sequence.
 
-What must be recorded:
+## Step 4: overturn produces STOP
 
-- The stop is immediate and the wheels do not turn again.
-- The published `state` becomes `2` (shell FAULT), not IDLE.
-- The run summary, if a run was active, carries `shell_fault = 6`
-  (`VSM_FAULT_IMU`) with detail `2` (`IMU_SAFETY_LIFT`).
-- The console prints one `[robot] IMU safety IMU lift detected ...` line.
-- `g_mg`, `tilt_ddeg`, `vertical_mg` in that line become the first measured
-  evidence for the candidate bounds, which RT-0091 asked for.
+PASS. The USB console captured:
 
-## Step 5: overturn produces STOP
+```
+[robot] IMU safety IMU overturn detected g_mg 979 tilt_ddeg 757 vertical_mg -7 clear_ms 0 age_ms 9
+```
 
-NOT RUN. Needs the operator to turn the robot on its side.
+| Check | Observation | Result |
+| --- | --- | --- |
+| Reason | `IMU overturn detected` | PASS |
+| Tilt at the latch | 757 deci-degrees, which is 75.7 deg, just over the 75 deg limit | PASS |
+| Gravity magnitude at the latch | 979 mg, inside the near-1 g band | RECORDED |
+| Vertical change | -7 mg, so the trigger was the tilt, not a vertical rule | PASS |
+| Sample age | 9 ms, inside the 50 ms limit | PASS |
+| Shell FAULT published | `state = 2` on 29 state rows, uptime 279765 to 307765 ms | PASS |
+| Motor E-Stop | `motion_faults = 4` (`MC_FAULT_ESTOP`) throughout the FAULT window | PASS |
+| Event record | `robot/event` kind 3, word 1 (`IMU_SAFETY_OVERTURN`) | PASS |
 
-The expected detail is `1` (`IMU_SAFETY_OVERTURN`), and the console line is
-`IMU overturn detected`.
+The latch held for about 28 s until the operator cleared it. The robot did not
+resume on its own.
+
+This is the first measured evidence for the overturn bound. 757 deci-degrees
+confirms that the 75 deg limit is reached by a real hand overturn. The value is
+only 7 deci-degrees above the limit, so the bound is close to the real motion
+and is not a wide-margin threshold.
+
+The second overturn (-X) produced no separate line. That is correct: the latch
+was already set, so the detector does not report a second reason until a safe
+restart.
+
+## Step 5: lift produces STOP
+
+NOT DETECTED. Both lifts produced no console line and no event. The robot did
+not latch, so `state` stayed IDLE and `motion_faults` stayed 0 through both
+lifts.
+
+This is a real result, not a logging loss. The console capture was active, the
+overturn line in step 4 proves the capture works, and the event sequence has no
+gap.
+
+Cause, from the code: the lift path needs one of two conditions.
+
+- Free fall: `|a| < 400 mg` for 2 consecutive observations. A hand that holds
+  the robot keeps it near 1 g, so this path needs a real release.
+- Vertical change: `|(a - gravity) . gravity_unit| > 500 mg` for 3
+  consecutive observations, and `|a|` must be more than 200 mg away from 1 g.
+  A gentle hand lift stays inside the near-1 g band, so the vertical rule is
+  separated out; a lift that leaves the band still needs about 5 m/s2 of
+  sustained upward acceleration for 30 ms to pass the 500 mg rule.
+
+A slow lift of 3 s cannot satisfy either condition. A quick short lift by hand
+usually cannot either, because the hand supports the robot and the
+acceleration is small.
+
+The lift stop therefore is NOT achieved with the current candidate bounds on a
+hand lift. RT-0091 already asked for recorded lift traces before these bounds
+become device thresholds. This step shows why that is necessary.
 
 ## Step 6: GP21-only recovery
 
-NOT RUN. This is the new two-press behaviour:
+PASS for the two-press design.
 
-1. The first press requests the clear and prints
-   `IMU safety clear requested, hold upright; press GP21 again`. It must not
-   start the robot and must not command the wheels.
-2. The second press starts the run only if the pose was upright, still and
-   fresh for the full 1 s window.
+| Check | Observation | Result |
+| --- | --- | --- |
+| First press requests the clear | console `IMU safety clear requested, hold upright; press GP21 again` | PASS |
+| First press does not start | no motor command in the interval; `active` stayed 0 | PASS |
+| Refusal event on the first press | `robot/event` kind 3, word 1 (the latched reason) at uptime 308411 ms | PASS |
+| Latch released only after the writer | FAULT window ends at 307765 ms; the clear request is at 308411 ms | PASS |
+| Second press starts | `active = 1` at uptime 311885 ms, `motion_faults` 4 to 0 | PASS |
+| Calibration ran | `[BC_CAL] gen 1 samples 2100 ... mode ABORTED`; expected with no line under the wheels | RECORDED |
 
-A refused or late clear must keep the latch and the FAULT state. This is the
-F1 repair in the direction that matters.
+The motor E-Stop stayed set from the latch until the start cleared it. No motor
+command was possible between the clear and the start.
 
 ## Step 7: upright gate refuses a start
 
-NOT RUN. Needs the robot physically tilted or inverted at boot.
+NOT RUN. The operator did not boot the robot tilted or inverted.
+
+## What this session adds to the candidate bounds
+
+| Bound | Candidate value | Measured this session |
+| --- | --- | --- |
+| Overturn tilt | more than 75 deg for 5 observations | 75.7 deg at the latch, 979 mg, 9 ms old |
+| Lift free fall | below 400 mg for 2 observations | no measurement; the operator did not release the robot |
+| Lift vertical change | more than 500 mg for 3 observations, away from 1 g | no measurement; the hand lift stayed near 1 g |
+
+The next step for the lift stop is a recorded raw trace during a real lift, not
+another threshold guess. Use the procedure in
+[IMU_SAFETY_TRACE_PROCEDURE.md](../../docs/s4-imu/IMU_SAFETY_TRACE_PROCEDURE.md)
+with the IMU stream image, then replay the capture through the analyser.
 
 ## Not claimed
 
-- No lift, overturn, restart, stop-latency or FOLLOW result exists yet.
-- The candidate bounds are still candidates until step 4 and step 5 give
-  measured gravity values.
-- The IMU-specific stack high-water is still NOT RUN.
+- The lift stop is NOT achieved with the current candidate bounds on a hand
+  lift. No lift trigger was recorded in this session.
+- Stop latency, FOLLOW, the upright-gate refusal and the IMU-specific stack
+  high-water are still NOT RUN.
+- The overturn bound has one measured latch. One sample is not a distribution
+  and does not prove a margin.
+- The lifted-action sequence is the operator's description. No instrumented
+  timeline of the hand motion exists.
 - Hump accuracy and the H3 comparison are not part of this log.
 
 ## Recorded evidence files
 
-All under the ignored `testing/logs/` directory:
+All under the ignored 	esting/logs/ directory:
 
-- `repair-boot-20261117-1502.csv` — the step 2 recorder output.
+- 
+epair-boot-20261117-1502.csv - MQTT recorder output, boot_id 4211540474.
+- console-session2.txt - USB console capture with the overturn line, the
+  clear-request line and the calibration lines.
 
-Analysis must filter on `boot_id` `4211540474` for this session. Session 1
+Analysis must filter on oot_id 4211540474 for this session. Session 1
 evidence uses different boot IDs and must not be combined with this one.
