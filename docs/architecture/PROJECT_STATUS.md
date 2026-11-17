@@ -74,7 +74,7 @@ commit inside this repository before the parent updates its recorded revision.
 | `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface lineage |
 | `mtk3-line` | Line tracing and line search; the barcode reader is an optional extension of this module |
 | `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
-| `mtk3-detour-sweep` | Helper from staging `024d01a`: the line counts in the DETOUR return turn from 45° (`line_turn_deg`), after FC_2. Host tests pass; robot not run; Main merges into staging |
+| `mtk3-detour-sweep` | Helper from staging `024d01a`: the line counts in the DETOUR return turn from 20° (`line_turn_deg`, after the second STRAIGHT), after FC_2 and FX_1. Host tests pass; robot not run; Main merges into staging |
 | `mtk3-scan-int` | Approved helper for coarse/fine scan vehicle diagnostics, obstacle wire v3 and legacy-compatible decoder; Main merges into staging |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
 | `mtk3-imu` | S4 IMU module development |
