@@ -4,8 +4,9 @@
 
 The canonical header and boards were introduced in7177edd. The
 [SHADOW producer](LIVE_PRODUCER.md) now connects the existing LINE task to
-these boards. No new task or live action is enabled. Initial and produced
-records have valid=0 and SHADOW set.
+these boards. No new task is added. The initial record, and every produced
+record in default builds, have valid=0 and SHADOW set. Only a live opt-in
+build can produce valid=1 ([BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md)).
 
 - Header/source: `app_program/subsystem3/barcode_live_source.{h,c}`.
 - Record writer/reset owner: S3 producer only.
@@ -42,6 +43,7 @@ Record flags, in hexadecimal: 01 DISTANCE_FORWARD, 02 WINDOW29,
 40 OFFSET_VERIFIED, 80 SHADOW. A live action needs low seven bits set,
 SHADOW clear, valid=1, supported metadata and nonzero mapped command.
 Shadow, unverified-offset and unmapped observations always have valid=0.
+OFFSET_VERIFIED is set only by a live opt-in build with a measured clearance.
 
 `read_ms/counts` describe one ORIGINAL coherent motor observation at
 eligibility, not a publication retry time. `frame_end_counts` are the first

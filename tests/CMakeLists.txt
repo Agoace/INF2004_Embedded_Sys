@@ -93,6 +93,8 @@ foreach(base 146 120 100 83 378)
 endforeach()
 add_test(NAME test_line_base_make COMMAND "${CMAKE_COMMAND}" -E env
     python3 "${REPO}/tests/test_line_base_make.py")
+add_test(NAME test_motion_same_tick_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_motion_same_tick_make.py")
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
 # MOTION_SAME_TICK=1: the tests/sametick units force-include the same
 # headers as the firmware make rules.

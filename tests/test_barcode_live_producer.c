@@ -4,7 +4,19 @@
 #include <string.h>
 #include "../app_program/subsystem3/barcode.h"
 #include "../app_program/subsystem3/barcode_live_producer.h"
+#ifndef BARCODE_LIVE_ENABLE
+#define BARCODE_LIVE_ENABLE 0
+#endif
 static barcode_live_producer_t p;
+
+/* Expected live gate: build enable, custom map (id>=2), mode2 at bind and
+ * publish, and a mapped command. Anything else stays SHADOW/valid0. */
+static bool expect_valid(uint8_t letter, uint32_t mode)
+{
+    return BARCODE_LIVE_ENABLE && barcode_window_mapping_id() >= 2u &&
+           mode == BC_LIVE_PERMITTED &&
+           barcode_window_table_entry((unsigned int)(letter - 'A')) != 0u;
+}
 
 static uint16_t waveform(float mm, float start, char letter, bool reverse)
 {
@@ -50,8 +62,10 @@ int main(int argc, char **argv)
                     .mode = BC_LIVE_SHADOW_MODE},
         .control_ok = true, .motor_ok = true};
     const bool reverse = strcmp(kind, "reverse") == 0;
+    const bool ack_kind = strcmp(kind, "ack") == 0 ||
+                          strcmp(kind, "mode2_ack") == 0;
     const bool old_ack = strcmp(kind, "old_epoch_ack") == 0;
-    const bool two = strcmp(kind, "ack") == 0 || old_ack ||
+    const bool two = ack_kind || old_ack ||
                      strcmp(kind, "no_ack") == 0 ||
                      strcmp(kind, "old_epoch_no_ack") == 0 ||
                      strcmp(kind, "busy_ack") == 0;
@@ -67,10 +81,10 @@ int main(int argc, char **argv)
         cal.white_samples = 0u;
         cal.faults = BC_CAL_NO_WHITE;
     }
-    if (strcmp(kind, "mode2") == 0) {
+    if (strcmp(kind, "mode2") == 0 || strcmp(kind, "mode2_ack") == 0) {
         in.control.mode = BC_LIVE_PERMITTED;
     }
-    unsigned int publications = 0u, failures = 0u;
+    unsigned int publications = 0u, failures = 0u, live_records = 0u;
     barcode_live_record_t original = {0};
     for (unsigned int i = 0u; i < (two ? 6000u : 3000u); ++i) {
         if (strcmp(kind, "pause") == 0 && i >= 1200u && i < 1270u) {
@@ -130,7 +144,7 @@ int main(int argc, char **argv)
             ++in.control.epoch;
             in.control.revision_ms = in.now_ms;
         }
-        if ((strcmp(kind, "ack") == 0 || old_ack ||
+        if ((ack_kind || old_ack ||
              strcmp(kind, "busy_ack") == 0) && i == 2600u) {
             assert(p.occupied && p.slot.sequence == 1u);
             in.control.ack_sequence = p.slot.sequence;
@@ -155,10 +169,18 @@ int main(int argc, char **argv)
         if (p.record_pending) {
             ++publications;
             assert(p.slot.source == 2u && p.slot.version == 1u);
-            assert(p.slot.valid == 0u && p.slot.reserved == 0u);
-            assert(p.slot.flags == (0x3fu | BC_LIVE_SHADOW));
-            assert(p.slot.command == (publications == 1u ? 1u : 2u));
+            assert(p.slot.reserved == 0u);
             assert(p.slot.letter == (publications == 1u ? 'A' : 'B'));
+            assert(p.slot.command ==
+                   barcode_window_table_entry(p.slot.letter - 'A'));
+            if (expect_valid(p.slot.letter, in.control.mode)) {
+                assert(p.slot.valid == 1u &&
+                       p.slot.flags == BC_LIVE_REQUIRED);
+                ++live_records;
+            } else {
+                assert(p.slot.valid == 0u);
+                assert(p.slot.flags == (0x3fu | BC_LIVE_SHADOW));
+            }
             assert(p.slot.direction == (reverse ? 2u : 1u));
             assert(p.slot.read_ms == barcode_live_ms_at(in.now_ms,
                 in.now_us, p.window.result.read_us));
@@ -177,9 +199,9 @@ int main(int argc, char **argv)
         strcmp(kind, "us_wrap") == 0 || strcmp(kind, "ms_wrap") == 0 ||
         strcmp(kind, "count_wrap") == 0 || strcmp(kind, "mode2") == 0 ||
         strcmp(kind, "fallback") == 0 || strcmp(kind, "sequence_wrap") == 0;
-    assert(publications == (strcmp(kind, "ack") == 0 || old_ack ? 2u :
+    assert(publications == (ack_kind || old_ack ? 2u :
                             positive ? 1u : 0u));
-    if (strcmp(kind, "ack") == 0 || old_ack) {
+    if (ack_kind || old_ack) {
         assert(p.occupied && p.slot.sequence == 2u);
         assert(in.control.ack_sequence == 1u); /* Old ACK cannot free X+1. */
         assert(p.slot.epoch == in.control.epoch);
@@ -191,8 +213,15 @@ int main(int argc, char **argv)
     if (!positive && strcmp(kind, "no_progress") != 0) {
         assert(failures > 0u);
     }
-    printf("%s pubs%u failures%u max_control%lu max_record%lu\n", kind,
-           publications, failures, (unsigned long)p.max_control_age_ms,
+    /* The mode2 positive case is the only one that may act, and only in
+     * a live build with a custom confirmed map and a mapped letter A. */
+    const unsigned int live_expected = strcmp(kind, "mode2") == 0 ?
+        (expect_valid('A', 2u) ? 1u : 0u) : strcmp(kind, "mode2_ack") == 0 ?
+        (expect_valid('A', 2u) ? 1u : 0u) + (expect_valid('B', 2u) ? 1u : 0u)
+        : 0u;
+    assert(live_records == live_expected);
+    printf("%s live%u pubs%u failures%u max_control%lu max_record%lu\n", kind,
+           live_records, publications, failures, (unsigned long)p.max_control_age_ms,
            (unsigned long)p.max_record_age_ms);
     /* Nonzero fractional phase across independent us/ms wraps. */
     const uint64_t t = origin + 2345678u;

@@ -100,6 +100,9 @@ void barcode_live_test_publish(const barcode_live_record_t *value)
 #if !APP_TEST && !APP_BENCH && !BC_LIVE_SOURCE_HOST_TEST
 #include "barcode_live_producer.h"
 #include "barcode_attempt.h"
+#ifndef BARCODE_LIVE_ENABLE
+#define BARCODE_LIVE_ENABLE 0
+#endif
 #if BARCODE_FAIL_CAPTURE
 #include "barcode_fail_capture.h"
 #endif
@@ -350,8 +353,16 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
                                            producer.event.start_us),
             .uptime_ms = terminal_ms,
             .reason = (uint16_t)producer.event.reason,
+#if BARCODE_LIVE_ENABLE
+            /* SHADOW clears only for a record that was offered for action. */
+            .flags = (uint8_t)((producer.event.reason == BW_OK &&
+                                producer.event.record.valid == 1u
+                                ? 0u : RM_BARCODE_SHADOW) |
+                (producer.event.reason == BW_OK ? RM_BARCODE_DECODED : RM_BARCODE_FAILED)),
+#else
             .flags = (uint8_t)(RM_BARCODE_SHADOW |
                 (producer.event.reason == BW_OK ? RM_BARCODE_DECODED : RM_BARCODE_FAILED)),
+#endif
             .letter = producer.event.reason == BW_OK ? producer.event.record.letter : 0u,
             .command = producer.event.reason == BW_OK ? producer.event.record.command : 0u,
             .direction = producer.event.record.direction,

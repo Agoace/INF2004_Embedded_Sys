@@ -10,7 +10,7 @@ int main(void)
     assert(LINE_CFG.steer.min_mm_s == 62);
     assert(LINE_CFG.steer.max_mm_s == 378);
     assert(LINE_CFG.steer.gain_pct == 85u);
-    assert(LINE_CFG.steer.kd_pct == 85u);
+    assert(LINE_CFG.steer.kd_pct == 30u);
     assert(LINE_CFG.steer.far_from == 50u);
     assert(LINE_CFG.steer.far_gain_pct == 340u);
     assert(SEARCH_CFG.speed_mm_s == 131);

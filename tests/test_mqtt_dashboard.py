@@ -869,7 +869,7 @@ class ApprovedContractPanelTests(ModelCase):
         self.assertEqual(rows['Attempt decoded / failed'], 'yes / no')
         self.assertEqual(rows['Decoded letter'], 'A')
         self.assertEqual(rows['Mode (wire)'], 'SHADOW')
-        self.assertEqual(rows['Mapped command (observation only)'], 'A')
+        self.assertEqual(rows['Mapped command (observation only)'], 'LEFT')
         self.assertEqual(rows['Command issued / executed'], 'no / no')
         self.assertEqual(rows['Narrow / wide estimate'], '4.50 / 9.90 mm')
         self.assertEqual(rows['Producer epoch / sequence'], '5 / 17')
@@ -889,7 +889,19 @@ class ApprovedContractPanelTests(ModelCase):
         self.assertEqual(rows['Reason'], 'BW_WIDTH (6)')
         self.assertEqual(rows['Direction'], 'reverse')
         self.assertEqual(rows['Narrow / wide estimate'], 'unavailable')
-        self.assertEqual(rows['Mapped command (observation only)'], 'none')
+        self.assertEqual(rows['Mapped command (observation only)'], 'NONE')
+
+    def test_v2_command_names_and_wire_modes_do_not_relabel_the_decoded_letter(self):
+        for flags, mode in ((13, 'SHADOW'), (9, 'LIVE')):
+            for nav, name in enumerate(('NONE', 'LEFT', 'RIGHT', 'STRAIGHT', 'UTURN')):
+                with self.subTest(mode=mode, nav=nav):
+                    self.model.ingest('robot/barcode',
+                        barcode_v2(flags=flags, letter=ord('A'), nav=nav))
+                    rows = self.rows('barcode')
+                    self.assertEqual(rows['Mode (wire)'], mode)
+                    self.assertEqual(rows['Decoded letter'], 'A')
+                    self.assertEqual(rows['Mapped command (observation only)'], name)
+                    self.assertEqual(rows['Command issued / executed'], 'no / no')
 
     def test_attempt_age_is_not_refreshed_by_raw_gp28_or_completed_summary(self):
         self.attempt()
@@ -2584,11 +2596,23 @@ class RedesignPageTests(AppCase):
         barcode_rows, geometry_rows = map(dict, trace['values'][0])
         self.assertEqual(barcode_rows['Mode (wire)'], 'SHADOW')
         self.assertEqual(barcode_rows['Decoded letter'], 'A')
-        self.assertEqual(barcode_rows['Mapped command (observation only)'], 'A')
+        self.assertEqual(barcode_rows['Mapped command (observation only)'], 'LEFT')
         self.assertEqual(barcode_rows['Command issued / executed'], 'no / no')
         self.assertNotIn('Confidence', barcode_rows)
         self.assertEqual(geometry_rows['Width (mm)'], '>= 123 mm (lower bound)')
         self.assertEqual(geometry_rows['Left / right clearance (mm)'], 'unavailable / 19 mm')
+
+    def test_live_v2_renders_command_direction_not_letter_without_execution_claim(self):
+        self.model.ingest('robot/barcode',
+            barcode_v2(flags=9, letter=ord('D'), nav=4))
+        expression = """document.getElementById('panel-barcode').querySelector(
+          'table.facts').children.map(row => row.children.map(cell => cell.textContent))"""
+        trace = self.trace(expressions=[expression])
+        rows = dict(trace['values'][0])
+        self.assertEqual(rows['Mode (wire)'], 'LIVE')
+        self.assertEqual(rows['Decoded letter'], 'D')
+        self.assertEqual(rows['Mapped command (observation only)'], 'UTURN')
+        self.assertEqual(rows['Command issued / executed'], 'no / no')
 
     def test_unknown_contract_versions_render_not_crash_or_replace_valid_geometry(self):
         ApprovedContractPanelTests.geometry(self)

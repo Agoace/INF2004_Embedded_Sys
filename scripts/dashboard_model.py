@@ -1057,13 +1057,14 @@ def barcode_panel(model, now):
             rows[0] = ('Mode (deployment)', 'SHADOW expected (deployment setting)')
             rows = [(label, 'robot/barcode v2' if label == 'Per-attempt details' else value)
                     for label, value in rows]
-            rows += [('Mode (wire)', 'SHADOW' if f['shadow'] else 'not SHADOW'),
+            rows += [('Mode (wire)', 'SHADOW' if f['shadow'] else 'LIVE'),
                      ('Attempt decoded / failed', f"{_yes_no(f['decoded'])} / {_yes_no(f['failed'])}"),
                      ('Decoded letter', f['letter'] if f['decoded'] else 'none'),
                      ('Reason', f"{f['reason_name']} ({f['reason']})"),
                      ('Direction', _name(BARCODE_DIRECTIONS, f['direction'])),
                      ('Mapped command (observation only)',
-                      {0: 'none', 1: 'A', 2: 'B', 3: 'C', 4: 'D'}.get(f['nav_command'], 'unknown')),
+                      {0: 'NONE', 1: 'LEFT', 2: 'RIGHT', 3: 'STRAIGHT',
+                       4: 'UTURN'}.get(f['nav_command'], 'unknown')),
                      ('Command issued / executed',
                       f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
                      ('Producer epoch / sequence', f"{f['epoch']} / {f['sequence']}"),

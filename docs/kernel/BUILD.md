@@ -62,12 +62,12 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
 | `BARCODE_CAPTURE` | 0; 1 selects B1b driven TEST capture; VIN required |
 | `JUNCTION_TEST_CMD` | NONE (default) selects source2 SHADOW; A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
-| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
+| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE, a non-empty `BARCODE_MAP` and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
 | `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
 | `BARCODE_MAP` | Empty default = built-in table, image unchanged. `"F=LEFT,K=RIGHT"` sets the barcode_window action table (unlisted letters NONE; NONE/LEFT/RIGHT/STRAIGHT/UTURN) via [`barcode_map.py`](../../tools/barcode_map/barcode_map.py); bad letter, action or a repeat stops make. Adds `_bmap<id>`. Check the boot line `[BARCODE_TABLE] id <id> confirmed 1 A=.. Z=..` (0..4 = N/L/R/S/U). |
 | `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
-| `LINE_KD` | 85 default, image unchanged. 0..85 replaces only the LINE D gain ([D gain trial](../s3-line-barcode/LINE.md#d-gain-trial-opt-in-line_kd)). Adds `_kdN`. Not with `BENCH_KERNEL=1`. |
-| `MOTION_SAME_TICK` | 0 default, image unchanged. 1 applies a new wheel speed in the same 10 ms period ([same-tick retarget](../s2-motion/MOTION.md#same-tick-retarget-opt-in)). Adds `_sametick`. Not with `BENCH_KERNEL=1`. |
+| `LINE_KD` | 30 default (config value, since 2026-11-17; was 85). 0..85 replaces only the LINE D gain ([D gain trial](../s3-line-barcode/LINE.md#d-gain-trial-line_kd-default-30-since-2026-11-17)). A value other than 30 adds `_kdN`. Not with `BENCH_KERNEL=1`. |
+| `MOTION_SAME_TICK` | 1 default for robot images (since 2026-11-17): a new wheel speed applies in the same 10 ms period ([same-tick retarget](../s2-motion/MOTION.md#same-tick-retarget-default-on)). 0 gives the old timing and adds `_sametick0`. `BENCH_KERNEL=1`: default 0, no suffix; 1 stops make. |
 | `BARCODE_FAIL_CAPTURE` |0 default, images unchanged.1 is ROBOT only and keeps raw edge/decimated ADC evidence for the first two failed attempts per run. Adds `_bcfail2`. See [failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md). |
 | `BARCODE_FAIL_SLOTS` |2 default;1 is the smaller fallback. Used only when failed capture is enabled; changes image/profile suffix and invalidates old objects. Recheck combined RAM/headroom before use. |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
@@ -197,7 +197,9 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 JUNCTION_TEST_CMD=NONE \
     BARCODE_LIVE_ENABLE=0 BARCODE_MEASURED_CLEAR_MM=0 -j4 --output-sync=target
 ```
 
-The decoder and adapter report evidence only; S3 forces valid0 even in mode2.
+In default builds, the decoder and adapter report evidence only, and S3 forces
+valid0 even in mode2. A live opt-in build ([BARCODE_LIVE_COMMAND.md](../s3-line-barcode/BARCODE_LIVE_COMMAND.md))
+can set valid1 only with mode2, a custom `BARCODE_MAP` and a mapped letter.
 The150 mm SHADOW label is unverified and cannot authorize actions. Enable,
 bound and source choice are object-profile keys. Invalid bounds, fake+live,
 or enable1 with bound0 fail in Make and C. Do not build/flash an action image

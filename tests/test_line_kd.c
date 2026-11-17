@@ -31,7 +31,7 @@ static int step_diff(int kd, int to)
 int main(void)
 {
     CHECK(LINE_CFG.steer.kd_pct == LINE_KD, "kd %u", LINE_CFG.steer.kd_pct);
-    CHECK(LINE_CFG.steer.base_mm_s == 146 && LINE_CFG.steer.gain_pct == 85u &&
+    CHECK(LINE_CFG.steer.base_mm_s == 120 && LINE_CFG.steer.gain_pct == 85u &&
               LINE_CFG.steer.min_mm_s == 62 && LINE_CFG.steer.max_mm_s == 378 &&
               LINE_CFG.steer.far_from == 50u &&
               LINE_CFG.steer.far_gain_pct == 340u,
@@ -53,10 +53,15 @@ int main(void)
         CHECK(got < step_diff(85, 32), "kd %d not below the default (%d/%d)",
               LINE_KD, got, step_diff(85, 32));
     }
-    /* Clip unchanged: a step of 32 and one of 25 give the same D part. */
-    CHECK(step_diff(LINE_KD, 32) - step_diff(0, 32) ==
-              step_diff(LINE_KD, 25) - step_diff(0, 25),
-          "D part not clipped at 25");
+    /* Clip unchanged: a step of 32 and one of 25 give the same D part,
+     * within 2 mm/s (each wheel is rounded; base 120 shows 24 vs 26 at
+     * kd 85, where an unclipped step of 32 gives about 33). */
+    {
+        const int d32 = step_diff(LINE_KD, 32) - step_diff(0, 32);
+        const int d25 = step_diff(LINE_KD, 25) - step_diff(0, 25);
+        CHECK(abs(d32 - d25) <= 2, "D part not clipped at 25 (%d/%d)", d32,
+              d25);
+    }
     /* Wheel limits hold for every position. */
     for (int p = -100; p <= 100; ++p) {
         steer_mm_reset(&s);
