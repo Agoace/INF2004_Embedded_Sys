@@ -98,6 +98,9 @@ then reports one Windows loopback failure in a security test
 
 ## Related records
 
+- [IMU_SAFETY_STOP_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_STOP_RUN_LOG.md)
+  — the hardware session on this repair. Step 2 is a PASS; the lift, overturn
+  and recovery steps are NOT RUN.
 - [IMU_SAFETY_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_RUN_LOG.md) —
   the first hardware session.
 - [IMU_SAFETY_TRACE_PROCEDURE.md](IMU_SAFETY_TRACE_PROCEDURE.md) — capture and
