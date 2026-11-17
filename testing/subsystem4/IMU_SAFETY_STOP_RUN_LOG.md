@@ -177,6 +177,30 @@ command was possible between the clear and the start.
 
 NOT RUN. The operator did not boot the robot tilted or inverted.
 
+## Step 8: final capture window and session end
+
+The operator stopped the MQTT recorder and the USB console capture when the
+robot was disconnected from USB and from the hotspot. No further evidence can
+be added to this session.
+
+Final captured totals, from the whole `repair-boot-20261117-1502.csv` file:
+
+| Check | Observation | Result |
+| --- | --- | --- |
+| Total rows | 792 | RECORDED |
+| `robot/state` rows | 653 | RECORDED |
+| Uptime window | 78.2 s to 712.6 s, about 11 minutes, one boot | RECORDED |
+| `boot_id` | `4211540474` on every row that carries one | PASS: no reboot |
+| `state` values | 0 (IDLE) and 2 (FAULT) only | PASS: no RUNNING state without a start |
+| `motion_faults` values | 0 and 4 (`MC_FAULT_ESTOP`) only | PASS: no other fault bit |
+| `stack_min_free` | 476 bytes on every heartbeat | PASS, above the 256 B gate |
+| `cpu_load_permille` | 526 to 611 | RECORDED; the maximum is at the calibration attempt |
+| Console capture | 438 bytes: one overturn line, one clear-request line, one aborted calibration line, one Wi-Fi window line | RECORDED |
+
+The `cpu_load_permille` maximum of 611 is higher than the 539 measured at
+idle. It occurs at the calibration attempt, when the motors and the Wi-Fi
+window run together, so it is not an IMU safety cost.
+
 ## What this session adds to the candidate bounds
 
 | Bound | Candidate value | Measured this session |
