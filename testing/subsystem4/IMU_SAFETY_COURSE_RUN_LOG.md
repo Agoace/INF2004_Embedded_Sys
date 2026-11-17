@@ -118,14 +118,21 @@ measured. It can be one of:
 
 ## Instrumentation added after this run
 
-Commit `pending` adds to this branch:
+Commit `526cc67` adds, and the follow-up commit repairs after RT-0101:
 
 - `imu_safety_unavailable_cause()`: separates stale, invalid and absent.
-- The live `robot/event` for an IMU stop now carries the cause in its detail
-  byte, and a refused start carries it too.
-- The USB console lines now print `cause <name>`.
+- The live `robot/event` for an IMU stop carries the cause in its detail byte,
+  and a refused start carries it too. `docs/s1-telemetry/MQTT_WIRE.md` records
+  the values.
+- A pose refusal is reported as detail 4, not as an unavailable IMU, and a
+  refused start while an unavailable latch is in force keeps the saved cause
+  instead of reporting NONE (RT-0101/F2).
+- The cause is saved once, at the first latch, so the console and the first
+  MQTT event cannot disagree (RT-0101/F3).
 - The IMU `compute_*` window now covers the safety step and the safety board
-  publish, so that measurement matches the work it claims to measure.
+  publish. It is wall elapsed time, including preemption, not CPU time
+  (RT-0101/F1).
+- The USB console lines print `cause <name>`.
 
 ## Still not measured
 

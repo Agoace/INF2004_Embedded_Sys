@@ -109,6 +109,29 @@ sample. Caching the reference magnitude costs 4 bytes and saves nothing while
 field is diagnostic only, it is printed once per latch, and no test asserts a
 non-zero value for an upright sample.
 
+## Unavailability cause
+
+`imu_safety_evaluate()` reports one value for every way the IMU can stop being
+usable, so a field report could not say which one happened (RT-0099).
+`imu_safety_unavailable_cause()` separates them, and the value is carried in
+the detail byte of the live `robot/event` and printed on the USB line:
+
+| Detail | Meaning |
+| --- | --- |
+| 1 | Stale: a copy exists but is older than `IMU_SAFETY_MAX_AGE_MS` |
+| 2 | Invalid: the newest sample is not valid or not calibrated |
+| 3 | Absent: no copy was ever published |
+| 4 | Pose: the sample is fresh and valid but outside the upright bounds. A refused start only; the cause helper never returns it |
+
+A stopped robot stores the cause once, at the first latch, because the live
+event suppresses repeats (RT-0101/F3). A later refused start while the latch is
+in force reuses that saved cause instead of reporting NONE (RT-0101/F2).
+
+The IMU `compute_*` counter is **wall elapsed time**, including preemption by
+tasks at priority 10 to 13, not exclusive CPU time. `work_*` also includes
+preemption and adds the probe and the final publication. Neither counter alone
+can attribute CPU load (RT-0101/F1).
+
 ## Limits
 
 - The host tests use synthetic accelerations and a stub board. They prove the

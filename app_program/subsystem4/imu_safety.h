@@ -101,8 +101,12 @@ typedef enum {
     IMU_SAFETY_CAUSE_STALE = 1,   /* copy exists but is older than the limit */
     IMU_SAFETY_CAUSE_INVALID = 2, /* newest sample is not valid or not
                                    * calibrated, so no fresh observation */
-    IMU_SAFETY_CAUSE_ABSENT = 3   /* no copy was ever published: the writer
+    IMU_SAFETY_CAUSE_ABSENT = 3,  /* no copy was ever published: the writer
                                    * has not run yet, or every read was busy */
+    IMU_SAFETY_CAUSE_POSE = 4     /* REFUSAL ONLY: the sample is fresh and
+                                   * valid but outside the upright bounds.
+                                   * imu_safety_unavailable_cause() never
+                                   * returns this value (RT-0101/F2). */
 } imu_safety_cause_t;
 
 /* Output flags. */

@@ -205,7 +205,11 @@ Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
 kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
 or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
 reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, detail is 0 accepted, 1 not idle,
-2 uncalibrated, 3 log busy, 4 duplicate, or 5 backend unavailable. The word
+2 uncalibrated, 3 log busy, 4 duplicate, or 5 backend unavailable. For kind 3, a word of 1 is
+IMU overturn and 2 is IMU lift, with detail 0. A word of 3 is IMU unavailable,
+either as a stop or as a refused start, and its detail gives the cause: 1 stale
+sample, 2 invalid sample, 3 no board copy, or 4 pose not upright. Detail 0 on a
+word of 3 means the image predates this field, so treat it as unknown. The word
 contains opcode in bits 0–7 and detail in bits 8–15. Only validated, queued
 commands reach the vehicle and produce these events. Bad tokens, malformed
 commands, and full command queues increment `command_lost` without a vehicle

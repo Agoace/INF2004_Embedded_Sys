@@ -293,8 +293,12 @@ static void sample(void)
     /* The compute window covers the whole usable-sample path, including the
      * safety detector step and the safety board publish. It used to stop
      * before that block, so the reported cost excluded the safety work
-     * (RT-0099). It is a CPU-time measure of this task's own work; it still
-     * excludes any preemption, which work_max_us does include. */
+     * (RT-0099). This is WALL ELAPSED time on the free-running timer, NOT
+     * exclusive CPU time: tasks at priority 10 to 13 can preempt this task at
+     * 14, so preemption is included. work_* spans the same sample and adds the
+     * probe and the final publication, so it includes preemption as well; it
+     * is not the only measure that does. Do not use either counter alone to
+     * attribute CPU load (RT-0101/F1). */
     const uint32_t compute = drv_time_us() - compute_start;
 
     value.compute_last_us = compute;

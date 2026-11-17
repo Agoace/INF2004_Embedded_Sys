@@ -669,6 +669,9 @@ static const char *imu_cause_text(uint8_t cause)
     if (cause == (uint8_t)IMU_SAFETY_CAUSE_ABSENT) {
         return "no board copy";
     }
+    if (cause == (uint8_t)IMU_SAFETY_CAUSE_POSE) {
+        return "pose not upright";
+    }
     return "none";
 }
 
@@ -779,14 +782,15 @@ static bool imu_safety_check(void)
      * so it only blocks; latching it faulted every boot. */
     if (trigger == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
         if (active) {
-            /* Record WHICH kind of unavailability caused the stop, so a field
-             * report can separate a stale sample from an invalid one from an
-             * absent board (RT-0099). The value is diagnostic only; it never
-             * changes the stop. */
-            imu_latch_cause = imu_safety_unavailable_cause(
-                &imu_copy, imu_have_copy, drv_time_ms(),
-                IMU_SAFETY_MAX_AGE_MS);
             if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+                /* Save WHICH kind of unavailability caused the stop, once, at
+                 * the first latch. live_event() suppresses a repeat kind-3
+                 * event, so recording it again could make the console cause
+                 * disagree with the first MQTT event (RT-0101/F3). The value
+                 * is diagnostic only; it never changes the stop. */
+                imu_latch_cause = imu_safety_unavailable_cause(
+                    &imu_copy, imu_have_copy, drv_time_ms(),
+                    IMU_SAFETY_MAX_AGE_MS);
                 imu_latch(trigger);
             }
             (void)vehicle_estop();
@@ -850,6 +854,40 @@ static bool imu_start_allowed(void)
     }
     return (int32_t)(drv_time_ms() - imu_copy.observation_ms) <=
            (int32_t)IMU_SAFETY_MAX_AGE_MS;
+}
+
+/*
+ * Detail byte for a refused start. The event word says which reason blocked
+ * the start; this says why, so a pose refusal is not reported as an
+ * unavailable IMU and a latched unavailable fault keeps the cause that
+ * stopped the robot (RT-0101/F2). `board` is the effective trigger already
+ * read for this press. Diagnostic only: it never changes the decision.
+ */
+static uint8_t imu_refuse_detail(uint8_t board)
+{
+    if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
+        /* A latch is in force. Keep the saved cause for an unavailable
+         * latch; lift and overturn have no cause. */
+        return (imu_latched == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE)
+                   ? imu_latch_cause
+                   : (uint8_t)IMU_SAFETY_CAUSE_NONE;
+    }
+    if (imu_clear_pending) {
+        /* A clear is queued; the console reports that separately. */
+        return (uint8_t)IMU_SAFETY_CAUSE_NONE;
+    }
+    if (board == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
+        return imu_safety_unavailable_cause(&imu_copy, imu_have_copy,
+                                            drv_time_ms(),
+                                            IMU_SAFETY_MAX_AGE_MS);
+    }
+    if (board == (uint8_t)IMU_SAFETY_NONE) {
+        /* evaluate() only returns NONE for a published, valid, fresh sample,
+         * so the gate stopped on the upright bounds alone. */
+        return (uint8_t)IMU_SAFETY_CAUSE_POSE;
+    }
+    /* The board reports lift or overturn: the event word says so. */
+    return (uint8_t)IMU_SAFETY_CAUSE_NONE;
 }
 
 /*
@@ -1655,24 +1693,36 @@ static void vehicle_task(INT code, void *ctx)
             (void)imu_safety_restart();
         }
         if (!imu_start_allowed()) {
-            const uint8_t why =
-                imu_latched != (uint8_t)IMU_SAFETY_NONE
-                    ? imu_latched
-                    : (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE;
-            const char *text =
-                imu_latched != (uint8_t)IMU_SAFETY_NONE
-                    ? imu_reason_text(why)
-                    : "IMU not ready";
+            /* Read the effective trigger once, so the word reports lift or
+             * overturn when the board is latched, and the detail can separate
+             * a stale sample from an invalid one from a pose refusal
+             * (RT-0101/F2). One extra board read per refused press is
+             * acceptable: a press is operator-paced, not a periodic path. */
+            const uint8_t board =
+                (imu_latched == (uint8_t)IMU_SAFETY_NONE)
+                    ? imu_safety_now()
+                    : (uint8_t)IMU_SAFETY_NONE;
+            uint8_t why;
+            if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
+                why = imu_latched;
+            } else if ((board == (uint8_t)IMU_SAFETY_LIFT) ||
+                       (board == (uint8_t)IMU_SAFETY_OVERTURN)) {
+                why = board;
+            } else {
+                why = (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE;
+            }
+            const uint8_t refuse_cause = imu_refuse_detail(board);
+            const char *text = imu_reason_text(why);
+            if ((why == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) &&
+                (refuse_cause == (uint8_t)IMU_SAFETY_CAUSE_POSE)) {
+                text = "IMU pose not upright";
+            } else if (why == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
+                text = "IMU not ready";
+            }
+            /* A refused start is also a field observation: the event detail
+             * carries the cause, so a field report can classify the refusal
+             * without a USB console (RT-0099). */
             set_reason(imu_reason_code(why), text);
-            /* A refused start is also a field observation: carry the cause of
-             * an unavailable IMU, so the operator can tell a stale sample from
-             * an invalid one before any latch (RT-0099). */
-            const uint8_t refuse_cause =
-                (why == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE)
-                    ? imu_safety_unavailable_cause(&imu_copy, imu_have_copy,
-                                                   drv_time_ms(),
-                                                   IMU_SAFETY_MAX_AGE_MS)
-                    : (uint8_t)IMU_SAFETY_CAUSE_NONE;
             event_detail(3u, vsm.state, vsm.running, (uint16_t)why,
                          refuse_cause);
             /* Low-rate: one line per refused start request, never in the

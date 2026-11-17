@@ -25,14 +25,18 @@ static bool fault_state_seen;
 /* Cause byte carried on the live IMU-unavailable event (RT-0099). */
 static unsigned int unavailable_events;
 static unsigned int unavailable_detail;
+/* Bit N is set when a kind-3/word-3 event carried detail N. A refused start
+ * reports the same word, so the mask covers both the latch and the refusal. */
+static unsigned int unavailable_detail_mask;
 void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
 void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;
     if (event->kind==3u && event->word==3u) {
-        /* IMU_SAFETY_IMU_UNAVAILABLE: the detail carries the cause. */
+        /* IMU_SAFETY_IMU_UNAVAILABLE, latch or refused start: detail=cause. */
         if (unavailable_events==0u) unavailable_detail=event->detail;
+        if (event->detail<32u) unavailable_detail_mask|=(1u<<event->detail);
         ++unavailable_events;
     }
     if (event->kind==RM_EVENT_HUMP) {
@@ -77,6 +81,9 @@ ER tk_slp_tsk(TMO timeout) {
         } else if (mode==4u) {
             /* The IMU goes unavailable while the robot is moving. */
             safety_busy=true;
+        } else if (mode==5u) {
+            /* Reads succeed, but the published sample is not valid. */
+            safety_out.flags=0u;
         } else {
             rows_at_dump=rows;ordinary[command_head++%8u]=(robot_command_t){RM_CMD_DUMP,100u};
         }
@@ -92,7 +99,7 @@ ER tk_slp_tsk(TMO timeout) {
             assert(!value.active && rows==rows_after_stop && !calibrating);verified_priority=true;
         }
     }
-    if ((mode==3u || mode==4u) && estops>0u) {
+    if ((mode==3u || mode==4u || mode==5u) && estops>0u) {
         /* F2: an IMU stop must publish a persistent FAULT, not IDLE. It must
          * also stop issuing wheel commands. */
         assert(estops==1u && asked[0]==0 && asked[1]==0);
@@ -109,10 +116,17 @@ int main(int argc,char **argv) {
     else if (argc>1 && !strcmp(argv[1],"estop")) mode=2u;
     else if (argc>1 && !strcmp(argv[1],"imufault")) mode=3u;
     else if (argc>1 && !strcmp(argv[1],"imuunavailable")) mode=4u;
+    else if (argc>1 && !strcmp(argv[1],"imuinvalid")) mode=5u;
+    else if (argc>1 && !strcmp(argv[1],"imuabsent")) mode=6u;
+    else if (argc>1 && !strcmp(argv[1],"imupose")) mode=7u;
+    if (mode==6u) safety_busy=true; /* no board at all: every read times out */
+    if (mode==7u) safety_out.flags=IMU_SAFETY_FLAG_VALID; /* fresh, not upright */
     lp_init(&line);lp_set_pair(&line,true,0);watchdog_ready=true;services_ready=true;
     assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
-    assert(injected && listener==7 && notifications==1u && !irq_off);
+    /* Modes 6 and 7 must refuse the start, so no run is ever active. */
+    assert((injected || mode==6u || mode==7u) && listener==7 &&
+           notifications==1u && !irq_off);
     /* The IMU scenarios add a refused-restart line and one latched-reason
      * line, so they have more than the single boot line. */
     if (mode<=2u) assert(prints==1u);
@@ -123,7 +137,19 @@ int main(int argc,char **argv) {
         assert(hump_events==0u);
         return 0;
     }
-    if (mode==3u || mode==4u) {
+    if (mode==6u || mode==7u) {
+        /* The gate must refuse, and the event must say why: an absent board
+         * is not a pose refusal (RT-0101/F2). */
+        const unsigned int want =
+            (mode==6u) ? (unsigned int)IMU_SAFETY_CAUSE_ABSENT
+                       : (unsigned int)IMU_SAFETY_CAUSE_POSE;
+        assert(line_drives==0u && estops==0u && asked[0]==0 && asked[1]==0);
+        assert(unavailable_events>=1u);
+        assert(unavailable_detail==want);
+        assert(unavailable_detail_mask==(1u<<want));
+        return 0;
+    }
+    if (mode==3u || mode==4u || mode==5u) {
         /* F2 and the approved recovery rule. */
         rm_summary_t summary;
         assert(fault_state_seen);
@@ -133,6 +159,14 @@ int main(int argc,char **argv) {
         assert(summary.shell_fault_detail==
                (uint16_t)(mode==3u ? IMU_SAFETY_LIFT
                                    : IMU_SAFETY_IMU_UNAVAILABLE));
+        if (mode==5u) {
+            /* The published sample is invalid, so the cause is INVALID. */
+            assert(unavailable_events>=1u);
+            assert(unavailable_detail==(unsigned int)IMU_SAFETY_CAUSE_INVALID);
+            assert(unavailable_detail_mask==
+                   (1u<<(unsigned int)IMU_SAFETY_CAUSE_INVALID));
+            return 0;
+        }
         if (mode==3u) assert(safety_clear_requests>=1u);
         else {
             assert(safety_clear_requests==0u);
@@ -141,6 +175,10 @@ int main(int argc,char **argv) {
              * absent board or an invalid sample. */
             assert(unavailable_events>=1u);
             assert(unavailable_detail==(unsigned int)IMU_SAFETY_CAUSE_STALE);
+            /* The later GP21 press while the latch is in force must keep the
+             * saved cause, so no kind-3 event may carry detail 0. */
+            assert((unavailable_detail_mask &
+                    (1u<<(unsigned int)IMU_SAFETY_CAUSE_NONE))==0u);
         }
         return 0;
     }
