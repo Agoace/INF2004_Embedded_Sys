@@ -101,7 +101,11 @@ ID tk_cre_cyc(const T_CCYC *config)
 {
     ++create_calls;
     assert(config->cyctim == 10u && config->cycphs == 10u);
+#if TK_SUPPORT_SMP
     assert(config->assprc == app_prc_core1());
+#else
+    assert(config->assprc == 0u); /* UP has no cyclic affinity attribute. */
+#endif
     cyclic_function = config->cychdr;
     return create_error != 0 ? E_SYS : 6;
 }
