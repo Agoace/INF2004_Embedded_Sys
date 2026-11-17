@@ -165,6 +165,9 @@ static const dt_config_t ROBOT = {
  * fitted robot model: it only drives dt_t through a plausible sequence. */
 typedef struct {
     double lx, ly, la;           /* line point and direction, mm, deg */
+    uint16_t omm;                /* scan distance; 0: 220 */
+    bool blind;                  /* sonar: no echo after the first STRAIGHT */
+    int line_straights;          /* straights done when ON_LINE began */
     double bx0, bx1, by0, by1;   /* box, mm */
     double x, y, th;             /* rear axle pose, mm, deg */
     double fl, fr;               /* wheel counts, fractional */
@@ -228,7 +231,8 @@ static dt_step_t scene_run(scene_t *s, const dt_config_t *cfg) {
     s->t = 1000u;
     s->line_steps = 0;
     s->on_line_from = -1;
-    dt_init(&dt, cfg, OBSTACLE_SIDE_LEFT, 220u, 0, 0, s->t);
+    dt_init(&dt, cfg, OBSTACLE_SIDE_LEFT, s->omm ? s->omm : 220u, 0, 0,
+            s->t);
     while (dt_step(&dt) < DT_DONE && s->t < 60000u) {
         s->t += 10u;
         if (s->echo_due && (int32_t)(s->t - s->echo_at) >= 0) {
@@ -247,13 +251,16 @@ static dt_step_t scene_run(scene_t *s, const dt_config_t *cfg) {
         if (dt.step == DT_ON_LINE && before != DT_ON_LINE) {
             s->on_line_from = before;
             s->line_heading = (int)s->th;
+            s->line_straights = dt.straights;
         }
         hash_add(s, (uint32_t)dt.step | (uint32_t)w << 8 |
                         (uint32_t)(uint16_t)dt.heading << 24);
         hash_add(s, (uint32_t)dt.returning);
         if (!s->echo_due && dt_wants_reading(&dt, s->t)) {
             dt_triggered(&dt);
-            s->echo = scene_echo(s, dt_servo_deg(w));
+            s->echo = s->blind && dt.straights >= 1u
+                          ? 0xFFFFu
+                          : scene_echo(s, dt_servo_deg(w));
             s->echo_at = s->t + 30u;
             s->echo_due = true;
         }
@@ -291,11 +298,13 @@ static scene_t fc1_like(void) {
                      .bx0 = 290.0, .bx1 = 435.0, .by0 = -50.0, .by1 = 50.0};
 }
 
-/* Return turn from heading h0 to h1 (whole degrees, S frame), line seen
- * from line_from (degrees, absolute) on. Returns the step at the end. */
+/* Return turn after the second STRAIGHT from heading h0 to h1 (whole
+ * degrees, S frame), line seen from line_from (degrees, absolute) on.
+ * Returns the step at the end. */
 static dt_step_t sweep_line(dt_t *dt, int h0, int h1, int line_from,
                             uint32_t *now) {
     dt->step = DT_TURN_TOWARD;
+    dt->straights = 2u;
     dt->heading = (int16_t)h0;
     for (int h = h0; h >= h1 && dt->step == DT_TURN_TOWARD; --h) {
         const bool seen = h <= line_from;
@@ -333,6 +342,7 @@ static void test_line_in_return_turn(void) {
     (void)at(&dt, 0, 50u);
     now = 100u;
     dt.step = DT_TURN_TOWARD;
+    dt.straights = 2u;
     for (int h = -1; h >= -44; --h) {
         now += 10u;
         (void)dt_update(&dt, true, dt.l0 - dt.side * h * 10,
@@ -377,6 +387,23 @@ static void test_line_in_return_turn(void) {
         (void)dt_update(&dt, true, dt.l0 - h * 10, dt.r0 + h * 10, now);
     }
     CHECK(dt_step(&dt) == DT_TURN_TOWARD, "not armed: line ignored");
+
+    /* (8) After the first STRAIGHT only: the robot can be beside the
+     * obstacle; the line does not count. */
+    dt_init(&dt, &cfg, OBSTACLE_SIDE_LEFT, 250u, 0, 0, 0u);
+    (void)at(&dt, 0, 50u);
+    now = 100u;
+    (void)sweep_line(&dt, -12, -12, 0, &now); /* sets straights 2 */
+    dt.l0 = dt.l;
+    dt.r0 = dt.r;
+    dt.straights = 1u;
+    for (int h = -13; h >= -80; --h) {
+        now += 10u;
+        (void)dt_update(&dt, true, dt.l0 - (h + 12) * 10,
+                        dt.r0 + (h + 12) * 10, now);
+    }
+    CHECK(dt_step(&dt) == DT_TURN_TOWARD,
+          "turn after STRAIGHT 1: line at -45..-80 ignored");
 
     /* (5) line_turn_deg 0: the old rule, the turn goes on. */
     cfg.line_turn_deg = 0u;
@@ -423,6 +450,26 @@ static void test_scenes(void) {
     CHECK(scene_run(&s, &cfg) == DT_DONE && s.hash == old_fc1 &&
               s.line_steps == 0 && s.on_line_from == DT_STRAIGHT,
           "FC_1-like: ON_LINE from the return STRAIGHT, DONE, identical");
+
+    /* (9) Sonar miss beside the obstacle: box 100 x 300 mm on the line,
+     * 140 mm ahead; no echo after the first STRAIGHT. The turn after the
+     * first STRAIGHT crosses the line beside the box. The line must not
+     * count there: the trace is the old-rule trace. */
+    for (uint16_t mm = 100u; mm <= 180u; mm = (uint16_t)(mm + 40u)) {
+        scene_t a = fc2_like(), b;
+        a.omm = mm;
+        a.blind = true;
+        a.bx0 = 65.0 + mm;
+        a.bx1 = a.bx0 + 300.0;
+        b = a;
+        cfg.line_turn_deg = 0u;
+        (void)scene_run(&a, &cfg);
+        cfg.line_turn_deg = 45u;
+        (void)scene_run(&b, &cfg);
+        CHECK(b.hash == a.hash &&
+                  !(b.on_line_from == DT_TURN_TOWARD && b.line_straights < 2),
+              "sonar miss: no line in the turn after STRAIGHT 1");
+    }
 }
 
 int main(void) {

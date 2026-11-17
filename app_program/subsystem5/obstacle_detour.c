@@ -217,7 +217,11 @@ void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t ob
 }
 
 /* Return turn: the line counts once the heading reaches -line_turn_deg.
- * Not in TURN_AWAY, the trim, a back-off, or a stop for a seen obstacle. */
+ * Not in TURN_AWAY, the trim, a back-off, or a stop for a seen obstacle.
+ * Not before the second STRAIGHT: after the first one the robot can still
+ * be beside the obstacle, and a sonar miss must not put it on the line
+ * there. */
+#define DT_LINE_TURN_MIN_STRAIGHTS 2u
 static bool turn_line(const dt_t *dt, bool line_seen) {
     const int64_t cpd = dt->cfg.counts_per_deg_x100;
     const int64_t now_x100 = (int64_t)dt->heading * cpd + turn_x100(dt);
@@ -225,7 +229,8 @@ static bool turn_line(const dt_t *dt, bool line_seen) {
                          dt->sweep_end == DT_SWEEP_RETURN;
     return dt->cfg.line_turn_deg != 0u && dt->armed && line_seen &&
            dt->step == DT_TURN_TOWARD && !dt->backing && !dt->trimming &&
-           stop_ok && now_x100 <= -(int64_t)dt->cfg.line_turn_deg * cpd;
+           dt->straights >= DT_LINE_TURN_MIN_STRAIGHTS && stop_ok &&
+           now_x100 <= -(int64_t)dt->cfg.line_turn_deg * cpd;
 }
 
 static bool sweeping(const dt_t *dt) {

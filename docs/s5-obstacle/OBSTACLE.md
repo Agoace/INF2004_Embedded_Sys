@@ -214,7 +214,15 @@ The return straight then drove away from the line:
 
 The rule: in TURN_TOWARD, not in a back-off, a trim or a stop for a seen
 obstacle, with the line lost once (armed), a line reading at a heading of
--`line_turn_deg` or past it ends the turn. ON_LINE then drives
+-`line_turn_deg` or past it ends the turn. The line counts only from the
+second STRAIGHT: after the first one the robot can still be beside the
+obstacle. The guards against a line beside the obstacle are this rule and
+the sweep itself: the servo looks 30° past the heading, and two seen
+readings stop the turn before the line counts. ON_LINE and ALIGN take no
+readings. In LINE, the forward monitor stops for an obstacle ahead; nothing
+checks the sides. A host scene with no echo after the first STRAIGHT gave
+line catches beside the box only in the turn after STRAIGHT 1; with the
+rule, the trace is the old-rule trace. ON_LINE then drives
 `line_ahead_mm` along the heading, then ALIGN. TURN_AWAY never counts the
 line. DONE_NO_LINE means ALIGN ended off the line; DONE needs ON_LINE, so
 the line was registered. Host test: `tests/test_detour_sweep.c` (unit
