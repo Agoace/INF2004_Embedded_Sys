@@ -634,15 +634,17 @@ static void read_line(void)
  */
 static imu_safety_output_t imu_copy;
 static bool imu_have_copy;
-/* Vehicle-owned latch: the first confirmed reason, until a safe restart.
- * Ordinary run cleanup never clears it. */
+/* Vehicle-owned latch: the first confirmed reason, until a safe restart is
+ * ACKNOWLEDGED by the writer. Ordinary run cleanup never clears it. */
 static uint8_t imu_latched;
-/* The writer applies a clear on its next tick, so a wake inside that window
- * must not re-latch the reason that was just cleared. The window is bounded
- * so a refused clear still stops the robot. */
+/* A safe restart is a request, not a clear (RT-0092/F1). Every latch stays
+ * in force until the IMU writer acknowledges on a fresh board, so the window
+ * is bounded and a refused or lost clear keeps the robot stopped. */
 #define IMU_CLEAR_WAIT_MS 100u
-static bool imu_await_clear;
-static uint32_t imu_await_until;
+static bool imu_clear_pending;
+static uint32_t imu_clear_deadline;
+/* One bounded USB line per latched reason. */
+static bool imu_reported;
 
 static const char *imu_reason_text(uint8_t trigger)
 {
@@ -683,6 +685,33 @@ static uint8_t imu_safety_now(void)
                               IMU_SAFETY_MAX_AGE_MS);
 }
 
+/* The effective stop requirement: Vehicle's latch, a queued clear, or a
+ * trigger the board still reports. The motor faults are cleared and the
+ * shell is reset only when this is false. */
+static bool imu_stop_required(void)
+{
+    if (imu_latched != (uint8_t)IMU_SAFETY_NONE || imu_clear_pending) {
+        return true;
+    }
+    (void)imu_safety_now();
+    return imu_have_copy &&
+           imu_copy.latched_trigger != (uint8_t)IMU_SAFETY_NONE;
+}
+
+/* Latch one reason and put the shell in persistent FAULT. The run loop stops
+ * before the next vsm_step() can see the latched motor fault, so this
+ * transition must be explicit: otherwise the published state and the run
+ * summary stay IDLE/RUNNING (RT-0092/F2). vsm_stop() does not clear FAULT;
+ * only vsm_reset() after an acknowledged safe restart does. */
+static void imu_latch(uint8_t trigger)
+{
+    imu_latched = trigger;
+    imu_reported = false;
+    imu_clear_pending = false;
+    vsm_set_fault(&vsm, VSM_FAULT_IMU, (uint16_t)trigger);
+    publish_vehicle();
+}
+
 /*
  * Act on a confirmed trigger. Called on every Vehicle wake, so it covers
  * line calibration, the start delay, each running module and idle. Returns
@@ -692,28 +721,41 @@ static bool imu_safety_check(void)
 {
     const uint8_t trigger = imu_safety_now();
 
-    if (imu_await_clear) {
+    if (imu_clear_pending) {
         if (trigger == (uint8_t)IMU_SAFETY_NONE) {
-            /* The requested clear has landed. */
-            imu_await_clear = false;
-        } else if ((int32_t)(drv_time_ms() - imu_await_until) < 0) {
-            /* Not applied yet: give the writer its next tick instead of
-             * re-latching the reason the operator just cleared. */
+            /* The writer applied the clear and the fresh board reports no
+             * trigger. Only now may every latch be released. */
+            imu_clear_pending = false;
+            imu_latched = (uint8_t)IMU_SAFETY_NONE;
+            imu_reported = false;
+            if (!active) {
+                vsm_reset(&vsm);
+            }
             return true;
-        } else {
-            /* The clear was refused, or the reason returned. Stop. */
-            imu_await_clear = false;
         }
+        if ((int32_t)(drv_time_ms() - imu_clear_deadline) < 0) {
+            /* Not applied yet: keep every latch and wait for the writer. */
+            return false;
+        }
+        /* Timed out. Treat it as refused and keep the latch (RT-0092/F1). */
+        imu_clear_pending = false;
+        if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+            imu_latched = trigger;
+        }
+        return false;
     }
     if (trigger == (uint8_t)IMU_SAFETY_NONE) {
         return imu_latched == (uint8_t)IMU_SAFETY_NONE;
     }
-    /* An unavailable IMU blocks a start and stops active motion, but it is
-     * not a latched fault: the plan reserves the latch for a confirmed
-     * overturn or lift. Latching it here faulted every cold boot, because
-     * the IMU service has not published a board on the first Vehicle wake. */
+    /* An unavailable IMU blocks a start and stops active motion. Owner rule
+     * (RT-0094/F2): once the robot is moving, the stop is a fault and needs
+     * the GP21 restart. A cold boot before the first sample is not a fault,
+     * so it only blocks; latching it faulted every boot. */
     if (trigger == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
         if (active) {
+            if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+                imu_latch(trigger);
+            }
             (void)vehicle_estop();
             cancelled = true;
             set_reason(RM_STOP_IMU_UNAVAILABLE, imu_reason_text(trigger));
@@ -723,7 +765,7 @@ static bool imu_safety_check(void)
     }
     if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
         /* Exactly one stop request per confirmed reason. */
-        imu_latched = trigger;
+        imu_latch(trigger);
         (void)vehicle_estop();
         cancelled = true;
         set_reason(imu_reason_code(trigger), imu_reason_text(trigger));
@@ -737,8 +779,6 @@ static bool imu_safety_check(void)
  * path, and the robot is already stopped by the time this runs. Without it a
  * non-MQTT image reports no reason at all, because event() is compiled out
  * there and `reason` is never printed. */
-static bool imu_reported;
-
 static void imu_report_latched(void)
 {
     if (imu_latched == (uint8_t)IMU_SAFETY_NONE || imu_reported) {
@@ -753,15 +793,20 @@ static void imu_report_latched(void)
               (long)(int32_t)(drv_time_ms() - imu_copy.observation_ms));
 }
 
-/* A start needs no latched reason, a fresh valid observation and an upright
- * pose. Never waits for the board. The board's own latch is not consulted
- * here: a safe restart has already cleared it, and imu_safety_check() runs
- * first on every wake and re-latches if the pose is still unsafe. */
-static bool imu_start_allowed(void){
-    if (imu_latched != (uint8_t)IMU_SAFETY_NONE) {
+/* A start needs no latched reason, no queued clear, a fresh valid upright
+ * observation AND a board that reports no trigger. The board's own latch is
+ * rechecked here on purpose: Vehicle's latch alone is not the effective one
+ * (RT-0093/P1). Never waits for the board. */
+static bool imu_start_allowed(void)
+{
+    if (imu_latched != (uint8_t)IMU_SAFETY_NONE || imu_clear_pending) {
         return false;
     }
-    (void)imu_safety_now();
+    const uint8_t trigger = imu_safety_now();
+    if (trigger != (uint8_t)IMU_SAFETY_NONE) {
+        /* Board latch still set, or the observation is stale or unusable. */
+        return false;
+    }
     if (!imu_have_copy) {
         return false;
     }
@@ -776,12 +821,21 @@ static bool imu_start_allowed(void){
 /*
  * GP21 safe restart after an IMU latch. Needs a fresh observation, an
  * upright pose and a completed all-clear window. Only then is the writer
- * asked to clear. MQTT commands cannot clear a latch.
+ * asked to clear, and the request is bounded: the latch is released only
+ * after the writer acknowledges on a fresh board (RT-0092/F1). A refused or
+ * lost clear keeps every latch, so no motor command can follow. MQTT
+ * commands cannot clear a latch.
  */
 static bool imu_safety_restart(void)
 {
-    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+    if (imu_latched == (uint8_t)IMU_SAFETY_NONE && !imu_clear_pending) {
         return true;
+    }
+    if (imu_clear_pending) {
+        /* Wait for the acknowledgement that imu_safety_check() completes.
+         * Returning false here keeps the start refused and the robot
+         * stopped for this press. */
+        return false;
     }
     if (imu_safety_now() == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
         return false;
@@ -791,11 +845,9 @@ static bool imu_safety_restart(void)
         return false;
     }
     (void)imu_safety_clear_request();
-    imu_latched = (uint8_t)IMU_SAFETY_NONE;
-    imu_reported = false;
-    imu_await_clear = true;
-    imu_await_until = drv_time_ms() + IMU_CLEAR_WAIT_MS;
-    return true;
+    imu_clear_pending = true;
+    imu_clear_deadline = drv_time_ms() + IMU_CLEAR_WAIT_MS;
+    return false;
 }
 
 /*
@@ -891,8 +943,9 @@ static bool cal_spin(int direction, goal_t goal, const int32_t home[2],
     const int sign[2] = {direction, -direction};
     bool running[2] = {true, true};
     const uint32_t t0 = drv_time_ms();
-    /* Never clear a motor fault behind an IMU safety latch. */
-    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+    /* Never clear a motor fault behind an IMU safety latch, a queued clear,
+     * or a trigger the board still reports. */
+    if (!imu_stop_required()) {
         (void)motion_clear_faults();
     }
     while (running[0] || running[1]) {
@@ -1196,8 +1249,9 @@ static bool request(sonar_request_t *r)
 static void run_once(void)
 {
     /* A latched IMU safety reason must survive run cleanup, so the motor
-     * faults are cleared and the shell reset only when none is latched. */
-    if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+     * faults are cleared and the shell reset only when nothing is stopping
+     * the robot: no latch, no queued clear, no board trigger. */
+    if (!imu_stop_required()) {
         (void)motion_clear_faults();
         vsm_reset(&vsm);
     }
@@ -1559,9 +1613,10 @@ static void vehicle_task(INT code, void *ctx)
             continue;
         }
 #endif
-        /* IMU start gate. A GP21 press may clear a latched reason, but only
-         * after the full all-clear window; an MQTT command never can. A
-         * stale, invalid or non-upright IMU blocks every start. */
+        /* IMU start gate. A GP21 press may request a clear of a latched
+         * reason, but only after the full all-clear window, and the latch is
+         * released only when the writer acknowledges. An MQTT command never
+         * can. A stale, invalid or non-upright IMU blocks every start. */
         if (run_edge) {
             (void)imu_safety_restart();
         }
@@ -1577,13 +1632,19 @@ static void vehicle_task(INT code, void *ctx)
             set_reason(imu_reason_code(why), text);
             event(3u, vsm.state, vsm.running, (uint16_t)why);
             /* Low-rate: one line per refused start request, never in the
-             * stop path. An unavailable IMU does not latch, so this is the
-             * operator's only feedback for a refused press. */
-            tm_printf((UB *)"[robot] IMU safety start refused: %s "
-                            "g_mg %ld tilt_ddeg %ld age_ms %ld\n",
-                      text, (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
-                      (long)(int32_t)(drv_time_ms() -
-                                      imu_copy.observation_ms));
+             * stop path. This is the operator's only feedback for a press
+             * that did not start a run. */
+            if (imu_clear_pending) {
+                /* GP21 press 1: the clear is queued, not applied yet. */
+                tm_printf((UB *)"[robot] IMU safety clear requested, hold "
+                                "upright; press GP21 again\n");
+            } else {
+                tm_printf((UB *)"[robot] IMU safety start refused: %s "
+                                "g_mg %ld tilt_ddeg %ld age_ms %ld\n",
+                          text, (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
+                          (long)(int32_t)(drv_time_ms() -
+                                          imu_copy.observation_ms));
+            }
 #if TM_MQTT
             vehicle.phase = 0u;
 #endif
@@ -1643,8 +1704,9 @@ static void vehicle_task(INT code, void *ctx)
         (void)send(&m);
         active = false;
         cancelled = false;
-        /* Ordinary run cleanup does not clear an IMU safety latch. */
-        if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
+        /* Ordinary run cleanup does not clear an IMU safety latch or a
+         * queued clear; only an acknowledged safe restart does. */
+        if (!imu_stop_required()) {
             vsm_reset(&vsm);
         }
 #if TM_MQTT

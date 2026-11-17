@@ -706,12 +706,27 @@ def pack_command(opcode, request_id, token):
 
 
 def read_token(path):
-    """Read one owner-only regular file; never include token bytes in errors."""
-    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    """Read one owner-only regular file; never include token bytes in errors.
+
+    POSIX keeps the strict contract: refuse a symbolic link, and require a
+    regular file, mode 0600, owned by the caller. Windows has no
+    O_NOFOLLOW, O_CLOEXEC or os.getuid(), and its mode bits do not carry
+    0600, so there the link refusal uses lstat and the checks the platform
+    cannot express are skipped. On Windows the token is therefore not
+    protected by a mode or owner check.
+    """
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    cloexec = getattr(os, "O_CLOEXEC", 0)
+    if not nofollow and stat.S_ISLNK(os.lstat(path).st_mode):
+        _require(False, "token file must not be a symbolic link")
+    fd = os.open(path, os.O_RDONLY | nofollow | cloexec)
     try:
         info = os.fstat(fd)
-        _require(stat.S_ISREG(info.st_mode) and stat.S_IMODE(info.st_mode) == 0o600 and
-                 info.st_uid == os.getuid(), "token file must be owned by you with mode 0600")
+        _require(stat.S_ISREG(info.st_mode), "token file must be a regular file")
+        if hasattr(os, "getuid"):
+            _require(stat.S_IMODE(info.st_mode) == 0o600 and
+                     info.st_uid == os.getuid(),
+                     "token file must be owned by you with mode 0600")
         value = os.read(fd, 35)
         _require(re.fullmatch(rb"[0-9a-fA-F]{32}(?:\r?\n)?", value) is not None,
                  "token file must contain 32 hex digits")

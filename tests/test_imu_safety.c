@@ -425,6 +425,70 @@ static void test_tilt_ddeg(void)
     CHECK(imu_safety_tilt_ddeg(NULL) == 0);
 }
 
+/* --- All-clear window needs continuous observation (RT-0094/F1) ------- */
+
+/* A gap longer than the observation cadence restarts the window. Sparse
+ * valid samples must not add up to a safe-restart window. */
+static void test_clear_window_restarts_after_gap(void)
+{
+    rig_t r;
+
+    rig(&r);
+    feed_n(&r, 99, 0.0f, 0.0f, 1000.0f);
+    CHECK(r.s.output.clear_ms < IMU_SAFETY_CLEAR_MS);
+
+    r.now_ms += 30u; /* 40 ms since the previous observation */
+    feed(&r, 0.0f, 0.0f, 1000.0f);
+    CHECK(r.s.output.clear_ms == 0u);
+    CHECK(!imu_safety_clear(&r.s));
+}
+
+/* Sparse observations alone never complete the window, whatever their pose. */
+static void test_sparse_observations_never_clear(void)
+{
+    rig_t r;
+
+    rig(&r);
+    for (int i = 0; i < 200; ++i) {
+        feed(&r, 0.0f, 0.0f, 1000.0f);
+        r.now_ms += 30u; /* 40 ms spacing: every observation is a gap */
+    }
+    CHECK(r.s.output.clear_ms == 0u);
+    CHECK(!imu_safety_clear(&r.s));
+}
+
+/* --- Separation gate, deliberate lift coverage limit (RT-0092/F4) ----- */
+
+/* A sudden tilt rotates gravity while |a| stays near 1 g. The vertical-change
+ * rule must not report that as a lift, and the tilt is below the overturn
+ * limit, so nothing latches. Removing the near-1 g gate makes this a LIFT
+ * after three observations. */
+static void test_sudden_tilt_near_one_g_is_not_a_lift(void)
+{
+    rig_t r;
+
+    rig(&r);
+    feed_n(&r, 20, 0.0f, 0.0f, 1000.0f); /* settle gravity on +Z */
+    feed_n(&r, 6, 916.0f, 0.0f, 400.0f); /* 66.4 deg, |a| = 999.5 mg */
+    CHECK(latched(&r) == IMU_SAFETY_NONE);
+    CHECK(r.s.output.stops == 0u);
+    CHECK(r.s.output.tilt_ddeg > 660 && r.s.output.tilt_ddeg < 670);
+}
+
+/* The overturn path still catches a tilt past its own limit in the same
+ * near-1 g condition. */
+static void test_tilt_beyond_overturn_latches_overturn(void)
+{
+    rig_t r;
+
+    rig(&r);
+    feed_n(&r, 20, 0.0f, 0.0f, 1000.0f);
+    feed_n(&r, 5, 985.0f, 0.0f, 174.0f); /* 80 deg, |a| = 1000.25 mg */
+    CHECK(latched(&r) == IMU_SAFETY_OVERTURN);
+    CHECK(r.s.output.stops == 1u);
+    CHECK(r.s.output.lift_samples == 0u);
+}
+
 int main(void)
 {
     test_upright_guard();
@@ -447,6 +511,10 @@ int main(void)
     test_gravity_frozen_during_transient();
     test_gravity_tracks_quiet();
     test_tilt_ddeg();
+    test_clear_window_restarts_after_gap();
+    test_sparse_observations_never_clear();
+    test_sudden_tilt_near_one_g_is_not_a_lift();
+    test_tilt_beyond_overturn_latches_overturn();
 
     if (failures == 0u) {
         printf("ALL PASSED (0 failures)\n");

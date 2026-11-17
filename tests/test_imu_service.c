@@ -406,6 +406,23 @@ int main(int argc, char **argv)
     run(2u);
     assert(!read_snapshot().value.motion_valid);
     stale_motion = false;
+    /* RT-0092/F3: the clear window must use counts AND zero commanded duty.
+     * Unchanged counts with a nonzero duty is a driven or stalled wheel, not
+     * a still robot, so the window must not advance. */
+    {
+        imu_safety_output_t safety;
+
+        count_step[0] = 0;
+        count_step[1] = 0;
+        duty = 100;
+        run(150u);
+        assert(imu_safety_try_read(&safety) == E_OK);
+        assert(safety.clear_ms == 0u);
+        duty = 0;
+        run(150u);
+        assert(imu_safety_try_read(&safety) == E_OK);
+        assert(safety.clear_ms >= IMU_SAFETY_CLEAR_MS);
+    }
     const uint32_t mark = imu_request_mark();
 
     count_step[0] = 3;

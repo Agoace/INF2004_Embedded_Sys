@@ -270,7 +270,10 @@ static void sample(void)
             .now_ms = input.now_ms,
             .accel_valid = core.output.valid,
             .calibrated = core.output.calibrated,
-            .wheels_still = wheels_still};
+            /* input.wheels_still is counts unchanged AND zero commanded
+             * duty. The encoder-only copy would call a wheel that is being
+             * driven but is stalled "still" (RT-0092/F3). */
+            .wheels_still = input.wheels_still};
         for (unsigned int axis = 0u; axis < 3u; ++axis) {
             safe_in.accel_mg[axis] = core.output.accel_mg[axis];
         }

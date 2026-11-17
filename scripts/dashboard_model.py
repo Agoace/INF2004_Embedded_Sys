@@ -49,7 +49,8 @@ STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "90 
                 13: "scan reverse timed out", 14: "IMU lift detected",
                 15: "IMU overturn detected", 16: "IMU unavailable"}
 SHELL_FAULTS = {0: "none", 1: "safety (motor fault bits)", 2: "module failed",
-                3: "no route", 4: "no module", 5: "handoff loop"}
+                3: "no route", 4: "no module", 5: "handoff loop",
+                6: "IMU safety"}
 MOTION_FAULT_BITS = ((0x01, "stall left"), (0x02, "stall right"), (0x04, "ESTOP"),
                      (0x08, "stale command"))
 BARCODE_DIRECTIONS = {0: "unknown", 1: "forward", 2: "reverse"}

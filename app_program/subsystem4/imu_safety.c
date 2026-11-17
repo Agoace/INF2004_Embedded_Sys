@@ -93,8 +93,13 @@ static void update_gravity(imu_safety_t *s, const float accel_mg[3], bool quiet)
     }
 }
 
-static uint32_t elapsed_ms(imu_safety_t *s, uint32_t now_ms)
+/* Elapsed observation time, clamped, plus whether the raw gap was too long
+ * to count as a continuous observation. */
+static uint32_t elapsed_ms(imu_safety_t *s, uint32_t now_ms, bool *gap)
 {
+    if (gap != NULL) {
+        *gap = false;
+    }
     if (!s->have_previous) {
         s->have_previous = true;
         s->previous_ms = now_ms;
@@ -105,6 +110,9 @@ static uint32_t elapsed_ms(imu_safety_t *s, uint32_t now_ms)
     s->previous_ms = now_ms;
     if (delta <= 0) {
         return 0u;
+    }
+    if (gap != NULL) {
+        *gap = (uint32_t)delta > IMU_SAFETY_CLEAR_GAP_MS;
     }
     return (uint32_t)delta > IMU_SAFETY_MAX_DELTA_MS
                ? IMU_SAFETY_MAX_DELTA_MS
@@ -117,7 +125,8 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
         return;
     }
     imu_safety_output_t *o = &s->output;
-    const uint32_t delta_ms = elapsed_ms(s, in->now_ms);
+    bool gap = false;
+    const uint32_t delta_ms = elapsed_ms(s, in->now_ms, &gap);
 
     o->observation_ms = in->now_ms;
     o->current_trigger = (uint8_t)IMU_SAFETY_NONE;
@@ -164,8 +173,10 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
     }
 
     /* The all-clear window measures the pose, so it must run even while a
-     * trigger is latched; the safe restart needs it. */
-    if (upright && in->wheels_still && near_one_g) {
+     * trigger is latched; the safe restart needs it. A gap longer than the
+     * observation cadence restarts the window: the pose was not observed in
+     * that time, so it cannot count as continuously clear (RT-0094/F1). */
+    if (!gap && upright && in->wheels_still && near_one_g) {
         const uint32_t limit = IMU_SAFETY_CLEAR_MS;
 
         o->clear_ms = (o->clear_ms >= limit - delta_ms) ? limit

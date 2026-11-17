@@ -199,3 +199,152 @@ Next: step 3 of the test order, the restrained calibration spin. This needs
 the wheels clear of the floor. The spin is started with the MQTT
 `calibrate` command, which is the same path a GP21 press takes and is
 gated by the same check, so no button press is needed.
+
+### Step 8: restrained calibration spin (the main untested risk)
+
+Operator confirmed at 2026-11-16 17:30 that the car is held clear of the
+floor and will stay lifted for the rest of this session.
+
+The spin is started with the MQTT `calibrate` command, not a GP21 press.
+Both take the same idle-loop path and pass the same safety gate; the command
+path only removes the need for a physical press. `calibrate` runs the spin
+and returns to IDLE without driving, so this step exercises the spin and the
+safety gate without commanding a run.
+
+Condition under test: the calibration spin is the most energetic stationary
+motion the robot performs, and the lift and overturn bounds are still
+candidates with no recorded trace behind them. A false trigger here would be
+a false stop in normal use.
+
+Capture: USB console to `testing/logs/spin-console.txt` and telemetry to
+`testing/logs/imu-safety-run.csv`.
+
+Result: **PASS for the spin test.** No IMU safety stop was produced.
+
+| Check | Observation | Result |
+| --- | --- | --- |
+| Motor output during the spin | 8 one-second samples with nonzero duty over 1859 ms; peak `duty_l = -193`, `duty_r = +186` permille, so the wheels turned in opposite directions | PASS (spin happened) |
+| Encoder travel | counts went from `-254/297` to `52/7`; the wheels really turned | PASS |
+| `motion_faults` at every sample this boot | `0` for all 212 state rows, including all 8 spin rows and every row after | **PASS** |
+| IMU safety line on USB | absent; the console captured only the barcode observer and the Wi-Fi window lines | PASS |
+| Robot after the spin | `active = 0`, `state = 0` (IDLE), `duty = 0/0` | PASS |
+
+The console during the spin contained only:
+
+```text
+[BC_CAL] gen 1 samples 1640 GP28 3943..3985 mode ABORTED faults 08
+[BC_CAL] white 0/0 black 3957/1640 hold_us 1639006 gap_us 1015 rise 320 fall 240; shadow only
+[robot] WiFi window wall polls 105 gaps 104 max_gap_us 21067 gaps_over_10000 104 work_max_us 3232 probe_max_us 56
+```
+
+The `[BC_CAL]` line is the barcode observer, not an IMU safety stop. Its
+`mode ABORTED` and `white 0/0` mean the line calibration found no white
+under the sensors, which is expected with the car held clear of the floor.
+That also explains the short sweep: the spin stopped after about 1.9 s
+instead of running the full bounded sequence.
+
+Limit to state with this result: the wheels turned and the detectors stayed
+quiet, but the full calibration sweep was not exercised because there is no
+track under a lifted robot. A complete-sweep spin test needs the robot on the
+line with the wheels held clear, or a bench run with the track in place.
+
+Two caveats on reading the capture file: the telemetry CSV spans both boots,
+so every analysis filters on `boot_id`; and the pre-fix boot contributes
+rows with `motion_faults = 4` that must not be attributed to this image.
+
+### Step 9: telemetry dump and stack evidence
+
+MQTT `dump` published request `4238312033`. The dump reports
+`rows_total = 0`, `rows_sent = 0`, `events_total = 1`, `lost_total = 0`
+and `generation = 1`. Zero rows is correct: no run has completed on this
+boot, so the RAM log holds nothing. The single event is the start-up stop
+event at `uptime_ms = 2091`.
+
+The dump does not carry the per-task stack report. That report is printed on
+USB at run end and at a GP20 dump, and neither happened here.
+
+| Check | Observation | Result |
+| --- | --- | --- |
+| Telemetry dump | 1 event, 0 rows, no loss | PASS (dump works) |
+| `stack_min_free` on this boot | 532 B early, 508 B after the spin | above the 256 B minimum |
+| IMU task high-water specifically | not available without the USB stack report | NOT RUN |
+| `cpu_load_permille` | 541 to 549 | RECORDED |
+
+So the 256 B gate is satisfied for the worst application stack on this boot,
+but the IMU-specific figure the plan asks for still needs the USB stack
+report. It is not a PASS for that narrower claim.
+
+### Step 10: start request with the wheels free
+
+MQTT `start` published request `2489399017`.
+
+| Check | Observation | Result |
+| --- | --- | --- |
+| Motor output after the request | 0 rows with nonzero duty after `uptime_ms` 210 s; no motion at all | RECORDED |
+| `motion_faults` | `0` on all 329 current-boot state rows, including after the request | PASS |
+| Command accounting | `command_lost = 0`, `commands_enabled = 1`: the request was consumed, not dropped | PASS |
+| IMU safety refusal line on USB | **absent**, but that proves nothing about the gate: it is never evaluated | NOT RUN |
+| Robot position afterwards | `active = 0`, `state = 0`, `duty = 0/0` | PASS |
+
+The run did not start. The reason is not the IMU gate. `vehicle_network_policy.c`
+rejects a START request without line calibration, and that policy check runs
+before the IMU start gate, so this step cannot test the gate at all.
+
+The `start` opcode uses an already-learned line calibration instead of running
+a new spin, and the earlier spin aborted without learning one because there was
+no white under the lifted robot.
+
+Recorded command status for this step: consumed (`command_lost = 0`,
+`commands_enabled = 1`), no motion, no refusal line, robot left IDLE.
+
+What this step cannot show: the IMU start gate, the FOLLOW path with wheels
+turning, or false-stop freedom while driving. The gate is first reached only
+with a learned line calibration, which needs the robot on the track.
+
+### Step 11: session end
+
+Operator lowered and disconnected planning is not needed; the robot is left
+in IDLE with `motion_faults = 0`.
+
+Covered on hardware in this session:
+
+| Gate | Result |
+| --- | --- |
+| Cold boot latches no fault | **PASS** (was FAIL before the fix) |
+| Calibration spin produces no false lift or overturn | **PASS** for the partial sweep |
+| Worst application stack above 256 B | 500 to 532 B |
+| Telemetry dump works, no loss | PASS |
+
+Not covered, and not claimed:
+
+| Gate | Status |
+| --- | --- |
+| Upright gate refuses a start for an upside-down or tilted boot | NOT RUN; needs the robot physically inverted |
+| Safe restart clears a latch after 1 s upright and still | NOT RUN; no latch occurred this session |
+| Full bounded calibration sweep without a false trigger | NOT RUN; needs the track under the robot |
+| FOLLOW with wheels turning, false-stop free | NOT RUN; needs a learned calibration |
+| IMU task stack high-water specifically | NOT RUN; needs the USB stack report at run end or GP20 |
+| Hump accuracy and the H3 corrected-versus-filtered comparison | NOT RUN |
+
+Every number above is from this boot only. The telemetry CSV also contains
+the earlier pre-fix boot, so analysis must filter on `boot_id`
+`4000845492`.
+
+### Step 12: final telemetry read before shutdown
+
+The recorder made one last dump after the start request:
+
+```
+[boot:ee780eb4:0] dump 4238312033: complete, 0 rows, 1 events
+```
+
+The dump completed without truncation, and the boot reported one event and no
+state rows. That is expected for a robot left IDLE.
+
+The boot ID of this last dump, `4238312033`, differs from the
+`4000845492` of the main evidence above. The session therefore contains at
+least two boots, and any cross-boot analysis must filter on `boot_id`
+explicitly. Do not combine the two.
+
+The broker and the recorder were then stopped by the operator. No test was
+running at shutdown.

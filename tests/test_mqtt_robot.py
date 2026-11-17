@@ -4,6 +4,7 @@ import contextlib
 import csv
 import importlib.util
 import io
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -118,18 +119,27 @@ class WireTests(unittest.TestCase):
             token.write_text(bytes(range(16)).hex() + "\n")
             token.chmod(0o600)
             self.assertEqual(wire.read_token(token), bytes(range(16)))
-            token.chmod(0o644)
-            with self.assertRaises(ValueError):
-                wire.read_token(token)
-            token.chmod(0o600)
+            # Windows mode bits cannot express 0600 and there is no getuid,
+            # so read_token skips the owner/mode contract there. The strict
+            # POSIX contract is still asserted on POSIX.
+            if os.name == "posix":
+                token.chmod(0o644)
+                with self.assertRaises(ValueError):
+                    wire.read_token(token)
+                token.chmod(0o600)
             for text in ("00", "z" * 32, "0" * 32 + "\nEXTRA", " " + "0" * 32):
                 token.write_text(text)
                 with self.assertRaises(ValueError):
                     wire.read_token(token)
             link = Path(folder) / "link"
-            link.symlink_to(token)
-            with self.assertRaises(OSError):
-                wire.read_token(link)
+            try:
+                link.symlink_to(token)
+            except OSError:
+                # Windows without the symlink privilege cannot create it.
+                pass
+            else:
+                with self.assertRaises(OSError):
+                    wire.read_token(link)
 
     def test_cli_callback_api_and_publication(self):
         calls = []

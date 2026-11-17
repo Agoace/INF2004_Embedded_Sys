@@ -130,6 +130,7 @@ typedef enum {
     VSM_FAULT_NO_ROUTE = 3,     /* detail: outcome word */
     VSM_FAULT_NO_MODULE = 4,    /* detail: module number with no functions */
     VSM_FAULT_HANDOFF_LOOP = 5, /* detail: outcome word of the last handoff */
+    VSM_FAULT_IMU = 6,          /* detail: imu_safety_trigger_t */
 } vsm_fault_t;
 
 /* Handoffs allowed in one vsm_step(): a new module may finish in its
@@ -170,6 +171,12 @@ void vsm_stop(vsm_t *vsm);
 
 /* Leave FAULT: IDLE. The glue clears the motor controller faults too. */
 void vsm_reset(vsm_t *vsm);
+
+/* Enter FAULT from an external safety owner, whatever the current state.
+ * The IMU safety latch uses this because the Vehicle run loop stops before
+ * the next vsm_step() can see the latched motor fault (RT-0092/F2). The
+ * shell stays in FAULT until vsm_reset(); vsm_stop() does not clear it. */
+void vsm_set_fault(vsm_t *vsm, vsm_fault_t fault, uint16_t detail);
 
 /* Every 10 ms. mc_faults: latched motor controller fault bits
  * (MC_FAULT_LATCHED part of mc_faults()). Returns the drive command. */

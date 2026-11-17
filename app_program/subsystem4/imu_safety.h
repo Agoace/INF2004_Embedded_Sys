@@ -13,13 +13,24 @@
  *    recorded lift traces confirm the separation.
  *  - The hump mean, hump travel gate and estimated hump height are NOT
  *    inputs here. Hump reporting stays independent of the stop.
- *  - Lift wins over overturn when both confirm in the same observation;
- *    either reason causes the same stop.
+ *  - Lift and overturn are mutually exclusive in one observation because of
+ *    the separation gate (see imu_safety_step()). LIFT is reported on the
+ *    stated precedence anyway, so a later change to either gate cannot
+ *    silently reverse the order.
  *
  * The upright reference is the fixed mapped +Z. A slow lift, or a robot
  * already held still and level in the air, produces no detectable inertial
  * change; IMU-only detection is best effort and does not cover every
  * airborne pose.
+ *
+ * Deliberate limitation (RT-0092/F4), not an oversight: the vertical-change
+ * rule needs |a| away from 1 g. A tilt rotates gravity while |a| stays near
+ * 1 g, so without that separation a plain tilt would read as a large
+ * vertical change and latch LIFT. The cost is reduced lift coverage for a
+ * combined tilt-and-lift that keeps |a| within IMU_SAFETY_NEAR_ONE_G_MG of
+ * 1 g and stays below the overturn limit. Free fall, a magnitude change and
+ * a tilt past the overturn limit are all still covered. Do not remove the
+ * separation without a pure-tilt false-stop check.
  */
 #ifndef IMU_SAFETY_H
 #define IMU_SAFETY_H
@@ -60,6 +71,12 @@
 
 /* Continuous fresh, valid, still, upright time before a GP21 clear. */
 #define IMU_SAFETY_CLEAR_MS 1000u
+
+/* The window above claims CONTINUOUS observation. A longer gap between two
+ * observations restarts it instead of crediting time that was never
+ * observed, so sparse samples cannot add up to a safe-restart window
+ * (RT-0094/F1). Three missed 10 ms observations. */
+#define IMU_SAFETY_CLEAR_GAP_MS 30u
 
 /* Elapsed-time clamp, so a preempted gap cannot satisfy a window at once. */
 #define IMU_SAFETY_MAX_DELTA_MS 100u

@@ -198,6 +198,10 @@ if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_imu_refused_clear_relatches
         COMMAND test_vehicle_task imuclearrefused)
     add_test(NAME test_vehicle_imu_boot_race COMMAND test_vehicle_task imubootrace)
+    add_test(NAME test_vehicle_imu_clear_acknowledged
+        COMMAND test_vehicle_task imudelayed)
+    add_test(NAME test_vehicle_imu_retrigger_before_start
+        COMMAND test_vehicle_task imuretrigger)
 endif()
 
 # TEST runner policy and buffered timing evidence; no real scheduler or hardware.

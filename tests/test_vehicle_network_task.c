@@ -10,6 +10,7 @@
 #undef tk_slp_tsk
 #undef main
 #include "../app_program/vehicle/vehicle_board.h"
+#include "../app_program/vehicle/vehicle_sm.h"
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/vehicle/run_stats.h"
 static unsigned int mode,irq_off,network_events,network_lost,dump_requests,command_losses;
@@ -20,6 +21,7 @@ static unsigned int rows_at_dump,rows_after_stop;
 static uint32_t stopped_at;
 static bool rejected_uncalibrated;
 static unsigned int hump_events;
+static bool fault_state_seen;
 void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
 void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
 int robot_event_push(const rm_event_t *event) {
@@ -57,6 +59,16 @@ ER tk_slp_tsk(TMO timeout) {
             /* START was queued first, but the dedicated ESTOP must win. */
             ordinary[command_head++%8u]=(robot_command_t){RM_CMD_START,200u};
             estop_slot=(robot_command_t){RM_CMD_ESTOP,201u};have_estop=true;
+        } else if (mode==3u) {
+            /* A confirmed trigger while the run is active. The all-clear
+             * window is already complete, so a later GP21 press reaches the
+             * writer; the writer refuses the clear, which must keep the
+             * persistent FAULT. */
+            safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+            safety_out.clear_ms=IMU_SAFETY_CLEAR_MS;safety_refuse_clear=true;
+        } else if (mode==4u) {
+            /* The IMU goes unavailable while the robot is moving. */
+            safety_busy=true;
         } else {
             rows_at_dump=rows;ordinary[command_head++%8u]=(robot_command_t){RM_CMD_DUMP,100u};
         }
@@ -72,21 +84,54 @@ ER tk_slp_tsk(TMO timeout) {
             assert(!value.active && rows==rows_after_stop && !calibrating);verified_priority=true;
         }
     }
+    if ((mode==3u || mode==4u) && estops>0u) {
+        /* F2: an IMU stop must publish a persistent FAULT, not IDLE. It must
+         * also stop issuing wheel commands. */
+        assert(estops==1u && asked[0]==0 && asked[1]==0);
+        if (stopped_at==0u) stopped_at=now;
+        if (now-stopped_at>300u) {
+            assert(!value.active && value.state==(uint8_t)VSM_FAULT);
+            fault_state_seen=true;
+        }
+    }
     return result;
 }
 int main(int argc,char **argv) {
     if (argc>1 && !strcmp(argv[1],"uncalibrated")) mode=1u;
     else if (argc>1 && !strcmp(argv[1],"estop")) mode=2u;
+    else if (argc>1 && !strcmp(argv[1],"imufault")) mode=3u;
+    else if (argc>1 && !strcmp(argv[1],"imuunavailable")) mode=4u;
     lp_init(&line);lp_set_pair(&line,true,0);watchdog_ready=true;services_ready=true;
     assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
-    assert(injected && listener==7 && notifications==1u && prints==1u && !irq_off);
+    assert(injected && listener==7 && notifications==1u && !irq_off);
+    /* The IMU scenarios add a refused-restart line and one latched-reason
+     * line, so they have more than the single boot line. */
+    if (mode<=2u) assert(prints==1u);
+    else assert(prints>=1u);
     assert(network_events>0u && network_lost==network_events);
-    if (mode==1u) assert(rejected_uncalibrated && line_drives==0u && rows==0u && estops==0u && asked[0]==0 && asked[1]==0);
-    else if (mode==2u) assert(verified_priority && command_losses==1u && estops==1u);
+    if (mode==1u) {
+        assert(rejected_uncalibrated && line_drives==0u && rows==0u && estops==0u && asked[0]==0 && asked[1]==0);
+        assert(hump_events==0u);
+        return 0;
+    }
+    if (mode==3u || mode==4u) {
+        /* F2 and the approved recovery rule. */
+        rm_summary_t summary;
+        assert(fault_state_seen);
+        assert(fault_state_seen && estops==1u);
+        assert(vehicle_summary_try_read(&summary)==E_OK);
+        assert(summary.shell_fault==(uint8_t)VSM_FAULT_IMU);
+        assert(summary.shell_fault_detail==
+               (uint16_t)(mode==3u ? IMU_SAFETY_LIFT
+                                   : IMU_SAFETY_IMU_UNAVAILABLE));
+        if (mode==3u) assert(safety_clear_requests>=1u);
+        else assert(safety_clear_requests==0u);
+        return 0;
+    }
+    if (mode==2u) assert(verified_priority && command_losses==1u && estops==1u);
     else assert(verified_dump && dump_requests==1u && line_drives>0u && rows>0u && estops==1u);
-    if (mode==1u) assert(hump_events==0u);
-    else {
+    {
         rm_summary_t summary;assert(vehicle_summary_try_read(&summary)==E_OK);
         /* ESTOP may end the run before its first hump poll; the summary
          * still takes one final fresh board read. */

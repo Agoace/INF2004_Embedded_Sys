@@ -7,6 +7,7 @@ import contextlib
 import http.client
 import io
 import json
+import os
 from pathlib import Path
 import shutil
 import struct
@@ -1004,6 +1005,19 @@ class SummaryTests(ModelCase):
             if reason in expected:
                 self.assertEqual(text, expected[reason])
 
+    def test_all_shell_faults_have_a_name(self):
+        # Every shell fault the firmware can send must have a name, so a new
+        # fault code cannot silently render as "unknown (n)". The firmware
+        # sends VSM_FAULT_NONE through VSM_FAULT_IMU, so cover 0..6. Each
+        # ingest needs a NEW run id for the same reason as the stop-reason
+        # test: a fixed id would leave only the first fault on the panel.
+        for fault in range(7):
+            self.model.ingest("robot/summary",
+                              summary_v3(shell=fault, shell_detail=0,
+                                         run=fault + 1))
+            text = self.rows("summary")["Shell fault"]
+            self.assertNotIn("unknown (", text)
+
     def test_speed_error_not_measured(self):
         self.model.ingest("robot/summary", summary(flags=0, speed_error=45))  # flag off
         self.assertEqual(self.rows("summary")["Max speed error"], "not measured")
@@ -1683,12 +1697,16 @@ class CliTests(unittest.TestCase):
             code, started, error = self.run_main(["--http-port", "0", "--token-file", str(token)])
             self.assertEqual((code, started), (0, [("127.0.0.1", 1883, True)]))
             self.assertNotIn(TOKEN.hex(), error)
-            token.chmod(0o644)
-            with contextlib.redirect_stderr(io.StringIO()) as error, \
-                    self.assertRaises(SystemExit) as raised:
-                dashboard.main(["--http-port", "0", "--token-file", str(token)])
-            self.assertEqual(raised.exception.code, 2)
-            self.assertNotIn(TOKEN.hex(), error.getvalue())
+            # Windows mode bits cannot express 0600, so read_token skips the
+            # owner/mode contract there and the CLI would not refuse the
+            # file. The strict POSIX refusal is asserted on POSIX only.
+            if os.name == "posix":
+                token.chmod(0o644)
+                with contextlib.redirect_stderr(io.StringIO()) as error, \
+                        self.assertRaises(SystemExit) as raised:
+                    dashboard.main(["--http-port", "0", "--token-file", str(token)])
+                self.assertEqual(raised.exception.code, 2)
+                self.assertNotIn(TOKEN.hex(), error.getvalue())
 
     def test_without_token_file_only_estop(self):
         code, started, error = self.run_main(["--http-port", "0", "--host", "192.0.2.10"])

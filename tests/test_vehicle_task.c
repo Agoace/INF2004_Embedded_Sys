@@ -114,18 +114,46 @@ static bool safety_busy;
 static bool safety_refuse_clear;
 static unsigned int safety_fail_reads;
 static unsigned int safety_clear_requests;
+/* A clear that the writer applies on a LATER observation, not inside the
+ * request call. Models the real writer's next tick (RT-0092/F1). */
+static uint32_t safety_clear_delay_ms;
+static bool safety_clear_deferred;
+static uint32_t safety_clear_apply_at;
+/* A trigger that appears between the safety wake and the start gate. It is
+ * counted in read order so the wake's safety check sees NONE and the gate
+ * that follows sees the trigger (RT-0093/P1). */
+static uint32_t safety_latch_at_ms;
+static unsigned int safety_latch_reads;
+/* Earliest nonzero wheel command, so a test can prove no motor command was
+ * issued while a clear was pending. */
+static uint32_t first_drive_ms;
+/* Suppress the harness's late GP21 press when a scenario must not restart. */
+static bool suppress_late_press;
 int imu_safety_try_read(imu_safety_output_t *o) {
     if (safety_busy) return E_TMOUT;
     /* Models the interval before the IMU service publishes its board. */
     if (safety_fail_reads > 0u) { --safety_fail_reads; return E_TMOUT; }
+    if (safety_clear_deferred && (int32_t)(now-safety_clear_apply_at)>=0) {
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_NONE;
+        safety_clear_deferred=false;
+    }
+    if (safety_latch_at_ms!=0u && now>=safety_latch_at_ms &&
+        ++safety_latch_reads>=2u) {
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+    }
     *o=safety_out;o->observation_ms=now;return E_OK;
 }
 bool imu_safety_clear_request(void) {
     ++safety_clear_requests;
     /* A refused clear keeps the latch, as the writer does when the pose is
      * no longer safe by the time it applies the request. */
-    if (!safety_refuse_clear)
-        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_NONE;
+    if (safety_refuse_clear) return true;
+    if (safety_clear_delay_ms>0u) {
+        safety_clear_deferred=true;
+        safety_clear_apply_at=now+safety_clear_delay_ms;
+        return true;
+    }
+    safety_out.latched_trigger=(uint8_t)IMU_SAFETY_NONE;
     return true;
 }
 int tm_printf(const UB *f,...) {
@@ -197,7 +225,7 @@ bool drv_motor_hw_button_down(unsigned int pin) {
     const bool active_stop=junction_stop &&
         (JUNCTION_TEST_CMD==JA_STRAIGHT ? junction_source_acknowledged()!=0u : spins>=4u);
     return pin==21u && ((now>=20u && now<50u) || active_stop ||
-        (!junction_stop && !junction_pending_fail && !sonar_stale && now>=(junction_mode ? 12000u : 5000u) && now<(junction_mode ? 12050u : 5050u)));
+        (!suppress_late_press && !junction_stop && !junction_pending_fail && !sonar_stale && now>=(junction_mode ? 12000u : 5000u) && now<(junction_mode ? 12050u : 5050u)));
 }
 int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
@@ -211,6 +239,7 @@ int motion_snapshot_try_read(motion_status_t *s,uint32_t *stamp) {
 int motion_clear_faults(void) { return E_OK; }
 int motion_set_speed(int16_t l,int16_t r) {
     if (l>0 && r>0) ++line_drives;
+    if ((l!=0 || r!=0) && first_drive_ms==0u) first_drive_ms=now;
     if (junction_mode && (vehicle_run_epoch()&1u) && l*r<0) {
         assert(vehicle_line_run_epoch()==0u);
         if (junction_results==0u) assert(junction_source_busy());
@@ -245,6 +274,10 @@ int main(int argc,char **argv) {
     const bool imu_refused=argc>1 && !strcmp(argv[1],"imuclearrefused");
     /* Boot race: the IMU service has not published its board yet. */
     const bool imu_boot=argc>1 && !strcmp(argv[1],"imubootrace");
+    /* F1: the writer acknowledges the clear on a later observation. */
+    const bool imu_delayed=argc>1 && !strcmp(argv[1],"imudelayed");
+    /* P1: a trigger appears between the safety wake and the start gate. */
+    const bool imu_retrigger=argc>1 && !strcmp(argv[1],"imuretrigger");
     if (imu_boot) safety_fail_reads=3u;
     if (imu_lift) {
         safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
@@ -256,6 +289,15 @@ int main(int argc,char **argv) {
     }
     if (imu_refused) safety_refuse_clear=true;
     if (imu_unavail) safety_busy=true;
+    if (imu_delayed) {
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+        safety_out.clear_ms=IMU_SAFETY_CLEAR_MS;
+        safety_clear_delay_ms=40u;
+    }
+    if (imu_retrigger) {
+        safety_latch_at_ms=20u;
+        suppress_late_press=true;
+    }
     lp_init(&line);lp_set_pair(&line,true,0);
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
     imu_hump_summary_t last;assert(vehicle_hump_try_read(&last)==E_NOEXS);
@@ -310,9 +352,31 @@ int main(int argc,char **argv) {
     if (imu_refused) {
         /* The writer refused the clear, so the bounded wait expires and the
          * stop returns: the robot must not keep driving on a cleared latch
-         * that the detector never actually released. */
+         * that the detector never actually released. The latch is never
+         * released, so there is no second relatch: exactly one stop. */
         assert(safety_clear_requests>=1u);
-        assert(estops>=2u);
+        assert(estops==1u);
+        /* F1: a refused clear must leave zero motor commands behind. */
+        assert(run_seen==0u && line_drives==0u && spins==0u);
+        assert(asked[0]==0 && asked[1]==0 && first_drive_ms==0u);
+        return 0;
+    }
+    if (imu_delayed) {
+        /* F1: the writer applies the clear on a later observation. The press
+         * that requests it must not start a run, so the first wheel command
+         * can only come after the acknowledged clear and the next press. */
+        assert(safety_clear_requests==1u);
+        assert(run_seen!=0u && line_drives>0u);
+        assert(first_drive_ms>=5000u);
+        return 0;
+    }
+    if (imu_retrigger) {
+        /* P1: a trigger that appears after the safety wake is caught by the
+         * final start gate. No start, no clear, zero motor commands. */
+        assert(run_seen==0u && line_drives==0u && spins==0u);
+        assert(asked[0]==0 && asked[1]==0 && first_drive_ms==0u);
+        assert(safety_clear_requests==0u);
+        assert(estops>=1u);
         return 0;
     }
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
