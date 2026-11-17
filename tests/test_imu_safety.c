@@ -489,6 +489,52 @@ static void test_tilt_beyond_overturn_latches_overturn(void)
     CHECK(r.s.output.lift_samples == 0u);
 }
 
+/* --- Unavailability cause (RT-0099) ---------------------------------- */
+
+/* The stop uses one trigger value for every kind of IMU unavailability. The
+ * cause helper separates them for the field event and the console line. */
+static void test_unavailable_causes(void)
+{
+    imu_safety_output_t out = {0};
+
+    /* No published copy at all: absent, even if a copy pointer exists. */
+    CHECK(imu_safety_unavailable_cause(&out, false, 1000u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_ABSENT);
+    CHECK(imu_safety_unavailable_cause(NULL, true, 1000u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_ABSENT);
+
+    /* Valid and fresh: not unavailable, so no cause. */
+    out.flags = IMU_SAFETY_FLAG_VALID;
+    out.observation_ms = 1000u;
+    CHECK(imu_safety_unavailable_cause(&out, true, 1020u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_NONE);
+
+    /* Valid but older than the limit: stale. */
+    CHECK(imu_safety_unavailable_cause(&out, true, 1080u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_STALE);
+
+    /* Not valid wins over both freshness and staleness, because it is the
+     * more specific cause. */
+    out.flags = 0u;
+    CHECK(imu_safety_unavailable_cause(&out, true, 1000u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_INVALID);
+    CHECK(imu_safety_unavailable_cause(&out, true, 2000u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_INVALID);
+
+    /* The cause agrees with evaluate: a cause exists exactly when the reader
+     * reports unavailable. */
+    out.flags = IMU_SAFETY_FLAG_VALID;
+    out.observation_ms = 1000u;
+    for (uint32_t age = 0u; age <= 120u; age += 10u) {
+        const uint8_t trigger = imu_safety_evaluate(&out, true,
+                                                    1000u + age, 50u);
+        const uint8_t cause = imu_safety_unavailable_cause(&out, true,
+                                                           1000u + age, 50u);
+        CHECK((trigger == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) ==
+              (cause != (uint8_t)IMU_SAFETY_CAUSE_NONE));
+    }
+}
+
 int main(void)
 {
     test_upright_guard();
@@ -515,6 +561,7 @@ int main(void)
     test_sparse_observations_never_clear();
     test_sudden_tilt_near_one_g_is_not_a_lift();
     test_tilt_beyond_overturn_latches_overturn();
+    test_unavailable_causes();
 
     if (failures == 0u) {
         printf("ALL PASSED (0 failures)\n");

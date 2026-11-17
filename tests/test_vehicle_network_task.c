@@ -22,11 +22,19 @@ static uint32_t stopped_at;
 static bool rejected_uncalibrated;
 static unsigned int hump_events;
 static bool fault_state_seen;
+/* Cause byte carried on the live IMU-unavailable event (RT-0099). */
+static unsigned int unavailable_events;
+static unsigned int unavailable_detail;
 void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
 void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;
+    if (event->kind==3u && event->word==3u) {
+        /* IMU_SAFETY_IMU_UNAVAILABLE: the detail carries the cause. */
+        if (unavailable_events==0u) unavailable_detail=event->detail;
+        ++unavailable_events;
+    }
     if (event->kind==RM_EVENT_HUMP) {
         /* Live only, inside the run, once per new event: 10.8 mm, #1, RIGHT. */
         assert(event->from==0u && event->to==0u && event->word==108u && event->detail==1u);
@@ -126,7 +134,14 @@ int main(int argc,char **argv) {
                (uint16_t)(mode==3u ? IMU_SAFETY_LIFT
                                    : IMU_SAFETY_IMU_UNAVAILABLE));
         if (mode==3u) assert(safety_clear_requests>=1u);
-        else assert(safety_clear_requests==0u);
+        else {
+            assert(safety_clear_requests==0u);
+            /* Mode 4 makes every board read busy after an earlier successful
+             * read, so the cached copy ages out: the cause is STALE, not an
+             * absent board or an invalid sample. */
+            assert(unavailable_events>=1u);
+            assert(unavailable_detail==(unsigned int)IMU_SAFETY_CAUSE_STALE);
+        }
         return 0;
     }
     if (mode==2u) assert(verified_priority && command_losses==1u && estops==1u);

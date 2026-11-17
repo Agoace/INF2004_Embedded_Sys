@@ -450,14 +450,19 @@ static bool send(telemetry_message_t *message)
 
 /*
  * Store a run-relative event and optionally queue a live observation.
+ * `detail` is carried only on the live MQTT event, which has a detail byte;
+ * the stored run event has no such field.
  */
-static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
+static void event_detail(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
+                         uint8_t detail)
 {
 #if TM_MQTT
-    live_event(kind == 4u ? 5u : kind, from, to, word, 0u);
+    live_event(kind == 4u ? 5u : kind, from, to, word, detail);
     if (kind == 1u && from == VSM_MOD_SCAN) {
         live_event(4u, from, to, word, 0u);
     }
+#else
+    (void)detail;
 #endif
     if (!active) {
         return;
@@ -469,6 +474,11 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
                                        .from = from,
                                        .to = to};
     (void)send(&m);
+}
+
+static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
+{
+    event_detail(kind, from, to, word, 0u);
 }
 
 /*
@@ -645,6 +655,22 @@ static bool imu_clear_pending;
 static uint32_t imu_clear_deadline;
 /* One bounded USB line per latched reason. */
 static bool imu_reported;
+/* Diagnostic cause of an UNAVAILABLE latch (RT-0099). Never changes the stop. */
+static uint8_t imu_latch_cause;
+
+static const char *imu_cause_text(uint8_t cause)
+{
+    if (cause == (uint8_t)IMU_SAFETY_CAUSE_STALE) {
+        return "stale sample";
+    }
+    if (cause == (uint8_t)IMU_SAFETY_CAUSE_INVALID) {
+        return "invalid sample";
+    }
+    if (cause == (uint8_t)IMU_SAFETY_CAUSE_ABSENT) {
+        return "no board copy";
+    }
+    return "none";
+}
 
 static const char *imu_reason_text(uint8_t trigger)
 {
@@ -728,6 +754,7 @@ static bool imu_safety_check(void)
             imu_clear_pending = false;
             imu_latched = (uint8_t)IMU_SAFETY_NONE;
             imu_reported = false;
+            imu_latch_cause = (uint8_t)IMU_SAFETY_CAUSE_NONE;
             if (!active) {
                 vsm_reset(&vsm);
             }
@@ -752,13 +779,21 @@ static bool imu_safety_check(void)
      * so it only blocks; latching it faulted every boot. */
     if (trigger == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE) {
         if (active) {
+            /* Record WHICH kind of unavailability caused the stop, so a field
+             * report can separate a stale sample from an invalid one from an
+             * absent board (RT-0099). The value is diagnostic only; it never
+             * changes the stop. */
+            imu_latch_cause = imu_safety_unavailable_cause(
+                &imu_copy, imu_have_copy, drv_time_ms(),
+                IMU_SAFETY_MAX_AGE_MS);
             if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
                 imu_latch(trigger);
             }
             (void)vehicle_estop();
             cancelled = true;
             set_reason(RM_STOP_IMU_UNAVAILABLE, imu_reason_text(trigger));
-            event(3u, vsm.state, vsm.running, (uint16_t)trigger);
+            event_detail(3u, vsm.state, vsm.running, (uint16_t)trigger,
+                         imu_latch_cause);
         }
         return false;
     }
@@ -784,11 +819,11 @@ static void imu_report_latched(void)
         return;
     }
     imu_reported = true;
-    tm_printf((UB *)"[robot] IMU safety %s g_mg %ld tilt_ddeg %ld "
+    tm_printf((UB *)"[robot] IMU safety %s cause %s g_mg %ld tilt_ddeg %ld "
                     "vertical_mg %ld clear_ms %lu age_ms %ld\n",
-              imu_reason_text(imu_latched), (long)imu_copy.g_mg,
-              (long)imu_copy.tilt_ddeg, (long)imu_copy.vertical_mg,
-              (unsigned long)imu_copy.clear_ms,
+              imu_reason_text(imu_latched), imu_cause_text(imu_latch_cause),
+              (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
+              (long)imu_copy.vertical_mg, (unsigned long)imu_copy.clear_ms,
               (long)(int32_t)(drv_time_ms() - imu_copy.observation_ms));
 }
 
@@ -1629,7 +1664,17 @@ static void vehicle_task(INT code, void *ctx)
                     ? imu_reason_text(why)
                     : "IMU not ready";
             set_reason(imu_reason_code(why), text);
-            event(3u, vsm.state, vsm.running, (uint16_t)why);
+            /* A refused start is also a field observation: carry the cause of
+             * an unavailable IMU, so the operator can tell a stale sample from
+             * an invalid one before any latch (RT-0099). */
+            const uint8_t refuse_cause =
+                (why == (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE)
+                    ? imu_safety_unavailable_cause(&imu_copy, imu_have_copy,
+                                                   drv_time_ms(),
+                                                   IMU_SAFETY_MAX_AGE_MS)
+                    : (uint8_t)IMU_SAFETY_CAUSE_NONE;
+            event_detail(3u, vsm.state, vsm.running, (uint16_t)why,
+                         refuse_cause);
             /* Low-rate: one line per refused start request, never in the
              * stop path. This is the operator's only feedback for a press
              * that did not start a run. */
@@ -1639,8 +1684,9 @@ static void vehicle_task(INT code, void *ctx)
                                 "upright; press GP21 again\n");
             } else {
                 tm_printf((UB *)"[robot] IMU safety start refused: %s "
-                                "g_mg %ld tilt_ddeg %ld age_ms %ld\n",
-                          text, (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
+                                "cause %s g_mg %ld tilt_ddeg %ld age_ms %ld\n",
+                          text, imu_cause_text(refuse_cause),
+                          (long)imu_copy.g_mg, (long)imu_copy.tilt_ddeg,
                           (long)(int32_t)(drv_time_ms() -
                                           imu_copy.observation_ms));
             }

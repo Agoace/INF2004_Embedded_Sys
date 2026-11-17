@@ -142,6 +142,9 @@ non-zero value for an upright sample.
   — the hardware session on this repair. Cold boot and overturn are PASS, the
   GP21 two-press recovery is PASS, and the lift stop is NOT DETECTED on a real
   hand lift. The upright-gate refusal is NOT RUN.
+- [IMU_SAFETY_COURSE_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_COURSE_RUN_LOG.md)
+  — the first course run. The stop was classified as IMU unavailable and the
+  image could not report the cause; RT-0099 asked for that instrumentation.
 - [IMU_SAFETY_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_RUN_LOG.md) —
   the first hardware session.
 - [IMU_SAFETY_TRACE_PROCEDURE.md](IMU_SAFETY_TRACE_PROCEDURE.md) — capture and

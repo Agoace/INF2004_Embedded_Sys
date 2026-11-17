@@ -242,8 +242,6 @@ static void sample(void)
     if (!empty) {
         diagnostic_tick(&input);
     }
-    const uint32_t ended = drv_time_us();
-    const uint32_t compute = ended - compute_start;
     const uint32_t gap = started - previous_us;
 
     if (core.output.samples > 1u && gap > value.gap_max_us) {
@@ -255,7 +253,7 @@ static void sample(void)
     /* EMPTY is not a new observation. Publish counters but retain the
      * actual data timestamp so consumers can detect age/duplicates. */
     if (!empty) {
-        value.timestamp_us = ended;
+        value.timestamp_us = drv_time_us();
         value.timestamp_ms = input.now_ms;
         /* Only a real observation refreshes the hump board time, so a
          * stalled sensor makes the copy stale for every reader. */
@@ -292,6 +290,13 @@ static void sample(void)
         app_board_publish(&safety_board.sequence, safety_board.words,
                           &safety.output, sizeof(safety.output));
     }
+    /* The compute window covers the whole usable-sample path, including the
+     * safety detector step and the safety board publish. It used to stop
+     * before that block, so the reported cost excluded the safety work
+     * (RT-0099). It is a CPU-time measure of this task's own work; it still
+     * excludes any preemption, which work_max_us does include. */
+    const uint32_t compute = drv_time_us() - compute_start;
+
     value.compute_last_us = compute;
     value.compute_total_us += compute;
     if (compute > value.compute_max_us) {

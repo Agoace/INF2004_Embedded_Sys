@@ -302,3 +302,24 @@ uint8_t imu_safety_evaluate(const imu_safety_output_t *out, bool have,
     }
     return out->latched_trigger;
 }
+
+uint8_t imu_safety_unavailable_cause(const imu_safety_output_t *out, bool have,
+                                     uint32_t now_ms, uint32_t max_age_ms)
+{
+    if (!have || (out == NULL)) {
+        return (uint8_t)IMU_SAFETY_CAUSE_ABSENT;
+    }
+    if ((out->flags & IMU_SAFETY_FLAG_VALID) == 0u) {
+        /* The writer published, but the newest observation is not a usable
+         * sample: a failed read, or a level bias that is not trusted yet. */
+        return (uint8_t)IMU_SAFETY_CAUSE_INVALID;
+    }
+    const int32_t age = (int32_t)(now_ms - out->observation_ms);
+
+    if (age > (int32_t)max_age_ms) {
+        /* Usable, but the writer has not published for too long. A busy
+         * reader also lands here: it keeps the old copy, so the age grows. */
+        return (uint8_t)IMU_SAFETY_CAUSE_STALE;
+    }
+    return (uint8_t)IMU_SAFETY_CAUSE_NONE;
+}

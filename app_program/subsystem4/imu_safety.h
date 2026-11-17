@@ -92,6 +92,19 @@ typedef enum {
     IMU_SAFETY_IMU_UNAVAILABLE = 3
 } imu_safety_trigger_t;
 
+/* Why a reader sees IMU_SAFETY_IMU_UNAVAILABLE. `imu_safety_evaluate()`
+ * reports one value for every cause, so a field report cannot say which one
+ * happened. This separates them for the live event detail, the console line
+ * and the host tests (RT-0099). */
+typedef enum {
+    IMU_SAFETY_CAUSE_NONE = 0,
+    IMU_SAFETY_CAUSE_STALE = 1,   /* copy exists but is older than the limit */
+    IMU_SAFETY_CAUSE_INVALID = 2, /* newest sample is not valid or not
+                                   * calibrated, so no fresh observation */
+    IMU_SAFETY_CAUSE_ABSENT = 3   /* no copy was ever published: the writer
+                                   * has not run yet, or every read was busy */
+} imu_safety_cause_t;
+
 /* Output flags. */
 #define IMU_SAFETY_FLAG_VALID        0x01u /* Accel valid and calibrated. */
 #define IMU_SAFETY_FLAG_UPRIGHT      0x02u /* Raw pose inside the bounds. */
@@ -156,6 +169,13 @@ bool imu_safety_clear(imu_safety_t *s);
  * otherwise the latched trigger. Pure: it reads the copy only. */
 uint8_t imu_safety_evaluate(const imu_safety_output_t *out, bool have,
                             uint32_t now_ms, uint32_t max_age_ms);
+
+/* Cause of an IMU_UNAVAILABLE result. Returns CAUSE_NONE when the reader is
+ * not unavailable. An absent copy wins over an invalid sample, and an invalid
+ * sample wins over staleness, because the more specific cause is the more
+ * useful one to report. Pure: reads the copy only. */
+uint8_t imu_safety_unavailable_cause(const imu_safety_output_t *out, bool have,
+                                     uint32_t now_ms, uint32_t max_age_ms);
 
 /* Tilt from the fixed +Z in deci-degrees. Non-finite or zero magnitude
  * gives 0. Always computes the angle, so it is for tests and callers that
