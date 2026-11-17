@@ -194,6 +194,26 @@ endif
 BARCODE_CAPTURE_SUFFIX := _barcode_capture
 endif
 
+# Opt-in same-tick motion: motion_set_speed() applies the new target in the
+# current 10 ms period (mc_retarget). Only motion.o and motor_ctl.o get a
+# forced header; the default 0 adds nothing, so ordinary images stay
+# byte-identical. See docs/s2-motion/MOTION.md.
+MOTION_SAME_TICK ?= 0
+ifneq ($(words $(MOTION_SAME_TICK)),1)
+$(error MOTION_SAME_TICK must be one value: 0 or 1)
+endif
+ifneq ($(filter $(MOTION_SAME_TICK),0 1),$(MOTION_SAME_TICK))
+$(error Unknown MOTION_SAME_TICK '$(MOTION_SAME_TICK)'; use 0 or 1)
+endif
+ifeq ($(MOTION_SAME_TICK),1)
+ifeq ($(BENCH_KERNEL),1)
+$(error MOTION_SAME_TICK=1 is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/subsystem2/motion.o: CFLAGS += -include ../app_program/subsystem2/motion_same_tick.h
+mtkernel_3/app_program/subsystem2/motor_ctl.o: CFLAGS += -include ../app_program/subsystem2/motor_ctl_same_tick_impl.h
+$(info MOTION_SAME_TICK: same-tick retarget on)
+endif
+
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
 # GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
 # the last messages and the kernel's crash report after a crash, when the
@@ -302,6 +322,9 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
 endif
+ifeq ($(MOTION_SAME_TICK),1)
+EXE_FILE := $(EXE_FILE)_sametick
+endif
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -382,6 +405,9 @@ ifeq ($(BENCH_KERNEL),1)
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
 else
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
+endif
+ifeq ($(MOTION_SAME_TICK),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/same_tick.list
 endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
