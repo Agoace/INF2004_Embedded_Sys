@@ -124,7 +124,8 @@ detector.
 - GP21: start refused, `KR1 reset other; IMU unavailable`, event kind 3
   word 32771, no calibration. GP20 DUMP completed, `tm_usb_dropped 0`.
 - overruns 0, lost wakes 0, faults 0, Vehicle `response_max_us` 370.
-- Aggregate CPU 226–229 permille with Wi-Fi/MQTT.
+- Aggregate CPU with Wi-Fi/MQTT: 213–229 permille in 47 MQTT heartbeats
+  (`mqtt_BENCH1.csv`); USB `[load]` 229.
 - Stack minimum free (B): motion 2608, line 1552, sonar 1752, IMU 664
   (absent-IMU path), Vehicle 2520, telemetry 3084, Health 1376,
   idle_meter 520, cyw43 7136.
