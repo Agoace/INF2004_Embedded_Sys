@@ -56,8 +56,8 @@ IMU_EVENTS = {1: "stationary", 2: "accelerating", 3: "turning", 4: "climbing",
               5: "descending", 6: "impact"}
 NOT_IMPLEMENTED = "not implemented yet"
 NOT_REPORTED = "not reported by current telemetry"
-FUTURE_BARCODE = "awaiting approved per-attempt message"
-FUTURE_GEOMETRY = "not reported; awaiting approved geometry message"
+FUTURE_BARCODE = "waiting for per-attempt report"
+FUTURE_GEOMETRY = "not reported (requires obstacle v3)"
 OPCODE_NAMES = {code: name.upper() for name, code in robot_wire.COMMANDS.items()}
 DECISIONS = {0: "accepted", 1: "refused: robot not idle", 2: "refused: not calibrated",
              3: "refused: log busy", 4: "duplicate request",
@@ -126,6 +126,7 @@ class DashboardModel:
         self.status = None  # robot/status: {"online": bool, "retained": bool, "rx": ms}
         self.statuses = {}  # retained status can arrive before that boot's first live frame
         self.obstacle = None
+        self.unsupported_obstacle = None
         self.obstacle_scan_id = None
         self.obstacle_missed = 0
         self.detours = collections.deque(maxlen=DETOUR_LIMIT)
@@ -197,6 +198,8 @@ class DashboardModel:
                     heard_live = (not retained and fields.get("known") != 0 and
                                   topic != "robot/summary")
             except ValueError as error:
+                if topic == 'robot/obstacle' and payload and payload[0] not in (1, 2, 3):
+                    self.unsupported_obstacle = payload[0]  # notice only, never a reading
                 self.discarded += 1
                 self.last_discard = f"{topic}: {error}"
                 return
@@ -206,6 +209,7 @@ class DashboardModel:
     def _new_boot(self):
         """Invalidate all current readings and command decisions, but retain scoped logs."""
         self.state = self.heartbeat = self.sonar = self.obstacle = None
+        self.unsupported_obstacle = None
         self.status = self.statuses.get(self.log.sessions.current)
         self.sonar_profile.clear()
         self.sonar_recent.clear()
@@ -234,14 +238,16 @@ class DashboardModel:
                     self.log.sessions.boot_id is None):
                 self.status = status
         elif topic == "robot/obstacle":
+            self.unsupported_obstacle = None
             self._store_obstacle(fields, now)
         elif topic in ("robot/barcode", "robot/imu"):
             name = topic.removeprefix("robot/")
             if name == "imu" and fields["kind"] == 2:
                 name = "imu_event"
-            if fields["known"]:
+            if fields["known"] or name == 'barcode':
+                # Unknown barcode formats get a visible notice, never guessed fields.
                 self.reserved[name] = {"fields": fields, "rx": now}
-            else:
+            if not fields['known']:
                 self.ignored_reserved += 1
         elif topic == "robot/detour":
             self._store_detour(fields, now)
@@ -868,18 +874,42 @@ def _detour_table(model):
 def obstacle_panel(model, now):
     geometry_rows = [("Width (mm)", FUTURE_GEOMETRY),
                      ("Left / right clearance (mm)", FUTURE_GEOMETRY)]
-    geometry_note = ("future millimetre clearance means observed side span, not guaranteed "
-                     "passability; clipped width is only a lower bound")
+    geometry_note = ("millimetre clearance is observed edge-plane side span, not guaranteed "
+                     "passability; clipped width is only a lower bound; "
+                     "sensor-frame location: x forward, y left (not a world/map position)")
+    format_rows = ([] if model.unsupported_obstacle is None else
+                   [('Report format', f'unsupported version {model.unsupported_obstacle} (rejected)')])
     if model.obstacle is None and not model.detours:
         return make_panel("obstacle", "Obstacle profile and detours", None, stale_ms=None,
-                          rows=geometry_rows, note="no completed scan or detour yet; " + geometry_note)
+                          rows=format_rows + geometry_rows,
+                          note="no completed scan or detour yet; " + geometry_note)
     rows = []
     chart = None
     age = None
     if model.obstacle is not None:
         fields = model.obstacle["fields"]
         age = model.record_age(now, model.obstacle)
+        if fields['version'] not in (1, 2, 3):
+            return make_panel('obstacle', 'Obstacle profile and detours', age, stale_ms=None,
+                              rows=[('Report format', f"unsupported version {fields['version']}")],
+                              note='no fields interpreted from this version')
+        if fields['version'] == 3:
+            width = ('unavailable' if not fields['width_valid'] else
+                     f">= {fields['width_mm']} mm (lower bound)" if fields['width_lower_bound'] else
+                     f"{fields['width_mm']} mm (observed span)")
+            left = f"{fields['left_clear_mm']} mm" if fields['left_clear_valid'] else 'unavailable'
+            right = f"{fields['right_clear_mm']} mm" if fields['right_clear_valid'] else 'unavailable'
+            geometry_rows = [('Width (mm)', width), ('Left / right clearance (mm)', f'{left} / {right}'),
+                             ('Left / right scan edge clipped',
+                              f"{_yes_no(fields['left_edge_clipped'])} / {_yes_no(fields['right_edge_clipped'])}")]
+        location = 'unavailable'
+        if fields['closest_valid']:
+            angle = math.radians(fields['closest_angle_deg'])
+            x = fields['closest_mm'] * math.cos(angle)
+            y = fields['closest_mm'] * math.sin(angle)
+            location = f'{x:.1f} / {y:.1f} mm (sensor frame; approximate)'
         rows = [("Closest", _closest_text(fields)),
+                ('Closest x forward / y left', location),
                 ("Right clearance", _clear_text(fields["right_clear_deg"],
                                                 fields["right_free_step"])),
                 ("Left clearance", _clear_text(fields["left_clear_deg"],
@@ -903,7 +933,7 @@ def obstacle_panel(model, now):
         age = detour_age if age is None else min(age, detour_age)
         rows.append(("Detours missed (sequence gaps)", model.detour_missed))
     return make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None,
-                      rows=rows + geometry_rows,
+                      rows=format_rows + rows + geometry_rows,
                       chart=chart, table=_detour_table(model) if model.detours else None,
                       note=geometry_note + "; age = time since the newest scan or detour finished; "
                       "angle: right is negative. Max offset is the sideways distance from "
@@ -983,7 +1013,9 @@ def barcode_panel(model, now):
         age = model.state_age(now, 'line_age_ms')
         rows += [("Raw GP28 sample", model.state['fields']['raw_bc']),
                  ("GP28 board valid", _yes_no(model.state['fields']['line_valid'])),
-                 ("GP28 sample age", f"{age} ms" + (" (stale)" if age > model.limits()['state_stale_ms'] else ""))]
+                 ("GP28 board fresh", _yes_no(model.state['fields']['line_fresh'])),
+                 ("GP28 sample age", f"{age} ms"
+                  + (" (stale)" if age > model.limits()['state_stale_ms'] else ""))]
     summary_rows, notes = _summary_context(model, now)
     if model.summary is not None:
         f = model.summary['fields']
@@ -997,23 +1029,56 @@ def barcode_panel(model, now):
     if record is not None:
         age = model.record_age(now, record)
         f = record['fields']
-        rows += [("Detected / decoded / unreadable",
-                  f"{_yes_no(f['detected'])} / {_yes_no(f['decoded'])} / {_yes_no(f['unreadable'])}"),
-                 ("Decoded command", f"code {f['code']} (raw)"),
-                 ("Confidence", f"{f['votes']} of {f['reads']} reads agree"),
-                 ("Direction", _name(BARCODE_DIRECTIONS, f['direction'])),
-                 ("Navigation command", f"{f['nav_command']} (raw)"),
-                 ("Result", f"{f['result']} (raw)"),
-                 ("Command issued / executed", f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
-                 ("Report", f"#{f['sequence']} at robot uptime {f['uptime_ms']} ms"),
-                 ("Legacy report received age", f"{age} ms")]
-        notes.append("legacy robot/barcode v1 raw report; no new per-attempt decoder yet")
+        version = f['version']
+        if not f.get('known') or version not in (1, 2):
+            description = (f"unsupported report kind {f['kind']} (version {version})"
+                           if version in (1, 2) and f['kind'] != 1 else
+                           f'unsupported version {version}')
+            rows.append(('Report format', description))
+        elif version == 1:
+            rows += [("Detected / decoded / unreadable",
+                      f"{_yes_no(f['detected'])} / {_yes_no(f['decoded'])} / {_yes_no(f['unreadable'])}"),
+                     ("Decoded command", f"code {f['code']} (raw)"),
+                     ("Confidence", f"{f['votes']} of {f['reads']} reads agree"),
+                     ("Direction", _name(BARCODE_DIRECTIONS, f['direction'])),
+                     ("Navigation command", f"{f['nav_command']} (raw)"),
+                     ("Result", f"{f['result']} (raw)"),
+                     ("Command issued / executed", f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
+                     ("Report", f"#{f['sequence']} at robot uptime {f['uptime_ms']} ms"),
+                     ("Legacy report received age", f"{age} ms")]
+            notes.append('legacy robot/barcode v1 raw report')
+        else:
+            # Fields come only from robot_wire's validated v2 decoder.
+            rows[0] = ('Mode (deployment)', 'SHADOW expected (deployment setting)')
+            rows = [(label, 'robot/barcode v2' if label == 'Per-attempt details' else value)
+                    for label, value in rows]
+            rows += [('Mode (wire)', 'SHADOW' if f['shadow'] else 'not SHADOW'),
+                     ('Attempt decoded / failed', f"{_yes_no(f['decoded'])} / {_yes_no(f['failed'])}"),
+                     ('Decoded letter', f['letter'] if f['decoded'] else 'none'),
+                     ('Reason', f"{f['reason_name']} ({f['reason']})"),
+                     ('Direction', _name(BARCODE_DIRECTIONS, f['direction'])),
+                     ('Mapped command (observation only)',
+                      {0: 'none', 1: 'A', 2: 'B', 3: 'C', 4: 'D'}.get(f['nav_command'], 'unknown')),
+                     ('Command issued / executed',
+                      f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
+                     ('Producer epoch / sequence', f"{f['epoch']} / {f['sequence']}"),
+                     ('Attempt start / terminal uptime', f"{f['start_ms']} / {f['uptime_ms']} ms"),
+                     ('Narrow / wide estimate',
+                      f"{f['narrow_mm']:.2f} / {f['wide_mm']:.2f} mm" if f['widths_valid'] else 'unavailable'),
+                     ('Attempt source session (inferred)', f['boot_session']),
+                     ('Attempt report received age', f'{age} ms')]
+            notes += ['v2 mode uses the wire SHADOW flag; a mapped command is observation only, '
+                      'not a command acknowledgement',
+                      'v2 has no boot ID or run ID; session is inferred from other messages, '
+                      'not proved by the producer epoch; summary totals remain separate']
+    if record is None or record['fields']['version'] != 2 or not record['fields'].get('known'):
+        notes.append('SHADOW is deployment context, not a transmitted mode')
     history_only = model.state is None and record is None
     if history_only:
         age = model.record_age(now, model.summary)
     panel = make_panel('barcode', 'Barcode', age, rows=rows,
                        stale_ms=None if history_only else model.limits()['state_stale_ms'],
-                       note='; '.join(notes + ['raw GP28 uses robot/state line-board age; SHADOW is deployment context, not a transmitted mode']))
+                       note='; '.join(notes + ['raw GP28 uses robot/state line-board age']))
     panel['age_kind'] = 'report' if history_only else 'data'
     return panel
 
@@ -1036,7 +1101,8 @@ def imu_panel(model, now):
         result, warnings = _hump_result(model.summary['fields'])
         rows += result
         f = model.summary['fields']
-        if f['version'] >= 3 and f['hump_implemented'] and not any(label == 'Humps counted' for label, _ in result):
+        if (f['version'] >= 3 and f['hump_implemented']
+                and not any(label == 'Humps counted' for label, _ in result)):
             rows.append(('Humps counted', f['hump_count']))
         notes += warnings
     else:
@@ -1058,12 +1124,14 @@ def imu_panel(model, now):
         notes.append('legacy robot/imu raw values: units are not fixed yet')
     if event is not None:
         f = event['fields']
-        rows += [('Motion event', f"{_name(IMU_EVENTS, f['event'])} #{f['sequence']} at robot uptime {f['uptime_ms']} ms"),
+        rows += [('Motion event', f"{_name(IMU_EVENTS, f['event'])} #{f['sequence']} at "
+                  f"robot uptime {f['uptime_ms']} ms"),
                  ('Motion event received age', f"{model.record_age(now, event)} ms")]
     elif snapshot is not None:
         rows.append(('Motion event', 'not received'))
     if model.state is not None:
-        notes.append('robot/state heading and turn rate are wheel odometry, not IMU attitude; robot/status has no IMU samples')
+        notes.append('robot/state heading and turn rate are wheel odometry, not IMU attitude; '
+                     'robot/status has no IMU samples')
     streams = [r for r in (snapshot, event) if r is not None]
     history = [r for r in (live, model.summary) if r is not None]
     newest = max(streams or history, key=lambda r: r['rx'], default=None)

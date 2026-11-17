@@ -137,6 +137,26 @@ def barcode(flags=0b00111, code=5, votes=3, reads=4, direction=1, nav=9, result=
                        0, sequence, uptime)
 
 
+def barcode_v2(flags=13, letter=ord('F'), reason=1, direction=1, nav=0,
+               sequence=17, epoch=5, start=1000, end=2000, narrow=450, wide=990):
+    """Approved 28-byte attempt contract. Width units are 0.01 mm."""
+    return struct.pack('<BBBBHBBIIIIHH', 2, 1, flags, letter, reason, direction, nav,
+                       sequence, epoch, start, end, narrow, wide)
+
+
+def obstacle_v3(geometry_flags=7, width=123, left=17, right=19, boot=0, **kwargs):
+    """Approved 32-byte geometry report; v2 prefix includes the boot ID."""
+    return (b'\x03' + obstacle(**kwargs)[1:] + struct.pack('<IHHHBB', boot, width, left,
+                                                                     right, geometry_flags, 0))
+
+
+def contract_supported(topic, frame):
+    try:
+        return bool(robot_wire.decode(topic, frame).get('known', 1))
+    except ValueError:
+        return False
+
+
 def imu_snapshot(pitch=3, heading=200, rate=250, hump=2, collision=1, valid=1, height=7,
                  peak=9, age=0xBEEF):
     word1 = pitch | heading << 8 | rate << 16 | hump << 24 | collision << 26 | valid << 27
@@ -818,6 +838,145 @@ class ExistingReportPanelTests(ModelCase):
         self.assertIn('15 deg', rows['Right clearance'])
         self.assertIn('not guaranteed passability', self.panel('obstacle')['note'])
         self.assertIn('lower bound', self.panel('obstacle')['note'])
+
+
+class ApprovedContractPanelTests(ModelCase):
+    """Decoded-field fixtures run even before the owners' decoders are merged."""
+    def attempt(self, **changes):
+        fields = dict(version=2, kind=1, known=1, decoded=1, failed=0, shadow=1,
+                      widths_valid=1, letter='F', reason=1, reason_name='BW_OK',
+                      direction=1, nav_command=0, command_issued=0, executed=0,
+                      sequence=17, epoch=5, start_ms=1000, uptime_ms=2000,
+                      narrow_mm=4.50, wide_mm=9.90,
+                      boot_session=self.model.log.sessions.current)
+        fields.update(changes)
+        self.model._store('robot/barcode', fields, self.model.now_ms())
+
+    def geometry(self, **changes):
+        fields = robot_wire.decode('robot/obstacle', obstacle(flags=0x21))
+        fields.update(version=3, width_mm=123, left_clear_mm=17, right_clear_mm=19,
+                      width_valid=True, left_clear_valid=True, right_clear_valid=True,
+                      left_edge_clipped=False, right_edge_clipped=False,
+                      width_lower_bound=False, geometry_flags=7)
+        fields.update(changes)
+        self.model._store('robot/obstacle', fields, self.model.now_ms())
+
+    def test_attempt_success_is_not_navigation_execution_or_a_summary_total(self):
+        self.model.ingest('robot/summary', summary_v3(flags=3, barcode_failed=7))
+        self.attempt(letter='A', nav_command=1)
+        rows = self.rows('barcode')
+        self.assertEqual(rows['Barcode ok / failed'], '0 / 7')
+        self.assertEqual(rows['Attempt decoded / failed'], 'yes / no')
+        self.assertEqual(rows['Decoded letter'], 'A')
+        self.assertEqual(rows['Mode (wire)'], 'SHADOW')
+        self.assertEqual(rows['Mapped command (observation only)'], 'A')
+        self.assertEqual(rows['Command issued / executed'], 'no / no')
+        self.assertEqual(rows['Narrow / wide estimate'], '4.50 / 9.90 mm')
+        self.assertEqual(rows['Producer epoch / sequence'], '5 / 17')
+        self.assertEqual(rows['Attempt start / terminal uptime'], '1000 / 2000 ms')
+        self.assertEqual(rows['Per-attempt details'], 'robot/barcode v2')
+        self.assertNotIn('Confidence', rows)
+        self.assertNotIn('Result', rows)
+        self.assertIn('no boot ID or run ID', self.panel('barcode')['note'])
+        self.assertIn('inferred', self.panel('barcode')['note'])
+
+    def test_failure_and_unavailable_widths_do_not_invent_a_letter_or_zero_width(self):
+        self.attempt(decoded=0, failed=1, letter='', reason=6, reason_name='BW_WIDTH',
+                     direction=2, widths_valid=0, narrow_mm=None, wide_mm=None)
+        rows = self.rows('barcode')
+        self.assertEqual(rows['Attempt decoded / failed'], 'no / yes')
+        self.assertEqual(rows['Decoded letter'], 'none')
+        self.assertEqual(rows['Reason'], 'BW_WIDTH (6)')
+        self.assertEqual(rows['Direction'], 'reverse')
+        self.assertEqual(rows['Narrow / wide estimate'], 'unavailable')
+        self.assertEqual(rows['Mapped command (observation only)'], 'none')
+
+    def test_attempt_age_is_not_refreshed_by_raw_gp28_or_completed_summary(self):
+        self.attempt()
+        self.clock.advance(1500)
+        self.feed('state_idle')
+        self.model.ingest('robot/summary', summary_v3(flags=3))
+        self.assertTrue(self.panel('barcode')['stale'])
+        self.assertEqual(self.rows('barcode')['Attempt report received age'], '1500 ms')
+        self.assertEqual(self.rows('barcode')['GP28 sample age'], '5 ms')
+        self.assertEqual(self.rows('barcode')['Summary received age'], '0 ms')
+
+    def test_unknown_barcode_version_is_visible_without_interpreting_fields(self):
+        self.model.ingest('robot/barcode', bytes([99, 1, 5]))
+        self.assertEqual(self.rows('barcode')['Report format'], 'unsupported version 99')
+        self.assertNotIn('Decoded letter', self.rows('barcode'))
+        self.assertNotIn('Mode (wire)', self.rows('barcode'))
+        self.assertEqual(self.model.discarded, 0)
+
+    def test_geometry_displays_observed_spans_and_sensor_frame_location(self):
+        self.geometry()
+        rows = self.rows('obstacle')
+        self.assertEqual(rows['Width (mm)'], '123 mm (observed span)')
+        self.assertEqual(rows['Left / right clearance (mm)'], '17 mm / 19 mm')
+        self.assertEqual(rows['Left / right scan edge clipped'], 'no / no')
+        self.assertEqual(rows['Scan stage'], 'fine')
+        self.assertEqual(rows['Closest x forward / y left'],
+                         '241.5 / -64.7 mm (sensor frame; approximate)')
+        self.assertIn('not guaranteed passability', self.panel('obstacle')['note'])
+
+    def test_clipped_width_is_a_lower_bound_and_missing_clearance_stays_unknown(self):
+        self.geometry(left_clear_valid=False, left_clear_mm=None, left_edge_clipped=True,
+                      width_lower_bound=True, geometry_flags=13)
+        rows = self.rows('obstacle')
+        self.assertEqual(rows['Width (mm)'], '>= 123 mm (lower bound)')
+        self.assertEqual(rows['Left / right clearance (mm)'], 'unavailable / 19 mm')
+        self.assertEqual(rows['Left / right scan edge clipped'], 'yes / no')
+        self.geometry(width_valid=False, width_mm=None, left_clear_valid=False,
+                      left_clear_mm=None, right_clear_valid=False, right_clear_mm=None,
+                      geometry_flags=0)
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], 'unavailable')
+        self.assertEqual(self.rows('obstacle')['Left / right clearance (mm)'],
+                         'unavailable / unavailable')
+
+    def test_valid_zero_spans_are_not_treated_as_unknown(self):
+        self.geometry(width_mm=0, left_clear_mm=0, right_clear_mm=0)
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], '0 mm (observed span)')
+        self.assertEqual(self.rows('obstacle')['Left / right clearance (mm)'], '0 mm / 0 mm')
+
+    def test_unknown_obstacle_version_preserves_readings_and_shows_rejection(self):
+        self.geometry()
+        before = self.model.obstacle
+        self.model.ingest('robot/obstacle', bytes([99, 0]))
+        self.assertIs(self.model.obstacle, before)
+        self.assertEqual(self.rows('obstacle')['Report format'], 'unsupported version 99 (rejected)')
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], '123 mm (observed span)')
+        self.assertEqual(self.model.discarded, 1)
+        # Also guard against a future decoder that recognizes a newer version.
+        self.model.obstacle = {'fields': {'version': 99}, 'rx': self.model.now_ms()}
+        self.assertEqual(self.rows('obstacle')['Report format'], 'unsupported version 99')
+
+    @unittest.skipUnless(contract_supported('robot/barcode', barcode_v2()),
+                         'requires approved SW10 decoder integration')
+    def test_binary_attempt_decoder_feeds_the_panel_and_rejects_malformed_update(self):
+        self.model.ingest('robot/barcode', barcode_v2())
+        self.assertEqual(self.rows('barcode')['Decoded letter'], 'F')
+        self.assertEqual(self.rows('barcode')['Narrow / wide estimate'], '4.50 / 9.90 mm')
+        old = self.model.reserved['barcode']
+        self.model.ingest('robot/barcode', barcode_v2()[:-1])
+        self.assertIs(self.model.reserved['barcode'], old)
+        self.assertEqual(self.model.discarded, 1)
+        self.model.ingest('robot/barcode', barcode_v2(flags=6, letter=0, reason=6, nav=0,
+                                                   narrow=65535, wide=65535))
+        self.assertEqual(self.rows('barcode')['Decoded letter'], 'none')
+        self.assertEqual(self.rows('barcode')['Narrow / wide estimate'], 'unavailable')
+
+    @unittest.skipUnless(contract_supported('robot/obstacle', obstacle_v3()),
+                         'requires approved SW9 decoder integration')
+    def test_binary_geometry_decoder_handles_clipping_and_rejects_bad_validity(self):
+        self.model.ingest('robot/obstacle', obstacle_v3(flags=0x21))
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], '123 mm (observed span)')
+        self.model.ingest('robot/obstacle', obstacle_v3(geometry_flags=13, left=65535))
+        self.assertEqual(self.rows('obstacle')['Width (mm)'], '>= 123 mm (lower bound)')
+        self.assertEqual(self.rows('obstacle')['Left / right clearance (mm)'], 'unavailable / 19 mm')
+        old = self.model.obstacle
+        self.model.ingest('robot/obstacle', obstacle_v3(geometry_flags=7, left=65535))
+        self.assertIs(self.model.obstacle, old)
+        self.assertEqual(self.model.discarded, 1)
 
 
 class RobotStatusTests(ModelCase):
@@ -2371,6 +2530,36 @@ class RedesignPageTests(AppCase):
         self.assertIn('since report', trace['views'][0]['text'])
         self.assertIn('not a transmitted mode', trace['views'][1]['text'])
         self.assertNotIn('not implemented', json.dumps(trace['values'][0][:2]))
+
+    def test_v2_attempt_and_v3_geometry_render_without_legacy_field_assumptions(self):
+        ApprovedContractPanelTests.attempt(self, letter='A', nav_command=1)
+        ApprovedContractPanelTests.geometry(self, left_clear_valid=False, left_clear_mm=None,
+                                            left_edge_clipped=True, width_lower_bound=True)
+        expression = """['barcode', 'obstacle'].map(id =>
+          document.getElementById('panel-' + id).querySelector('table.facts').children.map(
+            row => row.children.map(cell => cell.textContent)))"""
+        trace = self.trace(expressions=[expression])
+        barcode_rows, geometry_rows = map(dict, trace['values'][0])
+        self.assertEqual(barcode_rows['Mode (wire)'], 'SHADOW')
+        self.assertEqual(barcode_rows['Decoded letter'], 'A')
+        self.assertEqual(barcode_rows['Mapped command (observation only)'], 'A')
+        self.assertEqual(barcode_rows['Command issued / executed'], 'no / no')
+        self.assertNotIn('Confidence', barcode_rows)
+        self.assertEqual(geometry_rows['Width (mm)'], '>= 123 mm (lower bound)')
+        self.assertEqual(geometry_rows['Left / right clearance (mm)'], 'unavailable / 19 mm')
+
+    def test_unknown_contract_versions_render_not_crash_or_replace_valid_geometry(self):
+        ApprovedContractPanelTests.geometry(self)
+        self.model.ingest('robot/barcode', bytes([99, 1, 5]))
+        self.model.ingest('robot/obstacle', bytes([99, 0]))
+        expression = """['barcode', 'obstacle'].map(id =>
+          document.getElementById('panel-' + id).querySelector('table.facts').children.map(
+            row => row.children.map(cell => cell.textContent)))"""
+        trace = self.trace(expressions=[expression])
+        barcode_rows, geometry_rows = map(dict, trace['values'][0])
+        self.assertEqual(barcode_rows['Report format'], 'unsupported version 99')
+        self.assertEqual(geometry_rows['Report format'], 'unsupported version 99 (rejected)')
+        self.assertEqual(geometry_rows['Width (mm)'], '123 mm (observed span)')
 
     def test_rendered_older_summary_retains_boot_and_retained_warning(self):
         for i, (topic, encoded) in enumerate(CAPTURE_HUMP_REPORTS[:5]):
