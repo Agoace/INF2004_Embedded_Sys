@@ -194,4 +194,8 @@ config test is RED before the value change. On the five older real fixtures,
 every accept/reject result and reason is unchanged. Accepted retained fits
 move by at most 0.022 mm: large forward n/w 5.766/17.551 to 5.769/17.573 mm;
 430 large forward 5.776/17.715 to 5.778/17.727 mm. GCC passes 581/581 tests.
-Firmware matrix and sanitizer validation are in the final hand-off below.
+Capture context D (default-off diagnostic only): each retained failure
+now also prints `[BC_FAIL_CONTEXT]` with source-enable and last unbound-reset
+times. See [the capture format](FAILED_ATTEMPT_CAPTURE.md#stopped-dump-format).
+The analyzer reports them relative to first-bar time. It now applies the
+40 mm policy and also reports the legacy `10n` value for older images.

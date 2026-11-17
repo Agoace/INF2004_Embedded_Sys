@@ -110,6 +110,7 @@ The bounded capture dump remains before the large KR table. It adds:
 [BC_FAIL_STATUS] slots 2 edges 64 samples 512 pre 64 div_us 4000 missed_lifetime M
 [BC_REF] ...                         # existing matching reference
 [BC_FAIL_CAPTURE] epoch E index I ...
+[BC_FAIL_CONTEXT] epoch E index I enable_us A reset_us B reset_reason R
 [BC_FAIL_EDGE] epoch E index I row R adc_us U raw V black B phase P mm_cmm X bracket_us T counts L/R
 [BC_FAIL_ADC] epoch E index I row R us U raw V flags F pre 0/1
 ```
@@ -121,6 +122,16 @@ leading distance, fitted n/w/bias/space, `fit_valid`, pre/ADC/edge counts and
 fields are unset parameters, not measured physical zero. Distances use
 0.01 mm print units, not an accuracy claim. Times and counts keep the existing
 low32-bit modular-clock/encoder rules. Print direction is not robot motion.
+
+`BC_FAIL_CONTEXT` (added 2026-11-17) answers when the source could see the
+code. `enable_us` is the source-poll time (`drv_time_us`, same clock as
+`start_us`) of the last control change from disabled to SHADOW/PERMITTED.
+`reset_us`/`reset_reason` are the poll time and window reason of the last
+reject while NO window was bound, such as BW_MOTION or BW_LOSS in SEEK. Both
+are copied when the window binds and cleared at a new run epoch. Zero means
+not observed in this run; it is not a measured time zero. A silent window
+restart at re-enable is dated by `enable_us`, not `reset_us`. Older images
+print no context line; the analyzer then reports context as absent.
 
 The key is **epoch + internal source frame index**, not decoded serial:
 failure serials are zero. Legacy BC_FRAME/BC_REF do not print that index;

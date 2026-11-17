@@ -32,7 +32,10 @@ class AnalyzeTests(unittest.TestCase):
         self.assertTrue(report["complete"])
         star = report["captures"][0]["star"]
         self.assertEqual(star["mask"], "0x094")
-        self.assertEqual(star["decision"], "leading_white_short")
+        self.assertEqual(star["decision"], "start_gates_pass")  # 42.63 >= 40 mm policy
+        self.assertAlmostEqual(star["legacy_10n_leading_mm"], 58.95)
+        self.assertIsNone(report["captures"][0]["context"])
+        self.assertEqual(m.star_check(WIDTHS, 39.99)["decision"], "leading_white_short")
         self.assertAlmostEqual(star["narrow_mm"], 5.895)
         self.assertAlmostEqual(star["ratio"], 2.9868061446)
 
@@ -61,6 +64,15 @@ class AnalyzeTests(unittest.TestCase):
         bad = fixture().replace("epoch 1 index 2 row 0 us", "ep_FAIL_ADC] epoch 1 index 2 row 0 us")
         self.assertFalse(m.analyze([bad])["complete"])
         self.assertFalse(m.analyze([fixture().split("[robot] end")[0]])["complete"])
+
+    def test_context_line(self):
+        line = "[BC_FAIL_CONTEXT] epoch 1 index 2 enable_us 4000 reset_us 0 reset_reason 0"
+        text = fixture().replace("[BC_EDGES]", line + "\n[BC_EDGES]")
+        c = m.analyze([text])["captures"][0]
+        self.assertEqual(c["context"]["enable_before_start_ms"], 6.0)
+        self.assertIsNone(c["context"]["reset_us"])
+        bad = text.replace("enable_us 4000", "enable_us 4001")
+        self.assertFalse(m.analyze([text, bad], merge=True)["complete"])
 
     def test_nonstar_and_wrap(self):
         star = m.star_check([15.97,8.63,13.49,9.54,3.22,9.48,2.12,7.15,14.83],46.44)

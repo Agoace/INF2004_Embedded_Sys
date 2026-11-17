@@ -28,6 +28,7 @@ typedef struct {
     barcode_live_frame_t frame;
     uint32_t epoch, pre_head, pre_count, adc_count, edge_count;
     uint32_t adc_total, edge_total, last_adc_us, elements, window_reason;
+    uint32_t enable_us, reset_us, reset_reason;
     float leading_mm, bias, space, first_mm, last_mm;
     uint16_t rise, fall;
     bool bound, closed, sampled;
@@ -38,6 +39,10 @@ static bcfc_slot_t bcfc_slots[BCFC_SLOTS];
 static uint32_t bcfc_run, bcfc_saved, bcfc_missed;
 static uint32_t bcfc_reading; /* DUMP-written slot+1, zero when not reading. */
 static int bcfc_active = -1;
+/* LINE-only context: last disabled->enabled control poll and last reset of
+ * an UNBOUND window (both drv_time_us at the poll). Zero = unobserved. */
+static uint32_t bcfc_now_us, bcfc_enable_us, bcfc_reset_us, bcfc_reset_reason;
+static bool bcfc_enabled;
 /* DUMP-only bit mask; no LINE access. */
 static uint32_t bcfc_printed;
 _Static_assert(sizeof(bcfc_edge_t)==24u && sizeof(bcfc_adc_t)==8u,
@@ -63,6 +68,7 @@ static bcfc_slot_t *bcfc_work(void)
         s->adc_total=0u;s->edge_total=0u;s->elements=0u;s->window_reason=0u;
         s->bound=false;s->closed=false;s->sampled=false;
         s->leading_mm=0.0f;s->bias=0.0f;s->space=0.0f;
+        s->enable_us=0u;s->reset_us=0u;s->reset_reason=0u;
         s->first_mm=0.0f;s->last_mm=0.0f;s->rise=0u;s->fall=0u;
         bcfc_active=(int)i;return s;
     }
@@ -73,9 +79,18 @@ void bcfc_epoch(uint32_t epoch)
 {
     if (epoch==0u || epoch==bcfc_run) return;
     bcfc_run=epoch;bcfc_saved=0u;bcfc_active=-1;
+    bcfc_enable_us=0u;bcfc_reset_us=0u;bcfc_reset_reason=0u;bcfc_enabled=false;
     for (unsigned int i=0u;i<BCFC_SLOTS;++i) {
         __atomic_store_n(&bcfc_slots[i].state,0u,__ATOMIC_SEQ_CST);
     }
+}
+
+void bcfc_control(uint32_t mode, uint32_t now_us)
+{
+    const bool enabled=mode!=0u && mode<=2u;
+    bcfc_now_us=now_us;
+    if (enabled && !bcfc_enabled) bcfc_enable_us=now_us;
+    bcfc_enabled=enabled;
 }
 
 static void bcfc_edge(bcfc_slot_t *s, const barcode_window_t *w,
@@ -122,6 +137,8 @@ void bcfc_start(const barcode_window_t *w, barcode_window_adc_t a,
     s->bound=true;s->frame.start_us=w->start_us;
     s->leading_mm=w->leading_mm;s->rise=w->rise;s->fall=w->fall;
     s->first_mm=mm;s->last_mm=mm;
+    s->enable_us=bcfc_enable_us;s->reset_us=bcfc_reset_us;
+    s->reset_reason=bcfc_reset_reason;
     bcfc_edge(s,w,a,mm,upper,true);
 }
 
@@ -144,9 +161,11 @@ static void bcfc_snapshot(bcfc_slot_t *s, const barcode_window_t *w)
 
 void bcfc_reject(const barcode_window_t *w, uint32_t reason)
 {
-    if (bcfc_active<0) return;
-    bcfc_slot_t *s=&bcfc_slots[bcfc_active];
-    if (!s->bound || s->closed) return;
+    bcfc_slot_t *s=bcfc_active>=0 ? &bcfc_slots[bcfc_active] : NULL;
+    if (!s || !s->bound) {
+        bcfc_reset_us=bcfc_now_us;bcfc_reset_reason=reason;return;
+    }
+    if (s->closed) return;
     bcfc_snapshot(s,w);s->window_reason=reason;s->closed=true;
 }
 void bcfc_close(const barcode_window_t *w)
@@ -209,6 +228,10 @@ static void bcfc_print(unsigned int index, bool saved_ref)
         (unsigned long)s->edge_count,
         (unsigned long)(s->adc_total-s->adc_count),
         (unsigned long)(s->edge_total-s->edge_count));
+    tm_printf((UB *)"[BC_FAIL_CONTEXT] epoch %lu index %lu enable_us %lu reset_us %lu reset_reason %lu\n",
+        (unsigned long)f->record.epoch,(unsigned long)f->index,
+        (unsigned long)s->enable_us,(unsigned long)s->reset_us,
+        (unsigned long)s->reset_reason);
     for (uint32_t i=0u;i<s->edge_count;++i) {
         const bcfc_edge_t *e=&s->edges[i];
         tm_printf((UB *)"[BC_FAIL_EDGE] epoch %lu index %lu row %lu adc_us %lu "

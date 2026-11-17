@@ -21,7 +21,9 @@ REQUIRED = {
     "EDGE": "epoch index row adc_us raw black phase mm_cmm bracket_us counts",
     "ADC": "epoch index row us raw flags pre",
     "REF": "epoch index start_us terminal_us reason",
+    "CONTEXT": "epoch index enable_us reset_us reset_reason",
 }
+QUIET_MIN_MM = 40.0  # Reader policy from mtk3-bc-quiet; older images used 10n.
 
 
 def relative_us(value, start):
@@ -84,11 +86,12 @@ def star_check(widths, leading):
     }
     out.update(narrow_mm=physical, wide_mm=w, bias_mm=bias, ratio=w / n,
                corrected_mm=corrected, gates=gates, leading_mm=leading,
-               required_leading_mm=10 * physical,
+               required_leading_mm=QUIET_MIN_MM,
+               legacy_10n_leading_mm=10 * physical,
                leading_in_narrow_units=leading / physical)
     decision = "size_gate" if not all(gates.values()) else (
         "not_star" if mask != 0x094 and reverse != 0x094 else (
-            "leading_white_short" if leading < 10 * physical else "start_gates_pass"))
+            "leading_white_short" if leading < QUIET_MIN_MM else "start_gates_pass"))
     return dict(out, decision=decision)
 
 
@@ -143,10 +146,14 @@ def parse(text, source):
                 continue
             if kind == "STATUS":
                 current["status"] = row
-            elif kind in ("CAPTURE", "EDGE", "ADC"):
+            elif kind in ("CAPTURE", "EDGE", "ADC", "CONTEXT"):
                 key = (row["epoch"], row["index"])
                 c = current["captures"].setdefault(key, {"header": None, "edges": [], "adc": [], "issues": []})
-                if kind == "CAPTURE":
+                if kind == "CONTEXT":
+                    if c.get("context") not in (None, row):
+                        c["issues"].append("conflicting capture context")
+                    c["context"] = row
+                elif kind == "CAPTURE":
                     if c["header"] is not None:
                         c["issues"].append("duplicate capture header in one dump")
                     c["header"] = row
@@ -199,6 +206,10 @@ def analyze(texts, merge=False, sources=None):
                 c["issues"].append("conflicting immutable capture header (same boot/run required)")
             if value["header"]:
                 c["header"] = copy.deepcopy(value["header"])
+            if value.get("context"):
+                if c.get("context") not in (None, value["context"]):
+                    c["issues"].append("conflicting capture context (same boot/run required)")
+                c["context"] = value["context"]
             c["edges"].extend(value["edges"])
             c["adc"].extend(value["adc"])
             c["issues"].extend(value["issues"])
@@ -235,7 +246,15 @@ def analyze(texts, merge=False, sources=None):
                 widths = [(edges[i+1]["mm_cmm"]-edges[i]["mm_cmm"])/100 for i in range(9)]
                 star = star_check(widths, h["lead_cmm"]/100)
             else: issues.append("nonalternating first ten edges")
-        result.append(dict(header=h, edges=list(edges.values()), adc=list(adc.values()),
+        ctx = c.get("context")
+        context = None  # Older images print no context; absent is not zero.
+        if ctx:
+            context = {"enable_us": ctx["enable_us"] or None, "reset_us": ctx["reset_us"] or None,
+                       "reset_reason": ctx["reset_reason"] if ctx["reset_us"] else None}
+            for name in ("enable", "reset"):
+                if context[f"{name}_us"] is not None:
+                    context[f"{name}_before_start_ms"] = -relative_us(context[f"{name}_us"], h["start_us"]) / 1000
+        result.append(dict(header=h, context=context, edges=list(edges.values()), adc=list(adc.values()),
                            missing_edges=missing_e, missing_adc=missing_a, issues=issues,
                            star=star, pre_black_runs=pre_black_runs(list(adc.values()), h),
                            storage_truncated=bool(h["adc_lost"] or h["edge_lost"]),
