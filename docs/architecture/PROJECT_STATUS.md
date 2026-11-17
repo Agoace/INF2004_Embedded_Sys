@@ -24,6 +24,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Area | State | Evidence | Open |
 | --- | --- | --- | --- |
 | LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
+| LINE D gain trial (`LINE_KD`) | Opt-in, on `mtk3-line-kd`. Lowers the D kick after a small drift on straights (2026-11-17). Built and host-tested; default image unchanged. | [LINE.md (D gain trial)](../s3-line-barcode/LINE.md#d-gain-trial-opt-in-line_kd) | Robot trial kd 30 and 0. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
 | Obstacle, scan, detour | Coarse/fine + v3 floor result on `d44bd25` (2026-11-17): same box met twice, 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, no overruns/lost wakes/faults; task stack high water recorded. Prior fixed-scan result: 2/2 in each of 6 runs. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Separate stationary A2/A3 placements skipped by operator; width accuracy/passability not established; DONE_NO_LINE and STALL_RIGHT remain open. |

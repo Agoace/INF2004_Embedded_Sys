@@ -83,6 +83,28 @@ payload, otherwise LEFT). It turns 316 counts, then reverses through the
 start to 316 counts on the other side. FOUND returns to LINE; exhaustion
 fails the shell. SEARCH does not run its own forward obstacle watch.
 
+### D gain trial (opt-in `LINE_KD`)
+
+School run 2026-11-17 (`LINE_GAP` + `MOTION_SAME_TICK`): on straights a
+2–3 mm drift flips the position 0 → 32 → 50 in 40 ms (t=20680→20720, yaw
+0 → 66 deg/s). The D term (kd 85, change clipped to 25) almost doubles
+the kick, and about 1 s of ±50 swings follow. Build switch
+`LINE_KD=<0..85>` (default 85, image unchanged; suffix `_kdN`) replaces
+only `kd_pct` through the forced header
+[`line_kd.h`](../../app_program/vehicle/line_kd.h) in `vehicle_task.o`.
+The D change clip and all other LINE settings stay the same.
+
+| kd | Wheel difference after step 0 → 32 (host, DERIVED) |
+| --- | --- |
+| 85 (default) | 82 mm/s |
+| 30 | 58 mm/s |
+| 0 | 46 mm/s |
+
+Tests: [`test_line_kd.c`](../../tests/test_line_kd.c) for kd 85/60/30/0 and
+[`test_line_kd_make.py`](../../tests/test_line_kd_make.py) for make
+guards, suffix and build profile. Status: built and host-tested; robot
+trial pending.
+
 ## Interface
 
 | API/data | Contract |
