@@ -436,6 +436,10 @@ Reported through Main_Worker; estimates, not ruler values:
 | Shadow full circuit (b405aef) | 90 s, 9.9 m, 146 mm/s; 45 losses; 7 junctions; 3 attempts 0 frames | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | SIL barcode along-sigma | 1 / 4 / 8 mm | 2026-11-16 | ASSUMED | `mtk3-hil:docs/simulation/SIL_JUNCTION_BARCODE_RESULTS_20261116.md#version-and-protocol` |
 | SIL barcode sheet | 400x50 mm paper, 40 mm bar height, 389.5 mm quiet length | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
+| Barcode 2 to 4-way crossing (D_cross) | unknown; long enough to straighten; up to one loop (course8 map L1 about 3.4 m, L2 about 5.2 m) | 2026-11-17 | OPERATOR (no measured number); loop lengths from map | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| Black between barcode 2 and next crossing | none (operator not fully sure) | 2026-11-17 | OPERATOR | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| 4-way crossing angle | about 90 deg (not fully sure) | 2026-11-17 | OPERATOR | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| Live clearance margin below D_min | 40 mm (6 mm arm + about 6 mm read latency + ticks + slip) | 2026-11-17 | ASSUMED | [BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session) |
 
 ## Sonar, servo and obstacle
 
