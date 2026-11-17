@@ -17,6 +17,7 @@
 #include "lwip/ip_addr.h"
 #include "robot_network.h"
 #include "network_queue.h"
+#include "../subsystem3/barcode_attempt.h"
 #include "robot_health.h"
 #include "telemetry.h"
 #include "log_stream.h"
@@ -83,6 +84,8 @@ static rm_detour_t pending_detour;
 static bool have_detour;
 static uint32_t summary_cursor;
 static uint32_t summary_retry_at;
+static bool barcode_inflight;
+static uint32_t barcode_token, barcode_sequence, barcode_retry_at;
 static pm_tracker_t mode_tracker;
 static pm_mode_t mode = PM_MODE_RUN;
 static bool status_pending;
@@ -473,6 +476,11 @@ static void connection_done(mqtt_client_t *c, void *arg,
     connecting = false;
     metrics_subscribed_set(false);
     subscribe_pending = false;
+    /* mqtt_close discards requests without callbacks. Keep the FIFO head
+     * unacknowledged and invalidate callbacks from the previous connection. */
+    barcode_inflight = false;
+    ++barcode_token;
+    barcode_retry_at = drv_time_ms();
     if (status == MQTT_CONNECT_ACCEPTED) {
         metrics_state_set(2u);
         mqtt_set_inpub_callback(client, incoming_publish, incoming_data, NULL);
@@ -568,6 +576,43 @@ static void service_summary(uint32_t now)
     }
 }
 
+static void barcode_done(void *arg, err_t error)
+{
+    if (!barcode_inflight || (uint32_t)(uintptr_t)arg != barcode_token) return;
+    barcode_inflight = false;
+    if (error == ERR_OK) {
+        (void)barcode_attempt_ack(barcode_sequence);
+    } else {
+        barcode_retry_at = drv_time_ms() + STATUS_RETRY_MS;
+        inc(&metrics.publish_failed);
+    }
+}
+
+static void service_barcode(uint32_t now)
+{
+    if (barcode_inflight || !due(now, barcode_retry_at)) return;
+    rm_barcode_t value;
+    if (!barcode_attempt_peek(&value)) return;
+    uint8_t bytes[RM_BARCODE_SIZE];
+    if (!rm_pack_barcode(bytes, &value)) {
+        /* Internal malformed observations cannot block the whole FIFO. */
+        (void)barcode_attempt_ack(value.sequence);
+        inc(&metrics.publish_failed);
+        return;
+    }
+    if (++barcode_token == 0u) ++barcode_token;
+    barcode_sequence = value.sequence;
+    barcode_inflight = true;
+    const err_t error = mqtt_publish(client, "robot/barcode", bytes,
+        RM_BARCODE_SIZE, QOS_AT_LEAST_ONCE, 0u, barcode_done,
+        (void *)(uintptr_t)barcode_token);
+    inc(error == ERR_OK ? &metrics.publish_ok : &metrics.publish_failed);
+    if (error != ERR_OK) {
+        barcode_inflight = false;
+        barcode_retry_at = now + STATUS_RETRY_MS;
+    }
+}
+
 /*
  * Count an asynchronous publish failure without affecting driving.
  */
@@ -619,6 +664,7 @@ static void service(uint32_t now)
     update_mode(now);
     service_status(now);
     service_summary(now);
+    service_barcode(now);
     if (!subscribed && !subscribe_pending && due(now, subscribe_at)) {
         subscribe_pending = true;
         if (mqtt_subscribe(client, "robot/cmd", 1u, subscription_done, NULL) !=

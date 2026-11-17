@@ -683,7 +683,7 @@ class ReservedTopicTests(ModelCase):
         self.assertEqual(rows["Pitch (raw)"], 3)  # the snapshot is kept
 
     def test_unknown_versions_and_kinds_are_ignored_not_counted_as_errors(self):
-        self.model.ingest("robot/barcode", bytes([2, 1, 5]))
+        self.model.ingest("robot/barcode", bytes([3, 1, 5]))
         self.model.ingest("robot/imu", bytes([9, 1, 5]))
         self.model.ingest("robot/imu", bytes([1, 9, 5, 5]))
         self.assertEqual((self.model.ignored_reserved, self.model.snapshot()["discarded"]), (3, 0))

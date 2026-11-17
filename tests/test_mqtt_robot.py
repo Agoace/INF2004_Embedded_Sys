@@ -679,7 +679,7 @@ class NewTopicTests(unittest.TestCase):
 
     def test_reserved_topics_ignore_unknown_versions_and_kinds(self):
         for topic in ("robot/barcode", "robot/imu"):
-            for frame in (bytes([2, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
+            for frame in (bytes([3, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
                 result = wire.decode(topic, frame)
                 self.assertEqual((result["known"], result["length"]), (0, len(frame)))
                 self.assertEqual((result["version"], result["kind"]), (frame[0], frame[1]))

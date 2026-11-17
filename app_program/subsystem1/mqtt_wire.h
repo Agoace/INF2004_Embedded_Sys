@@ -34,6 +34,20 @@
 #define RM_SUMMARY_VERSION   3u
 /* Value of an unavailable 16-bit measurement in robot/summary. */
 #define RM_SUMMARY_NONE_U16 65535u
+#define RM_BARCODE_SIZE     28u
+#define RM_BARCODE_VERSION  2u
+#define RM_BARCODE_DECODED  1u
+#define RM_BARCODE_FAILED   2u
+#define RM_BARCODE_SHADOW   4u
+#define RM_BARCODE_WIDTHS   8u
+/* Values, not a packed wire struct. Widths are hundredths of a millimetre;
+ * 65535 means unavailable. No action/execution permission is represented. */
+typedef struct {
+    uint32_t sequence, epoch, start_ms, uptime_ms;
+    uint16_t reason, narrow_cmm, wide_cmm;
+    uint8_t flags, letter, direction, command;
+} rm_barcode_t;
+bool rm_pack_barcode(uint8_t out[RM_BARCODE_SIZE], const rm_barcode_t *value);
 #define RM_COMMAND_SIZE     22u
 #define RM_LOG_SIZE         36u
 #define RM_LOG_VERSION      2u

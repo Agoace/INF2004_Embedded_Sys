@@ -97,12 +97,18 @@ is skipped, not printed as a valid copy. No DTR-retained TEST dump is changed.
 
 | Tag | Evidence |
 | --- | --- |
+| BC_REASON_COUNTS | Last nonzero run epoch, attempts/ok/failed, lifetime FIFO drops, BW0..10 and BP100..107 bins; first line before KR |
 | BC_LIVE | SHADOW, current epoch, sample count, total frame/attempt counts |
 | BC_CPU | Total source us / samples, max source slice, max eligible control age and source publication age |
 | BC_CPU_ELIGIBLE | Source us / samples and max while control mode1/2; STOP samples do not dilute this view |
 | BC_FRAME | Original epoch/serial/letter/command, reason, offered flag, control/publication ages, white means/difference, frozen thresholds |
-| BC_REF | Original first/final ADC edges, final-edge motor upper bracket, eligible ADC time, original read time/counts |
+| BC_REF | Original first/final ADC edges, final-edge motor upper bracket, eligible ADC time, original read time/counts; appended terminal_us after final source recheck |
 | BC_EDGES / BC_EDGE | Total/retained/lost raw GP28 edges AFTER window, ADC time, original upper motor time/counts, polarity/raw |
+
+The bounded barcode dump precedes the large KR dump. The current
+[terminal-attempt telemetry record](BARCODE_ATTEMPT_TELEMETRY.md) specifies
+v2 MQTT FIFO ownership, reason-count epoch retention, terminal time and new
+resource measurements. Older resource tables below remain historical evidence.
 
 Keep the latest8 frame/attempt rows and24 edge rows across runs, keyed by
 original epoch/serial. Counts are lifetime; age maxima reset at epoch change.
