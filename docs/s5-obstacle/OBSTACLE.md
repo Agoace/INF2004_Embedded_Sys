@@ -180,7 +180,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Seen range / turn step | 400 mm / 5° |
 | Away / toward limits | 90 / 180° (toward ≥ away + return heading) |
 | Return heading / max distance | 90° / 1000 mm |
-| Line in the return turn | counts from 45° toward the line (`line_turn_deg`; 0: off) |
+| Line in the return turn | counts from 20° toward the line (`line_turn_deg`; 0: off; 45° until FX_1 detour 2) |
 | Max straights / total time | 5 / 40 s |
 | Encoder turn scale | 24.05 difference counts/degree |
 

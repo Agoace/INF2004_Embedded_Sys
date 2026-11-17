@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "../app_program/subsystem5/obstacle_detour.h"
+#include "../app_program/vehicle/vehicle_robot_config.h"
 
 static int failures;
 #define CHECK(ok, text) do { if (!(ok)) { printf("FAIL: %s\n", text); ++failures; } } while (0)
@@ -292,6 +293,15 @@ static scene_t fc2_like(void) {
                      .bx0 = 290.0, .bx1 = 435.0, .by0 = -110.0, .by1 = -10.0};
 }
 
+static scene_t d2_like(void) {
+    /* FX_1 detour 2 (2026-11-17): STRAIGHT2 ends with the pair near the
+     * line; the return turn crosses it at about -25..-34 degrees. */
+    scene_t s = fc2_like();
+    s.la = -3.0;
+    s.ly = 20.0;
+    return s;
+}
+
 static scene_t fc1_like(void) {
     /* FC_1: box 100 x 145 mm on the line. */
     return (scene_t){.lx = 119.0, .ly = 7.0, .la = -7.0,
@@ -472,6 +482,59 @@ static void test_scenes(void) {
     }
 }
 
+/* The robot value (vehicle_robot_config.h), not a test copy. */
+static void test_robot_value(void) {
+    const dt_config_t *rc = &DETOUR_CFG.dt;
+    dt_t dt;
+    uint32_t now = 100u;
+    scene_t s;
+    (void)LINE_CFG;
+    (void)SEARCH_CFG;
+    (void)SCAN_CFG;
+    /* (10) Return turn after STRAIGHT 2 from -23; line from -27. The
+     * helper turns 20 counts per degree; line_turn_deg is the robot's. */
+    dt_config_t unit = *rc;
+    unit.counts_per_deg_x100 = 2000u;
+    dt_init(&dt, &unit, OBSTACLE_SIDE_LEFT, 250u, 0, 0, 0u);
+    (void)dt_update(&dt, false, 0, 0, 50u);
+    CHECK(sweep_line(&dt, -23, -90, -27, &now) == DT_ON_LINE &&
+              dt.heading == -27,
+          "robot value: line at -27 in the return turn counts");
+    /* (11) D2-like scene: the line is crossed at a shallow heading. */
+    s = d2_like();
+    CHECK(scene_run(&s, rc) == DT_DONE && s.on_line_from == DT_TURN_TOWARD &&
+              s.line_straights >= 2 && s.line_heading <= -20 &&
+              s.line_heading >= -35,
+          "robot value: D2-like rejoins from the return turn");
+    {
+        const double d = -(s.x - s.lx) * sin_d(s.la) +
+                         (s.y - s.ly) * cos_d(s.la);
+        CHECK(d > -30.0 && d < 30.0, "robot value: D2-like axle on the line");
+    }
+    /* (12) FC_2-like and FC_1-like keep their results. */
+    s = fc2_like();
+    CHECK(scene_run(&s, rc) == DT_DONE && s.on_line_from == DT_TURN_TOWARD &&
+              s.line_heading <= -45,
+          "robot value: FC_2-like still rejoins in the turn past -45");
+    s = fc1_like();
+    CHECK(scene_run(&s, rc) == DT_DONE && s.hash == 0x391dc490u,
+          "robot value: FC_1-like trace identical to the old rule");
+    /* (13) Post-STRAIGHT-1 guard with the robot value. */
+    for (uint16_t mm = 100u; mm <= 180u; mm = (uint16_t)(mm + 40u)) {
+        dt_config_t off = *rc;
+        scene_t a = fc2_like(), b;
+        a.omm = mm;
+        a.blind = true;
+        a.bx0 = 65.0 + mm;
+        a.bx1 = a.bx0 + 300.0;
+        b = a;
+        off.line_turn_deg = 0u;
+        (void)scene_run(&a, &off);
+        (void)scene_run(&b, rc);
+        CHECK(b.hash == a.hash, "robot value: sonar miss, old-rule trace");
+    }
+}
+
 int main(void) {
     test_controller();
     test_convergence();
@@ -480,6 +543,7 @@ int main(void) {
     test_away_and_return();
     test_line_in_return_turn();
     test_scenes();
+    test_robot_value();
     if (failures) return 1;
     puts("test_detour_sweep: all tests passed");
     return 0;

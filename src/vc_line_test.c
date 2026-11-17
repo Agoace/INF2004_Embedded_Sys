@@ -146,10 +146,10 @@ static const dr_config_t DETOUR_CFG = {
            /* Trim the turn away: pass the corner by half the robot
             * width 80 (160 mm widest) + margin 30. */
            .first_clear_mm = 110u,
-           /* Return turn: the line counts from 45 degrees toward it (FC_2
+           /* Return turn: the line counts from 20 degrees toward it (FC_2
             * 2026-11-17: the pivot crossed the line, ignored, then drove
-            * away). */
-           .line_turn_deg = 45u},
+            * away; FX_1 detour 2: crossed at -25..-34, below 45). */
+           .line_turn_deg = 20u},
     .straight_mm_s = 131,
     .turn_mm_s = 131,
     .pause_ms = 250u,
