@@ -301,6 +301,10 @@ vehicle task described below.
   FIFO tests: [`test_barcode_attempt.c`](../tests/test_barcode_attempt.c);
   codec tests: [`test_barcode_wire.c`](../tests/test_barcode_wire.c) and
   [`test_barcode_v2.py`](../tests/test_barcode_v2.py).
+  [School failed-start analysis](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md)
+  records FC1/FC2 evidence and timing limits. The host validator is
+  [`scripts/barcode_fail_analyze.py`](../scripts/barcode_fail_analyze.py), with
+  [`test_barcode_fail_analyze.py`](../tests/test_barcode_fail_analyze.py).
   [Opt-in failed-attempt capture](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md)
   uses [`barcode_fail_capture.h`](../app_program/subsystem3/barcode_fail_capture.h)
   and [`barcode_fail_capture.inc`](../app_program/subsystem3/barcode_fail_capture.inc),
