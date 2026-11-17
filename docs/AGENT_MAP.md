@@ -292,6 +292,13 @@ vehicle task described below.
   `barcode_live_counts_try_read`, the read-only epoch terminal counts in
   `barcode_live_source.{h,c}`; absence, cancellation and coherent-read tests
   include [`test_barcode_live_counts_absent.c`](../tests/test_barcode_live_counts_absent.c).
+  [Terminal-attempt telemetry](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md)
+  links the LINE FIFO [`barcode_attempt.c`](../app_program/subsystem3/barcode_attempt.c)
+  and [`barcode_attempt.h`](../app_program/subsystem3/barcode_attempt.h),
+  Wi-Fi `robot/barcode` QoS1 service, v2 codec/CSV and early reason/frame dump.
+  FIFO tests: [`test_barcode_attempt.c`](../tests/test_barcode_attempt.c);
+  codec tests: [`test_barcode_wire.c`](../tests/test_barcode_wire.c) and
+  [`test_barcode_v2.py`](../tests/test_barcode_v2.py).
 
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and

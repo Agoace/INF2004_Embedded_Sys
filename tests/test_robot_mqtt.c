@@ -11,6 +11,7 @@
 #include "../app_program/subsystem1/robot_health.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/platform/app_startup.h"
+#include "../app_program/subsystem3/barcode_attempt.h"
 #include "../lib/libwifi/sysdepend/pico_rp2040/cyw43_utk.h"
 #define FIXTURE_TOKEN_HEX "00112233445566778899aabbccddeeff"
 #ifndef ROBOT_MQTT_COMMAND_TOKEN_HEX
@@ -109,6 +110,8 @@ err_t mqtt_publish(mqtt_client_t *client,const char *topic,const void *payload,u
         assert(qos==1u && length==RM_STATUS_SIZE && callback!=NULL && payload_is_online(payload));
     } else if (strcmp(topic,"robot/summary")==0) {
         assert(qos==1u && length==RM_SUMMARY_SIZE && callback!=NULL);
+    } else if (strcmp(topic,"robot/barcode")==0) {
+        assert(qos==1u && length==RM_BARCODE_SIZE && callback!=NULL);
     } else assert(qos==0u);
     return record->result;
 }
@@ -244,6 +247,38 @@ static unsigned int count_topic(const char *topic) {
 static void start_connected(void) {
     poll_at(0u);assert(connect_count==1u);connected(MQTT_CONNECT_ACCEPTED);poll_at(0u);
     assert(subscribe_count==1u && subscribe_callback);subscribe_callback(subscribe_arg,ERR_OK);
+}
+static void test_barcode(void) {
+    start_connected();
+    rm_barcode_t value={.sequence=1u,.epoch=7u,.flags=RM_BARCODE_DECODED|RM_BARCODE_SHADOW,
+        .letter='F',.reason=1u,.narrow_cmm=65535u,.wide_cmm=65535u};
+    assert(barcode_attempt_enqueue(&value));
+    fail_topic="robot/barcode";failures_left=1u;
+    poll_at(1u);assert(count_topic("robot/barcode")==1u);
+    assert(barcode_attempt_peek(&value) && value.sequence==1u);
+    poll_at(2u);assert(count_topic("robot/barcode")==1u);
+    poll_at(2001u);
+    publication_t *r=last_topic("robot/barcode");
+    assert(r && r->result==ERR_OK && r->data[0]==2u && r->data[3]=='F');
+    assert(count_topic("robot/barcode")==2u);
+    poll_at(2002u);assert(count_topic("robot/barcode")==2u); /* No repeat in flight. */
+    r->callback(r->arg,ERR_ABRT); /* Keep FIFO head on asynchronous error. */
+    poll_at(4002u);assert(count_topic("robot/barcode")==3u);
+    r=last_topic("robot/barcode");r->callback(r->arg,ERR_OK);
+    assert(!barcode_attempt_peek(&value));
+    poll_at(4003u);assert(count_topic("robot/barcode")==3u);
+    value=(rm_barcode_t){.sequence=2u,.epoch=7u,.flags=RM_BARCODE_FAILED|RM_BARCODE_SHADOW,
+        .reason=101u,.narrow_cmm=65535u,.wide_cmm=65535u};
+    assert(barcode_attempt_enqueue(&value));poll_at(4010u);
+    r=last_topic("robot/barcode");
+    const mqtt_request_cb_t old_callback=r->callback;void *old_arg=r->arg;
+    connected(MQTT_CONNECT_DISCONNECTED); /* Request callback deleted by SDK. */
+    poll_at(7010u);connected(MQTT_CONNECT_ACCEPTED);poll_at(7010u);
+    assert(count_topic("robot/barcode")==5u);
+    old_callback(old_arg,ERR_OK); /* Late old callback cannot ACK new request. */
+    assert(barcode_attempt_peek(&value) && value.sequence==2u);
+    r=last_topic("robot/barcode");r->callback(r->arg,ERR_OK);
+    assert(!barcode_attempt_peek(&value));
 }
 static void test_no_boot_id(void) {
     boot_identity=0u;poll_at(0u);poll_at(10000u);
@@ -844,6 +879,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"status")) test_status();
     else if (!strcmp(argv[1],"detour")) test_detour();
     else if (!strcmp(argv[1],"summary")) test_summary();
+    else if (!strcmp(argv[1],"barcode")) test_barcode();
     else if (!strcmp(argv[1],"obstacle")) test_obstacle();
     else if (!strcmp(argv[1],"log_live")) test_log_live();
     else if (!strcmp(argv[1],"log_dump")) test_log_dump(false);

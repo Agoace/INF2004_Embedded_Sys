@@ -72,7 +72,10 @@ int tm_printf(const UB *fmt,...) {
             assert(va_arg(a,unsigned int)==3u);
         }
     }
-    if (!strcmp((const char *)fmt,"KR %lu ")) ++kr;
+    if (!strcmp((const char *)fmt,"KR %lu ")) {
+        assert(source_dumps > kr / 2u); /* Barcode tail must precede KR rows. */
+        ++kr;
+    }
     if (!strcmp((const char *)fmt,"VE %lu %u %u %u %u\n")) ++ve;
     if (!strncmp((const char *)fmt,"[robot] hump no finished run",28u)) ++hump_none;
     if (!strncmp((const char *)fmt,"[S4_HUMP_DIAG]",14u)) ++diag_lines;

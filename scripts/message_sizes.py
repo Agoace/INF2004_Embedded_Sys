@@ -39,11 +39,11 @@ ENTRIES = [
     ("vehicle/junction_live.h", ["jlive_t", "jlive_report_t", "jlive_counts_t"], []),
     ("subsystem1/mqtt_wire.h",
      ["rm_state_t", "rm_sonar_t", "rm_obstacle_t", "rm_detour_t",
-      "rm_event_t", "rm_summary_t", "rm_heartbeat_t", "rm_command_t",
+      "rm_event_t", "rm_summary_t", "rm_barcode_t", "rm_heartbeat_t", "rm_command_t",
       "rm_log_t", "rm_log_batch_t"],
      ["RM_STATE_SIZE", "RM_SONAR_SIZE", "RM_OBSTACLE_SIZE",
       "RM_DETOUR_SIZE", "RM_STATUS_SIZE", "RM_EVENT_SIZE",
-      "RM_EVENT_RECORD_SIZE", "RM_SUMMARY_SIZE", "RM_HEARTBEAT_SIZE",
+      "RM_EVENT_RECORD_SIZE", "RM_SUMMARY_SIZE", "RM_BARCODE_SIZE", "RM_HEARTBEAT_SIZE",
       "RM_COMMAND_SIZE", "RM_LOG_SIZE", "RM_LOG_BATCH_HEADER_SIZE",
       "RM_LOG_RECORD_SIZE", "RM_LOG_BATCH_MAX_SIZE"]),
 ]

@@ -1,4 +1,6 @@
 /* Canonical boards and single LINE-task producer. SHADOW only; no actions. */
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
 #include "subsystem3.h"
 #include "barcode_live_source.h"
 #if BC_LIVE_SOURCE_HOST_TEST || BC_LIVE_COUNTS_HOST_TEST
@@ -97,6 +99,8 @@ void barcode_live_test_publish(const barcode_live_record_t *value)
 
 #if !APP_TEST && !APP_BENCH && !BC_LIVE_SOURCE_HOST_TEST
 #include "barcode_live_producer.h"
+#include "barcode_attempt.h"
+#include <math.h>
 #include "../subsystem2/motion.h"
 #include "../platform/drv_time.h"
 #define FRAME_ROWS 8u
@@ -122,8 +126,15 @@ static APP_BOARD(summary_t) summary_board;
 static summary_t summary;
 static APP_BOARD(barcode_live_counts_t) counts_board;
 static barcode_live_counts_t run_counts;
+/* BW0..10 and BP100..107. LINE sole writer; DUMP is a bounded reader. */
+typedef struct { uint32_t epoch, reasons[19]; } reason_counts_t;
+static reason_counts_t reason_counts, dump_reasons;
+static APP_BOARD(reason_counts_t) reason_board;
 _Static_assert(sizeof(counts_board) == 20u, "Live counts board budget");
 static uint32_t frame_count, edge_count;
+#if TM_MQTT
+static uint32_t attempt_sequence;
+#endif
 static edge_row_t pending_edge;
 static bool edge_pending, edge_black, trace;
 static uint16_t trace_rise, trace_fall;
@@ -137,6 +148,7 @@ _Static_assert(sizeof(producer) + sizeof(input) + sizeof(motor) +
     sizeof(frames) + sizeof(edges) + sizeof(summary_board) + sizeof(summary) +
     sizeof(pending_edge) + sizeof(dump_frame) + sizeof(dump_edge) +
     sizeof(dump_summary) + sizeof(counts_board) + sizeof(run_counts) +
+    sizeof(reason_counts) + sizeof(dump_reasons) + sizeof(reason_board) +
     192u <= 4096u, "Live storage including boards");
 
 int barcode_live_counts_try_read(barcode_live_counts_t *out)
@@ -225,6 +237,13 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         run_counts = (barcode_live_counts_t){.epoch = input.control.epoch};
         counts_changed = true;
     }
+    /* STOP may publish epoch0. Preserve the last nonzero run's histogram
+     * for the stopped dump; a genuinely NEW run replaces it. */
+    if (input.control_ok && input.control.epoch != 0u &&
+        input.control.epoch != reason_counts.epoch) {
+        reason_counts = (reason_counts_t){.epoch = input.control.epoch};
+        counts_changed = true;
+    }
     if (input.control_ok && input.control.epoch != summary.epoch) {
         summary = (summary_t){.epoch = input.control.epoch};
         trace = false;
@@ -297,7 +316,43 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
             else ++run_counts.failures;
             counts_changed = true;
         }
+        if (producer.event.record.epoch == reason_counts.epoch) {
+            const uint32_t reason = producer.event.reason;
+            if (reason <= 10u) ++reason_counts.reasons[reason];
+            else if (reason >= 100u && reason <= 107u)
+                ++reason_counts.reasons[11u + reason - 100u];
+            counts_changed = true;
+        }
         producer.event.index = frame_count + 1u;
+        producer.event.terminal_us = drv_time_us();
+#if TM_MQTT
+        const uint32_t terminal_ms = input.now_ms +
+            (producer.event.terminal_us - input.now_us +
+             (input.now_us - input.now_ms * 1000u)) / 1000u;
+        if (++attempt_sequence == 0u) ++attempt_sequence;
+        /* One immutable observation AFTER final source recheck; no encoding
+         * or network operation in LINE. Dropping telemetry never cancels it. */
+        rm_barcode_t attempt = {.sequence = attempt_sequence,
+            .epoch = producer.event.record.epoch,
+            .start_ms = barcode_live_ms_at(terminal_ms, producer.event.terminal_us,
+                                           producer.event.start_us),
+            .uptime_ms = terminal_ms,
+            .reason = (uint16_t)producer.event.reason,
+            .flags = (uint8_t)(RM_BARCODE_SHADOW |
+                (producer.event.reason == BW_OK ? RM_BARCODE_DECODED : RM_BARCODE_FAILED)),
+            .letter = producer.event.reason == BW_OK ? producer.event.record.letter : 0u,
+            .command = producer.event.reason == BW_OK ? producer.event.record.command : 0u,
+            .direction = producer.event.record.direction,
+            .narrow_cmm = RM_NO_DATA_U16, .wide_cmm = RM_NO_DATA_U16};
+        if (isfinite(producer.event.narrow_mm) && isfinite(producer.event.wide_mm) &&
+            producer.event.narrow_mm > 0.0f && producer.event.narrow_mm < 655.35f &&
+            producer.event.wide_mm > 0.0f && producer.event.wide_mm < 655.35f) {
+            attempt.narrow_cmm = (uint16_t)lroundf(producer.event.narrow_mm * 100.0f);
+            attempt.wide_cmm = (uint16_t)lroundf(producer.event.wide_mm * 100.0f);
+            attempt.flags |= RM_BARCODE_WIDTHS;
+        }
+        (void)barcode_attempt_enqueue(&attempt);
+#endif
         const unsigned int at = frame_count++ % FRAME_ROWS;
         app_board_publish(&frames[at].sequence, frames[at].words,
                           &producer.event, sizeof(producer.event));
@@ -307,6 +362,8 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         /* Publish every epoch/terminal change, not the 100-sample CPU cadence. */
         app_board_publish(&counts_board.sequence, counts_board.words,
                           &run_counts, sizeof(run_counts));
+        app_board_publish(&reason_board.sequence, reason_board.words,
+                          &reason_counts, sizeof(reason_counts));
     }
     summary.frames = producer.publications;
     summary.attempts = frame_count;
@@ -337,6 +394,24 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
 
 void barcode_live_source_dump(void)
 {
+    if (app_board_try_read(&reason_board.sequence, reason_board.words,
+                           &dump_reasons, sizeof(dump_reasons))) {
+        uint32_t attempts = 0u;
+        for (unsigned int i = 0u; i < 19u; ++i) attempts += dump_reasons.reasons[i];
+        tm_printf((UB *)"[BC_REASON_COUNTS] epoch %lu attempts %lu ok %lu failed %lu "
+                  "dropped %lu BW0..10",
+                  (unsigned long)dump_reasons.epoch, (unsigned long)attempts,
+                  (unsigned long)dump_reasons.reasons[BW_OK],
+                  (unsigned long)(attempts - dump_reasons.reasons[BW_OK]),
+                  (unsigned long)barcode_attempt_dropped());
+        for (unsigned int i = 0u; i < 19u; ++i) {
+            if (i == 11u) tm_printf((UB *)" BP100..107");
+            tm_printf((UB *)" %lu", (unsigned long)dump_reasons.reasons[i]);
+        }
+        tm_printf((UB *)"\n");
+    } else {
+        tm_printf((UB *)"[BC_REASON_COUNTS] unavailable\n");
+    }
     if (!app_board_try_read(&summary_board.sequence, summary_board.words,
                             &dump_summary, sizeof(dump_summary))) {
         tm_printf((UB *)"[BC_LIVE] no coherent producer summary\n");
@@ -386,7 +461,7 @@ void barcode_live_source_dump(void)
                   (unsigned int)f->rise, (unsigned int)f->fall);
         tm_printf((UB *)"[BC_REF] epoch %lu seq %lu start_us %lu "
                   "edge_us %lu bracket_us %lu end %ld/%ld "
-                  "eligible_us %lu read_ms %lu counts %ld/%ld\n",
+                  "eligible_us %lu read_ms %lu counts %ld/%ld terminal_us %lu\n",
                   (unsigned long)f->record.epoch,
                   (unsigned long)f->record.sequence,
                   (unsigned long)f->start_us, (unsigned long)f->edge_us,
@@ -396,7 +471,8 @@ void barcode_live_source_dump(void)
                   (unsigned long)f->eligible_us,
                   (unsigned long)f->record.read_ms,
                   (long)f->record.read_counts[0],
-                  (long)f->record.read_counts[1]);
+                  (long)f->record.read_counts[1],
+                  (unsigned long)f->terminal_us);
     }
     const uint32_t edge_first = dump_summary.edges > EDGE_ROWS ?
                                dump_summary.edges - EDGE_ROWS : 0u;
