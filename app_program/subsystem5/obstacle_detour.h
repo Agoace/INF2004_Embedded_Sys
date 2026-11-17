@@ -99,6 +99,8 @@ typedef struct {
     uint16_t first_extra_mm;      /* first STRAIGHT: added to the wall triangle */
     uint16_t first_max_mm;        /* first STRAIGHT limit; 0: off (vehicle_mm rule) */
     uint16_t first_clear_mm;      /* trim: path to corner clearance; 0: off */
+    uint8_t line_turn_deg;        /* return turn: line counts at or past this
+                                   * heading toward the line; 0: off */
 } dt_config_t;
 
 /* Step: 3 bits. */

@@ -180,6 +180,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Seen range / turn step | 400 mm / 5° |
 | Away / toward limits | 90 / 180° (toward ≥ away + return heading) |
 | Return heading / max distance | 90° / 1000 mm |
+| Line in the return turn | counts from 45° toward the line (`line_turn_deg`; 0: off) |
 | Max straights / total time | 5 / 40 s |
 | Encoder turn scale | 24.05 difference counts/degree |
 
@@ -199,6 +200,34 @@ At 19 mm/s the wheels stick and slip; detours stopped with
 The toward limit was 150° until 2026-11-13. Two detours turned away 62° and
 63°; the turn back then needed 152° and 153° to reach the return heading
 (-90°) and failed with TURN_LIMIT. The limit is now away + return = 180°.
+
+Line in the return turn (`mtk3-detour-sweep`, 2026-11-17). The line
+sensors are 119 mm ahead of the rear axle. When the last turn starts less
+than about 128 mm from the line, the pivot sweeps the sensors across the
+line. Before this change the turn ignored the line (`line_return_only`).
+The return straight then drove away from the line:
+
+| Run | Return turn | Result before | With the rule |
+| --- | --- | --- | --- |
+| FC_2 (box on the line, left wall at the left line edge) | crossed the line at about -60° | false ON_LINE about 130 mm past the line, ALIGN, SEARCH lost | ON_LINE in the turn (host scene: axle 4 mm from the line, DONE) |
+| FC_1 | white, 36.6-37.7 s | line in the return straight at 38.28 s, ON_LINE, DONE_NO_LINE, SEARCH found | no change (trace identical) |
+
+The rule: in TURN_TOWARD, not in a back-off, a trim or a stop for a seen
+obstacle, with the line lost once (armed), a line reading at a heading of
+-`line_turn_deg` or past it ends the turn. The line counts only from the
+second STRAIGHT: after the first one the robot can still be beside the
+obstacle. The guards against a line beside the obstacle are this rule and
+the sweep itself: the servo looks 30° past the heading, and two seen
+readings stop the turn before the line counts. ON_LINE and ALIGN take no
+readings. In LINE, the forward monitor stops for an obstacle ahead; nothing
+checks the sides. A host scene with no echo after the first STRAIGHT gave
+line catches beside the box only in the turn after STRAIGHT 1; with the
+rule, the trace is the old-rule trace. ON_LINE then drives
+`line_ahead_mm` along the heading, then ALIGN. TURN_AWAY never counts the
+line. DONE_NO_LINE means ALIGN ended off the line; DONE needs ON_LINE, so
+the line was registered. Host test: `tests/test_detour_sweep.c` (unit
+cases and kinematic FC_1-like / FC_2-like scenes, one sonar ray, not a
+fitted robot model). Robot result: not run.
 
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
