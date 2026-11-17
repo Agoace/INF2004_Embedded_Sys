@@ -89,11 +89,11 @@ IMPORT void subsystem2_watchdog_test(void); /* destructive S2-U05; run last */
 IMPORT void subsystem3_test(void);
 IMPORT void subsystem4_test(void);
 IMPORT void subsystem5_test(void);
-/* Phase 1b: handler-versus-task lock stress. See docs/kernel/CORE_PLACEMENT.md */
+/* Phase 1b: handler-versus-task lock stress. See docs/kernel/KERNEL.md */
 IMPORT void app_lock_stress_run(void);
-/* Phase 4: DUMP admission interleaving self-test. See docs/kernel/CORE_PLACEMENT.md */
+/* Phase 4: DUMP admission interleaving self-test. See docs/kernel/KERNEL.md */
 IMPORT void log_stream_admission_selftest(void);
-/* RT-0073/F3: contention and admission tests. See docs/kernel/CORE_PLACEMENT.md */
+/* RT-0073/F3: contention and admission tests. See docs/kernel/KERNEL.md */
 IMPORT void telemetry_contention_test(void);
 #endif
 

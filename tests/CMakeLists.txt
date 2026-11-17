@@ -210,6 +210,14 @@ if(TARGET test_vehicle_task)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
     add_test(NAME test_vehicle_run_overrun COMMAND test_vehicle_task runoverrun)
     add_test(NAME test_vehicle_slow_stop COMMAND test_vehicle_task slowstop)
+    target_link_options(test_vehicle_network_task PRIVATE
+        "-Wl,--wrap=barcode_live_counts_try_read")
+    foreach(case barcode barcode_absent barcode_busy barcode_old
+            barcode_saturate barcode_zero barcode_runs barcode_final_busy
+            barcode_runs_absent)
+        add_test(NAME test_vehicle_summary_${case}
+            COMMAND test_vehicle_network_task ${case})
+    endforeach()
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
 endif()
 

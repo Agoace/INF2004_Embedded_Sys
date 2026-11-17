@@ -1,6 +1,6 @@
 /*
  * Vehicle state machine: the Vehicle Controller shell
- * (docs/architecture/ADR_VEHICLE_CONTROLLER.md,
+ * (Vehicle Controller ADR in
  * docs/architecture/ARCHITECTURE.md).
  *
  * It runs one module at a time. Each module does its job, interprets the

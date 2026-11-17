@@ -40,7 +40,7 @@ has been tested or implemented in this historical steps-0/1 result.
 
 Software starts from staging `b569adc`. See the
 [current implementation and formulas](../../docs/s4-imu/IMU.md#current-scope)
-and [RAM/CPU limits](../../docs/kernel/RAM_BUDGET.md#imu-step-2-measured-delta).
+and [RAM/CPU limits](../../docs/kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings).
 The local host/build checks do not change any hardware result below.
 S4-U03's old raw-stream PASS does not imply that these checks pass.
 

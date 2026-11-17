@@ -521,7 +521,7 @@ implemented instructions.
 
 `robot/imu`, 12-byte frame, future QoS 0, not retained: version 1 at byte 0,
 kind at byte 1. Kind 1 reserves bytes 2–3 as zero and contains the **8-byte**
-snapshot from [Week 8 notes section 11](../architecture/week8_change_requirement_1_notes.md#11-buddy-4--imu--hump-data):
+snapshot from [Week 8 notes section 11](../architecture/CR1.md#imu-hump-snapshot-week-8-11):
 
 | Offset | Type | Field |
 | --- | --- | --- |

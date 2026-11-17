@@ -27,7 +27,7 @@ S3 now averages eight ADC conversions on each of L/ADC1, C/ADC0 and
 barcode/ADC2 every 1 ms (24 total). In the normal robot, barcode remains
 raw observation only. The exclusive B1 profile below adds TEST decoding;
 no Ziven reference source is changed. Pure line logic receives L/C/zero,
-never ADC2. See the [control architecture](../../docs/archive/architecture/CONTROL_ARCHITECTURE.md)
+never ADC2. See the [control architecture](../../docs/archive/architecture/HISTORY.md#files)
 for the GP28 wiring and bar timing constraints. ISR timing excludes wrapper
 entry/exit and its final statistics stores; task timing is elapsed work,
 including any higher-priority preemption, an upper bound on CPU cost.

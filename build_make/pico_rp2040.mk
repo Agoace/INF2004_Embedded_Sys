@@ -360,6 +360,17 @@ LFLAGS += -Wl,--wrap=rt_timeline_report
 LFLAGS += -Wl,--wrap=app_startup_complete_publish
 LFLAGS += -Wl,--wrap=rt_call -Wl,--wrap=rt_max
 endif
+# Timeline recorders in RAM (always): run_timing.c compiles rt_tl and
+# rt_tl_gpio to .text.<name>; rename them to .data.ramfunc.<name>, which the
+# template linker script copies to RAM. Renaming is idempotent.
+RUN_TIMING_OBJ := mtkernel_3/app_program/platform/run_timing.o
+$(EXE_FILE).tlstamp: $(RUN_TIMING_OBJ)
+	arm-none-eabi-objcopy \
+	  --rename-section .text.rt_tl=.data.ramfunc.rt_tl \
+	  --rename-section .text.rt_tl_gpio=.data.ramfunc.rt_tl_gpio $<
+	touch $@
+$(EXE_FILE).elf: $(EXE_FILE).tlstamp
+
 # Kernel hot path in RAM: rule
 # Rename each listed section in its compiled object before the link (no
 # source or template change; renaming is idempotent). After the link,

@@ -19,46 +19,48 @@ record once. Use these topic directories before choosing a source entry below:
 | Directory | Scope |
 | --- | --- |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
-| [architecture/](architecture/) | Current system, separate ADRs, template ledger, branch layout and unchanged CR1 wording. |
-| [kernel/](kernel/) | Platform/build procedures, tasks, watchdog and timing. |
-| [s1-telemetry/](s1-telemetry/) | Current MQTT design, wire format, operator tools and dashboard. |
-| [s2-motion/](s2-motion/) | Motor control, pins, calibration and measured drift; obsolete power guidance is archived. |
+| [architecture/](architecture/) | PROJECT_STATUS (areas, branches), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
+| [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
+| [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
+| [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
-| [s5-obstacle/](s5-obstacle/) | Current obstacle pipeline and ultrasonic service; full originals in archive/s5-obstacle/. |
+| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
-| [archive/](archive/) | Superseded designs and revision-scoped historical evidence. |
+| [archive/](archive/) | `HISTORY.md` pointers per area (`git show 569672a:<path>`), records that code still cites, and line/barcode/sim originals. |
 
 The detailed entries below retain source and test navigation. Archive links do
 not imply current hardware acceptance. Follow the root README for current
 robot orientation; [kernel/BUILD.md](kernel/BUILD.md) is the current Make guide.
-The archived development record retains older CMake bench examples.
+The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake bench examples.
 
 | Content | Location |
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
+| Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area; branch layout and merge rules |
+| Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
 | Public orientation and setup | [README.md](../README.md) |
 | Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
-| SWD debug probe | [docs/kernel/SWD_DEBUG_PROBE.md](kernel/SWD_DEBUG_PROBE.md) — wiring, safety, memory reads, GDB on both cores |
-| Interrupt priorities | [docs/kernel/NVIC_PRIORITY_FINDING.md](kernel/NVIC_PRIORITY_FINDING.md) — F-NVIC: measured IPR, all external IRQs at 0 |
-| Calibration record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
-| Motor rotation drift record | [docs/s2-motion/HARDWARE.md](s2-motion/HARDWARE.md) |
+| SWD debug probe | [docs/kernel/BUILD.md](kernel/BUILD.md#swd-debug-probe) — wiring, safety, memory reads, GDB on both cores |
+| Interrupt priorities | [docs/kernel/KERNEL.md](kernel/KERNEL.md#interrupt-priorities-f-nvic) — F-NVIC: measured IPR, all external IRQs at 0 |
+| Calibration record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md#hardware-wiring-and-calibration) |
+| Motor rotation drift record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md#encoder-ratio-and-drift-method) |
 | Current architecture | [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — tasks/cores, interrupt/polling rules and shell routes; [`vehicle_sm.c`](../app_program/vehicle/vehicle_sm.c), [`test_vehicle_sm.c`](../tests/test_vehicle_sm.c). |
 | Obsolete USB power safety (archive only) | [docs/archive/s2-motion/USB_POWER_SAFETY.md](archive/s2-motion/USB_POWER_SAFETY.md) |
-| Archived UDP bench dashboard architecture | [docs/archive/WIFI_TELEMETRY_DASHBOARD.md](archive/WIFI_TELEMETRY_DASHBOARD.md) |
-| Live MQTT dashboard (laptop) | [docs/s1-telemetry/OPERATION.md](s1-telemetry/OPERATION.md) |
-| Week 8 Change Requirement 1 notes | [docs/architecture/week8_change_requirement_1_notes.md](architecture/week8_change_requirement_1_notes.md) |
-| Current kernel ultrasonic driver/service | [ULTRASONIC.md](s5-obstacle/ULTRASONIC.md) — bounded request/echo contract, packed result and sensor limits. |
+| Archived UDP bench dashboard architecture | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
+| Live MQTT dashboard (laptop) | [docs/s1-telemetry/TELEMETRY.md](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard) |
+| Week 8 Change Requirement 1 notes | [architecture history](archive/architecture/HISTORY.md#files); summary in [CR1.md](architecture/CR1.md#requirement) |
+| Current kernel ultrasonic driver/service | [OBSTACLE.md](s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) — bounded request/echo contract, packed result and sensor limits. |
 | Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
-| Detour v1.6 test plan | [docs/archive/DETOUR_V1_6_TEST_PLAN.md](archive/DETOUR_V1_6_TEST_PLAN.md) |
-| ADR: motor controller owns the actuators | [docs/architecture/ADR_MOTOR_CONTROLLER.md](architecture/ADR_MOTOR_CONTROLLER.md) |
-| ADR: one hardware heartbeat | [docs/architecture/ADR_HEARTBEAT.md](architecture/ADR_HEARTBEAT.md) |
-| ADR: Vehicle Controller runs one module at a time | [docs/architecture/ADR_VEHICLE_CONTROLLER.md](architecture/ADR_VEHICLE_CONTROLLER.md) |
+| Detour v1.6 test plan | [obstacle history](archive/s5-obstacle/HISTORY.md#files) |
+| ADR: motor controller owns the actuators | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators) |
+| ADR: one hardware heartbeat | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-one-hardware-heartbeat-short-work-in-the-interrupt-decisions-in-the-main-loop) |
+| ADR: Vehicle Controller runs one module at a time | [docs/architecture/ARCHITECTURE.md](architecture/ARCHITECTURE.md#adr-the-vehicle-controller-runs-one-module-at-a-time-and-maps-outcomes-to-the-next-module) |
 | Current kernel LINE/SEARCH | [LINE.md](s3-line-barcode/LINE.md) — pair detection, retained P7 mm/s settings, search and evidence; modules [`app_program/subsystem3/line_trace.c`](../app_program/subsystem3/line_trace.c), [`app_program/subsystem3/line_search.c`](../app_program/subsystem3/line_search.c); target [`src/vc_line_test.c`](../src/vc_line_test.c) |
 | SCAN/DETOUR modules and scoped physical results | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — modules [`app_program/subsystem5/servo_scan.c`](../app_program/subsystem5/servo_scan.c), [`app_program/subsystem5/detour_run.c`](../app_program/subsystem5/detour_run.c); test [`tests/test_obstacle_modules.c`](../tests/test_obstacle_modules.c) |
 | Line steering in mm/s | [docs/s3-line-barcode/LINE.md](s3-line-barcode/LINE.md) — `steer_mm_*` in [`app_program/subsystem3/line_steer.c`](../app_program/subsystem3/line_steer.c) |
@@ -70,11 +72,40 @@ The archived development record retains older CMake bench examples.
 | Week 6 design-review diagrams | [`design-review/`](../design-review) — Mermaid sources and rendered images for the §5 system statechart and §4 task interaction diagram; render with `npx -y @mermaid-js/mermaid-cli -i <file>.mmd -o <file>.png -b white --size 3000` |
 | Parent checkout ledger | [School Repos checkout ledger](https://github.com/Agoace/School-Repos/blob/main/docs/README.md#coursework-checkout-ledger) |
 
+## Source groups: what each does
+
+One line per directory or file group. Checked against the tree at the
+commit that changed this section (header comments and file lists).
+
+| Group | What it does |
+| --- | --- |
+| [`app_program/app_main.c`](../app_program/app_main.c), [`app.h`](../app_program/app.h), [`test_report.h`](../app_program/test_report.h) | Application entry from `usermain`: starts subsystems and the Vehicle task; shared build switches; TEST report helpers. |
+| [`app_program/platform/`](../app_program/platform) | Kernel-facing services: 1 µs time, GPIO IRQ dispatcher (core 0), watchdog, boards (bounded publication), task registry with static stacks, startup handoff, boot ID/entropy, CPU/idle meters, P1 run timing and lock stats, UP SMP shim. |
+| [`app_program/subsystem1/`](../app_program/subsystem1) | S1 telemetry: sole Wi-Fi/MQTT owner, binary wire codec (`mqtt_wire`), network queue, RUN/IDLE rates, RAM log stream and DUMP, Health task. |
+| [`app_program/subsystem2/`](../app_program/subsystem2) | S2 motion: motion task (only PWM writer), pure motor controller and robot settings, encoder/PWM hardware, packed 60 B status board, opt-in timing diagnostics, BENCH bench. |
+| [`app_program/subsystem3/`](../app_program/subsystem3) | S3 line and barcode: 1 ms ADC driver and line service, line position/steer/trace/search modules, TEST barcode (WIDTH, PEAK, capture, drive), B2b SHADOW live window reader, producer and source boards. |
+| [`app_program/subsystem4/`](../app_program/subsystem4) | S4 IMU (GY-511 accelerometer, no gyro): I2C probe/decode, FIFO, roll and height core, report-only hump detector and diagnostics, IMU service task and TEST capture. |
+| [`app_program/subsystem5/`](../app_program/subsystem5) | S5 obstacle: ultrasonic driver and sonar request service, forward watch, servo scan, profile analysis, detour modules. |
+| [`app_program/vehicle/`](../app_program/vehicle) | Vehicle Controller: shell state machine, vehicle task, detector inputs, robot settings, junction action/live adapter/source, odometry, run/detour stats, obstacle report, vehicle log and MQTT glue. |
+| [`app_program/bench_kernel/`](../app_program/bench_kernel) | `BENCH_KERNEL=1` spare-Pico bench: GPIO generator, motor/input stand-ins, load and idle meters, statistics, report and per-counter top lines. |
+| [`src/`](../src) | Earlier bare-metal targets (SDK, no kernel): calibration and probe programs, bench tests (servo, ultrasonic, line, steer, scan, detour, bypass, duty map, heartbeat, motor), bare-metal drivers, Wi-Fi/UDP logs. The simulator compiles some of them. |
+| [`tests/`](../tests) | Host unit test suite (CMake + ctest, strict warnings); one test per module plus fixtures. |
+| [`host-tests/`](../host-tests) | Four standalone module tests (detour, line, scan, search). |
+| [`build_make/`](../build_make) | Course-template Make build: `makefile`, board files, `pico_rp2040.mk`, `app_sdk_hw.mk` SDK subset hook, per-directory source lists under `mtkernel_3/`. |
+| [`kernel/`](../kernel), [`lib/`](../lib), [`device/`](../device), [`include/`](../include), [`config/`](../config), [`etc/`](../etc) | μT-Kernel 3.0 course template and its libraries (`libtk`, `libtm` USB console, `libwifi` CYW43, `liblwip` MQTT, `libbsp`). Change only through [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) (8 deviations). |
+| [`scripts/`](../scripts) | Checks (`check-docs.py`, `check-template-changes.py`, `check-sdk-hw-link.py`), hook installer, RAM and message-size reports, MQTT recorder/dashboard (`mqtt_robot.py`, `mqtt_dashboard.py`, `robot_wire.py`, `dashboard_*`), KR1 log decoder, motor bench report, old UDP receivers and dashboard, port restriction. |
+| [`tools/`](../tools) | `barcode_map/` (letter map to `BW_MAP_VALUES`), `kernel_ram/` (RAM placement lists and `ram_proof.py`), `elf2uf2/`, `verify_phase11_usb.py`. |
+| [`sim/`](../sim) | Separate host simulator of bare-metal sources: core clock/world/scenario/runner, devices, target hooks, scenarios JSON, offline viewer and local editor, box sweep, tests. |
+| [`testing/`](../testing) | Operator test logs per subsystem, integration (`KERNEL_ROBOT.md`) and system; `logs/` placeholders. |
+| [`design-review/`](../design-review) | Week 6 Mermaid sources and images: system statechart, task interaction. |
+| [`videos/`](../videos) | README for hardware test and demo videos. |
+| [`.githooks/`](../.githooks) | Shared pre-commit hook: runs `check-docs.py` when Markdown, docs or hook files are staged. |
+
 ## CR1 measurement and planning
 
-- [CR1 evidence](architecture/CR1_EVIDENCE.md) records the `168d705`
+- [CR1.md](architecture/CR1.md) records the `168d705`
   baseline, ARM message sizes and the single-writer publication rule.
-- [Motion plan](s2-motion/CR1_MOTION_PLAN.md) records approved A1 packing;
+- [Motion module plan](architecture/CR1.md#motion-module-plan) records approved A1 packing;
   controller ownership changes and derived-copy removal remain separate.
 - [`motion_pack.h`](../app_program/subsystem2/motion_pack.h) and
   [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
@@ -118,13 +149,13 @@ The archived development record retains older CMake bench examples.
 | Earlier bare-metal Vehicle Controller | [`src/vehicle_controller.c`](../src/vehicle_controller.c), [`app_program/vehicle/vehicle_controller.h`](../app_program/vehicle/vehicle_controller.h) |
 | Servo driver (clamped) | [`src/servo.c`](../src/servo.c), [`src/servo.h`](../src/servo.h) |
 | Servo scan bench test | [`src/scan_test.c`](../src/scan_test.c) |
-| Host unit tests | [`tests/`](../tests) — run without hardware; see [OBSTACLE_MONITOR.md](archive/s5-obstacle/OBSTACLE_MONITOR.md#host-unit-test), [OBSTACLE_SCAN.md](archive/s5-obstacle/OBSTACLE_SCAN.md#host-unit-test), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [MOTOR_CONTROLLER.md](archive/s2-motion/MOTOR_CONTROLLER.md#host-unit-test), [HEARTBEAT.md](archive/s2-motion/HEARTBEAT.md#host-unit-test), [VEHICLE_STATE_MACHINE.md](archive/architecture/VEHICLE_STATE_MACHINE.md#host-unit-test), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
+| Host unit tests | [`tests/`](../tests) — run without hardware; see [obstacle history](archive/s5-obstacle/HISTORY.md#files), [OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md#host-unit-test), [VEHICLE_CONTROLLER.md](archive/VEHICLE_CONTROLLER.md#host-unit-test), [LINE_POSITION.md](archive/s3-line-barcode/LINE_POSITION.md#host-unit-test), [LINE_STEERING.md](archive/s3-line-barcode/LINE_STEERING.md#host-unit-test), [motion history](archive/s2-motion/HISTORY.md#files), [architecture history](archive/architecture/HISTORY.md#files), and [STEER_WIFI_LOG.md](archive/STEER_WIFI_LOG.md#host-tests) |
 | Legacy IR line-data utilities | [`src/line_detector.c`](../src/line_detector.c), [`src/ir_line_data.c`](../src/ir_line_data.c); host test [`tests/test_ir_line_data.c`](../tests/test_ir_line_data.c) |
 | Motor bench report | [`scripts/motor_bench_report.py`](../scripts/motor_bench_report.py) — reads a `motor_ctl_bench` text log |
 | Earlier bench telemetry receiver | [`scripts/telemetry_receiver.py`](../scripts/telemetry_receiver.py) |
 | Earlier bench telemetry dashboard | [`scripts/telemetry_dashboard.py`](../scripts/telemetry_dashboard.py) |
-| Telemetry JSON schema | [`TELEMETRY_SCHEMA.md`](archive/TELEMETRY_SCHEMA.md) |
-| Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md`](archive/architecture/CONTROL_ARCHITECTURE.md) |
+| Telemetry JSON schema (old) | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
+| Archived control proposal, not current ownership | [`CONTROL_ARCHITECTURE.md` in architecture history](archive/architecture/HISTORY.md#files) |
 | Barcode B1c | [BARCODE.md](s3-line-barcode/BARCODE.md); TEST only. |
 | Telemetry port restriction | [`scripts/restrict-telemetry-port.sh`](../scripts/restrict-telemetry-port.sh) |
 | Separate host simulator | [`sim/CMakeLists.txt`](../sim/CMakeLists.txt), [`sim/targets/detour_test.cmake`](../sim/targets/detour_test.cmake) — host-only source selection; reads firmware without changing it |
@@ -152,9 +183,9 @@ The archived development record retains older CMake bench examples.
 
 ## Branch layout
 
-See [Branch layout](architecture/BRANCH_LAYOUT.md) for the active branches, merge rules and the [archive tags](archive/architecture/BRANCH_LAYOUT.md#archived-branches) of deleted branches.
+See [Branch layout](architecture/PROJECT_STATUS.md#branch-layout-and-integration-rules) for the active branches, merge rules and the [archive tags](architecture/PROJECT_STATUS.md#archived-branches) of deleted branches.
 
-The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
+The [on-chip kernel bench section](kernel/BUILD.md#kernel-bench-image-bench_kernel) covers
 [`bench_stats.c`](../app_program/bench_kernel/bench_stats.c), its
 [public read API](../app_program/bench_kernel/bench_stats.h),
 [core0 publication API](../app_program/bench_kernel/bench_stats_publish.h) and
@@ -162,7 +193,7 @@ The [on-chip kernel bench record](kernel/BENCH_KERNEL_TEST.md) covers
 [`[bench]` report](../app_program/bench_kernel/bench_report.c) and its
 [host test](../tests/test_bench_report.c). The bench directory is excluded
 from ordinary source selection. The
-[step-0 procedure](kernel/BENCH_KERNEL_STEP0.md) covers the bench-only
+[step-0 procedure](kernel/BUILD.md#kernel-bench-image-bench_kernel) covers the bench-only
 [`bench_generator.c`](../app_program/bench_kernel/bench_generator.c),
 [`bench_runtime.c`](../app_program/bench_kernel/bench_runtime.c),
 [`bench_timer_hw.c`](../app_program/bench_kernel/bench_timer_hw.c),
@@ -177,11 +208,11 @@ that real dispatcher to the real motion callback/controller with host scheduling
 
 Standalone module tests: [`host-tests/`](../host-tests), one C test per module.
 
-- [Archived Robo Pico RTOS multicore plan](archive/architecture/robo_pico_rtos_multicore_plan.md) — full historical proposal, not the current task/core contract.
+- [Archived Robo Pico RTOS multicore plan](archive/architecture/HISTORY.md#files) — full historical proposal, not the current task/core contract.
 
 ## Course template layout
 
-See [Branch layout](architecture/BRANCH_LAYOUT.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL_RAM.md) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
+See [Branch layout](architecture/PROJECT_STATUS.md#mtk3-layout). Pure logic is in `app_program/`; bare-metal hardware code stays in `src/`; kernel platform register access uses isolated `*_hw.c` files. The template kernel and support code are in `kernel/`, `include/`, `lib/`, `device/`, `config/`, `etc/`, and `tools/` (except [`tools/kernel_ram/`](../tools/kernel_ram/), the opt-in [KERNEL_RAM](kernel/KERNEL.md#ram-placement-kernel_ram) lists and placement proof, and [`tools/barcode_map/`](../tools/barcode_map/), the `BARCODE_MAP` converter in [BUILD](kernel/BUILD.md)). Template build: [`build_make/makefile`](../build_make/makefile). Team ownership: [`TEAM.md`](../TEAM.md). Host test build: [`tests/CMakeLists.txt`](../tests/CMakeLists.txt).
 
 The `mtk3` base contains shared pure helpers. `mtk3-motion` and
 `mtk3-vehicle` start there. `mtk3-telemetry` also starts from `mtk3`.
@@ -192,21 +223,21 @@ are in [`host-tests/`](../host-tests); run all host tests with
 kernel task. Staging now connects LINE/SEARCH/SCAN/DETOUR through the
 vehicle task described below.
 
-- [Course template layout checks](archive/kernel/MTK3_LAYOUT_CHECKS.md)
+- [Course template layout checks (history)](archive/kernel/HISTORY.md#files)
 
 ## Kernel platform
 
 - [`app_startup.h`](../app_program/platform/app_startup.h) and
   [`app_startup.c`](../app_program/platform/app_startup.c) — one-way boot
   handoff after all init/start attempts; the MQTT hook acquires before
-  application access. [M8 contract](kernel/CORE_PLACEMENT.md#m8-application-startup-handoff)
+  application access. [M8 contract](kernel/KERNEL.md#startup-handoff-m8)
   lists covered readers and unchanged runtime synchronization.
   [`test_app_startup.c`](../tests/test_app_startup.c),
   [`test_test_runner.c`](../tests/test_test_runner.c) and
   [`test_robot_mqtt.c`](../tests/test_robot_mqtt.c) check publication,
   lifecycle ordering and refusal of early application work.
 
-- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/NVIC_PRIORITY_FINDING.md)).
+- [`app_program/platform/drv_gpio_irq.c`](../app_program/platform/drv_gpio_irq.c) — kernel-owned GPIO dispatcher, core 0, IRQ 13 at requested priority 1 (0 on hardware, [F-NVIC](kernel/KERNEL.md#interrupt-priorities-f-nvic)).
 - [`app_program/platform/drv_time.c`](../app_program/platform/drv_time.c) — cold-power tick initialization, microsecond/millisecond clock and TIMER-to-kernel rate check.
 - [`tests/test_drv_time.c`](../tests/test_drv_time.c), with [`tests/mtk_stubs/tk/tkernel.h`](../tests/mtk_stubs/tk/tkernel.h) — host doubles for clock ratios and errors.
 - [`testing/subsystem1/TEST_LOG.md`](../testing/subsystem1/TEST_LOG.md) — shared platform S0-U01 cold-power clock test, run by the S1 TEST hook.
@@ -231,7 +262,7 @@ vehicle task described below.
 
 - [`tests/probes/sdk_hw_link_probe.c`](../tests/probes/sdk_hw_link_probe.c) and [`scripts/check-sdk-hw-link.py`](../scripts/check-sdk-hw-link.py) — retained SDK hardware link proof, never run or flashed.
 
-- [μT-Kernel motion bring-up checks](archive/kernel/MTK3_MOTION_CHECKS.md) — archived candidate revisions, SDK proof, sizes and then-open hardware checks.
+- [μT-Kernel motion bring-up checks (history)](archive/kernel/HISTORY.md#files) — removed; candidate revisions, SDK proof, sizes and then-open hardware checks.
 
 ## Kernel line acquisition
 
@@ -337,7 +368,7 @@ vehicle task described below.
 - [`tests/imu_checks.cmake`](../tests/imu_checks.cmake) — strict core/task/board/stream/host benchmark, hump detector and corrected/filtered core fixtures, FIFO/alias/capture fixtures and protocol/register-double checks; [`tests/imu_stubs/`](../tests/imu_stubs) supplies SDK doubles.
 - [`tests/test_imu_source_make.py`](../tests/test_imu_source_make.py) — isolated Make checks for `IMU_HUMP_SOURCE=1/2`, default/invalid values, `_humpfilt` image suffix and source-aware object invalidation. [H3 builds](kernel/BUILD.md#h3-source-comparison-images) compare both images; boot/result USB lines identify the source, default corrected.
 - [`tests/test_imu_hump_diag.c`](../tests/test_imu_hump_diag.c) — peak latch, paired windows/gate history, winners/rejections, run lifecycle, LINE maxima, stale-safe output and USB units; linked in `tests/CMakeLists.txt`.
-- [RAM budget](kernel/RAM_BUDGET.md#imu-diagnostic-c-measured-delta) — measured 5888 B MQTT delta including 2048 B stack (+772 B diagnostic C); IMU diagnostic C hardware high-water 1568/2048 B, free 480 B; sample frame 1000 B. 7888 B raw capture in IMU_STREAM only.
+- [RAM budget](kernel/KERNEL.md#static-ram-growth-mqtt-robot-same-public-example-settings) — measured 5888 B MQTT delta including 2048 B stack (+772 B diagnostic C); IMU diagnostic C hardware high-water 1568/2048 B, free 480 B; sample frame 1000 B. 7888 B raw capture in IMU_STREAM only.
 - [`testing/subsystem4/TEST_LOG.md`](../testing/subsystem4/TEST_LOG.md) — historical S4-U01/U03 evidence, partial step 2/2b hardware, step 2c hardware (NOT a height PASS), step 2d floor PASS for the 10 mm hump only and step 3 H1 STREAM hardware PASS on 1480b37, H0/H2-short plus diagnostic C hardware on 29d57de (uncorrected LINE height accepted; corrected over-read under investigation), named robot stacks and shared sensor scrape condition; H3 full-circuit no-false-hump acceptance is priority, H3..H9 Not run; absent-device/cold-power/MQTT-TEST gates still pending.
 
 ## Kernel ultrasonic acquisition
@@ -360,7 +391,7 @@ vehicle task described below.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
 - [Kernel robot design](kernel/KERNEL.md) — current tasks, priorities, stacks, freshness, watchdog, USB21, CPU load and measured limits.
-- [RAM budget](kernel/RAM_BUDGET.md) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
+- [RAM budget](kernel/KERNEL.md#ram-budget) — static RAM by group, dynamic estimate, RAM-shortage steps and CR1 baseline order.
 - [R5 procedure and integration results](../testing/integration/KERNEL_ROBOT.md) — track procedures and operator evidence; compare the stated revisions with bare-metal R4.
 
 ## Kernel hardware watchdog
@@ -376,7 +407,7 @@ vehicle task described below.
   [architecture seam](../app_program/platform/smp_single_core_arch.h) permits
   [real-source tests](../tests/test_smp_single_core.c), wired by
   [`shim_checks.cmake`](../tests/shim_checks.cmake) in both host test builds.
-  [M7 contract and proof](kernel/UP_SMP_SHIM.md) records red/green results,
+  [M7 contract and proof](kernel/KERNEL.md#lock-rules) records red/green results,
   ARM barriers, provider checks, RAM and hardware limits.
 
 ## Application task stacks
@@ -386,9 +417,9 @@ vehicle task described below.
   only with `APP_BENCH`. The MQTT idle-meter stack is now 768 B after
   the approved margin correction; other task stack sizes are unchanged.
   [`test_app_task.c`](../tests/test_app_task.c) checks normal, BENCH, MQTT
-  and TEST slot layouts; [B1 evidence](architecture/CR1_EVIDENCE.md)
+  and TEST slot layouts; [B1 evidence](architecture/CR1.md)
   separates this saving from minimum-bit packing.
-  M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/WIFI_STACK_WATERMARK.md).
+  M9 registers Wi-Fi too: [watermark contract and RAM evidence](kernel/KERNEL.md#wi-fi-stack-m9).
   [`test_template_wifi.c`](../tests/test_template_wifi.c) links the real
   initializer and registry; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
   checks the real Health minimum at the full slot layout.
@@ -396,7 +427,7 @@ vehicle task described below.
   forces the real registry's diagnostic lock busy in UP/split/control.
   The two existing template ledger rows change; no new deviation path is added.
 - [Application task stacks](kernel/KERNEL.md) — current static sizes, ownership and high-water limits.
-- [Core placement and lock audit](kernel/CORE_PLACEMENT.md) records reviews B1/B2.
+- [Core placement and lock audit](kernel/KERNEL.md#core-placement-and-locks) records reviews B1/B2.
   The isolated [blocker test build](../tests/core_migration/CMakeLists.txt)
   compiles [production lock sections](../tests/core_migration/extract_lock_sections.py)
   for [interrupt-mask/preemption checks](../tests/core_migration/test_b1_lock_sections.c).
@@ -410,7 +441,7 @@ vehicle task described below.
 - [`app_program/subsystem5/sonar_service.c`](../app_program/subsystem5/sonar_service.c) — priority-12 request/echo service: MBF requests, inherited-mutex result, result event flag and 10 ms deadline cyclic.
 ## Kernel telemetry
 
-- [Core/staging merge](kernel/CORE_STAGING_MERGE.md) — combined core-placement and B2b SHADOW contract, complete parent test union, profile/ABI/RAM evidence and unchanged hardware gates.
+- [Core/staging merge (history)](archive/kernel/HISTORY.md#files) — combined core-placement and B2b SHADOW contract, complete parent test union, profile/ABI/RAM evidence and unchanged hardware gates.
 
 - [`tests/test_sdk_profiles.py`](../tests/test_sdk_profiles.py) — M6 complete-log SDK proof gate, exact placement/barcode profile schemas, permission and stale-object rejection without invoking a compiler on failed gates.
 
@@ -433,18 +464,21 @@ vehicle task described below.
 ## STEP 8 MQTT navigation
 
 - [USB console priority](kernel/KERNEL.md) — template USB task 21, below driving and Wi-Fi; order check [`test_task_priorities.py`](../tests/test_task_priorities.py).
-- [Timing investigation](archive/MOTION_TIMING_INVESTIGATION.md) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](archive/MTK3_STEP8_RECORD.md) remain tied to the tested earlier image.
+- [Timing investigation (history)](archive/s2-motion/HISTORY.md#files) and [`motion_diag.h`](../app_program/subsystem2/motion_diag.h) / [`motion_diag_capture.h`](../app_program/subsystem2/motion_diag_capture.h) — opt-in `DIAG=1` fixed timing snapshots, GP20-only output and [`host check`](../tests/test_motion_diag.c); no scheduler fix. [Hardware results](archive/s1-telemetry/HISTORY.md#files) remain tied to the tested earlier image.
 
 - [`boot_id.c`](../app_program/platform/boot_id.c), [`boot_id_hw.c`](../app_program/platform/boot_id_hw.c), and [`boot_entropy.c`](../app_program/platform/boot_entropy.c) — bounded ROSC per-boot observation label and pure bit extraction; [`test_boot_id.c`](../tests/test_boot_id.c). Binary two-boot fixtures: [`mqtt_boot_fixtures.h`](../tests/mqtt_boot_fixtures.h).
 
-- [Follow-up handoff](archive/MTK3_FOLLOWUP_HANDOFF.md) — final owner tips, commit sequence, helper cleanup/recovery and hardware limits.
+- [Follow-up handoff (history)](archive/s1-telemetry/HISTORY.md#files) — final owner tips, commit sequence, helper cleanup/recovery and hardware limits.
 
 - [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c) — pure completed-scan report; [`test_obstacle_report.c`](../tests/test_obstacle_report.c).
+- [Barcode run-summary counters](s3-line-barcode/BARCODE_RUN_SUMMARY.md)
+  describe the vehicle task's bounded same-epoch SHADOW count reads and
+  existing summary fields. No barcode observation changes navigation.
 - [`odometry.c`](../app_program/vehicle/odometry.c) and [`run_stats.c`](../app_program/vehicle/run_stats.c) — encoder geometry, read-only run/detour summaries; [`test_odometry.c`](../tests/test_odometry.c), [`test_run_stats.c`](../tests/test_run_stats.c).
 - [`idle_meter.c`](../app_program/platform/idle_meter.c) and [`cpu_load.c`](../app_program/platform/cpu_load.c) — calibrated lowest-priority CPU meter and pure arithmetic, including the per-run peak; [`test_cpu_load.c`](../tests/test_cpu_load.c), [CPU load](kernel/KERNEL.md#cpu-load).
 - [`run_timing.c`](../app_program/platform/run_timing.c) and [`kernel_lock_stats.c`](../app_program/platform/kernel_lock_stats.c) — P1 report-only per-run latches, `[kcall]` call costs and big-kernel-lock figures; [`test_run_timing.c`](../tests/test_run_timing.c), host double [`kernel_lock_double.c`](../tests/smp_stubs/kernel_lock_double.c), [run timing report](kernel/KERNEL.md#run-timing-report-p1).
 
-- [Design](s1-telemetry/TELEMETRY.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/OPERATION.md).
+- [Design](s1-telemetry/TELEMETRY.md), [wire layout](s1-telemetry/MQTT_WIRE.md), [operator runbook](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard).
 - [`app_program/subsystem1/robot_mqtt.c`](../app_program/subsystem1/robot_mqtt.c) — strong Wi-Fi-task hook, retry/subscription/publish and the sink for `log_stream`.
 - [`log_stream.c`](../app_program/subsystem1/log_stream.c) — live RAM-log stream (QoS 0, jump-to-newest, data age) and batched QoS 1 DUMP refill with ACK cursor; live pause in IDLE; no lwIP dependency.
 - [`telemetry_mode.c`](../app_program/subsystem1/telemetry_mode.c) — pure RUN/IDLE publication-mode rule (2 s grace, TEST/BENCH always RUN) and the per-mode periods.
@@ -453,7 +487,7 @@ vehicle task described below.
 - [`mqtt_wire.c`](../app_program/subsystem1/mqtt_wire.c), [`scripts/robot_wire.py`](../scripts/robot_wire.py), [`scripts/mqtt_robot.py`](../scripts/mqtt_robot.py) — explicit binary codec, pure Python decoder with log merge/gap store (no Paho), and Paho2 VERSION2 receiver/CSV/commands.
 - [`robot_mqtt_secrets.h.example`](../app_program/subsystem1/robot_mqtt_secrets.h.example) — app-owned private-header example; do not edit the template config example.
 - [`vehicle_board.h`](../app_program/vehicle/vehicle_board.h), [`vehicle_mqtt.c`](../app_program/vehicle/vehicle_mqtt.c), [`vehicle_network_policy.c`](../app_program/vehicle/vehicle_network_policy.c) — vehicle read board, bounded cross-board adapters and idle/command policy.
-- [`scripts/mqtt_dashboard.py`](../scripts/mqtt_dashboard.py), [`dashboard_model.py`](../scripts/dashboard_model.py), [`dashboard_page.py`](../scripts/dashboard_page.py) — laptop-only live dashboard ([runbook](s1-telemetry/OPERATION.md)): HTTP/SSE server with CSRF/Origin/Host checks, pure panel and button-gating model, inline page; it uses `robot_wire.py` and never sends the token to the browser. [`scripts/dashboard_replay.py`](../scripts/dashboard_replay.py) makes offline public-fixture pages and screenshots for the responsive layout.
+- [`scripts/mqtt_dashboard.py`](../scripts/mqtt_dashboard.py), [`dashboard_model.py`](../scripts/dashboard_model.py), [`dashboard_page.py`](../scripts/dashboard_page.py) — laptop-only live dashboard ([runbook](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard)): HTTP/SSE server with CSRF/Origin/Host checks, pure panel and button-gating model, inline page; it uses `robot_wire.py` and never sends the token to the browser. [`scripts/dashboard_replay.py`](../scripts/dashboard_replay.py) makes offline public-fixture pages and screenshots for the responsive layout.
 - [`tests/mqtt_protocol.cmake`](../tests/mqtt_protocol.cmake), [`dashboard_checks.cmake`](../tests/dashboard_checks.cmake), [`network_checks.cmake`](../tests/network_checks.cmake), [`mqtt_client_checks.cmake`](../tests/mqtt_client_checks.cmake) — C/Python packing, board/queue/log and mocked transport regression tests.
 - [`tests/test_sonar_history.c`](../tests/test_sonar_history.c) — non-consuming latest/history reads, overflow/miss and sequence wrap.
 
@@ -466,6 +500,6 @@ vehicle task described below.
 - Line public `line_snapshot_try_read` is a transport-independent bounded board, never an event consumer or mutex waiter. [`tests/test_line_service.c`](../tests/test_line_service.c) checks unready/null, coherent sample identity and non-consumption.
 
 - [`tests/vehicle_network_checks.cmake`](../tests/vehicle_network_checks.cmake) — adapter age/wrap/busy, exhaustive command policy, and real vehicle task non-critical queue/DUMP/ESTOP tests.
-- [STEP 8 consolidated historical record](archive/MTK3_STEP8_RECORD.md) — software build/strict/link/host results, hardware evidence and reboot follow-up in separate source sections; never extend a PASS to a later revision.
+- [STEP 8 consolidated historical record (history)](archive/s1-telemetry/HISTORY.md#files) — software build/strict/link/host results, hardware evidence and reboot follow-up in separate source sections; never extend a PASS to a later revision.
 - [`tests/test_log_stream.c`](../tests/test_log_stream.c) — live batching/jump/generation/failure and DUMP window/ACK/rewind/abort/throughput and live-pause tests.
 - [`tests/test_telemetry_mode.c`](../tests/test_telemetry_mode.c) — publication-mode transitions: run cycle, ESTOP, busy and absent vehicle board, time wrap.
