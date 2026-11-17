@@ -4,7 +4,9 @@ One row per area, then the branch layout and merge rules. Read this page
 before you propose work. Update the row in
 the same commit as a change of state. Details stay in the linked records.
 
-State date: 2026-11-16. Staging tip at writing: `a0cd97b`.
+Baseline state date: 2026-11-16; staging tip at that writing: `a0cd97b`.
+Scan candidate updated 2026-11-17 on `mtk3-scan-int`, based on staging
+`b9a47b5`. This branch does not record a new hardware acceptance.
 
 ## Demo image
 
@@ -22,7 +24,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
-| Obstacle, scan, detour | Detours 2/2 in each of 6 course runs (2026-11-16). | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md) | DONE_NO_LINE and STALL_RIGHT cases. |
+| Obstacle, scan, detour | Prior fixed-scan detours 2/2 in each of 6 course runs (2026-11-16). Coarse/fine + v3 geometry software candidate on `mtk3-scan-int`: 551 GCC/sanitizer tests, UP RAM proof PASS. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Stationary geometry/timing/stack check and two-detour regression not run; DONE_NO_LINE and STALL_RIGHT remain open. |
 | Junction actions (B2a) | CLOSED. J1..J5 PASS on the floor with fake commands. | [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Pending command has no timeout. J2 new pending policy Not run. |
 | Barcode reader (B2b) | SHADOW only. Course 2026-11-16: 0 of 10 attempts decoded (robot zigzags). Straight TEST pass: large F decoded both ways. | [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md), [BARCODE.md](../s3-line-barcode/BARCODE.md) | Size-tolerant reader (n 4..7 mm) in staging: identical to the old reader on 5 real captures; not proven on the course. Reliable read needs less zigzag. |
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
@@ -67,6 +69,7 @@ commit inside this repository before the parent updates its recorded revision.
 | `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface lineage |
 | `mtk3-line` | Line tracing and line search; the barcode reader is an optional extension of this module |
 | `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
+| `mtk3-scan-int` | Approved helper for coarse/fine scan vehicle diagnostics, obstacle wire v3 and legacy-compatible decoder; Main merges into staging |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
 | `mtk3-imu` | S4 IMU module development |
 | `mtk3-cr1`, `mtk3-b2b` | Helper branches: CR1 data representation; B2b barcode-to-junction (S3 reader + vehicle adapter). Merged into staging; kept as records |

@@ -51,7 +51,7 @@ not current acceptance reports. Local course originals are not public records.
 - [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — the Wi-Fi/MQTT owner and how to run the laptop side.
   Contains: execution and hook, boards and queues, events and commands, publication settings (RUN/IDLE), RAM log and DUMP refill, results and limits; operation: broker, private settings, recorder and page, data panels (fan, hump, run path), Tailscale remote view, troubleshooting, tests.
 - [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — the binary wire contract, byte by byte.
-  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 24, detour 36, summary 52, status 6; barcode v2 28 (legacy v1 20), reserved IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
+  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 32, detour 36, summary 52, status 6; barcode v2 28 (legacy v1 20), reserved IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
 
 ## S2 — Motion
 
@@ -93,7 +93,10 @@ not current acceptance reports. Local course originals are not public records.
 ## S5 — Obstacle
 
 - [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — obstacle monitor, scan, avoidance and the ultrasonic service.
-  Contains: forward monitor thresholds; 13-point coarse scan (no fine scan); mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
+  Contains: forward monitor thresholds; coarse/fine scan with 13-bin decision completion, estimated width and observed edge-plane spans; mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
+
+- [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — scan software proof and pending operator checks.
+  Contains: 551 GCC and sanitizer checks, 2560 ms host timing vs2230 ms baseline, v3 geometry/legacy decoding, stopped USB scan evidence, +620 B static RAM and stack-frame changes, stationary bench and two-detour floor procedure; hardware not run.
 
 ## Simulation
 

@@ -4,8 +4,9 @@
 
 The robot stops for a confirmed forward obstacle, scans, chooses a side,
 and runs DETOUR. The five brief stages below describe the intended work
-and the actual implementation separately. There is no separate adaptive
-coarse/fine scan or reliable obstacle-width estimate.
+and the actual implementation separately. The SCAN module now uses a
+coarse/fine schedule with legacy-bin completion. Geometry reporting is
+separate from the unchanged avoidance decision.
 
 The pure modules return requests to the Vehicle Controller shell. Motion
 owns the servo and wheel outputs. The [ultrasonic service](#ultrasonic-driver-and-service)
@@ -36,20 +37,42 @@ current robot feature.
 
 ### 1 — Coarse scan
 
-The implemented first survey is the complete fixed 13-point scan: −30°
-(right) to +30° (left), in 5° steps. It is not a separate coarse sweep.
-The robot waits stopped for 300 ms, settles the first point for 150 ms,
-then takes two readings at each point. Each next step settles for 60 ms;
-the 60 ms trigger minimum still applies. Return to centre settles 150 ms.
-Standalone bench scans measured 1829 and 1833 ms, excluding the robot's
-initial 300 ms stop wait.
+The robot stops for 300 ms, then surveys −30, −15, 0, +15 and +30 degrees,
+with two readings at each angle. Negative is right, positive is left.
+The first angle settles for 150 ms. Between points, settling is 60 ms for
+a 5-degree move, plus 15 ms per additional 5 degrees, capped at 150 ms.
+The sonar service retains its minimum 60 ms trigger interval. Return to
+centre settles for 150 ms. These settle values are scheduling assumptions,
+not a new servo-speed measurement.
 
-### 2 — Fine scan: not implemented
+### 2 — Fine scan and decision-bin completion
 
-There is no edge-triggered second pass, smaller-angle refinement or
-coarse-to-fine controller. The same 13 points at 5° spacing are all that
-run. The beam is much wider than a step, so 5° spacing is not 5° edge
-accuracy. Do not label current profiles as precise obstacle boundaries.
+After the coarse sweep, the nearest VALID coarse distance sets a frozen
+hit threshold: that distance plus 150 mm, inclusive. Refine in 5-degree
+steps from one coarse step outside the outermost hits on each side,
+clipped to −30..+30. A coarse sweep without VALID hits has no fine region.
+Completed coarse points are reused, never pinged again. Within the region,
+the nearest unvisited index is selected first to limit return travel.
+
+The unchanged DETOUR free-step calculation needs all 13 original bins.
+After refinement, fill the remaining unvisited bins, nearest first. No
+missing ray is interpolated or marked free. Each finished profile therefore
+has 13 unique angles and 26 readings, including coarse samples. Geometry
+resolution is 5 degrees; the wide sonar beam does not have 5-degree edge
+accuracy. A narrow object missed by all coarse rays can still appear during
+compatibility completion, but this is not a proven detection guarantee.
+
+A 10 ms fake scheduler with 60 ms sonar spacing gives a worst duration of
+2560 ms (fixed-order baseline 2230 ms under the same clock) including the
+300 ms stop over all contiguous hit intervals and the
+empty case. This host result is accepted for the first bench; it is not a
+measured robot bound. Actual echo and navigation latency can add time.
+Historical fixed-scan bench times were 1829/1833 ms excluding the initial
+stop. Retain settling and sonar spacing; measure the new robot duration.
+
+Host proof, stopped USB scan diagnostics, resource changes and the pending
+stationary/two-detour procedure are in
+[COARSE_FINE_VALIDATION.md](COARSE_FINE_VALIDATION.md).
 
 ### Mounted servo limits
 
@@ -72,6 +95,37 @@ the VALID value. With no VALID value, any NO_RETURN gives NO_RETURN;
 two failures give no data. A fault streak of five fails the scan and
 centres the servo.
 
+### Geometry estimates
+
+The v3 observation report adds estimated width and two observed lateral
+spans. Closest distance and angle remain the sensor-frame location: forward
+`x = r cos(theta)`, left `y = r sin(theta)`. This is not a world coordinate.
+Geometry never selects a detour or changes the PROFILE.
+
+The nearest VALID final distance sets `r_min`. Candidate hits are VALID,
+positive distances at most `r_min + 150 mm`. Use the outermost candidates as
+the edges. Width is the chord between these range/angle points, calculated
+with the law of cosines and rounded to the nearest mm. One hit cannot
+establish width. A zero-distance TOO_NEAR or absent closest sample makes
+all geometry unknown. Disjoint hits can include empty space in the reported
+region width; the sonar does not identify individual objects.
+
+An edge at −30 or +30 degrees is clipped by the field of view. A calculated
+width with either edge clipped is only a lower bound. Beyond each edge,
+inspect the first adjacent outward ray. A VALID ray at least 150 mm farther
+than the closest hit, or NO_RETURN, supports an observed span. Unknown and
+error samples do not. A VALID ray must also reach the edge's forward plane.
+At that plane the span is `abs(x_edge * tan(theta_free) - y_edge)`.
+No outward ray means no estimate; clipped-edge clearance is unknown.
+NO_RETURN supports an observed gap, not a measured far boundary.
+
+Unknown dimensions use 65535 and explicit validity flags. The geometry
+assumes one useful obstacle region, no motion during scan, and representative
+sonar returns. Wide beams and sloping surfaces can give poor estimates.
+These are not body-clearance or passability claims. Dashboard rendering is
+separate. See the [v3 wire table](../s1-telemetry/MQTT_WIRE.md#obstacle-profile);
+v1/v2 remain readable without geometry.
+
 ### Profile analysis and the PROFILE event
 
 Obstacle distance is the nearest VALID point, or 511 if none is VALID.
@@ -87,7 +141,8 @@ must also be free; the outermost 30° point can be free alone.
 | Both blocked | Step 7 on both sides; side NONE |
 | PROFILE word | Distance bits 0–8, right free step 9–11, left 12–14, bit 15 zero |
 
-No width is calculated. Side selection is not a proof of body clearance.
+The decision does not use estimated width or observed spans. Side selection
+is not a proof of body clearance.
 
 ### 4 — Avoidance decision, reverse and reattempt
 
@@ -194,7 +249,7 @@ an endpoint became free. Do not subtract a fixed beam angle: surface,
 incidence and shape change the return. Reverse/rescan reduces angular
 size without assuming a universal beam correction.
 
-Fine scan, width measurement, complete material/angle characterization,
+Robot validation of coarse/fine geometry, complete material/angle characterization,
 precise centre alignment and safe clearance for every object are not
 implemented or established. NO_RETURN remains unknown. Test the reverse
 with room behind the robot; this code does not add a rear sensor.

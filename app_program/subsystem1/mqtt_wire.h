@@ -16,8 +16,8 @@
 #define RM_STATE_V2_SIZE     60u
 #define RM_SONAR_SIZE        36u
 #define RM_SONAR_VERSION     2u
-#define RM_OBSTACLE_SIZE     24u
-#define RM_OBSTACLE_VERSION  2u
+#define RM_OBSTACLE_SIZE     32u
+#define RM_OBSTACLE_VERSION  3u
 #define RM_STATUS_SIZE       6u
 #define RM_STATUS_VERSION    2u
 #define RM_EVENT_SIZE        20u
@@ -118,6 +118,15 @@ enum {
     RM_OBSTACLE_ATTEMPT_MAX = 2
 };
 
+enum {
+    RM_OBSTACLE_WIDTH_VALID = 0x01,
+    RM_OBSTACLE_LEFT_CLEAR_VALID = 0x02,
+    RM_OBSTACLE_RIGHT_CLEAR_VALID = 0x04,
+    RM_OBSTACLE_LEFT_CLIPPED = 0x08,
+    RM_OBSTACLE_RIGHT_CLIPPED = 0x10
+};
+#define RM_OBSTACLE_GEOMETRY_NONE UINT16_MAX
+
 /* One completed obstacle scan. Decision is obstacle_side_t: 0 none, 1 right,
  * 2 left. Angles: negative right, positive left. */
 typedef struct {
@@ -133,6 +142,10 @@ typedef struct {
     uint8_t right_clear_deg;
     uint8_t left_clear_deg;
     uint32_t boot_id;
+    uint16_t width_mm;
+    uint16_t left_clear_mm;
+    uint16_t right_clear_mm;
+    uint8_t geometry_flags;
 } rm_obstacle_t;
 
 /* robot/detour outcome (byte 1): the shell outcome numbers, plus ABORTED. */

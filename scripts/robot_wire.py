@@ -12,7 +12,7 @@ import sys
 VERSION = 1
 # Recorded topics and their newest payload size. The log has variable batch sizes.
 SIZES = {"state": 76, "sonar": 36, "event": 20, "heartbeat": 108, "log": 36,
-         "obstacle": 24, "status": 6, "detour": 36, "summary": 52,
+         "obstacle": 32, "status": 6, "detour": 36, "summary": 52,
          "barcode": 28, "imu": 12}
 # State: v2 adds distances, v3 adds duty/heading, v4 adds boot identity,
 # v5 adds the telemetry mode word (u16 at 70, bit 0 idle).
@@ -22,7 +22,7 @@ HEARTBEAT_VERSIONS = (1, 2, 3, 4)
 TOPIC_SIZES = {
     "state": STATE_SIZES, "heartbeat": {1: 100, 2: 100, 3: 108, 4: 108},
     "sonar": {1: 32, 2: 36}, "event": {1: 16, 2: 20},
-    "obstacle": {1: 20, 2: 24}, "detour": {1: 32, 2: 36},
+    "obstacle": {1: 20, 2: 24, 3: 32}, "detour": {1: 32, 2: 36},
     "summary": {1: 44, 2: 48, 3: 52}, "status": {1: 2, 2: 6}, "log": {1: 32, 2: 36},
     "barcode": {1: 20, 2: 28}, "imu": {1: 12}}
 BOOT_OFFSETS = {"state": (4, 72), "heartbeat": (3, 100), "sonar": (2, 32),
@@ -262,6 +262,24 @@ def _decode_obstacle(data):
                   profile_word=_u16(data, 14),
                   right_free_step=right_step, left_free_step=left_step,
                   right_clear_deg=data[18], left_clear_deg=data[19])
+    if data[0] == 3:
+        flags = data[30]
+        _require(flags & 0xE0 == 0 and data[31] == 0,
+                 "obstacle geometry reserved bits")
+        result["geometry_flags"] = flags
+        for name, offset, mask in (("width", 24, 1), ("left_clear", 26, 2),
+                                   ("right_clear", 28, 4)):
+            value = _u16(data, offset)
+            valid = bool(flags & mask)
+            _require((value != 65535) == valid, "obstacle geometry validity")
+            result[name + "_valid"] = valid
+            result[name + "_mm"] = value if valid else None
+        result["left_edge_clipped"] = bool(flags & 8)
+        result["right_edge_clipped"] = bool(flags & 16)
+        result["width_lower_bound"] = bool(flags & 1 and flags & 24)
+        _require(not (flags & 8 and flags & 2) and
+                 not (flags & 16 and flags & 4),
+                 "obstacle clipped clearance")
     return result
 
 
@@ -755,6 +773,8 @@ def csv_fields():
                 sample[1] = 1
             elif name == "detour":
                 sample[1] = 3
+            elif name == "obstacle" and version == 3:
+                sample[24:30] = b"\xff" * 6
             if name == 'barcode' and version == 2:
                 sample[2], sample[3], sample[4] = 5, 65, 1
                 sample[8] = sample[12] = 1

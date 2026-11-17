@@ -21,6 +21,7 @@ if(TARGET test_vehicle_network_task)
     add_test(NAME test_vehicle_network_estop_priority COMMAND test_vehicle_network_task estop)
 endif()
 host_test(test_obstacle_report tests/test_obstacle_report.c app_program/vehicle/obstacle_report.c ${obstacle_profile_source})
+target_link_libraries(test_obstacle_report PRIVATE m)
 host_test(test_odometry tests/test_odometry.c app_program/vehicle/odometry.c)
 host_test(test_run_stats tests/test_run_stats.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c)
