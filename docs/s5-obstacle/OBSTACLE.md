@@ -68,10 +68,12 @@ A 10 ms fake scheduler with 60 ms sonar spacing gives a worst duration of
 empty case. This host result is accepted for the first bench; it is not a
 measured robot bound. Actual echo and navigation latency can add time.
 Historical fixed-scan bench times were 1829/1833 ms excluding the initial
-stop. Retain settling and sonar spacing; measure the new robot duration.
+stop. The `d44bd25` floor run measured2519/2509 ms, including stopped wait
+(2026-11-17). Retain settling and sonar spacing; this is not a worst-case
+robot bound.
 
-Host proof, stopped USB scan diagnostics, resource changes and the pending
-stationary/two-detour procedure are in
+Host proof, stopped USB scan diagnostics, resource changes and the scoped
+floor result (stationary bench replaced by operator decision) are in
 [COARSE_FINE_VALIDATION.md](COARSE_FINE_VALIDATION.md).
 
 ### Mounted servo limits
@@ -249,9 +251,10 @@ an endpoint became free. Do not subtract a fixed beam angle: surface,
 incidence and shape change the return. Reverse/rescan reduces angular
 size without assuming a universal beam correction.
 
-Robot validation of coarse/fine geometry, complete material/angle characterization,
+The coarse/fine floor check covers two encounters with one off-centre box,
+including one clipped edge. Complete material/angle characterization,
 precise centre alignment and safe clearance for every object are not
-implemented or established. NO_RETURN remains unknown. Test the reverse
+established. NO_RETURN remains unknown. Test the reverse
 with room behind the robot; this code does not add a rear sensor.
 
 ## Ultrasonic driver and service

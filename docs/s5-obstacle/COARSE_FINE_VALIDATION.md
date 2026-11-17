@@ -2,7 +2,10 @@
 
 ## State
 
-Software candidate, 2026-11-17. No new robot or floor acceptance is claimed.
+Floor check completed on staging `d44bd25`, school, 2026-11-17.
+The operator replaced the separate stationary bench with one floor run.
+Both encounters completed their detours; scan1 also covered clipped geometry.
+This is a scoped functional result, not a width-accuracy or passability proof.
 Module commits: `75c5d85`, `c2a9a6a`. Integration code: `3f569b2`.
 The [scan record](OBSTACLE.md#2--fine-scan-and-decision-bin-completion)
 defines the schedule; [geometry](OBSTACLE.md#geometry-estimates) defines the
@@ -97,32 +100,70 @@ lost telemetry. Reject evidence with omissions or unexplained telemetry
 loss. Repeated DUMP repeats the saved evidence; it is not another scan.
 USB scan lines are not new MQTT RAM-log record types.
 
-## Operator stationary bench — not run
+## Robot floor result — 2026-11-17
 
-1. Use an operator-controlled stationary setup. Keep the wheels clear or
-   arrange the course so motion cannot cause a collision. Use the normal
-   sonar/servo harness and retain the mounted safe limits.
-2. Present a broad face near centre, then a narrower/off-centre face. Capture
-   USB, MQTT and the stopped dump. Record the actual face dimensions and
-   distances in [MEASUREMENTS](../architecture/MEASUREMENTS.md).
-3. Check one scan line per completed profile. A centre coarse hit should
-   produce nonzero fine mask, no repeated coarse rays in that mask, and a
-   sensible duration. Record duration, stack high water and lost/overrun
-   counters. Abort for a sweep outside safe servo limits or unintended drive.
-4. Move the face to a scan limit: expect clipping and lower-bound width or
-   unknown width, with unknown outward clearance on that side. A single hit
-   must not show zero-width certainty. Empty/invalid evidence must not show
-   valid dimensions. Compare rough estimates only; no accuracy claim is set.
-5. Confirm last-completed stage/attempt and closest sensor-frame point on
-   the combined dashboard. A missing network must not affect scan decisions.
+Image: staging `d44bd25`. Location: school. One 90 s run met the same box
+twice, not two distinct test objects. The operator supplied a box width of
+210 mm and said it was not centred. The separate stationary bench was
+replaced by this floor run. The operator skipped the separate A2/A3
+placements because scan1 already covered the clipped case.
 
-## Two-detour floor regression — not run
+Source worktree: `~/Projects/mtk3-core-review`. Local logs, not committed:
 
-Use the operator's unchanged two-obstacle course and retained motor/LINE
-settings. Capture one complete run with two attempted detours. For each,
-check PROFILE free steps and chosen side, reverse/retry behavior, completion
-and line reacquisition. Confirm no added forward motion during scan, no
-missing scan lines, no new faults/overruns, and reasonable observed geometry.
-Compare against the prior2/2 detour result without calling it a new pass.
-Record the candidate SHA, both durations, outcomes, logs and anomalies here
-and in the measurement ledger after the operator run.
+- `build/school_stg_d44bd25/robot_STG_1.final.log`
+- `build/school_stg_d44bd25/mqtt_STG_1b.csv` (new decoder)
+
+The MQTT obstacle/detour records below share boot ID `4132446305`.
+Other retained boot records in the CSV are not part of this result.
+Repeated USB dumps repeat the same two scan IDs, not additional sweeps.
+All robot rows below are **MEASURED(robot log,2026-11-17)**.
+The box reference is **MEASURED(operator,2026-11-17)**, not a sonar result.
+
+| Observation | Scan1 | Scan2 |
+| --- | --- | --- |
+| Closest sensor-frame range and angle | 233 mm at +5 deg | 221 mm at 0 deg |
+| Estimated region width | 193 mm, lower bound | 174 mm, valid and not clipped |
+| Geometry flags | 19: width/left span valid, right edge clipped | 7: width and both spans valid |
+| Observed edge-plane spans | left24 mm; right unknown | left25 mm; right23 mm |
+| Coarse hits | 4 | 3 |
+| Fine mask | `0db6` | `0db6` |
+| Completed sweep duration, including stopped wait | 2519 ms | 2509 ms |
+| Final stage / attempt | 2 /0 | 2 /0 |
+| Detour result | success, 17900 ms | success, 17950 ms |
+| Maximum reported lateral distance | 291 mm | 309 mm |
+
+```text
+[S5_SCAN] id 1 attempt 0 coarse_hits 4 fine_mask 0db6 duration_ms 2519
+[S5_SCAN] id 2 attempt 0 coarse_hits 3 fine_mask 0db6 duration_ms 2509
+```
+
+Mask `0db6` contains the eight non-coarse angles: −25, −20, −10, −5,
++5, +10, +20 and +25 degrees. Together with the five reused coarse angles,
+this shows both stages ran and all13 original decision bins were covered.
+Both completed on the initial attempt. The measured durations are below the
+accepted2560 ms host case, but two observations do not establish a worst-case
+robot bound. Settling and minimum60 ms ping spacing were not shortened.
+
+| Run health / stack | Measured value |
+| --- | --- |
+| Completed detours | 2/2 successful |
+| Vehicle overruns / lost wakes / faults | 0 /0 /0 |
+| Lost telemetry | 0 |
+| Maximum vehicle response | 2374 us |
+| Vehicle task stack high water | 1712/4096 B; 2384 B free |
+| Telemetry task stack high water after dump | 1096/4096 B; 3000 B free |
+
+The initial dump reports telemetry high water864 B; use the later1096 B
+value, which includes dump work. No scan omission line is present. The scan
+widths are estimates of observed regions, not the operator's full box width.
+In particular, scan1 must remain marked lower-bound with unknown right span.
+No numeric width-accuracy threshold or guaranteed body clearance is claimed.
+
+## Remaining scope
+
+The separate A2/A3 placements were skipped by operator decision, not passed.
+Single-hit, empty/invalid rays and their unknown geometry are covered by host
+tests only, not this robot run. This run does not exercise reverse/retry,
+DONE_NO_LINE or STALL_RIGHT. It does not prove all sonar surface/angle cases
+or network-loss independence. The recorded two-detour floor regression is
+successful for this run; retain these limits when reporting the result.
