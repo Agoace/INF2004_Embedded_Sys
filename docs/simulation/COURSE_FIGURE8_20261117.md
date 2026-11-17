@@ -11,7 +11,7 @@ parameters (default: none placed).
 | Tile grid, track, loose arcs | Operator photos IMG_1960, IMG_1961, IMG_1962 (local only, not in the repository) | PHOTO-ESTIMATED |
 | Tile, line, arc | 315 mm tile, 18 mm line, arc radius 157.5 mm (MEASUREMENTS "Course tile") | ASSUMED |
 | Obstacle box | 170 × 120 mm footprint (STEP 8 box); 120 mm high | MEASURED / PHOTO-ESTIMATED |
-| Ramp | 195 mm long, 10 mm high (test hump); 52 mm wide | MEASURED / PHOTO-ESTIMATED |
+| Ramp | 195 mm long, 10 mm high (test hump); 55 mm wide; beside the line, right side, near edge 75 mm from the line centre | MEASURED / PHOTO-ESTIMATED |
 | Barcode sheet | SIL sheet 400 × 50 mm, 40 mm bars, 77 mm left of the line centre | ASSUMED |
 | Start pose | `L1:1190` (top straight, heading west) | ASSUMED |
 
@@ -44,29 +44,63 @@ certain cells: perspective in IMG_1962 and the image edge in IMG_1961.
 
 ## Placements
 
-A placement is `LOOP:MM[:SIDE]`:
+A placement is `LOOP:MM[:SIDE[:GAP_MM]]`:
 - `LOOP`: `L1` leaves the crossing north, `L2` leaves it east. Add `r` (`L1r`, `L2r`) for the other drive direction.
 - `MM`: distance along the line from the crossing centre, in the drive direction.
-- `SIDE`: `centre` (default), `left` or `right` (56 mm, one wheel). A barcode is always 77 mm left of the line.
+- `SIDE`: `L`, `R` or `C` (centred), relative to the drive direction.
+- `GAP_MM`: lateral gap from the line centre to the near edge of the object.
 
-Straight runs (distance in mm along L1 / L2):
+| Object | Default | Notes |
+| --- | --- | --- |
+| Obstacle | `C`, gap 0 | Box centred on the line, 170 mm along it, 120 mm across |
+| Ramp | `R`, gap 75 mm | Beside the line (one-wheel hump); long axis along the line |
+| Barcode | `L`, 77 mm (fixed) | Sheet centre 77 mm left of the line centre |
+
+### Ramp offset (PHOTO-ESTIMATED)
+
+The photos show the ramp beside the r3 line, north of it, so on the right
+when the robot drives west (`L2r`). Scale from features at floor level
+next to the ramp:
+
+| Photo | Scale | Line centre → ramp near edge | Ramp width | Ramp length |
+| --- | --- | --- | --- | --- |
+| IMG_1960 (top-down) | tile seams 953 px per 315 mm = 0.33 mm/px | 80 mm | 56 mm | 211 mm |
+| IMG_1961 (top-down) | 18 mm line = 35 px, 0.51 mm/px | 69 mm | 54 mm | 225 mm |
+| Default | | 75 mm | 55 mm | 195 mm (MEASURED test hump), height 10 mm |
+
+The photo lengths include perspective from the ramp top; the measured
+195 mm is used.
+
+Right wheel check (MEASUREMENTS: half-track 55.75 mm, wheel width 16 mm):
+the tyre spans 47.75–63.75 mm right of the robot centre. With the ramp near
+edge at 75 mm and the robot centred on the line, the gap is 11.25 mm: the
+right wheel does **not** touch the ramp. It touches when the robot is more
+than 11.25 mm right of the line, and the full tyre is on the ramp from
+27.25 mm. A near edge of 47.75 mm or less puts the full tyre on the ramp
+when centred (for example `R:45`).
+
+Straight runs (distance in mm along L1 / L2; for `L1r`/`L2r` use loop
+length − value):
 
 | Loop | Straights | Arcs |
 | --- | --- | --- |
 | L1 | 0–788 N, 1035–1350 W, 2092–2407 S, 2655–3442 E | 788–1035, 1350–2092 (S-jog), 2407–2655 |
 | L2 | 0–1102 E, 1350–2295 S, 3532–3847 W, 4094–5197 N | 1102–1350, 2295–3532 (S-wiggle), 3847–4094 |
 
-Example placements (not measured). They are alternatives: do not place all at once (for example `L2:1800` overlaps the `L2:1700` barcode). The render uses `L1:400` obstacle, `L2:600` ramp, `L2:1700` barcode.
+Example placements (not measured). They are alternatives: do not place all
+at once. The render uses obstacle `L1:400`, ramp `L2r:4790`, barcode
+`L2r:3300`.
 
 | Object | Placement | Where |
 | --- | --- | --- |
 | Obstacle | `L1:400` | Loop 1 straight north of the crossing |
 | Obstacle | `L2:1800` | Loop 2 right-side straight |
 | Obstacle | `L1:3150` | Just before the crossing (loop 1 bottom straight) |
-| Barcode | `L2:1700` | Loop 2 right-side straight, after the corner |
+| Barcode | `L2r:3300` | Loop 2 right-side straight, driving north, after the corner |
 | Barcode | `L1r:250` | Loop 1 driven the other way, after the crossing |
-| Ramp | `L2:600` | Loop 2 top straight, centred |
-| Ramp | `L1:2250:left` | Loop 1 left straight, under the left wheel |
+| Ramp | `L2r:4790` | Photo position: north of the r3 line, driving west |
+| Ramp | `L2:600:R:45` | Loop 2 top straight, right wheel fully on the ramp |
+| Ramp | `L1:2250` | Loop 1 left straight, right (outer) side |
 
 ## Build
 
@@ -74,7 +108,7 @@ Example placements (not measured). They are alternatives: do not place all at on
 python3 sim/webots/tools/course8_tilemap.py \
   --out sim/webots/courses/course_figure8_photo.json        # track only
 python3 sim/webots/tools/course8_tilemap.py --obstacle L1:400 \
-  --ramp L2:600 --barcode L2:1700 --out build/course8/example.json
+  --ramp L2r:4790 --barcode L2r:3300 --out build/course8/example.json
 python3 -m unittest sim/webots/tests/test_course8_tilemap.py
 ```
 
@@ -85,8 +119,14 @@ which is not on this branch: in a `mtk3-hil` checkout run
 The generator reports 18 open ports: the free ends of the loose arcs
 (`allow_open_ports` is true for this reason).
 
+Known issue for SW8 (generator not changed here): `pil/world.py` writes
+`Viewpoint { ... orientation 0 0 1 0 }`, so the camera looks horizontally
+and Webots shows a black screen. Main_Worker's local fix in the generated
+world only: `position <cx> <cy> 3.6 orientation -0.57735 0.57735 0.57735
+2.0944` (top-down, north up).
+
 ## Status
 
-Built and host-checked: 8 unit checks; world generated on `mtk3-hil`
+Built and host-checked: 10 unit checks; world generated on `mtk3-hil`
 448fcef. The top-down render was compared with IMG_1962. No Webots
 robot run yet.

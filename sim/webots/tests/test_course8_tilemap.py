@@ -80,7 +80,9 @@ class TileMap(unittest.TestCase):
 
     def test_barcode_is_left_of_drive_direction(self):
         for name, dist in (("L2", 1700.0), ("L2r", 1700.0), ("L1", 400.0)):
-            data = t.course(self.cells, barcodes=[(name, dist, "centre")])
+            data = t.course(self.cells,
+                            barcodes=[t.placement(name + ":%g" % dist,
+                                                  "barcode")])
             x, y, h = t.pose(self.cells, name, dist)
             bx, by, _ = data["barcodes"][0]["centre_mm"]
             a = math.radians(h)
@@ -88,12 +90,46 @@ class TileMap(unittest.TestCase):
             self.assertAlmostEqual(left, 77.0, places=6)
 
     def test_placement_parse(self):
-        self.assertEqual(t.placement("L2r:900:left"), ("L2r", 900.0, "left"))
-        for bad in ("L3:10", "L1", "L1:10:up"):
+        self.assertEqual(t.placement("L2r:900"), ("L2r", 900.0, "C", 0.0))
+        self.assertEqual(t.placement("L2r:900", "ramp"),
+                         ("L2r", 900.0, "R", 75.0))
+        self.assertEqual(t.placement("L2:600:L:80", "ramp"),
+                         ("L2", 600.0, "L", 80.0))
+        self.assertEqual(t.placement("L1:600", "barcode"),
+                         ("L1", 600.0, "L", 77.0))
+        for bad, kind in (("L3:10", "obstacle"), ("L1", "obstacle"),
+                          ("L1:10:up", "obstacle"), ("L1:10:R:-1", "ramp"),
+                          ("L1:10:C:5", "ramp"), ("L1:10:R", "barcode")):
             with self.assertRaises(ValueError):
-                t.placement(bad)
+                t.placement(bad, kind)
         with self.assertRaises(ValueError):
             t.pose(self.cells, "L1", 1e6)
+
+
+    def test_ramp_beside_line_on_the_right(self):
+        for name, dist in (("L2", 600.0), ("L2r", 4000.0), ("L1", 400.0)):
+            data = t.course(self.cells,
+                            ramps=[t.placement(name + ":%g" % dist, "ramp")])
+            x, y, h = t.pose(self.cells, name, dist)
+            hump = data["humps"][0]
+            hx, hy, _ = hump["centre_mm"]
+            a = math.radians(h)
+            left = -math.sin(a) * (hx - x) + math.cos(a) * (hy - y)
+            along = math.cos(a) * (hx - x) + math.sin(a) * (hy - y)
+            # Near edge 75 mm right of the line centre; long axis along it.
+            self.assertAlmostEqual(-left - hump["width_mm"] / 2, 75.0)
+            self.assertAlmostEqual(along, 0.0)
+            self.assertAlmostEqual(hump["rotation_deg"], h)
+
+    def test_right_wheel_overlap(self):
+        # Tyre 47.75..63.75 mm; default ramp near edge 75 mm: no overlap
+        # when the robot is on the line; touch from 11.25 mm right shift.
+        self.assertEqual(t.wheel_overlap_mm(75.0), 0.0)
+        self.assertEqual(t.wheel_overlap_mm(75.0, shift_mm=11.25), 0.0)
+        self.assertAlmostEqual(t.wheel_overlap_mm(75.0, shift_mm=19.25), 8.0)
+        self.assertAlmostEqual(t.wheel_overlap_mm(75.0, shift_mm=27.25), 16.0)
+        self.assertAlmostEqual(t.wheel_overlap_mm(40.0), 16.0)
+        self.assertAlmostEqual(t.wheel_overlap_mm(55.0), 8.75)
 
 
 if __name__ == "__main__":

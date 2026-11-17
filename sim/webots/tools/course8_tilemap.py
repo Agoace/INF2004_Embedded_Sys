@@ -197,23 +197,52 @@ def offset(x, y, heading, left_mm):
     return x - math.sin(a) * left_mm, y + math.cos(a) * left_mm
 
 
-# Placement offsets left of the line centre (positive = left of the drive
-# direction). Barcode: SIL sheet 77 mm left (as school_like_assumed).
-# Ramp: centred on the line, or under one wheel (56 mm = track 112 / 2).
-SIDE_MM = {"centre": 0.0, "left": 56.0, "right": -56.0}
+# Placement: LOOP:MM[:SIDE[:GAP_MM]]. SIDE is L, R or C (centre); GAP_MM
+# is the lateral gap from the line centre to the near edge of the object.
+# Obstacle: default C, gap 0 (centred on the line).
+# Ramp: default R, gap 75 mm: it lies BESIDE the line on the right of the
+# drive direction (one-wheel hump). PHOTO-ESTIMATED from IMG_1960/1961:
+# line centre -> ramp near edge 80 mm (IMG_1960, tile seams 953 px per
+# 315 mm = 0.33 mm/px) and 69 mm (IMG_1961, 18 mm line = 35 px,
+# 0.51 mm/px); width 56 / 54 mm; length 211 / 225 mm (MEASURED 195 mm).
+# Barcode: always 77 mm left of the line centre (SIL sheet, ASSUMED).
+SIDES = {"L": 1.0, "R": -1.0, "C": 0.0}
+DEFAULTS = {"obstacle": ("C", 0.0), "ramp": ("R", 75.0),
+            "barcode": ("L", 77.0)}
+RAMP_LENGTH_MM, RAMP_WIDTH_MM, RAMP_HEIGHT_MM = 195.0, 55.0, 10.0
 BARCODE_LEFT_MM = 77.0
 
 
-def placement(text):
-    """'L1:600' or 'L2r:900:left' -> (loop, dist_mm, side)."""
+def placement(text, kind="obstacle"):
+    """'L1:600', 'L2r:900:R' or 'L2:600:R:80' -> (loop, mm, side, gap)."""
     part = text.split(":")
-    if len(part) not in (2, 3) or part[0] not in ("L1", "L1r", "L2", "L2r"):
-        raise ValueError("placement must be LOOP:MM[:SIDE], LOOP in "
-                         "L1 L1r L2 L2r: " + text)
-    side = part[2] if len(part) == 3 else "centre"
-    if side not in SIDE_MM:
-        raise ValueError("side must be centre, left or right: " + text)
-    return part[0], float(part[1]), side
+    if not 2 <= len(part) <= 4 or part[0] not in ("L1", "L1r", "L2", "L2r"):
+        raise ValueError("placement must be LOOP:MM[:SIDE[:GAP_MM]], LOOP "
+                         "in L1 L1r L2 L2r: " + text)
+    side, gap = DEFAULTS[kind]
+    if len(part) >= 3:
+        side = part[2]
+    if side not in SIDES:
+        raise ValueError("side must be L, R or C: " + text)
+    if len(part) == 4:
+        gap = float(part[3])
+    elif side == "C":
+        gap = 0.0
+    if gap < 0 or (side == "C" and gap != 0):
+        raise ValueError("gap must be >= 0 (and 0 with side C): " + text)
+    if kind == "barcode" and (side, gap) != ("L", BARCODE_LEFT_MM):
+        raise ValueError("barcode is always L, 77 mm: " + text)
+    return part[0], float(part[1]), side, gap
+
+
+def wheel_overlap_mm(gap_mm, width_mm=RAMP_WIDTH_MM, shift_mm=0.0):
+    """Lateral overlap of the right wheel with a ramp on the right.
+
+    Wheel centre 55.75 mm (half-track 111.5 / 2), width 16 mm, so the tyre
+    spans 47.75..63.75 mm from the robot centre. shift_mm: robot centre
+    right of the line centre (positive = toward the ramp)."""
+    lo, hi = 47.75 + shift_mm, 63.75 + shift_mm
+    return max(0.0, min(hi, gap_mm + width_mm) - max(lo, gap_mm))
 
 
 def course(cells, obstacles=(), ramps=(), barcodes=(),
@@ -231,24 +260,28 @@ def course(cells, obstacles=(), ramps=(), barcodes=(),
                       "column": col, "row": rows - 1 - row, "kind": kind,
                       "rotation_deg": rot})
     boxes, humps, sheets = [], [], []
-    for n, (loop, dist, side) in enumerate(obstacles):
+    for n, (loop, dist, side, gap) in enumerate(obstacles):
         x, y, h = pose(cells, loop, dist)
-        x, y = offset(x, y, h, SIDE_MM[side])
+        # Gap to the near edge; the box is 120 mm across the line.
+        lateral = gap + 60.0 if side != "C" else 0.0
+        x, y = offset(x, y, h, SIDES[side] * lateral)
         # Footprint 170 x 120 mm (STEP 8 box, MEASURED): 120 across the
         # drive direction; height 120 mm PHOTO-ESTIMATED.
         boxes.append({"id": "obstacle_%d" % n, "centre_mm": [x, y, 70],
                       "size_mm": [170, 120, 120], "rotation_deg": h,
                       "material_id": "BOX"})
-    for n, (loop, dist, side) in enumerate(ramps):
+    for n, (loop, dist, side, gap) in enumerate(ramps):
         x, y, h = pose(cells, loop, dist)
-        x, y = offset(x, y, h, SIDE_MM[side])
-        # 195 mm long, 10 mm high (test hump, MEASURED); 52 mm wide
-        # PHOTO-ESTIMATED. Long axis along the drive direction.
+        lateral = gap + (RAMP_WIDTH_MM / 2 if side != "C" else 0.0)
+        x, y = offset(x, y, h, SIDES[side] * lateral)
+        # 195 mm long, 10 mm high (test hump, MEASURED); 55 mm wide
+        # PHOTO-ESTIMATED. Long axis along the line.
         humps.append({"id": "ramp_%d" % n, "centre_mm": [x, y, 10],
-                      "length_mm": 195, "width_mm": 52, "height_mm": 10,
+                      "length_mm": RAMP_LENGTH_MM, "width_mm": RAMP_WIDTH_MM,
+                      "height_mm": RAMP_HEIGHT_MM,
                       "segments": 16, "rotation_deg": h,
                       "material_id": "MAT_WHITE"})
-    for n, (loop, dist, _side) in enumerate(barcodes):
+    for n, (loop, dist, _side, _gap) in enumerate(barcodes):
         x, y, h = pose(cells, loop, dist)
         x, y = offset(x, y, h, BARCODE_LEFT_MM)
         # SIL sheet (ASSUMED): 400 x 50 mm, 40 mm bars, long axis along
@@ -286,9 +319,11 @@ def main(argv=None):
     ap.add_argument("--out", type=pathlib.Path)
     for kind in ("obstacle", "ramp", "barcode"):
         ap.add_argument("--" + kind, action="append", default=[],
-                        type=placement, metavar="LOOP:MM[:SIDE]",
+                        type=lambda v, k=kind: placement(v, k),
+                        metavar="LOOP:MM[:SIDE[:GAP_MM]]",
                         help="place one %s; repeat for more" % kind)
-    ap.add_argument("--start", type=placement, default=("L1", 1190.0, "centre"),
+    ap.add_argument("--start", type=placement,
+                    default=("L1", 1190.0, "C", 0.0),
                     metavar="LOOP:MM")
     a = ap.parse_args(argv)
     cells = parse(a.map.read_text(encoding="utf-8"))
