@@ -13,8 +13,10 @@ USB/DUMP formatter. `line_service.c` copies the calibration report and missed/
 dropped counters under its existing mutex. ALL decoder, control/motor reads
 and diagnostic publication occur AFTER unlocking. No sample-path printing.
 
-Every record is SHADOW with valid=0, including mapped A--D and mode2 input.
-OFFSET_VERIFIED is never set. The 150 mm placeholder cannot enable an action.
+In default builds, every record is SHADOW with valid=0, including mapped A--D
+and mode2 input, and OFFSET_VERIFIED is never set. The 150 mm placeholder
+cannot enable an action. Only the live opt-in build can set valid=1; see
+[BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md) for its gates.
 The public ABI stays [40 B record / 20 B control](LIVE_SOURCE_CONTRACT.md).
 Sub_Worker5 owns the single stopped USB/DUMP hook next to `[JUNCTION]`, and
 vehicle admission, terminal ACKs and boot printing of the SAME mapping table.

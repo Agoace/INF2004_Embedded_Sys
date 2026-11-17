@@ -85,6 +85,8 @@ not current acceptance reports. Local course originals are not public records.
   Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
 - [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
   Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
+- [BARCODE_LIVE_COMMAND.md](s3-line-barcode/BARCODE_LIVE_COMMAND.md) — opt-in live command path from the barcode producer.
+  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, OPERATOR course answers, SW9 vehicle items V1–V6, clearance (D_cross) measurement procedure.
 - [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
   Contains: status (merged `b405aef`; table A=LEFT, B=RIGHT, C=STRAIGHT, D=UTURN), results (system PASS, large A not decoded), findings, proposal on hold, evidence.
 

@@ -5,6 +5,13 @@
 #include <math.h>
 #include <string.h>
 
+#ifndef BARCODE_LIVE_ENABLE
+#define BARCODE_LIVE_ENABLE 0
+#endif
+#if BARCODE_LIVE_ENABLE != 0 && BARCODE_LIVE_ENABLE != 1
+#error "BARCODE_LIVE_ENABLE must be 0 or 1"
+#endif
+
 uint32_t barcode_live_ms_at(uint32_t now_ms, uint32_t now_us, uint32_t us)
 {
     const uint32_t age = now_us - us;
@@ -135,7 +142,22 @@ static void publish(barcode_live_producer_t *p,
     if (barcode_window_table_confirmed()) {
         e->record.flags |= BC_LIVE_MAP_CONFIRMED;
     }
+#if BARCODE_LIVE_ENABLE
+    /* Live opt-in build only (make: measured clear bound, NONE fake source,
+     * custom BARCODE_MAP). Act only with a custom confirmed map, mode2 both
+     * at the first bar (bound context) and now, and a mapped command. */
+    if (barcode_window_mapping_id() >= 2u &&
+        p->context.mode == BC_LIVE_PERMITTED &&
+        in->control.mode == BC_LIVE_PERMITTED &&
+        e->record.command >= 1u && e->record.command <= 4u &&
+        (e->record.flags & BC_LIVE_REQUIRED) ==
+            (BC_LIVE_REQUIRED & ~BC_LIVE_OFFSET_VERIFIED)) {
+        e->record.flags = BC_LIVE_REQUIRED;
+        e->record.valid = 1u;
+    }
+#else
     /* Deliberately no OFFSET_VERIFIED, no valid1, even for control mode2. */
+#endif
     e->edge_us = r->edge_us;
     e->frame_us = r->frame_us;
     e->eligible_us = r->eligible_us;

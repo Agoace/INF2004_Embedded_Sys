@@ -9,6 +9,11 @@
 #include "../app_program/subsystem3/barcode_live_source.h"
 #include "../app_program/subsystem3/barcode_attempt.h"
 #include "../app_program/subsystem3/barcode_window.h"
+#ifndef BARCODE_LIVE_ENABLE
+#define BARCODE_LIVE_ENABLE 0
+#endif
+/* Live variant: custom map A=LEFT (id2) and a mode2 vehicle control. */
+#define FEED_MODE (BARCODE_LIVE_ENABLE ? BC_LIVE_PERMITTED : BC_LIVE_SHADOW_MODE)
 static uint32_t clock_us;
 static bool observing, race, raced, epoch_test, cancel_test, interrupt_counts;
 static bool start_test;
@@ -119,7 +124,7 @@ int main(int argc, char **argv)
     assert(memcmp(&counts, &sentinel, sizeof(counts)) == 0);
     control = (barcode_live_control_t){.epoch = 7u,
         .eligibility_revision = 3u, .revision_ms = 999u,
-        .mode = BC_LIVE_SHADOW_MODE};
+        .mode = FEED_MODE};
     barcode_live_record_t first = {0}, record;
     const unsigned int samples = start_test ? 1600u :
         ((epoch_test || cancel_test) ? 850u : 3100u);
@@ -164,16 +169,21 @@ int main(int argc, char **argv)
     assert((first.sequence == 1u) == (!race && !epoch_test && !cancel_test && !start_test));
     if (!race && !epoch_test && !cancel_test && !start_test) {
         assert(first.epoch == 7u && first.eligibility_revision == 3u);
-        assert(first.letter == (uint8_t)data_letter && first.valid == 0u);
+        const bool live = BARCODE_LIVE_ENABLE && data_letter == 'A';
+        assert(first.letter == (uint8_t)data_letter);
+        assert(first.valid == (live ? 1u : 0u));
         assert(first.command == (data_letter == 'A' ? 1u : 0u));
-        assert(first.flags == (0x3fu | BC_LIVE_SHADOW));
+        assert(first.flags == (live ? BC_LIVE_REQUIRED :
+                                      (0x3fu | BC_LIVE_SHADOW)));
     }
     rm_barcode_t attempt;
     assert(barcode_attempt_peek(&attempt));
     assert(attempt.epoch == 7u && attempt.sequence == 1u);
     assert(attempt.uptime_ms >= attempt.start_ms);
-    assert((attempt.flags & RM_BARCODE_SHADOW) != 0u);
     const bool ok_attempt = !race && !epoch_test && !cancel_test && !start_test;
+    /* SHADOW clears on MQTT only for a record offered for action. */
+    assert(((attempt.flags & RM_BARCODE_SHADOW) == 0u) ==
+           (BARCODE_LIVE_ENABLE && ok_attempt && data_letter == 'A'));
     assert((attempt.reason == BW_OK) == ok_attempt);
     assert(attempt.letter == (ok_attempt ? (uint8_t)data_letter : 0u));
     assert(barcode_attempt_ack(attempt.sequence));

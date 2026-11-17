@@ -156,6 +156,10 @@ endif
 ifneq ($(JUNCTION_TEST_CMD),NONE)
 $(error Fake JUNCTION_TEST_CMD and live actions are mutually exclusive)
 endif
+# The built-in A-D table never acts; live needs an explicit course map.
+ifeq ($(strip $(BARCODE_MAP)),)
+$(error Live actions need an explicit BARCODE_MAP, e.g. BARCODE_MAP="F=LEFT")
+endif
 JUNCTION_SUFFIX := _bclive
 endif
 

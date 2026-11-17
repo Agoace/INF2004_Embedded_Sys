@@ -287,7 +287,9 @@ vehicle task described below.
   [SHADOW producer](s3-line-barcode/LIVE_PRODUCER.md),
   [`barcode_live_producer.h`](../app_program/subsystem3/barcode_live_producer.h)
   and [`barcode_live_producer.c`](../app_program/subsystem3/barcode_live_producer.c)
-  bind the LINE feed, context/ACK policy and stopped DUMP; no live actions.
+  bind the LINE feed, context/ACK policy and stopped DUMP; live actions only in
+  the opt-in build ([live command path](s3-line-barcode/BARCODE_LIVE_COMMAND.md),
+  e2e test [`test_barcode_live_e2e.c`](../tests/test_barcode_live_e2e.c)).
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
   record the first course run, GP28 geometry and open findings.
   [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) specifies
