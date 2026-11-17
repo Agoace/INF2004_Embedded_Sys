@@ -1,0 +1,3 @@
+# LINE_GAP=1 with KERNEL_RAM=1 only: lp_update is the gap wrapper (robot.list);
+# the original function is renamed lp_update_base. Format as robot.list.
+app_program/subsystem3/line_position.o .text.lp_update_base

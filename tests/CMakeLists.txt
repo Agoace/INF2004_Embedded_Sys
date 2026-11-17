@@ -67,6 +67,8 @@ host_test(test_line_trace tests/test_line_trace.c ${line_trace_source} ${line_se
 host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_source} ${detour_run_source} ${obstacle_detour_source} ${obstacle_profile_source} ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
 host_test(test_heartbeat tests/test_heartbeat.c src/heartbeat.c)
 host_test(test_line_position tests/test_line_position.c ${line_position_source})
+# LINE_GAP=1: tests/linegap force-includes the same header as the make rule.
+host_test(test_line_gap tests/test_line_gap.c tests/linegap/line_position_tu.c)
 host_test(test_line_steer tests/test_line_steer.c ${line_steer_source})
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)

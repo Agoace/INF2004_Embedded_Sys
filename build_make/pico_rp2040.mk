@@ -194,6 +194,25 @@ endif
 BARCODE_CAPTURE_SUFFIX := _barcode_capture
 endif
 
+# Opt-in LINE gap rule: in pair mode, a line crossing the L-C gap gives the
+# interpolated position, not an outward one (line_gap.h). Only
+# line_position.o gets a forced header; the default 0 adds nothing, so
+# ordinary images stay byte-identical. See docs/s3-line-barcode/LINE.md.
+LINE_GAP ?= 0
+ifneq ($(words $(LINE_GAP)),1)
+$(error LINE_GAP must be one value: 0 or 1)
+endif
+ifneq ($(filter $(LINE_GAP),0 1),$(LINE_GAP))
+$(error Unknown LINE_GAP '$(LINE_GAP)'; use 0 or 1)
+endif
+ifeq ($(LINE_GAP),1)
+ifeq ($(BENCH_KERNEL),1)
+$(error LINE_GAP=1 is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/subsystem3/line_position.o: CFLAGS += -include ../app_program/subsystem3/line_gap.h
+$(info LINE_GAP: pair-mode gap rule on)
+endif
+
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
 # GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
 # the last messages and the kernel's crash report after a crash, when the
@@ -302,6 +321,9 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
 endif
+ifeq ($(LINE_GAP),1)
+EXE_FILE := $(EXE_FILE)_gap
+endif
 
 GCC := arm-none-eabi-gcc
 AS := arm-none-eabi-gcc
@@ -382,6 +404,9 @@ ifeq ($(BENCH_KERNEL),1)
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
 else
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
+endif
+ifeq ($(LINE_GAP),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/line_gap.list
 endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))

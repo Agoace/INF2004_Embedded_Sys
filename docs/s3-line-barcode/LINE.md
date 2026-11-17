@@ -63,6 +63,36 @@ Pair mode does not set the old three-sensor junction-hold flag. The generic
 LINE module retains its 450-count straight-across-hold setting, but that
 is not evidence of a separate 450-count hold in this pair-mode detector.
 
+### Gap rule (opt-in `LINE_GAP=1`)
+
+School runs 2026-11-16/17: most straight-line twitches start when the
+line crosses the gap between L and C. The sensor that saw the line fades
+while the other starts to rise. The rows above take the fade as "past the
+sensor" (about −70..−77), or hold that value when both are below 30%, so
+the far term steers hard while the robot crosses the centre. Build switch
+`LINE_GAP=1` (image suffix `_gap`; default 0, image unchanged) adds, for
+each 1 kHz sample:
+
+| Observation | Position / action |
+| --- | --- |
+| Both at least 5% and both below 30% | `(C - L - target) / 20`; single-sensor memory cleared, so LOST waits 300 ms |
+| Only one sees it, below its peak, other at least 1.5% | `(C - L - target) / 20`; memory cleared |
+| Other below 1.5% (curve exit) | Unchanged rows above, LOST after 50 ms |
+
+Threshold 1.5% (`LP_PAIR_GAP_PERMILLE` 15): in the four school logs, rows
+where the lone sensor fell had the other sensor at 15 per mille or more
+before most gap crossings, and below 10 before most real exits.
+[`line_gap.h`](../../app_program/subsystem3/line_gap.h) is force-included
+into `line_position.o`; `line_position.c` does not change.
+[`test_line_gap.c`](../../tests/test_line_gap.c) uses real rows: two L→C
+and two C→L crossings (no outward step in the gap phase, ends on the new
+side), a curve exit identical to the default module, a 400 ms gap that
+still gives LOST at 300 ms, no step at the 30% boundary, and 20000 random
+samples with the other sensor at its floor identical to the default. The
+default `test_line_position` pair cases with the other sensor at 1.5–5%
+during a fall give the interpolated value in this build, by design.
+Status: built and host-tested; not run on the robot.
+
 ### Steering and search
 
 The shared steering rule adds P times position, D times the change in
