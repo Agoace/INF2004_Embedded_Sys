@@ -120,6 +120,11 @@ cost estimate. Offered rows include pre-publication age; a final-rejected row
 retains its preparation-age evidence and offered0, not a claim of delivery. Existing LINE cpu_us remains its mutex path; add source
 cost, or use heartbeat cpu_load for the total. All CPU figures await hardware.
 
+For raw FAILED-attempt evidence, use the separate opt-in
+[ROBOT failed capture](FAILED_ATTEMPT_CAPTURE.md). It preserves the first two
+failures of the run and adds `BC_FAIL_*` rows after `BC_REF`; it does not
+reinterpret or replace the existing post-window `BC_EDGES` list.
+
 Post-window edge evidence is UNCLASSIFIED; later barcode ink is not a proven
 junction. ADC loss/clipping, unreadable control/motor or motor faults stop that
 trace and increment its loss count. Original upper brackets need at most30 ms;

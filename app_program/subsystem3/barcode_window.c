@@ -1,6 +1,9 @@
 /* Course-only window policy; frozen TEST framing is deliberately unchanged. */
 #include "barcode_window.h"
 #include "barcode.h"
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.h"
+#endif
 #include <math.h>
 #include <string.h>
 
@@ -71,6 +74,9 @@ static uint32_t next_serial(barcode_window_t *state)
 /* Failure abandons the whole candidate. Never repair or slide its runs. */
 static void reject(barcode_window_t *state, barcode_window_reason_t reason)
 {
+#if BARCODE_FAIL_CAPTURE
+    bcfc_reject(state, (uint32_t)reason);
+#endif
     state->result = (barcode_window_result_t){
         .serial = next_serial(state), .reason = (uint32_t)reason};
     state->phase = SEEK;
@@ -164,10 +170,19 @@ void barcode_window_adc(barcode_window_t *state, uint32_t us, uint16_t raw,
     state->previous_adc_us = us;
     state->have_adc = true;
     if (bad_time || raw == 0u || raw >= 4095u || flags != 0u) {
+#if BARCODE_FAIL_CAPTURE
+        bcfc_bad_adc((barcode_window_adc_t){us, raw, flags},
+                     (uint16_t)((bad_time ? 1u : 0u) |
+                     ((raw == 0u || raw >= 4095u) ? 2u : 0u) |
+                     (flags != 0u ? 4u : 0u)));
+#endif
         loss(state, BW_LOSS);
         return;
     }
     if (state->queued == BW_ADC_CAPACITY) {
+#if BARCODE_FAIL_CAPTURE
+        bcfc_bad_adc((barcode_window_adc_t){us, raw, flags}, 8u);
+#endif
         loss(state, BW_LOSS);
         return;
     }
@@ -480,6 +495,9 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
             state->elements = 0u;
             state->black = true;
             state->phase = WINDOW;
+#if BARCODE_FAIL_CAPTURE
+            bcfc_start(state, sample, mm, upper);
+#endif
         } else if (state->white_started) {
             if (!state->transitioning) {
                 state->transition_start = mm;
@@ -566,6 +584,9 @@ unsigned int barcode_window_step(barcode_window_t *state, unsigned int budget)
         state->head = (uint8_t)((state->head + 1u) % BW_ADC_CAPACITY);
         --state->queued;
         ++processed;
+#if BARCODE_FAIL_CAPTURE
+        bcfc_observe(state, sample, mm, b);
+#endif
         process(state, sample, mm, b);
     }
     return processed;

@@ -66,6 +66,8 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
 | `BARCODE_MAP` | Empty default = built-in table, image unchanged. `"F=LEFT,K=RIGHT"` sets the barcode_window action table (unlisted letters NONE; NONE/LEFT/RIGHT/STRAIGHT/UTURN) via [`barcode_map.py`](../../tools/barcode_map/barcode_map.py); bad letter, action or a repeat stops make. Adds `_bmap<id>`. Check the boot line `[BARCODE_TABLE] id <id> confirmed 1 A=.. Z=..` (0..4 = N/L/R/S/U). |
 | `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
+| `BARCODE_FAIL_CAPTURE` |0 default, images unchanged.1 is ROBOT only and keeps raw edge/decimated ADC evidence for the first two failed attempts per run. Adds `_bcfail2`. See [failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md). |
+| `BARCODE_FAIL_SLOTS` |2 default;1 is the smaller fallback. Used only when failed capture is enabled; changes image/profile suffix and invalidates old objects. Recheck combined RAM/headroom before use. |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because

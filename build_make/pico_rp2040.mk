@@ -258,6 +258,27 @@ $(error KERNEL_RAM=1 is UP only: needs SMP=0)
 endif
 endif
 
+# Opt-in ROBOT failed-attempt diagnostics. OFF adds no compiler flag/object.
+BARCODE_FAIL_CAPTURE ?= 0
+BARCODE_FAIL_SLOTS ?= 2
+ifneq ($(words $(BARCODE_FAIL_CAPTURE)),1)
+$(error BARCODE_FAIL_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BARCODE_FAIL_CAPTURE),0 1),$(BARCODE_FAIL_CAPTURE))
+$(error BARCODE_FAIL_CAPTURE must be 0 or 1)
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+ifneq ($(TEST)$(BENCH),00)
+$(error BARCODE_FAIL_CAPTURE=1 is ROBOT only; TEST=0 BENCH=0 required)
+endif
+ifneq ($(words $(BARCODE_FAIL_SLOTS)),1)
+$(error BARCODE_FAIL_SLOTS must be one value: 1 or 2)
+endif
+ifneq ($(filter $(BARCODE_FAIL_SLOTS),1 2),$(BARCODE_FAIL_SLOTS))
+$(error BARCODE_FAIL_SLOTS must be 1 or 2)
+endif
+endif
+
 # Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
 # letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
 # nothing, so ordinary images stay byte-identical. Policy id 1 is the
@@ -301,6 +322,10 @@ EXE_FILE := $(EXE_FILE)_kernel_ram
 endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
+
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -401,6 +426,10 @@ all: $(EXE_FILE).ramproof
 endif
 # End of kernel hot path in RAM
 
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+CFLAGS += -DBARCODE_FAIL_CAPTURE=1 -DBCFC_FAILED_SLOTS=$(BARCODE_FAIL_SLOTS)
+endif
+
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
 # otherwise discard anything appended above.
 ifeq ($(SMP),1)
@@ -466,6 +495,9 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
 endif
 PROFILE_FILE := .build_profile
 

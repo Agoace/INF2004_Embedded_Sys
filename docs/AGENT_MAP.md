@@ -300,6 +300,14 @@ vehicle task described below.
   FIFO tests: [`test_barcode_attempt.c`](../tests/test_barcode_attempt.c);
   codec tests: [`test_barcode_wire.c`](../tests/test_barcode_wire.c) and
   [`test_barcode_v2.py`](../tests/test_barcode_v2.py).
+  [Opt-in failed-attempt capture](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md)
+  uses [`barcode_fail_capture.h`](../app_program/subsystem3/barcode_fail_capture.h)
+  and [`barcode_fail_capture.inc`](../app_program/subsystem3/barcode_fail_capture.inc),
+  included only by the enabled source provider. Window/producer hooks record
+  real failed inputs without a default-build object. Tests:
+  [`test_barcode_fail_capture.c`](../tests/test_barcode_fail_capture.c),
+  [`test_barcode_fail_make.py`](../tests/test_barcode_fail_make.py) and the
+  capture-enabled [`feed fixture`](../tests/test_barcode_live_feed.c).
 
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
