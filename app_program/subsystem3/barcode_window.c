@@ -11,10 +11,10 @@
 #define COMPLETE 4u
 #define WHITE_MIN 120u
 #define WHITE_MAX 220u
-#define N_MIN 4.6f
+/* ASSUMED scope, not an optical resolution measurement. Fit the scale from
+ * the start star; smaller print needs measured along-travel GP28 evidence. */
+#define N_MIN 4.0f
 #define N_MAX 7.0f
-#define W_MIN 13.5f
-#define W_MAX 21.5f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
 #define BW_MAP_VALUES 1,2,3,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -27,7 +27,14 @@
 #endif
 static const uint8_t actions[26] = {BW_MAP_VALUES};
 const barcode_window_config_t barcode_window_default_config = {
-    12414u, 1500u, 30000u};
+    .counts_per_m = 12414u,
+    .sample_gap_us = 1500u,
+    .motor_gap_us = 30000u,
+    /* GP28: measured from the drive axle; verify on the robot. */
+    .sensor_forward_mm = 80,
+    .sensor_lateral_mm = 77,
+    .track_mm = 111u,
+};
 _Static_assert(sizeof(barcode_window_t) <= 2048u, "Window RAM budget");
 
 uint8_t barcode_window_table_entry(unsigned int index)
@@ -99,6 +106,11 @@ bool barcode_window_begin(barcode_window_t *state,
         state->config.sample_gap_us > 10000u ||
         state->config.motor_gap_us == 0u ||
         state->config.motor_gap_us > 100000u ||
+        state->config.track_mm < 50u || state->config.track_mm > 500u ||
+        state->config.sensor_forward_mm < -500 ||
+        state->config.sensor_forward_mm > 500 ||
+        state->config.sensor_lateral_mm < -500 ||
+        state->config.sensor_lateral_mm > 500 ||
         (calibration->mode != BC_CAL_LEARNED &&
          calibration->mode != BC_CAL_FALLBACK) ||
         (calibration->mode == BC_CAL_LEARNED &&
@@ -173,6 +185,47 @@ static int32_t count_delta(uint32_t value, uint32_t previous)
            -(int32_t)(UINT32_MAX - delta) - 1;
 }
 
+/* Set the first sensor point to the origin of the barcode-axis projection.
+ * The axis is the robot's forward direction at the first motor observation.
+ * This exact differential-drive step accounts for GP28's forward and lateral
+ * offsets. It cannot infer an unknown angle between that axis and the print. */
+static void sensor_pose_begin(barcode_window_t *state)
+{
+    state->centre_x_mm = -(float)state->config.sensor_forward_mm;
+    state->centre_y_mm = -(float)state->config.sensor_lateral_mm;
+    state->heading_rad = 0.0f;
+}
+
+static float sensor_axis_mm(const barcode_window_t *state)
+{
+    const float forward = (float)state->config.sensor_forward_mm;
+    const float lateral = (float)state->config.sensor_lateral_mm;
+    return state->centre_x_mm + forward * cosf(state->heading_rad) -
+           lateral * sinf(state->heading_rad);
+}
+
+static float sensor_pose_step(barcode_window_t *state, int32_t dl, int32_t dr)
+{
+    const float scale = 1000.0f / (float)state->config.counts_per_m;
+    const float left = (float)dl * scale;
+    const float right = (float)dr * scale;
+    const float centre = (left + right) * 0.5f;
+    const float turn = (right - left) / (float)state->config.track_mm;
+    float local_x = centre;
+    float local_y = 0.0f;
+    if (fabsf(turn) > 0.000001f) {
+        const float radius = centre / turn;
+        local_x = radius * sinf(turn);
+        local_y = radius * (1.0f - cosf(turn));
+    }
+    const float c = cosf(state->heading_rad);
+    const float s = sinf(state->heading_rad);
+    state->centre_x_mm += c * local_x - s * local_y;
+    state->centre_y_mm += s * local_x + c * local_y;
+    state->heading_rad += turn;
+    return sensor_axis_mm(state);
+}
+
 void barcode_window_motor(barcode_window_t *state, uint32_t us,
                           uint32_t left, uint32_t right, uint32_t faults)
 {
@@ -200,9 +253,16 @@ void barcode_window_motor(barcode_window_t *state, uint32_t us,
             loss(state, BW_MOTION);
             state->motor_count = 0u;
         } else {
-            mm = last->mm + (float)(dl + dr) * 500.0f /
-                 (float)state->config.counts_per_m;
+            mm = sensor_pose_step(state, dl, dr);
+            if (!isfinite(mm) || mm <= last->mm) {
+                loss(state, BW_MOTION);
+                state->motor_count = 0u;
+            }
         }
+    }
+    if (state->motor_count == 0u) {
+        sensor_pose_begin(state);
+        mm = 0.0f;
     }
     if (state->motor_count == BW_MOTOR_CAPACITY) {
         memmove(state->motors, state->motors + 1,
@@ -273,7 +333,7 @@ static bool model(const float *runs, bool reverse, element_model_t *out)
         high[wide] = fmaxf(high[wide], corrected);
     }
     const float n = sum[0] / 6.0f, w = sum[1] / 3.0f;
-    if (n < N_MIN || n > N_MAX || w < W_MIN || w > W_MAX ||
+    if (n < N_MIN || n > N_MAX ||
         w / n < 1.6f || w / n > 3.4f || low[1] / high[0] < 1.4f ||
         low[0] < n * 0.65f || high[0] > n * 1.5f ||
         low[1] < w * 0.65f || high[1] > w * 1.5f) {
@@ -442,7 +502,12 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
     }
     const bool black = state->black ? sample.raw > state->fall :
                                      sample.raw >= state->rise;
-    if (mm - state->edge_mm > 35.0f) {
+    /* Before the star, keep the absolute fail-closed ceiling. Afterwards a
+     * raw run can include the fitted bar/space edge bias; never enlarge the
+     * absolute ceiling when applying the scale-relative class tolerance. */
+    const float run_limit = state->elements >= 9u ?
+        fminf(35.0f, 1.5f * state->wide + fabsf(state->bias)) : 35.0f;
+    if (mm - state->edge_mm > run_limit) {
         reject(state, BW_WIDTH);
         return;
     }

@@ -86,6 +86,24 @@ int barcode_live_control_publish(const barcode_live_control_t *control);
 /* S3 read; optional publication tag is unchanged on failure. */
 int barcode_live_control_try_read(barcode_live_control_t *out,
                                   uint32_t *publication_tag);
+/* Read-only epoch totals; no change to record/control wire formats.
+ * LINE is the sole writer. A terminal published record (including mapped
+ * NONE) increments frames; any terminal failed bound candidate, including
+ * cancellation, increments failures. attempts == frames + failures modulo
+ * 2^32; an unfinished candidate is not yet an attempt in this snapshot.
+ * On a coherent control-epoch change, LINE starts zero totals. A delayed
+ * event tagged with the old epoch is NOT charged to the new epoch. Existing
+ * lifetime producer/dump counters are unchanged. Readers cannot reset them.
+ * Any core, one bounded copy: E_OK success; E_PAR null; E_OBJ before init;
+ * E_TMOUT unpublished/interrupted; E_NOSPT when reader is not linked
+ * (TEST/BENCH/stub). Every failure leaves *out unchanged. Vehicle accepts
+ * only its current run epoch; a matching copy is an observed snapshot, not
+ * an acknowledgement that all future stop/cancellation work is drained. */
+typedef struct {
+    uint32_t epoch, frames, attempts, failures;
+} barcode_live_counts_t;
+_Static_assert(sizeof(barcode_live_counts_t) == 16u, "Live counts ABI");
+int barcode_live_counts_try_read(barcode_live_counts_t *out);
 /* LINE-task sole caller, after releasing its mutex. TEST/BENCH are no-ops. */
 void barcode_live_source_sample(uint32_t us, uint16_t raw,
                                 const barcode_cal_report_t *calibration,

@@ -2,12 +2,14 @@
 #include <tk/syslib.h>
 #include "drv_gpio_irq.h"
 #include "drv_gpio_irq_hw.h"
+#include "run_timing.h"
 #define CLIENTS 8u
 typedef struct { uint32_t pins; drv_gpio_irq_fn fn; void *ctx; } client_t;
 static client_t clients[CLIENTS];
 static unsigned int used;
 static int ready;
 static void gpio_dispatch(UINT intno) {
+    rt_tl_gpio(); /* P2: GPIO bursts show in the timeline */
     for (unsigned int group = 0u; group < 4u; ++group) {
         const uint32_t pending = drv_gpio_irq_hw_pending(group);
         for (unsigned int bit = 0u; bit < 8u; ++bit) {
@@ -33,7 +35,8 @@ int drv_gpio_irq_init(void) {
     if (er < E_OK) return (int)er;
     used = 0u;
     ClearInt(DRV_GPIO_IRQ_NUMBER);
-    /* USB IRQ5 remains reset priority 0; GPIO 1; SysTick/PendSV 3. */
+    /* Requested: USB IRQ5 0, GPIO 1, SysTick/PendSV 3. EnableInt does not
+     * write the level on RP2040, so GPIO stays at 0 (F-NVIC record). */
     EnableInt(DRV_GPIO_IRQ_NUMBER, DRV_GPIO_IRQ_PRIORITY);
     ready = 1;
     return (int)E_OK;

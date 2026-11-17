@@ -1,5 +1,5 @@
 /*
- * app_board.h - bounded core-0 publication of a value (a "board").
+ * app_board.h - bounded publication of a value (a "board").
  *
  * A reader never waits for a preempted writer. There is one writer, or
  * writers serialised by an existing owner mutex. Aligned 32-bit atomic words
@@ -7,6 +7,13 @@
  *
  * The writer makes the sequence odd, writes the words, then makes it even.
  * A reader accepts a copy only if the sequence was even and unchanged.
+ *
+ * The writer and the readers may sit on DIFFERENT cores.  Every access is an
+ * aligned 32-bit __atomic operation with __ATOMIC_SEQ_CST, which supplies all
+ * the ordering RP2040 needs (it has no data cache), so no separate
+ * mp_memory_barrir() call is required.  This is the contract the core
+ * migration relies on: the IMU publishes from core 1 while Vehicle and Health
+ * read from core 0.
  */
 #ifndef APP_BOARD_H
 #define APP_BOARD_H

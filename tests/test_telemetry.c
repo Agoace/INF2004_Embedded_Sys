@@ -3,17 +3,27 @@
 #include <stdarg.h>
 #include <string.h>
 #include <tk/tkernel.h>
+#include <tk/smp.h>
+#include "../app_program/app.h"
 #include "../app_program/subsystem1/telemetry.h"
+#include "../app_program/platform/run_timing.h"
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
-static bool full;static int irq_off;static unsigned int kr,ve,bytes,reports;
+#define irq_off test_smp_irq_mask
+static bool full;static unsigned int kr,ve,bytes,reports;
 unsigned int source_dumps;
 static unsigned int source_lines,source_count_lines;
 static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
-ID app_start_task(FP f,PRI p,UW core,const char *name) { (void)name;assert(p==30 && core==1u);entry=f;return 7; }
+ID app_start_task(FP function, PRI priority, UW core, const char *name)
+{
+    (void)name;
+    assert(priority == 30 && core == app_prc_core1());
+    entry = function;
+    return 7;
+}
 ER tk_snd_mbf(ID id,const void *m,INT size,TMO timeout) {
     assert(id==1 && size==(INT)sizeof(telemetry_message_t) && timeout==TMO_POL && !irq_off);
     if (full) return E_TMOUT;
@@ -24,11 +34,21 @@ INT tk_rcv_mbf(ID id,void *m,TMO timeout) {
     if (tail==head) longjmp(end,1);
     *(telemetry_message_t *)m=queue[tail++%64u];return (INT)sizeof(telemetry_message_t);
 }
-void mock_di(UINT *irq) { assert(!irq_off);*irq=0u;irq_off=1; }
-void mock_ei(UINT irq) { assert(irq==0u && irq_off);irq_off=0; }
-ER tk_dly_tsk(RELTIM delay) { assert(delay==20u && !irq_off);return E_OK; }
+void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
+void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
+static unsigned int timelines, yields;
+ER tk_dly_tsk(RELTIM delay) { assert(delay==20u && !irq_off);++yields;return E_OK; }
 const char *drv_watchdog_reset_name(void) { return "watchdog"; }
 void app_task_report(void) { ++reports; }
+/* P2 timeline double: once per dump, after the first report, with the
+ * dump's USB yield as the pause. */
+void rt_timeline_report(void (*pause)(void)) {
+    assert(pause != NULL && reports % 2u == 1u);
+    ++timelines;
+    const unsigned int before = yields;
+    pause();
+    assert(yields == before + 1u);
+}
 int vehicle_hump_try_read(imu_hump_summary_t *out) {
     if (hump_result==E_OK) *out=(imu_hump_summary_t){.peak_01mm=108u,.count=2u,.flags=0x05u,.gated=3u};
     return hump_result;
@@ -91,6 +111,7 @@ int main(void) {
     assert(telemetry_send(&m)==E_OK);telemetry_stats(&s);assert(s.busy);
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
     assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
+    assert(timelines==1u);
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();

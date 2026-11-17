@@ -2,10 +2,12 @@
 #include <assert.h>
 #include <tk/tkernel.h>
 #include "../app_program/platform/drv_gpio_irq.h"
+#include "../app_program/platform/run_timing.h"
 static FP handler;
 static int core = 1, irq_off, enabled_level = -1;
 static uint32_t pending[4], acknowledged[30], enabled_pins;
-static unsigned int calls;
+static unsigned int calls, gpio_counts;
+void rt_tl_gpio(void) { ++gpio_counts; } /* P2 timeline counter */
 INT tk_get_prc(void) { return core; }
 ER tk_def_int(UINT irq, const T_DINT *d) {
     assert(irq == 13u && d->intatr == TA_HLNG); handler = d->inthdr; return E_OK;
@@ -31,6 +33,7 @@ int main(void) {
     pending[2] = 4u | (8u << 4u);
     ((void (*)(UINT))handler)(13u);
     assert(calls == 2u && acknowledged[16] == 4u && acknowledged[17] == 8u);
+    assert(gpio_counts == 1u); /* P2: one count per dispatch */
     for (unsigned int pin = 0u; pin < 7u; ++pin)
         assert(drv_gpio_irq_add(1u << pin, callback, &calls) == E_OK);
     assert(drv_gpio_irq_add(1u << 7u, callback, &calls) == E_LIMIT);

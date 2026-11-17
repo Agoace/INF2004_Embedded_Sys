@@ -134,8 +134,8 @@ These do not validate the later boot-ID or diagnostic image.
 M1-MQTT lifetime gap 9916..10087 us; later ESTOP run 8952..11038 us exceeds
 the gate by 38 us. M2 successful detour later reported 9902..10099 us.
 Do not treat lifetime extrema as per-run extrema or guess a cause. See
-[hardware details](../../docs/archive/MTK3_STEP8_RECORD.md) and the
-[diagnostic-only investigation](../../docs/archive/MOTION_TIMING_INVESTIGATION.md).
+[hardware details](../../docs/archive/s1-telemetry/HISTORY.md#files) and the
+[diagnostic-only investigation](../../docs/archive/s2-motion/HISTORY.md#files).
 A per-run window is proposed there, not silently added to production.
 
 ## STEP 7 S2-U01 failure and approved window/probe correction
@@ -173,7 +173,7 @@ The approved correction changes TEST only:
   maxima and late/missed counts around S0 printing, S1 burst, its yield and
   print, and S2 entry/exit. They are copied under the motion mutex without
   output. The one PROBE block and lifetime INFO print only after the window.
-  See [expected format](../../docs/archive/kernel/KERNEL_ROBOT.md#fix-1-and-probe-a-test-only).
+  See [expected format](../../docs/archive/kernel/HISTORY.md#files).
 
 **New-image hardware status: PASS 2026-11-06** (see the S2-U01 row). Record both boots and the exact
 revision before changing this row. If demotion removes the startup delay,
@@ -264,7 +264,7 @@ Application initialization now sets 12 cycles, waits for RUNNING, and
 checks the TIMER/kernel ratio before enabling motion. The fixed image
 passed S0-U01 after a cold power-on. Test every kernel image after a cold
 power-on, not only after a flash. See the
-[motor record](../../docs/archive/s2-motion/MOTOR_CONTROLLER.md#cold-power-timer-source).
+[motor record](../../docs/archive/s2-motion/HISTORY.md#files).
 
 ### B4: floor, cold VIN power-on
 
@@ -312,7 +312,7 @@ Assessment, agreed with the operator on 2026-11-06:
 Source: saved B3 console summary `build/steer_logs/text_ede2.txt`, boot
 `ede2`, 2026-11-04, floor, VIN. This ignored local log is not committed.
 Only its measured values are copied here. The design record is
-[Motor controller](../../docs/archive/s2-motion/MOTOR_CONTROLLER.md#run-b3-2026-11-04-boot-ede2-rise-limit-8-countstick-per-tick-floor-vin).
+[Motor controller](../../docs/archive/s2-motion/HISTORY.md#files).
 The numeric heading below uses the exact console cdeg, not the rounded
 values in the design table. Compare `abs(B4 - B3) <= 0.05 * abs(B3)` for
 each nonzero mean speed, including the slow spin steps.

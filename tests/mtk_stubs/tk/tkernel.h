@@ -1,7 +1,12 @@
 #ifndef TEST_TKERNEL_H
 #define TEST_TKERNEL_H
 #include <stdint.h>
+#ifndef TK_SUPPORT_SMP
 #define TK_SUPPORT_SMP 1
+#endif
+#ifndef TK_MAX_CORE
+#define TK_MAX_CORE 2
+#endif
 #define EXPORT
 #define IMPORT extern
 #define CONST const
@@ -17,6 +22,7 @@
 #define XOSC_MHz 12
 #define E_SYS (-5)
 #define E_OK 0
+#define E_NOSPT (-9)
 #define E_PAR (-17)
 #define E_CTX (-25)
 #define E_LIMIT (-34)
@@ -63,7 +69,10 @@ void mock_ei(UINT irq);
 #define E_TMOUT (-50)
 #define E_NOEXS (-42)
 typedef int SZ;
-typedef struct { FP task; PRI itskpri; SZ stksz; UW tskatr; void *bufptr; UW assprc; } T_CTSK;
+typedef struct {
+    FP task; PRI itskpri; SZ stksz; UW tskatr;
+    void *bufptr; UW assprc; UB *dsname; void *exinf;
+} T_CTSK;
 typedef struct { UW mbfatr; SZ bufsz; INT maxmsz; void *bufptr; } T_CMBF;
 typedef struct { UW flgatr; UINT iflgptn; } T_CFLG;
 ID tk_cre_tsk(const T_CTSK *c);

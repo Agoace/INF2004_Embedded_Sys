@@ -26,7 +26,7 @@ duty  = min + wheel speed, or 0 if the wheel speed is 0 or less
 
 The correction is a share of the base speed, so it is the same ratio at
 any speed. Above the start duty our motors are close to linear
-([unloaded speed test](../s2-motion/CALIBRATION_RESULTS.md#unloaded-motor-speed-at-5-v-vin)).
+([unloaded speed test](../s2-motion/HISTORY.md#files)).
 
 | Position | Meaning | Wheels L / R (base 20 %, gain 150 %, min 12 %, max 30 %) | Before (raw duty, gain 100 %) |
 | ---: | --- | --- | --- |

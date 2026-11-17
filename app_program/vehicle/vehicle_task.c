@@ -6,6 +6,8 @@
 #define VEHICLE_RESPONSE_LIMIT_US 10000u
 #define LINE_MAX_AGE_US           10000u
 #define VEHICLE_WAKE_TIMEOUT_MS   20
+/* P1: a motion-stamp -> running gap above this is not one wake. */
+#define VEHICLE_WAKE_LIMIT_US     100000u
 #define BUTTON_INTERVAL_MS        20u
 #define RUN_BUTTON_PIN            21u
 #define DUMP_BUTTON_PIN           20u
@@ -26,11 +28,14 @@
 #include "../subsystem5/sonar_service.h"
 #include "../subsystem1/telemetry.h"
 #include "../platform/drv_time.h"
+#include "../platform/run_timing.h"
+#include "../platform/kernel_lock_stats.h"
 #include "vehicle_inputs.h"
 #include "vehicle_robot_config.h"
 #include "vehicle_log.h"
 #include "junction_line.h"
 #include "junction_source.h"
+#include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
 #include "run_stats.h"
@@ -86,6 +91,13 @@ static uint32_t overruns;
 static uint32_t response_max_us;
 static uint32_t release_us;
 static uint32_t release_tick;
+/* P1 report-only step timing; Vehicle is the only writer. */
+static uint32_t part_mark_us;  /* end of the previous step part */
+static uint32_t part_slow_us;  /* slowest part of the open step */
+static rt_max_t part_slow;
+static uint32_t step_wake_us;  /* wake latency of the open step */
+static uint32_t run_steps;     /* steps released in the current run */
+static uint32_t bkl_reset_ms;  /* when the lock statistics were cleared */
 static uint32_t run_start;
 static uint32_t run_button_ms;
 static uint32_t generation;
@@ -111,6 +123,19 @@ static uint32_t obstacle_scans;
 static APP_BOARD(rm_detour_t) detour_board;
 static APP_BOARD(rm_summary_t) summary_board;
 static rs_t run_stats;
+static barcode_live_counts_t run_barcode;
+static bool have_run_barcode;
+
+/* The LINE writer owns epoch counters. Never read its mutable producer. */
+static void barcode_poll(uint32_t epoch)
+{
+    barcode_live_counts_t copy;
+    if (barcode_live_counts_try_read(&copy) == E_OK && copy.epoch == epoch) {
+        run_barcode = copy;
+        have_run_barcode = true;
+    }
+}
+
 static uint8_t pending_action;
 static uint32_t event_sequence;
 static uint32_t seen_commands[8];
@@ -245,6 +270,13 @@ static void publish_run_summary(void)
     if (rs_run_end(&run_stats, drv_time_ms(), stop_code, vsm.fault,
                    vsm.fault_detail, &summary, &aborted)) {
         publish_detour(&aborted);
+    }
+    if (have_run_barcode) {
+        summary.flags |= RM_SUMMARY_BARCODE_IMPLEMENTED;
+        summary.barcode_ok = (uint8_t)(run_barcode.frames > UINT8_MAX ?
+                                      UINT8_MAX : run_barcode.frames);
+        summary.barcode_failed = (uint8_t)(run_barcode.failures > UINT8_MAX ?
+                                          UINT8_MAX : run_barcode.failures);
     }
     summary.hump_peak = run_hump.peak_01mm;
     summary.hump_count = run_hump.count;
@@ -425,6 +457,33 @@ static void handle_command(void)
 #endif
 
 /*
+ * P1: close one part of the open step and keep the slowest part.
+ */
+static void part_end(rt_max_t part)
+{
+    const uint32_t now = drv_time_us();
+    const uint32_t us = now - part_mark_us;
+    part_mark_us = now;
+    rt_max(part, us);
+    rt_tl(RT_TL_VEH_PART, now, (uint32_t)part);
+    if (us > part_slow_us) {
+        part_slow_us = us;
+        part_slow = part;
+    }
+}
+
+/*
+ * P1: telemetry_send with its call time in the [kcall] veh_send latch.
+ */
+static int timed_send(const telemetry_message_t *message)
+{
+    const uint32_t start = drv_time_us();
+    const int er = telemetry_send(message);
+    rt_call(RT_K_VEH_SEND, drv_time_us() - start);
+    return er;
+}
+
+/*
  * Detect one falling button edge from the active-low input.
  */
 static bool pressed(unsigned int pin, bool *previous)
@@ -440,7 +499,7 @@ static bool pressed(unsigned int pin, bool *previous)
  */
 static bool send(telemetry_message_t *message)
 {
-    if (telemetry_send(message) >= E_OK) {
+    if (timed_send(message) >= E_OK) {
         return true;
     }
     cancelled = true;
@@ -540,6 +599,11 @@ static void hump_finish(uint32_t epoch)
                       &run_hump, sizeof(run_hump));
     __atomic_store_n(&line_run_epoch, 0u, __ATOMIC_SEQ_CST);
     __atomic_store_n(&run_epoch, epoch + 1u, __ATOMIC_SEQ_CST);
+    rt_bkl_t lock = {0};
+    (void)kls_read(&lock);
+    lock.run_ms = drv_time_ms() - bkl_reset_ms;
+    rt_bkl(&lock);
+    rt_begin(epoch + 1u);
 }
 
 /*
@@ -575,12 +639,34 @@ static void finish_step(void)
     }
     publish_vehicle();
     const uint32_t elapsed = drv_time_us() - release_us;
+    part_end(RT_STEP_PUBLISH);
     if (elapsed > response_max_us) {
         response_max_us = elapsed;
     }
     motion_status_t s;
-    if (elapsed >= VEHICLE_RESPONSE_LIMIT_US ||
-        (motion_status(&s) >= E_OK && s.ticks != release_tick)) {
+    const bool late = elapsed >= VEHICLE_RESPONSE_LIMIT_US;
+    const bool have = !late && motion_status(&s) >= E_OK;
+    if (!late) {
+        part_end(RT_STEP_STATUS);
+    }
+    const bool over = late || (have && s.ticks != release_tick);
+    /* P2: record the finish before rt_overrun() freezes the timeline. */
+    rt_tl(RT_TL_VEH_FINISH, drv_time_us(), over ? 1u : 0u);
+    if (over) {
+        /* P1: a late step did not read the status; use the bounded board
+         * copy for the tick count. 0xFFFFFFFF: not available. */
+        uint32_t ticks = 0xFFFFFFFFu;
+        uint32_t stamp;
+        if (have) {
+            ticks = s.ticks - release_tick;
+        } else if (motion_snapshot_try_read(&s, &stamp) >= E_OK) {
+            ticks = s.ticks - release_tick;
+        }
+        const rt_overrun_t record = {
+            .step = run_steps, .elapsed_us = elapsed, .tick_delta = ticks,
+            .slow_part = (uint32_t)part_slow, .slow_us = part_slow_us,
+            .wake_us = step_wake_us, .uptime_ms = drv_time_ms()};
+        rt_overrun(&record);
         ++overruns;
         if (active) {
             cancelled = true;
@@ -634,7 +720,18 @@ static bool wait_tick(void)
         return false;
     }
     const ER er = tk_slp_tsk(VEHICLE_WAKE_TIMEOUT_MS);
+    const uint32_t woke = drv_time_us();
+    rt_tl(RT_TL_VEH_WAKE, woke, 0u);
+    const uint32_t wake = woke - rt_motion_stamp_us();
+    step_wake_us = 0u;
+    if (er >= E_OK && wake <= VEHICLE_WAKE_LIMIT_US) {
+        step_wake_us = wake;
+        rt_call(RT_K_VEH_WAKE, wake);
+        rt_max(RT_STEP_WAKE, wake);
+    }
     const INT extra = tk_can_wup(TSK_SELF);
+    const uint32_t can_done = drv_time_us();
+    rt_call(RT_K_VEH_CAN, can_done - woke);
     if (extra > 0) {
         wake_lost += (uint32_t)extra;
     }
@@ -650,8 +747,14 @@ static bool wait_tick(void)
         set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
     }
     release_us = drv_time_us();
+    rt_call(RT_K_VEH_STATUS, release_us - can_done);
+    part_mark_us = release_us;
+    part_slow_us = 0u;
+    part_slow = RT_STEP_READ_LINE;
+    ++run_steps;
     step_open = true;
     read_line();
+    part_end(RT_STEP_READ_LINE);
 #if TM_MQTT
     handle_command();
 #endif
@@ -669,6 +772,7 @@ static bool wait_tick(void)
             set_reason(RM_STOP_GP21, "GP21 emergency stop");
         }
     }
+    part_end(RT_STEP_COMMAND);
     return er >= E_OK && !cancelled;
 }
 
@@ -812,18 +916,18 @@ static watched_t watched[4];
 static void barcode_dump_request(void)
 {
     const telemetry_message_t m = {.kind = TELEMETRY_BARCODE_DUMP};
-    (void)telemetry_send(&m);
+    (void)timed_send(&m);
 }
 
 static void junction_observe(void)
 {
     telemetry_message_t m = {.kind = TELEMETRY_JUNCTION_SOURCE};
     if (junction_source_report(&m.data.junction_source)) {
-        (void)telemetry_send(&m);
+        (void)timed_send(&m);
     }
     if (junction_source_counts(&m.data.junction_counts)) {
         m.kind = TELEMETRY_JUNCTION_COUNTS;
-        (void)telemetry_send(&m);
+        (void)timed_send(&m);
     }
     const ja_t *action = &junction_line.action;
 #if TM_MQTT
@@ -866,7 +970,7 @@ static void junction_observe(void)
         action->phase == JA_UNUSED) {
         m.kind = TELEMETRY_JUNCTION;
         m.data.junction = action->result;
-        (void)telemetry_send(&m);
+        (void)timed_send(&m);
     }
 }
 
@@ -1027,10 +1131,16 @@ static void run_once(void)
     const uint32_t epoch =
         __atomic_load_n(&run_epoch, __ATOMIC_SEQ_CST) | 1u;
     __atomic_store_n(&run_epoch, epoch, __ATOMIC_SEQ_CST);
+    run_steps = 0u;
+    rt_begin(epoch);
+    (void)kls_reset();
+    bkl_reset_ms = drv_time_ms();
 #if TM_MQTT
     hump_emitted = 0u;
     stop_code = RM_STOP_UNKNOWN;
     rs_run_begin(&run_stats, run_start);
+    run_barcode = (barcode_live_counts_t){0};
+    have_run_barcode = false;
 #endif
     ja_init(&junction_line.action, SEARCH_CFG.speed_mm_s, epoch);
     junction_reported = JA_IDLE;
@@ -1066,6 +1176,9 @@ static void run_once(void)
             break;
         }
         hump_poll(epoch);
+#if TM_MQTT
+        barcode_poll(epoch);
+#endif
         const uint32_t now = drv_time_ms();
         sonar_snapshot_t sonar = {0};
         bool fresh = false;
@@ -1121,6 +1234,7 @@ static void run_once(void)
         }
         seen_ping = sonar.ping_sequence;
         seen_result = sonar.result_sequence;
+        part_end(RT_STEP_SONAR);
         motion_status_t s;
         if (motion_status(&s) < E_OK) {
             set_reason(RM_STOP_MOTION_STATUS, "motion status failed");
@@ -1222,6 +1336,7 @@ static void run_once(void)
                 last_servo = d.servo_deg;
             }
         }
+        part_end(RT_STEP_VSM);
         if (now - last_log >= LOG_PERIOD_MS) {
             save_row(now, &s, &d, echo, pending_bits);
             pending_bits = 0u;
@@ -1274,8 +1389,17 @@ static void run_once(void)
             set_reason(RM_STOP_TIME_LIMIT, "90 s time limit");
             break;
         }
+        part_end(RT_STEP_LOG);
     }
+    /* Close the last driving step here, before the stop work (prints,
+     * actuator stops). Measured later, that work would count as a deadline
+     * miss and replace the real stop reason. */
+    finish_step();
     ja_finish(&junction_line.action, final_counts, drv_time_ms());
+#if TM_MQTT
+    /* Take the last same-run copy before STOP changes producer context. */
+    barcode_poll(epoch);
+#endif
     junction_source_stop(drv_time_ms());
     junction_observe();
     barcode_dump_request();
@@ -1352,7 +1476,7 @@ static void vehicle_task(INT code, void *ctx)
             junction_observe(); /* Resend stopped counters after queue loss. */
             telemetry_message_t m = {.kind = TELEMETRY_DUMP};
             info(&m.data.info);
-            (void)telemetry_send(&m);
+            (void)timed_send(&m);
         }
 #if TM_MQTT
         const uint8_t action = run_edge ? 0u : pending_action;
