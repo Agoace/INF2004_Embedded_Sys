@@ -2,10 +2,13 @@
 
 Run: python3 -m unittest sim/webots/tests/test_course8_tilemap.py
 """
+import contextlib
+import io
 import json
 import math
 import pathlib
 import sys
+import tempfile
 import unittest
 
 HERE = pathlib.Path(__file__).resolve().parents[1]
@@ -139,23 +142,61 @@ class TileMap(unittest.TestCase):
         self.assertAlmostEqual(t.wheel_overlap_mm(55.0), 8.75)
 
 
+    WORLD = ("#VRML_SIM R2025a utf8\n"
+             "Viewpoint { position 1.2 1.3 4.5 orientation 0 0 1 0 }\n"
+             'Solid { name "ramp_0" contactMaterial "course" children '
+             "[ Shape { appearance PBRAppearance { baseColor 0.93 0.93 "
+             "0.93 roughness 1 } } ] }\n"
+             'Solid { name "r3c3" children [ Shape { appearance '
+             "PBRAppearance { baseColor 0.93 0.93 0.93 } } ] }")
+
     def test_world_patch(self):
-        world = ("Viewpoint { position 1.2 1.3 4.5 orientation 0 0 1 0 }\n"
-                 'Solid { name "ramp_0" contactMaterial "course" children '
-                 "[ Shape { appearance PBRAppearance { baseColor 0.93 0.93 "
-                 "0.93 roughness 1 } } ] }\n"
-                 'Solid { name "r3c3" children [ Shape { appearance '
-                 "PBRAppearance { baseColor 0.93 0.93 0.93 } } ] }")
-        text, views, ramps = wp.patch(world)
-        self.assertEqual((views, ramps), (1, 1))
+        text, views, ramps, solids = wp.patch(self.WORLD)
+        self.assertEqual((views, ramps, solids), (1, 1, 1))
         self.assertIn("position 1.2 1.3 3.6 orientation -0.57735", text)
         self.assertIn('"ramp_0" contactMaterial "course" children [ Shape { '
                       "appearance PBRAppearance { baseColor 0.85 0.1 0.55",
                       text)
         self.assertIn('"r3c3" children [ Shape { appearance PBRAppearance '
                       "{ baseColor 0.93 0.93 0.93", text)
-        self.assertEqual(wp.patch(text)[1:], (1, 1))
+        self.assertEqual(text.split("\n")[1], wp.PREVIEW)
+        again = wp.patch(text)
+        self.assertEqual((again[0], again[1:]), (text, (1, 1, 1)))
 
+    def test_view_height_fits_course_16_9(self):
+        cells = t.parse(MAP)
+        cx, cy, w, h = wp.extents(t.course(cells))
+        self.assertAlmostEqual(w, 9 * 0.315)
+        self.assertAlmostEqual(h, 8 * 0.315)
+        z = wp.view_height(w, h)
+        vfov = 2 * math.atan(math.tan(math.pi / 8) * 9 / 16)
+        # Height is the limit in 16:9: 2.52 m * 1.1 fits the vertical FOV.
+        self.assertAlmostEqual(2 * z * math.tan(vfov / 2), h * 1.1)
+        self.assertGreaterEqual(2 * z * math.tan(math.pi / 8), w * 1.1)
+        text = wp.patch(self.WORLD, (cx, cy, w, h))[0]
+        self.assertIn("position %.4f %.4f %.3f orientation" % (cx, cy, z), text)
+
+    def test_world_patch_main_atomic_and_no_viewpoint(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            world = pathlib.Path(tmp) / "w.wbt"
+            bad = self.WORLD.replace("Viewpoint", "Viewxoint")
+            world.write_text(bad, encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(wp.main([str(world)]), 1)
+            self.assertEqual(world.read_text(encoding="utf-8"), bad)
+            world.write_text(self.WORLD, encoding="utf-8")
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(wp.main([str(world)]), 0)
+            self.assertIn("baseColor 0.85 0.1 0.55", world.read_text(encoding="utf-8"))
+            self.assertEqual(sorted(p.name for p in pathlib.Path(tmp).iterdir()), ["w.wbt"])
+
+    def test_tilemap_out_creates_parent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = pathlib.Path(tmp) / "a" / "b" / "example.json"
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(t.main(["--out", str(out)]), 0)
+            self.assertEqual(json.loads(out.read_text())["name"], "course_figure8_photo")
 
 if __name__ == "__main__":
     unittest.main()

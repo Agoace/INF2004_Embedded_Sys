@@ -127,11 +127,20 @@ Known issues for SW8 (generator not changed here):
 - A hump has material `MAT_WHITE`, so the ramp is invisible on the white tiles.
 
 [`course8_world_patch.py`](../../sim/webots/tools/course8_world_patch.py)
-fixes both in a generated `.wbt` only: top-down view (`position <cx> <cy>
-3.6 orientation -0.57735 0.57735 0.57735 2.0944`, north up) and ramp
-`baseColor 0.85 0.1 0.55` (magenta, visual only). Run it after
-`pil.world`. The obstacle keeps the generator's brown `BOX` colour. The
-patched file no longer matches its hash in the generated `manifest.json`.
+fixes both in a generated `.wbt` only. Run it after `pil.world`:
+
+- View: top-down, north up (`orientation -0.57735 0.57735 0.57735
+  2.0944`), centred on the tile grid of `../course.json`. Height: the
+  grid plus 10 % fits a 16:9 view with the default 45 deg horizontal FOV.
+  For this course (2.835 x 2.52 m) the height limit wins: 5.95 m.
+- Ramp: `baseColor 0.85 0.1 0.55` (magenta, visual only). The obstacle
+  keeps the generator's brown `BOX` colour.
+- PREVIEW ONLY: the tool adds a `# PREVIEW` line. The patched file no
+  longer matches its hash in the generated `manifest.json`. Do not use it
+  for audited SIL output.
+- It checks first (1 Viewpoint, every ramp solid recoloured). On a
+  failure it writes nothing and exits 1; else it writes through a
+  temporary file and `os.replace`.
 
 ## Robot drive in Webots: blocked
 
@@ -147,6 +156,6 @@ cannot drive this course without SW8 changes:
 
 ## Status
 
-Built and host-checked: 11 unit checks; world generated on `mtk3-hil`
+Built and host-checked: 14 unit checks; world generated on `mtk3-hil`
 448fcef. The top-down render was compared with IMG_1962. No Webots
 robot run (blocked, see above).

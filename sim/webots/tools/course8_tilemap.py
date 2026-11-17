@@ -332,6 +332,7 @@ def main(argv=None):
     text = json.dumps(course(cells, a.obstacle, a.ramp, a.barcode,
                              a.start[:2]), indent=1) + "\n"
     if a.out:
+        a.out.parent.mkdir(parents=True, exist_ok=True)
         a.out.write_text(text, encoding="utf-8")
     print(json.dumps(facts))
     return 0
