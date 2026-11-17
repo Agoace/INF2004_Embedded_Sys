@@ -14,7 +14,7 @@ static telemetry_message_t queue[64];static unsigned int head,tail;
 #define irq_off test_smp_irq_mask
 static bool full;static unsigned int kr,ve,bytes,reports;
 unsigned int source_dumps;
-static unsigned int source_lines,source_count_lines,scan_lines;
+static unsigned int source_lines,source_count_lines,scan_lines,scan_omissions;
 static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
 ID tk_cre_mbf(const T_CMBF *c) { assert(c->maxmsz==(INT)sizeof(telemetry_message_t) && c->bufsz==4096);return 1; }
 ID app_start_task(FP function, PRI priority, UW core, const char *name)
@@ -71,6 +71,9 @@ int tm_printf(const UB *fmt,...) {
             for (unsigned int i=0u;i<6u;++i) (void)va_arg(a,unsigned int);
             assert(va_arg(a,unsigned int)==3u);
         }
+    }
+    if (!strcmp((const char *)fmt,"[S5_SCAN] omitted %lu\n")) {
+        assert(va_arg(a,unsigned long)==1u);++scan_omissions;
     }
     if (!strncmp((const char *)fmt,"[S5_SCAN] id ",13u)) {
         ++scan_lines;
@@ -155,9 +158,18 @@ int main(void) {
     m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(scan_lines==1u);
 #if !TM_MQTT /* The log-reader variant retains its generation-2 fixture. */
+    for (unsigned int i=0u;i<TELEMETRY_SCAN_ROWS;++i) {
+        m.kind=TELEMETRY_SCAN;
+        m.data.scan=(telemetry_scan_t){.scan_id=7u,.attempt=1u,
+            .coarse_hits=3u,.fine_mask=0x1b6u,.duration_ms=2560u};
+        assert(telemetry_send(&m)==E_OK);pump();
+    }
+    m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
+    assert(scan_lines==1u+TELEMETRY_SCAN_ROWS && scan_omissions==1u);
     m.kind=TELEMETRY_BEGIN;assert(telemetry_send(&m)==E_OK);pump();
     m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
-    assert(scan_lines==1u); /* No stale scan lines in the next run. */
+    assert(scan_lines==1u+TELEMETRY_SCAN_ROWS && scan_omissions==1u);
+    /* No stale scan lines or omission counter in the next run. */
 #endif
     return 0;
 }

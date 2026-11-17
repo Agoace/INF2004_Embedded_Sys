@@ -226,7 +226,8 @@ static void publish_obstacle(const ss_t *scan)
         .scan_id = obstacle_scans, .duration_ms = scan->duration_ms,
         .fine_mask = scan->fine_mask, .coarse_hits = scan->coarse_hits,
         .attempt = scan->completed_attempt};
-    (void)telemetry_send(&message); /* Bounded value copy; print at dump only. */
+    /* Bounded value copy; print at dump only. */
+    (void)telemetry_send(&message);
 }
 
 /* Report one scan retry edge. It is an observation only. */

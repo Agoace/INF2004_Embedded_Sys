@@ -25,7 +25,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
-| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
+| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: pipeline, coarse/fine geometry and sonar service; COARSE_FINE_VALIDATION.md: software proof and pending bench/floor checks; history in archive/s5-obstacle/HISTORY.md. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
 | [archive/](archive/) | `HISTORY.md` pointers per area (`git show 569672a:<path>`), records that code still cites, and line/barcode/sim originals. |
 
@@ -53,7 +53,8 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/TELEMETRY.md](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard) |
 | Week 8 Change Requirement 1 notes | [architecture history](archive/architecture/HISTORY.md#files); summary in [CR1.md](architecture/CR1.md#requirement) |
 | Current kernel ultrasonic driver/service | [OBSTACLE.md](s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) — bounded request/echo contract, packed result and sensor limits. |
-| Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
+| Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; coarse/fine scan, 13-bin decision completion, estimated geometry, monitor/profile, reattempt and line recovery. |
+| Coarse/fine proof and pending operator checks | [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — [`test_scan_stages.c`](../tests/test_scan_stages.c), [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c), [`test_obstacle_report.c`](../tests/test_obstacle_report.c); stopped `[S5_SCAN]` lines in [`telemetry.c`](../app_program/subsystem1/telemetry.c), wire v3 and legacy decoder [`robot_wire.py`](../scripts/robot_wire.py). |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |

@@ -27,7 +27,8 @@ static uint16_t observed_clearance(const obstacle_profile_t *profile,
                                     unsigned int edge, int direction,
                                     uint16_t nearest)
 {
-    const float radius = (float)ultrasonic_result_distance(profile->point[edge]);
+    const float radius =
+        (float)ultrasonic_result_distance(profile->point[edge]);
     const float x = radius * cosf(angle(edge));
     const float y = radius * sinf(angle(edge));
     for (int i = (int)edge + direction;
@@ -77,8 +78,10 @@ static void geometry(const obstacle_profile_t *profile, uint16_t nearest,
         out->geometry_flags |= RM_OBSTACLE_LEFT_CLIPPED;
     }
     if (last > first) {
-        const float right = (float)ultrasonic_result_distance(profile->point[first]);
-        const float left = (float)ultrasonic_result_distance(profile->point[last]);
+        const float right =
+            (float)ultrasonic_result_distance(profile->point[first]);
+        const float left =
+            (float)ultrasonic_result_distance(profile->point[last]);
         /* Law of cosines; clamp roundoff at zero before square root. */
         const float square = left * left + right * right -
             2.0f * left * right * cosf(angle(last) - angle(first));

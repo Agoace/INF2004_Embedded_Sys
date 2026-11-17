@@ -63,11 +63,16 @@ accuracy. A narrow object missed by all coarse rays can still appear during
 compatibility completion, but this is not a proven detection guarantee.
 
 A 10 ms fake scheduler with 60 ms sonar spacing gives a worst duration of
-2560 ms including the 300 ms stop over all contiguous hit intervals and the
+2560 ms (fixed-order baseline 2230 ms under the same clock) including the
+300 ms stop over all contiguous hit intervals and the
 empty case. This host result is accepted for the first bench; it is not a
 measured robot bound. Actual echo and navigation latency can add time.
 Historical fixed-scan bench times were 1829/1833 ms excluding the initial
 stop. Retain settling and sonar spacing; measure the new robot duration.
+
+Host proof, stopped USB scan diagnostics, resource changes and the pending
+stationary/two-detour procedure are in
+[COARSE_FINE_VALIDATION.md](COARSE_FINE_VALIDATION.md).
 
 ### Mounted servo limits
 
@@ -90,6 +95,37 @@ the VALID value. With no VALID value, any NO_RETURN gives NO_RETURN;
 two failures give no data. A fault streak of five fails the scan and
 centres the servo.
 
+### Geometry estimates
+
+The v3 observation report adds estimated width and two observed lateral
+spans. Closest distance and angle remain the sensor-frame location: forward
+`x = r cos(theta)`, left `y = r sin(theta)`. This is not a world coordinate.
+Geometry never selects a detour or changes the PROFILE.
+
+The nearest VALID final distance sets `r_min`. Candidate hits are VALID,
+positive distances at most `r_min + 150 mm`. Use the outermost candidates as
+the edges. Width is the chord between these range/angle points, calculated
+with the law of cosines and rounded to the nearest mm. One hit cannot
+establish width. A zero-distance TOO_NEAR or absent closest sample makes
+all geometry unknown. Disjoint hits can include empty space in the reported
+region width; the sonar does not identify individual objects.
+
+An edge at −30 or +30 degrees is clipped by the field of view. A calculated
+width with either edge clipped is only a lower bound. Beyond each edge,
+inspect the first adjacent outward ray. A VALID ray at least 150 mm farther
+than the closest hit, or NO_RETURN, supports an observed span. Unknown and
+error samples do not. A VALID ray must also reach the edge's forward plane.
+At that plane the span is `abs(x_edge * tan(theta_free) - y_edge)`.
+No outward ray means no estimate; clipped-edge clearance is unknown.
+NO_RETURN supports an observed gap, not a measured far boundary.
+
+Unknown dimensions use 65535 and explicit validity flags. The geometry
+assumes one useful obstacle region, no motion during scan, and representative
+sonar returns. Wide beams and sloping surfaces can give poor estimates.
+These are not body-clearance or passability claims. Dashboard rendering is
+separate. See the [v3 wire table](../s1-telemetry/MQTT_WIRE.md#obstacle-profile);
+v1/v2 remain readable without geometry.
+
 ### Profile analysis and the PROFILE event
 
 Obstacle distance is the nearest VALID point, or 511 if none is VALID.
@@ -105,7 +141,8 @@ must also be free; the outermost 30° point can be free alone.
 | Both blocked | Step 7 on both sides; side NONE |
 | PROFILE word | Distance bits 0–8, right free step 9–11, left 12–14, bit 15 zero |
 
-No width is calculated. Side selection is not a proof of body clearance.
+The decision does not use estimated width or observed spans. Side selection
+is not a proof of body clearance.
 
 ### 4 — Avoidance decision, reverse and reattempt
 
@@ -212,7 +249,7 @@ an endpoint became free. Do not subtract a fixed beam angle: surface,
 incidence and shape change the return. Reverse/rescan reduces angular
 size without assuming a universal beam correction.
 
-Fine scan, width measurement, complete material/angle characterization,
+Robot validation of coarse/fine geometry, complete material/angle characterization,
 precise centre alignment and safe clearance for every object are not
 implemented or established. NO_RETURN remains unknown. Test the reverse
 with room behind the robot; this code does not add a rear sensor.
