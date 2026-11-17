@@ -52,15 +52,16 @@ Each of three fixed RAM buffers can hold:
 | --- | ---: | --- |
 | Threshold-crossing rows |64 x24 B | ADC time/raw/polarity, decoder phase, interpolated GP28-axis distance, original upper motor bracket time and L/R counts |
 | ADC rows |512 x8 B |64 rolling pre-start points plus the FIRST448 post-start points, at least4000 us apart |
-| Context |172 B | Saved original frame/reference, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
+| Context |184 B | Saved original frame/reference, source-enable and last unbound-reset times, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
 
 The three buffers allow one active capture plus two retained failures. A
 terminal failure transfers buffer ownership; LINE does not copy or clear a
 whole buffer. A successful terminal attempt releases its working buffer and
 does not use a failure slot. Later attempts/laps cannot replace the first
 two failures. A NEW nonzero run epoch releases the old captures; STOP epoch0
-does not. Each retained buffer has5804 B; the array is17412 B. All capture
-storage together is17436 B, including source/reader indices. A compile-time
+does not. Each retained buffer has5816 B; the array is17448 B. All capture
+data symbols together are17485 B (was17432 B before the context times,
+measured by symbol sizes at `9ab99b2`), including source/reader indices. A compile-time
 ceiling limits the module to18 KiB.
 
 The pre-start ring covers up to256 ms at a continuous4 ms sample interval.

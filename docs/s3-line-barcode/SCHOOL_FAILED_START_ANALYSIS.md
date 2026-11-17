@@ -199,3 +199,31 @@ now also prints `[BC_FAIL_CONTEXT]` with source-enable and last unbound-reset
 times. See [the capture format](FAILED_ATTEMPT_CAPTURE.md#stopped-dump-format).
 The analyzer reports them relative to first-bar time. It now applies the
 40 mm policy and also reports the legacy `10n` value for older images.
+
+### Firmware and host gates (`9ab99b2`)
+
+| Gate | Result |
+| --- | --- |
+| GCC host tests | 581/581 PASS (572 before this work + 9 new) |
+| Clang ASan/UBSan host tests | 581/581 PASS; no runtime error reports |
+| 76 default profiles (38 built-in map + 38 `F=LEFT`) | Zero warnings |
+| A+B+C vs `024d01a` | 66 of 76 UF2 change; 10 are literal-identical |
+| D vs C, default OFF | 76/76 UF2 literal SHA MATCH and 76/76 ELF PT_LOAD MATCH |
+| Capture ON, UP MQTT KERNEL_RAM `F=LEFT` vs `024d01a` | RAM_PROOF 75/75 PASS; .data+.bss +208 B; .text +352 B; stack frames unchanged |
+
+Per map variant (both variants give the same list): the 24 images that
+contain the live reader change. The 9 images without the reader that also
+change are `capture-f0`, `capture-f1`, `up-test`, `up-bench`, `split-bench`,
+`control-bench`, `up-mqtt-test`, `split-mqtt-test` and `control-mqtt-test`.
+For each, the symbol names and sizes are identical and only 7–12 bytes
+differ. In `up-test` the bytes are two swapped linker veneers and the branch
+offsets to them. Identical: `up-mqtt-bench`, `split-mqtt-bench`,
+`control-mqtt-bench`, `split-test`, `control-test`. A rebuild of
+`024d01a` at a different path gives 38/38 identical images, so these
+differences are not path-dependent.
+
+The capture-ON image adds two flash callees under RAM_PROOF (still PASS):
+`__aeabi_fcmpeq` from `barcode_window_step` (held-retreat check) and
+`bcfc_epoch` from `barcode_live_source_sample`. Hardware cost and stack
+high-water are NOT measured. No flash and no push were done.
+
