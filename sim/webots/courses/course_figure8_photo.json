@@ -1,0 +1,425 @@
+{
+ "schema": 1,
+ "name": "course_figure8_photo",
+ "provenance": {
+  "assumed": true,
+  "source": "Demo course figure-8 from operator photos IMG_1960..1962 (2026-11-17), PHOTO-ESTIMATED tile grid; Cytron 315 mm tiles, 18 mm line, arc radius 157.5 mm. Only the line track is fixed; obstacle, ramp, barcode and start are parameters (ASSUMED). See docs/simulation/COURSE_FIGURE8_20261117.md."
+ },
+ "origin_mm": [
+  0,
+  0
+ ],
+ "start": {
+  "position_mm": [
+   789.9004214701962,
+   2362.5
+  ],
+  "yaw_deg": 180.0
+ },
+ "allow_open_ports": true,
+ "texture_mm_per_pixel": 0.5,
+ "tiles": [
+  {
+   "id": "r0c1",
+   "column": 1,
+   "row": 7,
+   "kind": "CURVE",
+   "rotation_deg": 270
+  },
+  {
+   "id": "r0c2",
+   "column": 2,
+   "row": 7,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r0c3",
+   "column": 3,
+   "row": 7,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r0c4_loose",
+   "column": 4,
+   "row": 7,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r0c5",
+   "column": 5,
+   "row": 7,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r1c0",
+   "column": 0,
+   "row": 6,
+   "kind": "CURVE",
+   "rotation_deg": 270
+  },
+  {
+   "id": "r1c1",
+   "column": 1,
+   "row": 6,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r1c2",
+   "column": 2,
+   "row": 6,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r1c3",
+   "column": 3,
+   "row": 6,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r1c4_loose",
+   "column": 4,
+   "row": 6,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r1c5",
+   "column": 5,
+   "row": 6,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r2c0",
+   "column": 0,
+   "row": 5,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r2c1",
+   "column": 1,
+   "row": 5,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r2c2",
+   "column": 2,
+   "row": 5,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r2c3",
+   "column": 3,
+   "row": 5,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r2c4_loose",
+   "column": 4,
+   "row": 5,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r2c5_loose",
+   "column": 5,
+   "row": 5,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r3c0",
+   "column": 0,
+   "row": 4,
+   "kind": "CURVE",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r3c1",
+   "column": 1,
+   "row": 4,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r3c2",
+   "column": 2,
+   "row": 4,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r3c3",
+   "column": 3,
+   "row": 4,
+   "kind": "CROSS",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r3c4",
+   "column": 4,
+   "row": 4,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r3c5",
+   "column": 5,
+   "row": 4,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r3c6",
+   "column": 6,
+   "row": 4,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r3c7",
+   "column": 7,
+   "row": 4,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r4c0_loose",
+   "column": 0,
+   "row": 3,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r4c1_loose",
+   "column": 1,
+   "row": 3,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r4c2",
+   "column": 2,
+   "row": 3,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r4c3",
+   "column": 3,
+   "row": 3,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r4c4",
+   "column": 4,
+   "row": 3,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r4c5",
+   "column": 5,
+   "row": 3,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r4c6_loose",
+   "column": 6,
+   "row": 3,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r4c7",
+   "column": 7,
+   "row": 3,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r4c8",
+   "column": 8,
+   "row": 3,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c0",
+   "column": 0,
+   "row": 2,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c1",
+   "column": 1,
+   "row": 2,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c2_loose",
+   "column": 2,
+   "row": 2,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r5c3",
+   "column": 3,
+   "row": 2,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c4",
+   "column": 4,
+   "row": 2,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c5_loose",
+   "column": 5,
+   "row": 2,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r5c6_loose",
+   "column": 6,
+   "row": 2,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r5c7",
+   "column": 7,
+   "row": 2,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r5c8",
+   "column": 8,
+   "row": 2,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c1_loose",
+   "column": 1,
+   "row": 1,
+   "kind": "CURVE",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c2",
+   "column": 2,
+   "row": 1,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c3",
+   "column": 3,
+   "row": 1,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c4",
+   "column": 4,
+   "row": 1,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c5",
+   "column": 5,
+   "row": 1,
+   "kind": "CURVE",
+   "rotation_deg": 270
+  },
+  {
+   "id": "r6c6",
+   "column": 6,
+   "row": 1,
+   "kind": "CURVE",
+   "rotation_deg": 180
+  },
+  {
+   "id": "r6c7",
+   "column": 7,
+   "row": 1,
+   "kind": "STRAIGHT",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r6c8",
+   "column": 8,
+   "row": 1,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r7c3",
+   "column": 3,
+   "row": 0,
+   "kind": "CURVE",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r7c4",
+   "column": 4,
+   "row": 0,
+   "kind": "STRAIGHT",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r7c5",
+   "column": 5,
+   "row": 0,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r7c6",
+   "column": 6,
+   "row": 0,
+   "kind": "CURVE",
+   "rotation_deg": 0
+  },
+  {
+   "id": "r7c7",
+   "column": 7,
+   "row": 0,
+   "kind": "CURVE",
+   "rotation_deg": 90
+  },
+  {
+   "id": "r7c8",
+   "column": 8,
+   "row": 0,
+   "kind": "BLANK",
+   "rotation_deg": 0
+  }
+ ],
+ "boxes": [],
+ "humps": [],
+ "barcodes": []
+}
