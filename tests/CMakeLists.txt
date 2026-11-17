@@ -73,6 +73,8 @@ host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.
 host_test(test_obstacle tests/test_obstacle.c ${obstacle_source})
 host_test(test_obstacle_detour tests/test_obstacle_detour.c ${obstacle_detour_source})
 host_test(test_obstacle_profile tests/test_obstacle_profile.c ${obstacle_profile_source})
+host_test(test_scan_stages tests/test_scan_stages.c ${servo_scan_source}
+    ${obstacle_profile_source})
 host_test(test_steer_log tests/test_steer_log.c src/steer_log.c)
 host_test(test_vehicle_controller tests/test_vehicle_controller.c src/vehicle_controller.c)
 host_test(test_vehicle_sm tests/test_vehicle_sm.c ${vehicle_sm_source})

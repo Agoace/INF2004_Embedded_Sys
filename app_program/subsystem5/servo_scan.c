@@ -15,6 +15,11 @@ static void clear_profile(ss_t *ss)
     for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; ++i) {
         ss->profile.point[i] = OBSTACLE_SCAN_POINT_EMPTY;
     }
+    ss->measured_mask = 0u;
+    ss->stage = SS_STAGE_COARSE;
+    ss->coarse_done = false;
+    ss->fine_first = 0u;
+    ss->fine_last = 0u;
     ss->index = 0u;
     ss->readings = 0u;
     ss->pending = false;
@@ -69,6 +74,42 @@ void ss_start(void *ctx, uint16_t payload, uint32_t now_ms)
     ++ss->scans;
 }
 
+/* Reuse completed coarse points. Fill every remaining legacy decision bin
+ * after refinement: free-step semantics never depend on invented samples. */
+static unsigned int next_point(ss_t *ss)
+{
+    if (!ss->coarse_done) {
+        for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; i += 3u) {
+            if ((ss->measured_mask & (1u << i)) == 0u) { return i; }
+        }
+        ss->coarse_done = true;
+        if (obstacle_fine_bounds(&ss->profile, &ss->fine_first,
+                                 &ss->fine_last)) {
+            ss->stage = SS_STAGE_FINE;
+        }
+    }
+    for (unsigned int pass = 0u; pass < 2u; ++pass) {
+        unsigned int best = OBSTACLE_SCAN_POINTS, distance = UINT8_MAX;
+        for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; ++i) {
+            if ((ss->measured_mask & (1u << i)) != 0u) { continue; }
+            if (pass == 0u && (ss->stage != SS_STAGE_FINE ||
+                i < ss->fine_first || i > ss->fine_last)) { continue; }
+            const unsigned int gap = i > ss->index ?
+                i - ss->index : ss->index - i;
+            if (gap < distance) { best = i; distance = gap; }
+        }
+        if (best < OBSTACLE_SCAN_POINTS) { return best; }
+    }
+    return OBSTACLE_SCAN_POINTS;
+}
+
+static uint32_t settle_ms(unsigned int before, unsigned int after)
+{
+    const unsigned int steps = before > after ? before - after : after - before;
+    const uint32_t wait = 60u + (steps > 1u ? (steps - 1u) * 15u : 0u);
+    return wait > 150u ? 150u : wait;
+}
+
 /* Add one echo to the current point; returns false on a fault streak. */
 static bool take_echo(ss_t *ss, const vsm_inputs_t *in, uint32_t now_ms)
 {
@@ -80,8 +121,12 @@ static bool take_echo(ss_t *ss, const vsm_inputs_t *in, uint32_t now_ms)
         obstacle_scan_combine(ss->profile.point[ss->index], in->echo);
     if (++ss->readings >= OBSTACLE_SCAN_READINGS) {
         ss->readings = 0u;
-        if (++ss->index < OBSTACLE_SCAN_POINTS) {
-            phase(ss, SS_SETTLE, OBSTACLE_SCAN_SETTLE_STEP_MS, now_ms);
+        ss->measured_mask |= (uint16_t)(1u << ss->index);
+        const unsigned int previous = ss->index;
+        const unsigned int next = next_point(ss);
+        if (next < OBSTACLE_SCAN_POINTS) {
+            ss->index = (uint8_t)next;
+            phase(ss, SS_SETTLE, settle_ms(previous, next), now_ms);
         } else {
             phase(ss, SS_RETURN, OBSTACLE_SCAN_SETTLE_RETURN_MS, now_ms);
         }

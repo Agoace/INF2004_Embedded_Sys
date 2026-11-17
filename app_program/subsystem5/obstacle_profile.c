@@ -1,5 +1,32 @@
 #include "obstacle_profile.h"
 
+bool obstacle_fine_bounds(const obstacle_profile_t *profile,
+                           uint8_t *first, uint8_t *last)
+{
+    uint16_t nearest = ULTRASONIC_DISTANCE_MAX_MM;
+    for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; i += 3u) {
+        const obstacle_scan_point_t p = profile->point[i];
+        if (ultrasonic_result_status(p) == ULTRASONIC_STATUS_VALID &&
+            ultrasonic_result_distance(p) < nearest) {
+            nearest = ultrasonic_result_distance(p);
+        }
+    }
+    if (nearest == ULTRASONIC_DISTANCE_MAX_MM) { return false; }
+    unsigned int lo = OBSTACLE_SCAN_POINTS, hi = 0u;
+    for (unsigned int i = 0u; i < OBSTACLE_SCAN_POINTS; i += 3u) {
+        const obstacle_scan_point_t p = profile->point[i];
+        if (ultrasonic_result_status(p) == ULTRASONIC_STATUS_VALID &&
+            ultrasonic_result_distance(p) <=
+                (uint32_t)nearest + OBSTACLE_PROFILE_GAP_MM) {
+            if (i < lo) { lo = i; }
+            hi = i;
+        }
+    }
+    *first = (uint8_t)(lo > 3u ? lo - 3u : 0u);
+    *last = (uint8_t)(hi < 9u ? hi + 3u : 12u);
+    return true;
+}
+
 /* Point index for a side and a step. Right steps go down from the centre. */
 static unsigned int point_index(bool left, unsigned int step) {
     return left ? OBSTACLE_SCAN_CENTRE_INDEX + step

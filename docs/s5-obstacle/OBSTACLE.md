@@ -4,8 +4,9 @@
 
 The robot stops for a confirmed forward obstacle, scans, chooses a side,
 and runs DETOUR. The five brief stages below describe the intended work
-and the actual implementation separately. There is no separate adaptive
-coarse/fine scan or reliable obstacle-width estimate.
+and the actual implementation separately. The SCAN module now uses a
+coarse/fine schedule with legacy-bin completion. Geometry reporting is
+separate from the unchanged avoidance decision.
 
 The pure modules return requests to the Vehicle Controller shell. Motion
 owns the servo and wheel outputs. The [ultrasonic service](#ultrasonic-driver-and-service)
@@ -36,20 +37,37 @@ current robot feature.
 
 ### 1 — Coarse scan
 
-The implemented first survey is the complete fixed 13-point scan: −30°
-(right) to +30° (left), in 5° steps. It is not a separate coarse sweep.
-The robot waits stopped for 300 ms, settles the first point for 150 ms,
-then takes two readings at each point. Each next step settles for 60 ms;
-the 60 ms trigger minimum still applies. Return to centre settles 150 ms.
-Standalone bench scans measured 1829 and 1833 ms, excluding the robot's
-initial 300 ms stop wait.
+The robot stops for 300 ms, then surveys −30, −15, 0, +15 and +30 degrees,
+with two readings at each angle. Negative is right, positive is left.
+The first angle settles for 150 ms. Between points, settling is 60 ms for
+a 5-degree move, plus 15 ms per additional 5 degrees, capped at 150 ms.
+The sonar service retains its minimum 60 ms trigger interval. Return to
+centre settles for 150 ms. These settle values are scheduling assumptions,
+not a new servo-speed measurement.
 
-### 2 — Fine scan: not implemented
+### 2 — Fine scan and decision-bin completion
 
-There is no edge-triggered second pass, smaller-angle refinement or
-coarse-to-fine controller. The same 13 points at 5° spacing are all that
-run. The beam is much wider than a step, so 5° spacing is not 5° edge
-accuracy. Do not label current profiles as precise obstacle boundaries.
+After the coarse sweep, the nearest VALID coarse distance sets a frozen
+hit threshold: that distance plus 150 mm, inclusive. Refine in 5-degree
+steps from one coarse step outside the outermost hits on each side,
+clipped to −30..+30. A coarse sweep without VALID hits has no fine region.
+Completed coarse points are reused, never pinged again. Within the region,
+the nearest unvisited index is selected first to limit return travel.
+
+The unchanged DETOUR free-step calculation needs all 13 original bins.
+After refinement, fill the remaining unvisited bins, nearest first. No
+missing ray is interpolated or marked free. Each finished profile therefore
+has 13 unique angles and 26 readings, including coarse samples. Geometry
+resolution is 5 degrees; the wide sonar beam does not have 5-degree edge
+accuracy. A narrow object missed by all coarse rays can still appear during
+compatibility completion, but this is not a proven detection guarantee.
+
+A 10 ms fake scheduler with 60 ms sonar spacing gives a worst duration of
+2560 ms including the 300 ms stop over all contiguous hit intervals and the
+empty case. This host result is accepted for the first bench; it is not a
+measured robot bound. Actual echo and navigation latency can add time.
+Historical fixed-scan bench times were 1829/1833 ms excluding the initial
+stop. Retain settling and sonar spacing; measure the new robot duration.
 
 ### Mounted servo limits
 

@@ -177,7 +177,7 @@ static void test_scan(void) {
     in.ping_sent = true;
     in.echo = echo_mm(250u);
     o = step(&ss, ss_step, &in, 540u, &d);
-    CHECK(ss.index == 1u && ss.readings == 0u && ss.phase == SS_SETTLE && d.servo_deg == -25 &&
+    CHECK(ss.index == 3u && ss.readings == 0u && ss.phase == SS_SETTLE && d.servo_deg == -15 &&
               ping == 0u && ultrasonic_result_distance(ss.profile.point[0]) == 250u,
           "point 1: index %u phase %u servo %d point0 %u", ss.index, ss.phase, d.servo_deg,
           ultrasonic_result_distance(ss.profile.point[0]));
@@ -185,8 +185,8 @@ static void test_scan(void) {
     in.echo_new = false;
     o = step(&ss, ss_step, &in, 599u, &d);
     CHECK(ss.phase == SS_SETTLE, "settle step 59 ms");
-    o = step(&ss, ss_step, &in, 600u, &d);
-    CHECK(ss.phase == SS_MEASURE, "settle step 60 ms");
+    o = step(&ss, ss_step, &in, 630u, &d);
+    CHECK(ss.phase == SS_MEASURE, "coarse 15-degree settle 90 ms");
     /* A ping in SETTLE (not asked) is not counted. */
     ss.phase = SS_SETTLE;
     in.ping_sent = true;
@@ -209,6 +209,8 @@ static void test_scan(void) {
     /* Last point: RETURN, servo centre, the outcome after 150 ms. */
     ss_start(&ss, 0u, 0u);
     ss.index = OBSTACLE_SCAN_POINTS - 1u;
+    ss.measured_mask = (1u << (OBSTACLE_SCAN_POINTS - 1u)) - 1u;
+    ss.coarse_done = true;
     ss.readings = OBSTACLE_SCAN_READINGS - 1u;
     ss.phase = SS_MEASURE;
     in.ping_sent = true;

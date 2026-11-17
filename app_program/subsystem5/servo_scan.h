@@ -7,10 +7,10 @@
  * shell inputs (ping request, ping_sent, echo).
  *
  *   WAIT     wheels 0, servo centre, for stop_ms (the robot stops)
- *   POINT i  servo to obstacle_scan_angle_deg(i) (i = 0..12, 30 degrees
- *            right to 30 degrees left); settle (first point, then one
- *            step); take OBSTACLE_SCAN_READINGS readings (pings as fast
- *            as the driver allows) and combine them
+ *   COARSE   indices 0,3,6,9,12; two readings each, driver-paced pings
+ *   FINE     unvisited 5-degree bins in the detected region, then remaining
+ *            legacy bins for identical PROFILE/free-step semantics;
+ *            completed angles are never measured again
  *   RETURN   servo centre; settle; publish the full profile
  *   REVERSE  if both sides are blocked, drive back 100 mm at 100 mm/s,
  *            measured by the mean wheel encoder delta; at most two retries
@@ -25,7 +25,8 @@
  *           obstacle_side_t (the clearer side; NONE when both are blocked)
  *   FAILED  SS_FAIL_ECHO, or SS_FAIL_REVERSE_TIMEOUT after a 3 s reverse leg
  *
- * The start payload (the obstacle distance) is not used.
+ * The start payload is not used. Refinement uses the nearest VALID coarse
+ * distance plus 150 mm. Geometry reporting never changes the SIDE result.
  *
  * Pure logic: host-tested by tests/test_obstacle_modules.c.
  */
@@ -86,8 +87,14 @@ typedef enum {
     SS_NOTICE_RESCAN_BEGIN = 3,
 } ss_notice_t;
 
+enum { SS_STAGE_COARSE = 1u, SS_STAGE_FINE = 2u };
+
 typedef struct {
     ss_config_t cfg;
+    uint16_t measured_mask;
+    uint8_t stage;
+    uint8_t fine_first, fine_last;
+    bool coarse_done;
     uint8_t phase; /* ss_phase_t */
     uint8_t index; /* point now, 0..13 */
     uint8_t readings;
