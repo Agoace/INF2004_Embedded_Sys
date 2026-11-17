@@ -773,12 +773,12 @@ def csv_fields():
                 sample[1] = 1
             elif name == "detour":
                 sample[1] = 3
-            elif name == "obstacle" and version == 3:
-                sample[24:30] = b"\xff" * 6
             if name == 'barcode' and version == 2:
                 sample[2], sample[3], sample[4] = 5, 65, 1
                 sample[8] = sample[12] = 1
                 sample[24:28] = b'\xff' * 4
+            elif name == "obstacle" and version == 3:
+                sample[24:30] = b"\xff" * 6
             fields.update(decode("robot/" + name, sample))
     # Junction angle variants add fields absent from ordinary phase events.
     sample = bytearray(20)

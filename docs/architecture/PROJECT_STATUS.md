@@ -5,8 +5,9 @@ before you propose work. Update the row in
 the same commit as a change of state. Details stay in the linked records.
 
 Baseline state date: 2026-11-16; staging tip at that writing: `a0cd97b`.
-Scan candidate updated 2026-11-17 on `mtk3-scan-int`, based on staging
-`b9a47b5`. This branch does not record a new hardware acceptance.
+2026-11-17: staging integrates barcode v2 (`ad22f8f`), coarse/fine scan
+with obstacle v3 (`7fe4054`) and the dashboard panels (`60b41f2`). No new
+hardware acceptance is recorded for these changes.
 
 ## Demo image
 
@@ -24,13 +25,13 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
-| Obstacle, scan, detour | Prior fixed-scan detours 2/2 in each of 6 course runs (2026-11-16). Coarse/fine + v3 geometry software candidate on `mtk3-scan-int`: 551 GCC/sanitizer tests, UP RAM proof PASS. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Stationary geometry/timing/stack check and two-detour regression not run; DONE_NO_LINE and STALL_RIGHT remain open. |
+| Obstacle, scan, detour | Prior fixed-scan detours 2/2 in each of 6 course runs (2026-11-16). Coarse/fine scan + v3 geometry in staging (2026-11-17): host tests and UP RAM proof PASS. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Stationary geometry/timing/stack check and two-detour regression not run; DONE_NO_LINE and STALL_RIGHT remain open. |
 | Junction actions (B2a) | CLOSED. J1..J5 PASS on the floor with fake commands. | [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Pending command has no timeout. J2 new pending policy Not run. |
 | Barcode reader (B2b) | SHADOW only. Course 2026-11-16: 0 of 10 attempts decoded (robot zigzags). Straight TEST pass: large F decoded both ways. | [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md), [BARCODE.md](../s3-line-barcode/BARCODE.md) | Size-tolerant reader (n 4..7 mm) in staging: identical to the old reader on 5 real captures; not proven on the course. Reliable read needs less zigzag. |
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
 | Barcode LIVE (steers) | Not enabled. Three gates: build flag with measured clearance, producer valid flag, table. | [JUNCTION_LIVE_ADAPTER.md](JUNCTION_LIVE_ADAPTER.md) | Blocked by reliable read. |
 | IMU humps | Report only. 2 humps per course run (2026-11-16). | [IMU.md](../s4-imu/IMU.md) | Extra IMU requirement: another team member works on staging. H3 Not run. `hump_imu_fault=1` once (2026-11-16 BASE run). |
-| Telemetry, MQTT, dashboard | Run-summary counts implemented. Barcode terminal v2, FIFO/QoS1 and early reason/frame dump are software candidates; host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md), [Terminal attempts](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) | Integrate matching v2 dashboard panel, then operator check of attempts, queue loss and same-run counts. No flash or hardware acceptance for this change. |
+| Telemetry, MQTT, dashboard | Run-summary counts implemented. Barcode terminal v2 (FIFO/QoS1, early reason/frame dump) and the v2/v3 dashboard panels are in staging (2026-11-17); host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md), [Terminal attempts](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) | Operator UI check pending: attempts, queue loss, same-run counts and the obstacle v3 panel on the robot. |
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. |
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
