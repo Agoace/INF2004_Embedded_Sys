@@ -390,12 +390,14 @@ synchronization. SDK headers are `-isystem`; application strict warnings
 remain errors. Link-only proof and command:
 [BUILD.md](../kernel/BUILD.md#host-tests-and-link-proof).
 
-## Same-tick retarget (opt-in)
+## Same-tick retarget (default on)
 
-Build switch `MOTION_SAME_TICK=1` (image suffix `_sametick`). Default 0:
-the image is byte-identical (hash76 MATCH against `b9a47b5`).
+Build switch `MOTION_SAME_TICK`, default 1 for robot images since
+2026-11-17 (demo default). `MOTION_SAME_TICK=0` gives the old timing;
+image suffix `_sametick0`, profile `-sametick0`. Before 2026-11-17 the
+default was 0 and 1 added `_sametick`.
 
-| Item | Default | `MOTION_SAME_TICK=1` |
+| Item | `MOTION_SAME_TICK=0` | Default (1) |
 | --- | --- | --- |
 | New target reaches the motor | next tick, about 8 ms after the vehicle step | in the same period, at `motion_set_speed()` |
 | Loop delay, line read to motor (10 ms period) | about 10 ms | about 2 ms |
@@ -425,8 +427,10 @@ Safety and timing:
   retarget time (one control step under the mutex).
 - `KERNEL_RAM=1` adds [`same_tick.list`](../../tools/kernel_ram/same_tick.list)
   (`motion_set_speed`, `mc_retarget`) only with this switch. The robot
-  demo build `KERNEL_RAM=1 MOTION_SAME_TICK=1` gives `RAM_PROOF PASS listed 77`.
-- `BENCH_KERNEL=1` rejects the switch. The sim and Webots paths do not use it.
+  demo build `KERNEL_RAM=1` gives `RAM_PROOF PASS listed 77`.
+- `BENCH_KERNEL=1` has no robot motion path: its default is 0, with no
+  suffix, and an explicit `MOTION_SAME_TICK=1` stops make. The sim,
+  Webots and CMake paths do not use the switch.
 
 Files: [`motor_ctl_same_tick.h`](../../app_program/subsystem2/motor_ctl_same_tick.h)
 (interface), [`motor_ctl_same_tick_impl.h`](../../app_program/subsystem2/motor_ctl_same_tick_impl.h)

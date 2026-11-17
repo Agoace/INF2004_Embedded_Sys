@@ -92,13 +92,15 @@
 /*
  * D test after P7 (docs/s3-line-barcode/LINE.md): GP20 picks the next D.
  * All other
- * settings stay. The first value is the P7 value. */
-static const uint8_t D_STEPS[] = {85u, 130u, 50u};
+ * settings stay. The first value is the default (D 30 since 2026-11-17;
+ * the P7 value was 85). */
+static const uint8_t D_STEPS[] = {30u, 85u, 130u, 50u};
 #define D_STEP_COUNT (sizeof D_STEPS / sizeof D_STEPS[0])
 static unsigned int d_step;
 
 static const lt_config_t LINE_CFG = {
-    .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
+    /* Demo default 2026-11-17 (run B120_1): base 120, D 30 (was 146, 85). */
+    .steer = {.base_mm_s = 120, .gain_pct = 85u, .kd_pct = 30u, .min_mm_s = 62,
               .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},
     .straight_counts = 450,
     .hint_counts = 20,

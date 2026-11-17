@@ -14,10 +14,10 @@ static int difference(int position)
 int main(void)
 {
     assert(LINE_CFG.steer.gain_pct == LINE_P_NEAR);
-    assert(LINE_CFG.steer.kd_pct == 85u);
+    assert(LINE_CFG.steer.kd_pct == 30u);
     assert(LINE_CFG.steer.far_gain_pct == 340u);
     assert(LINE_CFG.steer.far_from == 50u);
-    assert(LINE_CFG.steer.base_mm_s == 146);
+    assert(LINE_CFG.steer.base_mm_s == 120);
     assert(LINE_CFG.steer.min_mm_s == 62);
     assert(LINE_CFG.steer.max_mm_s == 378);
     assert(SEARCH_CFG.speed_mm_s == 131);
