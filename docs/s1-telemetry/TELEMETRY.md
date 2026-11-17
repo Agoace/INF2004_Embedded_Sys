@@ -371,8 +371,8 @@ attempt and geometry rows need the corresponding producer formats.
 | Barcode ok / failed | `robot/summary`; zero is a reported count, not missing data. These are completed-run totals, not individual attempts. |
 | Raw GP28 | `robot/state`; its age includes the line-board age. The board-valid row is separate from the raw value. RUN and idle age limits apply. |
 | IMU attitude | Current state/status messages do not contain IMU attitude samples. State heading and turn rate are wheel odometry; do not use them as IMU values. Legacy `robot/imu` v1 raw fields still appear if received. |
-| Barcode attempt v2 | `robot/barcode` v2 shows decoded/failed, letter, reason, direction, mapped command, producer epoch/sequence, start/terminal uptime and available narrow/wide estimates in mm. These are not confidence votes or navigation acknowledgements. |
-| SHADOW | The v2 attempt flag confirms SHADOW for that report. Without v2, SHADOW is deployment context only; summary counts and raw GP28 do not confirm it on wire. A decoded letter does not prove that a command was issued. |
+| Barcode attempt v2 | `robot/barcode` v2 shows decoded/failed, letter, reason, direction, mapped command, producer epoch/sequence, start/terminal uptime and available narrow/wide estimates in mm. Command values 0–4 display as NONE, LEFT, RIGHT, STRAIGHT and UTURN, separate from the decoded letter. These are not confidence votes or navigation acknowledgements. |
+| SHADOW / LIVE | The v2 attempt flag displays SHADOW when set and LIVE when clear. Without v2, SHADOW is deployment context only; summary counts and raw GP28 do not confirm it on wire. Neither LIVE nor a decoded letter proves that a command was issued or executed. |
 
 Each summary shows its run ID, boot/session, received age and retained-copy
 warning when applicable. An earlier boot's summary stays labelled as history.
