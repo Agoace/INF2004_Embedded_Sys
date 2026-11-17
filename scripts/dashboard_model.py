@@ -455,9 +455,10 @@ class DashboardModel:
         return min(age, MISSING_AGE_MS)
 
     def record_age(self, now, record, extra=0):
+        """Laptop elapsed receive time, not the producer's u16 board-age field."""
         if record is None:
             return None
-        return min(int(now - record["rx"]) + extra, MISSING_AGE_MS)
+        return int(now - record['rx']) + extra
 
     def telemetry_mode(self):
         """Return "idle", "run" or "unknown" from the newest frame that carries the mode bit.
@@ -932,12 +933,14 @@ def obstacle_panel(model, now):
         detour_age = model.record_age(now, model.detours[-1])
         age = detour_age if age is None else min(age, detour_age)
         rows.append(("Detours missed (sequence gaps)", model.detour_missed))
-    return make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None,
+    panel = make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None,
                       rows=format_rows + rows + geometry_rows,
                       chart=chart, table=_detour_table(model) if model.detours else None,
                       note=geometry_note + "; age = time since the newest scan or detour finished; "
                       "angle: right is negative. Max offset is the sideways distance from "
                       "the heading at detour start")
+    panel['age_kind'] = 'report'
+    return panel
 
 
 @register_panel
@@ -1070,7 +1073,8 @@ def barcode_panel(model, now):
             notes += ['v2 mode uses the wire SHADOW flag; a mapped command is observation only, '
                       'not a command acknowledgement',
                       'v2 has no boot ID or run ID; session is inferred from other messages, '
-                      'not proved by the producer epoch; summary totals remain separate']
+                      'not proved by the producer epoch; summary totals and attempt sequence '
+                      'are separate, not a report-loss estimate']
     if record is None or record['fields']['version'] != 2 or not record['fields'].get('known'):
         notes.append('SHADOW is deployment context, not a transmitted mode')
     history_only = model.state is None and record is None
@@ -1079,7 +1083,7 @@ def barcode_panel(model, now):
     panel = make_panel('barcode', 'Barcode', age, rows=rows,
                        stale_ms=None if history_only else model.limits()['state_stale_ms'],
                        note='; '.join(notes + ['raw GP28 uses robot/state line-board age']))
-    panel['age_kind'] = 'report' if history_only else 'data'
+    panel['age_kind'] = 'report' if history_only or record is not None else 'data'
     return panel
 
 

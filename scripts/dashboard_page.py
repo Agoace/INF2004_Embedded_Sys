@@ -76,8 +76,10 @@ button.armed { background:var(--warn); color:#000; }
 .panel td { padding:1px 0; vertical-align:top; }
 .panel td:first-child { color:var(--dim); width:55%; }
 .panel table.rows td:first-child { width:auto; }
-.panel table.rows th { text-align:left; color:var(--dim); font-weight:400; font-size:12px; }
-.panel table.rows { table-layout:fixed; margin-top:6px; }
+.table-scroll { max-width:100%; overflow-x:auto; }
+.panel table.rows th { text-align:left; color:var(--dim); font-weight:400; font-size:12px;
+  padding:1px 4px 1px 0; vertical-align:top; overflow-wrap:anywhere; }
+.panel table.rows { table-layout:fixed; margin-top:6px; min-width:640px; }
 .panel table.rows td { padding:1px 4px 1px 0; font-size:12px; overflow-wrap:anywhere; }
 .items { max-height:220px; overflow-y:auto; font-family:ui-monospace, monospace; font-size:12px; }
 .note { color:var(--dim); font-style:italic; }
@@ -138,9 +140,10 @@ function pill(id, label, level) {
   text(node, label);
   node.className = "pill " + level;
 }
-function fmtAge(ms) {
+function fmtAge(ms, boardAge = true) {
   if (ms === null || ms === undefined) return "no data";
-  return ms >= 65535 ? "no data" : (ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s");
+  return boardAge && ms === 65535 ? "no data" :
+    (ms < 1000 ? ms + " ms" : (ms / 1000).toFixed(1) + " s");
 }
 
 function drawBars(ctx, canvas, chart) {
@@ -369,7 +372,7 @@ function panelNode(panel) {
     node.innerHTML = '<h2><span class="title"></span><span class="age"></span></h2>' +
       '<div class="note"></div><div class="visual-summary"></div>' +
       '<canvas hidden></canvas><div class="legend"></div><table class="facts"></table>' +
-      '<table class="rows" hidden></table><div class="items"></div>';
+      '<div class="table-scroll"><table class="rows" hidden></table></div><div class="items"></div>';
     const primary = ["ultrasonic", "line", "wheels", "summary", "hump"].includes(panel.id);
     document.getElementById(primary ? "grid" : "health-grid").appendChild(node);
   }
@@ -405,7 +408,8 @@ function renderPanel(panel) {
   text(node.querySelector(".title"), titles[panel.id] || panel.title);
   text(node.querySelector(".age"), panel.id === "path" ? (panel.paused ? "idle (paused)" : "live rows")
        : panel.placeholder ? "placeholder"
-       : panel.age_kind === "report" && panel.age_ms !== null ? fmtAge(panel.age_ms) + " since report"
+       : panel.age_kind === "report" && panel.age_ms !== null ?
+         fmtAge(panel.age_ms, false) + " since report" + (panel.stale ? " - stale" : "")
        : panel.paused ? "idle (paused)" + (panel.age_ms === null ? "" : ", data " +
                                            fmtAge(panel.age_ms))
        : fmtAge(panel.age_ms) + (panel.stale && panel.age_ms !== null ? " - stale" : ""));
