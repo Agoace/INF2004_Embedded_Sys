@@ -536,6 +536,18 @@ vehicle task described below.
   [`gate1_report.py`](../sim/webots/tools/gate1_report.py) and
   [`check_d1_interop.py`](../sim/webots/tools/check_d1_interop.py) correlate
   stopped D1 evidence. Tests: [`test_gate1.py`](../sim/webots/tests/test_gate1.py).
+- [Figure-8 SIL integration](simulation/COURSE8_SIL_INTEGRATION_20261117.md) —
+  separate course8 controller and host checks; pinned read-only course/firmware
+  archives, not a merge of the staging course branch. Entry points:
+  [`sil_course8.py`](../sim/webots/pil/sil_course8.py),
+  [`sil_course_path.py`](../sim/webots/pil/sil_course_path.py),
+  [`sil_ray_np.py`](../sim/webots/pil/sil_ray_np.py),
+  [`course8_adapter.c`](../sim/webots/controllers/sil_line/course8_adapter.c),
+  [`controller`](../sim/webots/controllers/sil_course8/sil_course8.py),
+  [`report`](../sim/webots/pil/sil_course8_report.py) and
+  [`runner`](../sim/webots/tools/sil_course8_run.py). Tests are
+  `sim/webots/tests/test_sil_course8*.py`, `test_sil_course_path.py` and
+  `test_sil_ray_np.py`. No Webots run or hardware acceptance is implied.
 - [S3 sensor model](simulation/S3_SENSOR_MODEL.md) — exploratory, not calibration.
   [`s3_geometry.py`](../sim/webots/pil/s3_geometry.py),
   [`s3_assets.py`](../sim/webots/pil/s3_assets.py),

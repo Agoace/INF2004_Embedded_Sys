@@ -87,6 +87,8 @@ not current acceptance reports. Local course originals are not public records.
 
 ## Simulation
 
+- [COURSE8_SIL_INTEGRATION_20261117.md](simulation/COURSE8_SIL_INTEGRATION_20261117.md) — review of SW7's separate figure-8 SIL controller, pinned course/firmware overlays, NumPy equivalence checks, replay limits and unchanged hardware gates.
+
 - [PIL_PROTOCOL.md](simulation/PIL_PROTOCOL.md) — frozen PIL v1 bytes, clocks, safety and host-only Stage 0 / hardware Gate 1 boundary.
 - [PIL_GATE1.md](simulation/PIL_GATE1.md) — approved transport design/status; host-tested UART/session/runtime image, physical P1 not run.
 - [PIL_GATE1_BUILD.md](simulation/PIL_GATE1_BUILD.md) — exact Gate1 image/hash, operator wiring/stop procedure and host/ARM/RAM/identity evidence.
