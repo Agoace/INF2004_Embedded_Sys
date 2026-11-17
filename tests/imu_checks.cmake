@@ -1,3 +1,6 @@
+host_test(test_imu_safety tests/test_imu_safety.c
+    app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_safety PRIVATE m)
 host_test(test_imu_fifo tests/test_imu_fifo.c
     app_program/subsystem4/imu_fifo.c)
 target_link_libraries(test_imu_fifo PRIVATE m)
