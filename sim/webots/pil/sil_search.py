@@ -49,6 +49,12 @@ class SearchController(MotorLineController):
         result.update(search_speed_mm_s=out[0],search_turn_counts=out[1],
                       line_straight_counts=out[2],line_hint_counts=out[3],registered_modules=['LINE','SEARCH'])
         return result
+    def timing(self):
+        output=(ctypes.c_int32*7)()
+        function=self.lib.sil_search_timing
+        function.argtypes=[ctypes.POINTER(ctypes.c_int32)];function.restype=None
+        function(output)
+        return list(output)
     @staticmethod
     def _decode(out):
         result=dict(zip(('position','event','line_seen','junction','left_pct','right_pct','norm_left',

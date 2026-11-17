@@ -105,7 +105,7 @@ def run(robot,project):
     encoders=[robot.getDevice(n)for n in('left_encoder','right_encoder')]
     for encoder in encoders:encoder.enable(1)
     rows=[];rejections=[];error=None;fault=False;ticks=config.get('duration_ms',10000)
-    optical_history=[]
+    optical_history=[];timing_history=[]
     if config.get('taskA_geometry'):
         from pil.sil_excited_line import DelayPair
         adc_delay=DelayPair(config.get('sensor_transport_delay_ms',0))
@@ -136,6 +136,8 @@ def run(robot,project):
                 if not sample.valid:raise ValueError('GP28 invalid: '+sample.reason)
                 adc.append(sample.adc)
             actual=controller.update(*adc[:2],slot+1,*(counts if native else()),*(adc[2:]if config.get('barcode_trial')else()))
+            if config.get('record_motor_timing')and (slot+1)%10==0:
+                timing_history.append(controller.timing())
             if actual.get('bc_event_full'):raise ValueError('barcode evidence event budget full')
             if actual['fault']:fault=True
             try:targets=(plant.advance(actual['left_pct'],actual['right_pct'])if native else
@@ -214,6 +216,9 @@ def run(robot,project):
             (output/'barcode-inputs.json').write_text(json.dumps(evidence[0],separators=(',',':'))+'\n')
             (output/'barcode-details.json').write_text(json.dumps(evidence[1],indent=2)+'\n')
             (output/'barcode-events.json').write_text(json.dumps(evidence[2],indent=2)+'\n')
+    if config.get('record_motor_timing'):
+        with (output/'motor-timing.csv').open('w',newline='')as stream:
+            writer=csv.writer(stream);writer.writerow(('tick_ms','applied_command_stamp_ms','target_l_q8','target_r_q8','same_tick','has_command','age_ms'));writer.writerows(timing_history)
     if config.get('taskA_geometry'):
         with (output/'taskA-optical-inputs.csv').open('w',newline='')as stream:
             writer=csv.writer(stream);writer.writerow(('ms','fresh_l','fresh_c','delivered_l','delivered_c'));writer.writerows(optical_history)

@@ -17,6 +17,9 @@ from pil.sil_excited_line import apply_geometry,window_metrics
 CASES={'offset10-yaw-10':(10,-10,0),'offset15-yaw0':(15,0,0),'offset10-yaw-10-delay20':(10,-10,20)}
 CANDIDATES={f'P{gain}-delay{delay}':(gain,delay)for gain,delay in ((60,20),(40,20),(85,30),(60,30),(40,30))}
 CASES.update({name:(10,-10,delay)for name,(_,delay)in CANDIDATES.items()})
+BASE_TIMING={f'B{base}-delay{delay}':(base,delay,False)for base in (120,100)for delay in (20,30)}
+BASE_TIMING.update({f'same-tick-delay{delay}':(146,delay,True)for delay in (20,30)})
+CASES.update({name:(10,-10,delay)for name,(_,delay,_)in BASE_TIMING.items()})
 
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--case',choices=CASES,required=True)
@@ -35,6 +38,14 @@ def main():
         gain,_=CANDIDATES[a.case];record=build_candidate(project/'libraries',gain)
         config['LINE_P_NEAR']=gain;config['candidate_source_commit']=record['source_commit']
         config['candidate_source_policy']=record['source_policy']
+    if a.case in BASE_TIMING:
+        from pil.sil_line_candidates import build_candidate,BASE_REVISION
+        base,_,same_tick=BASE_TIMING[a.case]
+        record=build_candidate(project/'libraries',85,base_mm_s=base,same_tick=same_tick,revision=BASE_REVISION)
+        config.update(LINE_P_NEAR=85,LINE_BASE=base,same_tick_apply=same_tick,record_motor_timing=True,
+            candidate_source_commit=record['source_commit'],candidate_source_policy=record['source_policy'],
+            motor_order='shell step then motor tick'if same_tick else'motor tick then shell step',
+            delay_audit='Explicit ADC transport; existing DM1/80ms unchanged; same-tick changes order only, removes one10ms modeled publication wait, not a separately measured8ms delay.')
     config['taskA_case']=a.case;config['historical_spin_path']=str(a.spin.resolve())
     config['historical_spin_sha256']=hashlib.sha256(a.spin.read_bytes()).hexdigest()
     config_path.write_text(json.dumps(config,indent=2,sort_keys=True)+'\n')
@@ -54,8 +65,13 @@ def main():
             module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module);proof=module.replay_export(project)
         with (project/'sil-result/samples.csv').open()as stream:
             reader=csv.reader(stream);next(reader);rows=[list(map(float,r))for r in reader]
-        for start_ms,end_ms in ((2000,4000),(4000,6000),(6000,8000),(8000,10000)):
-            if rows and rows[-1][0]>=end_ms:metrics.append(window_metrics(rows,start_ms,end_ms))
+        if a.case in BASE_TIMING:
+            from pil.sil_line_base_timing import WINDOWS,analyze_window
+            for start_ms,end_ms in WINDOWS:
+                if rows and rows[-1][0]>=end_ms:metrics.append(analyze_window(rows,start_ms,end_ms,profile['track_mm']))
+        else:
+            for start_ms,end_ms in ((2000,4000),(4000,6000),(6000,8000),(8000,10000)):
+                if rows and rows[-1][0]>=end_ms:metrics.append(window_metrics(rows,start_ms,end_ms))
     except (ValueError,OSError)as e:error=str(e)
     result=dict(case=a.case,owned_pgid=pid,exit_status=status,wall_seconds=elapsed,cap_seconds=1200,command=command,
         complete=bool(status==0 and proof and summary and summary['samples']==10000 and summary['error']is None and 'ERROR:'not in contents and 'WARNING:'not in contents),
