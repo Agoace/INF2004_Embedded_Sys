@@ -28,11 +28,21 @@ static unsigned int unavailable_detail;
 /* Bit N is set when a kind-3/word-3 event carried detail N. A refused start
  * reports the same word, so the mask covers both the latch and the refusal. */
 static unsigned int unavailable_detail_mask;
+/* IMU recovery observations: word bit 15 marks them, low byte is the gate. */
+static unsigned int recovery_events;
+static unsigned int recovery_pending;
+static unsigned int recovery_cancelled;
 void mock_di(UINT *irq) { assert(!irq_off);irq_off=1u;*irq=77u; }
 void mock_ei(UINT irq) { assert(irq==77u && irq_off);irq_off=0u; }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;
+    if (event->kind==3u && (event->word & 0x8000u) != 0u) {
+        const unsigned int gate = event->word & 0xFFu;
+        ++recovery_events;
+        if (gate==8u) ++recovery_pending;
+        if (gate==9u) ++recovery_cancelled;
+    }
     if (event->kind==3u && event->word==3u) {
         /* IMU_SAFETY_IMU_UNAVAILABLE, latch or refused start: detail=cause. */
         if (unavailable_events==0u) unavailable_detail=event->detail;
@@ -119,13 +129,29 @@ int main(int argc,char **argv) {
     else if (argc>1 && !strcmp(argv[1],"imuinvalid")) mode=5u;
     else if (argc>1 && !strcmp(argv[1],"imuabsent")) mode=6u;
     else if (argc>1 && !strcmp(argv[1],"imupose")) mode=7u;
+    else if (argc>1 && !strcmp(argv[1],"imuclearretry")) mode=8u;
+    else if (argc>1 && !strcmp(argv[1],"imuclearintent")) mode=9u;
+    if (mode==8u) {
+        /* The writer applies the clear 250 ms after the request: longer than
+         * the old single 100 ms attempt, so only a retry can release it. */
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+        safety_out.clear_ms=IMU_SAFETY_CLEAR_MS;
+        safety_clear_delay_ms=250u;
+    }
+    if (mode==9u) {
+        /* The writer never applies the clear: the bounded intent must expire,
+         * record the outcome and keep the latch. */
+        safety_out.latched_trigger=(uint8_t)IMU_SAFETY_LIFT;
+        safety_out.clear_ms=IMU_SAFETY_CLEAR_MS;
+        safety_refuse_clear=true;
+    }
     if (mode==6u) safety_busy=true; /* no board at all: every read times out */
     if (mode==7u) safety_out.flags=IMU_SAFETY_FLAG_VALID; /* fresh, not upright */
     lp_init(&line);lp_set_pair(&line,true,0);watchdog_ready=true;services_ready=true;
     assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
     /* Modes 6 and 7 must refuse the start, so no run is ever active. */
-    assert((injected || mode==6u || mode==7u) && listener==7 &&
+    assert((injected || mode==6u || mode==7u || mode==9u) && listener==7 &&
            notifications==1u && !irq_off);
     /* The IMU scenarios add a refused-restart line and one latched-reason
      * line, so they have more than the single boot line. */
@@ -147,6 +173,27 @@ int main(int argc,char **argv) {
         assert(unavailable_events>=1u);
         assert(unavailable_detail==want);
         assert(unavailable_detail_mask==(1u<<want));
+        return 0;
+    }
+    if (mode==8u) {
+        /* The retried request released the latch and a later press started a
+         * run. A single 100 ms attempt cannot do this. */
+        assert(safety_clear_requests>=2u);
+        assert(recovery_pending>=1u);
+        assert(run_seen!=0u && line_drives>0u);
+        assert(first_drive_ms>=5000u);
+        assert(estops>=1u);
+        return 0;
+    }
+    if (mode==9u) {
+        /* The refused clear never releases: the bounded intent expires, the
+         * outcome is recorded, and no wheel ever moves. */
+        assert(safety_clear_requests>=2u);
+        assert(recovery_pending>=1u);
+        assert(recovery_cancelled>=1u);
+        assert(run_seen==0u && line_drives==0u && spins==0u);
+        assert(asked[0]==0 && asked[1]==0 && first_drive_ms==0u);
+        assert(estops>=1u);
         return 0;
     }
     if (mode==3u || mode==4u || mode==5u) {

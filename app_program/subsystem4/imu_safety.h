@@ -103,10 +103,16 @@ typedef enum {
                                    * calibrated, so no fresh observation */
     IMU_SAFETY_CAUSE_ABSENT = 3,  /* no copy was ever published: the writer
                                    * has not run yet, or every read was busy */
-    IMU_SAFETY_CAUSE_POSE = 4     /* REFUSAL ONLY: the sample is fresh and
+    IMU_SAFETY_CAUSE_POSE = 4,    /* REFUSAL ONLY: the sample is fresh and
                                    * valid but outside the upright bounds.
                                    * imu_safety_unavailable_cause() never
                                    * returns this value (RT-0101/F2). */
+    IMU_SAFETY_CAUSE_READ_FAILED = 5,  /* No usable sensor read: the probe
+                                        * returned no valid observation. */
+    IMU_SAFETY_CAUSE_NOT_CALIBRATED = 6, /* A sample exists, but the level
+                                          * bias is not trusted yet. */
+    IMU_SAFETY_CAUSE_ZERO_VECTOR = 7     /* The mapped vector is non-finite or
+                                          * exactly zero: a degenerate read. */
 } imu_safety_cause_t;
 
 /* Output flags. */
@@ -115,6 +121,18 @@ typedef enum {
 #define IMU_SAFETY_FLAG_GRAVITY      0x04u /* Gravity history is usable. */
 #define IMU_SAFETY_FLAG_FREEFALL     0x08u /* This observation is low-g. */
 #define IMU_SAFETY_FLAG_NEAR_ONE_G   0x10u /* This observation is quiet. */
+/* Exactly one of these is set when VALID is clear, so a reader can split the
+ * `invalid` cause without another board field (plan Phase 1.3). */
+#define IMU_SAFETY_FLAG_READ_FAILED     0x20u /* accel_valid was false. */
+#define IMU_SAFETY_FLAG_NOT_CALIBRATED  0x40u /* sample ok, bias not trusted. */
+#define IMU_SAFETY_FLAG_ZERO_VECTOR     0x80u /* non-finite or all-zero. */
+
+/* Why the one-second clear window is not advancing. Diagnostic only: it never
+ * changes the decision. A clear needs every bit clear. */
+#define IMU_SAFETY_BLOCK_NOT_UPRIGHT   0x01u
+#define IMU_SAFETY_BLOCK_NOT_NEAR_ONE_G 0x02u
+#define IMU_SAFETY_BLOCK_WHEELS_MOVING 0x04u
+#define IMU_SAFETY_BLOCK_GAP           0x08u
 
 typedef struct {
     float accel_mg[3]; /* Bias-corrected, mapped X right/Y forward/Z up. */
@@ -142,6 +160,8 @@ typedef struct {
     uint8_t latched_trigger;   /* imu_safety_trigger_t, first latched. */
     uint8_t stops;             /* Latched triggers, saturating. */
     uint8_t flags;             /* IMU_SAFETY_FLAG_*. */
+    uint8_t clear_blockers;    /* IMU_SAFETY_BLOCK_*: why the clear window is
+                                * not advancing. Diagnostic only. */
 } imu_safety_output_t;
 
 typedef struct {

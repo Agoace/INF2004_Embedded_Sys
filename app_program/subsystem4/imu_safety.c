@@ -142,15 +142,46 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
     const bool usable = in->accel_valid && in->calibrated;
 
     if (!usable) {
-        /* No sqrtf, no angle: an unusable sample cannot trigger. */
+        /* No angle: an unusable sample cannot trigger. The flags still say
+         * WHY it is unusable, so a reader can split the legacy INVALID
+         * cause (plan Phase 1.3). */
         o->g_mg = 0.0f;
-        o->flags = 0u;
         o->tilt_ddeg = 0;
         o->vertical_mg = 0.0f;
         o->overturn_samples = 0u;
         o->lift_samples = 0u;
         o->clear_ms = 0u;
         s->freefall_samples = 0u;
+
+        uint8_t blockers = 0u;
+        if (!imu_safety_upright_ok(in->accel_mg)) {
+            blockers |= IMU_SAFETY_BLOCK_NOT_UPRIGHT;
+        }
+        const float u_mg = magnitude_mg(in->accel_mg);
+        if (!isfinite(u_mg) ||
+            (fabsf(u_mg - IMU_SAFETY_GRAVITY_MG) > IMU_SAFETY_NEAR_ONE_G_MG)) {
+            blockers |= IMU_SAFETY_BLOCK_NOT_NEAR_ONE_G;
+        }
+        if (!in->wheels_still) {
+            blockers |= IMU_SAFETY_BLOCK_WHEELS_MOVING;
+        }
+        if (gap) {
+            blockers |= IMU_SAFETY_BLOCK_GAP;
+        }
+        o->clear_blockers = blockers;
+
+        if (!in->accel_valid) {
+            const bool finite = isfinite(in->accel_mg[0]) &&
+                                isfinite(in->accel_mg[1]) &&
+                                isfinite(in->accel_mg[2]);
+            const bool zero = (in->accel_mg[0] == 0.0f) &&
+                              (in->accel_mg[1] == 0.0f) &&
+                              (in->accel_mg[2] == 0.0f);
+            o->flags = (!finite || zero) ? IMU_SAFETY_FLAG_ZERO_VECTOR
+                                         : IMU_SAFETY_FLAG_READ_FAILED;
+        } else {
+            o->flags = IMU_SAFETY_FLAG_NOT_CALIBRATED;
+        }
         return;
     }
 
@@ -189,11 +220,28 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
         o->flags |= IMU_SAFETY_FLAG_FREEFALL;
     }
 
+    /* Why the clear window is not advancing, for the field refusal report.
+     * Diagnostic only; the window test below is equivalent. */
+    uint8_t blockers = 0u;
+    if (!upright) {
+        blockers |= IMU_SAFETY_BLOCK_NOT_UPRIGHT;
+    }
+    if (!near_one_g) {
+        blockers |= IMU_SAFETY_BLOCK_NOT_NEAR_ONE_G;
+    }
+    if (!in->wheels_still) {
+        blockers |= IMU_SAFETY_BLOCK_WHEELS_MOVING;
+    }
+    if (gap) {
+        blockers |= IMU_SAFETY_BLOCK_GAP;
+    }
+    o->clear_blockers = blockers;
+
     /* The all-clear window measures the pose, so it must run even while a
      * trigger is latched; the safe restart needs it. A gap longer than the
      * observation cadence restarts the window: the pose was not observed in
      * that time, so it cannot count as continuously clear (RT-0094/F1). */
-    if (!gap && upright && in->wheels_still && near_one_g) {
+    if (blockers == 0u) {
         const uint32_t limit = IMU_SAFETY_CLEAR_MS;
 
         o->clear_ms = (o->clear_ms >= limit - delta_ms) ? limit
@@ -309,9 +357,18 @@ uint8_t imu_safety_unavailable_cause(const imu_safety_output_t *out, bool have,
     if (!have || (out == NULL)) {
         return (uint8_t)IMU_SAFETY_CAUSE_ABSENT;
     }
+    if (out->flags & IMU_SAFETY_FLAG_ZERO_VECTOR) {
+        return (uint8_t)IMU_SAFETY_CAUSE_ZERO_VECTOR;
+    }
+    if (out->flags & IMU_SAFETY_FLAG_READ_FAILED) {
+        return (uint8_t)IMU_SAFETY_CAUSE_READ_FAILED;
+    }
+    if (out->flags & IMU_SAFETY_FLAG_NOT_CALIBRATED) {
+        return (uint8_t)IMU_SAFETY_CAUSE_NOT_CALIBRATED;
+    }
     if ((out->flags & IMU_SAFETY_FLAG_VALID) == 0u) {
-        /* The writer published, but the newest observation is not a usable
-         * sample: a failed read, or a level bias that is not trusted yet. */
+        /* Legacy generic meaning, kept for any image or fixture that sets no
+         * specific flag. */
         return (uint8_t)IMU_SAFETY_CAUSE_INVALID;
     }
     const int32_t age = (int32_t)(now_ms - out->observation_ms);

@@ -209,7 +209,26 @@ reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, 
 IMU overturn and 2 is IMU lift, with detail 0. A word of 3 is IMU unavailable,
 either as a stop or as a refused start, and its detail gives the cause: 1 stale
 sample, 2 invalid sample, 3 no board copy, or 4 pose not upright. Detail 0 on a
-word of 3 means the image predates this field, so treat it as unknown. The word
+word of 3 means the image predates this field, so treat it as unknown. With bit 15 set, a kind-3 word is not a stop
+reason: it is one IMU recovery observation, emitted on an operator press or on
+a recovery state change and never each 10 ms tick. Bits 8-9 are the effective
+latch (0 none, 1 overturn, 2 lift, 3 unavailable). Bits 0-7 are the gate that
+decided the press:
+
+| Gate | Meaning |
+| ---: | --- |
+| 1 | No published board |
+| 2 | Stale sample |
+| 3 | Invalid sample; detail gives the cause (2 generic, 5 read failed, 6 not calibrated, 7 zero vector) |
+| 4 | Pose not upright |
+| 5 | Outside the near-1 g band |
+| 6 | Wheels moving or commanded duty not zero |
+| 7 | One-second clear window incomplete |
+| 8 | Clear queued and waiting for the writer acknowledgement |
+| 9 | Clear intent expired or was cancelled; the latch stays |
+
+Gate 8 says the press was accepted. The latch is released only by the writer
+acknowledgement, which appears as the usual state change from FAULT to IDLE. The word
 contains opcode in bits 0–7 and detail in bits 8–15. Only validated, queued
 commands reach the vehicle and produce these events. Bad tokens, malformed
 commands, and full command queues increment `command_lost` without a vehicle

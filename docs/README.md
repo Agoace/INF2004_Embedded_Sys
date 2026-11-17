@@ -69,6 +69,7 @@ not current acceptance reports. Local course originals are not public records.
 - [IMU_SAFETY_STOP_PATH_REPAIR.md](s4-imu/IMU_SAFETY_STOP_PATH_REPAIR.md) - answers RT-0092, RT-0093 and RT-0094: acknowledged safe restart, persistent shell FAULT, the wheels_still input, the clear-window gap, the owner recovery rule, the documented near-1 g lift limit, host tests and mutation evidence.
 - [IMU_SAFETY_LIFT_RULE_STUDY.md](s4-imu/IMU_SAFETY_LIFT_RULE_STUDY.md) - why a plus-minus Z threshold does not detect a slow hand lift, the hump false-stop risk the model exposes, and the two traces the decision needs. A model, not evidence.
 - [IMU_SAFETY_REMOTE_COURSE_CHECKLIST.md](s4-imu/IMU_SAFETY_REMOTE_COURSE_CHECKLIST.md) - operator and Coder checks for two course runs, overturn E-Stop, GP21 recovery, and a supported hand lift.
+- [IMU_SAFETY_RECOVERY_LIFT_PLAN.md](s4-imu/IMU_SAFETY_RECOVERY_LIFT_PLAN.md) - evidence-led recovery diagnosis, invalid-sample classification, and IMU-only lift sensitivity gates.
 
 - [IMU_SAFETY_COURSE_RUN_LOG.md](../testing/subsystem4/IMU_SAFETY_COURSE_RUN_LOG.md) - the first course run: the stop classified as IMU unavailable with no lift or overturn, the load correlation, and why the image could not report the cause.
 ## S5 — Obstacle

@@ -318,11 +318,82 @@ static void test_invalid_input_has_no_trigger(void)
     feed_n(&r, 100, 0.0f, 0.0f, 1000.0f);
 
     CHECK(latched(&r) == IMU_SAFETY_NONE);
-    CHECK(r.s.output.flags == 0u);
+    /* The VALID flag is clear, and the split names the specific reason: the
+     * read failed while the vector itself stayed finite (plan Phase 1.3). */
+    CHECK((r.s.output.flags & IMU_SAFETY_FLAG_VALID) == 0u);
+    CHECK((r.s.output.flags & IMU_SAFETY_FLAG_READ_FAILED) != 0u);
+    CHECK(imu_safety_unavailable_cause(&r.s.output, true, r.now_ms,
+                                       IMU_SAFETY_MAX_AGE_MS) ==
+          (uint8_t)IMU_SAFETY_CAUSE_READ_FAILED);
     CHECK(r.s.output.clear_ms == 0u);
     CHECK(imu_safety_evaluate(&r.s.output, true, r.now_ms,
                               IMU_SAFETY_MAX_AGE_MS) ==
           (uint8_t)IMU_SAFETY_IMU_UNAVAILABLE);
+}
+
+/* The three invalid sub-causes must be distinguishable. */
+static void test_invalid_causes_split(void)
+{
+    rig_t r;
+
+    /* 1. Degenerate read. imu_core marks a zero or non-finite vector as
+     * accel_valid=false, so the detector sees the invalid read and the raw
+     * vector is what distinguishes it from an ordinary read failure. */
+    rig(&r);
+    r.in.accel_valid = false;
+    feed_n(&r, 3, 0.0f, 0.0f, 0.0f);
+    CHECK((r.s.output.flags & IMU_SAFETY_FLAG_ZERO_VECTOR) != 0u);
+    CHECK(imu_safety_unavailable_cause(&r.s.output, true, r.now_ms,
+                                       IMU_SAFETY_MAX_AGE_MS) ==
+          (uint8_t)IMU_SAFETY_CAUSE_ZERO_VECTOR);
+
+    /* 2. Sample present but the level bias is not trusted. */
+    rig(&r);
+    r.in.calibrated = false;
+    feed_n(&r, 3, 0.0f, 0.0f, 1000.0f);
+    CHECK((r.s.output.flags & IMU_SAFETY_FLAG_NOT_CALIBRATED) != 0u);
+    CHECK(imu_safety_unavailable_cause(&r.s.output, true, r.now_ms,
+                                       IMU_SAFETY_MAX_AGE_MS) ==
+          (uint8_t)IMU_SAFETY_CAUSE_NOT_CALIBRATED);
+
+    /* 3. The legacy generic meaning survives a board that sets no specific
+     * flag. */
+    imu_safety_output_t plain = {0};
+    plain.observation_ms = 1000u;
+    CHECK(imu_safety_unavailable_cause(&plain, true, 1000u, 50u) ==
+          (uint8_t)IMU_SAFETY_CAUSE_INVALID);
+}
+
+/* The clear-window blockers must name the condition that stops the window. */
+static void test_clear_blockers(void)
+{
+    rig_t r;
+
+    /* Upright, still, quiet: no blocker. */
+    rig(&r);
+    feed_n(&r, 5, 0.0f, 0.0f, 1000.0f);
+    CHECK(r.s.output.clear_blockers == 0u);
+
+    /* Not upright: a 66 deg tilt is fresh and near 1 g, so only the upright
+     * and near-1 g bits may be clear or set independently. */
+    rig(&r);
+    feed_n(&r, 5, 916.0f, 0.0f, 400.0f);
+    CHECK((r.s.output.clear_blockers & IMU_SAFETY_BLOCK_NOT_UPRIGHT) != 0u);
+
+    /* Wheels moving blocks the window even in a perfect pose. */
+    rig(&r);
+    r.in.wheels_still = false;
+    feed_n(&r, 5, 0.0f, 0.0f, 1000.0f);
+    CHECK((r.s.output.clear_blockers & IMU_SAFETY_BLOCK_WHEELS_MOVING) != 0u);
+    CHECK(r.s.output.clear_ms == 0u);
+
+    /* A gap over the cadence is named as such. */
+    rig(&r);
+    feed_n(&r, 2, 0.0f, 0.0f, 1000.0f);
+    r.now_ms += 40u;
+    feed(&r, 0.0f, 0.0f, 1000.0f);
+    CHECK((r.s.output.clear_blockers & IMU_SAFETY_BLOCK_GAP) != 0u);
+    CHECK(r.s.output.clear_ms == 0u);
 }
 
 static void test_uncalibrated_input_has_no_trigger(void)
@@ -562,6 +633,8 @@ int main(void)
     test_sudden_tilt_near_one_g_is_not_a_lift();
     test_tilt_beyond_overturn_latches_overturn();
     test_unavailable_causes();
+    test_invalid_causes_split();
+    test_clear_blockers();
 
     if (failures == 0u) {
         printf("ALL PASSED (0 failures)\n");

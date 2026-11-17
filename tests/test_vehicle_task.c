@@ -149,8 +149,13 @@ bool imu_safety_clear_request(void) {
      * no longer safe by the time it applies the request. */
     if (safety_refuse_clear) return true;
     if (safety_clear_delay_ms>0u) {
-        safety_clear_deferred=true;
-        safety_clear_apply_at=now+safety_clear_delay_ms;
+        /* The writer applies on its own schedule. A retried request while a
+         * clear is already deferred must NOT push the apply time further out,
+         * or the retry could never succeed. */
+        if (!safety_clear_deferred) {
+            safety_clear_deferred=true;
+            safety_clear_apply_at=now+safety_clear_delay_ms;
+        }
         return true;
     }
     safety_out.latched_trigger=(uint8_t)IMU_SAFETY_NONE;

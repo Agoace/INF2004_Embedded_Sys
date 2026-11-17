@@ -132,6 +132,24 @@ tasks at priority 10 to 13, not exclusive CPU time. `work_*` also includes
 preemption and adds the probe and the final publication. Neither counter alone
 can attribute CPU load (RT-0101/F1).
 
+## Bounded operator intent for GP21 recovery
+
+A single 100 ms clear attempt lost the operator's press to timing, and a
+refused press was invisible without USB (recovery plan Phase 1 and 2). Now:
+
+- A press records **one bounded intent** (`IMU_CLEAR_INTENT_MS`, 1000 ms) that
+  re-queues the request every 100 ms while the safe gates still hold.
+- The latch is released **only** by a fresh writer acknowledgement, so the F1
+  guarantee is unchanged. A new trigger, an unavailable IMU, expiry or a reboot
+  cancels the intent and keeps every latch.
+- Each press and each recovery state change emits one kind-3 event with bit 15
+  set, and one USB line carrying the gate, the effective latch, `clear_ms`,
+  the clear blockers and the board age. `docs/s1-telemetry/MQTT_WIRE.md` holds
+  the byte table.
+- The detector now splits the legacy INVALID cause into read failure, not
+  calibrated, and zero vector, and publishes `clear_blockers` so the field can
+  say which condition stops the one-second window.
+
 ## Limits
 
 - The host tests use synthetic accelerations and a stub board. They prove the
