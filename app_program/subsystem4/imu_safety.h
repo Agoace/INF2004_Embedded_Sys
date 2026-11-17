@@ -75,7 +75,8 @@
 /* The window above claims CONTINUOUS observation. A longer gap between two
  * observations restarts it instead of crediting time that was never
  * observed, so sparse samples cannot add up to a safe-restart window
- * (RT-0094/F1). Three missed 10 ms observations. */
+ * (RT-0094/F1). On the 10 ms cadence a 30 ms gap is two missed observations
+ * and still counts; 40 ms, which is three missed, restarts the window. */
 #define IMU_SAFETY_CLEAR_GAP_MS 30u
 
 /* Elapsed-time clamp, so a preempted gap cannot satisfy a window at once. */

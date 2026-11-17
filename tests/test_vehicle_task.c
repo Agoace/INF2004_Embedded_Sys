@@ -377,6 +377,11 @@ int main(int argc,char **argv) {
         assert(asked[0]==0 && asked[1]==0 && first_drive_ms==0u);
         assert(safety_clear_requests==0u);
         assert(estops>=1u);
+        /* Only the gate can stop the start here. If the board-latch recheck
+         * is removed, calibrate() runs and bumps the epoch before the next
+         * safety wake stops the robot, so the wheel assertions above still
+         * hold. The epoch is the observable that separates the two. */
+        assert(vehicle_calibration_epoch()==0u);
         return 0;
     }
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);

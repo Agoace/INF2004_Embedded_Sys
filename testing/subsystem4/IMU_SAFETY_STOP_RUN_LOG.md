@@ -166,7 +166,7 @@ PASS for the two-press design.
 | First press requests the clear | console `IMU safety clear requested, hold upright; press GP21 again` | PASS |
 | First press does not start | no motor command in the interval; `active` stayed 0 | PASS |
 | Refusal event on the first press | `robot/event` kind 3, word 1 (the latched reason) at uptime 308411 ms | PASS |
-| Latch released only after the writer | FAULT window ends at 307765 ms; the clear request is at 308411 ms | PASS |
+| Latch released only after the writer | Last FAULT sample 307765 ms, first IDLE sample 308765 ms, request at 308411 ms is between them, and the refusal event has `from = 2`, so the shell was still FAULT at the request | PASS |
 | Second press starts | `active = 1` at uptime 311885 ms, `motion_faults` 4 to 0 | PASS |
 | Calibration ran | `[BC_CAL] gen 1 samples 2100 ... mode ABORTED`; expected with no line under the wheels | RECORDED |
 

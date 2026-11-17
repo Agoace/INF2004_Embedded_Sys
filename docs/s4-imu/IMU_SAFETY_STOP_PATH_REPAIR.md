@@ -72,6 +72,7 @@ Mutation checks catch a revert of each repair:
 | Remove `!near_one_g` from the vertical rule | 13 test failures, including a false LIFT latch on a plain tilt. |
 | Revert `input.wheels_still` to the encoder-only copy | `test_imu_service` fails on `clear_ms == 0`. |
 | Release the latch when the clear is requested | `test_vehicle_imu_clear_acknowledged` fails. |
+| Remove the board-latch recheck at the final start gate | `test_vehicle_imu_retrigger_before_start` fails on `vehicle_calibration_epoch()==0`. Before that assertion the scenario still passed, because the next safety wake stopped the robot before any wheel command. |
 | Remove the explicit `vsm_set_fault()` call | `test_vehicle_imu_persistent_fault` fails on `state == VSM_FAULT`. |
 
 Full host result at the repair commit: 370 tests, 3 failures. The failures are
@@ -87,20 +88,35 @@ then reports one Windows loopback failure in a security test
 
 - The host tests use synthetic accelerations and a stub board. They prove the
   rule structure, the ordering and the latch, not detection accuracy.
-- The candidate bounds (600 mg upright, 75 deg overturn, 0.4 g free fall,
-  0.5 g vertical change) still need recorded lift and overturn traces from the
-  robot.
-- The two-press restart is new. The operator run log must record it.
-- No motor-enabled hardware test may run before this repair is reviewed
-  (RT-0093).
+- **The lift stop does not fire on a real hand lift.** The hardware session
+  recorded no lift trigger for a quick lift or a 3 s lift, because a hand
+  supports the robot: the free-fall rule needs a release and the vertical rule
+  needs about 5 m/s2 sustained for 30 ms. This is a measured coverage gap, not
+  only a written one. A recorded raw lift trace is required before the bounds
+  can be changed.
+- The overturn bound has **one** measured latch: 75.7 deg at 979 mg, 9 ms old.
+  One sample is not a margin.
+- A ±Z rule with a direction guard instead of the `!near_one_g` magnitude gate
+  is a candidate improvement. It must be checked against hump false stops
+  before it replaces the current rule.
+- An IMU loss while driving now latches a GP21-only fault. The IMU task has the
+  lowest priority and `IMU_SAFETY_MAX_AGE_MS` is 50 ms, so a scheduling gap over
+  50 ms during a run becomes a fault. The idle Wi-Fi gap is about 21 ms. The
+  running case is not measured. If it proves sensitive, debounce the
+  unavailability before latching.
+- The GP21 two-press flow is enforced on the button path. After an
+  acknowledged clear, a remote START is accepted, because the owner rule is
+  that GP21 is the only way to release the latch, not that every start needs
+  two presses.
 - The branch shares base `a03f9e5` with `mtk3-staging`, which has moved on.
   Integration is a separate step.
 
 ## Related records
 
 - [IMU_SAFETY_STOP_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_STOP_RUN_LOG.md)
-  — the hardware session on this repair. Step 2 is a PASS; the lift, overturn
-  and recovery steps are NOT RUN.
+  — the hardware session on this repair. Cold boot and overturn are PASS, the
+  GP21 two-press recovery is PASS, and the lift stop is NOT DETECTED on a real
+  hand lift. The upright-gate refusal is NOT RUN.
 - [IMU_SAFETY_RUN_LOG.md](../../testing/subsystem4/IMU_SAFETY_RUN_LOG.md) —
   the first hardware session.
 - [IMU_SAFETY_TRACE_PROCEDURE.md](IMU_SAFETY_TRACE_PROCEDURE.md) — capture and
