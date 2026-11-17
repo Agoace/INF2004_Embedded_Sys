@@ -84,6 +84,31 @@ and the two make-based target checks `test_imu_source_make` and
 then reports one Windows loopback failure in a security test
 (`ConnectionAbortedError`), not an IMU safety failure.
 
+## Cost and optimisation
+
+The device has limited RAM and CPU, so the added code was reviewed for cost.
+The measured numbers below are a HOST proxy, from `build_bench_imu.c` with
+`gcc -O2` on the x86 host, 2,000,000 samples per case, three runs. They are not
+device cycles. A device measurement needs one more flash cycle and is not done.
+
+| Path | Change | Host proxy before | after | Source saving |
+| --- | --- | --- | --- | --- |
+| Upright sample (the running case) | The tilt angle is not computed inside the upright bounds: there `Z >= 600 mg` and `|X|,|Y| <= 400 mg` cap the tilt at 43.3 deg, so the 75 deg overturn limit cannot be reached. | 0.042 to 0.044 us per sample | 0.0075 to 0.0085 us per sample | one `atan2f` and one `sqrtf` per upright sample |
+| Tilted sample | The angle is still computed, but |a| is passed in instead of repeated. | 0.046 to 0.047 us | 0.045 to 0.047 us | one `sqrtf` per tilted sample |
+| Invalid sample | The magnitude is not computed after the unusable input returns. | 0.0025 to 0.0030 us | 0.0025 to 0.0030 us | one `sqrtf`; not visible on the host, where `sqrtf` is one instruction |
+| `imu_safety_now()` in Vehicle | The board is read straight into the cached copy. `imu_safety_try_read()` writes its output only on success, so the scratch copy was redundant. | | | 28 bytes of stack on every Vehicle wake |
+| `imu_safety_step()` frame | Unchanged by the angle change. | 128 bytes | 128 bytes | `-fstack-usage` |
+| Dead timeout branch | A pending clear is only raised from a latched state, so the `imu_latched == NONE` re-latch on timeout could not run. | | | code size only |
+
+The detector work that remains is the gravity normalisation in
+`vertical_change_mg()`: it costs one `sqrtf` and one division per usable
+sample. Caching the reference magnitude costs 4 bytes and saves nothing while
+`update_gravity()` runs every quiet sample, so it was not changed.
+
+`tilt_ddeg` now reads 0 while the sample is inside the upright bounds. The
+field is diagnostic only, it is printed once per latch, and no test asserts a
+non-zero value for an upright sample.
+
 ## Limits
 
 - The host tests use synthetic accelerations and a stub board. They prove the

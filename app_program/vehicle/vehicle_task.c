@@ -675,10 +675,10 @@ static uint8_t imu_reason_code(uint8_t trigger)
 /* Refresh the cached copy, then report the effective trigger right now. */
 static uint8_t imu_safety_now(void)
 {
-    imu_safety_output_t scratch;
-
-    if (imu_safety_try_read(&scratch) >= E_OK) {
-        imu_copy = scratch;
+    /* Read straight into the cached copy: imu_safety_try_read() writes its
+     * output only on success, so no scratch copy is needed and 28 bytes of
+     * stack are saved on this path. */
+    if (imu_safety_try_read(&imu_copy) >= E_OK) {
         imu_have_copy = true;
     }
     return imu_safety_evaluate(&imu_copy, imu_have_copy, drv_time_ms(),
@@ -737,11 +737,10 @@ static bool imu_safety_check(void)
             /* Not applied yet: keep every latch and wait for the writer. */
             return false;
         }
-        /* Timed out. Treat it as refused and keep the latch (RT-0092/F1). */
+        /* Timed out. Treat it as refused and keep the latch (RT-0092/F1).
+         * The latch is still set here: a pending clear is only ever raised
+         * from a latched state and only the acknowledgement releases it. */
         imu_clear_pending = false;
-        if (imu_latched == (uint8_t)IMU_SAFETY_NONE) {
-            imu_latched = trigger;
-        }
         return false;
     }
     if (trigger == (uint8_t)IMU_SAFETY_NONE) {

@@ -112,7 +112,11 @@ typedef struct {
 typedef struct {
     uint32_t observation_ms; /* IMU observation time of this step. */
     uint32_t clear_ms;       /* Continuous all-clear time, clamped. */
-    int32_t tilt_ddeg;       /* Tilt from +Z, deci-degrees. */
+    int32_t tilt_ddeg;       /* Tilt from +Z, deci-degrees. 0 while the
+                              * sample is inside the upright bounds, where the
+                              * tilt cannot reach the overturn limit: the angle
+                              * is then not computed, to keep atan2f out of the
+                              * upright path. */
     float g_mg;              /* |accel|. */
     float vertical_mg;       /* Signed vertical change vs prior gravity. */
     uint16_t overturn_samples; /* Consecutive over-limit observations. */
@@ -154,7 +158,9 @@ uint8_t imu_safety_evaluate(const imu_safety_output_t *out, bool have,
                             uint32_t now_ms, uint32_t max_age_ms);
 
 /* Tilt from the fixed +Z in deci-degrees. Non-finite or zero magnitude
- * gives 0. Shared with the host tests. */
+ * gives 0. Always computes the angle, so it is for tests and callers that
+ * need the value outside the upright bounds; imu_safety_step() computes it
+ * only outside those bounds. */
 int32_t imu_safety_tilt_ddeg(const float accel_mg[3]);
 
 #endif /* IMU_SAFETY_H */

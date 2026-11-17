@@ -7,6 +7,9 @@
 
 #define RAD_TO_DDEG 572.9577951f
 
+static float magnitude_mg(const float accel_mg[3]);
+static int32_t tilt_with_magnitude(const float accel_mg[3], float magnitude);
+
 bool imu_safety_upright_ok(const float accel_mg[3])
 {
     if (accel_mg == NULL) {
@@ -23,20 +26,7 @@ int32_t imu_safety_tilt_ddeg(const float accel_mg[3])
     if (accel_mg == NULL) {
         return 0;
     }
-    const float x = accel_mg[0];
-    const float y = accel_mg[1];
-    const float z = accel_mg[2];
-
-    if (!isfinite(x) || !isfinite(y) || !isfinite(z)) {
-        return 0;
-    }
-    const float horizontal = sqrtf((x * x) + (y * y));
-    const float magnitude = sqrtf((horizontal * horizontal) + (z * z));
-
-    if (magnitude <= IMU_SAFETY_G_UNIT_MG) {
-        return 0;
-    }
-    return (int32_t)(atan2f(horizontal, z) * RAD_TO_DDEG);
+    return tilt_with_magnitude(accel_mg, magnitude_mg(accel_mg));
 }
 
 void imu_safety_init(imu_safety_t *s)
@@ -50,6 +40,24 @@ static float magnitude_mg(const float accel_mg[3])
 {
     return sqrtf((accel_mg[0] * accel_mg[0]) + (accel_mg[1] * accel_mg[1]) +
                  (accel_mg[2] * accel_mg[2]));
+}
+
+/* Tilt from +Z for a caller that already has |a|. One sqrtf and one atan2f
+ * are saved by not repeating the magnitude. */
+static int32_t tilt_with_magnitude(const float accel_mg[3], float magnitude)
+{
+    const float x = accel_mg[0];
+    const float y = accel_mg[1];
+    const float z = accel_mg[2];
+
+    if (!isfinite(x) || !isfinite(y) || !isfinite(z) ||
+        !isfinite(magnitude)) {
+        return 0;
+    }
+    if (magnitude <= IMU_SAFETY_G_UNIT_MG) {
+        return 0;
+    }
+    return (int32_t)(atan2f(sqrtf((x * x) + (y * y)), z) * RAD_TO_DDEG);
 }
 
 /* Signed vertical change: (current - prior gravity) . prior gravity unit.
@@ -132,11 +140,10 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
     o->current_trigger = (uint8_t)IMU_SAFETY_NONE;
 
     const bool usable = in->accel_valid && in->calibrated;
-    const float g_mg = magnitude_mg(in->accel_mg);
-    const bool finite = isfinite(g_mg);
 
-    o->g_mg = finite ? g_mg : 0.0f;
     if (!usable) {
+        /* No sqrtf, no angle: an unusable sample cannot trigger. */
+        o->g_mg = 0.0f;
         o->flags = 0u;
         o->tilt_ddeg = 0;
         o->vertical_mg = 0.0f;
@@ -147,12 +154,22 @@ void imu_safety_step(imu_safety_t *s, const imu_safety_input_t *in)
         return;
     }
 
+    const float g_mg = magnitude_mg(in->accel_mg);
+    const bool finite = isfinite(g_mg);
+
+    o->g_mg = finite ? g_mg : 0.0f;
+
     const bool near_one_g =
         finite && (fabsf(g_mg - IMU_SAFETY_GRAVITY_MG) <=
                    IMU_SAFETY_NEAR_ONE_G_MG);
     const bool freefall = finite && g_mg < IMU_SAFETY_FREEFALL_MG;
     const bool upright = imu_safety_upright_ok(in->accel_mg);
-    const int32_t tilt = imu_safety_tilt_ddeg(in->accel_mg);
+    /* Inside the upright bounds the tilt cannot reach 43.3 deg (Z >= 600 mg,
+     * |X|,|Y| <= 400 mg), so it can never cross the 75 deg overturn limit and
+     * the angle is not needed. Computing it only outside the bounds removes one
+     * atan2f and one sqrtf per sample from the upright path, which is most of
+     * the running time. */
+    const int32_t tilt = upright ? 0 : tilt_with_magnitude(in->accel_mg, g_mg);
     /* Measured against the PRIOR reference, before any update below. */
     const float vertical = vertical_change_mg(s, in->accel_mg);
 
