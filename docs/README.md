@@ -102,6 +102,7 @@ not current acceptance reports. Local course originals are not public records.
 
 - [SIMULATION.md](simulation/SIMULATION.md) — the host simulator: what it models and what it proves.
   Contains: layers, interface and operation, model assumptions, echo-fit summary (narrow box 160 × 250 mm, beam 5°, incidence 16°), box-sweep results (back-off 25°, gaps 22/54/91/91 mm), limits (bare-metal v1.8 sources, not kernel timing or physical proof).
+- [COURSE_FIGURE8_20261117.md](simulation/COURSE_FIGURE8_20261117.md) — the final demo line track (figure-8) as a Webots course; tile map from photos, placement parameters for obstacle, ramp and barcode.
 
 ## Archive
 

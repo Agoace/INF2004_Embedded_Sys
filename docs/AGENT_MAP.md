@@ -26,7 +26,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
 | [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: pipeline, coarse/fine geometry and sonar service; COARSE_FINE_VALIDATION.md: software proof, scoped robot floor result and remaining limits; history in archive/s5-obstacle/HISTORY.md. |
-| [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
+| [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results; figure-8 demo course. |
 | [archive/](archive/) | `HISTORY.md` pointers per area (`git show 569672a:<path>`), records that code still cites, and line/barcode/sim originals. |
 
 The detailed entries below retain source and test navigation. Archive links do
@@ -97,6 +97,7 @@ commit that changed this section (header comments and file lists).
 | [`scripts/`](../scripts) | Checks (`check-docs.py`, `check-template-changes.py`, `check-sdk-hw-link.py`), hook installer, RAM and message-size reports, MQTT recorder/dashboard (`mqtt_robot.py`, `mqtt_dashboard.py`, `robot_wire.py`, `dashboard_*`), KR1 log decoder, motor bench report, old UDP receivers and dashboard, port restriction. |
 | [`tools/`](../tools) | `barcode_map/` (letter map to `BW_MAP_VALUES`), `kernel_ram/` (RAM placement lists and `ram_proof.py`), `elf2uf2/`, `verify_phase11_usb.py`. |
 | [`sim/`](../sim) | Separate host simulator of bare-metal sources: core clock/world/scenario/runner, devices, target hooks, scenarios JSON, offline viewer and local editor, box sweep, tests. |
+| [`sim/webots/`](../sim/webots) | Figure-8 demo course: tile map, course JSON, map-to-JSON tool and its tests. The Webots generator itself is on `mtk3-hil` (SW8). |
 | [`testing/`](../testing) | Operator test logs per subsystem, integration (`KERNEL_ROBOT.md`) and system; `logs/` placeholders. |
 | [`design-review/`](../design-review) | Week 6 Mermaid sources and images: system statechart, task interaction. |
 | [`videos/`](../videos) | README for hardware test and demo videos. |

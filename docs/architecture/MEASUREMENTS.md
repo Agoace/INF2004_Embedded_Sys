@@ -33,7 +33,7 @@ Rules:
 | Label | Meaning |
 | --- | --- |
 | `MEASURED(who,date)` | A person or the robot measured it. `who` is operator, bench, robot log, trace or build. The date is in the label when the source gives it. |
-| `ASSUMED` | A design setting, guess, datasheet value or simulator input. Not measured. |
+| `ASSUMED` | A design setting, guess, datasheet value or simulator input. Not measured. An operator estimate without a ruler is `ASSUMED(operator estimate,date)`. |
 | `PHOTO-ESTIMATED` | Read from a photo with a ruler. |
 | `DERIVED` | Calculated or fitted from other values. |
 
@@ -112,6 +112,30 @@ Check (DERIVED, no new value): the operator confirms the GP28 diode sits
 at the module outer edge. Derived lateral = 64 + 17.5 - about 5 (half the
 TCRT housing) = about 76.5 mm; this assumes the LED pair centre is about
 5 mm inside the module edge. The direct 73 mm implies about 8.5 mm.
+
+## Robot runs 2026-11-17 (school)
+
+School course, 90 s, 3 laps per run, `KERNEL_RAM=1` MQTT images, one
+log each. Main_Worker's `feel.py` on the KR1 rows (20 ms):
+
+- Straights = LINE rows where the 0.5 s mean yaw rate is below 10 deg/s.
+- Deviation = |yaw rate − 0.5 s mean|; yaw rate from wheel speeds, track 111.5 mm.
+- Steer flips = sign changes of the asked wheel difference on straights.
+- SEARCH = LINE → SEARCH entries per minute.
+
+| Run | Image (UF2 SHA-256 prefix) | Deviation median / p90 / p99 (deg/s) | Flips (/s) | SEARCH (/min) |
+| --- | --- | --- | --- | --- |
+| ST (reference) | same-tick `ca55b87`, `cee94c24` | 6.9 / 29.4 / 72.9 | 11.7 | 26.7 (40) |
+| GAP+ST | `5d063ac` + same-tick, `d9d228ac` | 5.6 / 32.4 / 70.7 | 12.0 | 36.7 (55) |
+| KD30+ST | trial `474cc70` kd 30, `c8729500` | 8.4 / 29.7 / 68.5 | 9.7 | 19.3 (29) |
+| KD30+GAP+ST | `474cc70` + `24e2051`, `642eff1c` | 6.3 / 31.8 / 73.4 | 10.3 | 35.3 (53) |
+
+## Operator estimates 2026-11-17 (ramp)
+
+Reported through Main_Worker; estimates, not ruler values:
+
+- Ramp (one-wheel hump): 50 mm wide, 195 mm long, 10 mm high.
+- Ramp placed about 25 mm beside the line (line edge to ramp near edge; 9 + 25 = 34 mm from the line centre).
 
 ## Geometry
 
@@ -294,6 +318,9 @@ TCRT housing) = about 76.5 mm; this assumes the LED pair centre is about
 | Line sensor height above floor | about 9 mm | 2026-11-03 | MEASURED(operator,2026-11-03) | [LINE_POSITION.md#pair-mode-two-sensors-2026-11-03](../archive/s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03) |
 | Line sensor spacing, centre to centre | 14.5 mm | 2026-11-03 | MEASURED(operator,2026-11-03) | [LINE_POSITION.md#pair-mode-two-sensors-2026-11-03](../archive/s3-line-barcode/LINE_POSITION.md#pair-mode-two-sensors-2026-11-03) |
 | LINE zigzag on straights (current) | about +-40..54 deg/s, period about 0.4 s | 2026-11-16 | MEASURED(robot log,2026-11-16) | [PROJECT_STATUS.md#areas](PROJECT_STATUS.md#areas) |
+| LINE_GAP + same-tick run (5d063ac): straights yaw deviation median / p90 / p99; flips; SEARCH | 5.6 / 32.4 / 70.7 deg/s; 12.0 /s; 36.7 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
+| LINE_KD 30 + LINE_GAP + same-tick run (474cc70 + 24e2051): straights yaw deviation median / p90 / p99; flips; SEARCH | 6.3 / 31.8 / 73.4 deg/s; 10.3 /s; 35.3 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
+| LINE_KD 30 + same-tick run (474cc70): straights yaw deviation median / p90 / p99; flips; SEARCH | 8.4 / 29.7 / 68.5 deg/s; 9.7 /s; 19.3 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
 | LINE_LOST delay / gap delay / junction hold | 50 ms / 300 ms / 300 ms | doc ≤ 2026-10-28 | ASSUMED | [LINE_POSITION.md#thresholds](../archive/s3-line-barcode/LINE_POSITION.md#thresholds) |
 | Lost / found / junction / centred / outer-seen thresholds | 30 % / 50 % / 50 % (L+C >= 125 % in pair mode) / 80 % / 5 % | doc ≤ 2026-10-28 | ASSUMED | [LINE_POSITION.md#thresholds](../archive/s3-line-barcode/LINE_POSITION.md#thresholds) |
 | M1 calibration ADC | L floor/line 178/3595; C 150/3577 | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06](../../testing/integration/KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06) |
@@ -319,6 +346,7 @@ TCRT housing) = about 76.5 mm; this assumes the LED pair centre is about
 | Run 8 burst swing period | 0/75 <-> 75/0 about every 125 ms; line crossed 3 sensors in about 50 ms | 2026-10-29 | MEASURED(robot log,2026-10-29) | [LINE_STEERING.md#run-8-2026-10-29-vin-wi-fi-log](../archive/s3-line-barcode/LINE_STEERING.md#run-8-2026-10-29-vin-wi-fi-log) |
 | Runs 4-6 (2026-10-29) one wheel stopped | 17.1 % -> 15.4 % -> 12.9 % -> 20.3 % | 2026-10-29 | MEASURED(robot log,2026-10-29) | [LINE_STEERING.md#run-4-2026-10-29-vin-wi-fi-log](../archive/s3-line-barcode/LINE_STEERING.md#run-4-2026-10-29-vin-wi-fi-log) |
 | S3-U01 line samples | 1009 samples in 1009603 us, 0 missed | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s2-u05-result-2026-11-06](../../testing/subsystem2/TEST_LOG.md#s2-u05-result-2026-11-06) |
+| Same-tick reference run (ST, ca55b87): straights yaw deviation median / p90 / p99; flips; SEARCH | 6.9 / 29.4 / 72.9 deg/s; 11.7 /s; 26.7 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
 | Sim IR spacing (early guess) | 22 mm (+22/0/-22); footprint 3 mm | doc ≤ 2026-11-08 | ASSUMED | [SIMULATION.md#first-scenario-guesses](../archive/simulation/SIMULATION.md#first-scenario-guesses) |
 | Spin calibration / search | 131 mm/s; 633 counts each side; 200 ms pause; 6 s timeout; search 316 counts | doc ≤ 2026-11-08 | ASSUMED | [LINE.md#acquisition-and-calibration](../s3-line-barcode/LINE.md#acquisition-and-calibration) |
 | Spin calibration run 1 (USB) | 15 % stalled (746 of 2535 counts); 20 %: quarter turn 633 counts; L 807 ms, R 1633 ms, back 712 ms | 2026-10-27 | MEASURED(operator,2026-10-27) | [LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power](../archive/s3-line-barcode/LINE_POSITION.md#run-1-2026-10-27-spin-calibration-usb-power) |
@@ -503,6 +531,8 @@ TCRT housing) = about 76.5 mm; this assumes the LED pair centre is about
 | Motor/gear vibration | about 90 Hz (lines near 25 Hz and 85..97 Hz); 4-sample mean lowers sd 40 % X, 50 % Y | 2026-11-09 | MEASURED(operator,2026-11-09) | [IMU.md#step-2d-hardware-result](../s4-imu/IMU.md#step-2d-hardware-result) |
 | Offline fit wheel-to-caster base | 79 mm | doc ≤ 2026-11-08 | DERIVED | [IMU.md#step-2b-support-hypotheses-and-peak-quality-now-diagnostic](../s4-imu/IMU.md#step-2b-support-hypotheses-and-peak-quality-now-diagnostic) |
 | Offline hand-push heights | 10 mm ramp 10.2 / 11.1 mm; 5 mm object 6.0 / 6.9 mm | doc ≤ 2026-11-08 | DERIVED | [TEST_LOG.md#dfade14-hand-push-hardware-and-offline-analysis](../../testing/subsystem4/TEST_LOG.md#dfade14-hand-push-hardware-and-offline-analysis) |
+| Ramp (one-wheel hump) size, width x length x height | 50 x 195 x 10 mm | 2026-11-17 | ASSUMED(operator estimate,2026-11-17) | [MEASUREMENTS.md#operator-estimates-2026-11-17-ramp](MEASUREMENTS.md#operator-estimates-2026-11-17-ramp) |
+| Ramp gap beside the line (line edge to ramp near edge) | about 25 mm (34 mm from the line centre) | 2026-11-17 | ASSUMED(operator estimate,2026-11-17) | [MEASUREMENTS.md#operator-estimates-2026-11-17-ramp](MEASUREMENTS.md#operator-estimates-2026-11-17-ramp) |
 | Roll filter + mean delay | 100 ms LPF + 45 ms = about 145 ms (14.5 mm at 100 mm/s) | doc ≤ 2026-11-08 | DERIVED | [IMU.md#filter-response-and-window-choice-fixtures-only](../s4-imu/IMU.md#filter-response-and-window-choice-fixtures-only) |
 | SIL magnetic field | 0 / 0.3 / -0.4 gauss | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
 | Step 2b (75ff329) | work avg 1562 / max 2530 us; read 564/705 us; core 818/1053 us; static 5 mm object 5.2 mm; 10 mm ramp roll +5.4 / pitch -4.1 deg | doc ≤ 2026-11-08 | MEASURED(operator) | [TEST_LOG.md#step-2b-hardware-on75ff329](../../testing/subsystem4/TEST_LOG.md#step-2b-hardware-on75ff329) |
