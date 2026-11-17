@@ -95,8 +95,8 @@ not current acceptance reports. Local course originals are not public records.
 - [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — obstacle monitor, scan, avoidance and the ultrasonic service.
   Contains: forward monitor thresholds; coarse/fine scan with 13-bin decision completion, estimated width and observed edge-plane spans; mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
 
-- [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — scan software proof and pending operator checks.
-  Contains: 551 GCC and sanitizer checks, 2560 ms host timing vs2230 ms baseline, v3 geometry/legacy decoding, stopped USB scan evidence, +620 B static RAM and stack-frame changes, stationary bench and two-detour floor procedure; hardware not run.
+- [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — scan software proof and scoped robot floor result.
+  Contains: 551 GCC and sanitizer checks, 2560 ms host timing vs2230 ms baseline, v3 geometry/legacy decoding, stopped USB scan evidence, +620 B static RAM, and d44bd25 floor result (2026-11-17): 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, task stack high water; separate stationary placements skipped.
 
 ## Simulation
 
