@@ -76,6 +76,7 @@ not current acceptance reports. Local course originals are not public records.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
 - [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
   Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
+- [SCHOOL_FAILED_START_ANALYSIS.md](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md) — FC1/FC2 capture integrity, quiet and motion diagnosis, source-timing limits, and approved changes.
 - [FAILED_ATTEMPT_CAPTURE.md](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) — opt-in ROBOT raw failure evidence.
   Contains: first two failed attempts per run, real threshold-crossing edges and 4 ms ADC prefix, bounded storage/ownership, stopped dump tags, combined staging RAM/headroom and KD30/same-tick compatibility, default-off 76 UF2/ELF-load gate.
 - [BARCODE_ATTEMPT_TELEMETRY.md](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) — immutable terminal attempts and early diagnostics.

@@ -52,15 +52,16 @@ Each of three fixed RAM buffers can hold:
 | --- | ---: | --- |
 | Threshold-crossing rows |64 x24 B | ADC time/raw/polarity, decoder phase, interpolated GP28-axis distance, original upper motor bracket time and L/R counts |
 | ADC rows |512 x8 B |64 rolling pre-start points plus the FIRST448 post-start points, at least4000 us apart |
-| Context |172 B | Saved original frame/reference, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
+| Context |184 B | Saved original frame/reference, source-enable and last unbound-reset times, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
 
 The three buffers allow one active capture plus two retained failures. A
 terminal failure transfers buffer ownership; LINE does not copy or clear a
 whole buffer. A successful terminal attempt releases its working buffer and
 does not use a failure slot. Later attempts/laps cannot replace the first
 two failures. A NEW nonzero run epoch releases the old captures; STOP epoch0
-does not. Each retained buffer has5804 B; the array is17412 B. All capture
-storage together is17436 B, including source/reader indices. A compile-time
+does not. Each retained buffer has5816 B; the array is17448 B. All capture
+data symbols together are17485 B (was17432 B before the context times,
+measured by symbol sizes at `9ab99b2`), including source/reader indices. A compile-time
 ceiling limits the module to18 KiB.
 
 The pre-start ring covers up to256 ms at a continuous4 ms sample interval.
@@ -110,6 +111,7 @@ The bounded capture dump remains before the large KR table. It adds:
 [BC_FAIL_STATUS] slots 2 edges 64 samples 512 pre 64 div_us 4000 missed_lifetime M
 [BC_REF] ...                         # existing matching reference
 [BC_FAIL_CAPTURE] epoch E index I ...
+[BC_FAIL_CONTEXT] epoch E index I enable_us A reset_us B reset_reason R
 [BC_FAIL_EDGE] epoch E index I row R adc_us U raw V black B phase P mm_cmm X bracket_us T counts L/R
 [BC_FAIL_ADC] epoch E index I row R us U raw V flags F pre 0/1
 ```
@@ -121,6 +123,16 @@ leading distance, fitted n/w/bias/space, `fit_valid`, pre/ADC/edge counts and
 fields are unset parameters, not measured physical zero. Distances use
 0.01 mm print units, not an accuracy claim. Times and counts keep the existing
 low32-bit modular-clock/encoder rules. Print direction is not robot motion.
+
+`BC_FAIL_CONTEXT` (added 2026-11-17) answers when the source could see the
+code. `enable_us` is the source-poll time (`drv_time_us`, same clock as
+`start_us`) of the last control change from disabled to SHADOW/PERMITTED.
+`reset_us`/`reset_reason` are the poll time and window reason of the last
+reject while NO window was bound, such as BW_MOTION or BW_LOSS in SEEK. Both
+are copied when the window binds and cleared at a new run epoch. Zero means
+not observed in this run; it is not a measured time zero. A silent window
+restart at re-enable is dated by `enable_us`, not `reset_us`. Older images
+print no context line; the analyzer then reports context as absent.
 
 The key is **epoch + internal source frame index**, not decoded serial:
 failure serials are zero. Legacy BC_FRAME/BC_REF do not print that index;
