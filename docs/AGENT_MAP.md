@@ -309,6 +309,8 @@ vehicle task described below.
   three retained vectors and complete FC2 ADC trace. The older
   [`test_barcode_peak_real.c`](../tests/test_barcode_peak_real.c) also feeds
   its measured quiet distance bins through the live reader.
+  [`test_barcode_motion_twitch.c`](../tests/test_barcode_motion_twitch.c)
+  checks the 2.5 mm retreat hold, reverse, stall and FC1 KR twitch rows.
   [Opt-in failed-attempt capture](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md)
   uses [`barcode_fail_capture.h`](../app_program/subsystem3/barcode_fail_capture.h)
   and [`barcode_fail_capture.inc`](../app_program/subsystem3/barcode_fail_capture.inc),

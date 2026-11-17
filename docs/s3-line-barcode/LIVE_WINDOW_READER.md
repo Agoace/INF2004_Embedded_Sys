@@ -40,7 +40,13 @@ timestamp checks are not a substitute for those counters.
 There are 64 ADC slots, eight motor points and 29 run widths. No full-pass
 sample capture, allocation or unbounded scan exists. Excess queue/history,
 invalid raw/flags, nonpositive ADC time, excessive gaps, reverse mean wheel
-progress or non-forward GP28-axis progress abandon the candidate. Exact repeated motor snapshots are
+progress, both wheels stationary, or a GP28-axis retreat of more than 2.5 mm
+below the furthest point abandon the candidate. A smaller cumulative retreat
+(a hard left steering correction) holds the stored position at the furthest
+point, and ADC rows in a held interval are skipped until progress resumes.
+The 2.5 mm bound is ASSUMED; see the
+[FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md#approved-changes-and-host-plan).
+Exact repeated motor snapshots are
 idempotent; changed counts at the same timestamp are not. Per-wheel modular
 counter differences handle wrap before the mean is calculated. Large counter
 jumps are rejected. Stationary samples cannot earn spatial white evidence.

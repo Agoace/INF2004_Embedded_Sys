@@ -18,6 +18,8 @@
  * the start star; smaller print needs measured along-travel GP28 evidence. */
 #define N_MIN 4.0f
 #define QUIET_MIN_MM 40.0f
+/* ASSUMED bound: nominal L0/R292 for 30 ms retreats GP28 about 1.6..1.9 mm. */
+#define RETREAT_MAX_MM 2.5f
 #define N_MAX 7.0f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
@@ -265,14 +267,19 @@ void barcode_window_motor(barcode_window_t *state, uint32_t us,
         const int32_t dr = count_delta(right, last->right);
         if (dt == 0u || dt > state->config.motor_gap_us ||
             dl < -1024 || dl > 1024 || dr < -1024 || dr > 1024 ||
-            dl + dr < 0) {
+            dl + dr < 0 || (dl == 0 && dr == 0)) {
             loss(state, BW_MOTION);
             state->motor_count = 0u;
         } else {
+            /* Stored positions never decrease: last->mm is the furthest
+             * point. A small cumulative retreat (steering twitch) holds the
+             * position; step() skips ADC rows until progress resumes. */
             mm = sensor_pose_step(state, dl, dr);
-            if (!isfinite(mm) || mm <= last->mm) {
+            if (!isfinite(mm) || mm < last->mm - RETREAT_MAX_MM) {
                 loss(state, BW_MOTION);
                 state->motor_count = 0u;
+            } else if (mm < last->mm) {
+                mm = last->mm;
             }
         }
     }
@@ -593,6 +600,9 @@ unsigned int barcode_window_step(barcode_window_t *state, unsigned int budget)
 #if BARCODE_FAIL_CAPTURE
         bcfc_observe(state, sample, mm, b);
 #endif
+        if (b->mm == a->mm) {
+            continue; /* Held retreat: this position was already read. */
+        }
         process(state, sample, mm, b);
     }
     return processed;

@@ -179,5 +179,14 @@ older fixtures retain their expected results. An additional quiet check
 feeds 829 actual DISTANCE bins from PEAK-framed quiet crops into the live
 reader, in both orientations, with no candidate. These crops use the existing
 120 ms frame-centre guard; this count is not the historical 792-bin analysis.
+Motion change B: [`test_barcode_motion_twitch.c`](../../tests/test_barcode_motion_twitch.c)
+simulates differential-drive motion with the configured GP28 offsets. RED on
+change A: a 30 ms L0/R292 twitch inside the first star, the same twitch on
+the first bar's trailing edge, and the six FC1 KR measured wheel-speed rows
+(ASSUMED mm/s, 20 ms each) all end in BW_MOTION. GREEN after B: all three
+read F. A 120 ms twitch (retreat above 2.5 mm), both-wheel reverse, and a
+stationary motor step still end in BW_MOTION. GCC passes 580/580 tests.
+The recovery motor interval maps its ADC rows from the furthest point; edge
+error there is at most the held retreat (ASSUMED linear interpolation).
 Firmware matrix and sanitizer validation will be recorded with the remaining
 changes; no flash or push is authorized.
