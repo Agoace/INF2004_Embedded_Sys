@@ -82,6 +82,15 @@ void vsm_reset(vsm_t *vsm) {
     }
 }
 
+void vsm_set_fault(vsm_t *vsm, vsm_fault_t fault, uint16_t detail)
+{
+    if (vsm == 0) { return; }
+    vsm->state = VSM_FAULT;
+    vsm->fault = (uint8_t)fault;
+    vsm->fault_detail = detail;
+    vsm->running = VSM_MOD_NONE;
+}
+
 static unsigned int route(const vsm_t *vsm, unsigned int from, vsm_outcome_type_t type) {
     for (unsigned int i = 0u; i < vsm->route_count; ++i) {
         if (vsm->routes[i].from == from && vsm->routes[i].outcome == type) {
