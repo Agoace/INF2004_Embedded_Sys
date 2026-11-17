@@ -29,6 +29,8 @@ from pil.sil_course_path import CoursePath  # noqa: E402
 from pil.sil_course8_report import report  # noqa: E402
 
 CASES = {'default': (85, False), 'kd30st': (30, True)}
+ADC_DELAYS = (0, 20)
+DELAY_LABEL = 'ADC transport +20 ms (SW8 model)'
 # Pinned completed full-scene spin (SW8, 2026-11-15), read only.
 SPIN_SHA256 = '61c5a513d91ae9369c70b73becf2047da39d853e6ca4eb85f9272ffbdf3fb06a'
 LAPS = 2
@@ -45,7 +47,9 @@ def profile_values(profile):
             else getattr(profile, f.name) for f in fields(profile)}
 
 
-def prepare(output, case, spin_path):
+def prepare(output, case, spin_path, adc_delay_ms=0):
+    if adc_delay_ms not in ADC_DELAYS:
+        raise ValueError('adc delay must be one of %s ms' % (ADC_DELAYS,))
     kd, same_tick = CASES[case]
     spin_bytes = spin_path.read_bytes()
     if hashlib.sha256(spin_bytes).hexdigest() != SPIN_SHA256:
@@ -86,6 +90,11 @@ def prepare(output, case, spin_path):
                          'line_trace) + SEARCH(line_search) + motor_ctl; no barcode source '
                          '(SHADOW), no sonar; not SDK tasks or RTOS; no watchdog'),
                   motor_order='shell step then motor tick' if same_tick else 'motor tick then shell step')
+    if adc_delay_ms:
+        # Only a non-zero delay adds keys: the 0 ms manifest stays identical.
+        config.update(adc_delay_ms=adc_delay_ms, adc_transport_label=DELAY_LABEL,
+                      adc_transport_model='pil.sil_excited_line.DelayPair (SW8, imported '
+                      'unchanged); diagnostic, not a measured causal transport')
     (project / 'sil-manifest.json').write_text(json.dumps(config, indent=2, sort_keys=True) + '\n')
     manifest_path = project / 'manifest.json'
     manifest = json.loads(manifest_path.read_text())
@@ -128,6 +137,7 @@ def main():
     p.add_argument('--spin', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--timeout-seconds', type=int, default=CAP_SECONDS)
+    p.add_argument('--adc-delay-ms', type=int, choices=ADC_DELAYS, default=0)
     p.add_argument('--prepare-only', action='store_true')
     a = p.parse_args()
     if a.output.exists():
@@ -136,13 +146,13 @@ def main():
         p.error('timeout 20..1200 s')
     if not a.prepare_only and (os.environ.get('DISPLAY') != ':0' or not os.environ.get('XAUTHORITY')):
         p.error('existing approved DISPLAY=:0 / XAUTHORITY required; no display server is started')
-    project, world, course = prepare(a.output, a.case, a.spin)
+    project, world, course = prepare(a.output, a.case, a.spin, a.adc_delay_ms)
     if a.prepare_only:
         print(json.dumps(dict(prepared=str(project), world=str(world))))
         return 0
     start = time.monotonic()
     status, pid, command, contents = launch_project(project, world, a.timeout_seconds,
-                                                    label='course8-' + a.case)
+                                                    label='course8-' + a.case + ('-adc%d' % a.adc_delay_ms if a.adc_delay_ms else ''))
     wall = time.monotonic() - start
     summary, error, proof, rep = None, None, False, None
     try:
@@ -161,12 +171,13 @@ def main():
     complete = bool(status == 0 and summary and summary['status'] == 'SIL_COURSE8_COMPLETE'
                     and proof and error is None and 'ERROR:' not in contents
                     and 'WARNING:' not in contents)
-    result = dict(case=a.case, complete=complete, verdict='COMPLETE' if complete else 'INCOMPLETE',
+    result = dict(case=a.case, adc_delay_ms=a.adc_delay_ms,
+                  adc_transport=DELAY_LABEL if a.adc_delay_ms else 'none (0 ms)', complete=complete, verdict='COMPLETE' if complete else 'INCOMPLETE',
                   exit_status=status, owned_pgid=pid, command=command, cap_seconds=a.timeout_seconds,
                   wall_seconds=wall, independent_native_replay=proof, error=error,
                   summary=summary, report=rep)
     (project / 'course8-result.json').write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
-    print(json.dumps(dict(case=a.case, verdict=result['verdict'], wall_seconds=wall,
+    print(json.dumps(dict(case=a.case, adc_delay_ms=a.adc_delay_ms, verdict=result['verdict'], wall_seconds=wall,
                           error=error or (summary or {}).get('error')), sort_keys=True))
     print('Evidence:', project)
     return 0 if complete else 1

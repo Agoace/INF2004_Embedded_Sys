@@ -108,6 +108,11 @@ def run(robot, project):
     for encoder in encoders:
         encoder.enable(1)
     ticks, laps_goal = config['duration_ms'], config['laps']
+    delay = config.get('adc_delay_ms', 0)
+    transport, optical = None, []
+    if delay:
+        from pil.sil_excited_line import DelayPair   # SW8 model, unchanged
+        transport = DelayPair(delay)
     tilt_cos = math.cos(math.radians(TILT_LIMIT_DEG))
     rows, error, follower, z_flat = [], None, None, None
     pair_f = mounts['GP26']['forward_mm']
@@ -153,6 +158,9 @@ def run(robot, project):
                 adc.append(sample.adc)
             angles = [e.getValue() for e in encoders]
             counts = [round(a * 2535 / (2 * math.pi)) for a in angles]
+            if transport is not None:
+                optical.append((slot + 1, *adc))
+                adc = list(transport.update(slot + 1, adc))
             actual = ctl.native.update(adc[0], adc[1], slot + 1, *counts)
             j = ctl.junction()
             targets = plant.advance(actual['left_pct'], actual['right_pct'])
@@ -192,6 +200,11 @@ def run(robot, project):
         writer = csv.writer(stream)
         writer.writerow(FIELDS)
         writer.writerows(rows)
+    if transport is not None:
+        with (out / 'optical_adc.csv').open('w', newline='') as stream:
+            writer = csv.writer(stream)
+            writer.writerow(('sim_ms', 'optical_left_adc', 'optical_centre_adc'))
+            writer.writerows(optical)
     laps_done = bool(rows) and rows[-1][FIELDS.index('progress_mm')] >= laps_goal * path.length_mm
     proof = False
     if error is None and laps_done:
@@ -212,6 +225,10 @@ def run(robot, project):
                            'tilted samples use 3D ray geometry with UNCALIBRATED '
                            'height/tilt response; LagPlant DM1 rows; ramp profile '
                            'ASSUMED (generator sine hump); not hardware'))
+    if delay:
+        summary.update(adc_delay_ms=delay, limits=summary['limits'] + '; ' +
+                       config['adc_transport_label'] + ': samples.csv ADC = firmware '
+                       'input (delayed); optical_adc.csv = undelayed optics')
     (out / 'summary.json').write_text(json.dumps(summary, indent=2, sort_keys=True) + '\n')
     robot.simulationQuit(0 if complete else 1)
 

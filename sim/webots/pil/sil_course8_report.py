@@ -6,6 +6,13 @@ feel.py on 20 ms robot rows, so SIL and robot numbers compare:
   deviation = |yaw rate - 0.5 s mean|; flips = sign changes of the asked
   wheel difference on straights; SEARCH = LINE -> SEARCH entries.
 Here the yaw rate is the simulated body yaw (not wheel speeds).
+
+feel() is a line-for-line copy of feel.py
+(~/Projects/mtk3-core-review/build/school_kd_474cc70/feel.py) for the
+robot comparison: yaw rate from wheel speeds (20 ms encoder deltas here;
+the robot uses its logged measured_L/R), +-25-row mean, nearest-rank
+percentiles, >40 deg/s share, flips between consecutive straight rows,
+far = |position| > 52.
 """
 import math
 
@@ -50,6 +57,35 @@ def straights(rows, step_ms=20, window_ms=500):
     return dict(straight_seconds=secs, deviation_median=_pct(dev, .5),
                 deviation_p90=_pct(dev, .9), deviation_p99=_pct(dev, .99),
                 flips_per_s=flips / secs if secs else None)
+
+
+def feel(rows, step_ms=20):
+    """feel.py on 20 ms rows (see module note)."""
+    mm_per_count = 2 * math.pi * 32.5 / 2535
+    sub = rows[step_ms - 1::step_ms]
+    R = sub[1:]
+    n = len(R)
+    if not n:
+        return {}
+    y = [((b['right_count'] - a['right_count']) - (b['left_count'] - a['left_count']))
+         * mm_per_count / (step_ms / 1000) / 111.5 * 180 / math.pi
+         for a, b in zip(sub, sub[1:])]
+    k = 25
+    ma = [sum(y[max(0, i - k):i + k + 1]) / len(y[max(0, i - k):i + k + 1]) for i in range(n)]
+    S = [i for i in range(n) if R[i]['module'] == LINE and abs(ma[i]) < 10]
+    if not S:
+        return {}
+    d = sorted(abs(y[i] - ma[i]) for i in S)
+
+    def p(q):
+        return d[int(q * (len(d) - 1))]
+    dif = [R[i]['desired_right_mm_s'] - R[i]['desired_left_mm_s'] for i in range(n)]
+    flips = sum(1 for a, b in zip(S, S[1:]) if b == a + 1 and (dif[a] > 0) != (dif[b] > 0))
+    secs = len(S) * step_ms / 1000
+    far = sum(abs(R[i]['position']) > 52 for i in S) * 100 / len(S)
+    return dict(straight_seconds=secs, deviation_median=p(.5), deviation_p90=p(.9),
+                deviation_p99=p(.99), over40_pct=sum(1 for v in d if v > 40) * 100 / len(d),
+                flips_per_s=flips / secs, far_pct=far)
 
 
 def report(rows, *, loop_mm, crossing_tile, loose_ids, wall_seconds=None):
@@ -116,4 +152,5 @@ def report(rows, *, loop_mm, crossing_tile, loose_ids, wall_seconds=None):
                             max_track_dist_mm=round(max(r['track_dist_mm'] for r in rows), 1),
                             followed=bool(loose))
     out['straights'] = straights(rows)
+    out['feel'] = feel(rows)
     return out

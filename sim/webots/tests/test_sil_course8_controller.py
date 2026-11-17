@@ -151,6 +151,55 @@ class Course8ControllerTests(unittest.TestCase):
         finally:
             shutil.rmtree(tmp)
 
+    def _run(self, case, ms, **kw):
+        sys.path.insert(0, str(ROOT / 'sim/webots/tools'))
+        import sil_course8_run as runner
+        (ROOT / 'build/webots').mkdir(parents=True, exist_ok=True)
+        tmp = Path(tempfile.mkdtemp(dir=ROOT / 'build/webots', prefix='c8-host-test-'))
+        self.addCleanup(shutil.rmtree, tmp)
+        project, _, course = runner.prepare(tmp / 'p', case, SPIN, **kw)
+        config = json.loads((project / 'sil-manifest.json').read_text())
+        config['duration_ms'] = ms
+        (project / 'sil-manifest.json').write_text(json.dumps(config))
+        spec = importlib.util.spec_from_file_location(
+            'c8ctl_' + tmp.name, project / 'controllers/sil_course8/sil_course8.py')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module.run(FakeRobot(course.data['start']['position_mm'],
+                             course.data['start']['yaw_deg']), project)
+        _, names, rows = runner.load_rows(project)
+        return runner, project, module, names, rows
+
+    def test_adc_delay_20_feeds_old_optics_and_replays(self):
+        runner, project, module, names, rows = self._run('default', 1500, adc_delay_ms=20)
+        config = json.loads((project / 'sil-manifest.json').read_text())
+        self.assertEqual(config['adc_delay_ms'], 20)
+        self.assertEqual(config['adc_transport_label'], runner.DELAY_LABEL)
+        summary = json.loads((project / 'sil-result/summary.json').read_text())
+        self.assertEqual(summary['adc_delay_ms'], 20)
+        self.assertIn('ADC transport +20 ms (SW8 model)', summary['limits'])
+        # Firmware input at ms t is the optical pair at ms max(1, t - 20).
+        with (project / 'sil-result/optical_adc.csv').open() as stream:
+            reader = csv.reader(stream)
+            self.assertEqual(next(reader), ['sim_ms', 'optical_left_adc', 'optical_centre_adc'])
+            optical = [tuple(int(v) for v in r) for r in reader]
+        self.assertEqual(len(optical), len(rows))
+        for k, row in enumerate(rows):
+            src = optical[max(0, k - 20)]
+            self.assertEqual((row[1], row[2]), src[1:])
+        self.assertNotEqual([r[1:3] for r in rows], [o[1:] for o in optical])
+        self.assertTrue(module.replay(project, rows))
+
+    def test_adc_delay_0_identical_to_no_option(self):
+        a = self._run('default', 800)
+        b = self._run('default', 800, adc_delay_ms=0)
+        self.assertEqual(a[4], b[4])
+        self.assertEqual((a[1] / 'sil-manifest.json').read_bytes(),
+                         (b[1] / 'sil-manifest.json').read_bytes())
+        self.assertFalse((b[1] / 'sil-result/optical_adc.csv').exists())
+        with self.assertRaises(ValueError):
+            a[0].prepare(a[1].parent / 'q', 'default', SPIN, adc_delay_ms=10)
+
 
 if __name__ == '__main__':
     unittest.main()
