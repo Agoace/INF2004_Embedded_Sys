@@ -68,6 +68,7 @@ not current acceptance reports. Local course originals are not public records.
 - [IMU_SAFETY_TRACE_PROCEDURE.md](s4-imu/IMU_SAFETY_TRACE_PROCEDURE.md) — how to capture a robot session and replay it through the safety detector: build flags, USB capture, converter, analyser, and the limits to state with a result.
 - [IMU_SAFETY_STOP_PATH_REPAIR.md](s4-imu/IMU_SAFETY_STOP_PATH_REPAIR.md) - answers RT-0092, RT-0093 and RT-0094: acknowledged safe restart, persistent shell FAULT, the wheels_still input, the clear-window gap, the owner recovery rule, the documented near-1 g lift limit, host tests and mutation evidence.
 - [IMU_SAFETY_LIFT_RULE_STUDY.md](s4-imu/IMU_SAFETY_LIFT_RULE_STUDY.md) - why a plus-minus Z threshold does not detect a slow hand lift, the hump false-stop risk the model exposes, and the two traces the decision needs. A model, not evidence.
+- [IMU_SAFETY_REMOTE_COURSE_CHECKLIST.md](s4-imu/IMU_SAFETY_REMOTE_COURSE_CHECKLIST.md) - operator and Coder checks for two course runs, overturn E-Stop, GP21 recovery, and a supported hand lift.
 
 ## S5 â€” Obstacle
 
