@@ -56,17 +56,20 @@ can be compiled out of one profile and still pass a host test.
 
 ## Step 2: cold boot with no fault
 
-The recorder subscribed to the broker and captured 38 `robot/state` rows,
-8 `robot/heartbeat` rows and 1 `robot/status` row.
+The recorder subscribed to the broker. The claim below is bounded to one
+observation window, not to the growing total: **93 `robot/state` rows and 18
+`robot/heartbeat` rows, covering robot uptime 78.2 s to 170.4 s**, which is a
+92 s stationary period. The recorder kept running after that window.
 
 | Check | Observation | Result |
 | --- | --- | --- |
 | Robot reached the broker | `192.168.72.191` connected, `robot/state` about every 1 s | PASS |
-| `boot_id` | `4211540474` on every heartbeat row | RECORDED |
-| `state` | `0` (IDLE) on all 38 state rows | PASS |
-| `module` | `0` (none) on all 38 state rows | PASS |
-| `motion_faults` | `0` on all 38 state rows | PASS |
-| `active` | `0` on all 38 state rows | PASS |
+| `boot_id` | `4211540474` on every heartbeat row, one boot only | RECORDED |
+| `state` | `0` (IDLE) on all 93 state rows in the window | PASS |
+| `module` | `0` (none) on all 93 state rows in the window | PASS |
+| `motion_faults` | `0` on all 93 state rows in the window | PASS |
+| `active` | `0` on all 93 state rows in the window | PASS |
+| Stationary duration | 92 s with no spurious stop or fault | PASS |
 | Freshness | `motion_age_ms` 4 to 6, `vehicle_age_ms` 3 to 5 | PASS |
 | IMU safety event | 0 event rows of any kind | PASS |
 | `stack_min_free` | 476 bytes on every heartbeat row | PASS, above the 256 B gate |
