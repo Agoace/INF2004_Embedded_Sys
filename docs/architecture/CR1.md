@@ -121,12 +121,19 @@ Integration branch: `mtk3-cr1`. Each module has its own record:
 | Sonar/obstacle | [CR1_SONAR_A.md](CR1_SONAR_A.md) | sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B | 241228 to 241148 B |
 | Vehicle | [CR1_VEHICLE_A1.md](CR1_VEHICLE_A1.md) | vehicle board 44 to 40 B | 241228 to 241224 B |
 | Barcode (private evidence) | [CR1_BARCODE_A.md](CR1_BARCODE_A.md) | fail-capture edges 1536 to 1392 B per slot, barcode frame 104 to 92 B; capacity and precision unchanged | 241228 to 240892 B |
+| Telemetry T110 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#t110) | MQTT `robot/state` RUN deadline 200 to 110 ms (operator requirement, option A; expected gap about 120 ms with the 20 ms Wi-Fi poll) | no change |
+| Fault mask F1 + sonar bit 5 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md), [CR1_SONAR_F.md](CR1_SONAR_F.md) | shared single-writer fault mask interface; sonar owner word (bit 5); a cost, not a saving | +8 B |
 
 All three merged (`db13b39`): static RAM 241228 to 240808 B (-420 B),
 subsystem3 36501 to 36145 B, subsystem5 1013 to 945 B, vehicle 2516 to
 2504 B. RAM code 21004 to 21212 B (+208 B, barcode pack code in the LINE
 task). 684 host tests, 0 warnings, RAM_PROOF 79/79. Queue and MQTT sizes
-do not change. Target timing and whole-stack checks are not run. The older baseline and motion evidence
+do not change. Target timing and whole-stack checks are not run.
+
+After T110, F1/F1b and the sonar owner word (`a3a7578`): static RAM
+240816 B, subsystem5 953 B, 686 host tests, 0 warnings, RAM_PROOF 79/79
+(21212 B). All robot MQTT payloads are binary (audit in
+[CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md)). The older baseline and motion evidence
 below keep their original scope.
 
 ## Shared-access design rule
