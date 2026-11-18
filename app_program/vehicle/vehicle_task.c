@@ -778,10 +778,6 @@ static bool imu_check_tick(void)
         imu_announced = false;
         set_reason(imu_stop_code(imu_gate.latched),
                    imu_stop_text(imu_gate.latched));
-#if TM_MQTT
-        /* This is a new stop edge, not a repeated motor-fault observation. */
-        last_network_fault = UINT16_MAX;
-#endif
         event_detail(RM_EVENT_IMU_SAFETY, vsm.state, module,
                      imu_gate.latched, imu_gate.cause);
         publish_vehicle();

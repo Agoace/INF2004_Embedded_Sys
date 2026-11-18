@@ -29,6 +29,7 @@ static unsigned int barcode_case, barcode_reads;
 static unsigned int imu_stops, imu_pending, imu_cleared, imu_other;
 static uint16_t imu_stop_word, imu_last_word;
 static uint8_t imu_stop_detail;
+static unsigned int estop_events; /* kind 3 word ESTOP, once per stop */
 static uint32_t first_barcode_epoch;
 
 int __wrap_barcode_live_counts_try_read(barcode_live_counts_t *out)
@@ -66,7 +67,8 @@ int robot_event_push(const rm_event_t *event) {
     if (event->kind==3u) {
         /* Motion fault bits only; IMU words never share kind 3. */
         assert((event->word&0x8000u)==0u && (event->word&~0x0fu)==0u);
-        assert(mode<3u || mode>4u || event->word==MC_FAULT_ESTOP);
+        assert(mode<3u || mode==5u || event->word==MC_FAULT_ESTOP);
+        if (event->word==MC_FAULT_ESTOP) ++estop_events;
     }
     if (event->kind==RM_EVENT_IMU_SAFETY) {
         assert(event->detail<=7u && event->from<=VSM_FAULT && event->to<=4u);
@@ -124,6 +126,7 @@ ER tk_slp_tsk(TMO timeout) {
     } else if (value.active && value.phase==3u && !injected) {
         injected=true;
         if (mode==3u || mode==6u) { imu_lift_test=true; }
+        if (mode>=3u) { estop_latch_test=true; }
         if (mode==4u) { imu_stale_test=true; }
         if (mode==2u) {
             /* START was queued first, but the dedicated ESTOP must win. */
@@ -179,7 +182,7 @@ int main(int argc,char **argv) {
         assert(injected && estops==1u && asked[0]==0 && asked[1]==0);
         assert(vehicle_snapshot_try_read(&snapshot)==E_OK);
         /* One kind 10 STOP per latch edge, with trigger and cause. */
-        assert(imu_stops==1u && imu_other==0u);
+        assert(imu_stops==1u && imu_other==0u && estop_events==1u);
         assert(imu_stop_word==(mode==4u ? IMU_SAFETY_IMU_UNAVAILABLE :
                                           IMU_SAFETY_LIFT));
         assert(imu_stop_detail==(mode==4u ? IMU_SAFETY_CAUSE_STALE : 0u));
