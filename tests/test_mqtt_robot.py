@@ -1043,7 +1043,7 @@ class JunctionUnusedReasonWireTests(unittest.TestCase):
                            1 | phase << 8, reason, 0, 100)
 
     def test_unused_reasons_and_csv_names(self):
-        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+        for reason, name in ((13, 'expired'), (14, 'continuous SEARCH (>=200 ms)')):
             f = wire.decode('robot/event', self.frame(reason))
             self.assertEqual((f['word'], f['detail'], f['junction_reason_name']),
                              (0x0901, reason, name))

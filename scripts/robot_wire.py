@@ -44,7 +44,7 @@ EVENT_JUNCTION = 7  # live B2a phases / line angles, event v2
 JUNCTION_PHASES = {1: "pending", 2: "bar clear", 3: "legacy settle", 4: "search",
                    5: "legacy turn settle", 6: "second line", 7: "done", 8: "failed",
                    9: "unused", 10: "C LINE"}
-JUNCTION_REASON_NAMES = {13: 'expired', 14: 'left LINE (search)'}
+JUNCTION_REASON_NAMES = {13: 'expired', 14: 'continuous SEARCH (>=200 ms)'}
 JUNCTION_ANGLE_TAGS = {0x80: "first", 0x40: "accepted"}
 EVENT_SCAN_RETRY = 8
 EVENT_HUMP = 9  # word: peak 0.1 mm; detail bits 0..6 number, bit 7 LEFT
