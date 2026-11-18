@@ -147,6 +147,39 @@ static void test_away_and_return(void) {
     CHECK(dt.fail == DT_FAIL_TURN_LIMIT && dt.heading == -151, "limit stops and accounts coast");
 }
 
+/* Run LAST 2026-11-18: the result of a ping at the step start was lost (the
+ * vehicle cancelled it). The detour waited for it, asked for no more pings,
+ * missed the -90 return heading and failed at the turn limit. */
+static void test_lost_result(void) {
+    dt_t dt;
+    uint32_t now = 200u;
+    dt_init(&dt, &CFG, OBSTACLE_SIDE_LEFT, 250u, 0, 0, 0u);
+    dt.step = DT_TURN_TOWARD;
+    dt.heading = -20;
+    (void)at(&dt, 0, now);
+    CHECK(dt_wants_reading(&dt, now), "lost: reading wanted at the step start");
+    dt_triggered(&dt); /* this result never comes */
+    now += 10u;
+    (void)at(&dt, 0, now); /* the wait starts at the next update */
+    (void)at(&dt, 0, now + DT_PENDING_MAX_MS - 10u);
+    CHECK(!dt_wants_reading(&dt, now + DT_PENDING_MAX_MS - 10u),
+          "lost: wait for the result until the limit");
+    now += DT_PENDING_MAX_MS;
+    (void)at(&dt, 0, now);
+    CHECK(dt_wants_reading(&dt, now), "lost: at the limit, stop waiting and ping again");
+    for (int deg = 0; dt.step == DT_TURN_TOWARD && deg > -200; --deg) {
+        now += 10u;
+        (void)at(&dt, deg, now);
+        if (dt_wants_reading(&dt, now)) {
+            dt_triggered(&dt);
+            dt_reading(&dt, NR, now);
+        }
+    }
+    CHECK(dt.step == DT_STRAIGHT && dt.returning && dt.fail == DT_FAIL_NONE,
+          "lost: the return turn ends at the return heading, not the limit");
+    CHECK(dt.heading <= -90 && dt.heading > -120, "lost: heading near -90");
+}
+
 /* ---- Return-turn line rule (line_turn_deg). ---- */
 
 /* Robot detour settings (vehicle_robot_config.h DETOUR_CFG.dt, 024d01a). */
@@ -542,6 +575,7 @@ int main(void) {
     test_seen_and_coast(OBSTACLE_SIDE_RIGHT);
     test_away_and_return();
     test_line_in_return_turn();
+    test_lost_result();
     test_scenes();
     test_robot_value();
     if (failures) return 1;

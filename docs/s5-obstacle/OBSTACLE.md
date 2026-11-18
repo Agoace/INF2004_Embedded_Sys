@@ -229,6 +229,20 @@ the line was registered. Host test: `tests/test_detour_sweep.c` (unit
 cases and kinematic FC_1-like / FC_2-like scenes, one sonar ray, not a
 fitted robot model). Robot result: not run.
 
+Lost sonar result (run LAST, 2026-11-18, image 9). At a step change the
+detour can trigger a ping and then ask for no pings while it waits. The
+vehicle then sends a sonar STOP with a new request number, and the sonar
+service drops the echo of the old request. Before the fix the detour waited
+for that echo for the rest of the step and asked for no more pings. In LAST
+this happened twice: STRAIGHT 1 ran 3.5 s with no sonar, and the last
+TURN_TOWARD ran 4.8 s with no sonar. With no readings, the turn did not
+stop at the -90° return heading (it needs two unseen readings). It turned
+178° and failed with `DT_FAIL_TURN_LIMIT`. Now a reading with no result
+`DT_PENDING_MAX_MS` (100 ms) after the next update is lost: the detour
+stops waiting, clears the sweep counts and asks again. Host test:
+`test_lost_result` in `tests/test_detour_sweep.c` (fails without the fix
+with the LAST result). Robot result: not run.
+
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
 
