@@ -255,6 +255,7 @@ foreach(variant IN ITEMS default custom builtin expire search)
     set(target test_barcode_live_e2e_${variant})
     host_test(${target} tests/test_barcode_live_e2e.c
         app_program/barcode_live_vehicle/policy.c
+        app_program/barcode_live_vehicle/hook.c
         app_program/subsystem3/barcode_attempt.c
         app_program/subsystem3/barcode_live_source.c
         app_program/subsystem3/barcode_live_producer.c
@@ -285,6 +286,7 @@ target_compile_definitions(test_barcode_live_e2e_search PRIVATE
     E2E_POLICY=2)
 host_test(test_blv_policy tests/test_blv_policy.c
     app_program/barcode_live_vehicle/policy.c
+    app_program/barcode_live_vehicle/hook.c
     app_program/vehicle/junction_action.c
     ${line_search_source} ${obstacle_source})
 target_link_libraries(test_blv_policy PRIVATE m)

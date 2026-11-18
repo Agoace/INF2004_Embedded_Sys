@@ -123,7 +123,11 @@ int main(void)
     const uint32_t epoch = 1u;
     clock_us = 1000000u;
     assert(barcode_live_source_init() == E_OK);
+#if E2E_POLICY
+    blv_init(&action, 131, epoch);
+#else
     ja_init(&action, 131, epoch);
+#endif
     const int32_t start_counts[2] = {0, 0};
     junction_source_start(0u, epoch, drv_time_ms(), start_counts);
     unsigned int offers = 0u, accepted = 0u, records = 0u, claimed_ticks = 0u;
@@ -151,7 +155,7 @@ int main(void)
 #if E2E_POLICY
             /* watched_step order: route policy before the LINE step. */
             const bool search = E2E_POLICY == 2 && mm >= E2E_SEARCH_MM &&
-                                mm < E2E_SEARCH_MM + 2.0f;
+                                mm < E2E_SEARCH_MM + 40.0f;
             blv_pending_route(&action, search ? VSM_MOD_SEARCH :
                               VSM_MOD_LINE, counts, drv_time_ms());
 #endif
