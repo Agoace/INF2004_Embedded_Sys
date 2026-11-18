@@ -5,7 +5,6 @@
 #ifndef APP_FAULT_MASK_H
 #define APP_FAULT_MASK_H
 
-#include <stddef.h>
 #include <stdint.h>
 #include "app_board.h"
 
@@ -37,7 +36,7 @@ typedef struct {
 } fault_mask_board_t;
 _Static_assert(sizeof(fault_mask_board_t) == 8u, "Fault owner board size");
 _Static_assert(_Alignof(fault_mask_board_t) >= 4u, "Aligned fault atomics");
-_Static_assert(offsetof(fault_mask_board_t, word) == 4u, "Aligned fault word");
+_Static_assert(__builtin_offsetof(fault_mask_board_t, word) == 4u, "Aligned fault word");
 
 /* Health-owned state. valid marks the fault bits whose source was copied
  * successfully in this collection, including successfully observed zeros.
@@ -62,7 +61,7 @@ static inline bool fault_mask_owner_valid(uint32_t owner_mask)
 static inline bool fault_mask_publish(fault_mask_board_t *board,
                                       uint32_t owner_mask, uint32_t value)
 {
-    if (board == NULL || !fault_mask_owner_valid(owner_mask) ||
+    if (board == 0 || !fault_mask_owner_valid(owner_mask) ||
         (value & ~owner_mask) != 0u) {
         return false;
     }
@@ -75,7 +74,7 @@ static inline bool fault_mask_try_read(const fault_mask_board_t *board,
                                        uint32_t owner_mask, uint32_t *out)
 {
     uint32_t value;
-    if (board == NULL || out == NULL || !fault_mask_owner_valid(owner_mask) ||
+    if (board == 0 || out == 0 || !fault_mask_owner_valid(owner_mask) ||
         !app_board_try_read(&board->sequence, &board->word,
                             &value, sizeof(value)) ||
         (value & ~owner_mask) != 0u) {
@@ -107,7 +106,7 @@ static inline bool fault_mask_combine(fault_mask_snapshot_t *state,
         return false;
     }
     state->valid &= ~owner_mask;
-    if (value == NULL || (*value & ~owner_mask) != 0u) {
+    if (value == 0 || (*value & ~owner_mask) != 0u) {
         return false;
     }
     state->now = (state->now & ~owner_mask) | *value;
