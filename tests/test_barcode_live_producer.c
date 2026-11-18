@@ -73,13 +73,16 @@ int main(int argc, char **argv)
         .control_ok = true, .motor_ok = true};
     const bool search = strncmp(kind, "search", 6u) == 0;
     const bool terminal_search = strncmp(kind, "search_end", 10u) == 0;
-    const unsigned int search_begin = terminal_search ? 2450u : 1200u;
-    const unsigned int search_duration = strstr(kind, "199") ? 199u :
+    const unsigned int search_begin = strstr(kind, "unbound") ? 500u :
+        terminal_search ? 2450u : 1200u;
+    const unsigned int search_duration = (strstr(kind, "199") || strstr(kind, "unbound")) ? 199u :
         strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u :
         strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u : 30u;
     const bool search_positive = search && !strstr(kind, "200") &&
         !strstr(kind, "context") && !strstr(kind, "late") &&
-        !strstr(kind, "end51") && !strstr(kind, "hard");
+        !strstr(kind, "end51") && !strstr(kind, "hard") &&
+        !strstr(kind, "unbound") && !strstr(kind, "motorfault") &&
+        !strstr(kind, "loss");
     const bool reverse = strcmp(kind, "reverse") == 0;
     const bool ack_kind = strcmp(kind, "ack") == 0 ||
                           strcmp(kind, "mode2_ack") == 0;
@@ -187,10 +190,14 @@ int main(int argc, char **argv)
             }
             if (strstr(kind, "context") && i == search_begin + 10u)
                 ++in.control.eligibility_revision;
+            if (strstr(kind, "motorfault") && i == search_begin + 5u)
+                in.motor_faults = 1u;
+            if (strstr(kind, "loss") && i == search_begin + 5u) ++in.dropped;
         }
         barcode_live_producer_observe(&p, &in);
         if (search && in.control.mode == BC_LIVE_DISABLED) {
             assert(!p.record_pending);
+            if (strstr(kind, "unbound")) assert(!p.bound);
             assert(!p.event_pending || p.event.reason != BW_OK);
         }
         if (p.event_pending) {
@@ -253,7 +260,7 @@ int main(int argc, char **argv)
         assert(p.occupied && p.slot.epoch != in.control.epoch);
         assert(p.sequence == 1u); /* Epoch does not reset the slot/serial. */
     }
-    if (!positive && strcmp(kind, "no_progress") != 0) {
+    if (!positive && strcmp(kind, "no_progress") != 0 && !strstr(kind, "unbound")) {
         assert(failures > 0u);
     }
     /* The mode2 positive case is the only one that may act, and only in
