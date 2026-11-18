@@ -66,6 +66,10 @@
  * base is also the gap between readings in a straight. */
 #define DT_SETTLE_BASE_MS 40u
 #define DT_SETTLE_PER_DEG_MS 4u
+/* A triggered reading with no result this long after the next dt_update()
+ * is lost (the vehicle can cancel a ping at a step change): stop waiting
+ * and ask again. An echo takes at most 5 ms plus two 10 ms ticks. */
+#define DT_PENDING_MAX_MS 100u
 /* STRAIGHT: an echo nearer than this fails. */
 #define DT_TOO_NEAR_MM 80u
 /* Wheel: 2535 counts per turn, 204.204 mm circumference. */
@@ -227,6 +231,8 @@ typedef struct {
     int32_t wall_mm;             /* rear axle to the obstacle wall at TURN_AWAY */
     uint32_t first_leg_mm;       /* first STRAIGHT length; 0: vehicle_mm rule */
     int32_t trig_turn_x100;      /* turn of the step at the pending trigger */
+    bool pending_timed;          /* pending_ms is set */
+    uint32_t pending_ms;         /* first dt_update() after the pending trigger */
     bool edge_valid;             /* TURN_AWAY saw the obstacle */
     uint16_t edge_mm;            /* last seen echo of TURN_AWAY */
     int edge_deg;                /* S-frame heading at its trigger */

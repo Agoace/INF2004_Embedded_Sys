@@ -280,6 +280,7 @@ bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
 
 void dt_triggered(dt_t *dt) {
     dt->pending = true;
+    dt->pending_timed = false;
     dt->trig_mm = travel_mm(dt);
     dt->trig_turn_x100 = (int32_t)turn_x100(dt);
 }
@@ -415,6 +416,14 @@ dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint3
     const bool moved = dt->l != left || dt->r != right;
     dt->l = left;
     dt->r = right;
+    if (dt->pending && !dt->pending_timed) {
+        dt->pending_timed = true;
+        dt->pending_ms = now_ms;
+    } else if (dt->pending && now_ms - dt->pending_ms >= DT_PENDING_MAX_MS) {
+        /* Lost result: no information, so a sweep count starts again. */
+        dt->pending = false;
+        dt->sweep_seen = dt->sweep_lost = 0u;
+    }
     if (!line_seen) {
         dt->armed = true;
     }
