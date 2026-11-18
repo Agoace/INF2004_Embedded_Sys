@@ -1,12 +1,12 @@
 # Barcode live command path (producer gate)
 
 Status: host-tested producer gate, OFF by default. No live-action robot image
-is approved. A live image needs these three items first:
+is approved. The placement rule is approved, but a live image still needs:
 
 - SW9 adds V1 (pending expiry).
 - SW9 adds V3 (SEARCH policy).
-- The team approves a demo-course placement rule and its guard value.
-  The proposal below is not yet approval for a live image.
+- The team checks the approved placement rule on the actual demo course.
+  Placement approval alone does not approve a live image.
 
 ## Scope
 
@@ -23,7 +23,7 @@ only when every gate passes.
 | Gate | Rule | Where |
 | --- | --- | --- |
 | Build | `BARCODE_LIVE_ENABLE=1` | `barcode_live_producer.c`; compiled out when 0 |
-| Clearance | `BARCODE_MEASURED_CLEAR_MM` > 0; existing name, runtime distance guard (see placement proposal) | make and C errors (existing) |
+| Clearance | `BARCODE_MEASURED_CLEAR_MM` > 0; existing name, runtime distance guard (see placement rule) | make and C errors (existing) |
 | Fake source | `JUNCTION_TEST_CMD=NONE` | make and C errors (existing) |
 | Map | `BARCODE_MAP` is not empty | make error (new) |
 | Map at runtime | `barcode_window_mapping_id() >= 2`; the built-in A–D table (id 1) never acts | producer |
@@ -114,21 +114,27 @@ The earlier stop-run procedure and D_min minus 40 mm rule are superseded.
 The school results remain historical evidence only
 ([session report](BARCODE_SESSION_REPORT.md)).
 
-### Placement-rule proposal (not approved; no code change)
+### Placement rule (operator option C, 2026-11-18)
 
 Choose the barcode location to meet a design rule, instead of calculating
 the guard from a run. The existing build name `BARCODE_MEASURED_CLEAR_MM`
 does not prove that its value is measured. Document its origin as a design
-assumption if this proposal is approved.
+value, not a measured distance.
 
-Suggested values, **ASSUMED**, for a straight approach at no more than
-150 mm/s:
+**OPERATOR (2026-11-18), option C:** G = 100 mm, no extra 100 mm
+margin, and the last black bar at least 160 mm before the near edge of
+the intended junction. Use a straight approach with no other black feature
+between the barcode and the junction (the continuous tracking line remains).
+The <= 150 mm/s first-run speed remains an ASSUMED operating recommendation,
+not a measured timing guarantee.
 
 - Guard **G = 100 mm**, counted from the barcode frame end in wheel travel.
   This is a design choice, not a required reader dimension and not a
   school-track estimate.
-- Physical placement margin **M = 100 mm**.
-- Put the trailing edge of the LAST BLACK BAR at least **G + M = 200 mm**
+- There is **no extra 100 mm margin**. The geometry budget is
+  100 mm guard + 49 mm line-pair lead + 6 mm arming = 155 mm,
+  rounded up to **160 mm**.
+- Put the trailing edge of the LAST BLACK BAR at least **160 mm**
   before the nearest edge of the intended junction's transverse black
   feature. Measure along the straight direction of travel, not from the
   paper edge. Use a ruler on the day; no dedicated D_cross run is needed.
@@ -138,16 +144,15 @@ Suggested values, **ASSUMED**, for a straight approach at no more than
 - Record the actual placement distance. It also needs an approved upper
   bound for pending expiry (V1); a minimum gap alone is not an expiry rule.
 
-Geometry and margin budget:
+Geometry and placement budget:
 
 | Item | Value and purpose |
 | --- | --- |
 | GP28 position | 73 mm forward of the axle and 73 mm left (existing reader offsets). Align the barcode under GP28, not under the line pair. The lateral 73 mm is NOT added to the straight travel guard. |
 | Line pair position | About 122 mm forward of the axle (existing ruler record). It meets the junction about 49 mm before GP28 would. Thus physical last-bar-to-junction distance is NOT the wheel distance from frame end to line-pair edge. |
-| Placement budget | At 200 mm physical spacing, the line pair meets black after about 151 mm of wheel travel from frame end. G = 100 mm leaves about 51 mm for arming and uncertainty. |
+| Placement budget | At 160 mm physical spacing, the line pair meets black after about 111 mm of wheel travel from frame end. G = 100 mm leaves about 11 mm: 6 mm arming and only 5 mm nominal rounding allowance. |
 | Pre-junction clear | ja needs at least 6 mm of fresh forward travel on the ordinary line, without a junction flag, to arm. This is not 6 mm of empty mat: the tracking line must remain visible. |
-| Read and delivery allowance | About 6 mm at the proposed speed is an ASSUMED budget, not a worst-case latency proof. If delivery is later than G, the remaining gap must still permit arming; stale or late records can be rejected. |
-| Remaining margin | M = 100 mm covers the 49 mm sensor lead, 6 mm arming, the assumed 6 mm delivery allowance, and about 39 mm for placement, slip and sample timing. It is not a verified safety bound. |
+| Timing and uncertainty | No separate delivery/slip margin is included. Assume the record is ready by G and the 6 mm arming interval completes before black. Only 5 mm nominal rounding allowance remains for scheduling, placement error, slip and geometry error combined. This is NOT a verified timing or safety bound. Late delivery can prevent the turn. |
 | Junction confirmation | Both norms >= 700 permille, junction flag, then 6 mm confirmation. That confirmation is AFTER the leading edge; do not use it to reduce the pre-edge spacing. |
 | Post-junction bar clear | LEFT/RIGHT/UTURN use at least 33 mm from the junction edge, black exit and two fresh exit samples before SEARCH. Keep that exit area and the intended branch unobstructed. This is after consumption, not an extra pre-barcode guard. |
 
@@ -160,7 +165,7 @@ scan path. Do not cover or dim the tracking line with the barcode sheet.
    could be detected as a junction. Inspect both the line-pair path and the
    GP28 path, including the barcode paper and tape.
 2. Align the last black bar square to the straight approach. Measure and
-   record at least 200 mm from that bar to the near edge of the junction.
+   record at least 160 mm from that bar to the near edge of the junction.
    Check GP28's lateral alignment and the leading quiet zone.
 3. Check that the real junction can satisfy the detector: both channels
    >= 700 permille, the junction flag, and enough width for 6 mm of
@@ -168,7 +173,7 @@ scan path. Do not cover or dim the tracking line with the barcode sheet.
 4. Check room for the post-edge 33 mm bar-clear phase and the intended
    branch acquisition. Use the approved speed, explicit map and pending
    expiry/SEARCH policy. Keep KILL ready for the first live attempt.
-5. Record placement, guard and margin as design/placement values, not a
+5. Record placement and guard as design/placement values, not a
    MEASURED school D_cross. Use normal-run dumps to inspect behaviour;
    the operator decision does not require special stop runs.
 
@@ -193,8 +198,22 @@ next confirmed junction, subject to the applicable expiry/SEARCH policy.
   guaranteed to fail safe; inspection and KILL remain necessary.
 
 No threshold, geometry constant, expiry policy or build gate is changed by
-this proposal. V1/V3 and approval of the placement policy remain live-image
-prerequisites.
+this documentation. V1/V3 and the actual-course placement checks remain
+live-image prerequisites.
+
+### Variable-name proposal (no code change)
+
+Recommend renaming `BARCODE_MEASURED_CLEAR_MM` to
+`BARCODE_CLEAR_GUARD_MM` in a separate reviewed change. The present value
+is a **100 mm design guard**, not a measured D_cross. Until that change,
+use the existing name with value 100; do not use the proposed name in builds.
+
+Proposed make/C error text: "Live actions need BARCODE_CLEAR_GUARD_MM > 0
+(design guard in mm from barcode frame_end; check the placement rule)."
+The rename must also update tests, build/profile labels, C references and
+docs together. Preserve the nonzero live-build gate and the runtime
+behaviour; do not silently reinterpret a guard as a measured distance.
+This proposal does not change any variable, error message or firmware.
 
 ## Validation
 
