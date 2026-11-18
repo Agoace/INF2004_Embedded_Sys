@@ -1,6 +1,10 @@
 # CMake build output
 /build/
 /cmake-build-*/
+/sim/build/
+/sim/output/
+__pycache__/
+*.py[cod]
 CMakeCache.txt
 CMakeFiles/
 
@@ -20,3 +24,37 @@ CMakeFiles/
 .idea/
 .DS_Store
 *~
+
+Debug
+Release
+
+# Build artifacts
+*.elf
+*.uf2
+*.map
+*.o
+*.d
+build_make/tools/elf2uf2
+tools/elf2uf2/elf2uf2
+build_make/.build_profile
+
+# Real WiFi credentials -- never commit these. Copy config/wifi_secrets.example.h
+# to config/wifi_secrets.h and fill in your own network's SSID/password.
+config/wifi_secrets.h
+
+# Videos are shared as unlisted YouTube links (videos/README.md), never committed
+*.mp4
+*.mov
+*.webm
+*.avi
+*.mkv
+
+# macOS
+.DS_Store
+
+# App-owned MQTT command token/broker settings (never commit).
+app_program/subsystem1/robot_mqtt_secrets.h
+
+# Public repository: keep course originals local; track only our summary.
+/docs/project-requirements/*
+!/docs/project-requirements/README.md

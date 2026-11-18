@@ -1,0 +1,31 @@
+# TEST-only IMU replay: robot.list without 13 barcode rows, and without the
+# 2 same_tick.list rows. Those functions have no callers in this exclusive
+# TEST image, so the linker removes them. Use with common.list only.
+# Do not change the ordinary robot.list or same_tick.list.
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_alarm
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_ack
+app_program/subsystem3/drv_line_hw.o .text.drv_line_hw_read
+app_program/platform/drv_gpio_irq_hw.o .text.drv_gpio_irq_hw_ack
+app_program/platform/drv_gpio_irq_hw.o .text.drv_gpio_irq_hw_pending
+app_program/subsystem2/drv_motor_hw.o .text.drv_motor_hw_ab
+app_program/subsystem5/drv_ultrasonic.o .text.echo_irq_handler
+tinyusb/portable/raspberrypi/rp2040/dcd_rp2040.o .text.dcd_rp2040_irq
+tinyusb/device/usbd.o .time_critical.tinyusb dcd_event_handler
+tinyusb/device/usbd.o .text.tud_event_hook_cb
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_xfer_continue
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text._hw_endpoint_buffer_control_update32
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_reset_transfer
+tinyusb/common/tusb_fifo.o .text.tu_fifo_write
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.sync_ep_buffer
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.hw_endpoint_start_next_buffer
+tinyusb/portable/raspberrypi/rp2040/rp2040_usb.o .text.prepare_ep_buffer
+app_program/subsystem3/line_service.o .text.line_task
+app_program/subsystem3/drv_line.o .text.drv_line_take
+app_program/subsystem3/drv_line.o .text.drv_line_stats
+app_program/subsystem3/drv_line.o .text.drv_line_last_wake_us
+app_program/subsystem3/line_position.o .text.lp_update
+app_program/subsystem3/line_position.o .text.update_position
+app_program/subsystem3/line_position.o .text.pair_position
+app_program/subsystem3/line_position.o .text.pair_flags
+app_program/subsystem2/motion.o .text.motion_snapshot_try_read
+app_program/subsystem2/motion_pack.o .text.motion_unpack

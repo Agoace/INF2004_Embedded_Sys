@@ -1,0 +1,903 @@
+################################################################################
+# micro T-Kernel 3.0 BSP makefile
+#     Target Board: Raspberry Pi Pico
+################################################################################
+
+################################################################################
+# Execution model
+#
+#   SMP=1  (default)  dual core.  TK_MAX_CORE is 2.
+#   SMP=0             single core.  TK_MAX_CORE is 1, the per-core arrays
+#                     collapse and the current-core index folds to a constant
+#                     zero, so the generated code is equivalent to the
+#                     pre-SMP port.
+#
+# Passed to the assembler as well: the dispatcher indexes the per-core arrays
+# by SIO CPUID and needs the same profile.
+################################################################################
+
+SMP ?= 1
+
+ifneq ($(SMP),0)
+ifneq ($(SMP),1)
+$(error Unknown SMP '$(SMP)'; use 0 or 1)
+endif
+endif
+
+# Console default is needed here because the image name includes it.
+#
+# Defaults to usb_cdc so the console appears on the Pico's own USB cable.
+# usb_cdc still mirrors every line to UART0 (GP0 TX / GP1 RX) for early boot
+# and panic messages, so GP0/GP1 stay reserved either way.  CONSOLE=uart drops
+# the USB console and its TinyUSB dependency.
+CONSOLE ?= usb_cdc
+
+# Pico W radio.  Defaults to cyw43: the radio is powered up and owned by a
+# core-0 polling service task, using the Pico SDK's cyw43 driver.  WIFI=none
+# leaves the radio powered down.
+WIFI ?= cyw43
+ifneq ($(filter $(WIFI),none cyw43),$(WIFI))
+$(error Unknown WIFI '$(WIFI)'; use none or cyw43)
+endif
+
+ifeq ($(WIFI),cyw43)
+WIFI_SUFFIX := _wifi
+# SMP=0 is supported: the radio service task simply drops its TP_PRC1 affinity
+# request when TK_SUPPORT_SMP is off (see cyw43_utk_kernel.c), the same way the
+# USB console task already did. Everything touching the radio and lwIP still
+# runs on that one task; see the execution-and-hook section in
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook.
+# Single-core satisfies the same ownership rule.
+endif
+
+# Optional lwIP network stack on top of WIFI=cyw43. NO_SYS=1 (raw API, no
+# tcpip thread): everything that calls into lwIP -- cyw43_poll(),
+# sys_check_timeouts(), and any application tcp_*/udp_*/dns_* call -- runs
+# on the same processor-1-owned task that already services the radio, per
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook.
+# See lib/liblwip/sysdepend/pico_rp2040/.
+NET ?= none
+ifneq ($(filter $(NET),none lwip),$(NET))
+$(error Unknown NET '$(NET)'; use none or lwip)
+endif
+ifeq ($(NET),lwip)
+ifneq ($(WIFI),cyw43)
+$(error NET=lwip requires WIFI=cyw43)
+endif
+NET_SUFFIX := _lwip
+endif
+
+# Optional MQTT client on top of NET=lwip. Connects and publishes from the
+# same processor-1-owned task as everything else above -- see
+# lib/liblwip/sysdepend/pico_rp2040/mqtt_utk.c. Broker address and topic
+# come from config/wifi_secrets.h (gitignored; copy from
+# config/wifi_secrets.example.h), same as the WiFi credentials.
+MQTT ?= 0
+ifneq ($(filter $(MQTT),0 1),$(MQTT))
+$(error Unknown MQTT '$(MQTT)'; use 0 or 1)
+endif
+ifeq ($(MQTT),1)
+ifneq ($(NET),lwip)
+$(error MQTT=1 requires NET=lwip)
+endif
+MQTT_SUFFIX := _mqtt
+endif
+
+# Application selection: robot by default, motion floor bench only with BENCH=1.
+BENCH ?= 0
+ifneq ($(filter $(BENCH),0 1),$(BENCH))
+$(error Unknown BENCH '$(BENCH)'; use 0 or 1)
+endif
+ifeq ($(BENCH),1)
+BENCH_SUFFIX := _bench
+endif
+
+# IMU_STREAM=1: TEST-only S4 diagnostics until power-off; no other tests.
+IMU_STREAM ?= 0
+ifneq ($(filter $(IMU_STREAM),0 1),$(IMU_STREAM))
+$(error Unknown IMU_STREAM '$(IMU_STREAM)'; use 0 or 1)
+endif
+ifeq ($(IMU_STREAM),1)
+ifneq ($(TEST),1)
+$(error IMU_STREAM=1 requires TEST=1)
+endif
+ifeq ($(BENCH),1)
+$(error IMU_STREAM=1 cannot use BENCH=1)
+endif
+IMU_STREAM_SUFFIX := _imu_stream
+endif
+
+# Hump source: 1 corrected (default), 2 filtered roll for H3 comparison.
+IMU_HUMP_SOURCE ?= 1
+ifeq ($(IMU_HUMP_SOURCE),1)
+IMU_HUMP_SOURCE_SUFFIX :=
+else ifeq ($(IMU_HUMP_SOURCE),2)
+IMU_HUMP_SOURCE_SUFFIX := _humpfilt
+else
+$(error Unknown IMU_HUMP_SOURCE '$(IMU_HUMP_SOURCE)'; use 1 or 2)
+endif
+
+# A-D retain the fake START backend; NONE selects the live shadow reader.
+JUNCTION_TEST_CMD ?= NONE
+ifeq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_TEST_CMD_ID := 0
+else ifeq ($(JUNCTION_TEST_CMD),A)
+JUNCTION_TEST_CMD_ID := 1
+else ifeq ($(JUNCTION_TEST_CMD),B)
+JUNCTION_TEST_CMD_ID := 2
+else ifeq ($(JUNCTION_TEST_CMD),C)
+JUNCTION_TEST_CMD_ID := 3
+else ifeq ($(JUNCTION_TEST_CMD),D)
+JUNCTION_TEST_CMD_ID := 4
+else
+$(error Unknown JUNCTION_TEST_CMD '$(JUNCTION_TEST_CMD)'; use NONE/A/B/C/D)
+endif
+ifneq ($(JUNCTION_TEST_CMD),NONE)
+JUNCTION_SUFFIX := _jtest$(JUNCTION_TEST_CMD)
+endif
+
+# Live actions require explicit permission AND an operator-measured bound.
+# The separate 150 mm shadow estimate is not a measured bound.
+BARCODE_LIVE_ENABLE ?= 0
+BARCODE_MEASURED_CLEAR_MM ?= 0
+ifneq ($(BARCODE_LIVE_ENABLE),0)
+ifneq ($(BARCODE_LIVE_ENABLE),1)
+$(error BARCODE_LIVE_ENABLE must be 0 or 1)
+endif
+endif
+BARCODE_CLEAR_VALID := $(shell printf '%s\n' '$(BARCODE_MEASURED_CLEAR_MM)' | grep -Eq '^(0|[1-9][0-9]*)$$' && test '$(BARCODE_MEASURED_CLEAR_MM)' -le 65535 && echo yes)
+ifneq ($(BARCODE_CLEAR_VALID),yes)
+$(error BARCODE_MEASURED_CLEAR_MM must be an integer from 0 to 65535)
+endif
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+ifeq ($(BARCODE_MEASURED_CLEAR_MM),0)
+$(error Live actions need a nonzero operator-measured clear bound; shadow 150 mm is unverified)
+endif
+ifneq ($(JUNCTION_TEST_CMD),NONE)
+$(error Fake JUNCTION_TEST_CMD and live actions are mutually exclusive)
+endif
+# The built-in A-D table never acts; live needs an explicit course map.
+ifeq ($(strip $(BARCODE_MAP)),)
+$(error Live actions need an explicit BARCODE_MAP, e.g. BARCODE_MAP="F=LEFT")
+endif
+JUNCTION_SUFFIX := _bclive
+endif
+
+# DIAG=1 adds fixed motion timing snapshots, printed on GP20 only.
+# It changes timing. Default 0 compiles the diagnostic paths out.
+DIAG ?= 0
+ifneq ($(filter $(DIAG),0 1),$(DIAG))
+$(error Unknown DIAG '$(DIAG)'; use 0 or 1)
+endif
+ifeq ($(DIAG),1)
+DIAG_SUFFIX := _diag
+endif
+
+# TEST=1 builds the subsystem self-tests into the image (APP_TEST=1 in C).
+# The image gets a _test suffix so it cannot be mistaken for the normal one.
+TEST ?= 0
+ifneq ($(filter $(TEST),0 1),$(TEST))
+$(error Unknown TEST '$(TEST)'; use 0 or 1)
+endif
+ifeq ($(TEST),1)
+TEST_SUFFIX := _test
+endif
+
+# Exclusive analog barcode capture: no lwIP RAM or other subsystem tests.
+BARCODE_CAPTURE ?= 0
+ifneq ($(filter $(BARCODE_CAPTURE),0 1),$(BARCODE_CAPTURE))
+$(error Unknown BARCODE_CAPTURE '$(BARCODE_CAPTURE)'; use 0 or 1)
+endif
+ifeq ($(BARCODE_CAPTURE),1)
+BARCODE_MODE := $(TEST):$(BENCH):$(IMU_STREAM):$(SMP)
+BARCODE_MODE := $(BARCODE_MODE):$(WIFI):$(NET):$(MQTT)
+ifneq ($(BARCODE_MODE),1:0:0:0:none:none:0)
+$(error BARCODE_CAPTURE=1 requires TEST=1 BENCH=0 IMU_STREAM=0 \
+SMP=0 WIFI=none NET=none MQTT=0)
+endif
+BARCODE_CAPTURE_SUFFIX := _barcode_capture
+endif
+
+# LINE D gain override: LINE_KD=<0..85> replaces only kd_pct in
+# vehicle_task.o through a forced header (line_kd.h). The default 30 is the
+# vehicle_robot_config.h value (demo default 2026-11-17; was 85) and adds
+# nothing. See docs/s3-line-barcode/LINE.md.
+LINE_KD ?= 30
+LINE_KD_VALID := $(shell printf '%s\n' '$(LINE_KD)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_KD)' -le 85 && echo yes)
+ifneq ($(LINE_KD_VALID),yes)
+$(error LINE_KD must be one integer from 0 to 85)
+endif
+ifneq ($(LINE_KD),30)
+ifeq ($(BENCH_KERNEL),1)
+$(error LINE_KD is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_KD=$(LINE_KD) -include ../app_program/vehicle/line_kd.h
+endif
+# Same-tick motion: motion_set_speed() applies the new target in the
+# current 10 ms period (mc_retarget). Only motion.o and motor_ctl.o get a
+# forced header. Default 1 for robot images (demo default 2026-11-17);
+# MOTION_SAME_TICK=0 gives the old next-period timing (suffix _sametick0).
+# BENCH_KERNEL=1 has no motion task path for it: default 0, and 1 fails.
+# See docs/s2-motion/MOTION.md.
+ifeq ($(BENCH_KERNEL),1)
+MOTION_SAME_TICK ?= 0
+else
+MOTION_SAME_TICK ?= 1
+endif
+ifneq ($(words $(MOTION_SAME_TICK)),1)
+$(error MOTION_SAME_TICK must be one value: 0 or 1)
+endif
+ifneq ($(filter $(MOTION_SAME_TICK),0 1),$(MOTION_SAME_TICK))
+$(error Unknown MOTION_SAME_TICK '$(MOTION_SAME_TICK)'; use 0 or 1)
+endif
+ifeq ($(MOTION_SAME_TICK),1)
+ifeq ($(BENCH_KERNEL),1)
+$(error MOTION_SAME_TICK=1 is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/subsystem2/motion.o: CFLAGS += -include ../app_program/subsystem2/motion_same_tick.h
+mtkernel_3/app_program/subsystem2/motor_ctl.o: CFLAGS += -include ../app_program/subsystem2/motor_ctl_same_tick_impl.h
+endif
+
+# CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
+# GP1 (RX), 115200 8N1.  UART output is sent immediately, so it still shows
+# the last messages and the kernel's crash report after a crash, when the
+# USB console can no longer send anything.  It needs a USB-serial adapter on
+# GP0/GP1 and takes those two pins.
+# CRASH_REPORT=0 (default): console on USB only; the boot code leaves GP0/GP1
+# alone, so a subsystem may claim them in TEAM.md.
+# CONSOLE=uart always uses UART0 as the console, so it forces CRASH_REPORT=1.
+CRASH_REPORT ?= 0
+ifneq ($(filter $(CRASH_REPORT),0 1),$(CRASH_REPORT))
+$(error Unknown CRASH_REPORT '$(CRASH_REPORT)'; use 0 or 1)
+endif
+ifeq ($(CONSOLE),uart)
+override CRASH_REPORT := 1
+endif
+ifeq ($(CONSOLE)$(CRASH_REPORT),usb_cdc1)
+CRASH_SUFFIX := _crash
+endif
+
+# RT-0075/F2: the placement profile changes which core every task lands on, so it
+# changes the object code and must appear in both the artifact name and the
+# invalidation key below. Without this, switching FORCE_CORE0 reuses objects built
+# for the other placement and overwrites an identically named UF2.
+ifeq ($(FORCE_CORE0),1)
+CORE_SUFFIX := _core0
+endif
+
+# Explicit spare-Pico step0, not the BENCH=1 floor-motion application.
+BENCH_KERNEL ?= 0
+ifneq ($(words $(BENCH_KERNEL)),1)
+$(error BENCH_KERNEL must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BENCH_KERNEL),0 1),$(BENCH_KERNEL))
+$(error Unknown BENCH_KERNEL '$(BENCH_KERNEL)'; use 0 or 1)
+endif
+ifeq ($(BENCH_KERNEL),1)
+ifneq ($(WIFI):$(NET):$(MQTT):$(CONSOLE):$(CRASH_REPORT):$(BENCH):$(TEST):$(DIAG),none:none:0:usb_cdc:0:0:0:0)
+$(error BENCH_KERNEL=1 requires radio-free USB robot, CRASH_REPORT=0 TEST=0 BENCH=0 DIAG=0)
+endif
+ifneq ($(filter-out 0,$(strip $(SIM) $(PIL_GATE1))),)
+$(error BENCH_KERNEL=1 excludes SIM and PIL_GATE1)
+endif
+ifneq ($(IMU_STREAM):$(BARCODE_CAPTURE):$(BARCODE_LIVE_ENABLE):$(JUNCTION_TEST_CMD),0:0:0:NONE)
+$(error BENCH_KERNEL=1 requires neutral IMU/barcode/junction options)
+endif
+endif
+# Opt-in: run the listed kernel/ISR hot path from RAM (UP only). The default
+# 0 adds no rule, so ordinary images stay byte-identical.
+ifneq ($(strip $(BENCH_KERNEL_RAM)),)
+$(error BENCH_KERNEL_RAM was replaced: use BENCH_KERNEL=1 KERNEL_RAM=1)
+endif
+KERNEL_RAM ?= 0
+ifneq ($(words $(KERNEL_RAM)),1)
+$(error KERNEL_RAM must be one value: 0 or 1)
+endif
+ifneq ($(filter $(KERNEL_RAM),0 1),$(KERNEL_RAM))
+$(error Unknown KERNEL_RAM '$(KERNEL_RAM)'; use 0 or 1)
+endif
+ifeq ($(KERNEL_RAM),1)
+ifneq ($(SMP),0)
+$(error KERNEL_RAM=1 is UP only: needs SMP=0)
+endif
+endif
+
+# Opt-in ROBOT failed-attempt diagnostics. OFF adds no compiler flag/object.
+BARCODE_FAIL_CAPTURE ?= 0
+BARCODE_FAIL_SLOTS ?= 2
+ifneq ($(words $(BARCODE_FAIL_CAPTURE)),1)
+$(error BARCODE_FAIL_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BARCODE_FAIL_CAPTURE),0 1),$(BARCODE_FAIL_CAPTURE))
+$(error BARCODE_FAIL_CAPTURE must be 0 or 1)
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+ifneq ($(TEST)$(BENCH),00)
+$(error BARCODE_FAIL_CAPTURE=1 is ROBOT only; TEST=0 BENCH=0 required)
+endif
+ifneq ($(words $(BARCODE_FAIL_SLOTS)),1)
+$(error BARCODE_FAIL_SLOTS must be one value: 1 or 2)
+endif
+ifneq ($(filter $(BARCODE_FAIL_SLOTS),1 2),$(BARCODE_FAIL_SLOTS))
+$(error BARCODE_FAIL_SLOTS must be 1 or 2)
+endif
+endif
+# Vehicle-only LINE proportional gain and base speed. The defaults (85, 120)
+# are the vehicle_robot_config.h values and emit no extra flags or suffix.
+LINE_P_NEAR ?= 85
+LINE_P_NEAR_VALID := $(shell printf '%s\n' '$(LINE_P_NEAR)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_P_NEAR)' -le 85 && echo yes)
+ifneq ($(LINE_P_NEAR_VALID),yes)
+$(error LINE_P_NEAR must be one integer from 0 to 85)
+endif
+LINE_BASE ?= 120
+LINE_BASE_VALID := $(shell printf '%s\n' '$(LINE_BASE)' | grep -Eq '^[1-9][0-9]{1,2}$$' && test '$(LINE_BASE)' -gt 82 && test '$(LINE_BASE)' -le 378 && echo yes)
+ifneq ($(LINE_BASE_VALID),yes)
+$(error LINE_BASE must be one integer greater than 82 and at most 378)
+endif
+ifneq ($(LINE_P_NEAR):$(LINE_BASE),85:120)
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_P_NEAR=$(LINE_P_NEAR) -DLINE_BASE=$(LINE_BASE) -include ../app_program/vehicle/line_p_near.h
+endif
+
+# Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
+# letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
+# nothing, so ordinary images stay byte-identical. Policy id 1 is the
+# built-in table, so a custom map uses BARCODE_MAP_ID 2..255 (default 2).
+BARCODE_MAP ?=
+ifeq ($(strip $(BARCODE_MAP)),)
+ifneq ($(origin BARCODE_MAP_ID),undefined)
+$(error BARCODE_MAP_ID needs BARCODE_MAP)
+endif
+else
+BARCODE_MAP_ID ?= 2
+BARCODE_MAP_ID_VALID := $(shell printf '%s\n' '$(BARCODE_MAP_ID)' | grep -Eq '^[1-9][0-9]{0,2}$$' && test '$(BARCODE_MAP_ID)' -ge 2 && test '$(BARCODE_MAP_ID)' -le 255 && echo yes)
+ifneq ($(BARCODE_MAP_ID_VALID),yes)
+$(error BARCODE_MAP_ID must be an integer from 2 to 255)
+endif
+BARCODE_MAP_VALUES := $(shell python3 ../tools/barcode_map/barcode_map.py '$(BARCODE_MAP)' || echo FAIL)
+ifneq ($(filter FAIL,$(BARCODE_MAP_VALUES)),)
+$(error BARCODE_MAP '$(BARCODE_MAP)' is not valid (see message above))
+endif
+BARCODE_MAP_CFLAGS := -DBW_MAP_VALUES=$(BARCODE_MAP_VALUES) -DBW_MAP_POLICY_ID=$(BARCODE_MAP_ID)u
+mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLAGS)
+$(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
+endif
+
+# Replay is opt-in. 1 is the TEST runner; robot_synthetic is the full
+# robot app with a synthetic IMU stream (spare Pico W only, never a robot
+# with a real IMU). Normal profiles keep the same flags and link.
+IMU_SAFETY_BENCH ?= 0
+ifneq ($(words $(IMU_SAFETY_BENCH)),1)
+$(error IMU_SAFETY_BENCH must be one value: 0, 1 or robot_synthetic)
+endif
+ifneq ($(filter $(IMU_SAFETY_BENCH),0 1 robot_synthetic),$(IMU_SAFETY_BENCH))
+$(error IMU_SAFETY_BENCH must be 0, 1 or robot_synthetic)
+endif
+ifneq ($(IMU_SAFETY_BENCH),0)
+include imu_safety_bench.mk
+endif
+
+# Opt-in ROBOT IMU safety latch capture. OFF adds no flag, object or name.
+IMU_SAFETY_CAPTURE ?= 0
+ifneq ($(words $(IMU_SAFETY_CAPTURE)),1)
+$(error IMU_SAFETY_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_SAFETY_CAPTURE),0 1),$(IMU_SAFETY_CAPTURE))
+$(error IMU_SAFETY_CAPTURE must be 0 or 1)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+include imu_safety_capture.mk
+endif
+# V1/V3 live pending policy: live builds only (default objects unchanged).
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+include barcode_live_vehicle.mk
+endif
+
+#
+# Images are named after the profile they were built with.  Every image is
+# flashed by hand from a downloads folder, so identically-named artifacts are
+# a live hazard: an SMP=1 build was once flashed in place of an SMP=0 one and
+# only the banner in the log revealed it.
+#
+EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_SAFETY_BENCH_SUFFIX)
+ifeq ($(BENCH_KERNEL),1)
+EXE_FILE := $(EXE_FILE)_bench_kernel_step0
+endif
+ifeq ($(KERNEL_RAM),1)
+EXE_FILE := $(EXE_FILE)_kernel_ram
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),30)
+EXE_FILE := $(EXE_FILE)_kd$(LINE_KD)
+endif
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+EXE_FILE := $(EXE_FILE)_sametick0
+endif
+
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_imucap
+endif
+ifneq ($(LINE_P_NEAR),85)
+EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),120)
+EXE_FILE := $(EXE_FILE)_base$(LINE_BASE)
+endif
+
+GCC := arm-none-eabi-gcc
+AS := arm-none-eabi-gcc
+LINK := arm-none-eabi-gcc
+SIZE := arm-none-eabi-size
+E2U := tools/elf2uf2
+
+# Fail early, with a readable message, when the cross compiler is not on PATH.
+ifneq ($(MAKECMDGOALS),clean)
+ifeq ($(shell command -v $(GCC) 2>/dev/null),)
+$(error $(GCC) not found. Add your Arm GNU Toolchain 'bin' folder to PATH, e.g. export PATH="/path/to/arm-gnu-toolchain/bin:$$PATH")
+endif
+endif
+
+# The USB console and the radio take sources from the Pico C SDK.  Its location
+# must come from the environment (export PICO_SDK_PATH=...) or the command line.
+ifneq ($(MAKECMDGOALS),clean)
+ifneq ($(CONSOLE)$(WIFI),uartnone)
+ifeq ($(strip $(PICO_SDK_PATH)),)
+$(error PICO_SDK_PATH is not set. export PICO_SDK_PATH=/path/to/pico-sdk, or build with CONSOLE=uart WIFI=none)
+endif
+ifeq ($(wildcard $(PICO_SDK_PATH)/pico_sdk_init.cmake),)
+$(error PICO_SDK_PATH='$(PICO_SDK_PATH)' does not look like a Pico C SDK folder)
+endif
+endif
+endif
+
+# The ELF-to-UF2 converter is a small host program built from tools/elf2uf2
+# with the host C++ compiler the first time it is needed.
+$(E2U): ../tools/elf2uf2/main.cpp
+	@echo 'Building host tool: $@'
+	c++ -O2 -std=c++14 -I../tools/elf2uf2 -o $@ $<
+
+$(EXE_FILE).elf: | $(E2U)
+
+CFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding\
+    -std=gnu11 \
+    -O2 -g3 \
+    -MMD -MP \
+    -mfloat-abi=soft \
+
+ASFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding\
+    -x assembler-with-cpp \
+    -O2 -g3 \
+    -MMD -MP \
+
+LFLAGS := -mcpu=cortex-m0plus -mthumb -ffreestanding \
+    -nostartfiles \
+    -O2 -g3 \
+    -mfloat-abi=soft \
+
+LNKFILE := "../etc/linker/pico_rp2040/tkernel_map.ld"
+ifeq ($(BENCH_KERNEL),1)
+CFLAGS += -DBENCH_KERNEL=1
+LFLAGS += -Wl,--wrap=rt_timeline_report
+LFLAGS += -Wl,--wrap=app_startup_complete_publish
+LFLAGS += -Wl,--wrap=rt_call -Wl,--wrap=rt_max
+endif
+# Timeline recorders in RAM (always): run_timing.c compiles rt_tl and
+# rt_tl_gpio to .text.<name>; rename them to .data.ramfunc.<name>, which the
+# template linker script copies to RAM. Renaming is idempotent.
+RUN_TIMING_OBJ := mtkernel_3/app_program/platform/run_timing.o
+$(EXE_FILE).tlstamp: $(RUN_TIMING_OBJ)
+	arm-none-eabi-objcopy \
+	  --rename-section .text.rt_tl=.data.ramfunc.rt_tl \
+	  --rename-section .text.rt_tl_gpio=.data.ramfunc.rt_tl_gpio $<
+	touch $@
+$(EXE_FILE).elf: $(EXE_FILE).tlstamp
+
+# Kernel hot path in RAM: rule
+# Rename each listed section in its compiled object before the link (no
+# source or template change; renaming is idempotent). After the link,
+# ram_proof.py fails the build if a listed symbol is still in flash.
+KERNEL_RAM ?= 0
+ifeq ($(KERNEL_RAM),1)
+KERNEL_RAM_DIR := ../tools/kernel_ram
+ifeq ($(BENCH_KERNEL),1)
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
+else
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
+endif
+ifeq ($(MOTION_SAME_TICK),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/same_tick.list
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+# The exclusive TEST runner has no ROBOT barcode/Vehicle command callers.
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/imu_safety_bench.list
+endif
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/barcode_live_control.list
+endif
+KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
+	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+# The public producer symbol lives in the live wrapper, not the shared object.
+# Keep robot.list's proof symbol; move its section in the correct object.
+KERNEL_RAM_ROWS := $(subst app_program/subsystem3/barcode_live_producer.o:.text.barcode_live_producer_observe,app_program/barcode_live_vehicle/control.o:.text.barcode_live_producer_observe,$(KERNEL_RAM_ROWS))
+endif
+KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
+kernel_ram_obj = $(basename $(notdir $(1)))
+kernel_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))_text,$(if $(filter .text.%,$(1)),.data.ramfunc.$(patsubst .text.%,%,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))$(subst .,_,$(1))))
+$(EXE_FILE).ramstamp: $(KERNEL_RAM_OBJS) $(KERNEL_RAM_LISTS)
+	@echo 'KERNEL_RAM: moving $(words $(KERNEL_RAM_ROWS)) sections to RAM'
+	$(foreach o,$(KERNEL_RAM_OBJS),arm-none-eabi-objcopy $(foreach r,$(KERNEL_RAM_ROWS),$(if $(filter $(o),mtkernel_3/$(firstword $(subst :, ,$(r)))),--rename-section $(lastword $(subst :, ,$(r)))=$(call kernel_ram_new,$(lastword $(subst :, ,$(r))),$(o)))) $(o) &&) true
+	touch $@
+$(EXE_FILE).elf: $(EXE_FILE).ramstamp
+$(EXE_FILE).ramproof: $(EXE_FILE).elf $(KERNEL_RAM_DIR)/ram_proof.py
+	python3 $(KERNEL_RAM_DIR)/ram_proof.py $(EXE_FILE).elf \
+	  $(KERNEL_RAM_LISTS) > $@.tmp; st=$$?; cat $@.tmp; \
+	  if [ $$st -ne 0 ]; then rm -f $@.tmp; exit $$st; fi; mv $@.tmp $@
+all: $(EXE_FILE).ramproof
+endif
+# End of kernel hot path in RAM
+
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+CFLAGS += -DBARCODE_FAIL_CAPTURE=1 -DBCFC_FAILED_SLOTS=$(BARCODE_FAIL_SLOTS)
+endif
+
+# Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
+# otherwise discard anything appended above.
+ifeq ($(SMP),1)
+CFLAGS  += -DCNF_SMP=1
+ASFLAGS += -DCNF_SMP=1
+endif
+FORCE_CORE0 ?= 0
+CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
+CFLAGS  += -DAPP_FORCE_CORE0=$(FORCE_CORE0)
+CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
+CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
+CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
+CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
+CFLAGS  += -DBARCODE_LIVE_ENABLE=$(BARCODE_LIVE_ENABLE)
+CFLAGS  += -DBARCODE_MEASURED_CLEAR_MM=$(BARCODE_MEASURED_CLEAR_MM)
+CFLAGS  += -DTM_CONSOLE_UART=$(CRASH_REPORT)
+ifeq ($(CRASH_REPORT),0)
+CFLAGS  += -DBOARD_UART0_FREE=1
+endif
+
+################################################################################
+# Console selection
+#
+#   CONSOLE=usb_cdc             USB CDC-ACM console, with the UART0 mirror
+#                               retained for early boot and panics.
+#   CONSOLE=uart                UART0 only, no TinyUSB dependency.
+#
+# usb_cdc pulls seven TinyUSB sources and a set of pico-sdk headers from
+# PICO_SDK_PATH.  Only headers and those sources are used; the port does not
+# link the pico-sdk runtime, and lib/libtm/sysdepend/pico_rp2040/usb/
+# usb_sdk_compat.c supplies the few SDK hooks TinyUSB calls, mapped onto
+# micro T-Kernel's tk_def_int().
+################################################################################
+
+################################################################################
+# Stale-object guard
+#
+# Every profile compiles into the same object tree, so switching profiles
+# without cleaning silently relinks the previous profile's objects: SMP=0 and
+# SMP=1 built back to back produced byte-identical images. Record the profile
+# and discard the objects whenever it changes. Only *.o and *.d are removed:
+# build_make/mtkernel_3/ also holds the tracked subdir.mk files, so removing
+# the directory wholesale deletes source. Images are named after their
+# profile, so both can coexist. This runs at parse time, so it completes
+# before any recipe executes.
+################################################################################
+
+PROFILE_ID := smp$(SMP)-$(CONSOLE)-wifi$(WIFI)-net$(NET)-mqtt$(MQTT)
+PROFILE_ID := $(PROFILE_ID)-crash$(CRASH_REPORT)-test$(TEST)-bench$(BENCH)
+PROFILE_ID := $(PROFILE_ID)-diag$(DIAG)-imu_stream$(IMU_STREAM)
+PROFILE_ID := $(PROFILE_ID)-hump_source$(IMU_HUMP_SOURCE)
+PROFILE_ID := $(PROFILE_ID)-junction$(JUNCTION_TEST_CMD_ID)
+PROFILE_ID := $(PROFILE_ID)-forcecore$(FORCE_CORE0)
+PROFILE_ID := $(PROFILE_ID)-barcode_capture$(BARCODE_CAPTURE)
+PROFILE_ID := $(PROFILE_ID)-bclive$(BARCODE_LIVE_ENABLE)
+PROFILE_ID := $(PROFILE_ID)-bcclear$(BARCODE_MEASURED_CLEAR_MM)
+ifeq ($(BENCH_KERNEL),1)
+PROFILE_ID := $(PROFILE_ID)-benchkernelstep0
+endif
+ifeq ($(KERNEL_RAM),1)
+PROFILE_ID := $(PROFILE_ID)-kernelram1
+endif
+ifneq ($(strip $(BARCODE_MAP)),)
+BARCODE_MAP_COMMA := ,
+PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),30)
+PROFILE_ID := $(PROFILE_ID)-kd$(LINE_KD)
+endif
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+PROFILE_ID := $(PROFILE_ID)-sametick0
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-imucap
+endif
+ifneq ($(LINE_P_NEAR),85)
+PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),120)
+PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
+endif
+ifneq ($(IMU_SAFETY_BENCH),0)
+PROFILE_ID := $(PROFILE_ID)-imu_safety_bench_$(IMU_SAFETY_BENCH)
+endif
+PROFILE_FILE := .build_profile
+
+ifneq ($(strip $(shell cat $(PROFILE_FILE) 2>/dev/null)),$(PROFILE_ID))
+$(info Build profile is now $(PROFILE_ID); discarding objects built for another profile.)
+$(shell find mtkernel_3 -name '*.o' -o -name '*.d' | xargs -r rm -f; \
+	  rm -f $(EXE_FILE).elf $(EXE_FILE).map $(EXE_FILE).uf2; \
+	  echo $(PROFILE_ID) > $(PROFILE_FILE))
+endif
+
+
+ifeq ($(CONSOLE),usb_cdc)
+
+TINYUSB_PATH := $(PICO_SDK_PATH)/lib/tinyusb
+
+ifeq ($(wildcard $(TINYUSB_PATH)/src/tusb.c),)
+$(error TinyUSB not found at $(TINYUSB_PATH). Set PICO_SDK_PATH, or build with CONSOLE=uart)
+endif
+
+USBDIR := ../lib/libtm/sysdepend/pico_rp2040/usb
+
+USB_SRCS := usb_console.c usb_descriptors.c usb_sdk_compat.c usb_tinyusb_glue.c
+USB_OBJS := $(addprefix ./mtkernel_3/lib/libtm/sysdepend/pico_rp2040/usb/,$(USB_SRCS:.c=.o))
+
+TINYUSB_SRCS := tusb.c \
+                common/tusb_fifo.c \
+                device/usbd.c \
+                device/usbd_control.c \
+                class/cdc/cdc_device.c \
+                portable/raspberrypi/rp2040/rp2040_usb.c \
+                portable/raspberrypi/rp2040/dcd_rp2040.c
+TINYUSB_OBJS := $(addprefix ./mtkernel_3/tinyusb/,$(TINYUSB_SRCS:.c=.o))
+
+USB_INCLUDES := -I"$(USBDIR)" \
+                -I"$(TINYUSB_PATH)/src" \
+                -I"$(PICO_SDK_PATH)/src/common/pico_base_headers/include" \
+                -I"$(PICO_SDK_PATH)/src/common/pico_binary_info/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2040/pico_platform/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_compiler/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_sections/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_panic/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_common/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_base/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_irq/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_resets/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_sync/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_sync_spin_lock/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_timer/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2040/hardware_regs/include" \
+                -I"$(PICO_SDK_PATH)/src/rp2040/hardware_structs/include"
+
+CFLAGS += -DTM_CONSOLE_USB_CDC=1 -DNDEBUG $(USB_INCLUDES)
+
+OBJS += $(USB_OBJS) $(TINYUSB_OBJS)
+C_DEPS += $(USB_OBJS:.o=.d) $(TINYUSB_OBJS:.o=.d)
+
+mtkernel_3/lib/libtm/sysdepend/pico_rp2040/usb/%.o: $(USBDIR)/%.c
+	@echo 'Building file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+	@echo 'Finished building: $<'
+	@echo ' '
+
+mtkernel_3/tinyusb/%.o: $(TINYUSB_PATH)/src/%.c
+	@echo 'Building TinyUSB file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+	@echo 'Finished building: $<'
+	@echo ' '
+
+else ifneq ($(CONSOLE),uart)
+$(error Unknown CONSOLE '$(CONSOLE)'; use usb_cdc or uart)
+endif
+
+################################################################################
+# CYW43439 radio (polling architecture). NET=lwip below adds lwIP on top,
+# still within the same polling model -- see
+# docs/s1-telemetry/TELEMETRY.md#execution-and-hook and
+# lib/liblwip/sysdepend/pico_rp2040/.
+################################################################################
+
+ifeq ($(WIFI),cyw43)
+
+CYW43_DRIVER_PATH := $(PICO_SDK_PATH)/lib/cyw43-driver
+CYW43_PICO_PATH := $(PICO_SDK_PATH)/src/rp2_common/pico_cyw43_driver
+WIFIDIR := ../lib/libwifi/sysdepend/pico_rp2040
+
+ifeq ($(wildcard $(CYW43_DRIVER_PATH)/src/cyw43_ll.c),)
+$(error CYW43 driver not found below $(PICO_SDK_PATH); initialize the pico-sdk submodules)
+endif
+
+WIFI_LOCAL_SRCS := cyw43_utk.c cyw43_utk_kernel.c cyw43_utk_compat.c
+WIFI_LOCAL_OBJS := $(addprefix ./mtkernel_3/lib/libwifi/sysdepend/pico_rp2040/,$(WIFI_LOCAL_SRCS:.c=.o))
+
+CYW43_OBJS := ./mtkernel_3/cyw43/cyw43_ll.o \
+              ./mtkernel_3/cyw43/cyw43_ctrl.o \
+              ./mtkernel_3/cyw43/cyw43_stats.o \
+              ./mtkernel_3/cyw43/cyw43_bus_pio_spi.o \
+              ./mtkernel_3/cyw43/pio.o \
+              ./mtkernel_3/cyw43/dma.o \
+              ./mtkernel_3/cyw43/gpio.o
+
+WIFI_INCLUDES := -I"$(WIFIDIR)" \
+                 -I"../lib/libtm/sysdepend/pico_rp2040/usb" \
+                 -I"$(CYW43_DRIVER_PATH)/src" \
+                 -I"$(CYW43_DRIVER_PATH)/firmware" \
+                 -I"$(CYW43_PICO_PATH)/include" \
+                 -I"$(PICO_SDK_PATH)/src/boards/include" \
+                 -I"$(PICO_SDK_PATH)/src/common/pico_base_headers/include" \
+                 -I"$(PICO_SDK_PATH)/src/common/hardware_claim/include" \
+                 -I"$(PICO_SDK_PATH)/src/common/pico_binary_info/include" \
+                 -I"$(PICO_SDK_PATH)/src/common/pico_util/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2040/pico_platform/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2040/hardware_regs/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2040/hardware_structs/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_common/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_compiler/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_sections/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/pico_platform_panic/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_base/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_pio/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_gpio/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_dma/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_irq/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_sync/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_sync_spin_lock/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_clocks/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_resets/include" \
+                 -I"$(PICO_SDK_PATH)/src/rp2_common/hardware_timer/include"
+
+CFLAGS += -DTM_WIFI_CYW43=1 -DCYW43_LWIP=$(if $(filter lwip,$(NET)),1,0) -DCYW43_ENABLE_BLUETOOTH=0 \
+          -DCYW43_USE_OTP_MAC=1 -DPICO_CYW43_LOGGING_ENABLED=0 \
+          -DPICO_RP2040=1 -DPICO_32BIT=1 -DPICO_ON_DEVICE=1 -DPICO_BUILD=1 \
+          -DPICO_NO_HARDWARE=0 -DRASPBERRYPI_PICO_W=1 \
+          -DCYW43_DEFAULT_PIN_WL_REG_ON=23u \
+          -DCYW43_DEFAULT_PIN_WL_DATA_OUT=24u \
+          -DCYW43_DEFAULT_PIN_WL_DATA_IN=24u \
+          -DCYW43_DEFAULT_PIN_WL_HOST_WAKE=24u \
+          -DCYW43_DEFAULT_PIN_WL_CLOCK=29u \
+          -DCYW43_DEFAULT_PIN_WL_CS=25u \
+          -DNDEBUG -ffunction-sections -fdata-sections $(WIFI_INCLUDES)
+LFLAGS += -Wl,--gc-sections
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+# Retain the API while producer/adapter helpers are integrated separately.
+LFLAGS += -Wl,--undefined=blv_decode_grace_active
+endif
+
+OBJS += $(WIFI_LOCAL_OBJS) $(CYW43_OBJS)
+C_DEPS += $(WIFI_LOCAL_OBJS:.o=.d) $(CYW43_OBJS:.o=.d)
+
+mtkernel_3/lib/libwifi/sysdepend/pico_rp2040/%.o: $(WIFIDIR)/%.c
+	@echo 'Building Wi-Fi port file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/cyw43_ll.o: $(CYW43_DRIVER_PATH)/src/cyw43_ll.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/cyw43_ctrl.o: $(CYW43_DRIVER_PATH)/src/cyw43_ctrl.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/cyw43_stats.o: $(CYW43_DRIVER_PATH)/src/cyw43_stats.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/cyw43_bus_pio_spi.o: $(CYW43_PICO_PATH)/cyw43_bus_pio_spi.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/pio.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_pio/pio.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/dma.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_dma/dma.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/gpio.o: $(PICO_SDK_PATH)/src/rp2_common/hardware_gpio/gpio.c
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+ifeq ($(NET),lwip)
+
+LWIPDIR := $(PICO_SDK_PATH)/lib/lwip/src
+LIBLWIP_PORT := ../lib/liblwip/sysdepend/pico_rp2040
+
+ifeq ($(wildcard $(LWIPDIR)/core/init.c),)
+$(error lwIP not found below $(PICO_SDK_PATH); initialize the pico-sdk submodules)
+endif
+
+# COREFILES + CORE4FILES (IPv4 only) + the one NETIFFILES entry we need, per
+# $(PICO_SDK_PATH)/lib/lwip/src/Filelists.mk. altcp*.c is included because
+# apps/mqtt/mqtt.c (MQTT=1, below) is written against the altcp API -- used
+# here in its default plain-TCP passthrough mode (LWIP_ALTCP=0), not TLS.
+LWIP_CORE_SRCS := core/init.c core/def.c core/dns.c core/inet_chksum.c \
+                   core/ip.c core/mem.c core/memp.c core/netif.c core/pbuf.c \
+                   core/raw.c core/stats.c core/sys.c \
+                   core/altcp.c core/altcp_alloc.c core/altcp_tcp.c \
+                   core/tcp.c core/tcp_in.c core/tcp_out.c core/timeouts.c \
+                   core/udp.c \
+                   core/ipv4/acd.c core/ipv4/autoip.c core/ipv4/dhcp.c \
+                   core/ipv4/etharp.c core/ipv4/icmp.c core/ipv4/igmp.c \
+                   core/ipv4/ip4_frag.c core/ipv4/ip4.c core/ipv4/ip4_addr.c \
+                   netif/ethernet.c
+LWIP_CORE_OBJS := $(addprefix ./mtkernel_3/lwip/,$(LWIP_CORE_SRCS:.c=.o))
+
+LWIP_PORT_OBJS := ./mtkernel_3/lib/liblwip/sysdepend/pico_rp2040/sys_arch.o
+
+CYW43_LWIP_OBJS := ./mtkernel_3/cyw43/cyw43_lwip.o
+
+LWIP_INCLUDES := -I"$(LIBLWIP_PORT)/include" \
+                 -I"$(LIBLWIP_PORT)" \
+                 -I"$(LWIPDIR)/include"
+
+CFLAGS += -DTM_NET_LWIP=1 $(LWIP_INCLUDES)
+
+OBJS += $(LWIP_CORE_OBJS) $(LWIP_PORT_OBJS) $(CYW43_LWIP_OBJS)
+C_DEPS += $(LWIP_CORE_OBJS:.o=.d) $(LWIP_PORT_OBJS:.o=.d) $(CYW43_LWIP_OBJS:.o=.d)
+
+mtkernel_3/lwip/%.o: $(LWIPDIR)/%.c
+	@echo 'Building lwIP file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/lib/liblwip/sysdepend/pico_rp2040/%.o: ../lib/liblwip/sysdepend/pico_rp2040/%.c
+	@echo 'Building lwIP port file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+mtkernel_3/cyw43/cyw43_lwip.o: $(CYW43_DRIVER_PATH)/src/cyw43_lwip.c
+	@echo 'Building file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+ifeq ($(MQTT),1)
+
+MQTT_CORE_OBJS := ./mtkernel_3/lwip/apps/mqtt/mqtt.o
+MQTT_PORT_OBJS := ./mtkernel_3/lib/liblwip/sysdepend/pico_rp2040/mqtt_utk.o
+
+CFLAGS += -DTM_MQTT=1
+
+OBJS += $(MQTT_CORE_OBJS) $(MQTT_PORT_OBJS)
+C_DEPS += $(MQTT_CORE_OBJS:.o=.d) $(MQTT_PORT_OBJS:.o=.d)
+
+mtkernel_3/lwip/apps/mqtt/mqtt.o: $(LWIPDIR)/apps/mqtt/mqtt.c
+	@echo 'Building lwIP file: $<'
+	@mkdir -p "$(@D)"
+	$(GCC) $(CFLAGS) -D$(TARGET) $(INCPATH) -MF"$(@:%.o=%.d)" -MT"$(@)" -c -o "$@" "$<"
+
+endif
+
+endif
+
+endif
+
+include mtkernel_3/lib/libtm/sysdepend/pico_rp2040/subdir.mk
+include mtkernel_3/lib/libtm/sysdepend/no_device/subdir.mk
+include mtkernel_3/lib/libtk/sysdepend/cpu/rp2040/subdir.mk
+include mtkernel_3/lib/libtk/sysdepend/cpu/core/armv6m/subdir.mk
+include mtkernel_3/lib/libbsp/sysdepend/cpu/rp2040/subdir.mk
+include mtkernel_3/kernel/sysdepend/pico_rp2040/subdir.mk
+include mtkernel_3/kernel/sysdepend/cpu/rp2040/subdir.mk
+include mtkernel_3/kernel/sysdepend/cpu/core/armv6m/subdir.mk

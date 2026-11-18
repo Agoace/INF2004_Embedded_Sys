@@ -1,0 +1,5 @@
+# Live-only producer renamed by producer_impl.h. Original exported wrapper
+# is checked by robot.list; the live make rule redirects that row to control.o.
+app_program/subsystem3/barcode_live_producer.o .text.blc_producer_uncached
+
+app_program/barcode_live_vehicle/grace.o .text.blv_decode_grace_active

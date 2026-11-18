@@ -1,0 +1,1377 @@
+"""Pure dashboard model: robot MQTT messages in, panel data and button rules out.
+
+No network, no Paho and no HTTP here, so every rule runs in a host test.
+Add a panel by writing one builder function and decorating it with
+register_panel; the page draws any panel that appears in the snapshot.
+"""
+import collections
+import math
+import threading
+import time
+
+import robot_wire
+
+STALE_MS = 1000  # data older than this is greyed out
+HEARTBEAT_STALE_MS = 2500  # the robot sends a heartbeat once per second
+# Idle telemetry mode (state v5 / heartbeat v4 bit set): state at 1 Hz, heartbeat every 5 s.
+IDLE_STALE_MS = 2500
+IDLE_HEARTBEAT_STALE_MS = 12000
+ROBOT_OFFLINE_MS = 3000  # no robot message at all for this long
+PENDING_TIMEOUT_MS = 5000  # wait this long for a robot decision on a command
+MISSING_AGE_MS = 65535  # robot value for a board with no data
+EVENT_LIMIT = 50
+PROFILE_LIMIT = 256
+TREND_LIMIT = 100
+LOG_MESSAGE_LIMIT = 20
+CONFIRM_COMMANDS = ("start", "calibrate")
+OBSTACLE_DECISION_TEXT = {0: "none (both sides blocked)", 1: "right", 2: "left"}
+
+STATE_NAMES = {0: "IDLE", 1: "RUNNING", 2: "FAULT"}
+MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle scan",
+                4: "obstacle detour", 5: "scan reverse"}
+EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
+               5: "run end", 6: "command decision", 7: "junction (reserved)",
+               8: "scan retry", 9: "hump", 10: "IMU safety"}
+SCAN_RETRY_TEXT = {1: "reverse begins", 2: "reverse ends", 3: "rescan begins"}
+DETOUR_LIMIT = 8
+SCAN_STAGES = {0: "not reported", 1: "coarse", 2: "fine"}
+SIDE_TEXT = {0: "none", 1: "right", 2: "left"}  # obstacle and detour side bytes
+LINE_SIDE_TEXT = {0: "unknown", 1: "left", 2: "right"}  # vc_line_side_t, used in payloads
+DETOUR_FAIL_TEXT = {0: "none", 1: "both sides blocked", 2: "turn limit reached",
+                    3: "took too long", 4: "ultrasonic fault", 5: "echo too near",
+                    6: "no line found"}
+STOP_SOURCES = {0: "none or unknown", 1: "GP21 button", 2: "MQTT ESTOP", 3: "fault",
+                4: "time limit"}
+STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "90 s limit",
+                4: "shell left RUNNING", 5: "vehicle deadline missed", 6: "motion wake lost",
+                7: "motion status failed", 8: "line snapshot stale", 9: "line samples lost",
+                10: "sonar failure", 11: "telemetry failure", 12: "other",
+                13: "scan reverse timed out", 14: "IMU lift detected",
+                15: "IMU overturn detected", 16: "IMU unavailable"}
+SHELL_FAULTS = {0: "none", 1: "safety (motor fault bits)", 2: "module failed",
+                3: "no route", 4: "no module", 5: "handoff loop",
+                6: "IMU safety"}
+MOTION_FAULT_BITS = ((0x01, "stall left"), (0x02, "stall right"), (0x04, "ESTOP"),
+                     (0x08, "stale command"))
+BARCODE_DIRECTIONS = {0: "unknown", 1: "forward", 2: "reverse"}
+IMU_EVENTS = {1: "stationary", 2: "accelerating", 3: "turning", 4: "climbing",
+              5: "descending", 6: "impact"}
+IMU_SAFETY_TRIGGERS = {1: 'overturn', 2: 'lift', 3: 'unavailable'}
+IMU_SAFETY_CAUSES = {0: 'none', 1: 'stale', 2: 'invalid', 3: 'absent', 4: 'pose',
+                     5: 'read failed', 6: 'not calibrated', 7: 'zero vector'}
+IMU_RECOVERY_REASONS = {0: 'CLEARED', 1: 'NO_BOARD (no IMU report)',
+                        2: 'STALE (report too old)', 3: 'INVALID (invalid data)',
+                        4: 'POSE (not upright)', 5: 'ONE_G (not near 1 g)',
+                        6: 'WHEELS (moving)', 7: 'WINDOW (clear window incomplete)',
+                        8: 'PENDING', 9: 'CANCELLED'}
+NOT_IMPLEMENTED = "not implemented yet"
+NOT_REPORTED = "not reported by current telemetry"
+FUTURE_BARCODE = "waiting for per-attempt report"
+FUTURE_GEOMETRY = "not reported (requires obstacle v3)"
+OPCODE_NAMES = {code: name.upper() for name, code in robot_wire.COMMANDS.items()}
+DECISIONS = {0: "accepted", 1: "refused: robot not idle", 2: "refused: not calibrated",
+             3: "refused: log busy", 4: "duplicate request",
+             5: "refused: backend unavailable"}
+RESET_REASONS = {0: "power or RUN pin", 1: "watchdog", 2: "other"}
+MQTT_STATES = {0: "disconnected", 1: "connecting", 2: "connected", 3: "subscribed"}
+SONAR_STATUS = {0: "empty", 1: "echo", 2: "deadline", 3: "cancelled"}
+ECHO_STATUS = {0: "valid", 1: "no rising edge", 2: "stuck high", 3: "no return"}
+
+PANEL_BUILDERS = []
+
+
+def register_panel(builder):
+    """Add a panel builder: builder(model, now_ms) returns the dict from make_panel."""
+    PANEL_BUILDERS.append(builder)
+    return builder
+
+
+def make_panel(panel_id, title, age_ms, stale_ms=STALE_MS, rows=None, chart=None,
+               items=None, note="", placeholder=False, table=None, paused=False):
+    """Build one panel. age_ms None means no data yet; stale_ms None means never stale.
+
+    paused True: the robot does not publish this stream in idle telemetry mode, so the
+    panel is not stale; the page shows "idle (paused)" and the data age.
+    """
+    if paused:
+        stale = False
+    elif placeholder:
+        stale = True
+    elif age_ms is None:
+        stale = True
+    else:
+        stale = stale_ms is not None and age_ms > stale_ms
+    return {"id": panel_id, "title": title, "age_ms": age_ms, "stale": stale,
+            "rows": [{"label": label, "value": value} for label, value in (rows or [])],
+            "chart": chart, "items": items or [], "note": note, "placeholder": placeholder,
+            "table": table, "paused": paused}
+
+
+def _name(table, value):
+    return table.get(value, f"unknown ({value})")
+
+
+def _imu_safety_values(fields):
+    recovery = fields['imu_safety_phase'] == 'recovery'
+    trigger = ('none' if recovery and fields['imu_safety_trigger'] == 0 else
+               _name(IMU_SAFETY_TRIGGERS, fields['imu_safety_trigger']))
+    cause = ('unavailable (RAM log)' if fields['imu_safety_cause'] is None else
+             _name(IMU_SAFETY_CAUSES, fields['imu_safety_cause']))
+    action = ('RECOVERY: ' + _name(IMU_RECOVERY_REASONS, fields['imu_safety_recovery'])
+              if recovery else 'STOP: ' + trigger)
+    module_names = {key: value for key, value in MODULE_NAMES.items() if key <= 4}
+    context = _name(STATE_NAMES, fields['from']) + ' / ' + _name(module_names, fields['to'])
+    return action, trigger, cause, context
+
+
+def _mm_text(tenths):
+    """Hump heights travel in 0.1 mm units."""
+    return f"{tenths / 10:.1f} mm"
+
+
+def _side_text(left):
+    # Course humps hit the RIGHT wheel; LEFT detection is not hardware-proven.
+    return "left wheel (not proven)" if left else "right wheel"
+
+
+class DashboardModel:
+    """Latest robot data, command bookkeeping and button gating. Thread safe."""
+
+    def __init__(self, clock=time.monotonic, token_configured=False):
+        self.clock = clock
+        self.token_configured = token_configured
+        self.lock = threading.RLock()
+        self.broker_connected = False
+        self.discarded = 0
+        self.last_discard = ""
+        self.state = None  # {"fields": dict, "rx": ms}
+        self.heartbeat = None
+        self.status = None  # robot/status: {"online": bool, "retained": bool, "rx": ms}
+        self.statuses = {}  # retained status can arrive before that boot's first live frame
+        self.obstacle = None
+        self.unsupported_obstacle = None
+        self.obstacle_scan_id = None
+        self.obstacle_missed = 0
+        self.detours = collections.deque(maxlen=DETOUR_LIMIT)
+        self.detour_sequence = None
+        self.detour_missed = 0
+        self.summary = None  # {"fields": dict, "rx": ms, "retained": bool}
+        self.hump_live = None  # this run's kind 9 events: {"peak", "left", "count", "rx"}
+        self.imu_safety = None  # latest kind 10 report, not a continuous safety snapshot
+        self.reserved = {"barcode": None, "imu": None, "imu_event": None}
+        self.ignored_reserved = 0
+        self.sonar = None
+        self.sonar_profile = {}  # angle -> {"mm", "text", "rx"}
+        self.sonar_recent = collections.deque(maxlen=128)
+        self.scan_samples = {}
+        self.completed_scan = None
+        self.scan_retry = 0
+        self.scan_reversing = False
+        self.events = collections.deque(maxlen=EVENT_LIMIT)
+        self.last_decision = None
+        self.event_sequence = None
+        self.event_gaps = 0
+        self.trend = collections.deque(maxlen=TREND_LIMIT)
+        self.path = self._empty_path()
+        self.path_previous = None
+        self.path_reset_pending = False
+        self.pending = None
+        self.last_message_ms = None
+        self.log_messages = collections.deque(maxlen=LOG_MESSAGE_LIMIT)
+        self.log = robot_wire.LogStream(report=self.log_messages.append)
+        self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
+
+    def now_ms(self):
+        return self.clock() * 1000.0
+
+    # ---- input -------------------------------------------------------------
+
+    def set_broker_connected(self, connected):
+        with self.lock:
+            self.broker_connected = bool(connected)
+            if not connected:
+                self.status = None  # the broker will send the retained status again
+                self.statuses.clear()
+
+    def ingest(self, topic, payload, retained=False):
+        """Decode one message. A malformed message is counted and never changes state."""
+        with self.lock:
+            now = self.now_ms()
+            try:
+                previous = self.log.sessions.current
+                if topic == "robot/log":
+                    rows = self.log.handle(payload)
+                    if self.log.sessions.current != previous:
+                        self._new_boot()
+                    current_rows = [r for r in rows
+                                    if r["boot_session"] == self.log.sessions.current]
+                    self._log_rows(current_rows, now)
+                    heard_live = bool(current_rows)
+                else:
+                    fields = robot_wire.decode(topic, payload)
+                    scope = self.log.observe(topic, fields, retained)
+                    if self.log.sessions.current != previous:
+                        self._new_boot()
+                    # Old retained history is labelled, never used as live state.
+                    if (scope != self.log.sessions.current and topic != "robot/summary"
+                            and self.log.sessions.boot_id is not None):
+                        if topic == "robot/status":
+                            self._store(topic, dict(fields, boot_session=scope), now, retained)
+                        return
+                    self._store(topic, dict(fields, boot_session=scope), now, retained)
+                    heard_live = (not retained and fields.get("known") != 0 and
+                                  topic != "robot/summary")
+            except ValueError as error:
+                if topic == 'robot/obstacle' and payload and payload[0] not in (1, 2, 3):
+                    self.unsupported_obstacle = payload[0]  # notice only, never a reading
+                self.discarded += 1
+                self.last_discard = f"{topic}: {error}"
+                return
+            if heard_live:
+                self.last_message_ms = now
+
+    def _new_boot(self):
+        """Invalidate all current readings and command decisions, but retain scoped logs."""
+        self.state = self.heartbeat = self.sonar = self.obstacle = None
+        self.unsupported_obstacle = None
+        self.status = self.statuses.get(self.log.sessions.current)
+        self.sonar_profile.clear()
+        self.sonar_recent.clear()
+        self.scan_samples.clear()
+        self.completed_scan = None
+        self.scan_retry = 0
+        self.scan_reversing = False
+        self.trend.clear()
+        self.events.clear()
+        self.detours.clear()
+        self.obstacle_scan_id = self.detour_sequence = self.event_sequence = None
+        self.obstacle_missed = self.detour_missed = self.event_gaps = 0
+        self.pending = self.last_decision = self.last_message_ms = None
+        self.path = self._empty_path()
+        self.path_previous = None
+        self.path_reset_pending = False
+        self.reserved = {"barcode": None, "imu": None, "imu_event": None}
+        self.hump_live = None
+        self.imu_safety = None
+        self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
+
+    def _store(self, topic, fields, now, retained=False):
+        if topic == "robot/status":
+            status = {"online": bool(fields["robot_online"]), "retained": retained, "rx": now}
+            self.statuses[fields["boot_session"]] = status
+            if (fields["boot_session"] == self.log.sessions.current or
+                    self.log.sessions.boot_id is None):
+                self.status = status
+        elif topic == "robot/obstacle":
+            self.unsupported_obstacle = None
+            self._store_obstacle(fields, now)
+        elif topic in ("robot/barcode", "robot/imu"):
+            name = topic.removeprefix("robot/")
+            if name == "imu" and fields["kind"] == 2:
+                name = "imu_event"
+            if fields["known"] or name == 'barcode':
+                # Unknown barcode formats get a visible notice, never guessed fields.
+                self.reserved[name] = {"fields": fields, "rx": now}
+            if not fields['known']:
+                self.ignored_reserved += 1
+        elif topic == "robot/detour":
+            self._store_detour(fields, now)
+        elif topic == "robot/summary":
+            if (self.summary is not None and
+                    self.summary["fields"]["boot_session"] == self.log.sessions.current and
+                    fields["boot_session"] != self.log.sessions.current):
+                return  # do not replace a current summary with an older retained copy
+            self.summary = {"fields": fields, "rx": now, "retained": retained}
+        elif topic == "robot/state":
+            if fields["state"] == 1 and (self.state is None or self.state["fields"]["state"] != 1):
+                self.path_reset_pending = True
+                self.hump_live = None  # a new run: live hump events start again
+            previous_module = None if self.state is None else self.state["fields"]["module"]
+            if fields["module"] == 3 and previous_module not in (3, 5):
+                self.scan_samples.clear()
+                self.scan_retry = 0
+                self.scan_reversing = False
+            # A newer state snapshot supersedes a retry event (including a lost end event).
+            self.scan_reversing = fields["state"] == 1 and fields["module"] == 5
+            self.state = {"fields": fields, "rx": now}
+            self.trend.append(fields["kr1_position"])
+        elif topic == "robot/heartbeat":
+            self.heartbeat = {"fields": fields, "rx": now}
+        elif topic == "robot/sonar":
+            self._store_sonar(fields, now)
+        elif topic == "robot/event":
+            self._store_event(fields, now, retained)
+
+    def _store_obstacle(self, fields, now):
+        scan_id = fields["scan_id"]
+        if self.obstacle_scan_id is not None and scan_id > self.obstacle_scan_id + 1:
+            self.obstacle_missed += scan_id - self.obstacle_scan_id - 1
+        self.obstacle_scan_id = scan_id  # a lower number means the robot restarted
+        self.obstacle = {"fields": fields, "rx": now}
+        self.completed_scan = {"fields": dict(fields), "samples": dict(self.scan_samples), "rx": now}
+        self.scan_retry = fields.get("scan_attempt", 0)
+        self.scan_samples.clear()
+
+    def _store_detour(self, fields, now):
+        sequence = fields["sequence"]
+        if self.detour_sequence is not None and sequence > self.detour_sequence + 1:
+            self.detour_missed += sequence - self.detour_sequence - 1
+        self.detour_sequence = sequence  # a lower number means the robot restarted
+        self.detours.append({"fields": fields, "rx": now})
+
+    def _store_sonar(self, fields, now):
+        if self.sonar is not None and self.sonar["fields"]["sequence"] == fields["sequence"]:
+            return
+        self.sonar = {"fields": fields, "rx": now}
+        valid = bool(fields["valid"]) and fields["echo_status"] == 0
+        if len(self.sonar_profile) >= PROFILE_LIMIT and fields["angle"] not in self.sonar_profile:
+            return
+        reading = {"angle": fields["angle"], "mm": fields["echo_mm"] if valid else None,
+                   "status": _sonar_distance(fields), "rx": now,
+                   "no_return": fields["status"] == 1 and fields["echo_status"] == 3}
+        self.sonar_recent.append(reading)
+        if fields["angle"] in range(-30, 31, 5):
+            self.scan_samples[fields["angle"]] = reading
+        self.sonar_profile[fields["angle"]] = {
+            "mm": fields["echo_mm"] if valid else None,
+            "text": _name(ECHO_STATUS, fields["echo_status"]) if fields["status"] == 1
+            else _name(SONAR_STATUS, fields["status"]), "rx": now}
+
+    def _store_event(self, fields, now, retained=False):
+        sequence, kind = fields['sequence'], fields['kind']
+        previous = self.imu_safety
+        if (kind == robot_wire.EVENT_IMU_SAFETY and previous is not None and
+                previous['fields']['boot_session'] == fields['boot_session']):
+            delta = (sequence - previous['fields']['sequence']) & 0xffffffff
+            if delta == 0 or delta >= 0x80000000:
+                return  # Duplicate/older report: no new history or refreshed age.
+        if self.event_sequence is None:
+            self.event_sequence = sequence
+        else:
+            delta = (sequence - self.event_sequence) & 0xffffffff
+            if 0 < delta < 0x80000000:
+                self.event_gaps += delta - 1
+                self.event_sequence = sequence
+        event = {"rx": now, "sequence": sequence, "kind": kind, "uptime_ms": fields["uptime_ms"]}
+        if kind == 6:
+            opcode = fields["word"] & 0xFF
+            event["opcode"] = opcode
+            event["decision"] = fields["detail"]
+            event["text"] = f"{_name(OPCODE_NAMES, opcode)} {_name(DECISIONS, fields['detail'])}"
+            self.last_decision = event
+            pending = self.pending
+            if (pending is not None and pending["result"] is None
+                    and pending["opcode"] == opcode and now >= pending["sent"]):
+                pending["result"] = event
+        elif kind == robot_wire.EVENT_JUNCTION and fields["version"] >= 2:
+            event.update(junction_live=True, boot_session=fields['boot_session'], retained=retained)
+            if "junction_angle" in fields:
+                command = "ABCD"[fields["junction_command"] - 1]
+                angle = fields["junction_angle_cdeg"] / 100
+                event["text"] = (f"JUNCTION {command}: {fields['junction_angle']} line"
+                                 f" at {angle:.2f} deg")
+            else:
+                command = "ABCD"[(fields["word"] & 0xFF) - 1]
+                phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
+                reason = (f"{fields['junction_reason_name']} ({fields['detail']})"
+                          if 'junction_reason_name' in fields else str(fields['detail']))
+                event['text'] = f'JUNCTION {command}: {phase}, reason {reason}'
+        elif kind == robot_wire.EVENT_SCAN_RETRY:
+            attempt = fields["word"] & 0xFF
+            self.scan_retry = attempt
+            self.scan_reversing = fields["detail"] == 1
+            if fields["detail"] == 3:
+                self.scan_samples.clear()
+            event["text"] = (f"SCAN retry {attempt}: {_name(SCAN_RETRY_TEXT, fields['detail'])}"
+                             " (both sides blocked)")
+        elif kind == robot_wire.EVENT_IMU_SAFETY:
+            self.imu_safety = {'fields': dict(fields), 'rx': now, 'retained': retained}
+            action, trigger, cause, context = _imu_safety_values(fields)
+            event['text'] = (f'IMU SAFETY {action}; trigger {trigger}; cause {cause}; '
+                             f'shell / module {context}; word 0x{fields["word"]:04x}, '
+                             f'detail {fields["detail"]}; {fields["boot_session"]} '
+                             f'#{sequence} at robot uptime {fields["uptime_ms"]} ms')
+            if retained:
+                event['text'] += ' (retained history)'
+        elif kind == robot_wire.EVENT_HUMP:
+            left, number = fields["detail"] >> 7, fields["detail"] & 0x7F
+            event["text"] = (f"HUMP #{number}: {_mm_text(fields['word'])}, "
+                             f"{_side_text(left)}")
+            if retained:
+                event['text'] += ' (retained event; not attributed to this run)'
+            else:
+                live = self.hump_live
+                if live is None or fields["word"] > live["peak"]:
+                    live = {"peak": fields["word"], "left": left,
+                            "count": number if live is None else max(number, live["count"])}
+                else:
+                    live = dict(live, count=max(number, live["count"]))
+                self.hump_live = dict(live, rx=now, uptime_ms=fields['uptime_ms'],
+                                      sequence=sequence, boot_session=fields['boot_session'])
+        else:
+            event["text"] = (f"{_name(EVENT_KINDS, kind)}: {_name(MODULE_NAMES, fields['from'])}"
+                             f" to {_name(MODULE_NAMES, fields['to'])},"
+                             f" word {fields['word']}, detail {fields['detail']}")
+        self.events.append(event)
+
+    def _log_rows(self, rows, now):
+        live = [row for row in rows if row.get("source") == "live" and row.get("kind") == 5]
+        refill = [row for row in rows if row.get("source") == "refill"]
+        self.log_info["live_rows"] += len(live)
+        self.log_info["refill_rows"] += len(refill)
+        if live:
+            for row in live:
+                self._path_row(row)
+            last = live[-1]
+            self.log_info["last"] = {"rx": now, "data_age_ms": last["data_age_ms"],
+                                     "rows_behind": last["rows_behind"],
+                                     "generation": last["generation"], "index": last["index"]}
+            if any(row["jumped"] for row in live):
+                self.log_info["jumped_frames"] += 1
+
+    @staticmethod
+    def _empty_path():
+        return {"points": collections.deque(maxlen=4600), "generation": None,
+                "x": 0.0, "y": 0.0, "heading": 0.0, "gaps": 0, "trimmed": 0}
+
+    def _path_row(self, row):
+        """Integrate live measured speeds only; never bridge missing rows or DUMP history."""
+        generation = row["generation"]
+        old = self.path["generation"]
+        if old is not None and generation != old and ((generation - old) & 0xFFFFFFFF) >= 0x80000000:
+            return  # a delayed old generation must not reset the displayed run
+        previous = self.path_previous
+        if row["kr1_state"] != 1:
+            self.path_previous = None
+            self.path_reset_pending = True
+            return
+        if self.path_reset_pending or generation != old:
+            self.path = self._empty_path()
+            self.path["generation"] = generation
+            self.path_reset_pending = False
+            previous = None
+        elif previous is not None and row["index"] <= previous["index"]:
+            return
+        path = self.path
+        connected = False
+        if previous is not None:
+            dt_ms = (row["kr1_time_ms"] - previous["kr1_time_ms"]) % (65536 * 20)
+            if row["index"] == previous["index"] + 1 and 0 < dt_ms <= 200:
+                dt = dt_ms / 1000.0
+                left, right = previous["kr1_measured_l"], previous["kr1_measured_r"]
+                distance = (left + right) / 2.0 * dt
+                turn = (right - left) * dt / 111.0
+                half = turn / 2.0
+                chord = distance if abs(half) < 1e-9 else distance * math.sin(half) / half
+                path["x"] -= chord * math.sin(path["heading"] + half)
+                path["y"] += chord * math.cos(path["heading"] + half)
+                path["heading"] += turn
+                connected = True
+            else:
+                path["gaps"] += 1  # position beyond a gap is not known; do not fabricate travel
+        if len(path["points"]) == path["points"].maxlen:
+            path["trimmed"] += 1
+        path["points"].append({"x": path["x"], "y": path["y"], "module": row["kr1_module"],
+                               "connected": connected})
+        self.path_previous = row
+
+    def path_visual(self):
+        return {"points": list(self.path["points"]), "gaps": self.path["gaps"],
+                "trimmed": self.path["trimmed"], "generation": self.path["generation"]}
+
+    def note_command(self, command, request_id, puback):
+        """Record a command the dashboard just published."""
+        with self.lock:
+            self.pending = {"command": command, "request_id": request_id, "puback": puback,
+                            "opcode": robot_wire.COMMANDS[command], "sent": self.now_ms(),
+                            "result": None}
+
+    # ---- derived values ----------------------------------------------------
+
+    def state_age(self, now, key=None):
+        """Age of robot/state in ms, plus the reported board age for key; None if unknown."""
+        if self.state is None:
+            return None
+        age = int(now - self.state["rx"])
+        if key is not None:
+            reported = self.state["fields"][key]
+            if reported >= MISSING_AGE_MS:
+                return MISSING_AGE_MS
+            age += reported
+        return min(age, MISSING_AGE_MS)
+
+    def record_age(self, now, record, extra=0):
+        """Laptop elapsed receive time, not the producer's u16 board-age field."""
+        if record is None:
+            return None
+        return int(now - record['rx']) + extra
+
+    def telemetry_mode(self):
+        """Return "idle", "run" or "unknown" from the newest frame that carries the mode bit.
+
+        robot/state v5 and robot/heartbeat v4 carry it. Older firmware: "unknown", and the
+        dashboard uses the run (full rate) limits.
+        """
+        newest = None
+        for record, version in ((self.state, 5), (self.heartbeat, 4)):
+            if record is not None and record["fields"]["version"] >= version and (
+                    newest is None or record["rx"] >= newest["rx"]):
+                newest = record
+        if newest is None:
+            return "unknown"
+        return "idle" if newest["fields"]["telemetry_idle"] else "run"
+
+    def limits(self):
+        """Freshness limits in ms for the current telemetry mode."""
+        if self.telemetry_mode() == "idle":
+            return {"state_stale_ms": IDLE_STALE_MS, "heartbeat_stale_ms": IDLE_HEARTBEAT_STALE_MS}
+        return {"state_stale_ms": STALE_MS, "heartbeat_stale_ms": HEARTBEAT_STALE_MS}
+
+    def telemetry(self, now):
+        mode = self.telemetry_mode()
+        return {"mode": mode, "paused": mode == "idle", **self.limits(),
+                "state_age_ms": self.record_age(now, self.state),
+                "heartbeat_age_ms": self.record_age(now, self.heartbeat)}
+
+    def robot_status(self, now):
+        """Return the robot link level: online, offline, silent or unknown.
+
+        online  = robot/status says online AND robot/state is recent
+        offline = robot/status says offline (shown at once, also when retained)
+        silent  = robot/status says online but robot/state stopped (link may be dying)
+        unknown = no robot/status message yet
+        """
+        status = self.status
+        state_age = None if self.state is None else int(now - self.state["rx"])
+        last_age = None if self.last_message_ms is None else int(now - self.last_message_ms)
+        if status is None:
+            level, text = "unknown", "robot status unknown (no robot/status yet)"
+        elif not status["online"]:
+            level, text = "offline", "ROBOT OFFLINE (broker last will)"
+        elif state_age is None or state_age > ROBOT_OFFLINE_MS:
+            level = "silent"
+            text = "robot silent: no state for " + ("ever" if state_age is None
+                                                    else f"{state_age // 1000} s")
+        else:
+            level, text = "online", "ROBOT ONLINE"
+        return {"online": level == "online", "level": level, "text": text, "age_ms": last_age,
+                "heard_recently": last_age is not None and last_age <= ROBOT_OFFLINE_MS,
+                "status": None if status is None else
+                {"online": status["online"], "retained": status["retained"],
+                 "age_ms": int(now - status["rx"])}}
+
+    def _state_problem(self, now):
+        """Return why robot/state is not usable for a gated button, or an empty string."""
+        if self.state is None:
+            return "no state data from the robot"
+        age = int(now - self.state["rx"])
+        limit = self.limits()["state_stale_ms"]
+        if age > limit:
+            return f"robot state is {age} ms old (limit {limit} ms)"
+        fields = self.state["fields"]
+        if fields["vehicle_busy"]:
+            return "vehicle board read busy"
+        if not fields["vehicle_fresh"]:
+            return "vehicle board data is not fresh"
+        return ""
+
+    def _is_idle(self):
+        fields = self.state["fields"]
+        return fields["active"] == 0 and fields["state"] == 0
+
+    def _pending_open(self, now):
+        pending = self.pending
+        return (pending is not None and pending["result"] is None
+                and now - pending["sent"] <= PENDING_TIMEOUT_MS)
+
+    def button_state(self, command, now=None):
+        """Return {"enabled", "reason", "needs_confirm"}; the server asks again before sending."""
+        with self.lock:
+            now = self.now_ms() if now is None else now
+            result = {"enabled": False, "reason": "", "needs_confirm": command in CONFIRM_COMMANDS}
+            if command == "estop":
+                result["enabled"] = True
+                link = self.robot_status(now)["level"]
+                if not self.broker_connected:
+                    result["reason"] = "broker not connected: ESTOP cannot be sent now"
+                elif link in ("offline", "silent"):
+                    result["reason"] = ("robot is not reachable: ESTOP delivery is unlikely. "
+                                        "Use GP21.")
+                return result
+            reason = self._gate_reason(command, now)
+            result["enabled"] = reason == ""
+            result["reason"] = reason
+            return result
+
+    def _gate_reason(self, command, now):
+        if command not in robot_wire.COMMANDS:
+            return "unknown command"
+        if not self.broker_connected:
+            return "broker not connected"
+        if not self.token_configured:
+            return "no token file: only ESTOP is available"
+        robot = self.robot_status(now)
+        if robot["level"] == "offline":
+            return "robot is offline"
+        if robot["level"] == "silent":
+            return "robot is silent (no state data)"
+        if robot["level"] == "unknown" and not robot["heard_recently"]:
+            return "no recent robot data"
+        if self._pending_open(now):
+            return "waiting for the robot decision on the previous command"
+        if command == "dump":
+            heartbeat = self.heartbeat
+            if (heartbeat is not None
+                    and now - heartbeat["rx"] <= self.limits()["heartbeat_stale_ms"]
+                    and heartbeat["fields"]["log_dump_active"]):
+                return "a RAM dump is already running"
+            return ""
+        problem = self._state_problem(now)
+        if problem:
+            return problem
+        if not self._is_idle():
+            return "robot is not idle"
+        return ""
+
+    def last_command(self, now):
+        pending = self.pending
+        if pending is None:
+            return None
+        if pending["result"] is not None:
+            status = "robot decision: " + _name(DECISIONS, pending["result"]["decision"])
+        elif now - pending["sent"] > PENDING_TIMEOUT_MS:
+            status = ("no robot decision received "
+                      "(token refused, link lost or event lost); PUBACK is not acceptance")
+        else:
+            status = "sent; waiting for the robot decision"
+        return {"command": pending["command"].upper(), "request_id": pending["request_id"],
+                "puback": pending["puback"], "age_ms": int(now - pending["sent"]),
+                "status": status}
+
+    # ---- output ------------------------------------------------------------
+
+    def gap_counts(self):
+        lost = sum(g["end"] - g["start"] for g in self.log.gaps if g["type"] == "lost")
+        jumped = sum(g["end"] - g["start"] for g in self.log.gaps if g["type"] == "jumped")
+        return {"lost_rows": lost, "jumped_rows": jumped, "total": lost + jumped,
+                "event_gaps": self.event_gaps, "duplicates": self.log.duplicates}
+
+    def sonar_visual(self, now):
+        """Observed echo points, not inferred obstacle geometry or reconstructed scans."""
+        record = self.completed_scan
+        profile = None
+        if record is not None:
+            f = record["fields"]
+            samples = record["samples"]
+            profile = {"scan_id": f["scan_id"], "decision": f["decision"],
+                       "attempt": f.get("scan_attempt", 0) + 1,
+                       "age_ms": int(now - record["rx"]),
+                       "free_threshold_mm": (f["profile_word"] & 511) + 150,
+                       "points": [dict(samples[a], angle=a) if a in samples else
+                                  {"angle": a, "mm": None, "no_return": False,
+                                   "status": "not observed"} for a in range(-30, 31, 5)],
+                       "closest": {"angle": f["closest_angle_deg"], "mm": f["closest_mm"]}
+                       if f["closest_valid"] else None}
+        f = {} if self.state is None else self.state["fields"]
+        latest = None if self.sonar is None else self.sonar["fields"]
+        servo = f.get("kr1_servo_deg", 0)
+        if latest is not None and (self.state is None or self.sonar["rx"] > self.state["rx"]):
+            servo = latest["angle"]
+        echo_now = self.sonar["rx"] if self.telemetry_mode() == "idle" and self.sonar else now
+        return {"beam_deg": servo,
+                "latest_mm": None if latest is None or not latest["valid"] or
+                latest["echo_status"] != 0 else latest["echo_mm"],
+                "recent": [dict(p, age_ms=int(echo_now - p["rx"])) for p in self.sonar_recent
+                           if echo_now - p["rx"] <= 10000],
+                "profile": profile, "attempt": min(3, self.scan_retry + 1),
+                "reversing": bool(f.get("state") == 1 and
+                                  (self.scan_reversing or f.get("module") == 5))}
+
+    def visual_state(self, now):
+        """Numeric presentation fields; existing panel and command API stays intact."""
+        f = {} if self.state is None else self.state["fields"]
+        return {"mode": _name(STATE_NAMES, f.get("state")),
+                "module": f.get("module", 0),
+                "paused": self.telemetry_mode() == "idle",
+                "state": dict(f),
+                "sonar": self.sonar_visual(now),
+                "path": self.path_visual(),
+                "state_stale": self.state is None or
+                self.state_age(now, "vehicle_age_ms") > self.limits()["state_stale_ms"]}
+
+    def snapshot(self):
+        """Return everything the page needs as one JSON-ready dict."""
+        with self.lock:
+            now = self.now_ms()
+            return {"boot": {"boot_id": self.log.sessions.boot_id,
+                             "session": self.log.sessions.current,
+                             "inferred": self.log.sessions.boot_id is None},
+                    "broker": {"connected": self.broker_connected},
+                    "robot": self.robot_status(now),
+                    "telemetry": self.telemetry(now),
+                    "view": self.visual_state(now),
+                    "token_configured": self.token_configured,
+                    "gaps": self.gap_counts(),
+                    "discarded": self.discarded,
+                    "last_command": self.last_command(now),
+                    "buttons": {name: self.button_state(name, now)
+                                for name in ("estop", "dump", "start", "calibrate")},
+                    "panels": [builder(self, now) for builder in PANEL_BUILDERS]}
+
+
+# ---- panels ------------------------------------------------------------------
+
+
+def _sonar_distance(fields):
+    if fields["valid"] and fields["echo_status"] == 0:
+        return f"{fields['echo_mm']} mm"
+    return _name(ECHO_STATUS, fields["echo_status"]) if fields["status"] == 1 \
+        else _name(SONAR_STATUS, fields["status"])
+
+
+def _unavailable_text(fields):
+    if "board_unavailable_mask" not in fields:
+        return "not reported (old heartbeat)"
+    names = ("line", "sonar", "motion", "vehicle", "health")
+    absent = [name for bit, name in enumerate(names)
+              if fields["board_unavailable_mask"] & (1 << bit)]
+    return ", ".join(absent) if absent else "none"
+
+
+def _cpu_text(fields):
+    if "cpu_load_permille" not in fields:
+        return "not reported (old heartbeat)"
+    value = fields["cpu_load_permille"]
+    return "not available" if value == robot_wire.CPU_UNKNOWN else f"{value / 10:.1f} %"
+
+
+def _stack_text(value):
+    return "unknown" if value == MISSING_AGE_MS else f"{value} bytes"
+
+
+@register_panel
+def vehicle_panel(model, now):
+    rows = []
+    age = None
+    if model.state is not None:
+        fields = model.state["fields"]
+        age = model.state_age(now, "vehicle_age_ms")
+        rows += [("State", _name(STATE_NAMES, fields["state"])),
+                 ("Module", _name(MODULE_NAMES, fields["module"])),
+                 ("Running", "yes" if fields["active"] else "no"),
+                 ("Motion faults", fields["motion_faults"]),
+                 ("Vehicle board", "fresh" if fields["vehicle_fresh"] else "not fresh")]
+    rows.append(("Boot / session", model.log.sessions.current +
+                 (" (inferred legacy session)" if model.log.sessions.boot_id is None else "")))
+    command = model.last_command(now)
+    rows.append(("Last command", "none sent" if command is None else
+                 f"{command['command']} #{command['request_id']}"))
+    if command is not None:
+        rows.append(("Command result", command["status"]))
+    decision = model.last_decision
+    rows.append(("Last robot decision", "none" if decision is None else decision["text"]))
+    return make_panel("vehicle", "Vehicle", age, rows=rows,
+                      stale_ms=model.limits()["state_stale_ms"],
+                      note="" if model.state else "waiting for robot/state")
+
+
+@register_panel
+def line_panel(model, now):
+    if model.state is None:
+        return make_panel("line", "Line sensor", None, note="waiting for robot/state")
+    fields = model.state["fields"]
+    rows = [("Position", fields["kr1_position"]),
+            ("Raw left / centre", f"{fields['kr1_raw_l']} / {fields['kr1_raw_c']}"),
+            ("Normalised left / centre", f"{fields['norm_l']} / {fields['norm_c']}"),
+            ("Line valid", "yes" if fields["line_valid"] else "no"),
+            ("Line board", "fresh" if fields["line_fresh"] else "not fresh")]
+    chart = {"type": "trend", "values": list(model.trend), "min": -128, "max": 127,
+             "label": "line position"}
+    return make_panel("line", "Line sensor", model.state_age(now, "line_age_ms"),
+                      stale_ms=model.limits()["state_stale_ms"], rows=rows, chart=chart)
+
+
+def _signed(value, scale, unit, digits=1):
+    return f"{value / scale:+.{digits}f} {unit}"
+
+
+@register_panel
+def wheels_panel(model, now):
+    if model.state is None:
+        return make_panel("wheels", "Wheels", None, note="waiting for robot/state")
+    fields = model.state["fields"]
+    rows = [("Requested left / right", f"{fields['kr1_asked_l']} / {fields['kr1_asked_r']} mm/s"),
+            ("Measured left / right",
+             f"{fields['kr1_measured_l']} / {fields['kr1_measured_r']} mm/s")]
+    if "duty_left_permille" in fields:
+        rows.append(("PWM duty left / right",
+                     f"{_signed(fields['duty_left_permille'], 10, '%')} / "
+                     f"{_signed(fields['duty_right_permille'], 10, '%')}"))
+    else:
+        rows.append(("PWM duty left / right", "not reported (old state version)"))
+    if "dist_avg_mm" in fields:
+        rows.append(("Distance left / right / average",
+                     f"{fields['dist_left_mm']} / {fields['dist_right_mm']} / "
+                     f"{fields['dist_avg_mm']} mm"))
+    else:
+        rows.append(("Distance left / right / average", "not reported (old state v1)"))
+    rows += [("Encoder counts left / right", f"{fields['count_l']} / {fields['count_r']}"),
+             ("Servo", f"{fields['kr1_servo_deg']} deg")]
+    return make_panel("wheels", "Wheels", model.state_age(now, "motion_age_ms"), rows=rows,
+                      stale_ms=model.limits()["state_stale_ms"],
+                      note="distance: signed mm since robot boot, forward is positive. "
+                      "duty: forward is positive")
+
+
+@register_panel
+def odometry_panel(model, now):
+    if model.state is None:
+        return make_panel("odometry", "Odometry (encoder-derived)", None,
+                          note="waiting for robot/state")
+    fields = model.state["fields"]
+    age = model.state_age(now, "motion_age_ms")
+    imu = model.reserved["imu"]
+    imu_fields = None if imu is None else imu["fields"]
+    rows = []
+    chart = None
+    if "heading_cdeg" in fields:
+        heading = fields["heading_cdeg"]
+        rate = fields["turn_rate_ddps"]
+        wrapped = (heading % 36000) / 100
+        rows += [("Heading (left +, since boot)", _signed(heading, 100, "deg", 2)),
+                 ("Heading on the dial", f"{wrapped:.2f} deg"),
+                 ("Turn rate (left +)", _signed(rate, 10, "deg/s"))]
+        chart = {"type": "dial", "heading_deg": wrapped, "turn_rate_dps": rate / 10}
+    else:
+        rows.append(("Heading and turn rate", "not reported (old state version)"))
+    if "dist_avg_mm" in fields:
+        rows.append(("Distance average", f"{fields['dist_avg_mm']} mm"))
+        rows.append(("Distance left / right",
+                     f"{fields['dist_left_mm']} / {fields['dist_right_mm']} mm"))
+    else:
+        rows.append(("Distance", "not reported (old state version)"))
+    rows.append(("Source", "encoder-derived (wheel counts), drifts when a wheel slips"))
+    rows.append(("IMU heading (raw)", NOT_IMPLEMENTED if imu_fields is None
+                 else imu_fields["heading_raw"]))
+    rows.append(("IMU turn rate (raw)", NOT_IMPLEMENTED if imu_fields is None
+                 else imu_fields["turn_rate_raw"]))
+    return make_panel("odometry", "Odometry (encoder-derived)", age, rows=rows, chart=chart,
+                      stale_ms=model.limits()["state_stale_ms"],
+                      note="heading = (right - left counts) / 24.05 counts per degree; "
+                      "origin is robot boot. IMU rows are for comparison later")
+
+
+@register_panel
+def ultrasonic_panel(model, now):
+    if model.sonar is None:
+        return make_panel("ultrasonic", "Ultrasonic", None, note="no sonar result yet",
+                          paused=model.telemetry_mode() == "idle")
+    fields = model.sonar["fields"]
+    points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
+              for angle, entry in sorted(model.sonar_profile.items())]
+    rows = [("Latest", _sonar_distance(fields)), ("Angle", f"{fields['angle']} deg"),
+            ("Pending request", "yes" if fields["pending"] else "no")]
+    return make_panel("ultrasonic", "Ultrasonic", model.record_age(now, model.sonar), rows=rows,
+                      chart={"type": "profile", "points": points, "max_mm": 511},
+                      paused=model.telemetry_mode() == "idle")
+
+
+def _clear_text(deg, step):
+    return "blocked" if deg == robot_wire.BLOCKED_CLEAR_DEG else f"{deg} deg ({step} steps free)"
+
+
+def _closest_text(fields):
+    if fields["too_near"]:
+        return "too near (below sensor range)"
+    if not fields["closest_valid"] or fields["closest_mm"] == robot_wire.NO_CLOSEST_MM:
+        return "none seen"
+    angle = fields["closest_angle_deg"]
+    side = "ahead" if angle == 0 else ("left" if angle > 0 else "right")
+    return f"{fields['closest_mm']} mm at {angle} deg ({side})"
+
+
+def _seconds(ms):
+    return f"{ms / 1000:.2f} s"
+
+
+def _detour_outcome(fields):
+    outcome, payload = fields["outcome"], fields["payload"]
+    if outcome == 3:
+        return "done, line found"
+    if outcome == 4:
+        return f"done, no line (search {_name(LINE_SIDE_TEXT, payload)})"
+    if outcome == 7:
+        return f"FAILED: {_name(DETOUR_FAIL_TEXT, payload)}"
+    return "aborted (run ended)"
+
+
+def _detour_table(model):
+    rows = []
+    for entry in reversed(model.detours):
+        f = entry["fields"]
+        offset = f"{f['max_lateral_mm']} mm" if f["lateral_valid"] else "not measured"
+        rows.append([f["sequence"], _name(SIDE_TEXT, f["side"]), _detour_outcome(f),
+                     _seconds(f["duration_ms"]), f"{f['distance_mm']} mm", offset,
+                     f["scan_id"] if f["scan_id"] else "unknown"])
+    return {"columns": ["Detour", "Side", "Outcome", "Duration", "Distance", "Max offset",
+                        "Scan"], "rows": rows}
+
+
+@register_panel
+def obstacle_panel(model, now):
+    geometry_rows = [("Width (mm)", FUTURE_GEOMETRY),
+                     ("Left / right clearance (mm)", FUTURE_GEOMETRY)]
+    geometry_note = ("millimetre clearance is observed edge-plane side span, not guaranteed "
+                     "passability; clipped width is only a lower bound; "
+                     "sensor-frame location: x forward, y left (not a world/map position)")
+    format_rows = ([] if model.unsupported_obstacle is None else
+                   [('Report format', f'unsupported version {model.unsupported_obstacle} (rejected)')])
+    if model.obstacle is None and not model.detours:
+        return make_panel("obstacle", "Obstacle profile and detours", None, stale_ms=None,
+                          rows=format_rows + geometry_rows,
+                          note="no completed scan or detour yet; " + geometry_note)
+    rows = []
+    chart = None
+    age = None
+    if model.obstacle is not None:
+        fields = model.obstacle["fields"]
+        age = model.record_age(now, model.obstacle)
+        if fields['version'] not in (1, 2, 3):
+            return make_panel('obstacle', 'Obstacle profile and detours', age, stale_ms=None,
+                              rows=[('Report format', f"unsupported version {fields['version']}")],
+                              note='no fields interpreted from this version')
+        if fields['version'] == 3:
+            width = ('unavailable' if not fields['width_valid'] else
+                     f">= {fields['width_mm']} mm (lower bound)" if fields['width_lower_bound'] else
+                     f"{fields['width_mm']} mm (observed span)")
+            left = f"{fields['left_clear_mm']} mm" if fields['left_clear_valid'] else 'unavailable'
+            right = f"{fields['right_clear_mm']} mm" if fields['right_clear_valid'] else 'unavailable'
+            geometry_rows = [('Width (mm)', width), ('Left / right clearance (mm)', f'{left} / {right}'),
+                             ('Left / right scan edge clipped',
+                              f"{_yes_no(fields['left_edge_clipped'])} / {_yes_no(fields['right_edge_clipped'])}")]
+        location = 'unavailable'
+        if fields['closest_valid']:
+            angle = math.radians(fields['closest_angle_deg'])
+            x = fields['closest_mm'] * math.cos(angle)
+            y = fields['closest_mm'] * math.sin(angle)
+            location = f'{x:.1f} / {y:.1f} mm (sensor frame; approximate)'
+        rows = [("Closest", _closest_text(fields)),
+                ('Closest x forward / y left', location),
+                ("Right clearance", _clear_text(fields["right_clear_deg"],
+                                                fields["right_free_step"])),
+                ("Left clearance", _clear_text(fields["left_clear_deg"],
+                                               fields["left_free_step"])),
+                ("Detour decision", _name(OBSTACLE_DECISION_TEXT, fields["decision"])),
+                ("Scan ID", fields["scan_id"]),
+                ("Scan stage", _name(SCAN_STAGES, fields["scan_stage"])),
+                ("Scan attempt", "initial" if fields.get("scan_attempt", 0) == 0
+                 else f"retry {fields['scan_attempt']}"),
+                ("Scans missed (ID gaps)", model.obstacle_missed),
+                ("Profile word", f"0x{fields['profile_word']:04x}")]
+        points = [[angle, entry["mm"], int(now - entry["rx"]), entry["text"]]
+                  for angle, entry in sorted(model.sonar_profile.items())]
+        chart = {"type": "obstacle", "points": points, "max_mm": 511,
+                 "closest": None if not fields["closest_valid"] else
+                 {"angle": fields["closest_angle_deg"], "mm": fields["closest_mm"]},
+                 "right_clear_deg": fields["right_clear_deg"],
+                 "left_clear_deg": fields["left_clear_deg"], "decision": fields["decision"]}
+    if model.detours:
+        detour_age = model.record_age(now, model.detours[-1])
+        age = detour_age if age is None else min(age, detour_age)
+        rows.append(("Detours missed (sequence gaps)", model.detour_missed))
+    panel = make_panel("obstacle", "Obstacle profile and detours", age, stale_ms=None,
+                      rows=format_rows + rows + geometry_rows,
+                      chart=chart, table=_detour_table(model) if model.detours else None,
+                      note=geometry_note + "; age = time since the newest scan or detour finished; "
+                      "angle: right is negative. Max offset is the sideways distance from "
+                      "the heading at detour start")
+    panel['age_kind'] = 'report'
+    return panel
+
+
+@register_panel
+def events_panel(model, now):
+    items = [{"age_ms": int(now - e["rx"]), "text": f"#{e['sequence']} {e['text']}"}
+             for e in reversed(model.events)]
+    age = None if not model.events else int(now - model.events[-1]["rx"])
+    rows = [("Event sequence gaps", model.event_gaps)]
+    return make_panel("events", "Events", age, stale_ms=None, rows=rows, items=items,
+                      note="" if model.events else "no events yet")
+
+
+@register_panel
+def health_panel(model, now):
+    if model.heartbeat is None:
+        return make_panel("health", "Health", None,
+                          stale_ms=model.limits()["heartbeat_stale_ms"],
+                          note="waiting for robot/heartbeat")
+    f = model.heartbeat["fields"]
+    rows = [("Wi-Fi", "up" if f["wifi_up"] else "down"),
+            ("MQTT (robot side)", _name(MQTT_STATES, f["mqtt_state"])),
+            ("Reset reason", _name(RESET_REASONS, f["reset_reason"])),
+            ("Uptime", f"{f['uptime_ms'] / 1000:.1f} s"),
+            ("Wi-Fi poll gap max", f"{f['wifi_poll_gap_max_us'] / 1000:.1f} ms"
+             f" ({f['wifi_poll_gap_samples']} polls)"),
+            ("Lost: telemetry / event / command",
+             f"{f['telemetry_lost']} / {f['event_lost']} / {f['command_lost']}"),
+            ("Publish ok / failed", f"{f['publish_ok']} / {f['publish_failed']}"),
+            ("Busy reads: line / sonar / motion / vehicle / health",
+             f"{f['line_busy']} / {f['sonar_busy']} / {f['motion_busy']} / "
+             f"{f['vehicle_busy']} / {f['health_busy']}"),
+            ("Unavailable boards (last explicit read)", _unavailable_text(f)),
+            ("Unavailable observations (total)", f.get("board_unavailable", "not reported")),
+            ("Vehicle overruns", f["vehicle_overruns"]),
+            ("Motion late / missed", f"{f['motion_late']} / {f['motion_missed']}"),
+            ("CPU load", _cpu_text(f)),
+            ("Stack minimum free", _stack_text(f["stack_min_free"])),
+            ("Restricted commands", "configured" if f["commands_enabled"] else "not configured"),
+            ("Robot health age", f"{f['health_age_ms']} ms")]
+    return make_panel("health", "Health", model.record_age(now, model.heartbeat),
+                      stale_ms=model.limits()["heartbeat_stale_ms"], rows=rows)
+
+
+def _yes_no(value):
+    return "yes" if value else "no"
+
+
+def _summary_context(model, now):
+    """Label history; a retained/old summary is never a live reading."""
+    record = model.summary
+    if record is None:
+        return [], ["waiting for robot/summary (sent when a run ends)"]
+    f = record['fields']
+    rows = [("Summary run", f['run_id']), ("Summary boot / session", f['boot_session']),
+            ("Summary received age", f"{model.record_age(now, record)} ms")]
+    notes = ["counts are from a completed run, not a live per-attempt stream"]
+    if f['boot_session'] != model.log.sessions.current:
+        notes.append("previous boot/session: not the current robot's run")
+    if record['retained']:
+        notes.append("broker's retained copy: may be an earlier run")
+    if (model.state is not None and f['boot_session'] == model.log.sessions.current
+            and now - model.state['rx'] <= model.limits()['state_stale_ms']
+            and model.state['fields']['active']):
+        notes.append("a new run is active: summary is the previous completed run")
+    return rows, notes
+
+
+@register_panel
+def barcode_panel(model, now):
+    rows = [("Mode (deployment)", "SHADOW expected (not reported on wire)")]
+    age = None
+    if model.state is not None:
+        age = model.state_age(now, 'line_age_ms')
+        rows += [("Raw GP28 sample", model.state['fields']['raw_bc']),
+                 ("GP28 board valid", _yes_no(model.state['fields']['line_valid'])),
+                 ("GP28 board fresh", _yes_no(model.state['fields']['line_fresh'])),
+                 ("GP28 sample age", f"{age} ms"
+                  + (" (stale)" if age > model.limits()['state_stale_ms'] else ""))]
+    summary_rows, notes = _summary_context(model, now)
+    if model.summary is not None:
+        f = model.summary['fields']
+        rows.append(("Barcode ok / failed", f"{f['barcode_ok']} / {f['barcode_failed']}"
+                     if f['barcode_hump_implemented'] else "not reported by this firmware"))
+    else:
+        rows.append(("Barcode ok / failed", "waiting for run summary"))
+    rows += summary_rows
+    rows.append(("Per-attempt details", FUTURE_BARCODE))
+    record = model.reserved['barcode']
+    if record is not None:
+        age = model.record_age(now, record)
+        f = record['fields']
+        version = f['version']
+        if not f.get('known') or version not in (1, 2):
+            description = (f"unsupported report kind {f['kind']} (version {version})"
+                           if version in (1, 2) and f['kind'] != 1 else
+                           f'unsupported version {version}')
+            rows.append(('Report format', description))
+        elif version == 1:
+            rows += [("Detected / decoded / unreadable",
+                      f"{_yes_no(f['detected'])} / {_yes_no(f['decoded'])} / {_yes_no(f['unreadable'])}"),
+                     ("Decoded command", f"code {f['code']} (raw)"),
+                     ("Confidence", f"{f['votes']} of {f['reads']} reads agree"),
+                     ("Direction", _name(BARCODE_DIRECTIONS, f['direction'])),
+                     ("Navigation command", f"{f['nav_command']} (raw)"),
+                     ("Result", f"{f['result']} (raw)"),
+                     ("Command issued / executed", f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
+                     ("Report", f"#{f['sequence']} at robot uptime {f['uptime_ms']} ms"),
+                     ("Legacy report received age", f"{age} ms")]
+            notes.append('legacy robot/barcode v1 raw report')
+        else:
+            # Fields come only from robot_wire's validated v2 decoder.
+            rows[0] = ('Mode (deployment)', 'SHADOW expected (deployment setting)')
+            rows = [(label, 'robot/barcode v2' if label == 'Per-attempt details' else value)
+                    for label, value in rows]
+            rows += [('Mode (wire)', 'SHADOW' if f['shadow'] else 'LIVE'),
+                     ('Attempt decoded / failed', f"{_yes_no(f['decoded'])} / {_yes_no(f['failed'])}"),
+                     ('Decoded letter', f['letter'] if f['decoded'] else 'none'),
+                     ('Reason', f"{f['reason_name']} ({f['reason']})"),
+                     ('Direction', _name(BARCODE_DIRECTIONS, f['direction'])),
+                     ('Mapped command (observation only)',
+                      {0: 'NONE', 1: 'LEFT', 2: 'RIGHT', 3: 'STRAIGHT',
+                       4: 'UTURN'}.get(f['nav_command'], 'unknown')),
+                     ('Command issued / executed',
+                      f"{_yes_no(f['command_issued'])} / {_yes_no(f['executed'])}"),
+                     ('Producer epoch / sequence', f"{f['epoch']} / {f['sequence']}"),
+                     ('Attempt start / terminal uptime', f"{f['start_ms']} / {f['uptime_ms']} ms"),
+                     ('Narrow / wide estimate',
+                      f"{f['narrow_mm']:.2f} / {f['wide_mm']:.2f} mm" if f['widths_valid'] else 'unavailable'),
+                     ('Attempt source session (inferred)', f['boot_session']),
+                     ('Attempt report received age', f'{age} ms')]
+            notes += ['v2 mode uses the wire SHADOW flag; a mapped command is observation only, '
+                      'not a command acknowledgement',
+                      'v2 has no boot ID or run ID; session is inferred from other messages, '
+                      'not proved by the producer epoch; summary totals and attempt sequence '
+                      'are separate, not a report-loss estimate']
+    junction = next((event for event in reversed(model.events) if event.get('junction_live')), None)
+    if junction is not None:
+        rows += [('Latest junction report', junction['text']),
+                 ('Junction report boot / session', junction['boot_session']),
+                 ('Junction report sequence / uptime',
+                  f"#{junction['sequence']} / {junction['uptime_ms']} ms"),
+                 ('Junction report received age', f'{model.record_age(now, junction)} ms')]
+        notes.append('junction reports are separate from barcode attempts; UNUSED means the '
+                     'command was not acted on; do not infer an attempt-to-command match')
+        if junction['retained']:
+            notes.append('junction report is retained history, not a current action')
+    if record is None or record['fields']['version'] != 2 or not record['fields'].get('known'):
+        notes.append('SHADOW is deployment context, not a transmitted mode')
+    history_only = model.state is None and record is None
+    if history_only:
+        newest = max((r for r in (model.summary, junction) if r is not None),
+                     key=lambda r: r['rx'], default=None)
+        age = model.record_age(now, newest)
+    panel = make_panel('barcode', 'Barcode', age, rows=rows,
+                       stale_ms=None if history_only else model.limits()['state_stale_ms'],
+                       note='; '.join(notes + ['raw GP28 uses robot/state line-board age']))
+    panel['age_kind'] = 'report' if history_only or record is not None else 'data'
+    return panel
+
+
+def _imu_fault_at_run_end(fields):
+    """Describe a recorded shell latch, never the current safety condition."""
+    if fields is None:
+        return 'waiting for run summary'
+    if fields['version'] < 3:
+        return f"not reported (summary v{fields['version']} firmware)"
+    fault = fields['shell_fault']
+    if fault == 6:
+        trigger = _name(IMU_SAFETY_TRIGGERS, fields['shell_fault_detail'])
+        return 'latched: ' + trigger
+    return 'none reported' if fault in SHELL_FAULTS else f'unknown (shell fault {fault})'
+
+
+@register_panel
+def imu_panel(model, now):
+    snapshot, event = model.reserved['imu'], model.reserved['imu_event']
+    summary_fields = None if model.summary is None else model.summary['fields']
+    rows = [('Current IMU safety', 'not reported'),
+            ('IMU fault at run end', _imu_fault_at_run_end(summary_fields))]
+    notes = ['hump heights are report only; no navigation action',
+             'run-end IMU fault is history, not the current latch; '
+             'current IMU safety and recovery state are not reported']
+    safety = model.imu_safety
+    if safety is None:
+        rows.append(('Latest IMU safety event', 'not received'))
+    else:
+        f = safety['fields']
+        action, trigger, cause, context = _imu_safety_values(f)
+        rows += [('Latest IMU safety event', action), ('IMU trigger in event', trigger),
+                 ('IMU safety event cause', cause), ('IMU event shell / module', context),
+                 ('IMU safety event raw word / detail', f'0x{f["word"]:04x} / {f["detail"]}'),
+                 ('IMU safety event boot / session', f['boot_session']),
+                 ('IMU safety event sequence / uptime', f'#{f["sequence"]} / {f["uptime_ms"]} ms'),
+                 ('IMU safety event received age', f'{model.record_age(now, safety)} ms')]
+        notes.append('kind 10 is an event report, not a current-state snapshot; '
+                     'QoS 0 can lose reports; only CLEARED reports a successful clear')
+        if safety['retained']:
+            notes.append('retained history (unexpected for kind 10); not a live safety report')
+        if f['boot_session'] != model.log.sessions.current:
+            notes.append('IMU safety event is from a previous boot/session')
+    live = model.hump_live
+    if live is not None:
+        rows += [("Hump event run count", live['count']),
+                 ("Highest hump event", _mm_text(live['peak'])),
+                 ("Side of highest event", _side_text(live['left'])),
+                 ("Hump event boot / session", live['boot_session']),
+                 ("Latest hump event", f"#{live['sequence']} at robot uptime {live['uptime_ms']} ms"),
+                 ("Hump event received age", f"{model.record_age(now, live)} ms")]
+        notes.append('robot/event kind 9 reports a run count, not a delivery count; '
+                     'event data resets at observed run start or new boot; not a continuous IMU stream')
+    if model.summary is not None:
+        rows.append(('Last run stop reason', _name(STOP_REASONS, summary_fields['stop_reason'])))
+        result, warnings = _hump_result(model.summary['fields'])
+        rows += result
+        f = model.summary['fields']
+        if (f['version'] >= 3 and f['hump_implemented']
+                and not any(label == 'Humps counted' for label, _ in result)):
+            rows.append(('Humps counted', f['hump_count']))
+        notes += warnings
+    else:
+        rows.append(('Hump run result', 'waiting for run summary'))
+    summary_rows, summary_notes = _summary_context(model, now)
+    rows += summary_rows
+    notes += summary_notes
+    if snapshot is None:
+        rows.append(('IMU attitude stream', NOT_REPORTED + ' (robot/imu)'))
+    else:
+        f = snapshot['fields']
+        rows += [("Pitch (raw)", f['pitch_raw']), ("Heading (raw)", f['heading_raw']),
+                 ("Turn rate (raw)", f['turn_rate_raw']), ("Hump state (raw)", f['hump_state']),
+                 ("Height (raw)", f['height_raw']), ("Peak (raw)", f['peak_raw']),
+                 ("Collision", _yes_no(f['collision'])), ("Sample valid", _yes_no(f['valid'])),
+                 ("Sample age or sequence (raw)", f['age_or_seq']),
+                 ("IMU snapshot received age", f"{model.record_age(now, snapshot)} ms"
+                  + (' (stale)' if model.record_age(now, snapshot) > STALE_MS else ''))]
+        notes.append('legacy robot/imu raw values: units are not fixed yet')
+    if event is not None:
+        f = event['fields']
+        rows += [('Motion event', f"{_name(IMU_EVENTS, f['event'])} #{f['sequence']} at "
+                  f"robot uptime {f['uptime_ms']} ms"),
+                 ('Motion event received age', f"{model.record_age(now, event)} ms")]
+    elif snapshot is not None:
+        rows.append(('Motion event', 'not received'))
+    if model.state is not None:
+        notes.append('robot/state heading and turn rate are wheel odometry, not IMU attitude; '
+                     'robot/status has no IMU samples')
+    streams = [r for r in (snapshot, event) if r is not None]
+    history = [r for r in (live, model.summary, safety) if r is not None]
+    newest = max(streams or history, key=lambda r: r['rx'], default=None)
+    panel = make_panel('imu', 'IMU / hump reports', model.record_age(now, newest), rows=rows,
+                       stale_ms=STALE_MS if streams else None, note='; '.join(notes))
+    panel['age_kind'] = 'data' if streams else 'report'
+    return panel
+
+
+def _fault_text(bits):
+    names = [name for mask, name in MOTION_FAULT_BITS if bits & mask]
+    unknown = bits & ~sum(mask for mask, _ in MOTION_FAULT_BITS)
+    if unknown:
+        names.append(f"unknown bits 0x{unknown:02x}")
+    return ", ".join(names) if names else "none"
+
+
+@register_panel
+def summary_panel(model, now):
+    record = model.summary
+    if record is None:
+        return make_panel("summary", "Run summary", None, stale_ms=None,
+                          note="no run summary yet: it appears when a run ends")
+    f = record["fields"]
+    implemented = f["barcode_hump_implemented"]  # v3: barcode only
+    shell = ('unknown (6)' if f['version'] < 3 and f['shell_fault'] == 6
+             else _name(SHELL_FAULTS, f['shell_fault']))
+    if f["shell_fault"]:
+        shell += f" (detail {f['shell_fault_detail']})"
+    unknown_speed = (not f["speed_error_valid"]
+                     or f["max_speed_error_mm_s"] == robot_wire.SPEED_ERROR_NONE)
+    rows = [("Run ID", f["run_id"]),
+            ("Stop source", _name(STOP_SOURCES, f["stop_source"])),
+            ("Stop reason", _name(STOP_REASONS, f["stop_reason"])),
+            ('IMU fault at run end', _imu_fault_at_run_end(f)),
+            ("Started (robot uptime)", _seconds(f["start_ms"])),
+            ("Duration", _seconds(f["duration_ms"])),
+            ("Distance (path length)", f"{f['distance_mm']} mm"),
+            ("Line losses", f["line_losses"]), ("Obstacles seen", f["obstacles"]),
+            ("Detours started / done / succeeded",
+             f"{f['detours_started']} / {f['detours_done']} / {f['detours_succeeded']}"),
+            ("Detour time in total", _seconds(f["detour_total_ms"])),
+            ("SCAN reverse-and-rescan attempts", f.get("scan_reattempts", "not reported")),
+            ("Max speed error", "not measured" if unknown_speed
+             else f"{f['max_speed_error_mm_s']} mm/s"),
+            ("Motion faults seen", _fault_text(f["motion_fault_bits"])),
+            ("Shell fault", shell),
+            ("Barcode ok / failed", f"{f['barcode_ok']} / {f['barcode_failed']}" if implemented
+             else NOT_IMPLEMENTED)]
+    if f["detour_aborted"]:
+        rows.append(("Detour", "a detour was still running when the run ended"))
+    notes = ["age = time since this summary arrived"]
+    scope = f["boot_session"]
+    rows += [("Boot / session", scope),
+             ('Summary received age', f'{model.record_age(now, record)} ms')]
+    if scope != model.log.sessions.current:
+        notes.append("previous boot/session: not the current robot's run summary")
+    if record["retained"]:
+        notes.append("this is the broker's retained copy: it may be from an earlier run")
+    state = model.state
+    if (scope == model.log.sessions.current and state is not None and
+            now - state["rx"] <= model.limits()["state_stale_ms"]
+            and state["fields"]["active"]):
+        notes.append("a new run is in progress: this summary is the previous run")
+    panel = make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
+                       rows=rows, note="; ".join(notes))
+    panel['age_kind'] = 'report'
+    return panel
+
+
+HUMP_WARNINGS = (("hump_imu_fault", "IMU data was missing for part of the run"),
+                 ("hump_open_at_stop", "the run stopped on a hump: that peak may be low"),
+                 ("hump_curve_gated", "a curve froze a hump peak"),
+                 ("hump_long_rejected", "a slope longer than 600 mm was not counted"))
+
+
+def _hump_result(f):
+    """Rows of the run summary hump fields (summary v3 and later)."""
+    if f["version"] < 3:
+        return [("Highest hump", f"not reported (summary v{f['version']} firmware)")], []
+    if not f["hump_implemented"]:
+        return [("Highest hump", NOT_IMPLEMENTED)], []
+    warnings = [text for key, text in HUMP_WARNINGS if f[key]]
+    if f["hump_peak"] == robot_wire.HUMP_PEAK_NONE:
+        return [("Highest hump", "unavailable (no fresh IMU data)")], warnings
+    rows = [("Highest hump", _mm_text(f["hump_peak"]) if f["hump_count"] else
+             "no hump detected"),
+            ("Humps counted", f["hump_count"])]
+    if f["hump_count"]:
+        rows.append(("Side of highest", _side_text(f["hump_left"])))
+    rows.append(("Hump starts blocked (curve or slow)", f["hump_gated"]))
+    return rows, warnings
+
+
+@register_panel
+def hump_panel(model, now):
+    record, live = model.summary, model.hump_live
+    rows, notes = [], []
+    if live is not None and (record is None or live["rx"] > record["rx"]):
+        rows.append(("This run so far (live)",
+                     f"{_mm_text(live['peak'])}, {_side_text(live['left'])}, "
+                     f"{live['count']} counted"))
+        notes.append("live: from HUMP events of the run in progress")
+    if record is None:
+        notes.append("the run result appears when a run ends")
+        age = None if live is None else model.record_age(now, live)
+        return make_panel("hump", "Highest hump", age, stale_ms=None, rows=rows,
+                          note="; ".join(notes))
+    result, warnings = _hump_result(record["fields"])
+    rows += result
+    notes += warnings
+    if record["fields"]["boot_session"] != model.log.sessions.current:
+        notes.append("previous boot/session")
+    if record["retained"]:
+        notes.append("broker's retained copy: it may be from an earlier run")
+    notes.append(f"run {record['fields']['run_id']}; heights are report only")
+    return make_panel("hump", "Highest hump", model.record_age(now, record), stale_ms=None,
+                      rows=rows, note="; ".join(notes))
+
+
+@register_panel
+def log_panel(model, now):
+    info = model.log_info
+    gaps = model.gap_counts()
+    last = info["last"]
+    rows = [("Boot / session", model.log.sessions.current),
+            ("Live rows received", info["live_rows"]),
+            ("Refill rows (DUMP) merged", info["refill_rows"]),
+            ("Rows lost (index gaps)", gaps["lost_rows"]),
+            ("Rows skipped (jumps)", gaps["jumped_rows"]),
+            ("Jump frames", info["jumped_frames"]),
+            ("Duplicates dropped", gaps["duplicates"])]
+    age = None
+    if last is not None:
+        age = min(int(now - last["rx"]) + last["data_age_ms"], MISSING_AGE_MS)
+        rows += [("Data age", f"{age} ms"), ("Rows behind", last["rows_behind"]),
+                 ("Generation / last index", f"{last['generation']} / {last['index']}")]
+    items = [{"age_ms": None, "text": message} for message in reversed(model.log_messages)]
+    return make_panel("log", "RAM log stream", age, rows=rows, items=items,
+                      note=("" if last else "no live log rows yet; ") +
+                      "receive counts: current session; gaps and duplicates: all sessions",
+                      paused=model.telemetry_mode() == "idle")

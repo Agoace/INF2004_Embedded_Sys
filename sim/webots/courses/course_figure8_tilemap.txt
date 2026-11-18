@@ -1,0 +1,21 @@
+# Demo course "figure-8", tile map from operator photos IMG_1960..1962
+# (2026-11-17). PHOTO-ESTIMATED. Not a survey; check against the photos.
+#
+# View: from above, north up (as IMG_1962). Row r0 is the north edge.
+# One cell = one 315 mm Cytron tile. Cell codes:
+#   .   no tile (floor)          B   blank tile (no line)
+#   |   straight N-S             -   straight E-W
+#   X   4-way crossing
+#   NE NW SE SW   quarter arc (radius 157.5 mm) joining these two edge
+#                 midpoints, e.g. SW joins the south and west edges
+#   *   suffix: loose arc, NOT part of the track (open ends allowed)
+#
+#      c0   c1   c2   c3   c4   c5   c6   c7   c8
+r0     .    SE   -    SW   SW*  B    .    .    .
+r1     SE   NW   B    |    SW*  B    .    .    .
+r2     |    B    B    |    NW*  SW*  .    .    .
+r3     NE   -    -    X    -    -    -    SW   .
+r4     NW*  NW*  B    |    B    B    SW*  |    B
+r5     B    B    NW*  |    B    SW*  NW*  |    B
+r6     .    NE*  B    |    B    SE   SW   |    B
+r7     .    .    .    NE   -    NW   NE   NW   B

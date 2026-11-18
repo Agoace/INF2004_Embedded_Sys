@@ -1,0 +1,549 @@
+#include "obstacle_detour.h"
+
+/* sin(0..90 degrees) x 1000, rounded. */
+static const uint16_t SIN_PERMILLE[91] = {
+    0,   17,  35,  52,  70,  87,  105, 122, 139, 156, 174, 191, 208, 225, 242, 259,
+    276, 292, 309, 326, 342, 358, 375, 391, 407, 423, 438, 454, 469, 485, 500, 515,
+    530, 545, 559, 574, 588, 602, 616, 629, 643, 656, 669, 682, 695, 707, 719, 731,
+    743, 755, 766, 777, 788, 799, 809, 819, 829, 839, 848, 857, 866, 875, 883, 891,
+    899, 906, 914, 921, 927, 934, 940, 946, 951, 956, 961, 966, 970, 974, 978, 982,
+    985, 988, 990, 993, 995, 996, 998, 999, 999, 1000, 1000,
+};
+
+#define NO_ECHO 0xFFFFu
+
+int dt_sin1000(int deg) {
+    deg %= 360;
+    if (deg > 180) {
+        deg -= 360;
+    } else if (deg < -180) {
+        deg += 360;
+    }
+    const int sign = deg < 0 ? -1 : 1;
+    int a = deg < 0 ? -deg : deg; /* 0..180 */
+    if (a > 90) {
+        a = 180 - a;
+    }
+    return sign * (int)SIN_PERMILLE[a];
+}
+
+int dt_cos1000(int deg) {
+    return dt_sin1000(deg + 90);
+}
+
+uint32_t dt_mm_to_counts(uint32_t mm) {
+    const uint64_t num = (uint64_t)mm * DT_COUNTS_PER_WHEEL_TURN * 1000u;
+    return (uint32_t)((num + DT_WHEEL_CIRCUMFERENCE_UM / 2u) / DT_WHEEL_CIRCUMFERENCE_UM);
+}
+
+int32_t dt_counts_to_mm(int32_t counts) {
+    return (int32_t)((int64_t)counts * DT_WHEEL_CIRCUMFERENCE_UM /
+                     ((int64_t)DT_COUNTS_PER_WHEEL_TURN * 1000));
+}
+
+static int32_t clamp_i32(int64_t value, int32_t low, int32_t high) {
+    return value < low ? low : value > high ? high : (int32_t)value;
+}
+
+void dt_sweep_control_init(dt_sweep_control_t *ctl, const dt_config_t *cfg,
+                           int32_t left, int32_t right, uint32_t now_ms) {
+    *ctl = (dt_sweep_control_t){.counts = {left, right}, .sample_ms = now_ms};
+    const int max = cfg->sweep_max_duty > 100u ? 100 : cfg->sweep_max_duty;
+    const int min = cfg->sweep_min_duty > max ? max : cfg->sweep_min_duty;
+    ctl->duty[0] = min;
+    ctl->duty[1] = min;
+    ctl->duty_milli[0] = min * 1000;
+    ctl->duty_milli[1] = min * 1000;
+}
+
+void dt_sweep_control_update(dt_sweep_control_t *ctl, const dt_config_t *cfg,
+                             int direction, int32_t left, int32_t right, uint32_t now_ms) {
+    const uint32_t elapsed = now_ms - ctl->sample_ms;
+    const int max = cfg->sweep_max_duty > 100u ? 100 : cfg->sweep_max_duty;
+    const int min = cfg->sweep_min_duty > max ? max : cfg->sweep_min_duty;
+    if (elapsed >= 100u && cfg->counts_per_deg_x100 != 0u) {
+        const int32_t counts[2] = {left, right};
+        int rate_sum = 0;
+        for (unsigned int i = 0u; i < 2u; ++i) {
+            const int sign = i == 0u ? -direction : direction;
+            const int64_t delta = ((int64_t)counts[i] - ctl->counts[i]) * sign;
+            const int32_t rate_milli = clamp_i32(delta * 200000000 /
+                ((int64_t)elapsed * cfg->counts_per_deg_x100), -1000000, 1000000);
+            rate_sum += rate_milli;
+            const int32_t error = (int32_t)cfg->sweep_deg_s * 1000 - rate_milli;
+            const int32_t proportional = error / 100;
+            /* Clamp the integral itself: saturated outputs cannot wind it up. */
+            ctl->integral_milli[i] = clamp_i32(ctl->integral_milli[i] +
+                (int64_t)error * elapsed / 10000, 0, (max - min) * 1000);
+            ctl->duty_milli[i] = clamp_i32(min * 1000 + proportional +
+                ctl->integral_milli[i], min * 1000, max * 1000);
+            ctl->counts[i] = counts[i];
+        }
+        ctl->rate_deg_s = rate_sum / 2000;
+        ctl->sample_ms = now_ms;
+    }
+    for (unsigned int i = 0u; i < 2u; ++i) {
+        /* Whole-percent API, but distribute the fractional remainder across
+         * control ticks rather than holding a rounded duty for 100 ms. */
+        const int32_t requested = clamp_i32(ctl->duty_milli[i], min * 1000, max * 1000);
+        const int32_t sum = requested + ctl->duty_carry[i];
+        ctl->duty[i] = (int)(sum / 1000);
+        ctl->duty_carry[i] = (uint16_t)(sum % 1000);
+    }
+}
+
+static void fail(dt_t *dt, dt_fail_t reason) {
+    dt->step = DT_FAILED;
+    dt->fail = (uint8_t)reason;
+}
+
+static bool is_turn(const dt_t *dt) {
+    return dt->step == DT_TURN_AWAY || dt->step == DT_TURN_TOWARD;
+}
+
+/* Turn direction of the current step, S frame: +1 toward S. */
+static int turn_dir(const dt_t *dt) {
+    if (dt->step == DT_TURN_AWAY) {
+        return +1;
+    }
+    if (dt->step == DT_TURN_TOWARD) {
+        return dt->backing ? +1 : -1;
+    }
+    return dt->heading < 0 ? +1 : -1; /* ALIGN: back to 0 */
+}
+
+/* Turn of this step toward S, count difference x 100 (S frame). */
+static int64_t turn_x100(const dt_t *dt) {
+    const int32_t diff = (dt->r - dt->r0) - (dt->l - dt->l0); /* > 0: left */
+    return (int64_t)dt->side * diff * 100;
+}
+
+/* Turn of this step in its own direction, compared with deg. */
+static bool turned(const dt_t *dt, int deg) {
+    return turn_x100(dt) * turn_dir(dt) >= (int64_t)deg * dt->cfg.counts_per_deg_x100;
+}
+
+/* Turn of this step toward S in whole degrees, rounded. */
+static int turn_deg(const dt_t *dt) {
+    const int64_t t = turn_x100(dt);
+    const int64_t half = dt->cfg.counts_per_deg_x100 / 2;
+    return (int)((t + (t < 0 ? -half : half)) / dt->cfg.counts_per_deg_x100);
+}
+
+/* Straight distance of this step so far, mm (back: negative). */
+static int32_t travel_mm(const dt_t *dt) {
+    return dt_counts_to_mm(((dt->l - dt->l0) + (dt->r - dt->r0)) / 2);
+}
+
+static void begin(dt_t *dt, dt_step_t step) {
+    dt->step = (uint8_t)step;
+    dt->pending = false; /* a reading of the last step is not for this one */
+    dt->l0 = dt->l;
+    dt->r0 = dt->r;
+    dt->from_mm = 0;
+    dt->best_mm = NO_ECHO;
+    dt->looking = false;
+    dt->backing = false;
+    dt->returning = false;
+    dt->sweep_seen = dt->sweep_lost = 0u;
+    dt->sweep_end = DT_SWEEP_NONE;
+    dt->target_deg = 0u; /* turns look first */
+    dt->first_leg_mm = 0u;
+    dt->trimming = false;
+    if (step == DT_STRAIGHT && dt->straights == 0u && dt->cfg.first_max_mm != 0u) {
+        /* Wall triangle: hypotenuse to the wall line, then extra. */
+        const int c = dt_cos1000(dt->heading);
+        uint32_t leg = dt->cfg.first_max_mm;
+        if (c > 0 && dt->wall_mm > 0) {
+            const int64_t hyp = (int64_t)dt->wall_mm * 1000 / c + dt->cfg.first_extra_mm;
+            if (hyp < (int64_t)leg) {
+                leg = (uint32_t)hyp;
+            }
+        }
+        dt->first_leg_mm = leg;
+    }
+    if (step == DT_ON_LINE) {
+        dt->leg_mm = dt->cfg.line_ahead_mm;
+    }
+}
+
+/* End a straight: move the pose by the distance driven. */
+static void end_straight(dt_t *dt) {
+    const int32_t s = travel_mm(dt);
+    dt->x += s * dt_cos1000(dt->heading) / 1000;
+    dt->y += s * dt_sin1000(dt->heading) / 1000;
+}
+
+/* End a turn: add it to the heading. */
+static void end_turn(dt_t *dt, dt_step_t next) {
+    dt->heading = (int16_t)(dt->heading + turn_deg(dt));
+    begin(dt, next);
+}
+
+void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t obstacle_mm,
+             int32_t left, int32_t right, uint32_t now_ms) {
+    *dt = (dt_t){0};
+    dt->cfg = *cfg;
+    if (dt->cfg.turn_step_deg == 0u) {
+        dt->cfg.turn_step_deg = 1u;
+    }
+    if (dt->cfg.counts_per_deg_x100 == 0u) {
+        dt->cfg.counts_per_deg_x100 = 1u;
+    }
+    dt->l = dt->l0 = left;
+    dt->r = dt->r0 = right;
+    dt->start_ms = now_ms;
+    if (side == OBSTACLE_SIDE_LEFT) {
+        dt->side = +1;
+    } else if (side == OBSTACLE_SIDE_RIGHT) {
+        dt->side = -1;
+    } else {
+        fail(dt, DT_FAIL_NO_SIDE);
+        return;
+    }
+    /* The servo goes from the centre to 30 degrees toward the obstacle. */
+    dt->servo_deg = -DT_SERVO_BIAS;
+    dt->settle_ms = now_ms + DT_SETTLE_BASE_MS + DT_SETTLE_PER_DEG_MS * DT_SERVO_BIAS;
+    /* The obstacle must be outside the turn circle round the rear axle. */
+    const int32_t front = (int32_t)cfg->sensor_ahead_mm + obstacle_mm;
+    const int32_t need = (int32_t)cfg->sweep_mm + cfg->margin_mm;
+    dt->wall_mm = front;
+    if (front < need) {
+        dt->leg_mm = (uint32_t)(need - front);
+        begin(dt, DT_BACK);
+    } else {
+        begin(dt, DT_TURN_AWAY);
+    }
+}
+
+/* Return turn: the line counts once the heading reaches -line_turn_deg.
+ * Not in TURN_AWAY, the trim, a back-off, or a stop for a seen obstacle.
+ * Not before the second STRAIGHT: after the first one the robot can still
+ * be beside the obstacle, and a sonar miss must not put it on the line
+ * there. */
+#define DT_LINE_TURN_MIN_STRAIGHTS 2u
+static bool turn_line(const dt_t *dt, bool line_seen) {
+    const int64_t cpd = dt->cfg.counts_per_deg_x100;
+    const int64_t now_x100 = (int64_t)dt->heading * cpd + turn_x100(dt);
+    const bool stop_ok = dt->sweep_end == DT_SWEEP_NONE ||
+                         dt->sweep_end == DT_SWEEP_RETURN;
+    return dt->cfg.line_turn_deg != 0u && dt->armed && line_seen &&
+           dt->step == DT_TURN_TOWARD && !dt->backing && !dt->trimming &&
+           dt->straights >= DT_LINE_TURN_MIN_STRAIGHTS && stop_ok &&
+           now_x100 <= -(int64_t)dt->cfg.line_turn_deg * cpd;
+}
+
+static bool sweeping(const dt_t *dt) {
+    return dt->cfg.sweep_deg_s != 0u && is_turn(dt) && !dt->backing && !dt->trimming &&
+           dt->sweep_end == DT_SWEEP_NONE;
+}
+
+/* Smallest heading (S frame, whole degrees, below the heading now) whose
+ * path from the axle passes the last seen corner by first_clear_mm on the
+ * obstacle side; -1 when none. */
+static int trim_target(const dt_t *dt) {
+    if (!dt->edge_valid || dt->cfg.first_clear_mm == 0u) {
+        return -1;
+    }
+    const int ray = dt->edge_deg + dt->servo_deg;
+    const int64_t ex = (int64_t)dt->cfg.sensor_ahead_mm * dt_cos1000(dt->edge_deg) +
+                       (int64_t)dt->edge_mm * dt_cos1000(ray);
+    const int64_t ey = (int64_t)dt->cfg.sensor_ahead_mm * dt_sin1000(dt->edge_deg) +
+                       (int64_t)dt->edge_mm * dt_sin1000(ray);
+    const int64_t need = -(int64_t)dt->cfg.first_clear_mm * 1000000;
+    for (int th = 0; th < dt->heading; ++th) {
+        if (-ex * dt_sin1000(th) + ey * dt_cos1000(th) <= need) {
+            return th;
+        }
+    }
+    return -1;
+}
+
+/* TURN_AWAY passed the edge: trim toward the corner, or go straight. */
+static void away_done(dt_t *dt) {
+    dt->heading = (int16_t)(dt->heading + turn_deg(dt));
+    const int th = trim_target(dt);
+    if (th >= 0) {
+        begin(dt, DT_TURN_TOWARD);
+        dt->trimming = true;
+        dt->trim_deg = dt->heading - th;
+    } else {
+        begin(dt, DT_STRAIGHT);
+    }
+}
+
+bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
+    const bool step_wants = dt->step == DT_STRAIGHT || (is_turn(dt) && dt->looking) ||
+                            sweeping(dt);
+    return step_wants && !dt->pending && (int32_t)(now_ms - dt->settle_ms) >= 0;
+}
+
+void dt_triggered(dt_t *dt) {
+    dt->pending = true;
+    dt->trig_mm = travel_mm(dt);
+    dt->trig_turn_x100 = (int32_t)turn_x100(dt);
+}
+
+/* TURN_AWAY: keep the last seen echo and its heading for the trim. */
+static void note_edge(dt_t *dt, uint16_t mm) {
+    const int32_t t = dt->trig_turn_x100;
+    const int32_t half = (int32_t)dt->cfg.counts_per_deg_x100 / 2;
+    dt->edge_valid = true;
+    dt->edge_mm = mm;
+    dt->edge_deg = dt->heading + (int)((t + (t < 0 ? -half : half)) /
+                                       (int32_t)dt->cfg.counts_per_deg_x100);
+}
+
+/* A look in a turn found nothing to stop for: turn one more step. */
+static void next_look(dt_t *dt, uint8_t max_deg) {
+    dt->looking = false;
+    dt->target_deg = (uint8_t)(dt->target_deg + dt->cfg.turn_step_deg);
+    if (dt->target_deg > max_deg) {
+        fail(dt, DT_FAIL_TURN_LIMIT);
+    }
+}
+
+/* TURN_TOWARD has stopped (including coast): choose the blind back-off. */
+static void back_off(dt_t *dt) {
+    const int toward = -turn_deg(dt);
+    dt->last_turned_deg = toward > 0 ? toward : 0;
+    int back = dt->cfg.back_off_deg;
+    if (dt->cfg.back_off_fn) {
+        back = dt->cfg.back_off_fn(dt->last_turned_deg);
+        back = back < 0 ? 0 : back > 180 ? 180 : back;
+    }
+    dt->last_back_deg = back;
+    if (back == 0) {
+        end_turn(dt, DT_STRAIGHT);
+    } else {
+        dt->looking = false;
+        dt->backing = true;
+        dt->back_x100 = (int32_t)turn_x100(dt) +
+                        (int32_t)back * dt->cfg.counts_per_deg_x100;
+    }
+}
+
+static void sweep_stop(dt_t *dt, dt_sweep_end_t reason, uint32_t now_ms) {
+    dt->sweep_end = (uint8_t)reason;
+    dt->sweep_stop_ms = dt->sweep_quiet_ms = now_ms;
+    dt->sweep_stop_x100 = (int32_t)turn_x100(dt);
+    dt->pending = false;
+}
+
+void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
+    if (!dt->pending) {
+        return;
+    }
+    dt->pending = false;
+    if (dt->step != DT_STRAIGHT && !(is_turn(dt) && dt->looking) && !sweeping(dt)) {
+        return;
+    }
+    if (ultrasonic_result_fault(result)) {
+        fail(dt, DT_FAIL_SENSOR);
+        return;
+    }
+    const bool sweep = sweeping(dt);
+    dt->settle_ms = now_ms + (sweep ? dt->cfg.sweep_ping_ms : DT_SETTLE_BASE_MS);
+    const ultrasonic_status_t status = ultrasonic_result_status(result);
+    if (status != ULTRASONIC_STATUS_VALID && status != ULTRASONIC_STATUS_NO_RETURN) {
+        dt->sweep_seen = dt->sweep_lost = 0u;
+        return; /* no information: read again */
+    }
+    const uint16_t mm = ultrasonic_result_distance(result);
+    const bool seen = status == ULTRASONIC_STATUS_VALID && mm < dt->cfg.seen_mm;
+    if (sweep) {
+        const uint8_t need = dt->cfg.sweep_seen_count ? dt->cfg.sweep_seen_count : 1u;
+        uint8_t *count = seen ? &dt->sweep_seen : &dt->sweep_lost;
+        if (*count < need) {
+            ++*count;
+        }
+        if (seen) {
+            dt->sweep_lost = 0u;
+        } else {
+            dt->sweep_seen = 0u;
+        }
+        if (*count >= need) {
+            if (dt->step == DT_TURN_AWAY) {
+                if (seen) {
+                    dt->seen_once = true;
+                    note_edge(dt, mm);
+                } else if (dt->seen_once) {
+                    sweep_stop(dt, DT_SWEEP_LOST, now_ms);
+                }
+            } else if (seen) {
+                sweep_stop(dt, DT_SWEEP_SEEN, now_ms);
+            }
+        }
+        return;
+    }
+    if (dt->step == DT_STRAIGHT) {
+        if (status == ULTRASONIC_STATUS_VALID && mm < DT_TOO_NEAR_MM) {
+            fail(dt, DT_FAIL_TOO_NEAR);
+        } else if (!dt->returning && seen && mm < dt->best_mm) {
+            dt->best_mm = mm; /* nearest so far: count again from here */
+            dt->from_mm = dt->trig_mm;
+        }
+    } else if (dt->step == DT_TURN_AWAY) {
+        if (seen) {
+            dt->seen_once = true;
+            note_edge(dt, mm);
+            next_look(dt, dt->cfg.away_max_deg);
+        } else if (dt->seen_once) {
+            away_done(dt); /* past the edge */
+        } else {
+            next_look(dt, dt->cfg.away_max_deg);
+        }
+    } else if (seen) { /* DT_TURN_TOWARD */
+        back_off(dt);
+    } else if (!dt->backing && dt->cfg.return_heading_deg != 0u &&
+               (int64_t)dt->heading * dt->cfg.counts_per_deg_x100 + turn_x100(dt) <=
+                   -(int64_t)dt->cfg.return_heading_deg * dt->cfg.counts_per_deg_x100) {
+        end_turn(dt, DT_STRAIGHT);
+        dt->returning = true;
+    } else {
+        next_look(dt, dt->cfg.toward_max_deg);
+    }
+}
+
+static dt_word_t word(dt_move_t move, int dir, int servo_robot) {
+    return (dt_word_t)((unsigned int)move | (dir < 0 ? DT_DIR_BIT : 0u) |
+                       ((unsigned int)(servo_robot + DT_SERVO_BIAS) & DT_SERVO_MASK)
+                           << DT_SERVO_SHIFT);
+}
+
+dt_word_t dt_update(dt_t *dt, bool line_seen, int32_t left, int32_t right, uint32_t now_ms) {
+    const bool moved = dt->l != left || dt->r != right;
+    dt->l = left;
+    dt->r = right;
+    if (!line_seen) {
+        dt->armed = true;
+    }
+    if (dt->step < DT_DONE && (uint32_t)(now_ms - dt->start_ms) >= dt->cfg.total_max_ms) {
+        fail(dt, DT_FAIL_TIME);
+    }
+    if (sweeping(dt)) {
+        const int limit = dt->step == DT_TURN_AWAY ? dt->cfg.away_max_deg
+                                                  : dt->cfg.toward_max_deg;
+        const uint8_t need = dt->cfg.sweep_seen_count ? dt->cfg.sweep_seen_count : 1u;
+        if (dt->step == DT_TURN_TOWARD && dt->sweep_lost >= need &&
+            dt->cfg.return_heading_deg != 0u &&
+            (int64_t)dt->heading * dt->cfg.counts_per_deg_x100 + turn_x100(dt) <=
+                -(int64_t)dt->cfg.return_heading_deg * dt->cfg.counts_per_deg_x100) {
+            sweep_stop(dt, DT_SWEEP_RETURN, now_ms);
+        } else if (turned(dt, limit)) {
+            sweep_stop(dt, DT_SWEEP_LIMIT, now_ms);
+        }
+    }
+    if (is_turn(dt) && dt->sweep_end != DT_SWEEP_NONE) {
+        if (moved) {
+            dt->sweep_quiet_ms = now_ms;
+        }
+        /* No encoder change for 20 ms, or the operator's settle deadline. */
+        if (now_ms - dt->sweep_quiet_ms >= 20u ||
+            now_ms - dt->sweep_stop_ms >= dt->cfg.look_ms) {
+            const dt_sweep_end_t reason = (dt_sweep_end_t)dt->sweep_end;
+            const int64_t coast = turn_x100(dt) - dt->sweep_stop_x100;
+            dt->sweep_coast_x10 = (int)((coast < 0 ? -coast : coast) * 10 /
+                                       dt->cfg.counts_per_deg_x100);
+            dt->sweep_heading = dt->heading + turn_deg(dt);
+            dt->sweep_last_end = (uint8_t)reason;
+            ++dt->sweep_serial;
+            dt->sweep_end = DT_SWEEP_NONE;
+            if (reason == DT_SWEEP_SEEN) {
+                back_off(dt);
+            } else if (reason == DT_SWEEP_LIMIT) {
+                dt->heading = (int16_t)dt->sweep_heading;
+                fail(dt, DT_FAIL_TURN_LIMIT);
+            } else if (reason == DT_SWEEP_LOST) {
+                away_done(dt);
+            } else {
+                end_turn(dt, DT_STRAIGHT);
+                dt->returning = reason == DT_SWEEP_RETURN;
+            }
+        }
+    }
+    const int32_t s = travel_mm(dt);
+    const int32_t dist = s < 0 ? -s : s;
+
+    switch (dt_step(dt)) {
+    case DT_BACK:
+        if ((uint32_t)dist >= dt->leg_mm) {
+            dt->wall_mm += dist;
+            begin(dt, DT_TURN_AWAY);
+        }
+        break;
+    case DT_TURN_TOWARD:
+        if (turn_line(dt, line_seen)) {
+            end_turn(dt, DT_ON_LINE); /* the pair is on the line now */
+        } else if (dt->backing && turn_x100(dt) >= dt->back_x100) {
+            end_turn(dt, DT_STRAIGHT);
+        } else if (dt->trimming && turned(dt, dt->trim_deg)) {
+            end_turn(dt, DT_STRAIGHT);
+        }
+        break;
+    case DT_STRAIGHT:
+        if (dt->armed && line_seen && (dt->returning || !dt->cfg.line_return_only)) {
+            end_straight(dt);
+            begin(dt, DT_ON_LINE);
+        } else if (dt->returning) {
+            if (s >= (int32_t)dt->cfg.return_max_mm) {
+                fail(dt, DT_FAIL_NO_LINE);
+            }
+        } else if (dt->first_leg_mm != 0u ? s >= (int32_t)dt->first_leg_mm
+                                          : s - dt->from_mm >= (int32_t)dt->cfg.vehicle_mm) {
+            end_straight(dt);
+            ++dt->straights;
+            if (dt->straights >= dt->cfg.max_straights) {
+                fail(dt, DT_FAIL_NO_LINE);
+            } else {
+                begin(dt, DT_TURN_TOWARD);
+            }
+        }
+        break;
+    case DT_ON_LINE:
+        if ((uint32_t)dist >= dt->leg_mm) {
+            end_straight(dt);
+            begin(dt, DT_ALIGN);
+        }
+        break;
+    case DT_ALIGN: {
+        const int need = dt->heading < 0 ? -dt->heading : dt->heading;
+        if (turned(dt, need)) {
+            dt->heading = 0;
+            dt->step = DT_DONE;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+
+    /* After the step switch, so that a new turn looks before it moves. */
+    if (dt->cfg.sweep_deg_s == 0u && is_turn(dt) && !dt->looking &&
+        !dt->backing && !dt->trimming && turned(dt, dt->target_deg)) {
+        dt->looking = true; /* stop, let the robot settle, then read */
+        const uint32_t look = now_ms + dt->cfg.look_ms;
+        if ((int32_t)(look - dt->settle_ms) > 0) {
+            dt->settle_ms = look;
+        }
+    }
+
+    const int servo = dt->side * dt->servo_deg; /* S frame to robot (+ left) */
+    switch (dt_step(dt)) {
+    case DT_BACK:
+        return word(DT_MOVE_STRAIGHT, -1, servo);
+    case DT_TURN_AWAY:
+    case DT_TURN_TOWARD:
+        if (dt->looking || dt->sweep_end != DT_SWEEP_NONE) {
+            return word(DT_MOVE_STOP, +1, servo);
+        }
+        return word(DT_MOVE_TURN, dt->side * turn_dir(dt), servo);
+    case DT_ALIGN:
+        return word(DT_MOVE_TURN, dt->side * turn_dir(dt), servo);
+    case DT_STRAIGHT:
+    case DT_ON_LINE:
+        return word(DT_MOVE_STRAIGHT, +1, servo);
+    default:
+        return word(DT_MOVE_STOP, +1, 0);
+    }
+}

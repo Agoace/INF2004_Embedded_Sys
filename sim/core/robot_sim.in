@@ -1,0 +1,7 @@
+#!@Python3_EXECUTABLE@
+# Generated launcher: JSON validation and trace output use Python's standard library.
+import sys
+sys.dont_write_bytecode = True
+sys.path.insert(0, r"@CMAKE_CURRENT_SOURCE_DIR@/core")
+from runner import main
+main(r"@REPO@", r"@CMAKE_CURRENT_BINARY_DIR@")

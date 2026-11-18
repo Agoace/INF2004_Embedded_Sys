@@ -1,0 +1,42 @@
+stateDiagram-v2
+    state "INIT / SELF-TEST<br/>RTOS objects created<br/>I2C WHO_AM_I, ultrasonic echo,<br/>encoder + IR sanity checks" as INIT
+    state "CALIBRATE<br/>IMU bias (robot still, flat)<br/>IR black/white check" as CALIBRATE
+    state "IDLE<br/>motors off, telemetry on<br/>waiting for start" as IDLE
+    state "FAULT / SAFE STOP<br/>PWM = 0 within 20 ms<br/>publish fault code" as FAULT
+    state "MISSION_COMPLETE<br/>motors off<br/>publish summary (peak hump)" as MISSION_COMPLETE
+
+    state "RUNNING (Wi-Fi loss does NOT leave this state)" as RUNNING {
+        state "LINE_FOLLOW<br/>Motion: FOLLOW at cruise speed<br/>BARCODE(L/S/R) / store pending cmd<br/>OBST_NEAR / set SLOW" as LINE_FOLLOW
+        state "OBSTACLE_STOP<br/>Motion STOP<br/>set SCAN_REQ" as OBSTACLE_STOP
+        state "BYPASS<br/>ROTATE / FWD(d) sequence<br/>toward clearer side" as BYPASS
+        state "LINE_REACQUIRE<br/>steer back toward original<br/>heading until line seen" as LINE_REACQUIRE
+        state "HUMP_TRAVERSE<br/>slow speed, keep following<br/>ignore ultrasonic (tilted)" as HUMP_TRAVERSE
+        state "LINE_SEARCH<br/>sweep left/right<br/>by encoder angle" as LINE_SEARCH
+        state "EXECUTE_NAV<br/>TURN(±90°) / straight<br/>by encoder target<br/>exit / clear pending cmd" as EXECUTE_NAV
+
+        LINE_FOLLOW --> OBSTACLE_STOP : OBST_STOP<br/>(<20 cm x2)
+        OBSTACLE_STOP --> OBSTACLE_STOP : no clear side:<br/>reverse 10 cm,<br/>rescan (max 3)
+        OBSTACLE_STOP --> BYPASS : PROFILE &<br/>side clear
+        BYPASS --> LINE_REACQUIRE : MOTION_DONE
+        LINE_REACQUIRE --> LINE_FOLLOW : LINE_FOUND
+
+        LINE_FOLLOW --> HUMP_TRAVERSE : HUMP_START
+        HUMP_TRAVERSE --> LINE_FOLLOW : HUMP_END<br/>(peak stored)
+        LINE_FOLLOW --> LINE_SEARCH : LINE_LOST<br/>(>50 ms)
+        LINE_SEARCH --> LINE_FOLLOW : LINE_FOUND
+        LINE_FOLLOW --> EXECUTE_NAV : JUNCTION & pending cmd
+        EXECUTE_NAV --> LINE_FOLLOW : MOTION_DONE
+    }
+
+    [*] --> INIT
+    INIT --> CALIBRATE : self-test OK
+    INIT --> FAULT : self-test failed
+    CALIBRATE --> IDLE : calibrated
+    CALIBRATE --> FAULT : [calibration failed]
+    IDLE --> LINE_FOLLOW : MQTT start OR<br/>auto-start timer (5 s)
+    IDLE --> FAULT : ESTOP (MQTT / button)
+    RUNNING --> IDLE : MQTT stop
+    RUNNING --> FAULT : any state in RUNNING:<br/>ESTOP (MQTT / button), STALL, COLLISION,<br/>SENSOR_FAULT, search /<br/>reacquire / rescan timeout
+    LINE_FOLLOW --> MISSION_COMPLETE : END barcode
+    FAULT --> IDLE : MQTT reset &<br/>condition cleared
+    MISSION_COMPLETE --> IDLE : MQTT reset

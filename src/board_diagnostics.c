@@ -17,8 +17,9 @@
 #define SERVO_PIN 15
 #define ENCODER_2_A_PIN 16
 #define ENCODER_2_B_PIN 17
-#define IR_ADC_PIN 26
-#define IR_ADC_INPUT 0
+#define IR_SENSOR_COUNT 3
+
+static const uint8_t ir_gpio[IR_SENSOR_COUNT] = {26, 27, 28};
 
 #define I2C_BAUD_HZ (100 * 1000)
 #define REPORT_INTERVAL_MS 1000
@@ -136,9 +137,11 @@ static int32_t measure_ultrasonic_distance_mm(void) {
     return (int32_t)((pulse_us * 343u) / 2000u);
 }
 
-static uint16_t read_ir_millivolts(void) {
+static uint16_t read_ir_millivolts(uint8_t adc_input) {
     uint32_t total = 0;
-    adc_select_input(IR_ADC_INPUT);
+    adc_select_input(adc_input);
+    // Discard the first conversion after changing the ADC channel.
+    (void)adc_read();
     for (unsigned int sample = 0; sample < 16; ++sample) {
         total += adc_read();
         sleep_us(20);
@@ -172,7 +175,9 @@ int main(void) {
     initialise_edge_input(ENCODER_2_B_PIN, false);
 
     adc_init();
-    adc_gpio_init(IR_ADC_PIN);
+    for (unsigned int index = 0; index < IR_SENSOR_COUNT; ++index) {
+        adc_gpio_init(ir_gpio[index]);
+    }
 
     printf("\nRobo Pico connection diagnostics\n");
     printf("GP15 servo is not driven to prevent unexpected movement.\n");
@@ -193,7 +198,10 @@ int main(void) {
         const uint32_t current_encoder_2_b = encoder_2_b_edges;
         const uint32_t current_drdy = drdy_edges;
         const int32_t distance_mm = measure_ultrasonic_distance_mm();
-        const uint16_t ir_mv = read_ir_millivolts();
+        uint16_t ir_mv[IR_SENSOR_COUNT];
+        for (unsigned int index = 0; index < IR_SENSOR_COUNT; ++index) {
+            ir_mv[index] = read_ir_millivolts(index);
+        }
 
         printf("\n--- live report ---\n");
         if (distance_mm >= 0) {
@@ -215,7 +223,10 @@ int main(void) {
         printf("GY-511 DRDY GP6: level %u, edges +%lu\n",
                gpio_get(GY511_DRDY_PIN),
                (unsigned long)(current_drdy - previous_drdy));
-        printf("IR sensor GP26/ADC0: %u mV\n", ir_mv);
+        for (unsigned int index = 0; index < IR_SENSOR_COUNT; ++index) {
+            printf("IR sensor GP%u/ADC%u: %u mV\n",
+                   ir_gpio[index], index, ir_mv[index]);
+        }
         printf("Servo GP15: not driven\n");
 
         previous_encoder_1_a = current_encoder_1_a;

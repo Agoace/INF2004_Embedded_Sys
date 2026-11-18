@@ -1,0 +1,219 @@
+/*
+ * network_queue.c - bounded message buffers between the vehicle task and
+ * the Wi-Fi task, with loss counters.
+ *
+ * Three message buffers exist: events (vehicle to network), commands
+ * (network to vehicle) and a dedicated ESTOP slot. All sends and receives
+ * poll (TMO_POL), so no caller ever waits. A full buffer drops the message
+ * and counts it.
+ */
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
+#include <tk/tkernel.h>
+#include <tk/syslib.h>
+#include <tk/smp.h>   /* T_SPLOCK, ISpinLock: cross-core queue counters */
+#include "robot_network.h"
+
+/* Message buffer sizing: depth in messages; the kernel adds a header. */
+#define EVENT_QUEUE_DEPTH   16
+#define COMMAND_QUEUE_DEPTH 8
+#define MBF_HEADER_BYTES    4
+
+static ID event_queue;
+static ID command_queue;
+static ID estop_queue;
+static uint32_t event_lost;
+static uint32_t command_lost;
+static uint32_t busy[ROBOT_BOARD_COUNT];
+static uint32_t unavailable;
+/* M2: kernel atomic bit operations require an aligned 32-bit operand. */
+static UW unavailable_mask;
+
+/*
+ * RT-0071/F3: these counters are updated from both cores and read from both, and
+ * Vehicle reaches robot_command_lost() on the ESTOP path.  RT-0069 forbids a
+ * blocking wait in Vehicle, so there is no lock here at all: every counter is
+ * updated with the kernel's atomic RMW, which is a hardware-spinlock claim held
+ * for a few instructions on two cores and an interrupt window on one.  The
+ * unavailable mask also has two writers: Wi-Fi and Health. Each bit update
+ * must be one atomic RMW, not an atomic load followed by an atomic store.
+ */
+
+/* Increment a loss counter. Lock-free: no caller can be made to wait. */
+static void lost(uint32_t *counter)
+{
+    (void)atomic_inc((UW *)counter);
+}
+
+/*
+ * Create the three message buffers once.
+ * Returns E_OK (also if already created) or the first kernel error.
+ * On error all buffers made so far are deleted.
+ */
+int robot_network_init(void)
+{
+    if (event_queue > 0 && command_queue > 0 && estop_queue > 0) {
+        return E_OK;
+    }
+    T_CMBF q = {.mbfatr = TA_TFIFO,
+                .bufsz =
+                    EVENT_QUEUE_DEPTH *
+                    (INT)(sizeof(rm_event_t) + (unsigned int)MBF_HEADER_BYTES),
+                .maxmsz = (INT)sizeof(rm_event_t)};
+    event_queue = tk_cre_mbf(&q);
+    if (event_queue < 0) {
+        return (int)event_queue;
+    }
+    q.bufsz = COMMAND_QUEUE_DEPTH *
+              (INT)(sizeof(robot_command_t) + (unsigned int)MBF_HEADER_BYTES);
+    q.maxmsz = (INT)sizeof(robot_command_t);
+    command_queue = tk_cre_mbf(&q);
+    if (command_queue < 0) {
+        (void)tk_del_mbf(event_queue);
+        event_queue = 0;
+        return (int)command_queue;
+    }
+    q.bufsz = (INT)sizeof(robot_command_t) + MBF_HEADER_BYTES;
+    estop_queue = tk_cre_mbf(&q);
+    if (estop_queue < 0) {
+        (void)tk_del_mbf(event_queue);
+        (void)tk_del_mbf(command_queue);
+        event_queue = 0;
+        command_queue = 0;
+        return (int)estop_queue;
+    }
+    return E_OK;
+}
+
+/*
+ * Queue one event from the vehicle task. Never blocks.
+ * Returns a negative error and counts the loss when the buffer is full.
+ */
+int robot_event_push(const rm_event_t *event)
+{
+    if (!event) {
+        return E_PAR;
+    }
+    const ER er = event_queue > 0 ? tk_snd_mbf(event_queue, event,
+                                               (INT)sizeof(*event), TMO_POL)
+                                  : E_OBJ;
+    if (er < E_OK) {
+        lost(&event_lost);
+    }
+    return (int)er;
+}
+
+/*
+ * Take the oldest event. Never blocks.
+ * Returns the message size (> 0), E_TMOUT if empty, or an error.
+ */
+int robot_event_pop(rm_event_t *out)
+{
+    if (!out) {
+        return E_PAR;
+    }
+    return event_queue > 0 ? (int)tk_rcv_mbf(event_queue, out, TMO_POL)
+                           : (int)E_OBJ;
+}
+
+/*
+ * Queue a remote command from the Wi-Fi task. Never blocks.
+ * ESTOP goes to its own slot. A full ESTOP slot already holds an ESTOP,
+ * so it counts as accepted but is counted as lost.
+ */
+int robot_command_push(const robot_command_t *command)
+{
+    if (!command || command->opcode < RM_CMD_ESTOP ||
+        command->opcode > RM_CMD_START) {
+        return E_PAR;
+    }
+    const ID queue =
+        command->opcode == RM_CMD_ESTOP ? estop_queue : command_queue;
+    const ER er =
+        queue > 0 ? tk_snd_mbf(queue, command, (INT)sizeof(*command), TMO_POL)
+                  : E_OBJ;
+    if (er < E_OK) {
+        lost(&command_lost);
+    }
+    /* A full dedicated ESTOP slot already contains an ESTOP. Coalesce, count. */
+    return command->opcode == RM_CMD_ESTOP && er == E_TMOUT ? E_OK : (int)er;
+}
+
+/*
+ * Take the next command. ESTOP is always read first.
+ * Returns the message size (> 0), E_TMOUT if both are empty, or an error.
+ */
+int robot_command_pop(robot_command_t *out)
+{
+    if (!out) {
+        return E_PAR;
+    }
+    if (estop_queue <= 0 || command_queue <= 0) {
+        return E_OBJ;
+    }
+    const INT stop = tk_rcv_mbf(estop_queue, out, TMO_POL);
+    return stop > 0 ? (int)stop : (int)tk_rcv_mbf(command_queue, out, TMO_POL);
+}
+
+/*
+ * Count a board read that found the board busy.
+ * Boards outside ROBOT_BOARD_COUNT are ignored.
+ */
+void robot_network_busy(unsigned int board)
+{
+    if (board < (unsigned int)ROBOT_BOARD_COUNT) {
+        lost(&busy[board]);
+    }
+}
+
+/* Classify a main-board read: absence is not writer contention. */
+void robot_network_board_result(unsigned int board, int result)
+{
+    if (board >= (unsigned int)ROBOT_BOARD_COUNT) {
+        return;
+    }
+    const UW mask = (UW)1u << board;
+
+    /* M2: retain other boards' concurrent updates from either core. */
+    if (result >= E_OK) {
+        (void)atomic_bitclr(&unavailable_mask, mask);
+    } else if (result == E_OBJ || result == E_NOEXS) {
+        (void)atomic_inc((UW *)&unavailable);
+        (void)atomic_bitset(&unavailable_mask, mask);
+    } else if (result == E_TMOUT) {
+        (void)atomic_inc((UW *)&busy[board]);
+    }
+}
+
+/* Count a command dropped before it reached the queue. */
+void robot_command_lost(void)
+{
+    lost(&command_lost);
+}
+
+/* Copy the queue loss and busy counters into a heartbeat. */
+void robot_queue_metrics(rm_heartbeat_t *out)
+{
+    /*
+     * RT-0081/F1: the writers use atomic RMW from either core, so every read here
+     * must be an atomic load.  A word-aligned plain read is indivisible in hardware
+     * but is still an undefined concurrent C access against an atomic writer.  The
+     * set may come from two instants, which stays a diagnostic limit.
+     */
+    out->event_lost = __atomic_load_n(&event_lost, __ATOMIC_SEQ_CST);
+    out->command_lost = __atomic_load_n(&command_lost, __ATOMIC_SEQ_CST);
+    out->line_busy = __atomic_load_n(&busy[0], __ATOMIC_SEQ_CST);
+    out->sonar_busy = __atomic_load_n(&busy[1], __ATOMIC_SEQ_CST);
+    out->motion_busy = __atomic_load_n(&busy[2], __ATOMIC_SEQ_CST);
+    out->vehicle_busy = __atomic_load_n(&busy[3], __ATOMIC_SEQ_CST);
+    out->health_busy = __atomic_load_n(&busy[4], __ATOMIC_SEQ_CST);
+    out->board_unavailable = __atomic_load_n(&unavailable, __ATOMIC_SEQ_CST);
+    out->board_unavailable_mask =
+        (uint8_t)__atomic_load_n(&unavailable_mask, __ATOMIC_SEQ_CST);
+}
+
+/* Default metrics provider. The MQTT module overrides it. */
+void __attribute__((weak)) robot_network_metrics(rm_heartbeat_t *out)
+{
+    robot_queue_metrics(out);
+}

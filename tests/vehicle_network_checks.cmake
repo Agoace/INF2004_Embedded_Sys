@@ -1,0 +1,58 @@
+host_test(test_vehicle_mqtt tests/test_vehicle_mqtt.c app_program/vehicle/vehicle_mqtt.c app_program/subsystem1/mqtt_wire.c
+    app_program/vehicle/vehicle_log.c app_program/vehicle/odometry.c)
+if(TARGET test_vehicle_mqtt)
+    target_include_directories(test_vehicle_mqtt BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_vehicle_mqtt PRIVATE TM_MQTT=1)
+endif()
+host_test(test_vehicle_network_policy tests/test_vehicle_network_policy.c
+    app_program/vehicle/vehicle_network_policy.c)
+host_test(test_vehicle_network_task tests/test_vehicle_network_task.c
+    app_program/vehicle/vehicle_task.c app_program/vehicle/vehicle_log.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
+    app_program/vehicle/vehicle_network_policy.c app_program/vehicle/obstacle_report.c app_program/vehicle/run_stats.c
+    app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c
+    app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
+    ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
+    ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
+if(TARGET test_vehicle_network_task)
+    target_include_directories(test_vehicle_network_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_link_libraries(test_vehicle_network_task PRIVATE m)
+    target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
+    foreach(imu_case imulift imustale imuabsent imurecover)
+        add_test(NAME test_vehicle_network_${imu_case}
+            COMMAND test_vehicle_network_task ${imu_case})
+    endforeach()
+    add_test(NAME test_vehicle_network_uncalibrated COMMAND test_vehicle_network_task uncalibrated)
+    add_test(NAME test_vehicle_network_estop_priority COMMAND test_vehicle_network_task estop)
+endif()
+host_test(test_obstacle_report tests/test_obstacle_report.c app_program/vehicle/obstacle_report.c ${obstacle_profile_source})
+target_link_libraries(test_obstacle_report PRIVATE m)
+host_test(test_odometry tests/test_odometry.c app_program/vehicle/odometry.c)
+host_test(test_run_stats tests/test_run_stats.c app_program/vehicle/run_stats.c
+    app_program/vehicle/odometry.c)
+foreach(odo_test test_odometry test_run_stats)
+    if(TARGET ${odo_test})
+        target_link_libraries(${odo_test} PRIVATE m)
+    endif()
+endforeach()
+
+host_test(test_cpu_load tests/test_cpu_load.c app_program/platform/cpu_load.c)
+host_test(test_run_timing tests/test_run_timing.c app_program/platform/run_timing.c)
+if(TARGET test_run_timing)
+    target_include_directories(test_run_timing BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
+host_test(test_motion_diag tests/test_motion_diag.c)
+host_test(test_motion_task_diag tests/test_motion_task.c
+    app_program/subsystem2/motion.c app_program/subsystem2/motor_ctl.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
+if(TARGET test_motion_task_diag)
+    target_include_directories(test_motion_task_diag BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_motion_task_diag PRIVATE APP_DIAG=1)
+endif()
+
+host_test(test_boot_id tests/test_boot_id.c app_program/platform/boot_id.c
+    app_program/platform/boot_id_hw.c app_program/platform/boot_entropy.c)
+if(TARGET test_boot_id)
+    target_include_directories(test_boot_id BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_boot_id PRIVATE TM_MQTT=1 BOOT_ID_HW_TEST=1)
+endif()

@@ -1,0 +1,44 @@
+# KERNEL_RAM=1 (UP only): sections moved from flash (XIP) to executable RAM.
+# Format: object section [symbols]. The object path is below mtkernel_3/.
+# With no symbols, the symbol is the section name after ".text.". The build
+# renames each section to .data.ramfunc.*; the unchanged template linker
+# script copies .data.* to RAM. ram_proof.py fails the build if a listed
+# symbol stays in flash.
+# common.list: kernel and the application hot path in every KERNEL_RAM image.
+# Left in flash on purpose: rt_call/rt_max (P1 measurement), memset (C
+# library), Wi-Fi/lwIP/MQTT (priority-20 poll task, not on the deadline path).
+kernel/sysdepend/cpu/core/armv6m/dispatch.o .text knl_dispatch_entry
+kernel/sysdepend/cpu/core/armv6m/cpu_cntl.o .text.knl_dispatch
+kernel/sysdepend/cpu/core/armv6m/interrupt.o .text.knl_hll_inthdr
+kernel/sysdepend/cpu/core/armv6m/interrupt.o .text.knl_systim_inthdr
+lib/libtk/sysdepend/cpu/core/armv6m/int_armv6m.o .text.disint
+kernel/tkernel/timer.o .text.knl_timer_handler
+kernel/tkernel/timer.o .text.knl_timer_insert
+kernel/tkernel/timer.o .text.knl_enqueue_tmeb
+kernel/tkernel/timer.o .text.knl_timer_insert_reltim
+lib/libtk/sysdepend/cpu/rp2040/int_rp2040.o .text.ClearInt
+kernel/tkernel/task_sync.o .text.tk_wup_tsk
+kernel/tkernel/task_sync.o .text.tk_slp_tsk
+kernel/tkernel/task_sync.o .text.tk_can_wup
+kernel/tkernel/mutex.o .text.tk_loc_mtx
+kernel/tkernel/mutex.o .text.tk_unl_mtx
+kernel/tkernel/mutex.o .text.knl_release_mutex
+kernel/tkernel/mutex.o .text.knl_signal_all_mutex
+kernel/tkernel/mutex.o .text.mtx_chg_pri
+kernel/tkernel/mutex.o .text.mtx_rel_wai
+kernel/tkernel/task.o .text.knl_make_ready
+kernel/tkernel/task.o .text.knl_make_non_ready
+kernel/tkernel/task.o .text.knl_change_task_priority
+kernel/tkernel/wait.o .text.knl_make_wait
+kernel/tkernel/wait.o .text.knl_make_wait_reltim
+kernel/tkernel/wait.o .text.knl_wait_release_ok
+kernel/tkernel/wait.o .text.knl_wait_release_tmout
+kernel/tkernel/wait.o .text.knl_wait_delete
+kernel/tkernel/wait.o .text.knl_gcb_make_wait
+kernel/tkernel/wait.o .text.knl_gcb_change_priority
+kernel/tkernel/wait.o .text.knl_gcb_top_of_wait_queue
+app_program/subsystem3/drv_line.o .text.alarm_irq
+app_program/platform/drv_gpio_irq.o .text.gpio_dispatch
+app_program/subsystem2/motion.o .text.encoder_irq
+app_program/platform/drv_time.o .text.drv_time_us
+app_program/platform/drv_time_hw.o .text.drv_time_hw_us
