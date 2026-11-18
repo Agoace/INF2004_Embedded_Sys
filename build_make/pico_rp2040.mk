@@ -520,8 +520,16 @@ ifeq ($(IMU_SAFETY_BENCH),1)
 # The exclusive TEST runner has no ROBOT barcode/Vehicle command callers.
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/imu_safety_bench.list
 endif
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/barcode_live_control.list
+endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+# The public producer symbol lives in the live wrapper, not the shared object.
+# Keep robot.list's proof symbol; move its section in the correct object.
+KERNEL_RAM_ROWS := $(subst app_program/subsystem3/barcode_live_producer.o:.text.barcode_live_producer_observe,app_program/barcode_live_vehicle/control.o:.text.barcode_live_producer_observe,$(KERNEL_RAM_ROWS))
+endif
 KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
 kernel_ram_obj = $(basename $(notdir $(1)))
 kernel_ram_new = $(if $(filter .text,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))_text,$(if $(filter .text.%,$(1)),.data.ramfunc.$(patsubst .text.%,%,$(1)),.data.ramfunc.$(call kernel_ram_obj,$(2))$(subst .,_,$(1))))

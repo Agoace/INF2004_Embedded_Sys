@@ -302,7 +302,13 @@ vehicle task described below.
   [`line.c`](../app_program/barcode_live_vehicle/line.c) owns centre advance,
   [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
   [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
-  [`make seams`](../build_make/barcode_live_vehicle.mk). These expire a
+  [`make seams`](../build_make/barcode_live_vehicle.mk).
+  The live-only [`control cache`](../app_program/barcode_live_vehicle/control.c)
+  and [`interface`](../app_program/barcode_live_vehicle/control.h) use a
+  [`producer seam`](../app_program/barcode_live_vehicle/producer_impl.h) to
+  tolerate bounded control-board collisions. The shared source publication
+  recheck remains uncached. Tests:
+  [`test_barcode_control_cache.c`](../tests/test_barcode_control_cache.c). These expire a
   pending live command at 400 mm from decode and cancel it after 200 ms of SEARCH;
   default builds omit this folder. Tests:
   [`test_blv_policy.c`](../tests/test_blv_policy.c) and

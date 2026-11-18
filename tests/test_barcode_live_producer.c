@@ -195,7 +195,13 @@ int main(int argc, char **argv)
             assert(memcmp(&p.slot, &original, sizeof(original)) == 0);
         }
     }
-    const bool positive = strcmp(kind, "normal") == 0 || reverse || two ||
+    const bool cached_read_fail =
+#ifdef TEST_CONTROL_CACHE
+        strcmp(kind, "read_fail") == 0;
+#else
+        false;
+#endif
+    const bool positive = cached_read_fail || strcmp(kind, "normal") == 0 || reverse || two ||
         strcmp(kind, "us_wrap") == 0 || strcmp(kind, "ms_wrap") == 0 ||
         strcmp(kind, "count_wrap") == 0 || strcmp(kind, "mode2") == 0 ||
         strcmp(kind, "fallback") == 0 || strcmp(kind, "sequence_wrap") == 0;

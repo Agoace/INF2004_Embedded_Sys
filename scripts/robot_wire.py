@@ -44,6 +44,7 @@ EVENT_JUNCTION = 7  # live B2a phases / line angles, event v2
 JUNCTION_PHASES = {1: "pending", 2: "bar clear", 3: "legacy settle", 4: "search",
                    5: "legacy turn settle", 6: "second line", 7: "done", 8: "failed",
                    9: "unused", 10: "C LINE"}
+JUNCTION_REASON_NAMES = {13: 'expired', 14: 'continuous SEARCH (>=200 ms)'}
 JUNCTION_ANGLE_TAGS = {0x80: "first", 0x40: "accepted"}
 EVENT_SCAN_RETRY = 8
 EVENT_HUMP = 9  # word: peak 0.1 mm; detail bits 0..6 number, bit 7 LEFT
@@ -184,7 +185,11 @@ def decode(topic, data):
                               junction_command=command, junction_angle_cdeg=angle)
             else:
                 _require(data[12] in (1, 2, 3, 4) and data[13] in JUNCTION_PHASES and
-                         data[14] <= 12, "junction phase")
+                         (data[14] <= 12 or
+                          (data[14] in JUNCTION_REASON_NAMES and data[13] == 9)),
+                         "junction phase")
+                if data[14] in JUNCTION_REASON_NAMES:
+                    result['junction_reason_name'] = JUNCTION_REASON_NAMES[data[14]]
         if data[1] == EVENT_SCAN_RETRY:
             _require(data[0] >= 2 and data[2] == data[3] == 3 and
                      data[14] in SCAN_RETRY_PHASES and data[12] in (1, 2) and data[13] == 1,
@@ -798,6 +803,9 @@ def csv_fields():
     sample[0:4] = bytes((2, EVENT_JUNCTION, 1, 1))
     sample[14] = 0x81
     fields.update(decode("robot/event", sample))
+    # New UNUSED phase reasons add a name without changing old event fields.
+    sample[12:15] = bytes((1, 9, 13))
+    fields.update(decode('robot/event', sample))
     # Include dedicated safety fields in both live and embedded-log CSV rows.
     sample = bytearray(20)
     sample[0], sample[1], sample[12] = 2, EVENT_IMU_SAFETY, 2
