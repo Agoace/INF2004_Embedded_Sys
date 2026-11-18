@@ -39,6 +39,7 @@
 #include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
 #include "obstacle_report.h"
+#include "obstacle_pack.h"
 #include "run_stats.h"
 #include "../platform/app_board.h"
 #include "../subsystem4/imu_service.h"
@@ -119,7 +120,8 @@ static uint8_t stop_code;
 #if TM_MQTT
 static APP_BOARD(vehicle_snapshot_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
-static APP_BOARD(rm_obstacle_t) obstacle_board;
+/* CR1 A: 6-word packed layout, see obstacle_pack.h. */
+static obstacle_board_t obstacle_board;
 static uint32_t obstacle_scans;
 static APP_BOARD(rm_detour_t) detour_board;
 static APP_BOARD(rm_summary_t) summary_board;
@@ -221,8 +223,8 @@ static void publish_obstacle(const ss_t *scan)
                              (scan->stage << RM_OBSTACLE_STAGE_SHIFT) |
                              ((uint8_t)scan->completed_attempt
                               << RM_OBSTACLE_ATTEMPT_SHIFT));
-    app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
-                      sizeof(report));
+    /* The report comes from obstacle_report_make(); it always packs. */
+    (void)obstacle_board_publish(&obstacle_board, &report);
     telemetry_message_t message = {.kind = TELEMETRY_SCAN};
     message.data.scan = (telemetry_scan_t){
         .scan_id = obstacle_scans, .duration_ms = scan->duration_ms,
@@ -304,8 +306,7 @@ int vehicle_obstacle_try_read(rm_obstacle_t *out)
     if (!out) {
         return E_PAR;
     }
-    if (!app_board_try_read(&obstacle_board.sequence, obstacle_board.words,
-                            &report, sizeof(report))) {
+    if (!obstacle_board_try_read(&obstacle_board, &report)) {
         return (obstacle_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
     }
     *out = report;
