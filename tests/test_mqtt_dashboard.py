@@ -1360,13 +1360,70 @@ class SummaryTests(ModelCase):
 
 class ImuSafetyTests(ModelCase):
     def test_summary_stop_labels(self):
-        for reason, text in ((14, "IMU lift detected"),
-                             (15, "IMU overturn detected"),
-                             (16, "IMU unavailable")):
-            self.model.ingest("robot/summary", summary_v3(
-                reason=reason, shell=6, shell_detail=2, source=3))
-            self.assertEqual(self.rows("summary")["Stop reason"], text)
-            self.assertIn("IMU safety", str(self.rows("summary")))
+        for reason, trigger, text, name in ((14, 2, 'IMU lift detected', 'lift'),
+                                           (15, 1, 'IMU overturn detected', 'overturn'),
+                                           (16, 3, 'IMU unavailable', 'unavailable')):
+            self.model.ingest('robot/summary', summary_v3(
+                reason=reason, shell=6, shell_detail=trigger, source=3))
+            self.assertEqual(self.rows('summary')['Stop reason'], text)
+            self.assertEqual(self.rows('imu')['Last run stop reason'], text)
+            for panel in ('summary', 'imu'):
+                self.assertEqual(self.rows(panel)['IMU fault at run end'], 'latched: ' + name)
+            self.assertEqual(self.rows('imu')['Current IMU safety'], 'not reported')
+            self.assertIn('IMU safety', self.rows('summary')['Shell fault'])
+
+    def test_current_safety_is_not_reported_even_before_a_summary(self):
+        self.assertEqual(self.rows('imu')['Current IMU safety'], 'not reported')
+        self.assertEqual(self.rows('imu')['IMU fault at run end'], 'waiting for run summary')
+
+    def test_legacy_shell_six_keeps_unknown_label_and_does_not_become_an_imu_latch(self):
+        self.model.ingest('robot/state', reboot_state(100))
+        for payload in (summary(shell=6), boot_frame(summary(shell=6), 100)):
+            self.model.ingest('robot/summary', payload)
+            version = payload[0]
+            self.assertEqual(self.rows('summary')['Shell fault'], 'unknown (6) (detail 6)')
+            for panel in ('summary', 'imu'):
+                self.assertEqual(self.rows(panel)['IMU fault at run end'],
+                    f'not reported (summary v{version} firmware)')
+
+    def test_unknown_trigger_and_shell_do_not_claim_a_clear_or_known_trigger(self):
+        self.model.ingest('robot/summary', summary_v3(shell=6, shell_detail=99))
+        self.assertEqual(self.rows('imu')['IMU fault at run end'], 'latched: unknown (99)')
+        self.model.ingest('robot/summary', summary_v3(shell=99, shell_detail=7))
+        self.assertEqual(self.rows('summary')['Shell fault'], 'unknown (99) (detail 7)')
+        self.assertEqual(self.rows('imu')['IMU fault at run end'], 'unknown (shell fault 99)')
+        self.model.ingest('robot/summary', summary_v3(shell=0, shell_detail=0))
+        self.assertEqual(self.rows('imu')['IMU fault at run end'], 'none reported')
+        self.assertEqual(self.rows('imu')['Current IMU safety'], 'not reported')
+
+    def test_unknown_stop_reason_remains_rejected_without_replacing_the_last_summary(self):
+        self.model.ingest('robot/summary', summary_v3(reason=14, shell=6, shell_detail=2))
+        before = self.model.summary
+        self.model.ingest('robot/summary', summary_v3(reason=17, shell=6, shell_detail=2))
+        self.assertIs(self.model.summary, before)
+        self.assertEqual(self.model.discarded, 1)
+        self.assertIn('summary stop reason', self.model.last_discard)
+        self.assertEqual(model_module._name(model_module.STOP_REASONS, 99), 'unknown (99)')
+
+    def test_run_end_latch_remains_history_after_new_run_idle_or_boot(self):
+        self.model.ingest('robot/state', reboot_state(100))
+        self.model.ingest('robot/summary', summary_v3(
+            boot=100, run=8, reason=14, shell=6, shell_detail=2), retained=True)
+        for state_name in ('state_running', 'state_idle'):
+            self.model.ingest('robot/state', reboot_state(100, name=state_name))
+            self.assertEqual(self.rows('imu')['Current IMU safety'], 'not reported')
+            self.assertEqual(self.rows('imu')['IMU fault at run end'], 'latched: lift')
+            if state_name == 'state_running':
+                self.assertIn('previous completed run', self.panel('imu')['note'])
+        self.model.ingest('robot/state', reboot_state(200))
+        self.clock.advance(90000)
+        rows = self.rows('imu')
+        self.assertEqual(rows['Summary run'], 8)
+        self.assertNotEqual(rows['Summary boot / session'], self.model.log.sessions.current)
+        self.assertEqual(rows['Summary received age'], '90000 ms')
+        self.assertEqual(rows['Current IMU safety'], 'not reported')
+        self.assertIn('previous boot/session', self.panel('imu')['note'])
+        self.assertIn('retained copy', self.panel('imu')['note'])
 
 
 class HumpTests(ModelCase):
@@ -2613,6 +2670,30 @@ class RedesignPageTests(AppCase):
         self.assertEqual(rows['Decoded letter'], 'D')
         self.assertEqual(rows['Mapped command (observation only)'], 'UTURN')
         self.assertEqual(rows['Command issued / executed'], 'no / no')
+
+    def test_imu_run_end_faults_render_with_history_context_not_a_current_latch(self):
+        self.model.ingest('robot/state', reboot_state(100))
+        expression = """['summary','imu'].map(id => document.getElementById(
+          'panel-' + id).querySelector('table.facts').children.map(
+          row => row.children.map(cell => cell.textContent)))"""
+        for reason, trigger, text, name in ((14, 2, 'IMU lift detected', 'lift'),
+                                           (15, 1, 'IMU overturn detected', 'overturn'),
+                                           (16, 3, 'IMU unavailable', 'unavailable')):
+            self.model.ingest('robot/summary', summary_v3(
+                boot=100, run=8, reason=reason, source=3, shell=6, shell_detail=trigger), retained=True)
+            self.clock.advance(65535)
+            trace = self.trace(expressions=[expression], views=[['panel-summary', '.age'],
+                                                                ['panel-summary', '.note']])
+            compact, imu = map(dict, trace['values'][0])
+            self.assertEqual(compact['Stop reason'], text)
+            self.assertEqual(imu['Last run stop reason'], text)
+            for rows in (compact, imu):
+                self.assertEqual(rows['IMU fault at run end'], 'latched: ' + name)
+                self.assertEqual(rows['Summary received age'], '65535 ms')
+            self.assertEqual(compact['Boot / session'], imu['Summary boot / session'])
+            self.assertEqual(imu['Current IMU safety'], 'not reported')
+            self.assertIn('65.5 s since report', trace['views'][0]['text'])
+            self.assertIn('retained copy', trace['views'][1]['text'])
 
     def test_unknown_contract_versions_render_not_crash_or_replace_valid_geometry(self):
         ApprovedContractPanelTests.geometry(self)
