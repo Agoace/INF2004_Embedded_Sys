@@ -52,4 +52,35 @@ static inline bool telemetry_event_unpack(telemetry_event_t *out,
     *out = v;
     return true;
 }
+#if TM_MQTT
+/* Full generation/lost/newest time plus bounded committed counts. */
+typedef struct { uint32_t words[4]; } telemetry_index_packed_t;
+static inline bool telemetry_index_pack(telemetry_index_packed_t *out,
+                                        const telemetry_log_index_t *v)
+{
+    if (out == 0 || v == 0 || v->rows > TELEMETRY_ROWS ||
+        v->events > TELEMETRY_EVENTS) {
+        return false;
+    }
+    const telemetry_index_packed_t p = {{v->generation, v->lost, v->newest_ms,
+        v->rows | (v->events << 13)}};
+    *out = p;
+    return true;
+}
+static inline bool telemetry_index_unpack(telemetry_log_index_t *out,
+                                          const telemetry_index_packed_t *p)
+{
+    if (out == 0 || p == 0 || (p->words[3] & UINT32_C(0xff800000)) != 0u) {
+        return false;
+    }
+    const telemetry_log_index_t v = {.generation=p->words[0], .lost=p->words[1],
+        .newest_ms=p->words[2], .rows=p->words[3] & UINT32_C(0x1fff),
+        .events=(p->words[3] >> 13) & UINT32_C(0x3ff)};
+    if (v.rows > TELEMETRY_ROWS || v.events > TELEMETRY_EVENTS) {
+        return false;
+    }
+    *out = v;
+    return true;
+}
+#endif
 #endif

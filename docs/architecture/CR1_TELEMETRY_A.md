@@ -12,7 +12,7 @@ identities, queue capacity and admission safety must stay unchanged.
 | T110 | Software checks pass; robot measurement pending |
 | F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
 | A-EVENT | Software checks pass; robot timing pending |
-| A-INDEX | Pending implementation |
+| A-INDEX | Software checks pass; robot timing pending |
 | A-SCAN, A-HEALTH, A-SONAR, A-INFO | Pending implementation |
 | F combiner and output | Pending implementation and owner publishers |
 
@@ -141,6 +141,30 @@ timing still need the combined robot gate.
 Evidence: `build/wip/cr1/event-red.log`, `event-host.log`,
 `event-build.log`, `event/ram_report.txt` and copied ELF/map/proof.
 
+## A-INDEX committed log-index board
+
+The native log index stays 20 B. Its generation, loss counter and newest
+row time keep 32 bits each. Row count 0..4501 uses 13 bits; event count
+0..512 uses 10 bits. Nine spare bits are zero. The stored payload is four
+aligned u32 words (16 B); the sequence adds 4 B, making a 20 B board
+instead of 24 B. Telemetry remains the sole writer. Readers first accept
+a coherent sequence/word copy, then decode it locally. Failure leaves
+the public output unchanged. The existing stats lock, admission fields
+and shared counter atomics do not change.
+
+The red test first failed on the absent packed-index type. Tests cover
+every legal row and event count, full-width endpoints, reserved bits,
+out-of-range codes, changed/odd sequences, committed-count boundaries,
+new generations and full event storage. Host tests pass 686/686. Demo
+build: zero warnings, RAM_PROOF 79/79, 21212 B.
+
+S1 module RAM falls 78866 to 78862 B (4 B payload saving). Static RAM
+falls 239272 to 239264 B (8 B linked saving): an additional 4 B is linker
+alignment, not another packed field. Do not promise that alignment delta
+for a different link layout. Evidence: `build/wip/cr1/index-red.log`,
+`index-host.log`, `index-build.log`, `index/ram_report.txt` and copied
+ELF/map/proof. MQTT formats and queue allocations stay unchanged.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -172,6 +196,7 @@ This dormant demo is not an active robot MQTT publisher.
 | T110 | 240808 | 0 from starting integration | Local after map |
 | F1 interface only | 240808 | 0 from T110 | Local after map; no global storage |
 | A-EVENT | 239272 | -1536 from F1b | Local after map; events 4608 B |
+| A-INDEX | 239264 | -8 from A-EVENT | Index -4 B, linker alignment -4 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay

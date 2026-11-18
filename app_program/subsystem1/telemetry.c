@@ -120,7 +120,8 @@ void telemetry_test_release_payload_lock(void)
 #include "../platform/app_board.h"
 static uint32_t log_generation;
 static uint32_t newest_row_ms;
-static APP_BOARD(telemetry_log_index_t) log_index;
+static APP_BOARD(telemetry_index_packed_t) log_index;
+_Static_assert(sizeof(log_index) == 20u, "Packed log-index board size");
 
 /*
  * Publish the current RAM-log extent to the bounded-reader board.
@@ -130,7 +131,11 @@ static void publish_index(void)
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
                                      __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST),
                                      newest_row_ms};
-    app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
+    telemetry_index_packed_t packed;
+    if (telemetry_index_pack(&packed, &v)) {
+        app_board_publish(&log_index.sequence, log_index.words, &packed,
+                           sizeof(packed));
+    }
 }
 
 /*
@@ -141,12 +146,14 @@ int telemetry_log_open(telemetry_log_index_t *out)
     if (!out) {
         return E_PAR;
     }
-    telemetry_log_index_t v;
-    if (!app_board_try_read(&log_index.sequence, log_index.words, &v,
-                            sizeof(v))) {
+    telemetry_index_packed_t packed;
+    if (!app_board_try_read(&log_index.sequence, log_index.words, &packed,
+                            sizeof(packed))) {
         return E_TMOUT;
     }
-    *out = v;
+    if (!telemetry_index_unpack(out, &packed)) {
+        return E_SYS;
+    }
     return E_OK;
 }
 

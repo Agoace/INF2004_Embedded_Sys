@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#define TM_MQTT 1
 #include "../app_program/subsystem1/telemetry_pack.h"
 
 static void roundtrip(const telemetry_event_t *v)
@@ -16,8 +17,46 @@ static void roundtrip(const telemetry_event_t *v)
     assert(out.kind == v->kind && out.from == v->from && out.to == v->to);
 }
 
+static void test_index(void)
+{
+    assert(sizeof(telemetry_index_packed_t) == 16u);
+    telemetry_log_index_t v = {.generation=UINT32_MAX,.lost=UINT32_MAX,
+        .newest_ms=UINT32_MAX,.events=512u};
+    telemetry_index_packed_t p;
+    for (uint32_t rows=0u;rows<=4501u;++rows) {
+        v.rows=rows;
+        assert(telemetry_index_pack(&p,&v));
+        assert((p.words[3] & UINT32_C(0xff800000))==0u);
+        telemetry_log_index_t out={0};
+        assert(telemetry_index_unpack(&out,&p));
+        assert(out.rows==rows && out.events==512u && out.generation==UINT32_MAX);
+        assert(out.lost==UINT32_MAX && out.newest_ms==UINT32_MAX);
+    }
+    for (uint32_t events=0u;events<=512u;++events) {
+        v.events=events;
+        assert(telemetry_index_pack(&p,&v));
+        telemetry_log_index_t out={0};
+        assert(telemetry_index_unpack(&out,&p) && out.events==events);
+    }
+    const telemetry_index_packed_t saved=p;
+    v.rows=4502u;
+    assert(!telemetry_index_pack(&p,&v) && memcmp(&p,&saved,sizeof(p))==0);
+    v.rows=4501u;v.events=513u;
+    assert(!telemetry_index_pack(&p,&v));
+    telemetry_log_index_t out={.generation=12u};
+    unsigned char before[sizeof(out)];memcpy(before,&out,sizeof(out));
+    p=saved;p.words[3]|=UINT32_C(0x800000);
+    assert(!telemetry_index_unpack(&out,&p));
+    assert(memcmp(before,&out,sizeof(out))==0);
+    p=saved;p.words[3]=(p.words[3]&~UINT32_C(0x1fff))|4502u;
+    assert(!telemetry_index_unpack(&out,&p));
+    p=saved;p.words[3]=(p.words[3]&UINT32_C(0x1fff))|(513u<<13);
+    assert(!telemetry_index_unpack(&out,&p));
+}
+
 int main(void)
 {
+    test_index();
     assert(sizeof(telemetry_event_packed_t) == 9u);
     assert(sizeof(telemetry_event_t) == 12u);
     for (unsigned int kind = 1u; kind <= 10u; ++kind) {
