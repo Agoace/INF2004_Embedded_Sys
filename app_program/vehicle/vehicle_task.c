@@ -39,6 +39,7 @@
 #include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
 #include "vehicle_pack.h"
+#include "vehicle_fault.h"
 #include "obstacle_report.h"
 #include "obstacle_pack.h"
 #include "run_stats.h"
@@ -67,6 +68,8 @@ static ls_t ls;
 static ss_t ss;
 static dr_t dr;
 static vsm_t vsm;
+static fault_mask_board_t vehicle_fault_board;
+static void publish_vehicle_faults(void);
 static uint16_t raw[3];
 static vc_event_t line_event;
 static bool active;
@@ -175,6 +178,7 @@ static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
  */
 static void publish_vehicle(void)
 {
+    publish_vehicle_faults();
     vehicle.timestamp_us = drv_time_us();
     ++vehicle.sequence;
     vehicle.state = vsm.state;
@@ -467,7 +471,7 @@ static void handle_command(void)
 #define vehicle_stop      motion_stop
 #define vehicle_estop     motion_estop
 #define vehicle_servo     motion_set_servo
-#define publish_vehicle() ((void)0)
+#define publish_vehicle() publish_vehicle_faults()
 #endif
 
 /*
@@ -734,6 +738,14 @@ static void read_line(void)
 
 /* Port of smojjofy 48b5f9b..038ff23: integer-only, bounded Vehicle glue. */
 static ig_t imu_gate;
+
+/* Vehicle task only: mirror existing state, never latch or clear a fault. */
+static void publish_vehicle_faults(void)
+{
+    const uint32_t value = vehicle_fault_value(imu_gate.latched, vsm.state,
+                                               vsm.fault);
+    (void)fault_mask_publish(&vehicle_fault_board, FAULT_OWNER_VEHICLE, value);
+}
 static bool imu_announced;
 
 static const char *imu_stop_text(uint8_t trigger)
@@ -795,6 +807,7 @@ static bool imu_check_tick(void)
         ig_queued(&imu_gate, imu_safety_clear_request(), now);
     }
     if (action.recovery != 0u) { imu_recovery(action.recovery); }
+    publish_vehicle_faults();
     if (ig_stop_required(&imu_gate)) {
         if (active) { cancelled = true; }
         return false;
@@ -1215,6 +1228,7 @@ static void run_once(void)
     if (!ig_stop_required(&imu_gate)) {
         (void)motion_clear_faults();
         vsm_reset(&vsm);
+        publish_vehicle_faults();
     }
     read_line();
     line_event = VC_EVENT_NONE;
@@ -1383,6 +1397,7 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        publish_vehicle_faults();
         if (vsm.state == VSM_RUNNING &&
             (vsm.running == VSM_MOD_LINE || vsm.running == VSM_MOD_SEARCH)) {
             ja_cross_progress(&junction_line.action, s.counts, now);
@@ -1511,6 +1526,7 @@ static void run_once(void)
     (void)vehicle_stop();
     (void)vehicle_servo(0, 0);
     vsm_stop(&vsm);
+    publish_vehicle_faults();
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
     hump_print();
@@ -1673,6 +1689,7 @@ static void vehicle_task(INT code, void *ctx)
         active = false;
         cancelled = false;
         if (!ig_stop_required(&imu_gate)) { vsm_reset(&vsm); }
+        publish_vehicle_faults();
 #if TM_MQTT
         vehicle.phase = 0u;
         publish_vehicle();
@@ -1739,6 +1756,17 @@ int vehicle_task_start(void)
     return E_OK;
 }
 #endif
+/* Read-only observer: no board exists in TEST/BENCH roles. */
+bool vehicle_fault_mask_try_read(uint32_t *out)
+{
+#if !APP_TEST && !APP_BENCH
+    return fault_mask_try_read(&vehicle_fault_board, FAULT_OWNER_VEHICLE, out);
+#else
+    (void)out;
+    return false;
+#endif
+}
+
 /* Available without MQTT. TEST/BENCH cannot run vehicle calibration. */
 uint32_t vehicle_calibration_epoch(void)
 {
