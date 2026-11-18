@@ -401,9 +401,10 @@ decoder remains strict: out-of-range stop reasons are rejected, not guessed.
 Existing MQTT topics cannot supply a complete current safety state.
 `robot/imu` has reserved legacy formats, but no current safety publisher.
 `robot/state` has no IMU trigger or shell-fault detail. Summary reports are
-run-end history. Event kind 3 is not an unambiguous substitute: IMU trigger
-words 1 and 2 overlap motor fault bits, and recovery events alone do not
-provide a fresh snapshot after reconnect or a lost message.
+run-end history. Event kind 10 IMU_SAFETY (see
+[MQTT_WIRE.md](MQTT_WIRE.md#kind-10-imu_safety)) reports stops and
+recovery steps without ambiguity, but events alone do not provide a fresh
+snapshot after reconnect or a lost message.
 
 A future report needs:
 

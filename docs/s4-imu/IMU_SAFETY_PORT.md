@@ -89,8 +89,30 @@ scan geometry, configuration-token reader or live snapshot contract changes.
 - E: UP resources, kernel-service list, spare Pico W BENCH1 and the
   TEST-only synthetic bench ([IMU_SAFETY_BENCH.md](IMU_SAFETY_BENCH.md)).
   GCC 644/644 and Clang ASan/UBSan 644/644 pass. The 38 default profiles
-  (76 ELF/UF2 files) are byte-identical to `1269c7a`. The synthetic bench
-  run on the spare Pico W is pending.
+  (76 ELF/UF2 files) are byte-identical to `1269c7a`.
+- BENCH2 (TEST synthetic image of `f4ffd0e`) ran on the spare Pico W.
+  Results and corrections are in
+  [IMU_SAFETY_BENCH.md](IMU_SAFETY_BENCH.md#bench2-record-test-image-f4ffd0e--home-secrets).
+  The Vehicle does not run in TEST images, so BENCH2 covers the IMU
+  service, detector, boards and clear path only.
+- F: ROBOT synthetic profile (`IMU_SAFETY_BENCH=robot_synthetic`) for
+  BENCH3. It is the full robot demo app with the synthetic stream and
+  per-section timers. Starts trigger alternating OVERTURN and LIFT, so the
+  real Vehicle gate, ESTOP, FAULT and events run. GCC 645/645 and Clang
+  ASan/UBSan 645/645 pass. The 76 default files stay byte-identical to
+  `91f9b48`.
+- BENCH3 (ROBOT synthetic image of `3809dec`) ran on the spare Pico W.
+  The gate latched OVERTURN and LIFT with the Vehicle idle and each GP21
+  recovery cleared it. IMU overruns and lost wakes were 0. Results,
+  limits and open findings are in
+  [IMU_SAFETY_BENCH.md](IMU_SAFETY_BENCH.md#bench3-record-robot-synthetic-image-3809dec--home-secrets).
+- G: IMU safety events move to the additive event kind 10 IMU_SAFETY
+  ([MQTT_WIRE.md](../s1-telemetry/MQTT_WIRE.md#kind-10-imu_safety)).
+  Kind 3 keeps motion fault bits only. One recovery event per press (the
+  duplicate PENDING from the C glue is removed) and a new CLEARED event.
+  Test `test_vehicle_network_imurecover` was red first. The IMU stack
+  stays 2048 B: the first real-IMU robot run must show `imu_task` free
+  ≥ 256 B; add 512 B if it fails or if the margin is below 384 B.
 
 ## UP resources (E)
 
@@ -103,7 +125,12 @@ all builds. Static RAM is `__bss_end` minus 0x20000000; the total is
 | --- | --- | --- | --- | --- | --- |
 | Demo: `SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1` | 442936 → 447520 (+4584) | 201324 → 201476 (+152) | 222052 | 48284 (base 48436) | 77/77, 19544 B, same as base |
 | Capture: demo + `BARCODE_FAIL_CAPTURE=1` | 446560 → 451136 (+4576) | 218812 → 218964 (+152) | 239884 | 30452 (base 30604) | 77/77, 19772 B |
-| Bench: demo + `TEST=1 IMU_SAFETY_BENCH=1` | 395812 | 200612 | 210724 | 59612 | 62/62, 8592 B |
+| Bench (E): demo + `TEST=1 IMU_SAFETY_BENCH=1` | 395812 | 200612 | 210724 | 59612 | 62/62, 8592 B |
+| Bench (F, with section timers): same flags | 396296 | 201724 | 211836 | 58500 | 62/62, 8592 B |
+| ROBOT synthetic (F): demo + `IMU_SAFETY_BENCH=robot_synthetic` | 447852 (demo 447520) | 205764 (demo 201476) | 226340 | 43996 (demo 48284) | 77/77, 19544 B, same as demo |
+
+The ROBOT synthetic BSS adds mainly the reporter stack (2048 B) and three
+568 B statistics copies to the demo.
 
 The home-secrets demo image that Main flashed for BENCH1 had text 447504
 and BSS 201476.
@@ -148,8 +175,10 @@ kernel is the same in both the base and the candidate.
 | `DI`/`EI` | — | none added | Motion's existing encoder DI/EI is the same. |
 | Task creation or placement | — | none added | Same task table and priorities. |
 
-Bench-only services (TEST image only): `tk_cre_tsk` with `TA_USERBUF`,
-priority 21; `tk_sta_tsk`; `tk_dly_tsk`; `tk_slp_tsk(TMO_FEVR)`.
+Bench-only services, in the synthetic images only: `tk_cre_tsk` with
+`TA_USERBUF` (TEST priority 21, ROBOT priority 29); `tk_sta_tsk`;
+`tk_dly_tsk`; `tk_slp_tsk(TMO_FEVR)` (TEST). The section timers call
+`drv_time_us` six more times per IMU tick.
 
 ## Numbers that are not valid here
 

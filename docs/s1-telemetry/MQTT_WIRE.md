@@ -201,7 +201,7 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
 6 command decision; 7 JUNCTION/ACTION (B2a, live-only); 8 SCAN_RETRY;
-9 HUMP (event v2 only). For
+9 HUMP (event v2 only); 10 IMU_SAFETY (see below). For
 kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
 or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
 reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, detail is 0 accepted, 1 not idle,
@@ -232,6 +232,45 @@ LEFT hump is not proven on hardware. The vehicle sends kind 9 live only,
 once for each newly closed hump of the current run, and only from a fresh
 IMU copy. The RAM log does not keep kind 9. See
 [IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
+### Kind 10 IMU_SAFETY
+
+Kind 10 reports the Vehicle IMU safety gate. From and to are the shell
+state at emission (0 IDLE, 1 RUNNING, 2 FAULT) and the running module
+(0 none, 1 LINE, 2 SEARCH, 3 SCAN, 4 DETOUR). For a STOP, to is the module
+that was running before the stop.
+
+| Word bit 15 | Event | Word | Detail |
+| --- | --- | --- | --- |
+| 0 | STOP | trigger: 1 OVERTURN, 2 LIFT, 3 IMU_UNAVAILABLE | cause 0..7 |
+| 1 | RECOVERY | bits 8–14 latched trigger 0..3; bits 0–7 gate reason 0..9 | latched cause 0..7 |
+
+Causes: 0 NONE, 1 STALE, 2 INVALID, 3 ABSENT, 4 POSE, 5 READ_FAILED,
+6 NOT_CALIBRATED, 7 ZERO_VECTOR. Gate reasons: 0 CLEARED, 1 NO_BOARD,
+2 STALE, 3 INVALID, 4 POSE, 5 ONE_G, 6 WHEELS, 7 WINDOW, 8 PENDING,
+9 CANCELLED.
+
+- STOP is sent once per latch edge, idle or running. Trigger 3 latches
+  only during a run; an idle unavailable IMU only refuses starts. At a
+  stop, kind 3 word 4 (ESTOP) comes first, then the kind 10 STOP.
+- A start request (GP21, or MQTT START/CALIBRATE) that the gate refuses
+  gives exactly one RECOVERY event: PENDING when a GP21 press queued a
+  clear, otherwise the refusal reason. After PENDING, exactly one outcome
+  follows: CLEARED, CANCELLED, or a refusal reason. CLEARED names the
+  latch and cause that were cleared. It is the only success signal; the
+  shell state returns to IDLE at the same time.
+- During a run, the RAM log also keeps the event (kind 10, word 1..3; the
+  16-byte record has no detail byte). RECOVERY events occur only while
+  idle, so they are live only.
+- An event is not a current-state snapshot. QoS 0 and the bounded queue
+  can lose one; a sequence gap shows the loss.
+
+Kind 3 carries motion fault bits only: 1 STALL_LEFT, 2 STALL_RIGHT,
+4 ESTOP, 8 STALE. Firmware up to `950abb2` (and images built from staging
+`7017580`) sent the IMU events as kind 3 with the same words. In those
+captures, kind 3 with bit 15 set is an IMU RECOVERY (motion bits never
+set bit 15). Kind 3 words 1–3 are ambiguous there; keep them raw. That
+firmware also sent PENDING twice per press and had no CLEARED event.
+
 The vehicle is the sole producer. It assigns a monotonic
 sequence before enqueue, so dropped events cause sequence gaps. Live events
 use uptime and flags zero. RAM-log event bodies use run-relative time,
