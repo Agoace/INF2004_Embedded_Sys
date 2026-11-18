@@ -129,6 +129,7 @@ subsystem3 36501 to 36145 B, subsystem5 1013 to 945 B, vehicle 2516 to
 2504 B. RAM code 21004 to 21212 B (+208 B, barcode pack code in the LINE
 task). 684 host tests, 0 warnings, RAM_PROOF 79/79. Queue and MQTT sizes
 do not change. Target timing and whole-stack checks are not run.
+The first merge (`ea5fae6`, sonar/obstacle and vehicle only) gave 241144 B.
 
 After T110, F1/F1b and the sonar owner word (`a3a7578`): static RAM
 240816 B, subsystem5 953 B, 686 host tests, 0 warnings, RAM_PROOF 79/79

@@ -10,6 +10,7 @@
 #undef tk_slp_tsk
 #undef main
 #include "../app_program/vehicle/vehicle_board.h"
+#include "../app_program/platform/fault_mask.h"
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/vehicle/run_stats.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
@@ -31,6 +32,47 @@ static uint16_t imu_stop_word, imu_last_word;
 static uint8_t imu_stop_detail;
 static unsigned int estop_events; /* kind 3 word ESTOP, once per stop */
 static uint32_t first_barcode_epoch;
+static unsigned int shell_fault_case;
+static bool shell_fault_seen;
+static bool observed_imu_latch;
+static bool capture_time_limit;
+static unsigned int stop_captures;
+static uint32_t captured_epoch, captured_vehicle_faults;
+
+/* Health API seam: copy the real owner word before either epoch goes even.
+ * The real Health tests separately check its capture board and collection. */
+void robot_health_faults_stop(uint32_t epoch)
+{
+    assert((epoch & 1u) != 0u && epoch != captured_epoch);
+    assert(vehicle_run_epoch() == epoch && rt_epoch() == epoch);
+    assert(vehicle_fault_mask_try_read(&captured_vehicle_faults));
+    const uint32_t expected = shell_fault_case == 1u ? FAULT_SHELL_OTHER :
+        (mode == 3u || mode == 4u || mode == 6u) ? FAULT_IMU_SAFETY : 0u;
+    assert(captured_vehicle_faults == expected);
+    captured_epoch = epoch;
+    ++stop_captures;
+}
+
+vsm_drive_t __real_vsm_step(vsm_t *state, const vsm_inputs_t *in,
+                           uint8_t faults, uint32_t ms);
+vsm_drive_t __wrap_vsm_step(vsm_t *state, const vsm_inputs_t *in,
+                           uint8_t faults, uint32_t ms)
+{
+    /* Keep navigation running so this case reaches the real 90 s limit. */
+    if (capture_time_limit) {
+        return (vsm_drive_t){.left_mm_s = 100, .right_mm_s = 100,
+                             .action = VSM_ACT_SPEED};
+    }
+    vsm_drive_t drive = __real_vsm_step(state, in, faults, ms);
+    if (shell_fault_case != 0u && state->state == VSM_RUNNING) {
+        const vsm_fault_t cause = shell_fault_case == 1u ? VSM_FAULT_FAILED :
+            shell_fault_case == 2u ? VSM_FAULT_SAFETY : VSM_FAULT_IMU;
+        vsm_set_fault(state, cause, 123u);
+        drive = (vsm_drive_t){.action = VSM_ACT_STOP};
+    }
+    return drive;
+}
+
 
 int __wrap_barcode_live_counts_try_read(barcode_live_counts_t *out)
 {
@@ -97,8 +139,19 @@ int robot_command_pop(robot_command_t *out) {
 }
 void robot_command_lost(void) { ++command_losses; }
 int robot_network_dump(uint32_t request_id) { assert(request_id==100u);++dump_requests;return E_OBJ; }
-int telemetry_send(const telemetry_message_t *message) { return base_telemetry_send(message); }
+int telemetry_send(const telemetry_message_t *message) {
+    if (shell_fault_case != 0u && message->kind == TELEMETRY_EVENT &&
+        message->data.event.kind == 4u) {
+        uint32_t faults = UINT32_MAX;
+        assert(vehicle_fault_mask_try_read(&faults));
+        assert(faults == (shell_fault_case == 1u ? FAULT_SHELL_OTHER : 0u));
+        assert(message->data.event.word == 123u); /* Detail stays separate. */
+        shell_fault_seen = true;
+    }
+    return base_telemetry_send(message);
+}
 bool drv_motor_hw_button_down(unsigned int pin) {
+    if (capture_time_limit) return pin == 21u && now >= 20u && now < 50u;
     if (barcode_case == 7u || barcode_case == 9u) {
         return pin == 21u && ((now >= 20u && now < 50u) ||
             (now >= 5000u && now < 5050u) ||
@@ -114,6 +167,14 @@ bool drv_motor_hw_button_down(unsigned int pin) {
 ER tk_slp_tsk(TMO timeout) {
     const ER result=base_vehicle_sleep(timeout);
     vehicle_snapshot_t value;assert(vehicle_snapshot_try_read(&value)==E_OK);
+    if (shell_fault_case != 0u) return result;
+    if ((mode == 3u || mode == 4u || mode == 6u) &&
+        value.state == VSM_FAULT) {
+        uint32_t faults = 0u;
+        assert(vehicle_fault_mask_try_read(&faults));
+        assert(faults == FAULT_IMU_SAFETY);
+        observed_imu_latch = true;
+    }
     if (mode==5u) {
         if (!injected && now>=20u) {
             ordinary[command_head++%8u]=(robot_command_t){RM_CMD_DUMP,100u};
@@ -169,14 +230,47 @@ int main(int argc,char **argv) {
     else if (argc>1 && !strcmp(argv[1],"imuabsent")) {
         mode=5u;imu_absent_test=true;
     }
+    if (argc > 1 && !strcmp(argv[1], "capturetime")) {
+        capture_time_limit = true;
+        test_end_ms = 95000u;
+    }
+    if (argc > 1 && !strcmp(argv[1], "shellother")) shell_fault_case = 1u;
+    if (argc > 1 && !strcmp(argv[1], "shellmotion")) shell_fault_case = 2u;
+    if (argc > 1 && !strcmp(argv[1], "shellimu")) shell_fault_case = 3u;
+    uint32_t faults = UINT32_C(0xdeadbeef);
+    assert(!vehicle_fault_mask_try_read(NULL));
+    assert(!vehicle_fault_mask_try_read(&faults));
+    assert(faults == UINT32_C(0xdeadbeef));
     lp_init(&line);lp_set_pair(&line,true,0);watchdog_ready=true;services_ready=true;
     assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
+    assert((vehicle_run_epoch() & 1u) == 0u);
+    assert(stop_captures == vehicle_run_epoch() / 2u);
+    if (capture_time_limit) {
+        assert(stop_captures == 1u && captured_vehicle_faults == 0u);
+        assert(!strcmp(last_reason, "90 s time limit"));
+        return 0;
+    }
+    if (mode != 1u && mode != 5u) {
+        assert(stop_captures != 0u);
+    }
+    assert(vehicle_fault_mask_try_read(&faults));
+    assert(faults == ((mode == 3u || mode == 4u) ? FAULT_IMU_SAFETY : 0u));
+    /* No reader changes storage, consumes a latch or alters the clear policy. */
+    for (unsigned int i = 0u; i < 20u; ++i) {
+        uint32_t again = ~faults;
+        assert(vehicle_fault_mask_try_read(&again) && again == faults);
+    }
+    if (shell_fault_case != 0u) {
+        assert(shell_fault_seen && faults == 0u);
+        return 0;
+    }
     if (mode==5u) {
         assert(injected && dump_requests==1u && estops==0u && line_drives==0u);
         return 0;
     }
     if (mode>=3u) {
+        assert(observed_imu_latch);
         vehicle_snapshot_t snapshot;
         rm_summary_t summary;
         assert(injected && estops==1u && asked[0]==0 && asked[1]==0);
