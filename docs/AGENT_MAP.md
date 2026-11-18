@@ -137,6 +137,10 @@ commit that changed this section (header comments and file lists).
   single-writer owner board and Health-only combiner interface;
   [`test_fault_mask.c`](../tests/test_fault_mask.c) checks ownership, interrupted
   reads, reserved bits and run-epoch resets. Publishers are separate changes.
+  [`telemetry_pack.h`](../app_program/subsystem1/telemetry_pack.h) defines
+  private retained RAM codecs, not MQTT formats;
+  [`test_telemetry_pack.c`](../tests/test_telemetry_pack.c) checks field ranges,
+  byte layouts, spare bits and unchanged outputs on invalid input.
 - [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
   evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
   defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)

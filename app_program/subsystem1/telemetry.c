@@ -9,6 +9,7 @@
 #include <tk/syslib.h>
 #include "telemetry.h"
 #include "../platform/fault_mask.h" /* Also prove kernel-safe inclusion here. */
+#include "telemetry_pack.h"
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
@@ -49,7 +50,8 @@ static void publish_stats(void)
     __atomic_store_n(&stats_pub.events, stats.events, __ATOMIC_SEQ_CST);
 }
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
-static telemetry_event_t events[TELEMETRY_EVENTS];
+static telemetry_event_packed_t events[TELEMETRY_EVENTS];
+_Static_assert(sizeof(events) == 4608u, "Packed RAM event allocation");
 static telemetry_info_t info;
 /* S3 supplies the strong, bounded stopped dump in its producer commit. */
 void barcode_live_source_dump(void) __attribute__((weak));
@@ -223,9 +225,9 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
         (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
-    *out = events[index];
+    const bool decoded = telemetry_event_unpack(out, &events[index]);
     (void)ISpinUnlock(&stats_lock, intsts);
-    return E_OK;
+    return decoded ? E_OK : E_SYS;
 }
 #endif
 #if TM_CONSOLE_USB_CDC
@@ -373,7 +375,11 @@ static void dump(void)
         }
     }
     for (uint32_t i = 0u; i < st.events; ++i) {
-        const telemetry_event_t *e = &events[i];
+        telemetry_event_t value;
+        if (!telemetry_event_unpack(&value, &events[i])) {
+            continue; /* Only a corrupt private record can fail here. */
+        }
+        const telemetry_event_t *e = &value;
         tm_printf((UB *)"VE %lu %u %u %u %u\n", (unsigned long)e->ms,
                   (unsigned int)e->kind, (unsigned int)e->from,
                   (unsigned int)e->to, (unsigned int)e->word);
@@ -466,7 +472,11 @@ static void telemetry_task(INT code, void *ctx)
                 (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
             } else {
-                events[stats.events++] = m.data.event;
+                if (telemetry_event_pack(&events[stats.events], &m.data.event)) {
+                    ++stats.events;
+                } else {
+                    lose_locked(); /* Invalid event: never store a truncated value. */
+                }
             }
 #if TM_MQTT
             publish_index();

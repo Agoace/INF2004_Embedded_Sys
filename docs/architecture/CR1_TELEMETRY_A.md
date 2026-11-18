@@ -11,7 +11,8 @@ identities, queue capacity and admission safety must stay unchanged.
 | --- | --- |
 | T110 | Software checks pass; robot measurement pending |
 | F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
-| A-EVENT, A-INDEX | Pending implementation |
+| A-EVENT | Software checks pass; robot timing pending |
+| A-INDEX | Pending implementation |
 | A-SCAN, A-HEALTH, A-SONAR, A-INFO | Pending implementation |
 | F combiner and output | Pending implementation and owner publishers |
 
@@ -98,6 +99,48 @@ Evidence: `build/wip/cr1/f1b-red.log`, `f1b-host.log`, `f1b-build.log` and
 `f1b/ram_report.txt`. Null pointer checks use 0; the aligned-word offset
 assert uses the GCC/Clang builtin without importing a conflicting type.
 
+## A-EVENT retained RAM records
+
+Only the private 512-entry event array changes. Public `telemetry_event_t`
+stays 12 B; queued messages stay 116 B. MQTT event and log event formats,
+USB VE fields and USB yield pacing do not change. Telemetry remains the
+sole array writer. The existing stats lock and committed-count readers
+protect encoding and decoding; no shared byte access is added outside it.
+
+| Stored field | Valid range | Bits |
+| --- | --- | ---: |
+| ms | Full wrapping u32 | 32 |
+| word | Full u16 variant payload | 16 |
+| detail | Full u8 variant payload | 8 |
+| kind | Existing event kinds 1..10 | 4 |
+| from / to | Existing state or module IDs 0..5 | 3 each |
+| spare | Always zero | 6 |
+
+The 66 meaningful bits use nine bytes. Explicit shifts operate on bytes,
+not unaligned words or C bit-fields. Invalid input is rejected before
+storage and increments the existing loss counter; no truncated event is
+committed. An invalid private record returns an error without replacing
+reader output. Valid production values preserve all fields.
+
+The red codec test first failed with the absent header. Tests cover all
+legal kind/from/to/detail combinations, every u16 word, u32 endpoints,
+reserved bits, invalid inputs, unchanged outputs, event index 511 and the
+513th event's existing full/loss policy. Existing log publication,
+contention, USB output and log-stream tests pass. The initial full-array
+test incorrectly assumed the loss counter started at zero after its
+reused fixture; it now checks the increment from the actual prior value.
+
+A-EVENT results: host 686/686; demo zero warnings, RAM_PROOF 79/79,
+21212 B. Private events fall from 6144 to 4608 B, saving 1536 B. S1 falls
+from 80402 to 78866 B and total static RAM from 240808 to 239272 B.
+Codec code is not in RAM and the RAM proof size is unchanged. Queue
+allocations and all MQTT payload sizes remain unchanged. Compiler-local
+scratch events are not counted as static savings; hardware stack and
+timing still need the combined robot gate.
+
+Evidence: `build/wip/cr1/event-red.log`, `event-host.log`,
+`event-build.log`, `event/ram_report.txt` and copied ELF/map/proof.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -128,6 +171,7 @@ This dormant demo is not an active robot MQTT publisher.
 | Starting integration `33d2e4c` | 240808 | -420 from common baseline | Existing integrated A results |
 | T110 | 240808 | 0 from starting integration | Local after map |
 | F1 interface only | 240808 | 0 from T110 | Local after map; no global storage |
+| A-EVENT | 239272 | -1536 from F1b | Local after map; events 4608 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay
