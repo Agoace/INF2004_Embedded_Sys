@@ -145,6 +145,10 @@ commit that changed this section (header comments and file lists).
   Health and pending-sonar codecs; [`test_telemetry_optional_pack.c`](../tests/test_telemetry_optional_pack.c)
   checks them and the INFO/scan codecs. [`value_bits.h`](../app_program/platform/value_bits.h)
   provides local byte operations, not shared atomics.
+  [`robot_health.h`](../app_program/subsystem1/robot_health.h) exposes the
+  Vehicle-only STOP capture API and bounded fault snapshot reader. Health
+  alone combines owner words and freezes run history; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
+  tests the real Health path with fake owners and a fake STOP caller.
 - [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
   evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
   defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)

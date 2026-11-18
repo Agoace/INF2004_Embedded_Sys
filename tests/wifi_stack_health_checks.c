@@ -10,6 +10,26 @@
 #include "../app_program/subsystem1/robot_network.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/platform/run_timing.h"
+#include "../app_program/platform/fault_mask.h"
+#include "../app_program/subsystem2/motion.h"
+
+static uint32_t owner_values[5];
+static bool owners_readable = true;
+int motion_snapshot_try_read(motion_status_t *out, uint32_t *us)
+{
+    if (!owners_readable) return E_TMOUT;
+    memset(out,0,sizeof(*out));out->faults=(uint8_t)owner_values[0];*us=1234000u;
+    return E_OK;
+}
+static bool owner_get(unsigned int n,uint32_t *out)
+{
+    if (!owners_readable) return false;
+    *out=owner_values[n];return true;
+}
+bool vehicle_fault_mask_try_read(uint32_t *out) { return owner_get(1u,out); }
+bool sonar_fault_mask_try_read(uint32_t *out) { return owner_get(2u,out); }
+bool telemetry_fault_mask_try_read(uint32_t *out) { return owner_get(3u,out); }
+bool robot_network_fault_mask_try_read(uint32_t *out) { return owner_get(4u,out); }
 
 static FP health_entry;
 static jmp_buf refreshed;
@@ -64,6 +84,34 @@ void wifi_stack_health_check(uint32_t expected_free)
 #else
     assert(rt.load_peak[1] == 65535u);
 #endif
-    rt_begin(2u);
+    fault_mask_snapshot_t faults;
+    assert(robot_health_faults_try_read(&faults,&at)==E_OK);
+    assert(faults.now==0u && faults.run==0u && faults.valid==FAULT_MASK_ALL);
+    const uint32_t stop_causes[]={FAULT_MOTION_STALL_LEFT,FAULT_IMU_SAFETY,FAULT_SONAR_SENSOR};
+    for (unsigned int n=0u;n<3u;++n) {
+        const uint32_t epoch=3u+2u*n;
+        rt_begin(epoch);
+        memset(owner_values,0,sizeof(owner_values));
+        owner_values[n]=stop_causes[n];
+        robot_health_faults_stop(epoch);
+        rt_begin(epoch+1u);
+        memset(owner_values,0,sizeof(owner_values)); /* cleared before Health runs */
+        if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+        assert(robot_health_faults_try_read(&faults,&at)==E_OK);
+        assert(faults.epoch==epoch && faults.run==stop_causes[n]);
+        assert(faults.now==0u && faults.valid==FAULT_MASK_ALL);
+        owner_values[4]=FAULT_WIFI_LINK_DOWN; /* after STOP: now only */
+        if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+        assert(robot_health_faults_try_read(&faults,&at)==E_OK);
+        assert(faults.run==stop_causes[n] && faults.now==FAULT_WIFI_LINK_DOWN);
+    }
+    rt_begin(9u); /* new START drops frozen old-run bits */
+    memset(owner_values,0,sizeof(owner_values));
+    if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+    assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.run==0u && faults.epoch==9u);
+    owners_readable=false;
+    if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+    assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.valid==0u);
+    rt_begin(10u);
 }
 #endif

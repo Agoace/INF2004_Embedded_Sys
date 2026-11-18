@@ -14,7 +14,8 @@ identities, queue capacity and admission safety must stay unchanged.
 | A-EVENT | Software checks pass; robot timing pending |
 | A-INDEX | Software checks pass; robot timing pending |
 | A-SCAN, A-HEALTH, A-SONAR, A-INFO | Software checks pass; robot timing and stack pending |
-| F combiner and output | Pending implementation and owner publishers |
+| F2a STOP capture and Health combiner | Software checks pass; Vehicle call and final output integration pending |
+| F final owners and USB output | Pending integration and final build |
 
 The starting revision is `33d2e4c`, which includes the approved sonar,
 Vehicle and barcode A changes. The canonical common baseline remains
@@ -54,8 +55,9 @@ still means unavailable. No decoder threshold is changed.
 `app_program/platform/fault_mask.h` defines one 8 B owner board: aligned
 u32 sequence and u32 value, using the existing board atomics. Each board
 has one writer. Health alone owns the 16 B combined snapshot and calls
-`fault_mask_collect_begin(snapshot, rt_epoch())`, then `fault_mask_combine`
-for each source. This interface adds no global storage or firmware calls.
+`fault_mask_collect_begin(snapshot, normalized_run_epoch)`, then
+`fault_mask_combine` for each source. The F2a adapter below handles the
+odd START/even STOP epoch contract and freezes the run view. This interface adds no global storage or firmware calls.
 
 | Bits | Meaning | Writer / getter |
 | --- | --- | --- |
@@ -210,6 +212,55 @@ and control timing remain pending; local scratch is not a static saving.
 Evidence: `build/wip/cr1/optional-red.log`, `optional-host.log`,
 `optional-build.log`, `optional/ram_report.txt` and copied ELF/map/proof.
 
+## F2a STOP capture and Health consumption
+
+The operator requires run history to freeze at STOP, including the fault
+that caused STOP. A 1 Hz Health poll alone can miss that fault if the
+owner clears before the next poll. `robot_health_faults_stop(odd_epoch)`
+is therefore a Vehicle-only bounded capture API. Vehicle must call it
+after its fault mirror publishes the stop state and before `rt_begin`
+publishes the even STOP epoch. No change to shell state or stop order is
+permitted. The Vehicle call belongs to the separate Vehicle integration.
+
+The capture stores five separate owner words, valid bits, odd epoch and
+time in a 36 B sequence/word board. It does not OR the owners together.
+Vehicle is its sole writer. Health reads the capture and remains the sole
+combiner. It reads Motion's existing board and the sonar/Vehicle/log/network
+owner getters. Optional absent providers in isolated TEST/BENCH images
+are unknown, never an implicit zero. Final robot binding must be checked
+in the ELF after all publishers are merged.
+
+Health stores now/run/valid/epoch in its existing snapshot, with sample
+time. It normalizes even STOP epochs to the preceding odd run identity,
+resets run only for a new START, and ORs successful active samples plus
+the final STOP capture. Post-STOP conditions update now only. At wrapped
+STOP zero, it keeps the previous run identity. An epoch change during a
+collection invalidates that sample rather than combining two runs.
+
+`robot_health_faults_try_read` returns the latest coherent Health snapshot
+and capture time; it does not change `rm_heartbeat_t` or MQTT wire bytes.
+Valid describes now source-copy quality. Run means faults successfully
+observed in that run plus its STOP capture, not proof every short transient
+was seen. A missing or busy source at STOP is unknown, not an all-clear.
+Consumers must check the epoch before using the frozen run mask.
+
+The real Health test uses fake owner getters and a fake Vehicle caller.
+A stall STOP, IMU-lift STOP and sonar-fault STOP each remain in the frozen
+run mask even when their owners clear before Health runs. A Wi-Fi fault
+raised after STOP changes now only. The test also checks new START reset,
+read failures, unchanged heartbeat units, and stack reporting. Its red
+build first failed on the missing capture/getter definitions.
+
+F2a software results: host 688/688 (includes the merged sonar owner test),
+zero demo warnings, RAM_PROOF 79/79, 21212 B. Relative to optional A at
+239200 B, the merged sonar owner adds 8 B, and F2a adds 68 B data:
+36 B STOP capture, 16 B Health-only working views, 16 B in the Health
+snapshot (board 112 to 128 B). S1 is 78862 B. Linked static RAM is
+239272 B, a +72 B delta: +76 B data and -4 B alignment. This is a cost,
+not another A saving. F2a has no Vehicle source edit. Evidence:
+`build/wip/cr1/f2a-red.log`, `f2a-host.log`, `f2a-build.log`,
+`f2a/ram_report.txt` and copied ELF/map/proof.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -243,6 +294,7 @@ This dormant demo is not an active robot MQTT publisher.
 | A-EVENT | 239272 | -1536 from F1b | Local after map; events 4608 B |
 | A-INDEX | 239264 | -8 from A-EVENT | Index -4 B, linker alignment -4 B |
 | Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
+| F2a plus merged sonar owner | 239272 | +72 from optional A | Sonar +8, S1 +68, alignment -4 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay
