@@ -1691,7 +1691,44 @@ class BatchTwoCFixtureTests(ModelCase):
         self.assertEqual(self.model.discarded, 0)
 
 
+def junction_unused(reason, sequence=42, phase=9):
+    return struct.pack('<BBBBIIHBBI', 2, 7, 1, 1, sequence, 1234,
+                       1 | phase << 8, reason, 0, 100)
+
+
 class JunctionActionDashboardTests(ModelCase):
+    def test_new_unused_reasons_in_barcode_and_events_are_not_attempt_failures(self):
+        self.model.ingest('robot/state', reboot_state(100))
+        self.model.ingest('robot/barcode', barcode_v2(flags=9, letter=ord('A'), nav=1))
+        self.clock.advance(100)
+        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+            self.model.ingest('robot/event', junction_unused(reason, sequence=reason))
+            text = f'JUNCTION A: unused, reason {name} ({reason})'
+            rows = self.rows('barcode')
+            self.assertEqual(rows['Latest junction report'], text)
+            self.assertIn(text, self.panel('events')['items'][0]['text'])
+            self.assertEqual(rows['Command issued / executed'], 'no / no')
+            self.assertEqual(rows['Attempt decoded / failed'], 'yes / no')
+            self.assertEqual(rows['Junction report boot / session'], self.model.log.sessions.current)
+        self.clock.advance(90000)
+        rows = self.rows('barcode')
+        self.assertEqual(rows['Junction report received age'], '90000 ms')
+        self.assertEqual(rows['Attempt report received age'], '90100 ms')
+        self.model.ingest('robot/event', junction_unused(15))
+        self.assertEqual(self.model.discarded, 1)
+        self.assertEqual(self.rows('barcode')['Latest junction report'], text)
+        self.assertIsNone(self.model.last_decision)
+
+    def test_junction_only_badge_is_report_history_and_new_boot_clears_it(self):
+        self.model.ingest('robot/event', junction_unused(13))
+        self.clock.advance(90000)
+        panel = self.panel('barcode')
+        self.assertEqual(panel['age_kind'], 'report')
+        self.assertEqual(panel['age_ms'], 90000)
+        self.assertIn('separate', panel['note'])
+        self.model.ingest('robot/state', reboot_state(200))
+        self.assertNotIn('Latest junction report', self.rows('barcode'))
+
     def test_line_angle_labels(self):
         for name in ("first", "accepted"):
             self.feed(f"event_junction_{name}")
@@ -2785,6 +2822,18 @@ class RedesignPageTests(AppCase):
         self.assertEqual(rows['IMU safety event received age'], '90000 ms')
         self.assertEqual(rows['Current IMU safety'], 'not reported')
         self.assertIn('IMU SAFETY RECOVERY: CLEARED', ' '.join(trace['values'][1]))
+
+    def test_junction_unused_reason_names_render_in_barcode_and_events(self):
+        expression = """document.getElementById('panel-barcode').querySelector(
+          'table.facts').children.map(row => row.children.map(cell => cell.textContent))"""
+        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+            self.model.ingest('robot/event', junction_unused(reason, sequence=reason))
+            trace = self.trace(expressions=[expression,
+                "document.getElementById('panel-events').querySelector('.items').children.map(n => n.textContent)"])
+            text = f'JUNCTION A: unused, reason {name} ({reason})'
+            self.assertEqual(dict(trace['values'][0])['Latest junction report'], text)
+            self.assertIn(text, ' '.join(trace['values'][1]))
+            self.assertNotIn('failed', text)
 
     def test_unknown_contract_versions_render_not_crash_or_replace_valid_geometry(self):
         ApprovedContractPanelTests.geometry(self)

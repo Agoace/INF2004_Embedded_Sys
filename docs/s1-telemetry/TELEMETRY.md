@@ -380,6 +380,24 @@ A new active run does not turn the previous completed summary into current
 run totals. Hump events reset at an observed run start or new boot. A
 retained hump event is not assigned to the current run.
 
+##### Junction reports in Barcode
+
+The Barcode card also shows the latest buffered `robot/event` v2 kind 7
+junction report, with its own boot/session, sequence, robot uptime and
+receipt age. This is separate from the barcode attempt and its counts.
+Do not infer which attempt supplied a command from receipt order alone.
+A newer junction report does not refresh the barcode attempt's age.
+
+SW9's `f3a4678` live-only policy adds phase UNUSED (9) reasons 13 `expired`
+and 14 `left LINE (search)`. These mean a pending command was not acted on:
+it expired before consumption, or Vehicle left LINE for natural SEARCH.
+They are **not FAILED (8)** results. The decoder accepts these new reasons
+only with UNUSED. Ordinary phase reasons above 14 remain rejected; existing
+tagged line-angle messages remain a separate, unchanged format. Reasons
+0–12 retain their existing raw numeric display, and legacy v1 event fields
+remain unchanged. The matching firmware and MQTT wire record are integrated
+separately; this update changes no firmware or command admission.
+
 ##### IMU safety display
 
 The IMU card and compact LAST RUN show `IMU fault at run end`. For summary

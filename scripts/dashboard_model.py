@@ -364,6 +364,7 @@ class DashboardModel:
                     and pending["opcode"] == opcode and now >= pending["sent"]):
                 pending["result"] = event
         elif kind == robot_wire.EVENT_JUNCTION and fields["version"] >= 2:
+            event.update(junction_live=True, boot_session=fields['boot_session'], retained=retained)
             if "junction_angle" in fields:
                 command = "ABCD"[fields["junction_command"] - 1]
                 angle = fields["junction_angle_cdeg"] / 100
@@ -372,7 +373,9 @@ class DashboardModel:
             else:
                 command = "ABCD"[(fields["word"] & 0xFF) - 1]
                 phase = robot_wire.JUNCTION_PHASES[fields["word"] >> 8]
-                event["text"] = (f"JUNCTION {command}: {phase}, reason {fields['detail']}")
+                reason = (f"{fields['junction_reason_name']} ({fields['detail']})"
+                          if 'junction_reason_name' in fields else str(fields['detail']))
+                event['text'] = f'JUNCTION {command}: {phase}, reason {reason}'
         elif kind == robot_wire.EVENT_SCAN_RETRY:
             attempt = fields["word"] & 0xFF
             self.scan_retry = attempt
@@ -1119,11 +1122,24 @@ def barcode_panel(model, now):
                       'v2 has no boot ID or run ID; session is inferred from other messages, '
                       'not proved by the producer epoch; summary totals and attempt sequence '
                       'are separate, not a report-loss estimate']
+    junction = next((event for event in reversed(model.events) if event.get('junction_live')), None)
+    if junction is not None:
+        rows += [('Latest junction report', junction['text']),
+                 ('Junction report boot / session', junction['boot_session']),
+                 ('Junction report sequence / uptime',
+                  f"#{junction['sequence']} / {junction['uptime_ms']} ms"),
+                 ('Junction report received age', f'{model.record_age(now, junction)} ms')]
+        notes.append('junction reports are separate from barcode attempts; UNUSED means the '
+                     'command was not acted on; do not infer an attempt-to-command match')
+        if junction['retained']:
+            notes.append('junction report is retained history, not a current action')
     if record is None or record['fields']['version'] != 2 or not record['fields'].get('known'):
         notes.append('SHADOW is deployment context, not a transmitted mode')
     history_only = model.state is None and record is None
     if history_only:
-        age = model.record_age(now, model.summary)
+        newest = max((r for r in (model.summary, junction) if r is not None),
+                     key=lambda r: r['rx'], default=None)
+        age = model.record_age(now, newest)
     panel = make_panel('barcode', 'Barcode', age, rows=rows,
                        stale_ms=None if history_only else model.limits()['state_stale_ms'],
                        note='; '.join(notes + ['raw GP28 uses robot/state line-board age']))
