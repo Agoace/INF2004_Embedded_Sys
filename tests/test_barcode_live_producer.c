@@ -75,9 +75,11 @@ int main(int argc, char **argv)
     const bool terminal_search = strncmp(kind, "search_end", 10u) == 0;
     const unsigned int search_begin = terminal_search ? 2450u : 1200u;
     const unsigned int search_duration = strstr(kind, "199") ? 199u :
-        strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u : 30u;
+        strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u :
+        strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u : 30u;
     const bool search_positive = search && !strstr(kind, "200") &&
-        !strstr(kind, "context") && !strstr(kind, "late") && !strstr(kind, "hard");
+        !strstr(kind, "context") && !strstr(kind, "late") &&
+        !strstr(kind, "end51") && !strstr(kind, "hard");
     const bool reverse = strcmp(kind, "reverse") == 0;
     const bool ack_kind = strcmp(kind, "ack") == 0 ||
                           strcmp(kind, "mode2_ack") == 0;
@@ -222,7 +224,7 @@ int main(int argc, char **argv)
             assert(p.event.leading_white == 160u && p.event.rise == 310u);
             assert(p.event.spin_white == cal.white_mean);
             assert(p.slot.read_counts[0] == p.slot.read_counts[1]);
-            assert(p.event.record_age_ms <= 10u);
+            assert(p.event.record_age_ms <= (terminal_search ? 50u : 10u));
             original = p.slot;
             p.record_pending = false;
         }

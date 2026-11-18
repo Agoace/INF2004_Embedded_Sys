@@ -6,5 +6,8 @@
 #endif
 void blc_producer_uncached(barcode_live_producer_t *p,
                            const barcode_live_input_t *in);
+/* Vehicle-owned coherent SEARCH grace; weak false fallback in control.c. */
+bool blv_decode_grace_active(const barcode_live_control_t *control,
+                             uint32_t now_ms);
 extern uint32_t blc_control_read_misses;
 #endif
