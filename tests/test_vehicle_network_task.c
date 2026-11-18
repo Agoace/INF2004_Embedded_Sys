@@ -25,6 +25,10 @@ static uint32_t stopped_at;
 static bool rejected_uncalibrated;
 static unsigned int hump_events;
 static unsigned int barcode_case, barcode_reads;
+/* IMU events by kind: kind 3 is motion/ESTOP only, kind 10 IMU safety. */
+static unsigned int imu_stops, imu_pending, imu_cleared, imu_other;
+static uint16_t imu_stop_word, imu_last_word;
+static uint8_t imu_stop_detail;
 static uint32_t first_barcode_epoch;
 
 int __wrap_barcode_live_counts_try_read(barcode_live_counts_t *out)
@@ -59,6 +63,24 @@ void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 int robot_event_push(const rm_event_t *event) {
     assert(event);++network_events;++network_lost;
     if (event->kind==6u && event->word==(uint16_t)(RM_CMD_START|(2u<<8)) && event->detail==2u) rejected_uncalibrated=true;
+    if (event->kind==3u) {
+        /* Motion fault bits only; IMU words never share kind 3. */
+        assert((event->word&0x8000u)==0u && (event->word&~0x0fu)==0u);
+        assert(mode<3u || mode>4u || event->word==MC_FAULT_ESTOP);
+    }
+    if (event->kind==RM_EVENT_IMU_SAFETY) {
+        assert(event->detail<=7u && event->from<=VSM_FAULT && event->to<=4u);
+        imu_last_word=event->word;
+        if ((event->word&0x8000u)==0u) {
+            assert(event->word>=1u && event->word<=3u && event->from==VSM_FAULT);
+            ++imu_stops;imu_stop_word=event->word;imu_stop_detail=event->detail;
+        } else if ((event->word&0xffu)==8u) {
+            assert(event->word==(0x8000u|(IMU_SAFETY_LIFT<<8)|8u));++imu_pending;
+        } else if ((event->word&0xffu)==0u) {
+            assert(event->word==(0x8000u|(IMU_SAFETY_LIFT<<8)));
+            assert(imu_pending==1u);++imu_cleared;
+        } else { ++imu_other; }
+    }
     if (event->kind==RM_EVENT_HUMP) {
         /* Live only, inside the run, once per new event: 10.8 mm, #1, RIGHT. */
         assert(event->from==0u && event->to==0u && event->word==108u && event->detail==1u);
@@ -82,6 +104,8 @@ bool drv_motor_hw_button_down(unsigned int pin) {
             (now >= 12000u && now < 12050u));
     }
     if (mode==1u || mode==5u) return false; /* No physical start in uncalibrated START case. */
+    if (mode==6u) return pin==21u && ((now>=20u && now<50u) ||
+                                      (now>=3000u && now<3050u));
     if (mode>=2u) return pin==21u && now>=20u && now<50u;
     return base_vehicle_button(pin);
 }
@@ -99,7 +123,7 @@ ER tk_slp_tsk(TMO timeout) {
         if (now>=40u) assert(!value.active && !value.calibrated && !calibrating && line_drives==0u);
     } else if (value.active && value.phase==3u && !injected) {
         injected=true;
-        if (mode==3u) { imu_lift_test=true; }
+        if (mode==3u || mode==6u) { imu_lift_test=true; }
         if (mode==4u) { imu_stale_test=true; }
         if (mode==2u) {
             /* START was queued first, but the dedicated ESTOP must win. */
@@ -136,6 +160,9 @@ int main(int argc,char **argv) {
     else if (argc>1 && !strcmp(argv[1],"estop")) mode=2u;
     else if (argc>1 && !strcmp(argv[1],"imulift")) mode=3u;
     else if (argc>1 && !strcmp(argv[1],"imustale")) mode=4u;
+    else if (argc>1 && !strcmp(argv[1],"imurecover")) {
+        mode=6u;imu_recover_test=true;
+    }
     else if (argc>1 && !strcmp(argv[1],"imuabsent")) {
         mode=5u;imu_absent_test=true;
     }
@@ -151,9 +178,22 @@ int main(int argc,char **argv) {
         rm_summary_t summary;
         assert(injected && estops==1u && asked[0]==0 && asked[1]==0);
         assert(vehicle_snapshot_try_read(&snapshot)==E_OK);
-        assert(!snapshot.active && snapshot.state==VSM_FAULT);
+        /* One kind 10 STOP per latch edge, with trigger and cause. */
+        assert(imu_stops==1u && imu_other==0u);
+        assert(imu_stop_word==(mode==4u ? IMU_SAFETY_IMU_UNAVAILABLE :
+                                          IMU_SAFETY_LIFT));
+        assert(imu_stop_detail==(mode==4u ? IMU_SAFETY_CAUSE_STALE : 0u));
+        if (mode==6u) {
+            /* One PENDING per press, then exactly one CLEARED. */
+            assert(imu_pending==1u && imu_cleared==1u);
+            assert(imu_last_word==(0x8000u|(IMU_SAFETY_LIFT<<8)));
+            assert(!snapshot.active && snapshot.state==VSM_IDLE);
+        } else {
+            assert(imu_pending==0u && imu_cleared==0u);
+            assert(!snapshot.active && snapshot.state==VSM_FAULT);
+        }
         assert(vehicle_summary_try_read(&summary)==E_OK);
-        assert(summary.stop_reason==(mode==3u ? 14u : 16u));
+        assert(summary.stop_reason==(mode==4u ? 16u : 14u));
         assert(summary.shell_fault==VSM_FAULT_IMU);
         return 0;
     }

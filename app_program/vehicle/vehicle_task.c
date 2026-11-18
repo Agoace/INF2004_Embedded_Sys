@@ -747,11 +747,18 @@ static uint8_t imu_stop_code(uint8_t trigger)
 }
 #endif
 
+/* Kind 10 RECOVERY: bit 15, latched trigger in bits 8-14, gate reason in
+ * bits 0-7 (0 CLEARED), detail = latched cause. See mqtt_wire.h. */
+static void imu_recovery_word(uint8_t latched, uint8_t gate, uint8_t cause)
+{
+    const uint16_t word = (uint16_t)(RM_IMU_RECOVERY |
+                          ((uint32_t)latched << 8u) | gate);
+    event_detail(RM_EVENT_IMU_SAFETY, vsm.state, vsm.running, word, cause);
+}
+
 static void imu_recovery(uint8_t gate)
 {
-    const uint16_t word = (uint16_t)(0x8000u |
-                          ((uint32_t)imu_gate.latched << 8u) | gate);
-    event_detail(3u, vsm.state, vsm.running, word, imu_gate.cause);
+    imu_recovery_word(imu_gate.latched, gate, imu_gate.cause);
 }
 
 static bool imu_check_tick(void)
@@ -759,6 +766,8 @@ static bool imu_check_tick(void)
     imu_safety_report_t report;
     const bool have = imu_safety_try_read(&report) >= E_OK;
     const uint32_t now = drv_time_ms();
+    const uint8_t was_latched = imu_gate.latched;
+    const uint8_t was_cause = imu_gate.cause;
     const ig_action_t action = ig_step(&imu_gate, have ? &report : NULL,
                                         now, active);
     if (action.stop_edge) {
@@ -773,10 +782,15 @@ static bool imu_check_tick(void)
         /* This is a new stop edge, not a repeated motor-fault observation. */
         last_network_fault = UINT16_MAX;
 #endif
-        event_detail(3u, vsm.state, module, imu_gate.latched, imu_gate.cause);
+        event_detail(RM_EVENT_IMU_SAFETY, vsm.state, module,
+                     imu_gate.latched, imu_gate.cause);
         publish_vehicle();
     }
-    if (action.cleared && !active) { vsm_reset(&vsm); }
+    if (action.cleared) {
+        if (!active) { vsm_reset(&vsm); }
+        /* The only success signal: name the latch that was cleared. */
+        imu_recovery_word(was_latched, RM_IMU_CLEARED, was_cause);
+    }
     if (action.request_clear) {
         ig_queued(&imu_gate, imu_safety_clear_request(), now);
     }
@@ -1584,13 +1598,18 @@ static void vehicle_task(INT code, void *ctx)
             continue;
         }
 #endif
-        if (run_edge && ig_press(&imu_gate, now)) {
+        const bool queued = run_edge && ig_press(&imu_gate, now);
+        if (queued) {
             ig_queued(&imu_gate, imu_safety_clear_request(), now);
             imu_recovery(IG_PENDING);
         }
         if (!ig_start_allowed(&imu_gate, drv_time_ms())) {
-            imu_recovery(imu_gate.pending ? IG_PENDING :
-                         ig_refusal(&imu_gate, drv_time_ms()));
+            /* One observation per request: a queued clear already sent
+             * PENDING for this press. */
+            if (!queued) {
+                imu_recovery(imu_gate.pending ? IG_PENDING :
+                             ig_refusal(&imu_gate, drv_time_ms()));
+            }
             set_reason(imu_stop_code(imu_gate.latched),
                        imu_stop_text(imu_gate.latched));
 #if TM_MQTT

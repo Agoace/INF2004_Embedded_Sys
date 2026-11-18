@@ -128,7 +128,7 @@ detector and the real service source.
 4. Press GP21 once (start 1). The Vehicle starts calibration. On the
    spare Pico W, the motion stall check stops the calibration after
    about 0.1–0.3 s (no encoders). At about +2.3 s, OVERTURN latches with
-   the Vehicle idle. Expect the ESTOP, FAULT, event kind 3 word 1, then
+   the Vehicle idle. Expect the ESTOP, FAULT, event kind 10 word 1, then
    `[IMU_SAFETY] stop 1 cause N`.
 5. Wait for `PRESS_GP21_ONCE_TO_RECOVER` (about +6.4 s after press 1:
    tilt ends at +5.3 s, then a 1 s clear window). Press GP21 once
@@ -152,9 +152,12 @@ is correct behaviour, but it is not the planned sequence.
   state arrives up to 1 s after the stop.
 - `event`, for each start, in this order: kind 3 word 3 (motion stall
   faults, left and right), kind 5 (run end), then at the stop kind 3
-  word 4 (`MC_FAULT_ESTOP`) and kind 3 word 1 or 2 (IMU trigger), detail
-  = cause. Recovery and refusal events are kind 3 with word bit 15 set:
-  `0x8000 | latched << 8 | gate reason`.
+  word 4 (`MC_FAULT_ESTOP`) and kind 10 word 1 or 2 (IMU STOP), detail =
+  cause. Each recovery press gives one kind 10 PENDING event
+  (`0x8000 | latched << 8 | 8`), then one CLEARED event
+  (`0x8000 | latched << 8 | 0`). See
+  [MQTT_WIRE.md](../s1-telemetry/MQTT_WIRE.md#kind-10-imu_safety).
+  The BENCH3 image (`3809dec`) sent these as kind 3, without CLEARED.
 - `summary`: **not published on the spare Pico W.** The summary exists
   only for a run that passed calibration. With no line sensors and no
   encoders, calibration cannot complete. The stop reason text is in the
@@ -235,17 +238,20 @@ What BENCH3 does not prove:
   0.1–0.3 s. The active-run stop path has host tests only.
 - Any I2C time, real mounting or real motion.
 
-Open findings (no change made):
+Findings in the BENCH3 image, and their status:
 
-- Each recovery press publishes two identical events (kind 3 word
+- Each recovery press published two identical events (kind 3 word
   `0x8108` or `0x8208`, PENDING, consecutive sequence numbers, same
-  uptime). The Vehicle calls `imu_recovery(IG_PENDING)` after
+  uptime). The Vehicle called `imu_recovery(IG_PENDING)` after
   `ig_press`, then again in the start-refusal branch of the same press.
-  One producer, two calls. The successful clear has no event; only the
-  state change to 0 shows it.
-- Event kind 3 has three word meanings: motion fault bits (1, 2, 4),
-  IMU trigger (1, 2, 3) and IMU recovery (bit 15). Words 1, 2 and 3 are
-  ambiguous on the wire. The source branch has the same encoding.
+  One producer, two calls. The successful clear had no event; only the
+  state change to 0 showed it. Fixed in the kind 10 change: one PENDING
+  per press and one CLEARED event.
+- Event kind 3 had three word meanings: motion fault bits (1, 2, 4),
+  IMU trigger (1, 2, 3) and IMU recovery (bit 15). Words 1, 2 and 3 were
+  ambiguous on the wire. The source branch has the same encoding. Fixed
+  in the kind 10 change: IMU events moved to kind 10; kind 3 is motion
+  fault bits only.
 - The KR1 dump line `faults 7` is the latched motion fault bits:
   `MC_FAULT_STALL_LEFT | MC_FAULT_STALL_RIGHT | MC_FAULT_ESTOP`. The
   stall bits come from the calibration with no encoders, the ESTOP bit

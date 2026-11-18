@@ -106,6 +106,13 @@ scan geometry, configuration-token reader or live snapshot contract changes.
   recovery cleared it. IMU overruns and lost wakes were 0. Results,
   limits and open findings are in
   [IMU_SAFETY_BENCH.md](IMU_SAFETY_BENCH.md#bench3-record-robot-synthetic-image-3809dec--home-secrets).
+- G: IMU safety events move to the additive event kind 10 IMU_SAFETY
+  ([MQTT_WIRE.md](../s1-telemetry/MQTT_WIRE.md#kind-10-imu_safety)).
+  Kind 3 keeps motion fault bits only. One recovery event per press (the
+  duplicate PENDING from the C glue is removed) and a new CLEARED event.
+  Test `test_vehicle_network_imurecover` was red first. The IMU stack
+  stays 2048 B: the first real-IMU robot run must show `imu_task` free
+  ≥ 256 B; add 512 B if it fails or if the margin is below 384 B.
 
 ## UP resources (E)
 
