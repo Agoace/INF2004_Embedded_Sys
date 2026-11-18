@@ -1,12 +1,9 @@
 # Barcode live command path (producer gate)
 
-Status: host-tested producer gate, OFF by default. No live-action robot image
-is approved. The placement rule is approved, but a live image still needs:
-
-- SW9 adds V1 (pending expiry).
-- SW9 adds V3 (SEARCH policy).
-- The team checks the approved placement rule on the actual demo course.
-  Placement approval alone does not approve a live image.
+Status: host-tested producer and V1/V3 vehicle policy, OFF by default.
+Main approved the V1/V3 policy on 2026-11-18. A live image still needs the
+approved placement checks on the actual demo course. Host tests and a
+successful firmware build do not prove robot acceptance.
 
 ## Scope
 
@@ -87,21 +84,74 @@ producer, jlive and ja code:
 - The operator believes there is no other black between barcode 2 and the
   next crossing, but is not fully sure.
 - The crossing angle is about 90 degrees (not fully sure).
-- Consequence: D_cross can be as long as one loop of the course8 map. The
-  loops are about 3.4 m (L1) and 5.2 m (L2), from the course map, not
-  measured. The clearance is easy to meet. But a pending command must last
-  across curves and SEARCH events, so V1 and V3 are required.
+- Historical concern: D_cross can be as long as one loop of the course8
+  map (about 3.4 m L1 and 5.2 m L2, map values, not measured).
+  The approved straight placement rule below supersedes the proposal to
+  retain commands across curves or SEARCH. V1/V3 bound pending commands.
 
 ## Vehicle work for SW9 (before any live image)
 
 | Item | Need |
 | --- | --- |
-| V1 expiry | A pending live command has no limit today. Add a distance-based expiry from the offer counts. Use the approved placement distance plus a margin; do not use school-track D_cross. The hard upper bound is the loop length. Add a new FAILED reason (EXPIRED), with wire documentation and dashboard support. |
+| V1 expiry | Implemented: 400 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. Dashboard labels are a separate follow-up. |
 | V2 window | Optional: consume only when the junction edge is within [D_min, D_max] of the frame end. |
-| V3 SEARCH | A pending command survives a natural SEARCH today. Define the policy. Proposal: cancel when the heading change is more than about 10 degrees. |
+| V3 SEARCH | Implemented: entering natural SEARCH before consumption cancels the live command, UNUSED reason 14 SEARCH. SCAN/DETOUR keep CANCELLED. No heading-change rule. |
 | V4 turn | Check that the LEFT spin finds the correct branch at this crossing (about 90 degrees, OPERATOR). |
 | V5 detector | Confirm that this crossing gives a confirmed junction. The detector needs both channels >= 700 permille and the junction flag. |
 | V6 first run | Slow speed, kill switch ready, `BARCODE_MAP="F=LEFT"` only. |
+
+## Approved V1/V3 vehicle policy
+
+Approved by Main on 2026-11-18. This policy applies only to source 2 live
+commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
+
+- **V1:** expire when the mean signed wheel travel from
+  `command.read_counts` reaches `BLV_PENDING_MAX_MM = 400` mm. This is a
+  design value, not a measured distance. The decode follows the frame end,
+  so this is not a strict 400 mm bound from `frame_end`. The origin does
+  not restart at arming or during a reverse. Reverse net travel does not
+  reach the positive bound. Count differences use wrap-safe subtraction
+  and 64-bit addition. No time limit is added.
+- The one constant is in
+  [`policy.h`](../../app_program/barcode_live_vehicle/policy.h). A static
+  assertion requires it to exceed `BARCODE_MEASURED_CLEAR_MM + 160`.
+  The nominal recommendation is about 200 mm physical placement (at least
+  160 mm). After the 49 mm line-pair lead and 6 mm confirmation, normal
+  consumption is about 117–157 mm from the frame end. The 400 mm design
+  limit leaves margin without retaining a command for a full loop.
+- **V3:** cancel on the first natural SEARCH module step, before any
+  junction consumption. SCAN/DETOUR keep their existing cancellation.
+  No heading-change rule is added: the approved approach must be straight;
+  wheel-difference heading during line corrections is not a reliable
+  extra course-location check.
+- A drop calls `ja_finish`: command invalid, sequence consumed (retired),
+  final counts recorded, phase **UNUSED (9)**, claimed false. The new
+  reasons are **13 EXPIRED** and **14 SEARCH**. UNUSED means no turn was
+  attempted; it is not FAILED. SCAN/DETOUR retain reason CANCELLED (1).
+  These are command drops, not emergency stops. Ordinary navigation
+  continues. Active/consumed actions and fake source 1 are unchanged.
+- The check runs before each normal module step. If a pending command
+  reaches the bound on a tick that could confirm a junction, expiry wins.
+  No expiry is applied after consumption.
+
+Implementation: [`policy.c`](../../app_program/barcode_live_vehicle/policy.c)
+wraps `ja_pending_route` through live-only forced includes on
+`vehicle_task.o` and `junction_print.o`. The new folder is excluded from
+all default builds. Shared action/Vehicle headers and C files are unchanged.
+Kind 7 keeps its layout; see [wire contract](../s1-telemetry/MQTT_WIRE.md).
+
+Live build (example secrets only for the recorded build):
+
+```sh
+make -C build_make clean SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 BARCODE_FAIL_CAPTURE=1 BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100 BARCODE_MAP="F=LEFT" JUNCTION_TEST_CMD=NONE
+make -C build_make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 BARCODE_FAIL_CAPTURE=1 BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100 BARCODE_MAP="F=LEFT" JUNCTION_TEST_CMD=NONE
+```
+
+Output: `mtk3pico_smp0_usb_cdc_wifi_lwip_mqtt_bclive_kernel_ram_bmap2_bcfail2.uf2`.
+The build has no IMU capture. RAM_PROOF: 77/77 listed functions in RAM,
+19852 B. ELF text 451744 B, BSS 218964 B; link-time free RAM 30356 B
+(including static stacks), from ELF RAM section addresses and 270336 B.
+These are build results, not measured run-time stack margins.
 
 ## Clearance measurement (next robot session)
 
@@ -190,16 +240,18 @@ next confirmed junction, subject to the applicable expiry/SEARCH policy.
   but the robot can continue normal LINE; this is NOT an emergency stop.
 - Invalid epoch/revision, route change, stale data or other failed admission
   checks reject/retire the token. Do not assume it survives SEARCH.
-- A missed junction can leave a command pending for a later junction. The
-  approved V1 expiry is still needed to bound that risk.
+- A missed junction can leave a command pending for a later junction
+  within the V1 travel limit. Expiry bounds that risk but cannot remove it.
+- V1 limits net travel from the decode, not accumulated path length. It
+  does not identify the intended junction or impose a time bound.
 - An unintended feature AFTER arming that satisfies the detector CAN consume
   the command and turn at the wrong place. The code cannot identify the
   intended junction from placement alone. This rule violation is NOT
   guaranteed to fail safe; inspection and KILL remain necessary.
 
-No threshold, geometry constant, expiry policy or build gate is changed by
-this documentation. V1/V3 and the actual-course placement checks remain
-live-image prerequisites.
+No reader threshold, geometry constant or producer build gate is changed.
+V1/V3 are implemented; the actual-course placement checks and operator
+approval remain live-image prerequisites.
 
 ### Variable-name proposal (no code change)
 
@@ -222,5 +274,14 @@ This proposal does not change any variable, error message or firmware.
   - The live feed variant failed.
   - The e2e custom variant failed (abort).
   - The make test failed on the missing BARCODE_MAP error.
-- After the change: GCC and Clang ASan/UBSan, 631/631 host tests.
+- Producer gate: GCC and Clang ASan/UBSan, 631/631 host tests.
+- V1/V3: red first (expiry, SEARCH, pure policy and missing make seams),
+  then GCC and Clang, 653/653 tests each. Tests cover exact expiry boundary,
+  count wrap, reverse, fake/idle passthrough, SEARCH, SCAN/DETOUR, duplicate
+  retirement, and end-to-end expiry/SEARCH with no later junction claim.
+  Normal live consumption remains covered through the policy wrapper.
+  The make test checks that live-only sources and seams are absent by default.
+- Default-build proof against staging `a93b1de`: HASH76 MATCH (38 UF2 and
+  38 complete ELF files, including debug information), zero build warnings.
+  No shared Vehicle/action C or header file changed.
 - The firmware matrix and RAM proof results are in the commit report.

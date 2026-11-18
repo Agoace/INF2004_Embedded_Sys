@@ -293,6 +293,16 @@ vehicle task described below.
   bind the LINE feed, context/ACK policy and stopped DUMP; live actions only in
   the opt-in build ([live command path](s3-line-barcode/BARCODE_LIVE_COMMAND.md),
   e2e test [`test_barcode_live_e2e.c`](../tests/test_barcode_live_e2e.c)).
+  Live-only vehicle V1/V3 policy:
+  [`policy.h`](../app_program/barcode_live_vehicle/policy.h) and
+  [`policy.c`](../app_program/barcode_live_vehicle/policy.c),
+  [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
+  [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
+  [`make seams`](../build_make/barcode_live_vehicle.mk). These expire a
+  pending live command at 400 mm from decode and cancel it on SEARCH;
+  default builds omit this folder. Tests:
+  [`test_blv_policy.c`](../tests/test_blv_policy.c) and
+  [`test_barcode_live_vehicle_make.py`](../tests/test_barcode_live_vehicle_make.py).
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
   record the first course run, GP28 geometry and open findings.
   [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) specifies

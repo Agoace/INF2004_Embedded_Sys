@@ -387,6 +387,10 @@ endif
 ifeq ($(IMU_SAFETY_CAPTURE),1)
 include imu_safety_capture.mk
 endif
+# V1/V3 live pending policy: live builds only (default objects unchanged).
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+include barcode_live_vehicle.mk
+endif
 
 #
 # Images are named after the profile they were built with.  Every image is
