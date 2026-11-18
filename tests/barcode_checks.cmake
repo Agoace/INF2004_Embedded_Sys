@@ -304,3 +304,31 @@ host_test(test_blv_turn tests/test_blv_turn.c
     app_program/barcode_live_vehicle/line.c
     ${line_search_source} ${obstacle_source})
 target_link_libraries(test_blv_turn PRIVATE m)
+
+# Live-only control collision regression; initially red against shared producer.
+host_test(test_barcode_control_cache tests/test_barcode_control_cache.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_control_cache PRIVATE
+    BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1)
+target_link_libraries(test_barcode_control_cache PRIVATE m)
+
+# Compile shared producer with the SAME forced-include seam as live firmware.
+add_library(barcode_control_raw OBJECT "${REPO}/app_program/subsystem3/barcode_live_producer.c")
+target_compile_definitions(barcode_control_raw PRIVATE BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1)
+target_compile_options(barcode_control_raw PRIVATE -include "${REPO}/app_program/barcode_live_vehicle/producer_impl.h")
+foreach(t IN ITEMS test_barcode_control_cache test_barcode_live_feed_live
+        test_barcode_live_producer_live_custom test_barcode_live_producer_live_builtin
+        test_barcode_live_producer_live_none test_barcode_live_e2e_custom
+        test_barcode_live_e2e_builtin test_barcode_live_e2e_expire test_barcode_live_e2e_search)
+    get_target_property(srcs ${t} SOURCES)
+    list(REMOVE_ITEM srcs "${REPO}/app_program/subsystem3/barcode_live_producer.c")
+    set_property(TARGET ${t} PROPERTY SOURCES "${srcs}")
+    target_sources(${t} PRIVATE $<TARGET_OBJECTS:barcode_control_raw>
+        "${REPO}/app_program/barcode_live_vehicle/control.c")
+    target_compile_definitions(${t} PRIVATE TEST_CONTROL_CACHE=1)
+endforeach()
+foreach(v IN ITEMS custom builtin none)
+    add_test(NAME test_barcode_producer_live_${v}_read_fail
+        COMMAND test_barcode_live_producer_live_${v} read_fail)
+endforeach()
