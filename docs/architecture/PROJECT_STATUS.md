@@ -9,6 +9,8 @@ Baseline state date: 2026-11-16; staging tip at that writing: `a0cd97b`.
 with obstacle v3 (`7fe4054`) and the dashboard panels (`60b41f2`).
 The scan row records the scoped `d44bd25` school floor result from that date;
 it does not imply general geometry accuracy or acceptance of other changes.
+2026-11-18: code freeze. The demo kernel is tag `demo-kernel-v1` (`9f15213`);
+see [DEMO_FREEZE.md](../release/DEMO_FREEZE.md).
 
 ## Demo image
 
@@ -16,6 +18,7 @@ it does not imply general geometry accuracy or acceptance of other changes.
 make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 [BARCODE_MAP="F=LEFT"]
 ```
 
+The frozen live-barcode build line is in [DEMO_FREEZE.md](../release/DEMO_FREEZE.md#build).
 Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 [BUILD.md](../kernel/BUILD.md) and [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram).
 
@@ -29,11 +32,11 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
 | Same-tick retarget (`MOTION_SAME_TICK`) | Default on for robot images since 2026-11-17; `=0` gives the old timing. Loop delay about 10 -> 2 ms. Robot runs 2026-11-16/17: lifted-wheel ESTOP OK, 0 overruns/faults, smoother small corrections. | [MOTION.md (same tick)](../s2-motion/MOTION.md#same-tick-retarget-default-on) | None. |
 | Obstacle, scan, detour | Coarse/fine + v3 floor result on `d44bd25` (2026-11-17): same box met twice, 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, no overruns/lost wakes/faults; task stack high water recorded. Prior fixed-scan result: 2/2 in each of 6 runs. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Separate stationary A2/A3 placements skipped by operator; width accuracy/passability not established; DONE_NO_LINE and STALL_RIGHT remain open. |
-| Junction actions (B2a) | Physical turns REOPENED: LIVE1/LIVE2 DONE but went straight; earlier fake 40–45 degree contacts do not prove final heading. | [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Live-only centre advance/60 degree gate host-tested; robot branch-turn acceptance pending; merge into general ja fix. |
+| Junction actions (B2a) | Live images (2026-11-18): real LEFT turns at 92–95 deg (LIVE4, GRACE1), RIGHT seen by operator, U-turn accepted at 172.5 deg. LIVE1/LIVE2 DONE events went straight (old spin). Fake-command images still use the old spin. | [DEMO_FREEZE.md](../release/DEMO_FREEZE.md), [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Merge the live-only centre advance and 60 degree gate into the general junction action. U-turn: one pass only. |
 | Barcode reader (B2b) | SHADOW only. Course 2026-11-16: 0 of 10 attempts decoded (robot zigzags). Straight TEST pass: large F decoded both ways. | [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md), [BARCODE.md](../s3-line-barcode/BARCODE.md) | Size-tolerant reader (n 4..7 mm) in staging: identical to the old reader on 5 real captures; not proven on the course. Reliable read needs less zigzag. |
 | Barcode failed-attempt evidence | Opt-in ROBOT software candidate, default OFF. Keeps first two failures of the run; edges and 4 ms ADC prefix dump after BC_REF. | [Failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) | Operator capture/image acceptance not run. Combined staging + KD30/same-tick RAM has30788 B link-time headroom including static stacks; no capacity fallback required. |
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
-| Barcode LIVE (steers) | Opt-in, default OFF. Producer gate plus V1/V3 host-tested: pending live command expires at 1000 mm from decode or cancels after 200 ms natural SEARCH, UNUSED reasons 13/14. SCAN/DETOUR keep CANCELLED. | [Live command path](../s3-line-barcode/BARCODE_LIVE_COMMAND.md) | Actual-course straight placement check and operator live-image approval; reliable course read not established. |
+| Barcode LIVE (steers) | Opt-in, default OFF; the frozen demo build turns it on. Pending command expires at 1000 mm or after 200 ms continuous SEARCH (UNUSED 13/14). A decode continues through a natural SEARCH shorter than 200 ms. A failed control read uses the last good copy for up to 50 ms. GRACE1: 0 BP_DISABLED in 13 attempts. | [Live command path](../s3-line-barcode/BARCODE_LIVE_COMMAND.md), [DEMO_FREEZE.md](../release/DEMO_FREEZE.md) | A barcode entered at an angle (after a curve) often fails; place barcodes on straights. Full run with all features on the freeze image not done. |
 | IMU humps | Report only. 2 humps per course run (2026-11-16). | [IMU.md](../s4-imu/IMU.md) | Extra IMU requirement: another team member works on staging. H3 Not run. `hump_imu_fault=1` once (2026-11-16 BASE run). |
 | Telemetry, MQTT, dashboard | Run-summary counts implemented. Barcode terminal v2 (FIFO/QoS1, early reason/frame dump) and the v2/v3 dashboard panels are in staging (2026-11-17); host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md), [Terminal attempts](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) | Operator UI check pending: attempts, queue loss, same-run counts and the obstacle v3 panel on the robot. |
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. |
@@ -67,20 +70,24 @@ commit inside this repository before the parent updates its recorded revision.
 
 ### Branches
 
+Rule from 2026-11-18: `mtk3-staging` combines all modules, `mtk3-testing`
+holds the kernel tests, and `main` is the submission branch.
+
 | Branch | Purpose |
 | --- | --- |
-| `mtk3-staging` | Integrated robot program; the only module-combination branch |
+| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tag `submission-v1`. |
+| `mtk3-staging` | Integration branch: merge all module branches here. Demo kernel tag `demo-kernel-v1`. |
+| `mtk3-testing` | Kernel test branch: SIL/HIL/PIL simulation (Webots, course8 SIL), bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
 | `mtk3` | Course-template/platform base |
-| `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface lineage |
-| `mtk3-line` | Line tracing and line search; the barcode reader is an optional extension of this module |
-| `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
-| `mtk3-detour-sweep` | Helper from staging `024d01a`: the line counts in the DETOUR return turn from 20° (`line_turn_deg`, after the second STRAIGHT), after FC_2 and FX_1. Host tests pass; robot not run; Main merges into staging |
-| `mtk3-scan-int` | Approved helper for coarse/fine scan vehicle diagnostics, obstacle wire v3 and legacy-compatible decoder; Main merges into staging |
+| `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface |
+| `mtk3-line` | Line tracing, line search and the barcode reader |
+| `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Navigation modules |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
-| `mtk3-imu` | S4 IMU module development |
-| `mtk3-cr1`, `mtk3-b2b` | Helper branches: CR1 data representation; B2b barcode-to-junction (S3 reader + vehicle adapter). Merged into staging; kept as records |
-| `main` | Original course-template history; do not change |
-| `ziven-barcode-algo`, `yanshan`, `jaison-imu` | Reference branches; port approved ideas, do not merge them |
+| `mtk3-imu` | S4 IMU module |
+| `ziven-barcode-algo`, `yanshan`, `jaison-imu`, `mtk3-imu-safety` | Team reference branches; port approved ideas, do not merge them |
+
+The bench kernel switches (`BENCH_KERNEL`, `IMU_SAFETY_BENCH`) stay in
+staging, default off, because the freeze keeps shared files unchanged.
 
 Each module has its own development branch. Do module work and module-level
 tests on that branch. Merge it into `mtk3-staging`, where the complete
@@ -140,24 +147,11 @@ Run `python3 scripts/check-docs.py`,
 committing. A source/layout change must update the agent map in the same
 commit. Keep private Wi-Fi/MQTT settings and generated output out of Git.
 
-### Branch state 2026-11-16
+### Branch clean-up 2026-11-18
 
-Compared with `origin/mtk3-staging` `a0cd97b`. Update this table when a
-branch changes role.
-
-| Branch | Role | State |
-| --- | --- | --- |
-| `mtk3-staging` | Integration | Tip. Demo image source. |
-| `mtk3-motion`, `-line`, `-search`, `-scan`, `-detour`, `-vehicle`, `-telemetry`, `-dashboard`, `-imu` | Module branches | In staging. Merge staging in before new work. |
-| `mtk3-core-live` | Kernel timing, KERNEL_RAM | In staging. Active (SW7). |
-| `mtk3-b2b` | Barcode reader and B2b helper | Ahead of staging: size-tolerant reader, not hardware-proven. |
-| `mtk3-hil` | SIL (Webots) integration | Ahead of staging. Not for staging until the operator decides. |
-| `mtk3-hil-sw4`, `-sw5-trial*`, `-sw6` | SIL worker branches | In `mtk3-hil`. |
-| `mtk3-hil-sw5` | Gate 1 trial C1..C3 | Not merged. Record only (Gate 1 closed). |
-| `mtk3-cr1`, `mtk3-detour-tri`, `mtk3-core_migration`, `mtk3-core-m8`, `mtk3-core-m9`, `mtk3-core-review-sw5*`, `mtk3-core-staging-merge`, `mtk3-bench-sw6b`, `mtk3` | Finished helper branches | In staging. Record only. |
-| `mtk3-bench-sw6` | Bench record | In staging. Never merge again. |
-| `main` | Original history | Diverged. Do not touch. |
-| `ziven-barcode-algo`, `yanshan`, `jaison-imu` | Reference | Never merge. |
+All helper branches were deleted after the freeze. Their commits are in
+`mtk3-staging` (and so in `main`), or in `mtk3-testing`, or behind an
+archive tag below. Nothing was rebased or force-pushed.
 
 ### Archived branches
 
@@ -172,6 +166,13 @@ historical layout record retains the complete commands and module results.
 | `archive/yx-line-abstraction` | 249eac5 | Earlier motor/line manager |
 | `archive/joseph` | ad7527d | Motion/speed reference history |
 | `line-tracing-2sensor-v1` | e4ba9ec | Locked two-sensor duty design |
+| `archive/mtk3-hil` | bf09e39 | SIL/HIL line before `mtk3-testing` (also in `mtk3-testing`) |
+| `archive/mtk3-course8-sil` | 52051a5 | Course8 SIL demo-default cases (also in `mtk3-testing`) |
+| `archive/mtk3-hil-sw4` | 48396c8 | Size-reader SIL gate record |
+| `archive/mtk3-hil-sw5` | 3326d91 | Gate 1 trial C2/C3, not merged (Gate 1 closed) |
+| `archive/mtk3-line-gap` | 24e2051 | `LINE_GAP=1` opt-in, rejected 2026-11-16 |
+| `archive/mtk3-kd-st-trial` | 474cc70 | Throwaway KD + same-tick trial |
+| `demo-kernel-v1` | 9f15213 | Frozen demo kernel 2026-11-18 |
 
 ### Branch limits
 

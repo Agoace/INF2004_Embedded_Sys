@@ -15,6 +15,11 @@ not current acceptance reports. Local course originals are not public records.
 - [Repository README](../README.md) — public setup, current build and usage.
 - [Repository instructions](../AGENTS.md) — working rules and validation commands.
 
+## Release
+
+- [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the frozen demo kernel of 2026-11-18.
+  Contains: tag `demo-kernel-v1` (`9f15213`), submission branch `main` (`submission-v1`); live-barcode build line and fallback; checks (host 677/677, 76/76 MATCH, RAM_PROOF 79/79, 0 warnings); image SHA prefixes; robot runs LIVE1–4, UTURN1, RIGHT1, GRACE1 (LEFT turns 92–95 deg, U-turn 172.5 deg); known limits (straight barcode placement, 1000 mm expiry, U-turn one pass, no full-feature run on this image).
+
 ## Project requirements
 
 - [project-requirements/README.md](project-requirements/README.md) — our own course summary; original course files stay local and ignored.
@@ -23,7 +28,7 @@ not current acceptance reports. Local course originals are not public records.
 ## Architecture
 
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — read first: the state of each area.
-  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch table, merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch state 2026-11-16, archive tags.
+  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch table (main = submission, mtk3-staging = integration, mtk3-testing = kernel tests), merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch clean-up 2026-11-18, archive tags.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — the implemented robot system and its three decisions.
   Contains: subsystem ownership, tasks and cores, interrupt/polling rules, Vehicle Controller shell and route table, safety settings, results; ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal 1 ms time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
