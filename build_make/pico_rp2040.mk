@@ -778,6 +778,10 @@ CFLAGS += -DTM_WIFI_CYW43=1 -DCYW43_LWIP=$(if $(filter lwip,$(NET)),1,0) -DCYW43
           -DCYW43_DEFAULT_PIN_WL_CS=25u \
           -DNDEBUG -ffunction-sections -fdata-sections $(WIFI_INCLUDES)
 LFLAGS += -Wl,--gc-sections
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+# Retain the API while producer/adapter helpers are integrated separately.
+LFLAGS += -Wl,--undefined=blv_decode_grace_active
+endif
 
 OBJS += $(WIFI_LOCAL_OBJS) $(CYW43_OBJS)
 C_DEPS += $(WIFI_LOCAL_OBJS:.o=.d) $(CYW43_OBJS:.o=.d)

@@ -216,6 +216,32 @@ Operator confirmed all four were real LEFT turns. This is scoped LIVE4
 acceptance, not a general fake-command or UTURN acceptance. The 1000 mm update has red/green 999/1000 mm
 boundary tests and preserves the 200 ms SEARCH policy.
 
+### SEARCH-only decode grace
+
+Approved after LIVE4: a decode already bound before natural SEARCH can
+keep its eligibility identity across LINE→SEARCH→LINE strictly below
+200 ms. Real mode 0 is still published during SEARCH. No publication or
+offer is allowed while disabled. This is distinct from V3 pending-command
+cancellation and from V1 travel expiry.
+
+The live-only copy [`live.c`](../../app_program/barcode_live_vehicle/live.c)
+replaces `junction_live.c`. Only a permitted LINE with no candidate,
+latched junction or held record can start grace. Invalid/stale samples,
+busy/active actions, junctions, STOP, SCAN, DETOUR and 200 ms end it and
+change eligibility. A new epoch resets it. Resume preserves epoch,
+revision and revision_ms only when eligible.
+
+[`grace.c`](../../app_program/barcode_live_vehicle/grace.c) publishes a
+Vehicle-owned coherent identity/start/active board. The LINE accessor
+fails closed on a failed read, wrong identity or elapsed time >=200 ms.
+Producer retention is a separate coordinated change; this board does not
+permit publication. Keep the existing fresh source recheck and 50 ms age.
+Follow-up: merge this copy into the general adapter after acceptance.
+
+Historical build of `670eac5` (1000 mm, before decode grace), example
+secrets: text 452948 B, BSS 219020 B, free 30036 B; RAM_PROOF 78/78,
+20120 B. Warnings checked case-insensitively (including assembler).
+
 ## Clearance measurement (next robot session)
 
 ### Operator decision (2026-11-18)

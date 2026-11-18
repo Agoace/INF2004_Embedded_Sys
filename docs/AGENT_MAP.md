@@ -300,6 +300,11 @@ vehicle task described below.
   [`action.c`](../app_program/barcode_live_vehicle/action.c) is the live-only
   centred-turn action copy, and
   [`line.c`](../app_program/barcode_live_vehicle/line.c) owns centre advance,
+  [`live.c`](../app_program/barcode_live_vehicle/live.c) is the live adapter
+  copy with SEARCH-only decode grace, and
+  [`grace.h`](../app_program/barcode_live_vehicle/grace.h) /
+  [`grace.c`](../app_program/barcode_live_vehicle/grace.c) provide the
+  coherent Vehicle-to-LINE grace board,
   [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
   [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
   [`make seams`](../build_make/barcode_live_vehicle.mk).
