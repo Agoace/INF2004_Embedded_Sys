@@ -1037,6 +1037,30 @@ def imu_safety_frame(word=2, cause=0, sequence=10, uptime=1000, boot=100,
                        word, cause, flags, boot)
 
 
+class JunctionUnusedReasonWireTests(unittest.TestCase):
+    def frame(self, reason, phase=9):
+        return struct.pack('<BBBBIIHBBI', 2, 7, 1, 1, 42, 1234,
+                           1 | phase << 8, reason, 0, 100)
+
+    def test_unused_reasons_and_csv_names(self):
+        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+            f = wire.decode('robot/event', self.frame(reason))
+            self.assertEqual((f['word'], f['detail'], f['junction_reason_name']),
+                             (0x0901, reason, name))
+            csv.DictWriter(io.StringIO(), fieldnames=wire.csv_fields()).writerow(f)
+        old = wire.decode('robot/event', self.frame(12, phase=8))
+        self.assertEqual(old['detail'], 12)
+        self.assertNotIn('junction_reason_name', old)
+
+    def test_phase_reason_bounds_and_unused_semantics(self):
+        for reason in list(range(15, 64)) + [255]:
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', self.frame(reason))
+        for reason in (13, 14):
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', self.frame(reason, phase=8))
+
+
 class ImuSafetyEventWireTests(unittest.TestCase):
     def test_stop_recovery_and_unknown_values_keep_raw_fields(self):
         for trigger in range(1, 4):
