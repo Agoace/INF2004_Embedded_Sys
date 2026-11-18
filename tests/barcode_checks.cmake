@@ -335,3 +335,11 @@ endforeach()
 
 add_test(NAME test_barcode_live_feed_live_recheck_fail
     COMMAND test_barcode_live_feed_live recheck_fail)
+
+host_test(test_jlive_grace tests/test_jlive_grace.c
+    app_program/barcode_live_vehicle/live.c
+    app_program/barcode_live_vehicle/grace.c
+    app_program/vehicle/junction_action.c
+    ${line_search_source} ${obstacle_source})
+target_compile_definitions(test_jlive_grace PRIVATE BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100)
+target_link_libraries(test_jlive_grace PRIVATE m)
