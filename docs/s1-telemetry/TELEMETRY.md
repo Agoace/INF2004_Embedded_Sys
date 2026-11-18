@@ -119,7 +119,7 @@ replay protection. Token rules and units: [command spec](MQTT_WIRE.md#command).
 
 | Mode | Select when | State | Heartbeat | Live log / sonar |
 | --- | --- | --- | --- | --- |
-| RUN | Calibration, start delay, navigation, stop, plus 2 s grace | 200 ms | 1000 ms | Publish |
+| RUN | Calibration, start delay, navigation, stop, plus 2 s grace | 110 ms deadline; expected gap ~120 ms with 20 ms poll; robot measurement pending | 1000 ms | Publish |
 | IDLE | Idle beyond grace | 1000 ms | 5000 ms | Pause |
 
 Sensors and local logging do not slow down in IDLE. TEST/BENCH have no
