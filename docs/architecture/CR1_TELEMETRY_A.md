@@ -15,7 +15,7 @@ identities, queue capacity and admission safety must stay unchanged.
 | A-INDEX | Software checks pass; robot timing pending |
 | A-SCAN, A-HEALTH, A-SONAR, A-INFO | Software checks pass; robot timing and stack pending |
 | F2a STOP capture and Health combiner | Software checks pass; Vehicle call and final output integration pending |
-| F final owners and USB output | Pending integration and final build |
+| F final owners and USB output | Software and demo checks pass; combined robot test pending |
 
 The starting revision is `33d2e4c`, which includes the approved sonar,
 Vehicle and barcode A changes. The canonical common baseline remains
@@ -261,6 +261,103 @@ not another A saving. F2a has no Vehicle source edit. Evidence:
 `build/wip/cr1/f2a-red.log`, `f2a-host.log`, `f2a-build.log`,
 `f2a/ram_report.txt` and copied ELF/map/proof.
 
+## F final owner integration and USB output
+
+Main's integration branch was merged, not cherry-picked. The Vehicle
+owner publishes bits 4/6, then makes the STOP capture before changing to
+the even epoch. Sonar publishes bit 5 from the existing fault streak.
+Motion bits 0..3 come from its existing coherent board, not a duplicate
+publisher. Telemetry publishes bit 7 from the existing log-full condition
+when it publishes log stats. Wi-Fi publishes bits 8/9 from link status
+and the actual MQTT connection state at the end of its existing poll.
+No owner clears or latches a new fault. STALE remains non-latched; a
+connected MQTT client is not called disconnected merely while waiting
+for its subscription. Existing multi-writer admission counters and board
+unavailable mask remain unchanged.
+
+| Owner | Owned bits | New board B | Single writer / reader |
+| --- | --- | ---: | --- |
+| Motion | 0..3 | 0 | Existing Motion board / Health and STOP capture |
+| Vehicle | 4,6 | 8 | Vehicle / Health and STOP capture |
+| Sonar | 5 | 8 | Sonar / Health and STOP capture |
+| Log full | 7 | 8 | Telemetry / Health and STOP capture |
+| Network | 8,9 | 8 | Wi-Fi / Health and STOP capture |
+
+Every owner board uses complete aligned u32 atomic words with a sequence.
+Failed/busy/unpublished reads are unknown. Health is the only writer of
+the combined snapshot and run OR. The final ELF binds all five getters
+and the STOP API to real GLOBAL symbols, not weak defaults or test fakes.
+
+A raw phase epoch adds 4 B to the Health snapshot. Immediately after STOP,
+a prior active Health sample can have the correct odd run identity but
+still lack the final STOP fault. `robot_health_faults_try_read` therefore
+rejects a snapshot until its raw phase epoch equals the current START/STOP
+phase. It leaves outputs unchanged on rejection. Heartbeat reads are not
+blocked by this diagnostic quality rule. The owner words and STOP
+capture use the same bounded sequence/word read contract.
+
+Both the immediate stopped report and later GP20 dump use the same
+Telemetry dump path. If Health has not sampled the new phase, it prints:
+
+```text
+[FAULT_MASK] pending Health sample for phase_epoch ...
+```
+
+A later GP20 dump prints hexadecimal `now`, frozen `run`, source `valid`,
+odd run `epoch` and `sample_us`. It does not wait for Health and does not
+combine from the Telemetry task. Now is a sampled condition, not a proof
+of continuous current safety. Run is the OR of observed active conditions
+plus the final STOP capture, not an event counter. Unknown or busy STOP
+sources may still be absent from run; zero must not be called an all-clear.
+No new topic, MQTT version or field is added.
+
+Tests first failed because the new owner getters were absent. Log tests
+check unpublished/full/next-BEGIN clear. Network tests check unpublished,
+connected, link-down and MQTT-disconnected transitions independently. The
+real Health tests check stall, lift and sonar STOP captures after owners
+clear, new START reset, post-STOP now-only faults, unknown owners and raw
+phase rejection. USB tests check the immediate pending line and the later
+GP20 hexadecimal values without changing KR/VE or yield expectations.
+The pre-existing injected read hook was moved before the new board-header
+include so torn-read coverage remains active, rather than being disabled.
+
+Final standard host tests pass 698/698. Clang AddressSanitizer and
+UndefinedBehaviorSanitizer checks also pass 698/698. The GCC sanitizer
+configure attempt could not link because this machine lacks its libasan
+and libubsan runtime files; no GCC sanitizer result is claimed. Clang's
+runtime is available. Demo build has zero warnings and RAM_PROOF 79/79,
+21212 B. All wire constants/native message sizes and queue
+allocations remain unchanged. The combined robot image and 110 ms hardware
+gate belong to Main/operator; no flash or physical run was done here.
+
+| Final F allocation | Added data B relative to optional A |
+| --- | ---: |
+| Four new owner boards (Vehicle/Sonar/Telemetry/Wi-Fi) | 32 |
+| Vehicle-only STOP capture board | 36 |
+| Health-only working views | 16 |
+| Health snapshot: four fault fields plus raw phase | 20 |
+| Total F cost | 104 |
+
+Health board is now 132 B (112 B after A plus 20 B F). S1 is 78882 B:
+78794 after A plus 88 B F. Static RAM is 239304 B: 239200 after A plus
+104 B F. The net A/F saving from `33d2e4c` is 1504 B (1608 minus 104).
+The net change from the common `7350da0` baseline is -1924 B, which
+includes the earlier 420 B from other helpers; do not count that twice.
+Relative to F2a's 239272 B, the final increase is 32 B: Vehicle owner8,
+Telemetry/Wi-Fi owners16, raw phase4 and linker alignment4. Relative to
+the merged Vehicle F2a result (239280 B, measured by SW11), this final
+commit adds 24 B: 20 B S1 data plus 4 B linker alignment. The existing
+before result is reused; it was not rebuilt. Final linked
+alignment is 943 B, equal to optional A. Category B and wire savings are
+zero. Hardware stack/CPU, PBUF/heap headroom and task timing remain pending.
+
+Evidence: `build/wip/cr1/final-red.log`, `final-host.log`, `final-build.log`,
+`final/ram_report.txt`, copied ELF/map/proof and `final/owner-symbols.txt`.
+`final/message_sizes.txt` matches every baseline S1 native message and wire
+size. Sanitizer evidence: `final-clang-asan-build.log` and
+`final-clang-asan.log`; unavailable GCC runtime details are retained in
+`final-asan-build.log`.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -295,6 +392,7 @@ This dormant demo is not an active robot MQTT publisher.
 | A-INDEX | 239264 | -8 from A-EVENT | Index -4 B, linker alignment -4 B |
 | Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
 | F2a plus merged sonar owner | 239272 | +72 from optional A | Sonar +8, S1 +68, alignment -4 B |
+| Final F including Vehicle and local owners | 239304 | +104 total F cost from optional A | Final S1 78882 B, Health board 132 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay

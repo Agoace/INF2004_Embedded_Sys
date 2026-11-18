@@ -11,6 +11,7 @@ int robot_health_try_read(rm_heartbeat_t *out, uint32_t *timestamp_us);
  * Copy owners separately; Health alone combines them. Never waits. */
 void robot_health_faults_stop(uint32_t odd_epoch);
 /* Latest coherent Health diagnostic views, including sample time.
- * Same bounded/error contract as the heartbeat reader; no wire change. */
+ * E_TMOUT also means Health has not sampled the current START/STOP phase.
+ * Failed reads leave both outputs unchanged; no wire change. */
 int robot_health_faults_try_read(fault_mask_snapshot_t *out, uint32_t *timestamp_us);
 #endif

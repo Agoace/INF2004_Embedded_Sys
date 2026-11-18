@@ -1,12 +1,6 @@
-/* Reuse the established telemetry task doubles. Include the implementation
- * only to stop at private publication boundaries and inspect committed data. */
-#define main original_telemetry_test
-#define bytes telemetry_test_bytes
-#include "test_telemetry.c"
-#undef bytes
-#undef main
-static uint32_t fake_clock_ms;
-uint32_t drv_time_ms(void) { return fake_clock_ms; }
+/* Install the read hook before the doubles include fault_mask/app_board. */
+#include <stdbool.h>
+#include <stdint.h>
 static bool change_log_guard;
 static void log_read_hook(const uint32_t *sequence,unsigned int index) {
     if (change_log_guard && index==0u) {
@@ -15,10 +9,20 @@ static void log_read_hook(const uint32_t *sequence,unsigned int index) {
     }
 }
 #define APP_BOARD_READ_HOOK(sequence,index) log_read_hook(sequence,index)
+/* Reuse the established doubles and inspect private committed boundaries. */
+#define main original_telemetry_test
+#define bytes telemetry_test_bytes
+#include "test_telemetry.c"
+#undef bytes
+#undef main
+static uint32_t fake_clock_ms;
+uint32_t drv_time_ms(void) { return fake_clock_ms; }
 #include "../app_program/subsystem1/telemetry.c"
 static void send_message(telemetry_message_t *message) { assert(telemetry_send(message)==E_OK);pump(); }
 int main(void) {
     telemetry_log_index_t opened={.generation=99u,.rows=88u,.events=77u,.lost=66u};
+    uint32_t fault_word=UINT32_MAX;
+    assert(!telemetry_fault_mask_try_read(&fault_word) && fault_word==UINT32_MAX);
     const telemetry_log_index_t untouched=opened;
     uint8_t row[TELEMETRY_BYTES];telemetry_event_t event;
     assert(telemetry_log_open(NULL)==E_PAR);
@@ -26,6 +30,7 @@ int main(void) {
     assert(telemetry_log_row(0u,0u,NULL)==E_PAR && telemetry_log_event(0u,0u,NULL)==E_PAR);
     assert(telemetry_log_row(0u,0u,row)==E_TMOUT && telemetry_log_event(0u,0u,&event)==E_TMOUT);
     assert(original_telemetry_test()==0);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==0u);
     assert(telemetry_log_open(&opened)==E_OK && opened.generation==2u && opened.rows==2u && opened.events==1u);
     assert(telemetry_log_row(opened.generation,0u,row)==E_OK && row[0]==0x12u);
     assert(telemetry_log_row(opened.generation,1u,row)==E_OK && row[0]==0x34u);
@@ -84,5 +89,8 @@ int main(void) {
     const uint32_t loss_before=admit_lost;
     send_message(&message);
     assert(stats.events==512u && admit_full && admit_lost==loss_before+1u);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==FAULT_LOG_FULL);
+    message.kind=TELEMETRY_BEGIN;send_message(&message);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==0u);
     return 0;
 }
