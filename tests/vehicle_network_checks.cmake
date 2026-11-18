@@ -39,6 +39,10 @@ if(TARGET test_vehicle_network_task)
     target_link_libraries(test_vehicle_network_task PRIVATE m)
     target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
     target_link_options(test_vehicle_network_task PRIVATE "-Wl,--wrap=vsm_step")
+    add_test(NAME test_vehicle_fault_capture_time
+        COMMAND test_vehicle_network_task capturetime)
+    add_test(NAME test_vehicle_fault_capture_operator
+        COMMAND test_vehicle_network_task)
     foreach(shell_case shellother shellmotion shellimu)
         add_test(NAME test_vehicle_fault_${shell_case}
             COMMAND test_vehicle_network_task ${shell_case})

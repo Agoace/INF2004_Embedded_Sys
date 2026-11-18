@@ -47,6 +47,7 @@
 #include "../subsystem4/imu_service.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
+#include "../subsystem1/robot_health.h"
 #include "../subsystem1/network_queue.h"
 #include "../subsystem2/motor_ctl_robot.h"
 #endif
@@ -611,6 +612,12 @@ static void hump_poll(uint32_t epoch)
  */
 static void hump_finish(uint32_t epoch)
 {
+    /* Capture final owner values before this common run exit goes even.
+     * Keep vsm_stop below the summary/events so their shell state is unchanged. */
+    publish_vehicle_faults();
+#if TM_MQTT
+    robot_health_faults_stop(epoch);
+#endif
     hump_read();
     run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
                                   drv_time_ms(), IMU_HUMP_MAX_AGE_MS);

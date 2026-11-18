@@ -84,6 +84,10 @@ void app_task_report(void) { }
 void mock_di(UINT *irq) { *irq = test_smp_irq_save(); }
 void mock_ei(UINT irq) { test_smp_irq_restore(irq); }
 int robot_event_push(const rm_event_t *event) { assert(event); return E_OK; }
+void robot_health_faults_stop(uint32_t epoch)
+{
+    assert((epoch & 1u) != 0u && vehicle_run_epoch() == epoch);
+}
 void robot_command_lost(void) { assert(0); }
 int robot_network_dump(uint32_t request_id)
 {

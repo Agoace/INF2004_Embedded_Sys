@@ -40,7 +40,8 @@ int main(void) {
     assert(telemetry_log_row(opened.generation,2u,row)==E_PAR);
     publish_index();
     assert(telemetry_log_row(opened.generation,2u,row)==E_OK && row[0]==0xabu && row[15]==15u);
-    events[1]=(telemetry_event_t){.ms=50u,.kind=6u,.word=0x1234u,.detail=3u};
+    const telemetry_event_t next_event={.ms=50u,.kind=6u,.word=0x1234u,.detail=3u};
+    assert(telemetry_event_pack(&events[1], &next_event));
     ++stats.events;
     assert(telemetry_log_event(opened.generation,1u,&event)==E_PAR);
     publish_index();
@@ -71,5 +72,17 @@ int main(void) {
     assert(telemetry_log_row(opened.generation,0u,row)==E_OK && row[0]==0xefu);
     assert(telemetry_log_row(highwater.generation,0u,row)==E_OBJ);
     assert(!stats.busy); /* Log access does not claim the USB-dump exclusion. */
+    assert(sizeof(events) == 512u * 9u);
+    message.kind=TELEMETRY_EVENT;
+    message.data.event=(telemetry_event_t){.kind=10u,.from=2u,.to=5u,
+        .ms=UINT32_MAX,.word=UINT16_MAX,.detail=UINT8_MAX};
+    for (unsigned int n=0u;n<TELEMETRY_EVENTS;++n) send_message(&message);
+    assert(stats.events==512u && !admit_full);
+    assert(telemetry_log_event(opened.generation,511u,&event)==E_OK);
+    assert(event.ms==UINT32_MAX && event.word==UINT16_MAX && event.detail==UINT8_MAX);
+    assert(event.kind==10u && event.from==2u && event.to==5u);
+    const uint32_t loss_before=admit_lost;
+    send_message(&message);
+    assert(stats.events==512u && admit_full && admit_lost==loss_before+1u);
     return 0;
 }

@@ -11,9 +11,11 @@ identities, queue capacity and admission safety must stay unchanged.
 | --- | --- |
 | T110 | Software checks pass; robot measurement pending |
 | F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
-| A-EVENT, A-INDEX | Pending implementation |
-| A-SCAN, A-HEALTH, A-SONAR, A-INFO | Pending implementation |
-| F combiner and output | Pending implementation and owner publishers |
+| A-EVENT | Software checks pass; robot timing pending |
+| A-INDEX | Software checks pass; robot timing pending |
+| A-SCAN, A-HEALTH, A-SONAR, A-INFO | Software checks pass; robot timing and stack pending |
+| F2a STOP capture and Health combiner | Software checks pass; Vehicle call and final output integration pending |
+| F final owners and USB output | Pending integration and final build |
 
 The starting revision is `33d2e4c`, which includes the approved sonar,
 Vehicle and barcode A changes. The canonical common baseline remains
@@ -53,8 +55,9 @@ still means unavailable. No decoder threshold is changed.
 `app_program/platform/fault_mask.h` defines one 8 B owner board: aligned
 u32 sequence and u32 value, using the existing board atomics. Each board
 has one writer. Health alone owns the 16 B combined snapshot and calls
-`fault_mask_collect_begin(snapshot, rt_epoch())`, then `fault_mask_combine`
-for each source. This interface adds no global storage or firmware calls.
+`fault_mask_collect_begin(snapshot, normalized_run_epoch)`, then
+`fault_mask_combine` for each source. The F2a adapter below handles the
+odd START/even STOP epoch contract and freezes the run view. This interface adds no global storage or firmware calls.
 
 | Bits | Meaning | Writer / getter |
 | --- | --- | --- |
@@ -98,6 +101,166 @@ Evidence: `build/wip/cr1/f1b-red.log`, `f1b-host.log`, `f1b-build.log` and
 `f1b/ram_report.txt`. Null pointer checks use 0; the aligned-word offset
 assert uses the GCC/Clang builtin without importing a conflicting type.
 
+## A-EVENT retained RAM records
+
+Only the private 512-entry event array changes. Public `telemetry_event_t`
+stays 12 B; queued messages stay 116 B. MQTT event and log event formats,
+USB VE fields and USB yield pacing do not change. Telemetry remains the
+sole array writer. The existing stats lock and committed-count readers
+protect encoding and decoding; no shared byte access is added outside it.
+
+| Stored field | Valid range | Bits |
+| --- | --- | ---: |
+| ms | Full wrapping u32 | 32 |
+| word | Full u16 variant payload | 16 |
+| detail | Full u8 variant payload | 8 |
+| kind | Existing event kinds 1..10 | 4 |
+| from / to | Existing state or module IDs 0..5 | 3 each |
+| spare | Always zero | 6 |
+
+The 66 meaningful bits use nine bytes. Explicit shifts operate on bytes,
+not unaligned words or C bit-fields. Invalid input is rejected before
+storage and increments the existing loss counter; no truncated event is
+committed. An invalid private record returns an error without replacing
+reader output. Valid production values preserve all fields.
+
+The red codec test first failed with the absent header. Tests cover all
+legal kind/from/to/detail combinations, every u16 word, u32 endpoints,
+reserved bits, invalid inputs, unchanged outputs, event index 511 and the
+513th event's existing full/loss policy. Existing log publication,
+contention, USB output and log-stream tests pass. The initial full-array
+test incorrectly assumed the loss counter started at zero after its
+reused fixture; it now checks the increment from the actual prior value.
+
+A-EVENT results: host 686/686; demo zero warnings, RAM_PROOF 79/79,
+21212 B. Private events fall from 6144 to 4608 B, saving 1536 B. S1 falls
+from 80402 to 78866 B and total static RAM from 240808 to 239272 B.
+Codec code is not in RAM and the RAM proof size is unchanged. Queue
+allocations and all MQTT payload sizes remain unchanged. Compiler-local
+scratch events are not counted as static savings; hardware stack and
+timing still need the combined robot gate.
+
+Evidence: `build/wip/cr1/event-red.log`, `event-host.log`,
+`event-build.log`, `event/ram_report.txt` and copied ELF/map/proof.
+
+## A-INDEX committed log-index board
+
+The native log index stays 20 B. Its generation, loss counter and newest
+row time keep 32 bits each. Row count 0..4501 uses 13 bits; event count
+0..512 uses 10 bits. Nine spare bits are zero. The stored payload is four
+aligned u32 words (16 B); the sequence adds 4 B, making a 20 B board
+instead of 24 B. Telemetry remains the sole writer. Readers first accept
+a coherent sequence/word copy, then decode it locally. Failure leaves
+the public output unchanged. The existing stats lock, admission fields
+and shared counter atomics do not change.
+
+The red test first failed on the absent packed-index type. Tests cover
+every legal row and event count, full-width endpoints, reserved bits,
+out-of-range codes, changed/odd sequences, committed-count boundaries,
+new generations and full event storage. Host tests pass 686/686. Demo
+build: zero warnings, RAM_PROOF 79/79, 21212 B.
+
+S1 module RAM falls 78866 to 78862 B (4 B payload saving). Static RAM
+falls 239272 to 239264 B (8 B linked saving): an additional 4 B is linker
+alignment, not another packed field. Do not promise that alignment delta
+for a different link layout. Evidence: `build/wip/cr1/index-red.log`,
+`index-host.log`, `index-build.log`, `index/ram_report.txt` and copied
+ELF/map/proof. MQTT formats and queue allocations stay unchanged.
+
+## Four optional A records
+
+These changes affect private retained storage only. Existing native APIs,
+MQTT binary layouts, field units, queue allocations, timing deadlines and
+admission atomics stay unchanged. No source board owned by another helper
+is counted in the following savings.
+
+| Record | Information retained / bits | Writer and access | Before / after B |
+| --- | --- | --- | ---: |
+| 48 stopped scan records | ID32, duration32, fine mask13, coarse hits3 (0..5), attempt1 (1..2), seven zero bits | Telemetry only; decoded for stopped dump | 576 / 528 |
+| Retained INFO | Reason48 bytes, ten full u32 diagnostics, two full i32 counts, five 12-bit ADC fields, four independent Motion fault bits | Telemetry only; native scratch for stopped dump; reason termination unchanged | 108 / 104 |
+| Health board | 22 full u32 fields, i32 start status, stack/age16 each, CPU10 (0..1000, code1001=unknown), flags7, reset2, link3 (-3..3), MQTT2, priorities6 each (0..32), unavailable mask5 | Health only; existing sequence/word board; metrics lock and caches unchanged | 120 / 112 |
+| S1 pending sonar | Seven full u32 IDs/times, status2, valid1, pending1, two angles6 (-30..30), echo14, two zero bits | Wi-Fi only; bounded provider read to local value, encode retained copy, decode for publish | 40 / 32 |
+
+The Health value uses 809 meaningful bits in a 104 B aligned payload;
+23 spare bits are zero. Its u32 capture time and sequence add eight bytes.
+A failed or invalid encode never publishes a partial value; a failed read
+or decode leaves output unchanged. CPU unknown is reconstructed as 65535,
+not clipped to a plausible load. INFO is exactly 832 bits, with no spare
+bits. IDs, counters and signed extrema are not narrowed. The sonar echo
+is already a 14-bit result; unused bits are not physical range evidence.
+
+`value_bits.h` operates on local or owner-protected bytes. It is not an
+atomic publication mechanism. Sequence/word boards still use aligned
+32-bit atomics. No C bit-fields or unaligned word access is used.
+
+The red optional-codec build failed on the absent header before the
+implementation. Tests cover all scan mask/hit/attempt combinations, every
+12-bit ADC value, signed/count endpoints, all sonar angle pairs and
+status/flags, every 14-bit echo, all CPU codes and link values, all Health
+flag/reset/state/unavailable-mask combinations, invalid codes and every
+spare bit. Existing real Health refresh/stack, telemetry dump, retry and
+MQTT tests also pass. The native sonar pending copy is rebuilt for each
+publish retry; identity and acknowledgement policy do not change.
+
+Results: host 687/687; demo zero warnings, RAM_PROOF 79/79, 21212 B.
+S1 falls 78862 to 78794 B (68 B retained data). Static RAM falls 239264
+to 239200 B (64 B): linker alignment adds 4 B, so do not claim a 68 B
+linked saving. Across A-EVENT, A-INDEX and these four records the retained
+data saving is 1608 B; linked static saving is also 1608 B in this layout.
+No category B or wire saving is included. Hardware codec CPU, task stack
+and control timing remain pending; local scratch is not a static saving.
+Evidence: `build/wip/cr1/optional-red.log`, `optional-host.log`,
+`optional-build.log`, `optional/ram_report.txt` and copied ELF/map/proof.
+
+## F2a STOP capture and Health consumption
+
+The operator requires run history to freeze at STOP, including the fault
+that caused STOP. A 1 Hz Health poll alone can miss that fault if the
+owner clears before the next poll. `robot_health_faults_stop(odd_epoch)`
+is therefore a Vehicle-only bounded capture API. Vehicle must call it
+after its fault mirror publishes the stop state and before `rt_begin`
+publishes the even STOP epoch. No change to shell state or stop order is
+permitted. The Vehicle call belongs to the separate Vehicle integration.
+
+The capture stores five separate owner words, valid bits, odd epoch and
+time in a 36 B sequence/word board. It does not OR the owners together.
+Vehicle is its sole writer. Health reads the capture and remains the sole
+combiner. It reads Motion's existing board and the sonar/Vehicle/log/network
+owner getters. Optional absent providers in isolated TEST/BENCH images
+are unknown, never an implicit zero. Final robot binding must be checked
+in the ELF after all publishers are merged.
+
+Health stores now/run/valid/epoch in its existing snapshot, with sample
+time. It normalizes even STOP epochs to the preceding odd run identity,
+resets run only for a new START, and ORs successful active samples plus
+the final STOP capture. Post-STOP conditions update now only. At wrapped
+STOP zero, it keeps the previous run identity. An epoch change during a
+collection invalidates that sample rather than combining two runs.
+
+`robot_health_faults_try_read` returns the latest coherent Health snapshot
+and capture time; it does not change `rm_heartbeat_t` or MQTT wire bytes.
+Valid describes now source-copy quality. Run means faults successfully
+observed in that run plus its STOP capture, not proof every short transient
+was seen. A missing or busy source at STOP is unknown, not an all-clear.
+Consumers must check the epoch before using the frozen run mask.
+
+The real Health test uses fake owner getters and a fake Vehicle caller.
+A stall STOP, IMU-lift STOP and sonar-fault STOP each remain in the frozen
+run mask even when their owners clear before Health runs. A Wi-Fi fault
+raised after STOP changes now only. The test also checks new START reset,
+read failures, unchanged heartbeat units, and stack reporting. Its red
+build first failed on the missing capture/getter definitions.
+
+F2a software results: host 688/688 (includes the merged sonar owner test),
+zero demo warnings, RAM_PROOF 79/79, 21212 B. Relative to optional A at
+239200 B, the merged sonar owner adds 8 B, and F2a adds 68 B data:
+36 B STOP capture, 16 B Health-only working views, 16 B in the Health
+snapshot (board 112 to 128 B). S1 is 78862 B. Linked static RAM is
+239272 B, a +72 B delta: +76 B data and -4 B alignment. This is a cost,
+not another A saving. F2a has no Vehicle source edit. Evidence:
+`build/wip/cr1/f2a-red.log`, `f2a-host.log`, `f2a-build.log`,
+`f2a/ram_report.txt` and copied ELF/map/proof.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -128,6 +291,10 @@ This dormant demo is not an active robot MQTT publisher.
 | Starting integration `33d2e4c` | 240808 | -420 from common baseline | Existing integrated A results |
 | T110 | 240808 | 0 from starting integration | Local after map |
 | F1 interface only | 240808 | 0 from T110 | Local after map; no global storage |
+| A-EVENT | 239272 | -1536 from F1b | Local after map; events 4608 B |
+| A-INDEX | 239264 | -8 from A-EVENT | Index -4 B, linker alignment -4 B |
+| Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
+| F2a plus merged sonar owner | 239272 | +72 from optional A | Sonar +8, S1 +68, alignment -4 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay

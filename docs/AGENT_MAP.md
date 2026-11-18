@@ -132,6 +132,9 @@ commit that changed this section (header comments and file lists).
   TEST/BENCH. [`test_vehicle_fault_value.c`](../tests/test_vehicle_fault_value.c),
   [`test_vehicle_fault_owner.py`](../tests/test_vehicle_fault_owner.py) and
   the real Vehicle network task tests check the mirror and ownership.
+  The common run exit in `hump_finish` publishes the final owner word and
+  calls `robot_health_faults_stop` before the run epochs become even.
+  Capture tests check one call per run and the shell/IMU stop bits.
 - [Sonar/obstacle A](architecture/CR1_SONAR_A.md) records the sonar board,
   history and obstacle board change. [`sonar_pack.h`](../app_program/subsystem5/sonar_pack.h)
   and [`obstacle_pack.h`](../app_program/vehicle/obstacle_pack.h) define the
@@ -145,6 +148,18 @@ commit that changed this section (header comments and file lists).
   single-writer owner board and Health-only combiner interface;
   [`test_fault_mask.c`](../tests/test_fault_mask.c) checks ownership, interrupted
   reads, reserved bits and run-epoch resets. Publishers are separate changes.
+  [`telemetry_pack.h`](../app_program/subsystem1/telemetry_pack.h) defines
+  private retained RAM codecs, not MQTT formats;
+  [`test_telemetry_pack.c`](../tests/test_telemetry_pack.c) checks field ranges,
+  byte layouts, spare bits and unchanged outputs on invalid input.
+  [`network_pack.h`](../app_program/subsystem1/network_pack.h) defines private
+  Health and pending-sonar codecs; [`test_telemetry_optional_pack.c`](../tests/test_telemetry_optional_pack.c)
+  checks them and the INFO/scan codecs. [`value_bits.h`](../app_program/platform/value_bits.h)
+  provides local byte operations, not shared atomics.
+  [`robot_health.h`](../app_program/subsystem1/robot_health.h) exposes the
+  Vehicle-only STOP capture API and bounded fault snapshot reader. Health
+  alone combines owner words and freezes run history; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
+  tests the real Health path with fake owners and a fake STOP caller.
 - [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
   evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
   defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)
