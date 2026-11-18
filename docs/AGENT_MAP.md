@@ -309,6 +309,10 @@ vehicle task described below.
   records FC1/FC2 evidence and timing limits. The host validator is
   [`scripts/barcode_fail_analyze.py`](../scripts/barcode_fail_analyze.py), with
   [`test_barcode_fail_analyze.py`](../tests/test_barcode_fail_analyze.py).
+  [Session report](s3-line-barcode/BARCODE_SESSION_REPORT.md):
+  [`scripts/barcode_session_report.py`](../scripts/barcode_session_report.py)
+  prints per-attempt results and D_cross from a GP20 log, with
+  [`test_barcode_session_report.py`](../tests/test_barcode_session_report.py).
   [`test_barcode_quiet_real.c`](../tests/test_barcode_quiet_real.c) checks the
   three retained vectors and complete FC2 ADC trace. The older
   [`test_barcode_peak_real.c`](../tests/test_barcode_peak_real.c) also feeds
