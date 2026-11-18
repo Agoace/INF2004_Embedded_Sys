@@ -88,6 +88,16 @@ counted as costs when the publishers and combiner are integrated.
 Evidence: `build/wip/cr1/f1-red.log`, `f1-host.log`, `f1-build.log` and
 `f1/ram_report.txt` with copied ELF/map/proof.
 
+F1b removes `stddef.h` from the shared header. Kernel `size_t` conflicts
+with that header unless a translation unit first sets `PROHIBIT_DEF_SIZE_T`.
+`telemetry.c` now includes the fault interface after the kernel headers,
+without that define. Its first demo build failed on the conflicting
+`size_t`; after the fix it passes with zero warnings, RAM_PROOF 79/79,
+21212 B, and unchanged static RAM 240808 B. Host tests remain 685/685.
+Evidence: `build/wip/cr1/f1b-red.log`, `f1b-host.log`, `f1b-build.log` and
+`f1b/ram_report.txt`. Null pointer checks use 0; the aligned-word offset
+assert uses the GCC/Clang builtin without importing a conflicting type.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |

@@ -8,6 +8,7 @@
 
 #include <tk/syslib.h>
 #include "telemetry.h"
+#include "../platform/fault_mask.h" /* Also prove kernel-safe inclusion here. */
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
