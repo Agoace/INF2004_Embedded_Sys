@@ -388,10 +388,12 @@ receipt age. This is separate from the barcode attempt and its counts.
 Do not infer which attempt supplied a command from receipt order alone.
 A newer junction report does not refresh the barcode attempt's age.
 
-SW9's `f3a4678` live-only policy adds phase UNUSED (9) reasons 13 `expired`
-and 14 `left LINE (search)`. These mean a pending command was not acted on:
-it expired before consumption, or Vehicle left LINE for natural SEARCH.
-They are **not FAILED (8)** results. The decoder accepts these new reasons
+SW9's live-only policy (`f3a4678`, revised by `43e1963`) adds phase UNUSED
+(9) reasons 13 `expired` and 14 `continuous SEARCH (>=200 ms)`. These mean a
+pending command was not acted on: it expired before consumption, or natural
+SEARCH continued for at least 200 ms. Brief SEARCH that returns to LINE
+retains the pending command; the existing travel expiry still applies.
+These are **not FAILED (8)** results. The decoder accepts these new reasons
 only with UNUSED. Ordinary phase reasons above 14 remain rejected; existing
 tagged line-angle messages remain a separate, unchanged format. Reasons
 0–12 retain their existing raw numeric display, and legacy v1 event fields

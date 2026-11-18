@@ -1701,7 +1701,7 @@ class JunctionActionDashboardTests(ModelCase):
         self.model.ingest('robot/state', reboot_state(100))
         self.model.ingest('robot/barcode', barcode_v2(flags=9, letter=ord('A'), nav=1))
         self.clock.advance(100)
-        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+        for reason, name in ((13, 'expired'), (14, 'continuous SEARCH (>=200 ms)')):
             self.model.ingest('robot/event', junction_unused(reason, sequence=reason))
             text = f'JUNCTION A: unused, reason {name} ({reason})'
             rows = self.rows('barcode')
@@ -2826,7 +2826,7 @@ class RedesignPageTests(AppCase):
     def test_junction_unused_reason_names_render_in_barcode_and_events(self):
         expression = """document.getElementById('panel-barcode').querySelector(
           'table.facts').children.map(row => row.children.map(cell => cell.textContent))"""
-        for reason, name in ((13, 'expired'), (14, 'left LINE (search)')):
+        for reason, name in ((13, 'expired'), (14, 'continuous SEARCH (>=200 ms)')):
             self.model.ingest('robot/event', junction_unused(reason, sequence=reason))
             trace = self.trace(expressions=[expression,
                 "document.getElementById('panel-events').querySelector('.items').children.map(n => n.textContent)"])
