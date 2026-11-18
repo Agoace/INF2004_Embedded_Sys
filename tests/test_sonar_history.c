@@ -1,4 +1,6 @@
 #include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
 static uint32_t test_load(const uint32_t *p,int order);
 #define __atomic_load_n test_load
 #include "../app_program/subsystem5/sonar_service.c"
@@ -8,15 +10,64 @@ static uint32_t test_load(const uint32_t *p,int order);
 #undef main
 static const uint32_t *change_on_load;
 static unsigned int change_countdown;
+/* Torn-read injection: a whole writer publication runs while the reader is
+ * between two payload word loads. */
+static const uint32_t *tear_on_load;
+static sonar_snapshot_t tear_value;
+static bool tear_append;
 static uint32_t test_load(const uint32_t *p,int order) {
     const uint32_t value=__atomic_load_n(p,order);
     if (p==change_on_load && --change_countdown==0u) {
         __atomic_store_n((uint32_t *)p,value+2u,__ATOMIC_SEQ_CST);
         change_on_load=NULL;
     }
+    if (p==tear_on_load) {
+        tear_on_load=NULL;
+        board_publish(&tear_value,tear_append);
+    }
     return value;
 }
+static sonar_snapshot_t pattern(uint32_t seed) {
+    sonar_snapshot_t v;
+    memset(&v,0,sizeof(v));
+    v.generation=seed+1u;v.id=seed+2u;v.ping_sequence=seed+3u;
+    v.result_sequence=seed+4u;v.trigger_ms=seed+5u;v.timestamp_ms=seed+6u;
+    v.deadline_ms=seed+7u;v.ping_generation=seed+8u;v.ping_id=seed+9u;
+    v.angle=(int8_t)((int)(seed%61u)-30);v.ping_angle=(int8_t)(30-(int)(seed%61u));
+    v.echo=(ultrasonic_result_t)(seed*7u);v.status=(uint8_t)(seed%4u);
+    v.pending=(seed&1u)!=0u;v.valid=(seed&2u)!=0u;
+    return v;
+}
+static bool same_snapshot(const sonar_snapshot_t *a,const sonar_snapshot_t *b) {
+    uint32_t wa[SONAR_PACK_WORDS],wb[SONAR_PACK_WORDS];
+    return sonar_pack(a,wa) && sonar_pack(b,wb) && memcmp(wa,wb,sizeof(wa))==0;
+}
+/* CR1 A: torn reads after each payload word of the board and the history. */
+static void test_torn_reads(void) {
+    sonar_snapshot_t old=pattern(1000u),out;
+    sonar_history_entry_t item;uint32_t cursor,missed;
+    for (unsigned int k=0u;k<SONAR_PACK_WORDS;++k) {
+        board_publish(&old,false);
+        tear_value=pattern(2000u+k);tear_append=false;
+        tear_on_load=&board_words[k];
+        assert(sonar_snapshot_try_read(&out)==E_TMOUT && tear_on_load==NULL);
+        assert(sonar_snapshot_try_read(&out)==E_OK && same_snapshot(&out,&tear_value));
+    }
+    for (unsigned int k=0u;k<SONAR_PACK_WORDS;++k) {
+        (void)sonar_history_skip(&cursor);
+        board_publish(&old,true);
+        const uint32_t slot=(load_word(&history_count)-1u)%SONAR_HISTORY_CAPACITY;
+        tear_value=pattern(3000u+k);tear_append=true;
+        tear_on_load=&history_words[slot][k];
+        assert(sonar_history_read(&cursor,&item,&missed)==E_TMOUT && tear_on_load==NULL);
+        assert(sonar_history_read(&cursor,&item,&missed)==E_OK && same_snapshot(&item.result,&old));
+        assert(sonar_history_read(&cursor,&item,&missed)==E_OK && same_snapshot(&item.result,&tear_value));
+        assert(sonar_history_read(&cursor,&item,&missed)==E_NOEXS);
+    }
+}
 int main(void) {
+    /* CR1 A budget: 10 words per snapshot. */
+    assert(sizeof(board_words)==40u && sizeof(history_words)==640u);
     sonar_history_entry_t item;uint32_t cursor=0u,missed=55u;
     sonar_snapshot_t board;
     assert(sonar_history_read(&cursor,&item,&missed)==E_OBJ && missed==0u);
@@ -72,5 +123,6 @@ int main(void) {
     assert(sonar_history_read(&cursor,&item,&missed)==E_OK && cursor==0u);
     assert(sonar_history_read(&cursor,&item,&missed)==E_OK && cursor==1u);
     assert(sonar_history_read(&cursor,&item,&missed)==E_NOEXS);
+    test_torn_reads();
     return 0;
 }

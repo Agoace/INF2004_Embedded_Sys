@@ -16,16 +16,16 @@
 #include "drv_ultrasonic.h"
 #include "../platform/drv_time.h"
 #include "../platform/run_timing.h"
+#include "sonar_pack.h"
 /* Only aligned 32-bit atomic loads/stores: Cortex-M0+ needs no libatomic
  * read-modify-write helper. A reader never waits for the lower-priority writer.
- * All shared words are atomic, including the payload (no C data races). */
-#define SNAPSHOT_WORDS                                                         \
-    ((sizeof(sonar_snapshot_t) + sizeof(uint32_t) - 1u) / sizeof(uint32_t))
+ * All shared words are atomic, including the payload (no C data races).
+ * The payload is the 10-word layout of sonar_pack.h (CR1 A). */
 static uint32_t board_guard;
-static uint32_t board_words[SNAPSHOT_WORDS];
+static uint32_t board_words[SONAR_PACK_WORDS];
 static uint32_t history_count;
 static uint32_t history_guard;
-static uint32_t history_words[SONAR_HISTORY_CAPACITY][SNAPSHOT_WORDS];
+static uint32_t history_words[SONAR_HISTORY_CAPACITY][SONAR_PACK_WORDS];
 
 /*
  * Read one aligned board word with the required compiler ordering.
@@ -44,47 +44,49 @@ static void store_word(uint32_t *p, uint32_t v)
 }
 
 /*
- * Copy a sonar snapshot into its aligned-word board storage.
+ * Store packed words into shared board or history storage.
  */
-static void store_snapshot(uint32_t *words, const sonar_snapshot_t *value)
+static void store_snapshot(uint32_t *words,
+                           const uint32_t packed[SONAR_PACK_WORDS])
 {
-    uint32_t copy[SNAPSHOT_WORDS] = {0};
-    for (unsigned int i = 0u; i < sizeof(*value); ++i) {
-        ((unsigned char *)copy)[i] = ((const unsigned char *)value)[i];
-    }
-    for (unsigned int i = 0u; i < SNAPSHOT_WORDS; ++i) {
-        store_word(&words[i], copy[i]);
+    for (unsigned int i = 0u; i < SONAR_PACK_WORDS; ++i) {
+        store_word(&words[i], packed[i]);
     }
 }
 
 /*
- * Copy aligned board words into the caller-owned snapshot.
+ * Copy shared words to a local copy and unpack it into the caller snapshot.
  */
 static void load_snapshot(const uint32_t *words, sonar_snapshot_t *value)
 {
-    uint32_t copy[SNAPSHOT_WORDS];
-    for (unsigned int i = 0u; i < SNAPSHOT_WORDS; ++i) {
+    uint32_t copy[SONAR_PACK_WORDS];
+    for (unsigned int i = 0u; i < SONAR_PACK_WORDS; ++i) {
         copy[i] = load_word(&words[i]);
     }
-    for (unsigned int i = 0u; i < sizeof(*value); ++i) {
-        ((unsigned char *)value)[i] = ((const unsigned char *)copy)[i];
-    }
+    sonar_unpack(copy, value);
 }
 
 /*
  * Publish a sonar snapshot and append completed results to history.
+ * Angles come only from requests that sonar_request() checked (-30..30) and
+ * status only from sonar_status_t, so the pack does not fail. If it fails,
+ * nothing is published and the guards do not change.
  */
 static void board_publish(const sonar_snapshot_t *value, bool append)
 {
+    uint32_t packed[SONAR_PACK_WORDS];
+    if (!sonar_pack(value, packed)) {
+        return;
+    }
     const uint32_t guard = load_word(&board_guard);
     store_word(&board_guard, guard + 1u);
-    store_snapshot(board_words, value);
+    store_snapshot(board_words, packed);
     store_word(&board_guard, guard + 2u);
     if (append) {
         const uint32_t hguard = load_word(&history_guard);
         store_word(&history_guard, hguard + 1u);
         const uint32_t count = load_word(&history_count);
-        store_snapshot(history_words[count % SONAR_HISTORY_CAPACITY], value);
+        store_snapshot(history_words[count % SONAR_HISTORY_CAPACITY], packed);
         store_word(&history_count, count + 1u);
         store_word(&history_guard, hguard + 2u);
     }

@@ -235,6 +235,7 @@ if(TARGET test_line_service)
     target_include_directories(test_line_service BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
 
+host_test(test_sonar_pack tests/test_sonar_pack.c)
 host_test(test_sonar_history tests/test_sonar_history.c)
 if(TARGET test_sonar_history)
     target_include_directories(test_sonar_history BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
