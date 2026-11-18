@@ -5,8 +5,8 @@
 #include "../app_program/barcode_live_vehicle/policy.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
 
-/* mm_counts(400) in ja units: ceil(400 * 12414 / 1000). */
-#define LIMIT_COUNTS 4966
+/* mm_counts(1000) = 12414; 999 mm rounds up to 12402 counts. */
+#define LIMIT_COUNTS 12414
 
 static ja_t pending(uint8_t source, int32_t base)
 {
@@ -28,8 +28,10 @@ static void route(ja_t *s, uint8_t module, int32_t l, int32_t r)
 
 int main(void)
 {
-    /* Expiry at exactly 400 mm mean forward travel, not one count before. */
+    /* Expiry at exactly 1000 mm mean forward travel, not one count before. */
     ja_t s = pending(BC_LIVE_SOURCE, 1000);
+    route(&s, VSM_MOD_LINE, 1000 + 12402, 1000 + 12402);
+    assert(s.phase == JA_PENDING); /* 999 mm. */
     route(&s, VSM_MOD_LINE, 1000 + LIMIT_COUNTS - 1, 1000 + LIMIT_COUNTS - 1);
     assert(s.phase == JA_PENDING && s.command.valid == 1u);
     route(&s, VSM_MOD_LINE, 1000 + LIMIT_COUNTS, 1000 + LIMIT_COUNTS);

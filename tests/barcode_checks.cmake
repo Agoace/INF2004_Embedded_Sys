@@ -277,7 +277,7 @@ target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
     E2E_POLICY=3
     BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     BW_MAP_POLICY_ID=2u)
-# V1/V3 live policy: J1 beyond 400 mm from the decode, or SEARCH first.
+# V1/V3 live policy: J1 beyond 1000 mm from the decode, or SEARCH first.
 foreach(variant IN ITEMS expire search)
     target_compile_definitions(test_barcode_live_e2e_${variant} PRIVATE
         BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
@@ -285,7 +285,7 @@ foreach(variant IN ITEMS expire search)
         BW_MAP_POLICY_ID=2u)
 endforeach()
 target_compile_definitions(test_barcode_live_e2e_expire PRIVATE
-    J1_MM=850.0f E2E_POLICY=1)
+    J1_MM=1500.0f J2_MM=1800.0f E2E_POLICY=1)
 target_compile_definitions(test_barcode_live_e2e_search PRIVATE
     E2E_POLICY=2)
 host_test(test_blv_policy tests/test_blv_policy.c

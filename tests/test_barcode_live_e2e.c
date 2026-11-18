@@ -100,7 +100,9 @@ static uint16_t gp28(float mm)
 #ifndef J1_MM
 #define J1_MM 600.0f
 #endif
+#ifndef J2_MM
 #define J2_MM 900.0f
+#endif
 /* Live policy: 0 none, 1 EXPIRED, 2 SEARCH, 3 normal consumption. */
 #ifndef E2E_POLICY
 #define E2E_POLICY 0
@@ -134,7 +136,7 @@ int main(void)
     uint32_t record_sequence = 0u, offered_sequence = 0u;
     float claim_mm = -1.0f;
     ja_command_t last = {0};
-    for (unsigned int ms = 0u; ms < 7000u; ++ms) {
+    for (unsigned int ms = 0u; ms < 14000u; ++ms) {
         clock_us = 1000000u + ms * 1000u;
         const float mm = travel_mm(clock_us);
         if (ms % 10u == 0u) {
