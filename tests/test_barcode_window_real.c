@@ -4,6 +4,27 @@
 #include <string.h>
 #include "../app_program/subsystem3/barcode.h"
 #include "../app_program/subsystem3/barcode_window.h"
+#ifdef BCEP_VERIFY
+#include "../app_program/subsystem3/barcode_evidence_pack.h"
+/* Replay each real reader result through the evidence codec. No replay input,
+ * reader state or output row is changed. Compare this target's CSV with the
+ * existing native target, byte for byte. */
+static void verify_evidence(const barcode_window_result_t *r)
+{
+    const barcode_live_frame_t f={.record={.sequence=r->serial,
+        .read_counts={bcep_signed(r->read_left),bcep_signed(r->read_right)},
+        .frame_end_counts={bcep_signed(r->frame_left),bcep_signed(r->frame_right)},
+        .letter=(uint8_t)r->letter,.direction=r->direction,
+        .command=r->mapped_action,.valid=r->accepted},
+        .index=r->serial,.reason=r->reason,.start_us=r->start_us,
+        .edge_us=r->edge_us,.frame_us=r->frame_us,.eligible_us=r->eligible_us,
+        .narrow_mm=r->narrow_mm,.wide_mm=r->wide_mm,.leading_mm=r->leading_mm,
+        .rise=r->rise,.fall=r->fall};
+    bcep_frame_t packed; barcode_live_frame_t out;
+    assert(bcep_frame_pack(&packed,&f)); assert(bcep_frame_unpack(&out,&packed));
+    assert(memcmp(&out,&f,sizeof(f))==0);
+}
+#endif
 
 #ifndef BC_READER_LABEL
 #define BC_READER_LABEL "checkout"
@@ -125,6 +146,9 @@ int main(void)
                 (void)barcode_window_step(&state, BW_STEP_MAX);
                 if (serial != state.result.serial) {
                     serial = state.result.serial;
+#ifdef BCEP_VERIFY
+                    verify_evidence(&state.result);
+#endif
                     event_us = state.result.accepted ? state.result.eligible_us : stamp;
                     if (!state.result.accepted) {
                         if (failures++ == 0u) {
