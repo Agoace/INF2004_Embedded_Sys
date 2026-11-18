@@ -332,3 +332,6 @@ foreach(v IN ITEMS custom builtin none)
     add_test(NAME test_barcode_producer_live_${v}_read_fail
         COMMAND test_barcode_live_producer_live_${v} read_fail)
 endforeach()
+
+add_test(NAME test_barcode_live_feed_live_recheck_fail
+    COMMAND test_barcode_live_feed_live recheck_fail)
