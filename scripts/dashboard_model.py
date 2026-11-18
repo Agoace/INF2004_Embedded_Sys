@@ -1090,10 +1090,29 @@ def barcode_panel(model, now):
     return panel
 
 
+def _imu_fault_at_run_end(fields):
+    """Describe a recorded shell latch, never the current safety condition."""
+    if fields is None:
+        return 'waiting for run summary'
+    if fields['version'] < 3:
+        return f"not reported (summary v{fields['version']} firmware)"
+    fault = fields['shell_fault']
+    if fault == 6:
+        trigger = _name({1: 'overturn', 2: 'lift', 3: 'unavailable'},
+                        fields['shell_fault_detail'])
+        return 'latched: ' + trigger
+    return 'none reported' if fault in SHELL_FAULTS else f'unknown (shell fault {fault})'
+
+
 @register_panel
 def imu_panel(model, now):
     snapshot, event = model.reserved['imu'], model.reserved['imu_event']
-    rows, notes = [], ['hump heights are report only; no navigation action']
+    summary_fields = None if model.summary is None else model.summary['fields']
+    rows = [('Current IMU safety', 'not reported'),
+            ('IMU fault at run end', _imu_fault_at_run_end(summary_fields))]
+    notes = ['hump heights are report only; no navigation action',
+             'run-end IMU fault is history, not the current latch; '
+             'current IMU safety and recovery state are not reported']
     live = model.hump_live
     if live is not None:
         rows += [("Hump event run count", live['count']),
@@ -1105,6 +1124,7 @@ def imu_panel(model, now):
         notes.append('robot/event kind 9 reports a run count, not a delivery count; '
                      'event data resets at observed run start or new boot; not a continuous IMU stream')
     if model.summary is not None:
+        rows.append(('Last run stop reason', _name(STOP_REASONS, summary_fields['stop_reason'])))
         result, warnings = _hump_result(model.summary['fields'])
         rows += result
         f = model.summary['fields']
@@ -1164,7 +1184,8 @@ def summary_panel(model, now):
                           note="no run summary yet: it appears when a run ends")
     f = record["fields"]
     implemented = f["barcode_hump_implemented"]  # v3: barcode only
-    shell = _name(SHELL_FAULTS, f["shell_fault"])
+    shell = ('unknown (6)' if f['version'] < 3 and f['shell_fault'] == 6
+             else _name(SHELL_FAULTS, f['shell_fault']))
     if f["shell_fault"]:
         shell += f" (detail {f['shell_fault_detail']})"
     unknown_speed = (not f["speed_error_valid"]
@@ -1172,6 +1193,7 @@ def summary_panel(model, now):
     rows = [("Run ID", f["run_id"]),
             ("Stop source", _name(STOP_SOURCES, f["stop_source"])),
             ("Stop reason", _name(STOP_REASONS, f["stop_reason"])),
+            ('IMU fault at run end', _imu_fault_at_run_end(f)),
             ("Started (robot uptime)", _seconds(f["start_ms"])),
             ("Duration", _seconds(f["duration_ms"])),
             ("Distance (path length)", f"{f['distance_mm']} mm"),
@@ -1190,7 +1212,8 @@ def summary_panel(model, now):
         rows.append(("Detour", "a detour was still running when the run ended"))
     notes = ["age = time since this summary arrived"]
     scope = f["boot_session"]
-    rows.append(("Boot / session", scope))
+    rows += [("Boot / session", scope),
+             ('Summary received age', f'{model.record_age(now, record)} ms')]
     if scope != model.log.sessions.current:
         notes.append("previous boot/session: not the current robot's run summary")
     if record["retained"]:
@@ -1200,8 +1223,10 @@ def summary_panel(model, now):
             now - state["rx"] <= model.limits()["state_stale_ms"]
             and state["fields"]["active"]):
         notes.append("a new run is in progress: this summary is the previous run")
-    return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
-                      rows=rows, note="; ".join(notes))
+    panel = make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
+                       rows=rows, note="; ".join(notes))
+    panel['age_kind'] = 'report'
+    return panel
 
 
 HUMP_WARNINGS = (("hump_imu_fault", "IMU data was missing for part of the run"),
