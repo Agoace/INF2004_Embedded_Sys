@@ -1,4 +1,4 @@
-# Large course window reader — B2b step 3
+# Size-tolerant course window reader — B2b
 
 ## Status
 
@@ -10,7 +10,8 @@ are initialized by S3 before tasks, with an invalid SHADOW record.
 Vehicle alone publishes control. No live action is enabled.
 
 This step supplies the reader and tests for later integration, not an on-robot
-live-read acceptance result. Small-print work remains deferred. Existing
+live-read acceptance result. The current size extension covers a bounded
+4.0--7.0 mm fitted narrow, not arbitrary small print. Existing
 [TEST barcode](BARCODE.md) WIDTH/PEAK code and quiet rules are unchanged.
 
 ## Inputs and bounded work
@@ -25,8 +26,8 @@ One task owns all reader calls. These methods are not a cross-task queue API:
 6. An accepted result remains immutable until explicit `rearm()` or `begin()`.
 
 Default source bounds: 12414 counts/m, 1500 us ADC gap for the 1 kHz feed,
-30000 us motor gap. GP28 is modelled at 80 mm forward and 77 mm left of the
-drive axle, with a 111 mm track. The axis uses the GP28 point's differential-
+30000 us motor gap. GP28 is modelled at 73 mm forward and 73 mm left of the
+drive axle (operator ruler, 2026-11-16; earlier 80/77 mm), with a 111 mm track. The axis uses the GP28 point's differential-
 drive position projected onto its direction at the first motor observation,
 instead of mean wheel travel. This compensates a forward zigzag when the
 barcode is perpendicular to that initial direction; it cannot infer an
@@ -39,7 +40,13 @@ timestamp checks are not a substitute for those counters.
 There are 64 ADC slots, eight motor points and 29 run widths. No full-pass
 sample capture, allocation or unbounded scan exists. Excess queue/history,
 invalid raw/flags, nonpositive ADC time, excessive gaps, reverse mean wheel
-progress or non-forward GP28-axis progress abandon the candidate. Exact repeated motor snapshots are
+progress, both wheels stationary, or a GP28-axis retreat of more than 2.5 mm
+below the furthest point abandon the candidate. A smaller cumulative retreat
+(a hard left steering correction) holds the stored position at the furthest
+point, and ADC rows in a held interval are skipped until progress resumes.
+The 2.5 mm bound is ASSUMED; see the
+[FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md#approved-changes-and-host-plan).
+Exact repeated motor snapshots are
 idempotent; changed counts at the same timestamp are not. Per-wheel modular
 counter differences handle wrap before the mean is calculated. Large counter
 jumps are rejected. Stationary samples cannot earn spatial white evidence.
@@ -51,7 +58,7 @@ Result counts are ORIGINAL upper motor brackets, not invented interpolated
 counter pairs. ADC edge/start/eligible times and the source bracket times are
 separate evidence. The final-edge bracket is conservative for later arming.
 
-## Frozen thresholds and leading white
+## Frozen ADC thresholds and leading white
 
 The [white-offset correction](LIVE_CALIBRATION.md) supplies calibration.
 Fallback without spin white is usable only if NEW leading white qualifies;
@@ -66,9 +73,11 @@ through all 29 elements and short white confirmation. Mat black never sets
 the threshold scale. A short bounded transition from white to the first bar
 is allowed; it is not counted as credible leading white.
 
-Leading white must cover ten fitted narrow widths at the start star. The
-pre-search gate is only provisional; matching the first star cannot waive
-that final leading-white test. Mid-window adaptation is forbidden.
+Leading white must cover 40 mm both before admission and after fitting the
+start star. Any above-rise black that is not admitted clears the white
+qualification, even if the black run is short. Transition-band handling
+below rise stays bounded as before. Mid-window adaptation is forbidden.
+See the [FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md).
 
 ## The course window, not a trailing quiet-zone repair
 
@@ -85,22 +94,37 @@ bar/space edge bias without a requested letter, and uses the full ordinary
 Code 39 symbol table. Only a single uppercase A--Z is eligible for mapping.
 Digits/punctuation are recognized but rejected for course actuation.
 
-Initial large-print gates, to verify in shadow hardware:
+Current size gates, to verify in SHADOW hardware. The start star supplies the
+scale; a second fixed absolute wide band does not constrain it:
 
 | Check | Bound |
 | --- | --- |
-| Corrected narrow | 4.6--7.0 mm |
-| Corrected wide | 13.5--21.5 mm |
+| Corrected narrow | 4.0--7.0 mm (ASSUMED scope, not measured optical resolution) |
+| Corrected wide | Fitted from the three wide elements; ratio/consistency checks below |
 | Wide/narrow ratio | 1.6--3.4 |
 | Minimum class separation | 1.4 |
 | Each element against its class mean | 0.65--1.5 |
 | Data/stop scale against start | Within 20% |
 | Corrected inter-character gaps | 0.65--1.5 start narrow |
 | Total corrected body extent | Within two narrows of `20n + 9w` |
-| Candidate time/body/run limits | 5 s / 360 mm / 35 mm |
+| Leading white | 40 mm before and after fitting; unadmitted black clears qualification |
+| Pre-star white-to-ink transition allowance | 7 mm maximum candidate narrow (unchanged) |
+| Candidate time/body limits | 5 s / 360 mm (unchanged absolute watchdogs) |
+| Run limit before start-star fit | 35 mm absolute ceiling |
+| Run limit after start-star fit | Smaller of 35 mm and `1.5w + abs(bias)` |
 
 The body formula is about 273.5 mm at n=5.8 and w=17.5. It validates one
 candidate; it is NOT a 285 mm sensor blackout or a delay based on map geometry.
+With a wide/narrow ratio of three, approximate 274/210/141 mm bodies give
+n=5.83/4.47/3.00 mm. The first two are in scope; 141 mm remains out of scope.
+The 210 mm home-sheet ruler measurement is approximate, not a measured fit.
+The cross-axis GP28 sigma estimate of about 2.15 mm cannot establish the
+along-travel optical resolution. The 4 mm floor is ASSUMED. Do not lower it
+without straight, full-rate GP28 and encoder captures.
+
+The start, data and stop fits retain the geometry and bar/space bias correction
+from `52244f2`. No sensor offsets, forward-axis projection, ADC hysteresis,
+source-gap checks, command mapping or one-narrow trailing proof change.
 
 After the fifteenth bar ends, require continuous credible white for one
 narrow width (the larger fitted start/stop narrow). Ink before that proof
@@ -125,7 +149,76 @@ will print this same table once when integration lands; no second hardcoded
 copy is permitted. A mapped value remains data here, never an executed action.
 SHADOW and the unverified 150 mm guard cannot enable a real action.
 
-## Evidence and limits
+## Size-extension acceptance gates
+
+| Gate | Result and limit |
+| --- | --- |
+| RED before implementation | Original reader aborts on the 210 mm synthetic acceptance assertion (exit 134). |
+| GCC host | 536/536 pass, including size cases. |
+| Clang ASan/UBSan host | 536/536 pass. |
+| Size corpus | All 26 letters, both print directions, rectangular 274/210 mm bodies decode; 141 mm rejects. ASSUMED optics. |
+| Bounds and negatives | 3.9/7.1 mm narrow reject; 4.05/6.95 mm pass. Bad ratio/gap/scale, missing/merged bars, short white, long run, line-only and synthetic junction ink reject. |
+| Original optical fixtures | Existing large forward F fixtures still pass; backward drive still rejects. No measured 210 mm optical fixture yet. |
+| Hash76 against `25f70a7` | 38 warning-free profiles: 48 image hashes differ as expected; 28 match. Only `barcode_window.o` changes in every object comparison. |
+| Host-only optical SIL | PASS: 180 ASSUMED stripe cases, 64 correct accepts, no wrong letters/negative decodes; all 141 mm cases reject. No Webots process or hardware test. |
+| Home straight 210 mm SHADOW test | NOT RUN; wait for review. Record body/quiet dimensions and full-rate GP28/encoder data. |
+
+The host-only SIL uses infinite transverse stripes on white paper, a linear
+ASSUMED ADC response and exact no-slip motion, not the finite-paper or fitted
+nonlinear GP28 model. The straight 274/210 mm corpus passes at ASSUMED
+along-sigma 0/0.5/1 mm and rejects at 2.15/4 mm. High-blur/yaw rejections
+remain in the result. This does not demonstrate physical 210 mm readability
+or a safe minimum narrow width. The simulation branch stores the full record
+as `docs/simulation/S3_SIZE_READER_SIL.md`.
+
+Hash76 uses identical export/build paths for baseline and candidate. For each
+of UP, split and forced-core0 control placement, the UF2 and ELF change for
+`usb`, `wifi`, `lwip`, `mqtt`, and `mqtt-jA` through `mqtt-jD` (24 profiles).
+These are exactly the images that retain `barcode_window_step`, checked with
+`arm-none-eabi-nm`. For each placement, `test`, `bench`, `mqtt-test` and
+`mqtt-bench` match, as do `capture-f0/f1` (14 profiles). Thus all other 28
+UF2/ELF hashes match. The default robot image changes intentionally because
+its live reader uses the new size policy. No other object hash changes.
+Local evidence is under `build/size-reader/` and `/tmp/sw10-size-h76{,.base,.cand,.base-log}`;
+these compiler/profile results are not hardware acceptance.
+
+### School attempts: context, not full-rate optical replay
+
+MEASURED timestamps below come from the final GP20 dump of each `b0c3a9a`
+run. BASE run start is 19.627 s uptime; RAM run start is 81.189 s. KR rows
+are nearest retained rows, not reconstructed edge brackets.
+
+| Run/attempt | Start uptime s | Run s | KR row | Failure |
+| --- | --- | --- | --- | --- |
+| BASE 1 | 23.671988 | 4.045 | 199 | BW_START |
+| BASE 2 | 25.201988 | 5.575 | 272 | BP_CONTROL |
+| BASE 3 | 29.699989 | 10.073 | 493 | BP_DISABLED |
+| BASE 4 | 68.693986 | 49.067 | 2413 | BW_MOTION |
+| BASE 5 | 69.966989 | 50.340 | 2473 | BW_WIDTH |
+| RAM 1 | 85.458045 | 4.269 | 203 | BW_START |
+| RAM 2 | 86.772046 | 5.583 | 261 | BW_WIDTH |
+| RAM 3 | 91.279045 | 10.090 | 457 | BP_DISABLED |
+| RAM 4 | 130.125045 | 48.936 | 2293 | BW_START |
+| RAM 5 | 131.499045 | 50.310 | 2357 | BW_WIDTH |
+
+ASSUMED: the first two candidates belong to the one barcode after the first
+turn. A candidate is not a separate physical barcode. Later candidates are
+not proven negatives from ADC alone. MQTT samples GP28 at about 5 Hz, too
+slow to count its 15 bars or replay the live 1 kHz edge widths. The first
+cluster shows two sampled dark runs in BASE and three in RAM. Near candidate
+one, measured yaw is -21.2/+25.3 degrees/s and requested left/right speeds are
+181/111 and 102/190 mm/s respectively. Yaw reaches about +/-54.2 degrees/s
+within the cluster. Size rejection alone is not a demonstrated cause.
+
+These ten attempts constrain the context review, not a measured false-positive
+rate for the new policy. Do not interpolate 5 Hz ADC into an asserted full-rate
+regression. Wider size admission can admit more false starts; complete stars,
+class separation, gaps, scale agreement, single-letter framing, source health
+and fresh leading white remain mandatory. Keep SHADOW until hardware review.
+Local source logs: `build/kram_robot_b0c3a9a/robot_{BASE,RAM}.final.log` and
+`mqtt_{BASE,RAM}.csv` in the review workspace. They are not public fixtures.
+
+## Historical evidence and limits
 
 - At step3: strict host and Clang ASan/UBSan297/297, including35 window cases.
 - All 43 data symbols in both print orders, across default/custom/invalid/

@@ -10,7 +10,7 @@
 | Sensor | SW4 [boot5209 fitted profiles](S3_ASSUMED_LINE_PROFILES.md), noise0; LEFT=GP27, CENTRE=GP26; barcode not right-line |
 | Calibration | Public pair-mode/calib APIs;16 synthetic uniform-floor200 rows +4 uniform-ink3700 rows; NOT a thin-strip calibration or private-state injection |
 | Controller | ASSUMED base20,min8,max40%,P100,D100,trim0,far gain0; stop latched on line loss; not locked robot tuning |
-| Plant | All forward rows5..100% in [DM1](../archive/s2-motion/DUTY_MAP.md), boot5d51 table; per-wheel linear interpolation ONLY,0→velocity0,other duties rejected/logged |
+| Plant | All forward rows5..100% in [DM1](../s2-motion/MOTION.md#duty-map), boot5d51 table; per-wheel linear interpolation ONLY,0→velocity0,other duties rejected/logged |
 | Actuation | speed_mm_s/ASSUMED32.5mm radius; velocity servo cap ASSUMED0.12Nm; reverse/braking unmodelled;80–100% DM1 rows have wheelie/unsettled caveat |
 
 Fast optical query uses actual XY/yaw projected to fixed9mm clearance; tilt/bounce

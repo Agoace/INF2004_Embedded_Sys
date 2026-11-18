@@ -1,6 +1,6 @@
 /*
  * Vehicle state machine: the Vehicle Controller shell
- * (docs/architecture/ADR_VEHICLE_CONTROLLER.md,
+ * (Vehicle Controller ADR in
  * docs/architecture/ARCHITECTURE.md).
  *
  * It runs one module at a time. Each module does its job, interprets the
@@ -130,6 +130,7 @@ typedef enum {
     VSM_FAULT_NO_ROUTE = 3,     /* detail: outcome word */
     VSM_FAULT_NO_MODULE = 4,    /* detail: module number with no functions */
     VSM_FAULT_HANDOFF_LOOP = 5, /* detail: outcome word of the last handoff */
+    VSM_FAULT_IMU = 6,         /* detail: imu_safety_trigger_t */
 } vsm_fault_t;
 
 /* Handoffs allowed in one vsm_step(): a new module may finish in its
@@ -170,6 +171,8 @@ void vsm_stop(vsm_t *vsm);
 
 /* Leave FAULT: IDLE. The glue clears the motor controller faults too. */
 void vsm_reset(vsm_t *vsm);
+/* Port of 48b5f9b: external safety owner, persistent until explicit reset. */
+void vsm_set_fault(vsm_t *vsm, vsm_fault_t fault, uint16_t detail);
 
 /* Every 10 ms. mc_faults: latched motor controller fault bits
  * (MC_FAULT_LATCHED part of mc_faults()). Returns the drive command. */

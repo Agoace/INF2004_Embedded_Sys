@@ -31,7 +31,7 @@ Use the original course material to resolve a requirement or marking detail.
   not the full allowed range or an approved detection threshold.
 - Choose data widths from the values that the application permits. Keep
   units, sign, unavailable values and reserved bits explicit. See the team's
-  [CR1 interpretation](../architecture/week8_change_requirement_1_notes.md).
+  [CR1 interpretation](../architecture/CR1.md#requirement) (full Week 8 notes in [history](../archive/architecture/HISTORY.md#files)).
 - Distinguish course requirements, design decisions and hardware evidence.
   A host test or successful build does not establish that a physical task
   has passed. Record the tested revision and the operator result.

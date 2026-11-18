@@ -7,6 +7,7 @@
 #include "imu_probe.h"
 #include "imu_capture.h"
 #include "imu_hump_diag.h"
+#include "imu_safety.h"
 
 typedef struct {
     imu_core_output_t value;
@@ -36,6 +37,12 @@ int imu_snapshot_try_read(imu_snapshot_t *out);
 int imu_hump_try_read(imu_hump_report_t *out);
 /* Diagnostic C observation board; same bounded-copy contract. */
 int imu_hump_diag_try_read(imu_hump_diag_report_t *out);
+/* Unchanged output on failure; only real observations refresh board time. */
+int imu_safety_try_read(imu_safety_report_t *out);
+/* Vehicle is the sole requester. Nonzero token identifies this attempt;
+ * zero means no running writer. Acceptance is not acknowledgement: wait for
+ * the same token in a fresh report with no latch before releasing a stop. */
+uint32_t imu_safety_clear_request(void);
 /* TEST GP21 drive boundary (single TEST writer): active=true makes the
  * run epoch odd, false makes it even. Returns the new epoch; other images
  * return 0 and use vehicle_run_epoch(). */

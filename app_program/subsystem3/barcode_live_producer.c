@@ -1,6 +1,16 @@
 #include "barcode_live_producer.h"
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.h"
+#endif
 #include <math.h>
 #include <string.h>
+
+#ifndef BARCODE_LIVE_ENABLE
+#define BARCODE_LIVE_ENABLE 0
+#endif
+#if BARCODE_LIVE_ENABLE != 0 && BARCODE_LIVE_ENABLE != 1
+#error "BARCODE_LIVE_ENABLE must be 0 or 1"
+#endif
 
 uint32_t barcode_live_ms_at(uint32_t now_ms, uint32_t now_us, uint32_t us)
 {
@@ -64,14 +74,18 @@ static void evidence(barcode_live_producer_t *p,
                      const barcode_live_input_t *in, uint32_t reason)
 {
     const barcode_window_t *w = &p->window;
+#if BARCODE_FAIL_CAPTURE
+    bcfc_close(w);
+#endif
     p->event = (barcode_live_frame_t){
         .record = {.epoch = p->context.epoch,
                    .eligibility_revision = p->context.eligibility_revision,
                    .source = BC_LIVE_SOURCE, .version = BC_LIVE_VERSION,
                    .letter = reason == BW_NOT_LETTER ?
                        (uint8_t)w->result.letter : 0u,
-                   .flags = BC_LIVE_SHADOW},
-        .reason = reason, .start_us = w->start_us,
+                   .flags = BC_LIVE_SHADOW, .direction = w->direction},
+        .reason = reason, .start_us = w->start_us, .terminal_us = in->now_us,
+        .narrow_mm = w->narrow, .wide_mm = w->wide,
         .control_age_ms = p->control_age_ms,
         .spin_white = w->calibration.white_mean,
         .leading_white = (uint32_t)lroundf(w->white_mean),
@@ -128,7 +142,22 @@ static void publish(barcode_live_producer_t *p,
     if (barcode_window_table_confirmed()) {
         e->record.flags |= BC_LIVE_MAP_CONFIRMED;
     }
+#if BARCODE_LIVE_ENABLE
+    /* Live opt-in build only (make: measured clear bound, NONE fake source,
+     * custom BARCODE_MAP). Act only with a custom confirmed map, mode2 both
+     * at the first bar (bound context) and now, and a mapped command. */
+    if (barcode_window_mapping_id() >= 2u &&
+        p->context.mode == BC_LIVE_PERMITTED &&
+        in->control.mode == BC_LIVE_PERMITTED &&
+        e->record.command >= 1u && e->record.command <= 4u &&
+        (e->record.flags & BC_LIVE_REQUIRED) ==
+            (BC_LIVE_REQUIRED & ~BC_LIVE_OFFSET_VERIFIED)) {
+        e->record.flags = BC_LIVE_REQUIRED;
+        e->record.valid = 1u;
+    }
+#else
     /* Deliberately no OFFSET_VERIFIED, no valid1, even for control mode2. */
+#endif
     e->edge_us = r->edge_us;
     e->frame_us = r->frame_us;
     e->eligible_us = r->eligible_us;

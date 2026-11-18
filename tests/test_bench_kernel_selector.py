@@ -215,5 +215,21 @@ class KernelRamRule(unittest.TestCase):
         self.assertNotIn("subsystem3/drv_line_hw.o", bench)
 
 
+
+class TimelineRamRename(unittest.TestCase):
+    """rt_tl/rt_tl_gpio reach RAM by an objcopy rename, not a .data section
+    attribute on code (gas warns: incorrect section attributes)."""
+
+    def test_no_data_section_attribute_on_code(self):
+        text = (ROOT / "app_program/platform/run_timing.c").read_text()
+        self.assertNotIn('section(".data', text)
+
+    def test_make_renames_both(self):
+        text = (ROOT / "build_make/pico_rp2040.mk").read_text()
+        for name in ("rt_tl", "rt_tl_gpio"):
+            self.assertIn(f"--rename-section .text.{name}=.data.ramfunc.{name}",
+                          text)
+
+
 if __name__ == "__main__":
     unittest.main()

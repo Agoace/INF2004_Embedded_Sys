@@ -164,14 +164,24 @@ int main(int argc, char **argv) {
     assert(board_status.watchdog_armed && board_status.faults==s.faults);
     assert(s.ticks == 2u && s.gap_min_us == 10000u && s.tick_max_us == 7u);
     assert(motion_set_speed(150, 150) == E_OK);
+#if MOTION_SAME_TICK
+    /* Same tick: the speed set after the tick reaches the motor at once. */
+    assert(output[0] > 0 && output[1] > 0 && !held);
+#endif
     tick(30000u);
     assert(output[0] > 0 && output[1] > 0);
     assert(motion_estop() == E_OK && output[0] == 0 && output[1] == 0);
+#if MOTION_SAME_TICK
+    assert(motion_set_speed(150, 150) == E_OK && output[0] == 0 && output[1] == 0);
+#endif
     tick(40000u);
     assert(output[0] == 0 && output[1] == 0);
     assert(motion_status(&s) == E_OK && (s.faults & MC_FAULT_ESTOP) != 0u);
     assert(motion_clear_faults() == E_OK);
     assert(motion_set_speed(40, 40) == E_OK);
+#if MOTION_SAME_TICK
+    assert(output[0] == 0 && output[1] == 0); /* Clear closes the window. */
+#endif
     tick(150000u);
     assert(motion_status(&s) == E_OK && (s.faults & MC_FAULT_STALE) != 0u);
     assert(output[0] == 0 && output[1] == 0);
@@ -190,6 +200,22 @@ int main(int argc, char **argv) {
     assert(s.watchdog_armed && wd_starts==1u && wd_feeds==7u);
     ((void (*)(void *))cyclic_entry)(0); /* Stuck task: cyclic wake alone never feeds. */
     assert(wd_feeds==7u);
+#if MOTION_SAME_TICK
+    /* Stop, clear and ESTOP close the window: no late write of this period. */
+    assert(motion_set_speed(150, 150) == E_OK);
+    tick(200000u);
+    assert(output[0] > 0 && motion_stop() == E_OK && output[0] == 0);
+    assert(motion_set_speed(150, 150) == E_OK && output[0] == 0 && output[1] == 0);
+    tick(210000u);
+    assert(output[0] > 0 && motion_clear_faults() == E_OK && output[0] == 0);
+    assert(motion_set_speed(150, 150) == E_OK && output[0] == 0 && output[1] == 0);
+    tick(220000u);
+    assert(output[0] > 0 && motion_estop() == E_OK);
+    assert(motion_set_speed(150, 150) == E_OK && output[0] == 0 && output[1] == 0);
+    assert(motion_clear_faults() == E_OK);
+    tick(230000u); /* Target 0 after the clear: the window opens again. */
+    assert(output[0] == 0 && motion_set_speed(150, 150) == E_OK && output[0] > 0);
+#endif
 #if APP_TEST
     motion_timing_probe_t probe;
     assert(motion_timing_probe_read(MOTION_PROBE_BEFORE_S0_PRINT,&probe)==E_OBJ);

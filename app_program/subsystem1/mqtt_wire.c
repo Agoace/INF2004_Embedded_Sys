@@ -51,6 +51,32 @@ static void put32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)(v >> WIRE_HIGH_BYTE_BITS);
 }
 
+bool rm_pack_barcode(uint8_t out[RM_BARCODE_SIZE], const rm_barcode_t *v)
+{
+    if (!out || !v) return false;
+    const bool ok = (v->flags & RM_BARCODE_DECODED) != 0u;
+    const bool failed = (v->flags & RM_BARCODE_FAILED) != 0u;
+    const bool widths = (v->flags & RM_BARCODE_WIDTHS) != 0u;
+    if ((v->flags & ~15u) != 0u || ok == failed || v->direction > 2u ||
+        v->command > 4u || v->sequence == 0u || v->epoch == 0u ||
+        (ok && (v->letter < 'A' || v->letter > 'Z' || v->reason != 1u)) ||
+        (failed && (v->letter != 0u || v->command != 0u ||
+                    !((v->reason >= 2u && v->reason <= 10u) ||
+                      (v->reason >= 100u && v->reason <= 107u)))) ||
+        (widths && (v->narrow_cmm == 0u || v->wide_cmm == 0u ||
+                    v->narrow_cmm == 65535u || v->wide_cmm == 65535u)) ||
+        (!widths && (v->narrow_cmm != 65535u || v->wide_cmm != 65535u))) {
+        return false;
+    }
+    out[0] = RM_BARCODE_VERSION; out[1] = 1u;
+    out[2] = v->flags; out[3] = v->letter;
+    put16(out + 4, v->reason); out[6] = v->direction; out[7] = v->command;
+    put32(out + 8, v->sequence); put32(out + 12, v->epoch);
+    put32(out + 16, v->start_ms); put32(out + 20, v->uptime_ms);
+    put16(out + 24, v->narrow_cmm); put16(out + 26, v->wide_cmm);
+    return true;
+}
+
 /*
  * Read a 32-bit value in little-endian byte order.
  */
@@ -172,7 +198,14 @@ void rm_pack_obstacle(uint8_t out[RM_OBSTACLE_SIZE], const rm_obstacle_t *v)
     out[LEFT_FREE_STEP_OFFSET] = v->left_free_step;
     out[RIGHT_CLEAR_DEG_OFFSET] = v->right_clear_deg;
     out[LEFT_CLEAR_DEG_OFFSET] = v->left_clear_deg;
-    put32(out + RM_OBSTACLE_SIZE - sizeof(uint32_t), v->boot_id);
+    put32(out + 20u, v->boot_id);
+    put16(out + 24u, (v->geometry_flags & RM_OBSTACLE_WIDTH_VALID) != 0u ?
+                      v->width_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    put16(out + 26u, (v->geometry_flags & RM_OBSTACLE_LEFT_CLEAR_VALID) != 0u ?
+                      v->left_clear_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    put16(out + 28u, (v->geometry_flags & RM_OBSTACLE_RIGHT_CLEAR_VALID) != 0u ?
+                      v->right_clear_mm : RM_OBSTACLE_GEOMETRY_NONE);
+    out[30] = v->geometry_flags; /* Byte31 stays reserved zero. */
 }
 
 /*

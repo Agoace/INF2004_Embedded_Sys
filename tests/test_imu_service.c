@@ -24,6 +24,7 @@ static int motion_error;
 static int missed;
 static int wake_error;
 static bool sensor_ok = true;
+static int32_t sensor_z = 1375;
 static bool sensor_empty;
 static bool stale_motion;
 static bool corrupt_read;
@@ -68,7 +69,7 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now, imu_units_t *out)
     probe->total_us += 530u;
     out->accel_mg[0] = -20;
     out->accel_mg[1] = 80;
-    out->accel_mg[2] = 1375;
+    out->accel_mg[2] = sensor_z;
     out->mag_valid = true;
     probe->fifo_last_samples = 4u;
     for (unsigned int i = 0u; i < 4u; ++i) {
@@ -100,7 +101,11 @@ ID tk_cre_cyc(const T_CCYC *config)
 {
     ++create_calls;
     assert(config->cyctim == 10u && config->cycphs == 10u);
+#if TK_SUPPORT_SMP
     assert(config->assprc == app_prc_core1());
+#else
+    assert(config->assprc == 0u); /* UP has no cyclic affinity attribute. */
+#endif
     cyclic_function = config->cychdr;
     return create_error != 0 ? E_SYS : 6;
 }
@@ -181,6 +186,50 @@ static imu_hump_report_t read_hump(void)
     return out;
 }
 
+static void test_safety_tokens(void)
+{
+    imu_safety_report_t report, saved;
+    assert(imu_safety_try_read(NULL) == E_PAR);
+    run(250u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.value.clear_ms == IMU_SAFETY_CLEAR_MS);
+    const uint32_t first = imu_safety_clear_request();
+    assert(first != 0u);
+    assert(imu_safety_try_read(&saved) == E_OK);
+    assert(saved.applied_request == 0u); /* Request is not an ACK. */
+    sensor_empty = true;
+    run(2u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.value.observation_ms == saved.value.observation_ms);
+    assert(report.applied_request == 0u);
+    sensor_empty = false;
+    run(1u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.applied_request == first);
+    sensor_z = 675; /* Corrected 300 mg, after the default 375 mg bias. */
+    run(2u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.value.latched_trigger == IMU_SAFETY_LIFT);
+    const uint32_t refused = imu_safety_clear_request();
+    run(1u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.applied_request == first && refused != first);
+    assert(report.value.latched_trigger == IMU_SAFETY_LIFT);
+    sensor_z = 1375;
+    run(110u);
+    const uint32_t retry = imu_safety_clear_request();
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.applied_request != retry);
+    run(1u);
+    assert(imu_safety_try_read(&report) == E_OK);
+    assert(report.applied_request == retry);
+    assert(report.value.latched_trigger == IMU_SAFETY_NONE);
+    saved = report;
+    corrupt_read = true;
+    assert(imu_safety_try_read(&report) == E_TMOUT);
+    assert(memcmp(&report, &saved, sizeof(report)) == 0);
+}
+
 static imu_snapshot_t read_snapshot(void)
 {
     imu_snapshot_t out;
@@ -243,6 +292,10 @@ int main(int argc, char **argv)
     assert(memcmp(&hump, &hump_saved, sizeof(hump)) == 0);
     assert(imu_hump_diag_try_read(&diag) == E_TMOUT);
     assert(memcmp(&diag, &diag_saved, sizeof(diag)) == 0);
+    if (argc > 1 && strcmp(argv[1], "safety") == 0) {
+        test_safety_tokens();
+        return 0;
+    }
     if (argc > 1 && strcmp(argv[1], "fifo_empty") == 0) {
         run(103u);
         saved = read_snapshot();

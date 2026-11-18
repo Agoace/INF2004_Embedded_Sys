@@ -8,6 +8,7 @@ host_test(test_vehicle_network_policy tests/test_vehicle_network_policy.c
     app_program/vehicle/vehicle_network_policy.c)
 host_test(test_vehicle_network_task tests/test_vehicle_network_task.c
     app_program/vehicle/vehicle_task.c app_program/vehicle/vehicle_log.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/vehicle_network_policy.c app_program/vehicle/obstacle_report.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c
     app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
@@ -17,10 +18,15 @@ if(TARGET test_vehicle_network_task)
     target_include_directories(test_vehicle_network_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_link_libraries(test_vehicle_network_task PRIVATE m)
     target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
+    foreach(imu_case imulift imustale imuabsent imurecover)
+        add_test(NAME test_vehicle_network_${imu_case}
+            COMMAND test_vehicle_network_task ${imu_case})
+    endforeach()
     add_test(NAME test_vehicle_network_uncalibrated COMMAND test_vehicle_network_task uncalibrated)
     add_test(NAME test_vehicle_network_estop_priority COMMAND test_vehicle_network_task estop)
 endif()
 host_test(test_obstacle_report tests/test_obstacle_report.c app_program/vehicle/obstacle_report.c ${obstacle_profile_source})
+target_link_libraries(test_obstacle_report PRIVATE m)
 host_test(test_odometry tests/test_odometry.c app_program/vehicle/odometry.c)
 host_test(test_run_stats tests/test_run_stats.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c)

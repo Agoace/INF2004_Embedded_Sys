@@ -42,7 +42,7 @@ make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 
 Demo image (operator, 2026-11-15): UP robot with the kernel hot path in RAM.
 Check that `<image>.ramproof` starts with `RAM_PROOF PASS listed 75 in_ram 75`.
-See [KERNEL_RAM.md](KERNEL_RAM.md).
+See [KERNEL_RAM](KERNEL.md#ram-placement-kernel_ram).
 
 ```sh
 make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
@@ -62,10 +62,14 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
 | `BARCODE_CAPTURE` | 0; 1 selects B1b driven TEST capture; VIN required |
 | `JUNCTION_TEST_CMD` | NONE (default) selects source2 SHADOW; A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
-| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
+| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE, a non-empty `BARCODE_MAP` and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
 | `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
 | `BARCODE_MAP` | Empty default = built-in table, image unchanged. `"F=LEFT,K=RIGHT"` sets the barcode_window action table (unlisted letters NONE; NONE/LEFT/RIGHT/STRAIGHT/UTURN) via [`barcode_map.py`](../../tools/barcode_map/barcode_map.py); bad letter, action or a repeat stops make. Adds `_bmap<id>`. Check the boot line `[BARCODE_TABLE] id <id> confirmed 1 A=.. Z=..` (0..4 = N/L/R/S/U). |
 | `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
+| `LINE_KD` | 30 default (config value, since 2026-11-17; was 85). 0..85 replaces only the LINE D gain ([D gain trial](../s3-line-barcode/LINE.md#d-gain-trial-line_kd-default-30-since-2026-11-17)). A value other than 30 adds `_kdN`. Not with `BENCH_KERNEL=1`. |
+| `MOTION_SAME_TICK` | 1 default for robot images (since 2026-11-17): a new wheel speed applies in the same 10 ms period ([same-tick retarget](../s2-motion/MOTION.md#same-tick-retarget-default-on)). 0 gives the old timing and adds `_sametick0`. `BENCH_KERNEL=1`: default 0, no suffix; 1 stops make. |
+| `BARCODE_FAIL_CAPTURE` |0 default, images unchanged.1 is ROBOT only and keeps raw edge/decimated ADC evidence for the first two failed attempts per run. Adds `_bcfail2`. See [failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md). |
+| `BARCODE_FAIL_SLOTS` |2 default;1 is the smaller fallback. Used only when failed capture is enabled; changes image/profile suffix and invalidates old objects. Recheck combined RAM/headroom before use. |
 | `IMU_HUMP_SOURCE` | 1 corrected (default); 2 filtered roll; other values rejected; 2 adds `_humpfilt` to the image name |
 
 Robot/TEST IMU images require USB console and `CRASH_REPORT=0` because
@@ -193,7 +197,9 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 JUNCTION_TEST_CMD=NONE \
     BARCODE_LIVE_ENABLE=0 BARCODE_MEASURED_CLEAR_MM=0 -j4 --output-sync=target
 ```
 
-The decoder and adapter report evidence only; S3 forces valid0 even in mode2.
+In default builds, the decoder and adapter report evidence only, and S3 forces
+valid0 even in mode2. A live opt-in build ([BARCODE_LIVE_COMMAND.md](../s3-line-barcode/BARCODE_LIVE_COMMAND.md))
+can set valid1 only with mode2, a custom `BARCODE_MAP` and a mapped letter.
 The150 mm SHADOW label is unverified and cannot authorize actions. Enable,
 bound and source choice are object-profile keys. Invalid bounds, fake+live,
 or enable1 with bound0 fail in Make and C. Do not build/flash an action image
@@ -214,7 +220,7 @@ record/control limits,10 ms LINE age, terminal ACK and stopped diagnostics.
 Use the tracked `.example` headers as shapes, not credentials. In a fresh
 worktree, copy private settings privately and apply `chmod 600`; do not
 print or commit their values. The broker default `0.0.0.0` builds but does
-not connect. [OPERATION.md](../s1-telemetry/OPERATION.md#private-settings)
+not connect. [TELEMETRY.md operation](../s1-telemetry/TELEMETRY.md#private-settings)
 has first-time token setup. UF2/ELF files embed credentials; do not publish
 them or attach them to public evidence. Do not replace existing secrets.
 
@@ -259,6 +265,61 @@ Save terminal output under ignored `build/` when needed. Reconnect after a
 reset if the terminal closes. Check the boot profile, reset reason, complete
 TEST lines and dump loss footer; an enumerated port is not a timing pass.
 
+## Kernel bench image (BENCH_KERNEL)
+
+Runs the real radio-free robot tasks on a **spare** Pico, not the robot.
+Coding workers do not flash hardware.
+
+```sh
+make -C build_make SMP=0 WIFI=none NET=none MQTT=0 BENCH_KERNEL=1 -j8
+make -C build_make SMP=1 WIFI=none NET=none MQTT=0 BENCH_KERNEL=1 -j8
+make -C build_make SMP=0 FORCE_CORE0=0 WIFI=none BENCH_KERNEL=1 KERNEL_RAM=1
+```
+
+Images end in `_bench_kernel_step0.uf2` (`_kernel_ram` with the third line).
+
+| Item | Rule |
+| --- | --- |
+| Stimulus | Alarm1 gives 3800 encoder edges/s, alternating wheels, for 600 s, through a virtual GPIO provider into the unchanged dispatcher and motion callback. A missed slot or a pending-edge collision stops the generator (`GEN_STOPPED`); it never replays edges |
+| Other inputs | Line samples constant 1800; IMU NACK; sonar no echo; motor/servo writes kept in RAM, no PWM |
+| Run | Record USB from boot. After the stop, a virtual GP20 press dumps about 500 ms later. Do not press GP21 |
+| Report | `[timeline]`, `[load]`, `[bench_load]` (`WRAP_RISK` above 7146368/s), P1 lines, `[bench_top]` (count >= 100 us and top 20 per P1 counter), then `[bench] window_us W sched S delivered D coalesced C overflow O gen_calls N gen_us_sum U gen_us_max M cost_bp B V` and a per-wheel `COUNT_MATCH` line |
+| Verdict V | `GEN_STOPPED` (O > 0, overrides), `OK` (B < 300), `COST_HIGH`, `BAD_WINDOW` (W = 0 or > 60 min) |
+| Pass | No reset in 10 min; window 600000000 us; 2280000 edges scheduled = delivered; 1140000 per wheel with `diff 0` and `COUNT_MATCH`; coalesced and overflow 0; `cost_bp < 300` |
+| Limit | Generator time excludes IRQ entry/exit (about 1-2 us per call). Encoder/interrupt load test only, not sensor or robot acceptance |
+| Gate | Bench objects are not in ordinary links: 76 ordinary ELF/UF2 hashes (hash76) must match the base |
+
+Code: `app_program/bench_kernel/` (`bench_stats`, `bench_report`,
+`bench_gpio`, `bench_top`); tests `tests/test_bench_*.c`. Results:
+[split parked](KERNEL.md#split-placement-parked-2026-11-15) and
+[KERNEL_RAM](KERNEL.md#ram-placement-kernel_ram).
+
+## SWD debug probe
+
+Use it to see both cores, read memory while the firmware runs, or load
+without BOOTSEL. Connect **only SWDIO, SWCLK and GND** (no probe power).
+
+| Probe | Where | OpenOCD | Wiring SWCLK / SWDIO / GND |
+| --- | --- | --- | --- |
+| Raspberry Pi Debug Probe | school, laptop | `-f interface/cmsis-dap.cfg -f target/rp2040.cfg -c "adapter speed 5000"` | `D` port SC / SD / GND |
+| Raspberry Pi 400 header | home | start script in its Pico folder (loopback only); forward with `ssh -N -L 3333:127.0.0.1:3333 <pi-user>@<pi-host>` | pin 22 (GPIO25) / 18 (GPIO24) / 20 |
+
+| Task | Command |
+| --- | --- |
+| Read memory, no halt (safe on track) | `arm-none-eabi-nm -S build_make/<image>.elf \| grep <symbol>`, then `mdw <address> [n]` on Telnet port 4444 |
+| GDB | `arm-none-eabi-gdb build_make/<image>.elf -ex "target extended-remote :3333"`; `info threads`, `thread 1/2`, `bt`, `monitor halt`, `monitor reset halt` |
+| Load | add `-c "program build_make/<image>.elf verify reset exit"` |
+
+Safety and limits:
+
+- PWM keeps the last duty while the cores are halted: halt only with wheels
+  lifted or motor power off. The watchdog pauses on debug halt.
+- A halt stops kernel time; deadline counters after a halt are not valid.
+- Use the ELF of the image on the robot; addresses change each build.
+- Do not change other services on the Raspberry Pi 400.
+- Tested 2026-11-13: Raspberry Pi 400, OpenOCD 0.12.0, both cores examined
+  without a halt. The laptop with the Debug Probe is not tested.
+
 ## Host tests and link proof
 
 These tests do not need a robot, broker or secret files:
@@ -296,6 +357,7 @@ probe ELF. Source: [sdk_hw_link_probe.c](../../tests/probes/sdk_hw_link_probe.c)
 Use [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
 [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md) and
 [integration TEST_LOG](../../testing/integration/TEST_LOG.md) for operator records.
-The [original development record](../archive/kernel/DEVELOPMENT.md) keeps
-all old CMake probes, UDP benches, calibration commands and observations;
-those targets are not the current robot Make build.
+The original development record (old CMake probes, UDP benches,
+calibration commands and observations) is in the
+[kernel history](../archive/kernel/HISTORY.md); those targets are not the
+current robot Make build.

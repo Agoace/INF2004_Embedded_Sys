@@ -12,6 +12,7 @@ This repository contains INF2004 Embedded Systems coursework. Use the [Agent Nav
 1. [Agent Navigation Map](docs/AGENT_MAP.md) — repository structure and map chain.
 2. [Documentation index](docs/README.md) — durable records and current repository documentation.
 3. [README](README.md) — public orientation and repository usage.
+4. [Project status](docs/architecture/PROJECT_STATUS.md) — state and open items per area. Read it before you propose work.
 
 ## Commands
 
@@ -35,6 +36,7 @@ bash scripts/install-hooks.sh
 - Keep standard repository entry points at the repository root.
 - Use ASD-STE100 Simplified Technical English for repository instructions.
 - Store each durable record—such as an architecture note, plan, runbook, status record, release note, or ADR—in its own aptly named file under `docs/`, and list it in `docs/README.md`.
+- Check [MEASUREMENTS.md](docs/architecture/MEASUREMENTS.md) before you ask the operator for a number. When you record a new measured or assumed value, add a row there in the same commit.
 - Use `git commit --no-verify` only as an intentional escape hatch from the repository-owned pre-commit hook.
 
 ## Map freshness

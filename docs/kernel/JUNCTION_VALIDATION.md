@@ -2,7 +2,12 @@
 
 ## Status
 
-**B2a CLOSED**, as reported by Main_Worker after the `50426ae` A regression.
+**B2a physical-turn acceptance REOPENED (2026-11-18).** LIVE1/LIVE2
+reported DONE but went straight (operator). See the
+[live correction](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#live-leftright-turn-correction).
+The earlier 40–45 degree contacts below did not establish final heading.
+
+Historical: **B2a CLOSED**, as reported by Main_Worker after the `50426ae` A regression.
 All3 runs reached DONE. The worker did not push or flash. Evidence below is
 specific to its tested revision; closure does not invent missing heading,
 stack or recovery-path measurements. Main approved B2b STEP4a/4b SHADOW

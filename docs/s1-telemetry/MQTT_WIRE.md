@@ -23,11 +23,11 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/heartbeat` | 108 | Link state, health and loss counters |
 | `robot/log` | 36, or 36 + 16 x count | Live RAM-log rows (QoS 0) and DUMP refill (QoS 1) |
 | `robot/cmd` | 22 | Command, QoS 1, not retained; token policy below |
-| `robot/obstacle` | 24 | Completed scan profile, QoS 0, not retained |
+| `robot/obstacle` | 32 | Completed scan profile and geometry, QoS 0, not retained |
 | `robot/detour` | 36 | Finished detour, QoS 0, not retained |
 | `robot/summary` | 52 | End-of-run totals (v3), QoS 1, retained |
 | `robot/status` | 6 | Online/offline and last will, QoS 1, retained |
-| `robot/barcode` | 20 | Reserved; not implemented |
+| `robot/barcode` | 28 | v2 terminal SHADOW attempt, QoS 1, not retained; legacy v1 20 B still decodes |
 | `robot/imu` | 12 | Reserved; 4-byte header plus 8-byte snapshot; not implemented |
 
 ## Boot identity and sessions
@@ -79,13 +79,13 @@ adds a 32-bit unavailable counter and reuses its reserved byte for the mask.
 | `robot/heartbeat` | 100 / v2 | 108 / v3 | Establish live identity and distinguish absent boards from contention |
 | `robot/sonar` | 32 / v1 | 36 / v2 | History/ping sequence restarts must not mix scan charts across boots |
 | `robot/event` live | 16 / v1 | 20 / v2 | Event sequences and pending-command decisions can restart |
-| `robot/obstacle` | 20 / v1 | 24 / v2 | Scan IDs can repeat |
+| `robot/obstacle` | 20 / v1; 24 / v2 | 32 / v3 | Scan IDs can repeat |
 | `robot/detour` | 32 / v1 | 36 / v2 | Detour sequence resets must not mix table entries |
 | `robot/summary` | 44 / v1 | 48 / v2 | Retained prior-boot run 1 must not look like current run 1 |
 | `robot/status` | 2 / v1 | 6 / v2 | Associate retained ONLINE/OFFLINE with the correct boot |
 | `robot/cmd` | 22 / v1 | 22 / v1 | Unchanged; command/token contract is not a stored observation |
 | Embedded log event | 16 / v1 | 16 / v1 | Inherits the enclosing log-frame ID; no per-record duplication |
-| Reserved barcode / IMU | 20 / 12 | 20 / 12 | Not implemented; no extra fields added |
+| Barcode / reserved IMU | 20 / 12 | 28 / 12 | Barcode v2 terminal attempt; IMU topic remains reserved |
 
 State at 5 Hz adds only 20 payload bytes/second. Dropping its ID is not
 unambiguous: subscriber reconnect can deliver state before retained status,
@@ -201,7 +201,7 @@ read-modify-write operation or `libatomic` helper is required on Cortex-M0+.
 
 Kinds: 1 outcome, 2 module change, 3 ESTOP/fault, 4 scan complete, 5 run end,
 6 command decision; 7 JUNCTION/ACTION (B2a, live-only); 8 SCAN_RETRY;
-9 HUMP (event v2 only). For
+9 HUMP (event v2 only); 10 IMU_SAFETY (see below). For
 kind 8, from and to are SCAN (3), detail is 1 reverse begin, 2 reverse end,
 or 3 rescan begin, and the word low byte is attempt 1 or 2 with high byte
 reason 1 (no side). It is an observation only, not a shell handoff. For kind 6, detail is 0 accepted, 1 not idle,
@@ -212,7 +212,13 @@ commands, and full command queues increment `command_lost` without a vehicle
 event. Valid ESTOP requests are accepted in every state; repeated requests
 can coalesce when the dedicated ESTOP queue is already full.
 For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
-(A/B/C/D); high byte is phase1..10. Detail is reason0..12. Two angle
+(A/B/C/D); high byte is phase1..10. Detail is reason0..14. In an opt-in
+barcode live build, phase UNUSED (9) can carry reason 13 EXPIRED
+(pending command travelled at least 1000 mm mean wheel travel from decode
+`read_counts`) or 14 SEARCH (natural SEARCH lasted 200 ms). The
+command was never claimed and no turn was attempted. SCAN/DETOUR keep
+UNUSED/CANCELLED (1); fake commands and default builds are unchanged.
+Old captures keep their existing reason meanings. Two angle
 variants instead use detail=`0x80|command` (first line) or `0x40|command`
 (accepted line), with word signed16-bit centidegrees, LEFT positive.
 A/B emit both; D first is the skipped arm and accepted is the second;
@@ -232,6 +238,45 @@ LEFT hump is not proven on hardware. The vehicle sends kind 9 live only,
 once for each newly closed hump of the current run, and only from a fresh
 IMU copy. The RAM log does not keep kind 9. See
 [IMU step 3](../s4-imu/IMU.md#step-3-hump-report).
+### Kind 10 IMU_SAFETY
+
+Kind 10 reports the Vehicle IMU safety gate. From and to are the shell
+state at emission (0 IDLE, 1 RUNNING, 2 FAULT) and the running module
+(0 none, 1 LINE, 2 SEARCH, 3 SCAN, 4 DETOUR). For a STOP, to is the module
+that was running before the stop.
+
+| Word bit 15 | Event | Word | Detail |
+| --- | --- | --- | --- |
+| 0 | STOP | trigger: 1 OVERTURN, 2 LIFT, 3 IMU_UNAVAILABLE | cause 0..7 |
+| 1 | RECOVERY | bits 8–14 latched trigger 0..3; bits 0–7 gate reason 0..9 | latched cause 0..7 |
+
+Causes: 0 NONE, 1 STALE, 2 INVALID, 3 ABSENT, 4 POSE, 5 READ_FAILED,
+6 NOT_CALIBRATED, 7 ZERO_VECTOR. Gate reasons: 0 CLEARED, 1 NO_BOARD,
+2 STALE, 3 INVALID, 4 POSE, 5 ONE_G, 6 WHEELS, 7 WINDOW, 8 PENDING,
+9 CANCELLED.
+
+- STOP is sent once per latch edge, idle or running. Trigger 3 latches
+  only during a run; an idle unavailable IMU only refuses starts. At a
+  stop, kind 3 word 4 (ESTOP) comes first, then the kind 10 STOP.
+- A start request (GP21, or MQTT START/CALIBRATE) that the gate refuses
+  gives exactly one RECOVERY event: PENDING when a GP21 press queued a
+  clear, otherwise the refusal reason. After PENDING, exactly one outcome
+  follows: CLEARED, CANCELLED, or a refusal reason. CLEARED names the
+  latch and cause that were cleared. It is the only success signal; the
+  shell state returns to IDLE at the same time.
+- During a run, the RAM log also keeps the event (kind 10, word 1..3; the
+  16-byte record has no detail byte). RECOVERY events occur only while
+  idle, so they are live only.
+- An event is not a current-state snapshot. QoS 0 and the bounded queue
+  can lose one; a sequence gap shows the loss.
+
+Kind 3 carries motion fault bits only: 1 STALL_LEFT, 2 STALL_RIGHT,
+4 ESTOP, 8 STALE. Firmware up to `950abb2` (and images built from staging
+`7017580`) sent the IMU events as kind 3 with the same words. In those
+captures, kind 3 with bit 15 set is an IMU RECOVERY (motion bits never
+set bit 15). Kind 3 words 1–3 are ambiguous there; keep them raw. That
+firmware also sent PENDING twice per press and had no CLEARED event.
+
 The vehicle is the sole producer. It assigns a monotonic
 sequence before enqueue, so dropped events cause sequence gaps. Live events
 use uptime and flags zero. RAM-log event bodies use run-relative time,
@@ -314,7 +359,7 @@ record; each completed profile is published.
 
 | Offset | Type | Field |
 | --- | --- | --- |
-| 0 | u8 | Version 2 |
+| 0 | u8 | Version 3 |
 | 1 | u8 | Flags: closest valid bit 0, too near bit 1, left blocked bit 2, right blocked bit 3 |
 | 2 | u8 | Decision: NONE 0, RIGHT 1, LEFT 2 |
 | 3 | i8 | Closest angle, degrees; negative right |
@@ -324,13 +369,34 @@ record; each completed profile is published.
 | 14 | u16 | Existing packed PROFILE word |
 | 16, 17 | u8 each | Right, left free step, 0–6; 7 blocked |
 | 18, 19 | u8 each | Right, left clearance angle, step times 5 degrees; 255 blocked |
-| 20 | u32 | Boot ID (obstacle v2; v1 has 20 bytes) |
+| 20 | u32 | Boot ID (v2/v3; v1 has 20 bytes) |
+| 24 | u16 | Estimated width, mm; 65535 unknown |
+| 26 | u16 | Observed left edge-plane span, mm; 65535 unknown |
+| 28 | u16 | Observed right edge-plane span, mm; 65535 unknown |
+| 30 | u8 | Geometry flags: width valid bit0, left span valid bit1, right span valid bit2, left edge clipped +30 deg bit3, right edge clipped −30 deg bit4; bits5..7 zero |
+| 31 | u8 | Reserved zero |
 
-Flag bits 4–5 reserve scan stage: 0 not reported (current firmware), 1 coarse,
-2 fine, 3 reserved. In obstacle v2, bits 6–7 are scan attempt: 0 initial,
-1 first retry, 2 second retry, 3 reserved. In v1, bits 6–7 are zero. Equal closest distances prefer the
-point nearest straight ahead, then the right point. PROFILE does not measure
-obstacle width. Width is **unavailable**, not zero or an estimated size.
+Bytes0..23 retain the v2 layout except the version byte. In v3, invalid
+geometry dimensions must equal65535; valid dimensions must not. A clipped
+edge cannot have a valid outward span. The decoder rejects invalid lengths,
+reserved bits and inconsistent validity. Unknown dimensions decode as
+`None`; v1/v2 decode without geometry keys and are unchanged.
+
+Flag bits4–5 give the final stage:0 not reported,1 coarse (no fine region),
+2 fine (refinement ran),3 reserved. Compatibility completion still fills
+all13 bins before publication. There are no live mid-scan snapshots.
+In v2/v3, bits6–7 are scan attempt:0 initial,1 first retry,2 second retry,
+3 reserved. In v1 these bits stay zero. Equal closest distances prefer the
+point nearest straight ahead, then the right point.
+
+Closest range/angle gives sensor-frame location: forward `x=r*cos(theta)`,
+left `y=r*sin(theta)`. Width is the chord between the outermost hits within
+nearestVALID+150 mm. Any clipped edge makes a calculated width a lower bound.
+One hit, TOO_NEAR and absent evidence do not establish width. Spans project
+the first outward free ray onto the edge's forward plane. They are observed
+lateral spans, not guaranteed body clearance. See
+[geometry assumptions](../s5-obstacle/OBSTACLE.md#geometry-estimates).
+PROFILE, free steps, decision and DETOUR payload remain unchanged.
 
 ## Detour summary
 
@@ -403,8 +469,12 @@ the next summary version (v4); v3 keeps no reserved barcode bytes.
 Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
 line snapshot failure/stale 8; line samples lost 9; sonar failure 10;
-telemetry failure 11; other 12; SCAN reverse timeout 13. Sources describe the run-ending condition,
-not a unified fault mask. Motion faults preserve existing `MC_FAULT_*` bits.
+telemetry failure 11; other 12; SCAN reverse timeout 13; IMU lift 14;
+IMU overturn 15; IMU unavailable 16. Reasons 14–16 apply to summary v3 only.
+The decoder keeps the old v1 limit of 12 and v2 limit of 13. The IMU stop
+uses source FAULT (3) and shell fault IMU (6). No field or size changes.
+Sources describe the run-ending condition, not a unified fault mask.
+Motion faults preserve existing `MC_FAULT_*` bits.
 
 Speed error compares commanded versus measured wheel speed only after the
 command has stayed unchanged for at least 300 ms. This excludes early ramp
@@ -492,15 +562,65 @@ Retained ONLINE alone does not prove a current connection: require recent
 state messages too. Broker restart and stale retained data can mean unknown
 or silent status. MQTT ESTOP remains best effort; GP21 is the real ESTOP.
 
-## Reserved barcode and IMU formats
+## Barcode results and reserved IMU formats
 
-These formats reserve topics only. Firmware does not publish them or execute
-barcode commands. Clients ignore unknown versions/kinds and display **not
-implemented**. They must not infer sensor availability from a reserved topic.
+Barcode v2 is a terminal-attempt observation. It does not execute commands.
+Legacy barcode v1 and the IMU formats remain reserved. Clients ignore unknown
+versions/kinds; a reserved payload alone does not establish sensor capability.
 
-### Barcode
+### Barcode v2
 
-`robot/barcode`, 20 bytes, future QoS 1, not retained:
+`robot/barcode`, **28 bytes, QoS 1, not retained**, little-endian:
+
+| Offset | Type | Field |
+| --- | --- | --- |
+| 0, 1 | u8 each | Version 2, kind 1 (terminal result) |
+| 2 | u8 | Flags: decoded bit0, failed bit1, SHADOW bit2, widths-valid bit3; bits4--7 zero |
+| 3 | u8 | ASCII uppercase A--Z on decode, zero on failure |
+| 4 | u16 | Reason: BW_OK1; BW_CALIBRATION2, LOSS3, MOTION4, START5, WIDTH6, GAP7, EXTENT8, TAIL9, NOT_LETTER10; BP_CONTROL100, DISABLED101, CONTEXT102, CUT103, CALIBRATION104, RECORD_AGE105, MOTOR_AGE106, CLOCK107 |
+| 6 | u8 | Print direction: unknown0, forward1, reverse2; robot motion remains forward |
+| 7 | u8 | Mapped command0..4, observation only; zero on failure, NONE0 is valid on decode |
+| 8 | u32 | Lifetime terminal-attempt sequence, skips zero, includes failures |
+| 12 | u32 | Candidate's run epoch, nonzero; not the epoch of a later cancellation sample |
+| 16 | u32 | Candidate start uptime ms |
+| 20 | u32 | Terminal processing uptime ms, after final source recheck |
+| 24, 26 | u16 each | Fitted narrow/wide in0.01 mm; both65535 if unavailable |
+
+Exactly one decoded/failed flag is set. A decode requires reason1 and A--Z;
+a failure has no decoded letter or mapped command. BW_NOT_LETTER is a failed
+course-window attempt, not a decoded course instruction. Widths-valid requires
+both widths nonzero and below65535; no-valid-fit does not mean physical0 mm.
+Failures can carry the already-fitted start-star widths, NOT an accepted full
+frame. Known malformed v2 is rejected; unknown versions/kinds remain ignored.
+
+Current producer sets SHADOW, including valid0 decoded records. Issued and
+executed remain NO; the mapped command never grants action permission.
+No source/control/ACK behavior changes. v2 is not a reinterpretation of v1
+votes, action or executed-result fields. The Python decoder retains v1 and
+adds `letter`, `reason`, `reason_name`, `epoch`, `start_ms`, `failed`, `shadow`,
+`widths_valid`, `narrow_mm` and `wide_mm` to decoded/CSV fields. All v2 width
+unavailability becomes `None` (blank CSV), not invented zero.
+
+LINE posts one immutable value per terminal bound attempt after final source
+recheck. An8-entry SPSC FIFO drops the NEWEST event if full, not an old
+unacknowledged result. LINE never waits. Wi-Fi alone encodes and publishes
+at most one new QoS1 request per poll, with one barcode request in flight.
+The FIFO head is retired only after successful PUBACK. Immediate publish
+refusal, asynchronous error and reconnect retry the same immutable head.
+Connection tokens reject stale callbacks. Reconnect can duplicate delivery;
+clients identify an attempt by boot session + epoch + sequence. This payload
+has no embedded boot ID; it uses the established MQTT boot-session tracking.
+It cannot resolve a new boot before state/status identifies that boot.
+
+No durable flash spool exists. Power loss loses pending events. Full-ring
+losses are exposed by the lifetime `dropped` count in early
+`[BC_REASON_COUNTS]`, and later sequence gaps; no-event periods do not imply
+zero drops. An IDLE publisher still drains pending attempts. Before the first
+attempt, do not fabricate a result to fill a panel.
+
+### Barcode v1 (legacy reserved)
+
+`robot/barcode`, 20 bytes, reserved QoS 1, not retained:
 
 | Offset | Type | Field |
 | --- | --- | --- |
@@ -521,7 +641,7 @@ implemented instructions.
 
 `robot/imu`, 12-byte frame, future QoS 0, not retained: version 1 at byte 0,
 kind at byte 1. Kind 1 reserves bytes 2–3 as zero and contains the **8-byte**
-snapshot from [Week 8 notes section 11](../architecture/week8_change_requirement_1_notes.md#11-buddy-4--imu--hump-data):
+snapshot from [Week 8 notes section 11](../architecture/CR1.md#imu-hump-snapshot-week-8-11):
 
 | Offset | Type | Field |
 | --- | --- | --- |

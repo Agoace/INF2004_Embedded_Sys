@@ -679,7 +679,7 @@ class NewTopicTests(unittest.TestCase):
 
     def test_reserved_topics_ignore_unknown_versions_and_kinds(self):
         for topic in ("robot/barcode", "robot/imu"):
-            for frame in (bytes([2, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
+            for frame in (bytes([3, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
                 result = wire.decode(topic, frame)
                 self.assertEqual((result["known"], result["length"]), (0, len(frame)))
                 self.assertEqual((result["version"], result["kind"]), (frame[0], frame[1]))
@@ -1003,6 +1003,136 @@ def boot_batch(boot, generation=2, first=0, count=2, publish=1000, **kwargs):
     return b"\x02" + old[1:32] + struct.pack("<I", boot) + old[32:]
 
 
+class ObstacleV3Tests(unittest.TestCase):
+    def test_geometry_and_legacy(self):
+        old = with_boot(obstacle_frame(), 0x12345678, 2)
+        frame = bytes([3]) + old[1:] + struct.pack("<HHHBB", 70, 18, 19, 7, 0)
+        decoded = wire.decode("robot/obstacle", frame)
+        self.assertEqual(decoded["boot_id"], 0x12345678)
+        self.assertEqual((decoded["width_mm"], decoded["left_clear_mm"],
+                          decoded["right_clear_mm"]), (70, 18, 19))
+        self.assertTrue(decoded["width_valid"])
+        self.assertFalse(decoded["width_lower_bound"])
+        self.assertEqual(wire.decode("robot/obstacle", old)["version"], 2)
+        none = bytes([3]) + old[1:] + struct.pack("<HHHBB", 65535, 65535,
+                                                65535, 0, 0)
+        self.assertIsNone(wire.decode("robot/obstacle", none)["width_mm"])
+        clipped = bytes([3]) + old[1:] + struct.pack("<HHHBB", 100, 65535,
+                                                   65535, 0x19, 0)
+        self.assertTrue(wire.decode("robot/obstacle", clipped)["width_lower_bound"])
+        for offset, value in ((30, 0x80), (31, 1), (24, 255), (25, 255)):
+            bad = bytearray(frame)
+            bad[offset] = value
+            if offset == 24:
+                bad[25] = 255
+            if offset == 25:
+                bad[24] = 255
+            with self.assertRaises(ValueError):
+                wire.decode("robot/obstacle", bad)
+
+
+def imu_safety_frame(word=2, cause=0, sequence=10, uptime=1000, boot=100,
+                     source=2, module=1, flags=0):
+    return struct.pack('<BBBBIIHBBI', 2, 10, source, module, sequence, uptime,
+                       word, cause, flags, boot)
+
+
+class JunctionUnusedReasonWireTests(unittest.TestCase):
+    def frame(self, reason, phase=9):
+        return struct.pack('<BBBBIIHBBI', 2, 7, 1, 1, 42, 1234,
+                           1 | phase << 8, reason, 0, 100)
+
+    def test_unused_reasons_and_csv_names(self):
+        for reason, name in ((13, 'expired'), (14, 'continuous SEARCH (>=200 ms)')):
+            f = wire.decode('robot/event', self.frame(reason))
+            self.assertEqual((f['word'], f['detail'], f['junction_reason_name']),
+                             (0x0901, reason, name))
+            csv.DictWriter(io.StringIO(), fieldnames=wire.csv_fields()).writerow(f)
+        old = wire.decode('robot/event', self.frame(12, phase=8))
+        self.assertEqual(old['detail'], 12)
+        self.assertNotIn('junction_reason_name', old)
+
+    def test_phase_reason_bounds_and_unused_semantics(self):
+        for reason in list(range(15, 64)) + [255]:
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', self.frame(reason))
+        for reason in (13, 14):
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', self.frame(reason, phase=8))
+
+
+class ImuSafetyEventWireTests(unittest.TestCase):
+    def test_stop_recovery_and_unknown_values_keep_raw_fields(self):
+        for trigger in range(1, 4):
+            for cause in range(8):
+                f = wire.decode('robot/event', imu_safety_frame(trigger, cause))
+                self.assertEqual((f['imu_safety_phase'], f['imu_safety_trigger'],
+                                  f['imu_safety_cause'], f['imu_safety_recovery']),
+                                 ('stop', trigger, cause, None))
+        for trigger in range(4):
+            for reason in range(10):
+                word = 0x8000 | trigger << 8 | reason
+                f = wire.decode('robot/event', imu_safety_frame(word, 3))
+                self.assertEqual((f['imu_safety_phase'], f['imu_safety_trigger'],
+                                  f['imu_safety_recovery'], f['word']),
+                                 ('recovery', trigger, reason, word))
+        for word, trigger, recovery in ((0x7fff, 0x7fff, None), (0xffff, 127, 255)):
+            f = wire.decode('robot/event', imu_safety_frame(word, 255, source=255, module=254))
+            self.assertEqual((f['imu_safety_trigger'], f['imu_safety_recovery'],
+                              f['imu_safety_cause'], f['from'], f['to']),
+                             (trigger, recovery, 255, 255, 254))
+
+    def test_frame_bounds_stay_strict_and_legacy_kind_three_is_unchanged(self):
+        frame = imu_safety_frame()
+        for bad in (frame[:-1], frame + b'\x00', b'\x03' + frame[1:],
+                    imu_safety_frame(flags=2), b'\x01' + frame[1:16]):
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', bad)
+        for word in (1, 2, 3, 4, 0x8108):
+            old = bytearray(imu_safety_frame(word))
+            old[1] = 3
+            f = wire.decode('robot/event', old)
+            self.assertEqual(f['word'], word)
+            self.assertNotIn('imu_safety_phase', f)
+
+    def test_embedded_log_events_and_csv_columns(self):
+        record = bytearray(imu_safety_frame()[:16])
+        record[0], record[15] = 1, 1
+        header, records = wire.parse_log_batch(build_batch(kind=6, records=[bytes(record)]))
+        self.assertEqual(records[0]['event_imu_safety_trigger'], 2)
+        self.assertIsNone(records[0]['event_imu_safety_cause'])  # RAM log has no cause byte.
+        refill = build_batch(kind=6, flags=1, stream=77, newest=0, records=[bytes(record)])
+        refill_v2 = b'\x02' + refill[1:32] + struct.pack('<I', 100) + refill[32:]
+        head, records = wire.parse_log_batch(refill_v2)
+        self.assertEqual(head['boot_id'], 100)
+        self.assertEqual(records[0]['event_imu_safety_trigger'], 2)
+        self.assertIsNone(records[0]['event_imu_safety_cause'])
+        single = struct.pack('<BBHIII', 1, 2, 0, 0, 1, 0) + record
+        self.assertEqual(wire.decode('robot/log', single)['event_imu_safety_phase'], 'stop')
+        columns = wire.csv_fields()
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns)
+        writer.writerow(wire.decode('robot/event', imu_safety_frame(0x8200)))
+        writer.writerow(wire.decode('robot/log', single))
+        for row in wire.LogStream(report=lambda _: None).handle(
+                build_batch(kind=6, records=[bytes(record)])):
+            writer.writerow(row)
+
+
+class ImuSafetyWireTests(unittest.TestCase):
+    def test_stop_reasons_are_versioned(self):
+        for version, size in ((1, 44), (2, 48), (3, 52)):
+            for reason in (14, 15, 16, 17):
+                frame = bytearray(size)
+                frame[0], frame[2], frame[3] = version, 3, reason
+                if version == 3 and reason <= 16:
+                    self.assertEqual(wire.decode("robot/summary", frame)
+                                     ["stop_reason"], reason)
+                else:
+                    with self.assertRaises(ValueError):
+                        wire.decode("robot/summary", frame)
+
+
 class RebootWireTests(unittest.TestCase):
     def test_all_extended_observation_layouts_and_legacy_versions(self):
         legacy = {"state": state_v3_frame(bytes(48)), "sonar": bytes([1]) + bytes(31),
@@ -1190,7 +1320,7 @@ class RebootLogTests(unittest.TestCase):
                               begin["rows_total"]), (boot, 7, 2, 1))
             expected = {"state": 76, "heartbeat": 108, "status": 6,
                         "status_offline": 6, "summary": 52, "detour": 36,
-                        "event": 20, "sonar": 36, "obstacle": 24}
+                        "event": 20, "sonar": 36, "obstacle": 32}
             for name, size in expected.items():
                 topic = "robot/status" if name.startswith("status") else "robot/" + name
                 frame = outputs[f"dash/{name}_boot_{suffix}"]

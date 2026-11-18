@@ -33,6 +33,10 @@ function(host_test name test_file)
     if(NOT EXISTS "${REPO}/${test_file}")
         return()
     endif()
+    if("${sources}" MATCHES "subsystem3/barcode_live_source.c" AND
+            NOT "${sources}" MATCHES "subsystem3/barcode_attempt.c")
+        list(APPEND sources "${REPO}/app_program/subsystem3/barcode_attempt.c")
+    endif()
     add_executable(${name} ${sources})
     if("${sources}" MATCHES
             "imu_service.c|subsystem1/telemetry.c|test_telemetry_log.c")
@@ -67,12 +71,41 @@ host_test(test_line_trace tests/test_line_trace.c ${line_trace_source} ${line_se
 host_test(test_obstacle_modules tests/test_obstacle_modules.c ${servo_scan_source} ${detour_run_source} ${obstacle_detour_source} ${obstacle_profile_source} ${line_trace_source} ${line_search_source} ${line_steer_source} ${obstacle_source} ${vehicle_sm_source} ${line_position_source})
 host_test(test_heartbeat tests/test_heartbeat.c src/heartbeat.c)
 host_test(test_line_position tests/test_line_position.c ${line_position_source})
+# LINE_KD=<n>: the make rule force-includes app_program/vehicle/line_kd.h.
+foreach(kd 85 60 30 0)
+    host_test(test_line_kd_${kd} tests/test_line_kd.c ${line_steer_source})
+    target_compile_definitions(test_line_kd_${kd} PRIVATE LINE_KD=${kd})
+endforeach()
+add_test(NAME test_line_kd_make COMMAND python3 "${REPO}/tests/test_line_kd_make.py")
 host_test(test_line_steer tests/test_line_steer.c ${line_steer_source})
+foreach(gain 85 60 40)
+    host_test(test_line_p_near_${gain} tests/test_line_p_near.c
+        ${line_steer_source})
+    target_compile_definitions(test_line_p_near_${gain} PRIVATE
+        LINE_P_NEAR=${gain})
+endforeach()
+add_test(NAME test_line_p_near_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_line_p_near_make.py")
+foreach(base 146 120 100 83 378)
+    host_test(test_line_base_${base} tests/test_line_base.c
+        ${line_steer_source})
+    target_compile_definitions(test_line_base_${base} PRIVATE LINE_BASE=${base})
+endforeach()
+add_test(NAME test_line_base_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_line_base_make.py")
+add_test(NAME test_motion_same_tick_make COMMAND "${CMAKE_COMMAND}" -E env
+    python3 "${REPO}/tests/test_motion_same_tick_make.py")
 host_test(test_motor_ctl tests/test_motor_ctl.c ${motor_ctl_source})
+# MOTION_SAME_TICK=1: the tests/sametick units force-include the same
+# headers as the firmware make rules.
+host_test(test_motor_ctl_sametick tests/test_motor_ctl_sametick.c
+    tests/sametick/motor_ctl_tu.c)
 host_test(test_obstacle_bypass tests/test_obstacle_bypass.c src/obstacle_bypass.c)
 host_test(test_obstacle tests/test_obstacle.c ${obstacle_source})
 host_test(test_obstacle_detour tests/test_obstacle_detour.c ${obstacle_detour_source})
 host_test(test_obstacle_profile tests/test_obstacle_profile.c ${obstacle_profile_source})
+host_test(test_scan_stages tests/test_scan_stages.c ${servo_scan_source}
+    ${obstacle_profile_source})
 host_test(test_steer_log tests/test_steer_log.c src/steer_log.c)
 host_test(test_vehicle_controller tests/test_vehicle_controller.c src/vehicle_controller.c)
 host_test(test_vehicle_sm tests/test_vehicle_sm.c ${vehicle_sm_source})
@@ -138,7 +171,11 @@ if(TARGET test_motion_task_bench)
     target_compile_definitions(test_motion_task_bench PRIVATE APP_BENCH=1)
 endif()
 
+host_test(test_imu_gate tests/test_imu_gate.c app_program/vehicle/imu_gate.c
+    app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_gate PRIVATE m)
 host_test(test_vehicle_task tests/test_vehicle_task.c app_program/vehicle/vehicle_task.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/vehicle_log.c app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
     ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
     ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
@@ -169,6 +206,14 @@ host_test(test_motion_watchdog tests/test_motion_task.c
 if(TARGET test_motion_watchdog)
     target_include_directories(test_motion_watchdog BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_motion_watchdog PRIVATE APP_TEST=1 APP_BENCH=1)
+endif()
+
+host_test(test_motion_task_sametick tests/test_motion_task.c
+    tests/sametick/motion_tu.c tests/sametick/motor_ctl_tu.c
+    app_program/subsystem2/motion_pack.c app_program/subsystem2/subsystem2.c)
+if(TARGET test_motion_task_sametick)
+    target_include_directories(test_motion_task_sametick BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_motion_task_sametick PRIVATE MOTION_SAME_TICK=1)
 endif()
 
 foreach(mode IN ITEMS normal bench mqtt test)
@@ -206,10 +251,22 @@ if(TARGET test_telemetry)
 endif()
 
 if(TARGET test_vehicle_task)
+    foreach(imu_case imulift imustale imuabsent)
+        add_test(NAME test_vehicle_${imu_case}
+            COMMAND test_vehicle_task ${imu_case})
+    endforeach()
     add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
     add_test(NAME test_vehicle_run_overrun COMMAND test_vehicle_task runoverrun)
     add_test(NAME test_vehicle_slow_stop COMMAND test_vehicle_task slowstop)
+    target_link_options(test_vehicle_network_task PRIVATE
+        "-Wl,--wrap=barcode_live_counts_try_read")
+    foreach(case barcode barcode_absent barcode_busy barcode_old
+            barcode_saturate barcode_zero barcode_runs barcode_final_busy
+            barcode_runs_absent)
+        add_test(NAME test_vehicle_summary_${case}
+            COMMAND test_vehicle_network_task ${case})
+    endforeach()
     add_test(NAME test_vehicle_stale_sonar COMMAND test_vehicle_task sonarstale)
 endif()
 
@@ -279,6 +336,7 @@ endforeach()
 foreach(test IN ITEMS test_vehicle_task test_vehicle_network_task)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/vehicle/junction_live.c"
+        "${REPO}/app_program/subsystem3/barcode_attempt.c"
         "${REPO}/app_program/subsystem3/barcode_live_source.c"
         "${REPO}/app_program/subsystem3/barcode_live_producer.c"
         "${REPO}/app_program/subsystem3/barcode_window.c"

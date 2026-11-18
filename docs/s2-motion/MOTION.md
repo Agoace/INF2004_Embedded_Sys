@@ -6,8 +6,8 @@ The motor controller is the only owner of motor PWM, servo PWM and wheel
 encoder counts. PWM means pulse-width modulation: duty sets the fraction
 of each cycle for which a driver output is on. Navigation requests wheel
 speed and servo angle, not PWM pins. See the
-[ownership decision](../architecture/ADR_MOTOR_CONTROLLER.md),
-[hardware/calibration](HARDWARE.md), and [kernel tasks](../kernel/KERNEL.md).
+[ownership decision](../architecture/ARCHITECTURE.md#adr-the-motor-controller-is-the-only-owner-of-the-actuators),
+[hardware/calibration](#hardware-wiring-and-calibration), and [kernel tasks](../kernel/KERNEL.md).
 
 ## How it works
 
@@ -85,7 +85,7 @@ measurement of physical wheel stop time.
 | Motor PWM | Slices4/5, divider1, wrap6249 at 125 MHz =20 kHz; clear opposite pin before duty |
 | Servo | GP15, slice7B, divider125, wrap19999 =50 Hz and1 µs/count |
 | Encoders | Both edges, no pulls; left GP16/17 sign+1, right GP4/5 sign-1 |
-| GPIO interrupt | Shared core-0 IRQ13 dispatcher; acknowledge edge bits before callbacks; interrupt priority 1 requested, 0 on hardware ([F-NVIC](../kernel/NVIC_PRIORITY_FINDING.md)) |
+| GPIO interrupt | Shared core-0 IRQ13 dispatcher; acknowledge edge bits before callbacks; interrupt priority 1 requested, 0 on hardware ([F-NVIC](../kernel/KERNEL.md#interrupt-priorities-f-nvic)) |
 | Time | `drv_time_us()` reads TIMER; millisecond read uses a stable high/low pair, not truncated microseconds |
 | Startup | Kernel selects the 1 µs watchdog tick before devices/radio/tasks; application verification is idempotent |
 | Clock checks | Production error limit2%; cold-power S0-U01 limit1%; warm boot alone is insufficient |
@@ -115,6 +115,182 @@ must not be used to describe the kernel watchdog.
 | `isr_overruns` | Interrupt work >=1000 µs |
 | `isr_max_us` | Longest measured interrupt work |
 | `missed_frames` | Extra posts found by a late flag consumer |
+
+## Hardware, wiring and calibration
+
+The robot uses a Raspberry Pi Pico W on a Cytron Robo Pico, two encoder
+motors, a positional servo, HC-SR04+ sonar, line ADC sensors and a GY-511.
+This record separates measured ratios from assumed ground distance.
+The [motion settings](#settings) use these values; source and wiring must agree
+before a powered test. Historical calibration used Pico SDK2.3.0.
+
+### Pins and interface
+
+| Function | Pico pin | Current connection / owner |
+| --- | --- | --- |
+| GY-511 SDA/SCL | GP0/GP1 | I2C0, robot/TEST IMU observer; USB console, crash mirror off |
+| Sonar echo/trigger | GP2/GP3 | HC-SR04+, sonar service |
+| Right/motor 2 encoder A/B | GP4/GP5 | Motion; forward raw count decreases, sign-1 |
+| GY-511 DRDY (magnetometer) | GP6 | Connected, unused; not the accelerometer data-ready signal |
+| GY-511 INT1 (accelerometer) | GP7 | CTRL_REG3 I1_DRDY1; polled before/after reads, input with weak pull-down; no IRQ |
+| Left/motor 1 driver | GP8/GP9 | Forward/reverse PWM |
+| Right/motor 2 driver | GP10/GP11 | Forward/reverse PWM |
+| Servo | GP15 | Motion owns PWM; positive angle turns left |
+| Left/motor 1 encoder A/B | GP16/GP17 | Forward raw count increases, sign+1 |
+| Dump / start-ESTOP buttons | GP20/GP21 | Active low with pull-ups; normal vehicle samples20 ms |
+| Centre line ADC | GP26/ADC0 | Current two-sensor line service |
+| Left line ADC | GP27/ADC1 | Current two-sensor line service |
+| Barcode raw ADC | GP28/ADC2 | Sample only; no barcode decoder; VBAT jumper open |
+
+Early three-sensor logs used different L/C/R labels. Do not copy those
+labels into the current two-sensor wiring. GP29/ADC3 is not selected.
+The GY-511 scan found accelerometer0x19 and magnetometer0x1E. Current
+accelerometer TEST bring-up and scale limits are in [IMU.md](../s4-imu/IMU.md);
+the raw magnitude is not calibrated gravity. No magnetometer navigation
+is implied. Grove 7 exposes GP7 and GP28: GP7 now carries accelerometer
+INT1 while GP28 remains the barcode analog input. Do not assign GP7 to
+barcode output or enable a GPIO IRQ. Step 2c checks INT1 HIGH before and
+LOW after the accel read; that transition is still a pending hardware gate.
+
+### Geometry and distance settings
+
+| Value | Value used / measured | Limit |
+| --- | --- | --- |
+| Wheel track | 111 mm | Operator measurement2026-10-30 |
+| Wheel diameter | 65 mm nominal | Effective loaded rolling diameter not calibrated |
+| Servo axis to rear axle | 65 mm | Operator measurement2026-10-30 |
+| Maximum width | 160 mm | Includes left barcode-reader mount |
+| Overall length | 190 mm | Operator measurement2026-10-30 |
+| Sensor face to front | About58 mm | Echo mean57.9 mm, not ruler; short-range reading about 11 mm high |
+| Rear axle to front line sensors | 123 mm =65+58 | Derived from uncertain echo offset |
+| Front-corner radius | 146.7 mm =sqrt(123²+80²) | Conservative full-width calculation; detour sweep uses 150 mm |
+| Counts per wheel revolution | 2535 shared | 50-turn unloaded visual-alignment measurement |
+| Counts per metre | 12414 | Derived from 2535 and nominal65 mm; not measured ground travel |
+| Differential turn scale | 24.05 counts/degree, constant2405 per degree×100 | 111 mm track; wheel slip not measured |
+
+If the true sensor-front offset is about 47 mm rather than 58 mm, front reach
+becomes112 mm and corner radius about 138 mm. Measure with a ruler before
+using the old offset as precise geometry. The body without the left reader
+mount is narrower than 160 mm. Encoders cannot measure wheel slip or tyre
+compression; precise gear ratio does not make precise ground distance.
+
+### Encoder ratio and drift method
+
+Each motor ran alone, wheel lifted, forward50 revolutions at 10% duty,
+then coasted and was jogged **forward only** to a wheel/chassis alignment
+mark. The encoder interrupt made the stop decision, deliberately300 counts
+short of the expected mark. Final absolute count plus signed forward jog,
+then magnitude, divided by50 gives counts/revolution. A reverse jog would
+introduce gearbox backlash (lost motion at a direction change).
+
+| Result | Motor 1 (left) | Motor 2 (right) |
+| --- | ---: | ---: |
+| Count at visual alignment | 126750 | 126747 |
+| Revolutions | 50 | 50 |
+| Counts/revolution | 2535.000 | 2534.940 |
+| Shared selected value | 2535 | 2535 |
+| Measured unloaded coast at 10% | 27–28 counts | 23 counts |
+| Mean revolution time, USB test | 2491 ms | 2433 ms |
+| Mean speed in that test | 24.08 RPM | 24.66 RPM |
+
+The0.06-count difference is within the estimated±0.06-count/revolution
+precision. The non-multiple-of-four ratio is consistent with an encoder
+before a non-integer gearbox; do not assume a round gear ratio.
+
+| Jog / old-method result | Observation |
+| --- | --- |
+| Fine3-count request | 3..7 actual counts |
+| Coarse40-count request | 56..57 actual counts |
+| Time-based8..10 ms pulse | Did not move this motor reliably |
+| Starting revolution | About60..90 ms slower; wheels warmed and sped up |
+| Old single-revolution visual precision | About±20 counts; could not resolve a5-count ratio error |
+| Old motor 1/motor 2 ratios | 2540/2539 superseded by2535 |
+| Encoder-calibration stop | 2500 counts retained, with2535-35 brake compensation |
+
+The old2540 value was0.197% high, about 2 cm systematic error over10 m.
+Coast is per-motor, speed/load dependent, not a new shared correction.
+The50-turn tests were unloaded; loaded coast, slip and effective rolling
+radius remain unmeasured. The full signed arithmetic, method and older
+repeatability evidence are in `MOTOR_ROTATION_DRIFT.md` in the
+[motion history](../archive/s2-motion/HISTORY.md#files).
+
+### Servo and sonar
+
+| Setting / observation | Result |
+| --- | --- |
+| Unmounted servo behavior | Positional, not continuous rotation; 500/1500/2500 µs endpoints/centre, about 180° total; no strain observed in that test |
+| Mounted collision points | About1040/1960 µs, roughly41° right/left |
+| Current safe clamp / scan | 1100..1900 µs (about±36°); scan±30° |
+| Direction | Below1500 µs turns right, above turns left, viewed from behind |
+| Module | HC-SR04+ on reverse silkscreen, despite HC-SR04 front marking |
+| Logic supply | 3.3 V; echo follows that supply; no level conversion fitted |
+| Classic5 V HC-SR04 | Can drive5 V echo; not interchangeable without level conversion; carrier digital input limit3.6 V |
+| Early stationary echo | About177 mm; functional observation, not distance calibration |
+| Approximate beam | ±20°, operator measured2026-11-07; not a hard angular boundary |
+
+Pulse mapping is about 11.1 µs/degree around1500 µs, positive left. The old
+unmounted500..2500 µs test does **not** authorize that range on the mounted
+robot. Ultrasound gives approximate presence/range, not obstacle width.
+Tilted, narrow or soft targets can fail to return an echo. No echo is not
+proof of an empty route. The standard sound-speed constant assumes about
+20°C and varies about 0.17%/°C. Current sensor logic and measured optics:
+[ultrasonic driver](../s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) and
+[scan](../s5-obstacle/OBSTACLE.md).
+
+### Motor duty and speed results
+
+These unloaded benches are not the loaded controller tuning. Both wheels
+were lifted, approximately20 kHz PWM. The VIN test used5 V; motors/rail
+voltage change the result.
+
+| Starting/running check | Recorded result |
+| --- | --- |
+| USB, 0..5% | No movement |
+| USB, 6% | Motor 1 one count, no sustained movement; motor 2 none |
+| USB, 7% | Both sustained after about 80 ms |
+| 5 V VIN unloaded start | Motor 1 at 6%, about 70 ms to 10 counts; motor 2 at 7%, about 80 ms |
+| Old common unloaded policy | 8% minimum; 10% kick to 10 counts, 250 ms limit |
+| Current loaded controller | 12% kick; loaded duty map and limits in [Duty map](#duty-map) |
+
+#### Unloaded motor speed at 5 V VIN
+
+The following are unchanged recorded RPM values. They used old ratios2540
+(left) and2539 (right): left reads about 0.197% low, right about 0.158% low.
+Apply2540/2535 or2539/2535 when comparing; new firmware uses 2535 directly.
+A1 s settle and5 s measurement followed a10% start kick.
+
+| Duty % | VIN left RPM | VIN right RPM | Earlier USB left RPM | Earlier USB right RPM |
+| ---: | ---: | ---: | ---: | ---: |
+| 10 | 26.253 | 26.556 | 23.815 | 24.094 |
+| 20 | 53.881 | 54.352 | 49.412 | 49.885 |
+| 30 | 81.486 | 81.948 | 74.598 | 75.516 |
+| 40 | 109.006 | 109.328 | 99.699 | 100.570 |
+| 50 | 136.648 | 136.527 | 124.209 | 125.350 |
+| 60 | 163.417 | 163.136 | 147.992 | 149.576 |
+| 70 | 190.842 | 188.965 | Not valid | Not valid |
+| 80 | 217.029 | 214.298 | Not valid | Not valid |
+| 90 | 242.664 | 239.560 | Not valid | Not valid |
+| 100 | 260.829 | 257.860 | Not valid | Not valid |
+
+The VIN motors differed by less than 0.5 RPM through 60%; left was about 1..3 RPM
+faster above 70%. Earlier USB speeds were about 8.5..10.5% lower over10..60%.
+The USB run ended in over-current during70% settling; no70..100% results
+exist. These results do not authorize a power configuration or full-duty
+loaded test.
+
+### Power record status and limits
+
+**USB_POWER_SAFETY is obsolete by operator decision.** Its old limits,
+exceptions and recovery instructions are archived, not current operating
+requirements. Do not silently apply its exceptions to a new setup.
+The [full obsolete record](../archive/s2-motion/USB_POWER_SAFETY.md) preserves
+the reported1.2 A Pi400 budget, SSD incident and unmarked-bank observations.
+No replacement current-budget measurement was made for this rewrite.
+
+Hardware facts retained there: carrier input3.6..6 V, unregulated motor rail,
+and USB-only motor rail described as VUSB minus0.4 V. Supply voltage affects
+every speed table. Clear the mechanism and lift wheels for TEST; use the
+operator-approved supply arrangement for the actual hardware.
 
 ## Duty map
 
@@ -154,8 +330,17 @@ Do not tune from 80..100%: wheelies occurred, and90..100% speed still rose
 within the300 ms window. Running minimum was8% after a12% start kick;
 5..6% stopped and7% nearly stopped. The8..70% region was approximately
 8.5 mm/s per duty percent, with wheels/directions within about 3%.
-DM1 heartbeat max56 µs, no overruns. The source method/settle windows are
-preserved in the [full map](../archive/s2-motion/DUTY_MAP.md).
+DM1 heartbeat max56 µs, no overruns. B2 held 150 mm/s at 220 permille; this
+map gives 22% for about 150 mm/s.
+
+DM1 method (`src/duty_map_bench.c`): both wheels the same duty, forward then
+reverse; 23 levels (5–12% by 1, 14–20% by 2, 25–50% by 5, 60–100% by 10).
+Start from rest with a 12% kick until 10 counts (at most 250 ms). Settle +
+measure: 5–20% 500 + 500 ms; 25–40% 400 + 400; 45–50% 300 + 400; 60–100%
+300 + 300. Speed = mean counts per 10 ms tick x 8.055 mm/s (12414 counts/m).
+500 ms rest at 0 between drives. Log `build/steer_logs/text_5d51.txt`. The
+original record is `DUTY_MAP.md` in the
+[motion history](../archive/s2-motion/HISTORY.md#files).
 
 ## Results
 
@@ -205,6 +390,61 @@ synchronization. SDK headers are `-isystem`; application strict warnings
 remain errors. Link-only proof and command:
 [BUILD.md](../kernel/BUILD.md#host-tests-and-link-proof).
 
+## Same-tick retarget (default on)
+
+Build switch `MOTION_SAME_TICK`, default 1 for robot images since
+2026-11-17 (demo default). `MOTION_SAME_TICK=0` gives the old timing;
+image suffix `_sametick0`, profile `-sametick0`. Before 2026-11-17 the
+default was 0 and 1 added `_sametick`.
+
+| Item | `MOTION_SAME_TICK=0` | Default (1) |
+| --- | --- | --- |
+| New target reaches the motor | next tick, about 8 ms after the vehicle step | in the same period, at `motion_set_speed()` |
+| Loop delay, line read to motor (10 ms period) | about 10 ms | about 2 ms |
+| Control steps per period | 1 | 1 (the retarget redoes the step, it does not add one) |
+
+How it works:
+
+1. The motion task saves the wheel state, then runs `mc_tick()`. If no
+   fault is latched and STALE is not set, the window opens.
+2. The vehicle task calls `motion_set_speed()`. Under `mtx_motion` it sets
+   the target, then `mc_retarget()` restores the saved state, keeps the
+   tick's measured speed and the new target, and runs the control step
+   again. The result is written to the motor at once.
+3. The result equals a tick run with the new target: one rise step and
+   one integral step per period. A second set in the same period redoes
+   the same step; it does not add a step.
+
+Safety and timing:
+
+- Stop, ESTOP, fault clear and init close the window before they act. They
+  use the same mutex as before, so the order against ESTOP does not change.
+  A latched fault also blocks the retarget. A stall found by the retarget
+  latches and gives duty 0.
+- Only a completed motion tick feeds the watchdog. The retarget never feeds.
+- The task schedule does not change; the wake, response and overrun
+  measurements keep their meaning. The vehicle step gets longer by the
+  retarget time (one control step under the mutex).
+- `KERNEL_RAM=1` adds [`same_tick.list`](../../tools/kernel_ram/same_tick.list)
+  (`motion_set_speed`, `mc_retarget`) only with this switch. The robot
+  demo build `KERNEL_RAM=1` gives `RAM_PROOF PASS listed 77`.
+- `BENCH_KERNEL=1` has no robot motion path: its default is 0, with no
+  suffix, and an explicit `MOTION_SAME_TICK=1` stops make. The sim,
+  Webots and CMake paths do not use the switch.
+
+Files: [`motor_ctl_same_tick.h`](../../app_program/subsystem2/motor_ctl_same_tick.h)
+(interface), [`motor_ctl_same_tick_impl.h`](../../app_program/subsystem2/motor_ctl_same_tick_impl.h)
+and [`motion_same_tick.h`](../../app_program/subsystem2/motion_same_tick.h).
+The make rules force-include (`-include`) the last two into `motor_ctl.o`
+and `motion.o`, so `motor_ctl.c` and `motion.c` do not change. Tests:
+[`test_motor_ctl_sametick.c`](../../tests/test_motor_ctl_sametick.c)
+(20000-step comparison against set-then-tick, rise, integral, ESTOP, stop,
+stale and stall cases) and `test_motion_task_sametick` (motor write in
+`motion_set_speed`, window closed by stop, clear and ESTOP).
+
+Status: built and host-tested. Not run on the robot. SIL reference (on
+`mtk3-hil`): with the same-tick model, 0..3 s wheel RMS 19.6 vs 30.1.
+
 ## Limits, tests and full evidence
 
 Wheel slip, tyre compression and startup kick affect speed/heading. No
@@ -217,8 +457,14 @@ servo limits, task ordering and immediate ESTOP. They do not prove physical
 stopping or interrupt latency. Use [BUILD.md](../kernel/BUILD.md#host-tests-and-link-proof),
 [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md) and
 [integration TEST_LOG](../../testing/integration/TEST_LOG.md).
-All B1/B2/B3 comparisons, mutation results, older interface/SDK measurements
-and ideas remain reachable in the
-[motor archive](../archive/s2-motion/MOTOR_CONTROLLER.md),
-[heartbeat archive](../archive/s2-motion/HEARTBEAT.md) and
-[duty-map archive](../archive/s2-motion/DUTY_MAP.md).
+Other logs: [S3 TEST_LOG](../../testing/subsystem3/TEST_LOG.md) (learned line
+calibration; old three-sensor values are not two-sensor data) and
+[S5 TEST_LOG](../../testing/subsystem5/TEST_LOG.md) (sonar and mounted scan).
+All B1/B2/B3 comparisons, mutation results, older interface/SDK measurements,
+historical ADC/line values, ten-cycle drift tables, 50-turn conditions and
+the STEP 8 motion timing investigation are in the
+[motion history](../archive/s2-motion/HISTORY.md#files).
+
+No new hardware measurement was made in these records. Ground
+distance/slip, loaded coast, independent physical stop time and an
+externally corrected path remain open.

@@ -1,0 +1,5 @@
+# MOTION_SAME_TICK=1 with KERNEL_RAM=1 only: the same-tick path that the
+# vehicle task runs each period (motion_set_speed -> mc_retarget). Format as
+# robot.list. Not used by default or by the bench image.
+app_program/subsystem2/motion.o .text.motion_set_speed
+app_program/subsystem2/motor_ctl.o .text.mc_retarget

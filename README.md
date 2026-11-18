@@ -267,7 +267,7 @@ Each option goes through the same steps:
 The makefile also has `NET=lwip` and `MQTT=1` (TCP/IP and MQTT over WiFi).
 They need the SDK's `lib/lwip` submodule and a `config/wifi_secrets.h`
 (copy `config/wifi_secrets.example.h`). The robot uses its own MQTT settings;
-see [the operator runbook](docs/s1-telemetry/OPERATION.md), not the template demo.
+see [the operator runbook](docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard), not the template demo.
 
 ---
 
@@ -277,7 +277,7 @@ T-License 2.2. This dual-core RP2040 port is derived from the official
 
 ## Robot logic and reference firmware
 
-See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/architecture/BRANCH_LAYOUT.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; staging connects the four robot modules through the vehicle task.
+See [our documentation](docs/README.md), [navigation map](docs/AGENT_MAP.md), and [branch layout](docs/architecture/PROJECT_STATUS.md#mtk3-layout). The template demo tasks are removed. Empty subsystems return E_OK. The motion branch adds the motor controller task; staging connects the four robot modules through the vehicle task.
 
 The robot platform needs Pico SDK register headers even with `WIFI=none`.
 Keep the USB console enabled for the initial bring-up builds.
@@ -294,10 +294,10 @@ GP21 calibrates then starts the robot, or latches ESTOP during a session;
 GP20 dumps saved RAM data instead of changing D. TEST images start neither
 button task. Read [the kernel robot safety/design record](docs/kernel/KERNEL.md)
 and pass the lifted-wheel checks before floor work. R5 has not run.
-The [RAM budget](docs/kernel/RAM_BUDGET.md) shows the RAM use and the
+The [RAM budget](docs/kernel/KERNEL.md#ram-budget) shows the RAM use and the
 steps to use if the RAM becomes too small.
 To look at both cores or read memory while the firmware runs, use an SWD
-probe as given in the [SWD debug probe record](docs/kernel/SWD_DEBUG_PROBE.md).
+probe as given in the [SWD debug probe record](docs/kernel/BUILD.md#swd-debug-probe).
 
 Barcode B1c keeps Code 39 WIDTH and adds a separate PEAK observation path.
 In its exclusive TEST, VIN is required; GP21 runs 430 mm forward/backward
@@ -323,9 +323,9 @@ Barcode work is frozen for the dual-core migration.
 
 ## CR1 data representation
 
-[CR1 evidence](docs/architecture/CR1_EVIDENCE.md) records baseline RAM,
+[CR1.md](docs/architecture/CR1.md) records baseline RAM,
 board/queue and binary MQTT sizes. The
-[motion plan](docs/s2-motion/CR1_MOTION_PLAN.md) records approved motion
+[motion module plan](docs/architecture/CR1.md#motion-module-plan) records approved motion
 board packing (8 B saved). A separate change removes the inactive bench
 stack/slot (4112 B saved in MQTT). A1/B1 hardware passed on 2026-11-10
 with an idle-stack margin note. Its approved safety increase adds 256 B;
@@ -344,10 +344,10 @@ the recorded file list. No SDK startup/runtime is added.
 `make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 -j4` adds non-critical MQTT on the
 existing Wi-Fi task at priority20 and health31. Driving never requires a
 link/broker; GP21 remains the real ESTOP. [Design](docs/s1-telemetry/TELEMETRY.md),
-[wire layouts](docs/s1-telemetry/MQTT_WIRE.md), and [broker/private-settings runbook](docs/s1-telemetry/OPERATION.md)
+[wire layouts](docs/s1-telemetry/MQTT_WIRE.md), and [broker/private-settings runbook](docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard)
 explain ownership, binary CSV decoding and token-bearing commands. New-image
 network, cold-power and loaded motion/M1/M2 checks remain **Not run**.
 
-The live laptop view is [the MQTT dashboard](docs/s1-telemetry/OPERATION.md): run
+The live laptop view is [the MQTT dashboard](docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard): run
 `python3 scripts/mqtt_dashboard.py --host 127.0.0.1 --token-file <file>` and open
 `http://127.0.0.1:8765/`. It needs `paho-mqtt` 2.x only.

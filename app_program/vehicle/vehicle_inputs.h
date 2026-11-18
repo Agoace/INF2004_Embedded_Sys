@@ -4,7 +4,7 @@
  * copy
  * before each vsm_step() and the shell passes it to the running module.
  *
- * Detectors never decide (docs/architecture/ADR_VEHICLE_CONTROLLER.md, rule 1):
+ * Detectors never decide (docs/architecture/ARCHITECTURE.md, VC ADR rule 1):
  * each
  * field is a measurement or a detector event; the running module
  * interprets it for its job.

@@ -42,9 +42,13 @@ class MakeSelection(unittest.TestCase):
             input="print:\n\t@echo $(wildcard ../app_program/*.c) "
                   "$(wildcard ../app_program/*/*.c)\n",
             cwd=cls.cwd, capture_output=True, text=True, check=True)
-        # BENCH_KERNEL=0 (default) removes bench_kernel/*.c, order kept.
+        # Defaults remove these opt-in directories, order kept: BENCH_KERNEL,
+        # IMU_SAFETY_BENCH, IMU_SAFETY_CAPTURE and BARCODE_LIVE_ENABLE.
+        off = tuple("../app_program/" + d + "/" for d in (
+            "bench_kernel", "imu_safety_bench", "imu_safety_capture",
+            "barcode_live_vehicle"))
         cls.original_sources = [p for p in original.stdout.split()
-            if not p.startswith("../app_program/bench_kernel/")]
+            if not p.startswith(off)]
         for path in nested:
             dest = cls.tree / "app_program" / path.relative_to(ROOT / "app_program")
             dest.parent.mkdir(parents=True, exist_ok=True)

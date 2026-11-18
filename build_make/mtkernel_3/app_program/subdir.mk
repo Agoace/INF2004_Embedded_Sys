@@ -32,6 +32,23 @@ ifeq ($(PIL_GATE1),1)
 mtkernel_3/kernel/sysdepend/pico_rp2040/devinit.o: CFLAGS += -include ../app_program/sim/pil_gate1_device_config.h
 mtkernel_3/app_program/subsystem3/drv_line.o: CFLAGS += -Ddrv_time_us=pil_gate1_line_time_us
 endif
+# Replay instrumentation must not add empty objects to ordinary links.
+# TEST runner (1) and ROBOT synthetic profile each link only their reporter.
+ifeq ($(IMU_SAFETY_BENCH),1)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/robot.c,$(TEMP_SRCS))
+else ifeq ($(IMU_SAFETY_BENCH),robot_synthetic)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/bench.c,$(TEMP_SRCS))
+else
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/%.c,$(TEMP_SRCS))
+endif
+ifneq ($(IMU_SAFETY_CAPTURE),1)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_capture/%.c,$(TEMP_SRCS))
+endif
+ifneq ($(BARCODE_LIVE_ENABLE),1)
+TEMP_SRCS := $(filter-out ../app_program/barcode_live_vehicle/%.c,$(TEMP_SRCS))
+else
+TEMP_SRCS := $(filter-out ../app_program/vehicle/junction_action.c ../app_program/vehicle/junction_live.c,$(TEMP_SRCS))
+endif
 # Empty bench objects can still change veneer ordering and ordinary ELF bytes.
 ifneq ($(BENCH_KERNEL),1)
 TEMP_SRCS := $(filter-out ../app_program/bench_kernel/%.c,$(TEMP_SRCS))

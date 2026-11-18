@@ -45,7 +45,7 @@ native position±4 rounds duty to20/20; not every failure is oscillation.
 | Current SIL,129mm/s |11/11ms after command |60/60ms (10ms bins) |
 
 Robot source: main `build/steer_logs/text_ede2.txt`, MB command row50,
-first raw90% row61; [B3 report](../archive/s2-motion/MOTOR_CONTROLLER.md).
+first raw90% row61; [B3 report](../archive/s2-motion/HISTORY.md#files).
 SIL first differential yaw reaches90% about21ms after command. Current torque-
 limited velocity plant is not instantaneous, but much faster and lacks native
 motor_ctl kick/rise8/feedback. This is not an identical-input system comparison;

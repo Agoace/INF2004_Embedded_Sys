@@ -11,7 +11,7 @@ firmware control, navigation or line following. This extends the
 It is NOT direct torque/PWM control. Only the16–20% forward band is taken from
 measured data for this mapping. Reverse and braking are UNMODELLED.
 
-Source: [loaded duty map](../archive/s2-motion/DUTY_MAP.md), **Run DM1,
+Source: [loaded duty map](../s2-motion/MOTION.md#duty-map), **Run DM1,
 2026-11-04, boot5d51, revision7a65c0e, forward columns of table rows16% and20%**:
 
 | PWM (protocol full scale6250) | Duty | Forward L mm/s | Forward R mm/s |

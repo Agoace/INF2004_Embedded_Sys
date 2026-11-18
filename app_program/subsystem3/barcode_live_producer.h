@@ -20,7 +20,7 @@ typedef struct {
 
 typedef struct {
     barcode_live_record_t record;
-    uint32_t index, reason, start_us, edge_us, frame_us, eligible_us;
+    uint32_t index, reason, start_us, edge_us, frame_us, eligible_us, terminal_us;
     uint32_t control_age_ms, record_age_ms, spin_white, leading_white;
     float narrow_mm, wide_mm, leading_mm;
     uint16_t rise, fall;

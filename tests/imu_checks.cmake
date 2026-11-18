@@ -1,3 +1,48 @@
+host_test(test_imu_replay tests/test_imu_replay.c
+    app_program/imu_safety_bench/replay.c app_program/subsystem4/imu_safety.c)
+target_compile_definitions(test_imu_replay PRIVATE
+    APP_TEST=1 APP_BENCH=0 IMU_SAFETY_BENCH=1)
+target_link_libraries(test_imu_replay PRIVATE m)
+host_test(test_imu_replay_service tests/test_imu_replay_service.c
+    tests/imu_replay_service.c tests/smp_stubs/placement_double.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/imu_safety_bench/replay.c
+    app_program/imu_safety_bench/stats.c app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+    app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
+target_include_directories(test_imu_replay_service BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_imu_replay_service PRIVATE
+    APP_TEST=1 APP_BENCH=0 IMU_SAFETY_BENCH=1 TK_SUPPORT_SMP=0)
+target_compile_options(test_imu_replay_service PRIVATE
+    -include "${REPO}/tests/imu_service_hook.h")
+target_link_libraries(test_imu_replay_service PRIVATE m)
+# Same service and seam as the ROBOT synthetic firmware profile.
+host_test(test_imu_replay_service_robot tests/test_imu_replay_service.c
+    tests/imu_replay_service.c tests/smp_stubs/placement_double.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/imu_safety_bench/replay.c
+    app_program/imu_safety_bench/stats.c app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+    app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
+target_include_directories(test_imu_replay_service_robot BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_imu_replay_service_robot PRIVATE
+    APP_TEST=0 APP_BENCH=0 IMU_SAFETY_BENCH=1 IMU_SAFETY_BENCH_ROBOT=1
+    TK_SUPPORT_SMP=0)
+target_compile_options(test_imu_replay_service_robot PRIVATE
+    -include "${REPO}/tests/imu_service_hook.h")
+target_link_libraries(test_imu_replay_service_robot PRIVATE m)
+add_test(NAME test_imu_safety_bench_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_imu_safety_bench_make.py")
+add_test(NAME test_imu_safety_capture_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_imu_safety_capture_make.py")
+host_test(test_imu_safety_capture tests/test_imu_safety_capture.c
+    app_program/imu_safety_capture/capture.c)
+target_link_libraries(test_imu_safety_capture PRIVATE m)
+host_test(test_imu_safety tests/test_imu_safety.c
+    app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_safety PRIVATE m)
 host_test(test_imu_fifo tests/test_imu_fifo.c
     app_program/subsystem4/imu_fifo.c)
 target_link_libraries(test_imu_fifo PRIVATE m)
@@ -37,6 +82,7 @@ endforeach()
 target_compile_definitions(test_imu_hump_core_filtered PRIVATE
     IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
 host_test(test_imu_service tests/test_imu_service.c
+    app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c)
@@ -47,6 +93,7 @@ target_compile_options(test_imu_service PRIVATE
     -include "${REPO}/tests/imu_service_hook.h")
 target_link_libraries(test_imu_service PRIVATE m)
 host_test(test_imu_capture_service tests/test_imu_service.c
+    app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c
@@ -61,7 +108,7 @@ target_link_libraries(test_imu_capture_service PRIVATE m)
 add_test(NAME test_imu_capture_service_handoff
     COMMAND test_imu_capture_service capture)
 foreach(failure create_failure start_failure cyclic_failure count_wrap
-        fifo_empty)
+        fifo_empty safety)
     add_test(NAME test_imu_service_${failure}
         COMMAND test_imu_service ${failure})
 endforeach()
