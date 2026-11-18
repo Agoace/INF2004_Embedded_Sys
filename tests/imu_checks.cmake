@@ -17,6 +17,22 @@ target_compile_definitions(test_imu_replay_service PRIVATE
 target_compile_options(test_imu_replay_service PRIVATE
     -include "${REPO}/tests/imu_service_hook.h")
 target_link_libraries(test_imu_replay_service PRIVATE m)
+# Same service and seam as the ROBOT synthetic firmware profile.
+host_test(test_imu_replay_service_robot tests/test_imu_replay_service.c
+    tests/imu_replay_service.c tests/smp_stubs/placement_double.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/imu_safety_bench/replay.c
+    app_program/imu_safety_bench/stats.c app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
+    app_program/subsystem4/imu_roll.c app_program/subsystem4/imu_hump.c)
+target_include_directories(test_imu_replay_service_robot BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_imu_replay_service_robot PRIVATE
+    APP_TEST=0 APP_BENCH=0 IMU_SAFETY_BENCH=1 IMU_SAFETY_BENCH_ROBOT=1
+    TK_SUPPORT_SMP=0)
+target_compile_options(test_imu_replay_service_robot PRIVATE
+    -include "${REPO}/tests/imu_service_hook.h")
+target_link_libraries(test_imu_replay_service_robot PRIVATE m)
 add_test(NAME test_imu_safety_bench_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_imu_safety_bench_make.py")
 host_test(test_imu_safety tests/test_imu_safety.c

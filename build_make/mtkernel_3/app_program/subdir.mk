@@ -8,7 +8,12 @@ include app_sdk_hw.mk
 # app_program/*.c plus one level of subfolders (one per subsystem)
 TEMP_SRCS = $(wildcard ../app_program/*.c) $(wildcard ../app_program/*/*.c)
 # Replay instrumentation must not add empty objects to ordinary links.
-ifneq ($(IMU_SAFETY_BENCH),1)
+# TEST runner (1) and ROBOT synthetic profile each link only their reporter.
+ifeq ($(IMU_SAFETY_BENCH),1)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/robot.c,$(TEMP_SRCS))
+else ifeq ($(IMU_SAFETY_BENCH),robot_synthetic)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/bench.c,$(TEMP_SRCS))
+else
 TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/%.c,$(TEMP_SRCS))
 endif
 # Empty bench objects can still change veneer ordering and ordinary ELF bytes.
