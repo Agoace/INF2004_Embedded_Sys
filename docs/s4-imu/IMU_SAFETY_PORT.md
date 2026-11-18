@@ -122,6 +122,10 @@ scan geometry, configuration-token reader or live snapshot contract changes.
   ([IMU_SAFETY_CAPTURE.md](IMU_SAFETY_CAPTURE.md)) to find which rule
   fires for a push-over (K10_1 reported LIFT), and a GP21 ESTOP capture
   for a gentle lift that does not latch. Detector unchanged.
+  [Results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4):
+  push-overs gave LIFT once and OVERTURN once; the label does not matter
+  (operator decision), and the settled-pose event is cancelled. Demo
+  checklist: reseat the IMU connector.
 
 ## UP resources (E)
 

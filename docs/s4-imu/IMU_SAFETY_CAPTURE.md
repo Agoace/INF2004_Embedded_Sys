@@ -143,6 +143,44 @@ For each run:
 
 Record for each run: run name, MQTT kind 10 STOP word, and the USB dump.
 
+## Results (staging `581ab85`, image 3_IMUCAP `37eba5a4`)
+
+School robot with a real IMU. The capture runs ended after 3 captures.
+Sources: `robot_CAP.log` (USB) and `mqtt_CAP.csv` (MQTT) in
+`~/Projects/mtk3-core-review/build/school_stg_581ab85/`. Times are robot
+uptime in ms. `rel` is ms from the capture edge.
+
+| Capture | Event | Stop | What the capture shows |
+| --- | --- | --- | --- |
+| 1 (boot `1c736d55`) | P1: push-over to the left while driving LINE | LIFT, reason 14. Latch 13932 (USB), kind 10 STOP 13940 (MQTT), 2.59 s into the run | Vertical-change rule: lift run 1, 2, 3 at rel -20, -10, 0. At those samples \|a\| was 690, 619, 1876 mg, vertical change -638, -1013, -1318 mg, and tilt already 127°, 150°, 163°. Freefall run stayed 0. After the latch, \|a\| was near 1 g with tilt > 75° for 5 samples at rel 119–159, so OVERTURN would have confirmed about 160 ms later. |
+| 2 (boot `5634e731`) | No planned event: IMU fault during a run | IMU_UNAVAILABLE, cause 5 READ_FAILED, reason 16. Kind 10 STOP 47950 (MQTT), 2.14 s into the run. ESTOP capture at 47953 | From rel -11, every sample has flag 0x20 (READ_FAILED) and the same retained vector (195, 249, 1475 mg). Before it, the robot was upright (tilt 0). The STOP came about 8 ms after the first failed read. Probable cause: the IMU cable was loose after the push-over. Reseating the connector and a power cycle fixed it. |
+| 3 (boot `4b6f6a6b`) | P2: push-over to the left while driving LINE | OVERTURN, reason 15. Latch 16792 (USB), kind 10 STOP 16800 (MQTT), 3.00 s into the run | Overturn rule: overturn run 1–5 at rel -40 to 0, tilt 103.0°, 75.4°, 103.5°, 117.5°, 116.2°, \|a\| 834–1198 mg. The lift run reached 2 of 3 at rel -50, so the two rules were close. |
+
+Findings:
+
+- Both push-overs stopped the robot. Which rule fires first depends on
+  the fall: a fall with a strong impact gives LIFT, a softer roll gives
+  OVERTURN. Both labels are possible for the same event.
+- **Operator decision:** the LIFT or OVERTURN label does not matter. A
+  stop after an accident is enough. The settled-pose event (P1) is
+  cancelled and will not be built. No threshold changes.
+- From the detector latch to the kind 10 STOP event: 8 ms (captures 1
+  and 3), less than one 10 ms Vehicle tick.
+- `imu_task` stack with the capture: high water 1520–1544 B, free
+  504–528 B of 2048 (5 dumps, 4 boots). It is above the 384 B margin, so
+  the stack stays 2048 B.
+- The capture rows are complete in all 3 dumps (256 rows, no gap). The
+  capture 2 dump reported `dump delta 287` (USB bytes dropped) in other
+  dump lines.
+- The gentle-lift runs (G1–G3) were not done.
+
+### Demo checklist item
+
+Before the demo, reseat the IMU connector, then power-cycle the robot.
+Capture 2 shows that a loose IMU cable gives IMU_UNAVAILABLE
+(READ_FAILED) and stops the run. The robot cannot start again until the
+IMU reads again.
+
 ## Limits
 
 - One capture per dump. A latch edge while COLLECTING or FROZEN is
