@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Figure-8 SIL drive: one approved case, one launch, no retry.
 
-Cases: default (base 146, P 85, D 85, no same-tick) and kd30st (D 30 +
-same-tick). Track only, ramp at the photo position, 2 laps. Uses the
+Cases (pil.sil_course8.CASES): demo (default; base 120, D 30, same-tick,
+the demo image since 2026-11-17), p7 (old default: base 146, D 85, no
+same-tick) and kd30st (base 146, D 30, same-tick; runs 3-4). Track only, ramp at the photo position, 2 laps. Uses the
 shared approved launcher (existing DISPLAY=:0 / XAUTHORITY, own process
 group, --batch --mode=fast --no-rendering). --prepare-only builds and
 checks the project without Webots.
@@ -24,11 +25,10 @@ from pil.robot_profile import RobotProfile  # noqa: E402
 from pil.world import write_project  # noqa: E402
 from pil.s3_assumed_line import load_boot5209_line_profile, load_assumed_line_mount  # noqa: E402
 from pil.sil_course8 import (course8_course, build_course8_library, COURSE_REVISION,  # noqa: E402
-                             FIRMWARE_REVISION, RAMP)
+                             FIRMWARE_REVISION, RAMP, CASES, DEFAULT_CASE)
 from pil.sil_course_path import CoursePath  # noqa: E402
 from pil.sil_course8_report import report  # noqa: E402
 
-CASES = {'default': (85, False), 'kd30st': (30, True)}
 ADC_DELAYS = (0, 20)
 DELAY_LABEL = 'ADC transport +20 ms (SW8 model)'
 # Pinned completed full-scene spin (SW8, 2026-11-15), read only.
@@ -50,7 +50,7 @@ def profile_values(profile):
 def prepare(output, case, spin_path, adc_delay_ms=0):
     if adc_delay_ms not in ADC_DELAYS:
         raise ValueError('adc delay must be one of %s ms' % (ADC_DELAYS,))
-    kd, same_tick = CASES[case]
+    base, kd, same_tick = CASES[case]
     spin_bytes = spin_path.read_bytes()
     if hashlib.sha256(spin_bytes).hexdigest() != SPIN_SHA256:
         raise ValueError('spin JSON is not the pinned file')
@@ -76,9 +76,9 @@ def prepare(output, case, spin_path, adc_delay_ms=0):
     (libs / 'pil').mkdir(exist_ok=True)
     for source in (SOURCE / 'pil').glob('*.py'):
         shutil.copyfile(source, libs / 'pil' / source.name)
-    build = build_course8_library(libs, kd=kd, same_tick=same_tick)
+    build = build_course8_library(libs, case=case)
     (project / 'historical-spin.json').write_bytes(spin_bytes)
-    config = dict(case=case, kd=kd, same_tick_apply=same_tick, laps=LAPS,
+    config = dict(case=case, base=base, kd=kd, same_tick_apply=same_tick, laps=LAPS,
                   duration_ms=DURATION_MS, profiles=profiles,
                   mounts={n: asdict(load_assumed_line_mount(n)) for n in ('GP26', 'GP27')},
                   calibration_rows=rows, spin_endpoints=spin['calibration']['endpoints'],
@@ -133,7 +133,7 @@ def load_rows(project):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument('--case', choices=CASES, required=True)
+    p.add_argument('--case', choices=CASES, default=DEFAULT_CASE)
     p.add_argument('--spin', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--timeout-seconds', type=int, default=CAP_SECONDS)

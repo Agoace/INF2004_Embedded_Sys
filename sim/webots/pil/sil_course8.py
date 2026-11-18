@@ -1,8 +1,10 @@
 """Figure-8 demo course SIL: pinned read-only sources, no merge.
 
 Course files come from mtk3-course8 COURSE_REVISION (git archive, read
-only). Firmware C for the course8 controller comes from mtk3-line-kd
-FIRMWARE_REVISION (git archive, read only). Nothing here edits either.
+only). Firmware C for the course8 controller comes from staging
+FIRMWARE_REVISION (git archive, read only): the school demo image source,
+base 120 / D 30 / same-tick by default. Old values are cases that use the
+robot's own override headers. Nothing here edits either source.
 """
 import importlib.util
 import io
@@ -15,7 +17,7 @@ from .course_builder import Course
 from .sil_line import ROOT
 
 COURSE_REVISION = '3b43a1952bbb65f86cc942ee13f41aaf6280e7bb'
-FIRMWARE_REVISION = 'd06a78753e17a73a27867fe703a0cbd6ced391a9'
+FIRMWARE_REVISION = '70175801256d3d5e23257c872884cf6a48bb5952'
 COURSE_FILES = ('sim/webots/tools/course8_tilemap.py',
                 'sim/webots/courses/course_figure8_tilemap.txt')
 # Scenario (operator 2026-11-17): track only, ramp at the photo position.
@@ -65,7 +67,15 @@ def course8_course(ramps=(RAMP,)):
 
 
 # --- Native library: firmware C from FIRMWARE_REVISION, SIL adapters here --
-KD_CHOICES = (85, 30)     # 85 = default (line_kd.h not included)
+# case: (base mm/s, D kd_pct, same-tick). FIRMWARE_REVISION config is the
+# demo default 120/30 (no override header). The robot forces other values
+# into vehicle_task.o with line_kd.h / line_p_near.h; the SIL forces them
+# into the adapter TU (the LINE_CFG owner) the same way.
+CASES = {'demo': (120, 30, True),      # demo default since 2026-11-17
+         'p7': (146, 85, False),       # old default (P7, D 85)
+         'kd30st': (146, 30, True)}    # SIL runs 3-4 (2026-11-17)
+DEFAULT_CASE = 'demo'
+CONFIG_BASE, CONFIG_KD = 120, 30
 COURSE8_SOURCES = ('sim/webots/controllers/sil_line/course8_adapter.c',
                    'app_program/subsystem3/line_position.c',
                    'app_program/subsystem3/line_steer.c',
@@ -80,14 +90,15 @@ ADAPTERS = ('sim/webots/controllers/sil_line/course8_adapter.c',
             'sim/webots/controllers/sil_line/motor_adapter.c')
 
 
-def build_course8_library(directory, *, kd=85, same_tick=False):
+def build_course8_library(directory, *, case=DEFAULT_CASE):
     """Compile into directory/libsil_line.so; returns the build record."""
     import hashlib
     import json
     import shutil
     from .sil_search import SearchController
-    if kd not in KD_CHOICES or type(same_tick) is not bool:
-        raise ValueError('approved cases: kd 85/30, same_tick bool')
+    if case not in CASES:
+        raise ValueError('approved cases: ' + ', '.join(CASES))
+    base, kd, same_tick = CASES[case]
     directory = Path(directory)
     snapshot = directory / 'fw-source'
     snapshot.mkdir(parents=True)
@@ -97,9 +108,12 @@ def build_course8_library(directory, *, kd=85, same_tick=False):
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, target)
     flags = []
-    if kd != 85:
+    if kd != CONFIG_KD:
         flags += [f'-DLINE_KD={kd}', '-include',
                   str(snapshot / 'app_program/vehicle/line_kd.h')]
+    if base != CONFIG_BASE:
+        flags += [f'-DLINE_BASE={base}', '-include',
+                  str(snapshot / 'app_program/vehicle/line_p_near.h')]
     if same_tick:
         flags.append('-DSIL_SAME_TICK_APPLY=1')
     library = directory / 'libsil_line.so'
@@ -119,10 +133,11 @@ def build_course8_library(directory, *, kd=85, same_tick=False):
     subprocess.run(link, check=True, capture_output=True, text=True)
     commands.append(link)
     meta = SearchController(library).metadata()
-    if meta['steer'] != [146, 85, kd, 62, 378, 50, 340]:
+    if meta['steer'] != [base, 85, kd, 62, 378, 50, 340]:
         raise ValueError('course8 native config mismatch: ' + str(meta['steer']))
     record = dict(firmware_revision=FIRMWARE_REVISION, course_revision=COURSE_REVISION,
-                  kd=kd, same_tick_apply=same_tick, commands=commands,
+                  case=case, base=base, kd=kd, same_tick_apply=same_tick,
+                  commands=commands,
                   source_policy='read-only git archive overlay, NOT merged',
                   sources_sha256={str(p.relative_to(snapshot)): hashlib.sha256(
                       p.read_bytes()).hexdigest() for p in sorted(snapshot.rglob('*.[ch]'))
