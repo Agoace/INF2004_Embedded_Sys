@@ -46,6 +46,8 @@ function(host_test name test_file)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+host_test(test_fault_mask tests/test_fault_mask.c)
+
 function(robot_source old new output)
     if(EXISTS "${REPO}/${new}")
         set(${output} "${new}" PARENT_SCOPE)

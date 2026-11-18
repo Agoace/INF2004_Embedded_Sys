@@ -10,7 +10,7 @@ identities, queue capacity and admission safety must stay unchanged.
 | Step | State |
 | --- | --- |
 | T110 | Software checks pass; robot measurement pending |
-| F1 shared interface | Next step; no publisher is added by the interface |
+| F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
 | A-EVENT, A-INDEX | Pending implementation |
 | A-SCAN, A-HEALTH, A-SONAR, A-INFO | Pending implementation |
 | F combiner and output | Pending implementation and owner publishers |
@@ -48,6 +48,46 @@ Dashboard stale limits remain RUN state 1000 ms, IDLE state 2500 ms,
 RUN heartbeat 2500 ms and IDLE heartbeat 12000 ms. Producer age 65535
 still means unavailable. No decoder threshold is changed.
 
+## F1 shared interface
+
+`app_program/platform/fault_mask.h` defines one 8 B owner board: aligned
+u32 sequence and u32 value, using the existing board atomics. Each board
+has one writer. Health alone owns the 16 B combined snapshot and calls
+`fault_mask_collect_begin(snapshot, rt_epoch())`, then `fault_mask_combine`
+for each source. This interface adds no global storage or firmware calls.
+
+| Bits | Meaning | Writer / getter |
+| --- | --- | --- |
+| 0..3 | Left stall, right stall, ESTOP, stale command | Existing Motion board; STALE is not latched |
+| 4,6 | IMU gate latch; other shell FAULT excluding Motion/IMU | Vehicle / `vehicle_fault_mask_try_read` |
+| 5 | Ultrasonic streak at least 5; NO_RETURN is not a fault | Sonar / `sonar_fault_mask_try_read` |
+| 7 | Existing RAM-log full condition | Telemetry / `telemetry_fault_mask_try_read` |
+| 8,9 | Link down; MQTT not connected | Wi-Fi / `robot_network_fault_mask_try_read` |
+
+Writers call `fault_mask_publish(board, owner_mask, value)`. Their getters
+call `fault_mask_try_read(board, owner_mask, out)` and return bool. False
+leaves out unchanged. Wrong-owner and spare bits are rejected. A zero
+sequence is unpublished, not an observed all-clear. No shared byte writes,
+new fault latch or actuator input is introduced.
+
+The snapshot contains now, run, valid and epoch. A failed read retains the
+last copied now bits with valid clear; it is not a current all-clear. Run
+is the OR of successfully copied values in the current run epoch, not a
+count or a guarantee that every short transient was sampled. A new epoch
+clears run, not the owners' faults. Consumers must check epoch and valid;
+they must not show an old epoch as the new run before Health samples it.
+The final F integration must handle that boundary in the stopped reader.
+
+F1 tests exhaust all 1024 legal words and check ownership, unchanged
+outputs, odd/changing/zero/wrapped sequences, owner independence, current
+clear versus run OR and epoch reset. The red build first failed because
+the new interface was absent. Host checks pass 685/685; demo build has
+zero warnings and RAM_PROOF 79/79, 21212 B. Static RAM remains 240808 B:
+F1 has no allocated objects. New owner boards and Health state must be
+counted as costs when the publishers and combiner are integrated.
+Evidence: `build/wip/cr1/f1-red.log`, `f1-host.log`, `f1-build.log` and
+`f1/ram_report.txt` with copied ELF/map/proof.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -77,6 +117,7 @@ This dormant demo is not an active robot MQTT publisher.
 | Common baseline `7350da0` | 241228 | Reference | SW7 canonical map |
 | Starting integration `33d2e4c` | 240808 | -420 from common baseline | Existing integrated A results |
 | T110 | 240808 | 0 from starting integration | Local after map |
+| F1 interface only | 240808 | 0 from T110 | Local after map; no global storage |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay

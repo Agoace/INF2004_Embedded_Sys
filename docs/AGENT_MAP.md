@@ -133,6 +133,10 @@ commit that changed this section (header comments and file lists).
   the approved S1 storage work, diagnostic owner masks and 110 ms RUN state
   deadline. [`test_telemetry_mode.c`](../tests/test_telemetry_mode.c) checks
   eligibility, unchanged modes and the 20 ms polling model.
+  [`fault_mask.h`](../app_program/platform/fault_mask.h) defines the diagnostic
+  single-writer owner board and Health-only combiner interface;
+  [`test_fault_mask.c`](../tests/test_fault_mask.c) checks ownership, interrupted
+  reads, reserved bits and run-epoch resets. Publishers are separate changes.
 - [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
   evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
   defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)
