@@ -13,7 +13,7 @@ identities, queue capacity and admission safety must stay unchanged.
 | F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
 | A-EVENT | Software checks pass; robot timing pending |
 | A-INDEX | Software checks pass; robot timing pending |
-| A-SCAN, A-HEALTH, A-SONAR, A-INFO | Pending implementation |
+| A-SCAN, A-HEALTH, A-SONAR, A-INFO | Software checks pass; robot timing and stack pending |
 | F combiner and output | Pending implementation and owner publishers |
 
 The starting revision is `33d2e4c`, which includes the approved sonar,
@@ -165,6 +165,51 @@ for a different link layout. Evidence: `build/wip/cr1/index-red.log`,
 `index-host.log`, `index-build.log`, `index/ram_report.txt` and copied
 ELF/map/proof. MQTT formats and queue allocations stay unchanged.
 
+## Four optional A records
+
+These changes affect private retained storage only. Existing native APIs,
+MQTT binary layouts, field units, queue allocations, timing deadlines and
+admission atomics stay unchanged. No source board owned by another helper
+is counted in the following savings.
+
+| Record | Information retained / bits | Writer and access | Before / after B |
+| --- | --- | --- | ---: |
+| 48 stopped scan records | ID32, duration32, fine mask13, coarse hits3 (0..5), attempt1 (1..2), seven zero bits | Telemetry only; decoded for stopped dump | 576 / 528 |
+| Retained INFO | Reason48 bytes, ten full u32 diagnostics, two full i32 counts, five 12-bit ADC fields, four independent Motion fault bits | Telemetry only; native scratch for stopped dump; reason termination unchanged | 108 / 104 |
+| Health board | 22 full u32 fields, i32 start status, stack/age16 each, CPU10 (0..1000, code1001=unknown), flags7, reset2, link3 (-3..3), MQTT2, priorities6 each (0..32), unavailable mask5 | Health only; existing sequence/word board; metrics lock and caches unchanged | 120 / 112 |
+| S1 pending sonar | Seven full u32 IDs/times, status2, valid1, pending1, two angles6 (-30..30), echo14, two zero bits | Wi-Fi only; bounded provider read to local value, encode retained copy, decode for publish | 40 / 32 |
+
+The Health value uses 809 meaningful bits in a 104 B aligned payload;
+23 spare bits are zero. Its u32 capture time and sequence add eight bytes.
+A failed or invalid encode never publishes a partial value; a failed read
+or decode leaves output unchanged. CPU unknown is reconstructed as 65535,
+not clipped to a plausible load. INFO is exactly 832 bits, with no spare
+bits. IDs, counters and signed extrema are not narrowed. The sonar echo
+is already a 14-bit result; unused bits are not physical range evidence.
+
+`value_bits.h` operates on local or owner-protected bytes. It is not an
+atomic publication mechanism. Sequence/word boards still use aligned
+32-bit atomics. No C bit-fields or unaligned word access is used.
+
+The red optional-codec build failed on the absent header before the
+implementation. Tests cover all scan mask/hit/attempt combinations, every
+12-bit ADC value, signed/count endpoints, all sonar angle pairs and
+status/flags, every 14-bit echo, all CPU codes and link values, all Health
+flag/reset/state/unavailable-mask combinations, invalid codes and every
+spare bit. Existing real Health refresh/stack, telemetry dump, retry and
+MQTT tests also pass. The native sonar pending copy is rebuilt for each
+publish retry; identity and acknowledgement policy do not change.
+
+Results: host 687/687; demo zero warnings, RAM_PROOF 79/79, 21212 B.
+S1 falls 78862 to 78794 B (68 B retained data). Static RAM falls 239264
+to 239200 B (64 B): linker alignment adds 4 B, so do not claim a 68 B
+linked saving. Across A-EVENT, A-INDEX and these four records the retained
+data saving is 1608 B; linked static saving is also 1608 B in this layout.
+No category B or wire saving is included. Hardware codec CPU, task stack
+and control timing remain pending; local scratch is not a static saving.
+Evidence: `build/wip/cr1/optional-red.log`, `optional-host.log`,
+`optional-build.log`, `optional/ram_report.txt` and copied ELF/map/proof.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -197,6 +242,7 @@ This dormant demo is not an active robot MQTT publisher.
 | F1 interface only | 240808 | 0 from T110 | Local after map; no global storage |
 | A-EVENT | 239272 | -1536 from F1b | Local after map; events 4608 B |
 | A-INDEX | 239264 | -8 from A-EVENT | Index -4 B, linker alignment -4 B |
+| Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay

@@ -10,6 +10,7 @@
 #include <stddef.h>
 #include "../app.h"
 #include "robot_health.h"
+#include "network_pack.h"
 #include "robot_network.h"
 #include "telemetry.h"
 #include "../platform/app_board.h"
@@ -35,18 +36,19 @@ static ID health_task;
 static ID health_cyclic;
 
 typedef struct {
-    rm_heartbeat_t value;
+    network_health_packed_t value;
     uint32_t us;
 } health_snapshot_t;
 
 static APP_BOARD(health_snapshot_t) board;
+_Static_assert(sizeof(board) == 112u, "Packed Health board allocation");
 /* P1: per-run peak load; Health is the only writer. */
 static cpu_peak_t run_peak;
 
 /* Build one health snapshot and publish it to the board. */
 static void refresh(void)
 {
-    health_snapshot_t v = {0};
+    struct { rm_heartbeat_t value; uint32_t us; } v = {0};
     v.us = drv_time_us();
     v.value.uptime_ms = drv_time_ms();
     v.value.reset_reason = (uint8_t)drv_watchdog_last_reset();
@@ -74,7 +76,11 @@ static void refresh(void)
     v.value.telemetry_lost = st.lost;
     robot_health_collect(&v.value);
     robot_network_metrics(&v.value);
-    app_board_publish(&board.sequence, board.words, &v, sizeof(v));
+    health_snapshot_t packed;
+    packed.us = v.us;
+    if (network_health_pack(&packed.value, &v.value)) {
+        app_board_publish(&board.sequence, board.words, &packed, sizeof(packed));
+    }
 }
 
 /* Task body: refresh, then sleep until the next cyclic wake-up. */
@@ -142,7 +148,7 @@ int robot_health_try_read(rm_heartbeat_t *out, uint32_t *timestamp_us)
     if (!app_board_try_read(&board.sequence, board.words, &v, sizeof(v))) {
         return E_TMOUT;
     }
-    *out = v.value;
+    if (!network_health_unpack(out, &v.value)) return E_SYS;
     *timestamp_us = v.us;
     return E_OK;
 }

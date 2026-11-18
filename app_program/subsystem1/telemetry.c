@@ -52,7 +52,8 @@ static void publish_stats(void)
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_packed_t events[TELEMETRY_EVENTS];
 _Static_assert(sizeof(events) == 4608u, "Packed RAM event allocation");
-static telemetry_info_t info;
+static telemetry_info_packed_t stored_info;
+_Static_assert(sizeof(stored_info) == 104u, "Packed retained INFO size");
 /* S3 supplies the strong, bounded stopped dump in its producer commit. */
 void barcode_live_source_dump(void) __attribute__((weak));
 void barcode_live_source_dump(void)
@@ -65,7 +66,8 @@ static void dump_barcode_source(void)
 }
 
 static ja_result_t last_junction;
-static telemetry_scan_t scan_rows[TELEMETRY_SCAN_ROWS];
+static telemetry_scan_packed_t scan_rows[TELEMETRY_SCAN_ROWS];
+_Static_assert(sizeof(scan_rows) == 528u, "Packed scan allocation");
 static uint32_t scan_count, scan_omitted;
 static jlive_report_t last_source;
 static jlive_counts_t last_source_counts;
@@ -323,6 +325,8 @@ static void dump(void)
     const UW before = dropped();
     telemetry_stats_t st;
     telemetry_stats(&st);
+    telemetry_info_t info;
+    (void)telemetry_info_unpack(&info, &stored_info);
     tm_printf((UB *)"[robot] KR1 reset %s; %s rows %lu events %lu "
                     "lost_telemetry %lu lost_wakes %lu overruns %lu "
                     "response_max_us %lu faults %u gap %lu..%lu us\n",
@@ -356,7 +360,9 @@ static void dump(void)
         imu_hump_diag_print(&diag);
     }
     for (uint32_t i = 0u; i < scan_count; ++i) {
-        const telemetry_scan_t *s = &scan_rows[i];
+        telemetry_scan_t value;
+        if (!telemetry_scan_unpack(&value, &scan_rows[i])) continue;
+        const telemetry_scan_t *s = &value;
         tm_printf((UB *)"[S5_SCAN] id %lu attempt %u coarse_hits %u "
                         "fine_mask %04x duration_ms %lu\n",
                   (unsigned long)s->scan_id, (unsigned int)s->attempt,
@@ -492,8 +498,8 @@ static void telemetry_task(INT code, void *ctx)
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_INFO:
-            info = m.data.info;
-            info.reason[sizeof(info.reason) - 1u] = '\0';
+            m.data.info.reason[sizeof(m.data.info.reason) - 1u] = '\0';
+            if (!telemetry_info_pack(&stored_info, &m.data.info)) lose_locked();
             break;
         case TELEMETRY_JUNCTION:
             last_junction = m.data.junction;
@@ -509,7 +515,11 @@ static void telemetry_task(INT code, void *ctx)
             break;
         case TELEMETRY_SCAN:
             if (scan_count < TELEMETRY_SCAN_ROWS) {
-                scan_rows[scan_count++] = m.data.scan;
+                if (telemetry_scan_pack(&scan_rows[scan_count], &m.data.scan)) {
+                    ++scan_count;
+                } else {
+                    ++scan_omitted;
+                }
             } else {
                 ++scan_omitted;
             }
@@ -518,8 +528,8 @@ static void telemetry_task(INT code, void *ctx)
             dump_barcode_source();
             break;
         case TELEMETRY_DUMP:
-            info = m.data.info;
-            info.reason[sizeof(info.reason) - 1u] = '\0';
+            m.data.info.reason[sizeof(m.data.info.reason) - 1u] = '\0';
+            if (!telemetry_info_pack(&stored_info, &m.data.info)) lose_locked();
             motion_diag_dump(1);
             motion_diag_print();
             /* Bounded barcode diagnostics precede thousands of KR rows so
