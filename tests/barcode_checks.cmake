@@ -304,3 +304,11 @@ host_test(test_blv_turn tests/test_blv_turn.c
     app_program/barcode_live_vehicle/line.c
     ${line_search_source} ${obstacle_source})
 target_link_libraries(test_blv_turn PRIVATE m)
+
+# Live-only control collision regression; initially red against shared producer.
+host_test(test_barcode_control_cache tests/test_barcode_control_cache.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_control_cache PRIVATE
+    BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1)
+target_link_libraries(test_barcode_control_cache PRIVATE m)
