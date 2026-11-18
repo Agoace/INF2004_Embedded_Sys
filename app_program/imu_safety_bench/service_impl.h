@@ -1,9 +1,12 @@
-/* Forced include ONLY in an explicit IMU replay TEST service build.
- * The production service, observer, safety math and publish order stay intact. */
+/* Forced include ONLY in an explicit IMU replay service build (TEST
+ * runner or ROBOT synthetic). The production service, observer, safety
+ * math and publish order stay intact; only the probe is replaced and
+ * three calls are timed. */
 #ifndef IMU_SAFETY_BENCH_SERVICE_IMPL_H
 #define IMU_SAFETY_BENCH_SERVICE_IMPL_H
-#if !IMU_SAFETY_BENCH || !APP_TEST || APP_BENCH
-#error "IMU_SAFETY_BENCH service hook is TEST-only"
+#if !IMU_SAFETY_BENCH || APP_BENCH || \
+    (IMU_SAFETY_BENCH_ROBOT ? APP_TEST : !APP_TEST)
+#error "IMU_SAFETY_BENCH service hook: TEST=1 runner or TEST=0 ROBOT only"
 #endif
 #include "stats.h"
 #include "../platform/app_board.h"
@@ -19,4 +22,7 @@ static inline void imu_bench_publish(uint32_t *sequence, uint32_t *words,
 #define imu_probe_init imu_bench_probe_init
 #define imu_probe_read imu_bench_read
 #define app_board_publish imu_bench_publish
+#define imu_core_step imu_bench_core_step
+#define imu_hump_diag_step imu_bench_hump_diag_step
+#define imu_safety_step imu_bench_safety_step
 #endif

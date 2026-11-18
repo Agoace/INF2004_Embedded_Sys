@@ -93,6 +93,10 @@ INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
 /* Fresh IMU hump board of the current run: one closed 10.8 mm event. */
 static unsigned int hump_reads,hump_lines,hump_none;static uint32_t run_seen;
 static bool imu_lift_test, imu_stale_test, imu_absent_test;
+/* Recovery case: the first clear request removes the LIFT latch. */
+static bool imu_recover_test;
+/* Like motion.c: an ESTOP stays latched in the fault bits. */
+static bool estop_latch_test;
 static uint32_t imu_clear_token;
 int imu_safety_try_read(imu_safety_report_t *out) {
     if (imu_absent_test) return E_NOEXS;
@@ -101,7 +105,8 @@ int imu_safety_try_read(imu_safety_report_t *out) {
         .flags=IMU_SAFETY_FLAG_VALID|IMU_SAFETY_FLAG_UPRIGHT|
                IMU_SAFETY_FLAG_NEAR_ONE_G},.applied_request=imu_clear_token};
     if (run_seen!=0u && now-run_seen>=100u) {
-        if (imu_lift_test) out->value.latched_trigger=IMU_SAFETY_LIFT;
+        if (imu_lift_test && !(imu_recover_test && imu_clear_token!=0u))
+            out->value.latched_trigger=IMU_SAFETY_LIFT;
         if (imu_stale_test) out->value.observation_ms=now-60u;
     }
     return E_OK;
@@ -199,7 +204,9 @@ bool drv_motor_hw_button_down(unsigned int pin) {
 int motion_notify_after_tick(ID id) { listener=id;++notifications;return E_OK; }
 int motion_status(motion_status_t *s) {
     *s=(motion_status_t){0};s->watchdog_armed=watchdog_ready;s->ticks=now/10u;
-    s->counts[0]=counts[0];s->counts[1]=counts[1];return E_OK;
+    s->counts[0]=counts[0];s->counts[1]=counts[1];
+    if (estop_latch_test && estops!=0u) s->faults=MC_FAULT_ESTOP;
+    return E_OK;
 }
 int motion_snapshot_try_read(motion_status_t *s,uint32_t *stamp) {
     ++snapshot_reads;if (junction_start_fail==1u) return E_TMOUT;

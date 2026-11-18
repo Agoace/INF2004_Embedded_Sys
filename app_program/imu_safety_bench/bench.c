@@ -2,7 +2,7 @@
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
 #include "stats.h"
-#if IMU_SAFETY_BENCH
+#if IMU_SAFETY_BENCH && !IMU_SAFETY_BENCH_ROBOT
 #if !APP_TEST || APP_BENCH || TK_SUPPORT_SMP
 #error "IMU_SAFETY_BENCH reporter requires UP TEST=1 BENCH=0"
 #endif
@@ -11,7 +11,6 @@
 #include "../platform/drv_time.h"
 #include "../platform/run_timing.h"
 #include "../subsystem1/robot_health.h"
-#include "../vehicle/vehicle_board.h"
 #include <string.h>
 
 #define BENCH_DURATION_MS 70000u
@@ -66,15 +65,7 @@ static void report(uint32_t elapsed)
                   "exclusive_per_task_cpu NA\n",
                   (unsigned int)health.cpu_load_permille);
     }
-    vehicle_snapshot_t vehicle;
-    if (vehicle_snapshot_try_read(&vehicle) >= E_OK) {
-        tm_printf((UB *)"[IMU_BENCH_VEHICLE] state %u response_max_us %lu "
-                  "overruns %lu lost_wakes %lu\n",
-                  (unsigned int)vehicle.state,
-                  (unsigned long)vehicle.response_max_us,
-                  (unsigned long)vehicle.overruns,
-                  (unsigned long)vehicle.wake_lost);
-    }
+    /* TEST images have no Vehicle task; no Vehicle line exists. */
 }
 
 static void reporter(INT code, void *context)
@@ -110,6 +101,19 @@ static void reporter(INT code, void *context)
                   (unsigned long)mean(p->work_total_us, p->work_samples),
                   (unsigned long)p->work_max_us, (unsigned long)p->overruns,
                   (unsigned long)p->triggers);
+        const imu_bench_split_t *x = p->split;
+        tm_printf((UB *)"[IMU_BENCH_SPLIT] phase %u core %lu/%lu "
+                  "diag %lu/%lu safety %lu/%lu rest %lu/%lu "
+                  "compute_min_us %lu mean/max_us\n", i,
+                  (unsigned long)mean(x[0].total_us, p->samples),
+                  (unsigned long)x[0].max_us,
+                  (unsigned long)mean(x[1].total_us, p->samples),
+                  (unsigned long)x[1].max_us,
+                  (unsigned long)mean(x[2].total_us, p->samples),
+                  (unsigned long)x[2].max_us,
+                  (unsigned long)mean(x[3].total_us, p->samples),
+                  (unsigned long)x[3].max_us,
+                  (unsigned long)(p->samples ? p->compute_min_us : 0u));
         (void)tk_dly_tsk(20);
     }
     app_task_report();

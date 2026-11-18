@@ -362,16 +362,30 @@ mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLA
 $(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
 endif
 
-# Replay is opt-in TEST-only. Normal profiles keep the same flags and link.
+# Replay is opt-in. 1 is the TEST runner; robot_synthetic is the full
+# robot app with a synthetic IMU stream (spare Pico W only, never a robot
+# with a real IMU). Normal profiles keep the same flags and link.
 IMU_SAFETY_BENCH ?= 0
 ifneq ($(words $(IMU_SAFETY_BENCH)),1)
-$(error IMU_SAFETY_BENCH must be one value: 0 or 1)
+$(error IMU_SAFETY_BENCH must be one value: 0, 1 or robot_synthetic)
 endif
-ifneq ($(filter $(IMU_SAFETY_BENCH),0 1),$(IMU_SAFETY_BENCH))
-$(error IMU_SAFETY_BENCH must be 0 or 1)
+ifneq ($(filter $(IMU_SAFETY_BENCH),0 1 robot_synthetic),$(IMU_SAFETY_BENCH))
+$(error IMU_SAFETY_BENCH must be 0, 1 or robot_synthetic)
 endif
-ifeq ($(IMU_SAFETY_BENCH),1)
+ifneq ($(IMU_SAFETY_BENCH),0)
 include imu_safety_bench.mk
+endif
+
+# Opt-in ROBOT IMU safety latch capture. OFF adds no flag, object or name.
+IMU_SAFETY_CAPTURE ?= 0
+ifneq ($(words $(IMU_SAFETY_CAPTURE)),1)
+$(error IMU_SAFETY_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_SAFETY_CAPTURE),0 1),$(IMU_SAFETY_CAPTURE))
+$(error IMU_SAFETY_CAPTURE must be 0 or 1)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+include imu_safety_capture.mk
 endif
 
 #
@@ -404,6 +418,9 @@ endif
 
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_imucap
 endif
 ifneq ($(LINE_P_NEAR),85)
 EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
@@ -596,14 +613,17 @@ endif
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
 endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-imucap
+endif
 ifneq ($(LINE_P_NEAR),85)
 PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
 endif
 ifneq ($(LINE_BASE),120)
 PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
 endif
-ifeq ($(IMU_SAFETY_BENCH),1)
-PROFILE_ID := $(PROFILE_ID)-imu_safety_bench
+ifneq ($(IMU_SAFETY_BENCH),0)
+PROFILE_ID := $(PROFILE_ID)-imu_safety_bench_$(IMU_SAFETY_BENCH)
 endif
 PROFILE_FILE := .build_profile
 

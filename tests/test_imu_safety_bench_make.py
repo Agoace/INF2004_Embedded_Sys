@@ -31,4 +31,37 @@ for args in ((), ("IMU_SAFETY_BENCH=0",)):
     assert result.returncode == 0, result.stderr[-300:]
     assert " -DIMU_SAFETY_BENCH=1" not in result.stdout
     assert " -include ../app_program/imu_safety_bench/" not in result.stdout
+# ROBOT synthetic profile: one explicit long token, full robot app,
+# never TEST/BENCH, never a capture or stream profile.
+ROBOT = "IMU_SAFETY_BENCH=robot_synthetic"
+for extra in (("IMU_SAFETY_BENCH=robot",),
+              ("IMU_SAFETY_BENCH=ROBOT_SYNTHETIC",),
+              ("IMU_SAFETY_BENCH=robot_synthetic 1",),
+              (ROBOT, "TEST=1"),
+              (ROBOT, "BENCH=1"),
+              (ROBOT, "SMP=1"),
+              (ROBOT, "MQTT=0"),
+              (ROBOT, "KERNEL_RAM=0"),
+              (ROBOT, "IMU_STREAM=1"),
+              (ROBOT, "BARCODE_CAPTURE=1"),
+              (ROBOT, "BARCODE_FAIL_CAPTURE=1")):
+    result = make(*extra)
+    assert result.returncode != 0, f"accepted unsafe robot replay {extra}"
+    assert any(key in result.stderr for key in
+               ("IMU_SAFETY_BENCH", "KERNEL_RAM", "BARCODE_CAPTURE",
+                "MQTT", "BENCH", "TEST")), result.stderr[-300:]
+result = make(ROBOT)
+assert result.returncode == 0, result.stderr[-500:]
+assert "_imu_synth_robot" in result.stdout
+assert "_imu_safety_bench" not in result.stdout
+assert "service_impl.h" in result.stdout and "robot_impl.h" in result.stdout
+assert "main_impl.h" not in result.stdout
+assert "-DIMU_SAFETY_BENCH_ROBOT=1" in result.stdout
+assert "app_program/imu_safety_bench/robot.c" in result.stdout
+# The full robot keeps its ordinary KERNEL_RAM lists.
+assert "kernel_ram/robot.list" in result.stdout
+assert "kernel_ram/imu_safety_bench.list" not in result.stdout
+result = make("TEST=1", "IMU_SAFETY_BENCH=1")
+assert "-DIMU_SAFETY_BENCH_ROBOT=1" not in result.stdout
+assert "robot_impl.h" not in result.stdout
 print("IMU safety bench make guards PASS")

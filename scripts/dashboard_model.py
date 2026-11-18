@@ -31,7 +31,7 @@ MODULE_NAMES = {0: "none", 1: "line tracing", 2: "line search", 3: "obstacle sca
                 4: "obstacle detour", 5: "scan reverse"}
 EVENT_KINDS = {1: "outcome", 2: "module change", 3: "ESTOP or fault", 4: "scan complete",
                5: "run end", 6: "command decision", 7: "junction (reserved)",
-               8: "scan retry", 9: "hump"}
+               8: "scan retry", 9: "hump", 10: "IMU safety"}
 SCAN_RETRY_TEXT = {1: "reverse begins", 2: "reverse ends", 3: "rescan begins"}
 DETOUR_LIMIT = 8
 SCAN_STAGES = {0: "not reported", 1: "coarse", 2: "fine"}
@@ -56,6 +56,14 @@ MOTION_FAULT_BITS = ((0x01, "stall left"), (0x02, "stall right"), (0x04, "ESTOP"
 BARCODE_DIRECTIONS = {0: "unknown", 1: "forward", 2: "reverse"}
 IMU_EVENTS = {1: "stationary", 2: "accelerating", 3: "turning", 4: "climbing",
               5: "descending", 6: "impact"}
+IMU_SAFETY_TRIGGERS = {1: 'overturn', 2: 'lift', 3: 'unavailable'}
+IMU_SAFETY_CAUSES = {0: 'none', 1: 'stale', 2: 'invalid', 3: 'absent', 4: 'pose',
+                     5: 'read failed', 6: 'not calibrated', 7: 'zero vector'}
+IMU_RECOVERY_REASONS = {0: 'CLEARED', 1: 'NO_BOARD (no IMU report)',
+                        2: 'STALE (report too old)', 3: 'INVALID (invalid data)',
+                        4: 'POSE (not upright)', 5: 'ONE_G (not near 1 g)',
+                        6: 'WHEELS (moving)', 7: 'WINDOW (clear window incomplete)',
+                        8: 'PENDING', 9: 'CANCELLED'}
 NOT_IMPLEMENTED = "not implemented yet"
 NOT_REPORTED = "not reported by current telemetry"
 FUTURE_BARCODE = "waiting for per-attempt report"
@@ -103,6 +111,19 @@ def _name(table, value):
     return table.get(value, f"unknown ({value})")
 
 
+def _imu_safety_values(fields):
+    recovery = fields['imu_safety_phase'] == 'recovery'
+    trigger = ('none' if recovery and fields['imu_safety_trigger'] == 0 else
+               _name(IMU_SAFETY_TRIGGERS, fields['imu_safety_trigger']))
+    cause = ('unavailable (RAM log)' if fields['imu_safety_cause'] is None else
+             _name(IMU_SAFETY_CAUSES, fields['imu_safety_cause']))
+    action = ('RECOVERY: ' + _name(IMU_RECOVERY_REASONS, fields['imu_safety_recovery'])
+              if recovery else 'STOP: ' + trigger)
+    module_names = {key: value for key, value in MODULE_NAMES.items() if key <= 4}
+    context = _name(STATE_NAMES, fields['from']) + ' / ' + _name(module_names, fields['to'])
+    return action, trigger, cause, context
+
+
 def _mm_text(tenths):
     """Hump heights travel in 0.1 mm units."""
     return f"{tenths / 10:.1f} mm"
@@ -136,6 +157,7 @@ class DashboardModel:
         self.detour_missed = 0
         self.summary = None  # {"fields": dict, "rx": ms, "retained": bool}
         self.hump_live = None  # this run's kind 9 events: {"peak", "left", "count", "rx"}
+        self.imu_safety = None  # latest kind 10 report, not a continuous safety snapshot
         self.reserved = {"barcode": None, "imu": None, "imu_event": None}
         self.ignored_reserved = 0
         self.sonar = None
@@ -230,6 +252,7 @@ class DashboardModel:
         self.path_reset_pending = False
         self.reserved = {"barcode": None, "imu": None, "imu_event": None}
         self.hump_live = None
+        self.imu_safety = None
         self.log_info = {"live_rows": 0, "refill_rows": 0, "jumped_frames": 0, "last": None}
 
     def _store(self, topic, fields, now, retained=False):
@@ -315,11 +338,20 @@ class DashboardModel:
             else _name(SONAR_STATUS, fields["status"]), "rx": now}
 
     def _store_event(self, fields, now, retained=False):
-        sequence = fields["sequence"]
-        if self.event_sequence is not None and sequence > self.event_sequence + 1:
-            self.event_gaps += sequence - self.event_sequence - 1
-        self.event_sequence = sequence
-        kind = fields["kind"]
+        sequence, kind = fields['sequence'], fields['kind']
+        previous = self.imu_safety
+        if (kind == robot_wire.EVENT_IMU_SAFETY and previous is not None and
+                previous['fields']['boot_session'] == fields['boot_session']):
+            delta = (sequence - previous['fields']['sequence']) & 0xffffffff
+            if delta == 0 or delta >= 0x80000000:
+                return  # Duplicate/older report: no new history or refreshed age.
+        if self.event_sequence is None:
+            self.event_sequence = sequence
+        else:
+            delta = (sequence - self.event_sequence) & 0xffffffff
+            if 0 < delta < 0x80000000:
+                self.event_gaps += delta - 1
+                self.event_sequence = sequence
         event = {"rx": now, "sequence": sequence, "kind": kind, "uptime_ms": fields["uptime_ms"]}
         if kind == 6:
             opcode = fields["word"] & 0xFF
@@ -349,6 +381,15 @@ class DashboardModel:
                 self.scan_samples.clear()
             event["text"] = (f"SCAN retry {attempt}: {_name(SCAN_RETRY_TEXT, fields['detail'])}"
                              " (both sides blocked)")
+        elif kind == robot_wire.EVENT_IMU_SAFETY:
+            self.imu_safety = {'fields': dict(fields), 'rx': now, 'retained': retained}
+            action, trigger, cause, context = _imu_safety_values(fields)
+            event['text'] = (f'IMU SAFETY {action}; trigger {trigger}; cause {cause}; '
+                             f'shell / module {context}; word 0x{fields["word"]:04x}, '
+                             f'detail {fields["detail"]}; {fields["boot_session"]} '
+                             f'#{sequence} at robot uptime {fields["uptime_ms"]} ms')
+            if retained:
+                event['text'] += ' (retained history)'
         elif kind == robot_wire.EVENT_HUMP:
             left, number = fields["detail"] >> 7, fields["detail"] & 0x7F
             event["text"] = (f"HUMP #{number}: {_mm_text(fields['word'])}, "
@@ -1090,10 +1131,46 @@ def barcode_panel(model, now):
     return panel
 
 
+def _imu_fault_at_run_end(fields):
+    """Describe a recorded shell latch, never the current safety condition."""
+    if fields is None:
+        return 'waiting for run summary'
+    if fields['version'] < 3:
+        return f"not reported (summary v{fields['version']} firmware)"
+    fault = fields['shell_fault']
+    if fault == 6:
+        trigger = _name(IMU_SAFETY_TRIGGERS, fields['shell_fault_detail'])
+        return 'latched: ' + trigger
+    return 'none reported' if fault in SHELL_FAULTS else f'unknown (shell fault {fault})'
+
+
 @register_panel
 def imu_panel(model, now):
     snapshot, event = model.reserved['imu'], model.reserved['imu_event']
-    rows, notes = [], ['hump heights are report only; no navigation action']
+    summary_fields = None if model.summary is None else model.summary['fields']
+    rows = [('Current IMU safety', 'not reported'),
+            ('IMU fault at run end', _imu_fault_at_run_end(summary_fields))]
+    notes = ['hump heights are report only; no navigation action',
+             'run-end IMU fault is history, not the current latch; '
+             'current IMU safety and recovery state are not reported']
+    safety = model.imu_safety
+    if safety is None:
+        rows.append(('Latest IMU safety event', 'not received'))
+    else:
+        f = safety['fields']
+        action, trigger, cause, context = _imu_safety_values(f)
+        rows += [('Latest IMU safety event', action), ('IMU trigger in event', trigger),
+                 ('IMU safety event cause', cause), ('IMU event shell / module', context),
+                 ('IMU safety event raw word / detail', f'0x{f["word"]:04x} / {f["detail"]}'),
+                 ('IMU safety event boot / session', f['boot_session']),
+                 ('IMU safety event sequence / uptime', f'#{f["sequence"]} / {f["uptime_ms"]} ms'),
+                 ('IMU safety event received age', f'{model.record_age(now, safety)} ms')]
+        notes.append('kind 10 is an event report, not a current-state snapshot; '
+                     'QoS 0 can lose reports; only CLEARED reports a successful clear')
+        if safety['retained']:
+            notes.append('retained history (unexpected for kind 10); not a live safety report')
+        if f['boot_session'] != model.log.sessions.current:
+            notes.append('IMU safety event is from a previous boot/session')
     live = model.hump_live
     if live is not None:
         rows += [("Hump event run count", live['count']),
@@ -1105,6 +1182,7 @@ def imu_panel(model, now):
         notes.append('robot/event kind 9 reports a run count, not a delivery count; '
                      'event data resets at observed run start or new boot; not a continuous IMU stream')
     if model.summary is not None:
+        rows.append(('Last run stop reason', _name(STOP_REASONS, summary_fields['stop_reason'])))
         result, warnings = _hump_result(model.summary['fields'])
         rows += result
         f = model.summary['fields']
@@ -1140,7 +1218,7 @@ def imu_panel(model, now):
         notes.append('robot/state heading and turn rate are wheel odometry, not IMU attitude; '
                      'robot/status has no IMU samples')
     streams = [r for r in (snapshot, event) if r is not None]
-    history = [r for r in (live, model.summary) if r is not None]
+    history = [r for r in (live, model.summary, safety) if r is not None]
     newest = max(streams or history, key=lambda r: r['rx'], default=None)
     panel = make_panel('imu', 'IMU / hump reports', model.record_age(now, newest), rows=rows,
                        stale_ms=STALE_MS if streams else None, note='; '.join(notes))
@@ -1164,7 +1242,8 @@ def summary_panel(model, now):
                           note="no run summary yet: it appears when a run ends")
     f = record["fields"]
     implemented = f["barcode_hump_implemented"]  # v3: barcode only
-    shell = _name(SHELL_FAULTS, f["shell_fault"])
+    shell = ('unknown (6)' if f['version'] < 3 and f['shell_fault'] == 6
+             else _name(SHELL_FAULTS, f['shell_fault']))
     if f["shell_fault"]:
         shell += f" (detail {f['shell_fault_detail']})"
     unknown_speed = (not f["speed_error_valid"]
@@ -1172,6 +1251,7 @@ def summary_panel(model, now):
     rows = [("Run ID", f["run_id"]),
             ("Stop source", _name(STOP_SOURCES, f["stop_source"])),
             ("Stop reason", _name(STOP_REASONS, f["stop_reason"])),
+            ('IMU fault at run end', _imu_fault_at_run_end(f)),
             ("Started (robot uptime)", _seconds(f["start_ms"])),
             ("Duration", _seconds(f["duration_ms"])),
             ("Distance (path length)", f"{f['distance_mm']} mm"),
@@ -1190,7 +1270,8 @@ def summary_panel(model, now):
         rows.append(("Detour", "a detour was still running when the run ended"))
     notes = ["age = time since this summary arrived"]
     scope = f["boot_session"]
-    rows.append(("Boot / session", scope))
+    rows += [("Boot / session", scope),
+             ('Summary received age', f'{model.record_age(now, record)} ms')]
     if scope != model.log.sessions.current:
         notes.append("previous boot/session: not the current robot's run summary")
     if record["retained"]:
@@ -1200,8 +1281,10 @@ def summary_panel(model, now):
             now - state["rx"] <= model.limits()["state_stale_ms"]
             and state["fields"]["active"]):
         notes.append("a new run is in progress: this summary is the previous run")
-    return make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
-                      rows=rows, note="; ".join(notes))
+    panel = make_panel("summary", "Run summary", model.record_age(now, record), stale_ms=None,
+                       rows=rows, note="; ".join(notes))
+    panel['age_kind'] = 'report'
+    return panel
 
 
 HUMP_WARNINGS = (("hump_imu_fault", "IMU data was missing for part of the run"),

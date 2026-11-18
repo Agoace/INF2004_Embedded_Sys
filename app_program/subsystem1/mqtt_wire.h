@@ -232,6 +232,15 @@ enum {
 #define RM_EVENT_HUMP 9u
 #define RM_HUMP_DETAIL_LEFT 0x80u
 
+/* robot/event kind 10 (IMU_SAFETY), event v2. from = shell state, to =
+ * running module. Word bit 15 clear: STOP, word = trigger 1..3, detail =
+ * cause 0..7, once per latch edge. Bit 15 set: RECOVERY, bits 8-14 =
+ * latched trigger 0..3, bits 0-7 = gate reason 0..9 (0 CLEARED), detail =
+ * latched cause. Kind 3 carries motion fault bits only. */
+#define RM_EVENT_IMU_SAFETY 10u
+#define RM_IMU_RECOVERY 0x8000u
+#define RM_IMU_CLEARED 0u
+
 /* robot/summary v3 hump_flags (byte 50); hump_peak 0.1 mm, 65535 none. */
 enum {
     RM_HUMP_IMPLEMENTED = 0x01,

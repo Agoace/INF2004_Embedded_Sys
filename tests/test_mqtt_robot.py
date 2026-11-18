@@ -1031,6 +1031,70 @@ class ObstacleV3Tests(unittest.TestCase):
                 wire.decode("robot/obstacle", bad)
 
 
+def imu_safety_frame(word=2, cause=0, sequence=10, uptime=1000, boot=100,
+                     source=2, module=1, flags=0):
+    return struct.pack('<BBBBIIHBBI', 2, 10, source, module, sequence, uptime,
+                       word, cause, flags, boot)
+
+
+class ImuSafetyEventWireTests(unittest.TestCase):
+    def test_stop_recovery_and_unknown_values_keep_raw_fields(self):
+        for trigger in range(1, 4):
+            for cause in range(8):
+                f = wire.decode('robot/event', imu_safety_frame(trigger, cause))
+                self.assertEqual((f['imu_safety_phase'], f['imu_safety_trigger'],
+                                  f['imu_safety_cause'], f['imu_safety_recovery']),
+                                 ('stop', trigger, cause, None))
+        for trigger in range(4):
+            for reason in range(10):
+                word = 0x8000 | trigger << 8 | reason
+                f = wire.decode('robot/event', imu_safety_frame(word, 3))
+                self.assertEqual((f['imu_safety_phase'], f['imu_safety_trigger'],
+                                  f['imu_safety_recovery'], f['word']),
+                                 ('recovery', trigger, reason, word))
+        for word, trigger, recovery in ((0x7fff, 0x7fff, None), (0xffff, 127, 255)):
+            f = wire.decode('robot/event', imu_safety_frame(word, 255, source=255, module=254))
+            self.assertEqual((f['imu_safety_trigger'], f['imu_safety_recovery'],
+                              f['imu_safety_cause'], f['from'], f['to']),
+                             (trigger, recovery, 255, 255, 254))
+
+    def test_frame_bounds_stay_strict_and_legacy_kind_three_is_unchanged(self):
+        frame = imu_safety_frame()
+        for bad in (frame[:-1], frame + b'\x00', b'\x03' + frame[1:],
+                    imu_safety_frame(flags=2), b'\x01' + frame[1:16]):
+            with self.assertRaises(ValueError):
+                wire.decode('robot/event', bad)
+        for word in (1, 2, 3, 4, 0x8108):
+            old = bytearray(imu_safety_frame(word))
+            old[1] = 3
+            f = wire.decode('robot/event', old)
+            self.assertEqual(f['word'], word)
+            self.assertNotIn('imu_safety_phase', f)
+
+    def test_embedded_log_events_and_csv_columns(self):
+        record = bytearray(imu_safety_frame()[:16])
+        record[0], record[15] = 1, 1
+        header, records = wire.parse_log_batch(build_batch(kind=6, records=[bytes(record)]))
+        self.assertEqual(records[0]['event_imu_safety_trigger'], 2)
+        self.assertIsNone(records[0]['event_imu_safety_cause'])  # RAM log has no cause byte.
+        refill = build_batch(kind=6, flags=1, stream=77, newest=0, records=[bytes(record)])
+        refill_v2 = b'\x02' + refill[1:32] + struct.pack('<I', 100) + refill[32:]
+        head, records = wire.parse_log_batch(refill_v2)
+        self.assertEqual(head['boot_id'], 100)
+        self.assertEqual(records[0]['event_imu_safety_trigger'], 2)
+        self.assertIsNone(records[0]['event_imu_safety_cause'])
+        single = struct.pack('<BBHIII', 1, 2, 0, 0, 1, 0) + record
+        self.assertEqual(wire.decode('robot/log', single)['event_imu_safety_phase'], 'stop')
+        columns = wire.csv_fields()
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=columns)
+        writer.writerow(wire.decode('robot/event', imu_safety_frame(0x8200)))
+        writer.writerow(wire.decode('robot/log', single))
+        for row in wire.LogStream(report=lambda _: None).handle(
+                build_batch(kind=6, records=[bytes(record)])):
+            writer.writerow(row)
+
+
 class ImuSafetyWireTests(unittest.TestCase):
     def test_stop_reasons_are_versioned(self):
         for version, size in ((1, 44), (2, 48), (3, 52)):

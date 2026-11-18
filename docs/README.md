@@ -86,7 +86,7 @@ not current acceptance reports. Local course originals are not public records.
 - [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
   Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
 - [BARCODE_LIVE_COMMAND.md](s3-line-barcode/BARCODE_LIVE_COMMAND.md) — opt-in live command path from the barcode producer.
-  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, OPERATOR course answers, SW9 vehicle items V1–V6, clearance (D_cross) measurement procedure.
+  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, OPERATOR course answers, SW9 vehicle items V1–V6, OPERATOR decision against D_cross runs or school-track transfer, approved option C placement rule (100 mm design guard, >=160 mm physical gap, no extra 100 mm margin), proposed variable rename, geometry budget and failure limits.
 - [BARCODE_SESSION_REPORT.md](s3-line-barcode/BARCODE_SESSION_REPORT.md) — GP20 log tool for per-attempt results and D_cross; dark-mark analysis.
   Contains: tool usage and rules (one dump per run, MEASURED vs DERIVED D_cross), results on FX_1/FX2/B120 (barcode 2 only, frame end to next dark pair, DERIVED 251–254 mm), dark-mark position/width table and operator checks.
 - [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
@@ -99,7 +99,8 @@ not current acceptance reports. Local course originals are not public records.
 
 - [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
   Contains: source attribution, pure detector contract, finite/age guards, trigger-count semantics, applied-request acknowledgement and integration steps; E: UP resource table per build profile (demo, capture, bench), ARM stack frames, spare Pico W BENCH1 (absent IMU), kernel services checked vs d3890d0, old-kernel numbers marked not valid; device acceptance not claimed.
-- [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — TEST-only synthetic IMU safety bench runbook.
+- [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — synthetic IMU safety bench runbook (TEST runner and ROBOT synthetic profiles), BENCH2 record and BENCH3 procedure.
+- [IMU_SAFETY_CAPTURE.md](s4-imu/IMU_SAFETY_CAPTURE.md) — opt-in ROBOT IMU safety latch capture (`IMU_SAFETY_CAPTURE=1`): build, RAM, USB line format and the lift/overturn operator procedure.
   Contains: make guards and build lines, replay seams, 40 s phase table (OVERTURN, LIFT), spare Pico W procedure, USB lines to watch, pass conditions, limits (wall time, no I2C cost).
 
 ## S5 — Obstacle
