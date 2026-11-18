@@ -118,6 +118,12 @@ commit that changed this section (header comments and file lists).
   [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
   60 B motion payload, published in a 64 B sequence/word board. Its sole
   writer is motion; decoded public APIs are unchanged.
+- [Vehicle A1](architecture/CR1_VEHICLE_A1.md) records the observation-only
+  board change (44 to 40 B), unchanged public API and wire, and software
+  evidence. [`vehicle_pack.h`](../app_program/vehicle/vehicle_pack.h) and
+  [`vehicle_pack.c`](../app_program/vehicle/vehicle_pack.c) define its nine-word
+  payload; [`test_vehicle_pack.c`](../tests/test_vehicle_pack.c) checks
+  ranges, invalid codes and interrupted publication. Vehicle is sole writer.
 - [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
   reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
