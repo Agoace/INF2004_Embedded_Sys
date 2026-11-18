@@ -83,7 +83,7 @@ int main(int argc, char **argv)
         !strstr(kind, "context") && !strstr(kind, "late") &&
         !strstr(kind, "end51") && !strstr(kind, "hard") &&
         !strstr(kind, "unbound") && !strstr(kind, "motorfault") &&
-        !strstr(kind, "loss");
+        !strstr(kind, "loss") && !strstr(kind, "heartbeat");
     const bool reverse = strcmp(kind, "reverse") == 0;
     const bool ack_kind = strcmp(kind, "ack") == 0 ||
                           strcmp(kind, "mode2_ack") == 0;
@@ -194,6 +194,8 @@ int main(int argc, char **argv)
             if (strstr(kind, "motorfault") && i == search_begin + 5u)
                 in.motor_faults = 1u;
             if (strstr(kind, "loss") && i == search_begin + 5u) ++in.dropped;
+            if (strstr(kind, "heartbeat") && i >= search_begin + 5u &&
+                i < search_begin + 70u) in.control_ok = false;
         }
         barcode_live_producer_observe(&p, &in);
         if (search && in.control.mode == BC_LIVE_DISABLED) {
