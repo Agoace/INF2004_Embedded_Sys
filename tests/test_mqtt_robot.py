@@ -1031,6 +1031,20 @@ class ObstacleV3Tests(unittest.TestCase):
                 wire.decode("robot/obstacle", bad)
 
 
+class ImuSafetyWireTests(unittest.TestCase):
+    def test_stop_reasons_are_versioned(self):
+        for version, size in ((1, 44), (2, 48), (3, 52)):
+            for reason in (14, 15, 16, 17):
+                frame = bytearray(size)
+                frame[0], frame[2], frame[3] = version, 3, reason
+                if version == 3 and reason <= 16:
+                    self.assertEqual(wire.decode("robot/summary", frame)
+                                     ["stop_reason"], reason)
+                else:
+                    with self.assertRaises(ValueError):
+                        wire.decode("robot/summary", frame)
+
+
 class RebootWireTests(unittest.TestCase):
     def test_all_extended_observation_layouts_and_legacy_versions(self):
         legacy = {"state": state_v3_frame(bytes(48)), "sonar": bytes([1]) + bytes(31),

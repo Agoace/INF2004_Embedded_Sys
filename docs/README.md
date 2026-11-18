@@ -95,6 +95,11 @@ not current acceptance reports. Local course originals are not public records.
 - [IMU.md](s4-imu/IMU.md) — the IMU hump detector (report only) and its full step history.
   Contains: step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
 
+- [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
+  Contains: source attribution, pure detector contract, finite/age guards, trigger-count semantics, applied-request acknowledgement and integration steps; E: UP resource table per build profile (demo, capture, bench), ARM stack frames, spare Pico W BENCH1 (absent IMU), kernel services checked vs d3890d0, old-kernel numbers marked not valid; device acceptance not claimed.
+- [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — TEST-only synthetic IMU safety bench runbook.
+  Contains: make guards and build lines, replay seams, 40 s phase table (OVERTURN, LIFT), spare Pico W procedure, USB lines to watch, pass conditions, limits (wall time, no I2C cost).
+
 ## S5 — Obstacle
 
 - [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — obstacle monitor, scan, avoidance and the ultrasonic service.

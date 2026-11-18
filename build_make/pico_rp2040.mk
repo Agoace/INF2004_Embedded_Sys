@@ -362,6 +362,18 @@ mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLA
 $(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
 endif
 
+# Replay is opt-in TEST-only. Normal profiles keep the same flags and link.
+IMU_SAFETY_BENCH ?= 0
+ifneq ($(words $(IMU_SAFETY_BENCH)),1)
+$(error IMU_SAFETY_BENCH must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_SAFETY_BENCH),0 1),$(IMU_SAFETY_BENCH))
+$(error IMU_SAFETY_BENCH must be 0 or 1)
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+include imu_safety_bench.mk
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -373,6 +385,7 @@ EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_SAFETY_BENCH_SUFFIX)
 ifeq ($(BENCH_KERNEL),1)
 EXE_FILE := $(EXE_FILE)_bench_kernel_step0
 endif
@@ -482,6 +495,10 @@ endif
 ifeq ($(MOTION_SAME_TICK),1)
 KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/same_tick.list
 endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+# The exclusive TEST runner has no ROBOT barcode/Vehicle command callers.
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/imu_safety_bench.list
+endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
 KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
@@ -584,6 +601,9 @@ PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
 endif
 ifneq ($(LINE_BASE),120)
 PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+PROFILE_ID := $(PROFILE_ID)-imu_safety_bench
 endif
 PROFILE_FILE := .build_profile
 

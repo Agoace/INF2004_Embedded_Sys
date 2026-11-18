@@ -21,6 +21,7 @@
 
 #include "../app.h"
 #include "vehicle_task.h"
+#include "imu_gate.h"
 #include "../subsystem2/motion.h"
 #include "../subsystem2/motion_diag.h"
 #include "../subsystem2/drv_motor_hw.h"
@@ -149,10 +150,11 @@ static uint16_t last_network_fault;
 static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
                        uint8_t detail)
 {
-    if (kind == 3u && word == last_network_fault) {
+    const bool recovery = kind == 3u && (word & 0x8000u) != 0u;
+    if (kind == 3u && !recovery && word == last_network_fault) {
         return;
     }
-    if (kind == 3u) {
+    if (kind == 3u && !recovery) {
         last_network_fault = word;
     }
     const rm_event_t e = {.kind = kind,
@@ -518,13 +520,16 @@ static bool send(telemetry_message_t *message)
 /*
  * Store a run-relative event and optionally queue a live observation.
  */
-static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
+static void event_detail(uint8_t kind, uint8_t from, uint8_t to,
+                          uint16_t word, uint8_t detail)
 {
 #if TM_MQTT
-    live_event(kind == 4u ? 5u : kind, from, to, word, 0u);
+    live_event(kind == 4u ? 5u : kind, from, to, word, detail);
     if (kind == 1u && from == VSM_MOD_SCAN) {
         live_event(4u, from, to, word, 0u);
     }
+#else
+    (void)detail;
 #endif
     if (!active) {
         return;
@@ -536,6 +541,11 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
                                        .from = from,
                                        .to = to};
     (void)send(&m);
+}
+
+static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
+{
+    event_detail(kind, from, to, word, 0u);
 }
 
 /*
@@ -718,6 +728,67 @@ static void read_line(void)
     }
 }
 
+/* Port of smojjofy 48b5f9b..038ff23: integer-only, bounded Vehicle glue. */
+static ig_t imu_gate;
+static bool imu_announced;
+
+static const char *imu_stop_text(uint8_t trigger)
+{
+    if (trigger == IMU_SAFETY_LIFT) { return "IMU lift detected"; }
+    if (trigger == IMU_SAFETY_OVERTURN) { return "IMU overturn detected"; }
+    return "IMU unavailable";
+}
+#if TM_MQTT
+static uint8_t imu_stop_code(uint8_t trigger)
+{
+    if (trigger == IMU_SAFETY_LIFT) { return RM_STOP_IMU_LIFT; }
+    if (trigger == IMU_SAFETY_OVERTURN) { return RM_STOP_IMU_OVERTURN; }
+    return RM_STOP_IMU_UNAVAILABLE;
+}
+#endif
+
+static void imu_recovery(uint8_t gate)
+{
+    const uint16_t word = (uint16_t)(0x8000u |
+                          ((uint32_t)imu_gate.latched << 8u) | gate);
+    event_detail(3u, vsm.state, vsm.running, word, imu_gate.cause);
+}
+
+static bool imu_check_tick(void)
+{
+    imu_safety_report_t report;
+    const bool have = imu_safety_try_read(&report) >= E_OK;
+    const uint32_t now = drv_time_ms();
+    const ig_action_t action = ig_step(&imu_gate, have ? &report : NULL,
+                                        now, active);
+    if (action.stop_edge) {
+        const uint8_t module = vsm.running;
+        (void)vehicle_estop();
+        vsm_set_fault(&vsm, VSM_FAULT_IMU, imu_gate.latched);
+        cancelled = true;
+        imu_announced = false;
+        set_reason(imu_stop_code(imu_gate.latched),
+                   imu_stop_text(imu_gate.latched));
+#if TM_MQTT
+        /* This is a new stop edge, not a repeated motor-fault observation. */
+        last_network_fault = UINT16_MAX;
+#endif
+        event_detail(3u, vsm.state, module, imu_gate.latched, imu_gate.cause);
+        publish_vehicle();
+    }
+    if (action.cleared && !active) { vsm_reset(&vsm); }
+    if (action.request_clear) {
+        ig_queued(&imu_gate, imu_safety_clear_request(), now);
+    }
+    if (action.recovery != 0u) { imu_recovery(action.recovery); }
+    if (ig_stop_required(&imu_gate)) {
+        if (active) { cancelled = true; }
+        return false;
+    }
+    return imu_safety_evaluate(&imu_gate.report.value, imu_gate.have, now,
+                               IMU_SAFETY_MAX_AGE_MS) == IMU_SAFETY_NONE;
+}
+
 /*
  * Wait for the motion release and collect the next vehicle inputs.
  */
@@ -761,6 +832,11 @@ static bool wait_tick(void)
     part_slow = RT_STEP_READ_LINE;
     ++run_steps;
     step_open = true;
+    /* Always park before checking safety. A fault must not create a spin. */
+    if (!imu_check_tick() && active) {
+        part_end(RT_STEP_COMMAND);
+        return false;
+    }
     read_line();
     part_end(RT_STEP_READ_LINE);
 #if TM_MQTT
@@ -821,7 +897,7 @@ static bool cal_spin(int direction, goal_t goal, const int32_t home[2],
     const int sign[2] = {direction, -direction};
     bool running[2] = {true, true};
     const uint32_t t0 = drv_time_ms();
-    (void)motion_clear_faults();
+    if (!ig_stop_required(&imu_gate)) { (void)motion_clear_faults(); }
     while (running[0] || running[1]) {
         if (!wait_tick()) {
             (void)vehicle_stop();
@@ -1122,8 +1198,10 @@ static bool request(sonar_request_t *r)
  */
 static void run_once(void)
 {
-    (void)motion_clear_faults();
-    vsm_reset(&vsm);
+    if (!ig_stop_required(&imu_gate)) {
+        (void)motion_clear_faults();
+        vsm_reset(&vsm);
+    }
     read_line();
     line_event = VC_EVENT_NONE;
     motion_status_t initial = {0};
@@ -1432,6 +1510,7 @@ static void vehicle_task(INT code, void *ctx)
 {
     (void)code;
     (void)ctx;
+    ig_init(&imu_gate);
     lt_init(&lt, &LINE_CFG);
     jl_init(&junction_line, &lt, SEARCH_CFG.speed_mm_s);
     ls_init(&ls, &SEARCH_CFG);
@@ -1471,6 +1550,12 @@ static void vehicle_task(INT code, void *ctx)
         motion_diag_phase(MOTION_DIAG_IDLE);
         cancelled = false;
         (void)wait_tick();
+        if (imu_gate.latched != IMU_SAFETY_NONE && !imu_announced) {
+            imu_announced = true; /* Stopped, once per stop, never per tick. */
+            tm_printf((UB *)"[IMU_SAFETY] stop %u cause %u\n",
+                      (unsigned int)imu_gate.latched,
+                      (unsigned int)imu_gate.cause);
+        }
         const uint32_t now = drv_time_ms();
         if (now - button_ms < BUTTON_INTERVAL_MS) {
             continue;
@@ -1499,6 +1584,21 @@ static void vehicle_task(INT code, void *ctx)
             continue;
         }
 #endif
+        if (run_edge && ig_press(&imu_gate, now)) {
+            ig_queued(&imu_gate, imu_safety_clear_request(), now);
+            imu_recovery(IG_PENDING);
+        }
+        if (!ig_start_allowed(&imu_gate, drv_time_ms())) {
+            imu_recovery(imu_gate.pending ? IG_PENDING :
+                         ig_refusal(&imu_gate, drv_time_ms()));
+            set_reason(imu_stop_code(imu_gate.latched),
+                       imu_stop_text(imu_gate.latched));
+#if TM_MQTT
+            vehicle.phase = 0u;
+            publish_vehicle();
+#endif
+            continue;
+        }
         telemetry_message_t begin = {.kind = TELEMETRY_BEGIN};
         if (!send(&begin)) {
             continue;
@@ -1553,7 +1653,7 @@ static void vehicle_task(INT code, void *ctx)
         (void)send(&m);
         active = false;
         cancelled = false;
-        vsm_reset(&vsm);
+        if (!ig_stop_required(&imu_gate)) { vsm_reset(&vsm); }
 #if TM_MQTT
         vehicle.phase = 0u;
         publish_vehicle();

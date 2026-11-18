@@ -92,6 +92,21 @@ ER tk_slp_tsk(TMO t) {
 INT tk_can_wup(ID id) { assert(id==TSK_SELF);return 0; }
 /* Fresh IMU hump board of the current run: one closed 10.8 mm event. */
 static unsigned int hump_reads,hump_lines,hump_none;static uint32_t run_seen;
+static bool imu_lift_test, imu_stale_test, imu_absent_test;
+static uint32_t imu_clear_token;
+int imu_safety_try_read(imu_safety_report_t *out) {
+    if (imu_absent_test) return E_NOEXS;
+    *out=(imu_safety_report_t){.value={.observation_ms=now,
+        .clear_ms=IMU_SAFETY_CLEAR_MS,
+        .flags=IMU_SAFETY_FLAG_VALID|IMU_SAFETY_FLAG_UPRIGHT|
+               IMU_SAFETY_FLAG_NEAR_ONE_G},.applied_request=imu_clear_token};
+    if (run_seen!=0u && now-run_seen>=100u) {
+        if (imu_lift_test) out->value.latched_trigger=IMU_SAFETY_LIFT;
+        if (imu_stale_test) out->value.observation_ms=now-60u;
+    }
+    return E_OK;
+}
+uint32_t imu_safety_clear_request(void) { return ++imu_clear_token; }
 int imu_hump_try_read(imu_hump_report_t *r) {
     const uint32_t e=vehicle_run_epoch();
     ++hump_reads;if (e&1u) run_seen=e;
@@ -210,6 +225,9 @@ int motion_stop(void) { asked[0]=asked[1]=0;return E_OK; }
 int motion_estop(void) { ++estops;return motion_stop(); }
 int motion_set_servo(int deg,int *accepted) { (void)deg;(void)accepted;return E_OK; }
 int main(int argc,char **argv) {
+    imu_lift_test=argc>1 && !strcmp(argv[1],"imulift");
+    imu_stale_test=argc>1 && !strcmp(argv[1],"imustale");
+    imu_absent_test=argc>1 && !strcmp(argv[1],"imuabsent");
     junction_stop=argc>1 && !strcmp(argv[1],"junctionstop");
     junction_recover=argc>1 && !strcmp(argv[1],"junctionrecover");
     junction_pending_fail=argc>1 && !strcmp(argv[1],"junctionpendingfail");
@@ -234,6 +252,16 @@ int main(int argc,char **argv) {
     line_error=E_SYS;assert(vehicle_task_start()==E_SYS && starts==0u);
     line_error=E_OK;assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
+    if (imu_lift_test || imu_stale_test || imu_absent_test) {
+        assert(asked[0]==0 && asked[1]==0);
+        if (imu_absent_test) {
+            assert(run_seen==0u && line_drives==0u && estops==0u);
+        } else {
+            assert(run_seen!=0u && estops==1u && prints>=2u);
+            assert(strstr(last_reason,"IMU")!=NULL);
+        }
+        return 0;
+    }
     assert(listener==7 && notifications==1u && prints==1u && asked[0]==0 && asked[1]==0);
     assert(vehicle_calibration_epoch() >= 2u);
     assert((vehicle_calibration_epoch() & 1u) == 0u);

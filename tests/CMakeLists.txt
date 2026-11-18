@@ -171,7 +171,11 @@ if(TARGET test_motion_task_bench)
     target_compile_definitions(test_motion_task_bench PRIVATE APP_BENCH=1)
 endif()
 
+host_test(test_imu_gate tests/test_imu_gate.c app_program/vehicle/imu_gate.c
+    app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_gate PRIVATE m)
 host_test(test_vehicle_task tests/test_vehicle_task.c app_program/vehicle/vehicle_task.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/vehicle_log.c app_program/subsystem4/imu_hump.c ${vehicle_sm_source} ${line_position_source}
     ${line_trace_source} ${line_steer_source} ${line_search_source} ${obstacle_source}
     ${servo_scan_source} ${obstacle_profile_source} ${detour_run_source} ${obstacle_detour_source})
@@ -247,6 +251,10 @@ if(TARGET test_telemetry)
 endif()
 
 if(TARGET test_vehicle_task)
+    foreach(imu_case imulift imustale imuabsent)
+        add_test(NAME test_vehicle_${imu_case}
+            COMMAND test_vehicle_task ${imu_case})
+    endforeach()
     add_test(NAME test_vehicle_stale_line COMMAND test_vehicle_task stale)
     add_test(NAME test_vehicle_deadline_overrun COMMAND test_vehicle_task overrun)
     add_test(NAME test_vehicle_run_overrun COMMAND test_vehicle_task runoverrun)

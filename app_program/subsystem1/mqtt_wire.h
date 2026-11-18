@@ -201,7 +201,11 @@ enum {
     RM_STOP_SONAR = 10,
     RM_STOP_TELEMETRY = 11,
     RM_STOP_OTHER = 12,
-    RM_STOP_SCAN_REVERSE_TIMEOUT = 13
+    RM_STOP_SCAN_REVERSE_TIMEOUT = 13,
+    /* Port of smojjofy 8ac6e38/d1a036e; summary v3 only. */
+    RM_STOP_IMU_LIFT = 14,
+    RM_STOP_IMU_OVERTURN = 15,
+    RM_STOP_IMU_UNAVAILABLE = 16
 };
 
 /* robot/summary flags (byte 1). */
