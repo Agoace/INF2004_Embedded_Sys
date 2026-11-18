@@ -22,6 +22,13 @@
 #define E2E_EXPECT_OFFER 0
 #endif
 
+#ifndef E2E_DECODE_START
+#define E2E_DECODE_START 0u
+#define E2E_DECODE_DURATION 0u
+#endif
+#ifndef E2E_DECODE_RECORDS
+#define E2E_DECODE_RECORDS 1u
+#endif
 static uint32_t clock_us;
 static const barcode_cal_report_t cal = {.generation = 1u,
     .mode = BC_CAL_LEARNED, .white_samples = 1904u,
@@ -139,6 +146,8 @@ int main(void)
     for (unsigned int ms = 0u; ms < 14000u; ++ms) {
         clock_us = 1000000u + ms * 1000u;
         const float mm = travel_mm(clock_us);
+        const bool decode_search = E2E_DECODE_DURATION != 0u &&
+            ms >= E2E_DECODE_START && ms < E2E_DECODE_START + E2E_DECODE_DURATION;
         if (ms % 10u == 0u) {
             /* Vehicle tick (LINE module): ja first, then source/offer. */
             const bool black = junction_at(mm);
@@ -156,8 +165,8 @@ int main(void)
             vsm_drive_t drive = {0};
 #if E2E_POLICY
             /* watched_step order: route policy before the LINE step. */
-            const bool search = E2E_POLICY == 2 && mm >= E2E_SEARCH_MM &&
-                                mm < E2E_SEARCH_MM + 40.0f;
+            const bool search = decode_search || (E2E_POLICY == 2 &&
+                mm >= E2E_SEARCH_MM && mm < E2E_SEARCH_MM + 40.0f);
             blv_pending_route(&action, search ? VSM_MOD_SEARCH :
                               VSM_MOD_LINE, counts, drv_time_ms());
 #endif
@@ -168,7 +177,8 @@ int main(void)
                 claim_mm = mm;
                 ++claimed_ticks;
             }
-            junction_source_tick(VSM_MOD_LINE, &lp, &sample, counts,
+            junction_source_tick(decode_search ? VSM_MOD_SEARCH : VSM_MOD_LINE,
+                                 &lp, &sample, counts,
                                  drv_time_ms(), &action);
             ja_command_t command;
             if (junction_source_read(&command)) {
@@ -190,6 +200,10 @@ int main(void)
         barcode_live_source_sample(clock_us, gp28(mm), &cal, 0u, 0u);
         barcode_live_record_t record;
         assert(barcode_live_source_try_read(&record) == E_OK);
+        if (decode_search) {
+            assert(record.sequence == 0u); /* Never publish while SEARCH mode0. */
+            assert(offers == 0u);
+        }
         if (record.sequence != record_sequence) {
             ++records;
             record_sequence = record.sequence;
@@ -202,7 +216,11 @@ int main(void)
     printf("records %u offers %u accepted %u claim_mm %.1f phase %u\n",
            records, offers, accepted, (double)claim_mm,
            (unsigned int)action.phase);
-    assert(records == 1u); /* One pass, one decode, one record. */
+    assert(records == E2E_DECODE_RECORDS); /* One pass, at most one record. */
+    if (E2E_DECODE_RECORDS == 0u) {
+        assert(offers == 0u && accepted == 0u && claimed_ticks == 0u);
+        return 0;
+    }
     assert(junction_source_acknowledged() == record_sequence);
 #if E2E_POLICY == 1 || E2E_POLICY == 2
     /* Offered once, never consumed: no junction acts on a dropped command. */

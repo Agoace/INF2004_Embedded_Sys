@@ -8,6 +8,16 @@
 #define BARCODE_LIVE_ENABLE 0
 #endif
 static barcode_live_producer_t p;
+#ifdef TEST_CONTROL_CACHE
+static bool grace_enabled;
+static uint32_t grace_start;
+bool blv_decode_grace_active(const barcode_live_control_t *control, uint32_t now_ms);
+bool blv_decode_grace_active(const barcode_live_control_t *control, uint32_t now_ms)
+{
+    return grace_enabled && control->epoch == 7u &&
+        control->eligibility_revision == 3u && now_ms - grace_start < 200u;
+}
+#endif
 
 /* Expected live gate: build enable, custom map (id>=2), mode2 at bind and
  * publish, and a mapped command. Anything else stays SHADOW/valid0. */
@@ -61,6 +71,18 @@ int main(int argc, char **argv)
                     .revision_ms = (uint32_t)(origin / 1000u) - 1u,
                     .mode = BC_LIVE_SHADOW_MODE},
         .control_ok = true, .motor_ok = true};
+    const bool search = strncmp(kind, "search", 6u) == 0;
+    const bool terminal_search = strncmp(kind, "search_end", 10u) == 0;
+    const unsigned int search_begin = strstr(kind, "unbound") ? 500u :
+        terminal_search ? 2450u : 1200u;
+    const unsigned int search_duration = (strstr(kind, "199") || strstr(kind, "unbound")) ? 199u :
+        strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u :
+        strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u : 30u;
+    const bool search_positive = search && !strstr(kind, "200") &&
+        !strstr(kind, "context") && !strstr(kind, "late") &&
+        !strstr(kind, "end51") && !strstr(kind, "hard") &&
+        !strstr(kind, "unbound") && !strstr(kind, "motorfault") &&
+        !strstr(kind, "loss");
     const bool reverse = strcmp(kind, "reverse") == 0;
     const bool ack_kind = strcmp(kind, "ack") == 0 ||
                           strcmp(kind, "mode2_ack") == 0;
@@ -84,6 +106,7 @@ int main(int argc, char **argv)
     if (strcmp(kind, "mode2") == 0 || strcmp(kind, "mode2_ack") == 0) {
         in.control.mode = BC_LIVE_PERMITTED;
     }
+    if (search) in.control.mode = BC_LIVE_PERMITTED;
     unsigned int publications = 0u, failures = 0u, live_records = 0u;
     barcode_live_record_t original = {0};
     for (unsigned int i = 0u; i < (two ? 6000u : 3000u); ++i) {
@@ -155,7 +178,28 @@ int main(int argc, char **argv)
         if (strcmp(kind, "busy_ack") == 0 && i == 4200u) {
             in.control.mode = BC_LIVE_SHADOW_MODE;
         }
+        if (search) {
+#ifdef TEST_CONTROL_CACHE
+            grace_start = (uint32_t)(origin / 1000u) + search_begin;
+            grace_enabled = !strstr(kind, "hard");
+#endif
+            if (i >= search_begin && i < search_begin + search_duration) {
+                in.control.mode = BC_LIVE_DISABLED;
+            } else {
+                in.control.mode = BC_LIVE_PERMITTED;
+            }
+            if (strstr(kind, "context") && i == search_begin + 10u)
+                ++in.control.eligibility_revision;
+            if (strstr(kind, "motorfault") && i == search_begin + 5u)
+                in.motor_faults = 1u;
+            if (strstr(kind, "loss") && i == search_begin + 5u) ++in.dropped;
+        }
         barcode_live_producer_observe(&p, &in);
+        if (search && in.control.mode == BC_LIVE_DISABLED) {
+            assert(!p.record_pending);
+            if (strstr(kind, "unbound")) assert(!p.bound);
+            assert(!p.event_pending || p.event.reason != BW_OK);
+        }
         if (p.event_pending) {
             if (strcmp(kind, "nonletter") == 0) {
                 assert(p.event.reason == BW_NOT_LETTER);
@@ -187,7 +231,7 @@ int main(int argc, char **argv)
             assert(p.event.leading_white == 160u && p.event.rise == 310u);
             assert(p.event.spin_white == cal.white_mean);
             assert(p.slot.read_counts[0] == p.slot.read_counts[1]);
-            assert(p.event.record_age_ms <= 10u);
+            assert(p.event.record_age_ms <= (terminal_search ? 50u : 10u));
             original = p.slot;
             p.record_pending = false;
         }
@@ -201,7 +245,7 @@ int main(int argc, char **argv)
 #else
         false;
 #endif
-    const bool positive = cached_read_fail || strcmp(kind, "normal") == 0 || reverse || two ||
+    const bool positive = search_positive || cached_read_fail || strcmp(kind, "normal") == 0 || reverse || two ||
         strcmp(kind, "us_wrap") == 0 || strcmp(kind, "ms_wrap") == 0 ||
         strcmp(kind, "count_wrap") == 0 || strcmp(kind, "mode2") == 0 ||
         strcmp(kind, "fallback") == 0 || strcmp(kind, "sequence_wrap") == 0;
@@ -216,12 +260,13 @@ int main(int argc, char **argv)
         assert(p.occupied && p.slot.epoch != in.control.epoch);
         assert(p.sequence == 1u); /* Epoch does not reset the slot/serial. */
     }
-    if (!positive && strcmp(kind, "no_progress") != 0) {
+    if (!positive && strcmp(kind, "no_progress") != 0 && !strstr(kind, "unbound")) {
         assert(failures > 0u);
     }
     /* The mode2 positive case is the only one that may act, and only in
      * a live build with a custom confirmed map and a mapped letter A. */
-    const unsigned int live_expected = strcmp(kind, "mode2") == 0 ?
+    const unsigned int live_expected = search_positive ?
+        (expect_valid('A', 2u) ? 1u : 0u) : strcmp(kind, "mode2") == 0 ?
         (expect_valid('A', 2u) ? 1u : 0u) : strcmp(kind, "mode2_ack") == 0 ?
         (expect_valid('A', 2u) ? 1u : 0u) + (expect_valid('B', 2u) ? 1u : 0u)
         : 0u;

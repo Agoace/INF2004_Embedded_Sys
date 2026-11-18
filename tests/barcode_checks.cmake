@@ -251,7 +251,8 @@ endforeach()
 
 # HOST ONLY end-to-end S3 producer -> vehicle jlive -> ja. Live variants use
 # a synthetic 1 mm clear bound; they are not firmware builds.
-foreach(variant IN ITEMS default custom builtin expire search)
+foreach(variant IN ITEMS default custom builtin expire search
+        decode_grace decode_timeout decode_end)
     set(target test_barcode_live_e2e_${variant})
     set(action app_program/barcode_live_vehicle/action.c)
     if(variant STREQUAL "default")
@@ -320,7 +321,9 @@ target_compile_options(barcode_control_raw PRIVATE -include "${REPO}/app_program
 foreach(t IN ITEMS test_barcode_control_cache test_barcode_live_feed_live
         test_barcode_live_producer_live_custom test_barcode_live_producer_live_builtin
         test_barcode_live_producer_live_none test_barcode_live_e2e_custom
-        test_barcode_live_e2e_builtin test_barcode_live_e2e_expire test_barcode_live_e2e_search)
+        test_barcode_live_e2e_builtin test_barcode_live_e2e_expire test_barcode_live_e2e_search
+        test_barcode_live_e2e_decode_grace test_barcode_live_e2e_decode_timeout
+        test_barcode_live_e2e_decode_end)
     get_target_property(srcs ${t} SOURCES)
     list(REMOVE_ITEM srcs "${REPO}/app_program/subsystem3/barcode_live_producer.c")
     set_property(TARGET ${t} PROPERTY SOURCES "${srcs}")
@@ -343,3 +346,24 @@ host_test(test_jlive_grace tests/test_jlive_grace.c
     ${line_search_source} ${obstacle_source})
 target_compile_definitions(test_jlive_grace PRIVATE BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100)
 target_link_libraries(test_jlive_grace PRIVATE m)
+
+foreach(case IN ITEMS search30 search199 search200 search_context search_hard
+        search_end30 search_endlate search_end50 search_end51 search_unbound
+        search_motorfault search_loss)
+    add_test(NAME test_barcode_producer_grace_${case}
+        COMMAND test_barcode_live_producer_live_custom ${case})
+endforeach()
+
+foreach(v IN ITEMS decode_grace decode_timeout decode_end)
+    target_compile_definitions(test_barcode_live_e2e_${v} PRIVATE
+        BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
+        E2E_POLICY=3
+        BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        BW_MAP_POLICY_ID=2u)
+endforeach()
+target_compile_definitions(test_barcode_live_e2e_decode_grace PRIVATE
+    E2E_DECODE_START=1200u E2E_DECODE_DURATION=30u)
+target_compile_definitions(test_barcode_live_e2e_decode_timeout PRIVATE
+    E2E_DECODE_START=1200u E2E_DECODE_DURATION=200u E2E_DECODE_RECORDS=0u)
+target_compile_definitions(test_barcode_live_e2e_decode_end PRIVATE
+    E2E_DECODE_START=2450u E2E_DECODE_DURATION=30u)

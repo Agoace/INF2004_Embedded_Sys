@@ -410,3 +410,28 @@ Tests cover poisoned failed-read contents, first read, 50/51 ms boundaries,
 no cached timestamp progress, context/disabled changes, ACK exclusion,
 observation pause, successful waveform decode across a miss, and a failed
 REAL final publication recheck.
+
+### SEARCH-only active-decode grace
+
+The live producer seam can retain an already-bound decode across natural
+SEARCH only when the vehicle's coherent `blv_decode_grace_active(control,
+now_ms)` authorizes the exact epoch/revision/revision timestamp. The vehicle
+must preserve that identity only for eligible LINE -> SEARCH -> LINE trips
+strictly shorter than 200 ms. A weak false implementation keeps this feature
+disabled until the matching vehicle seam is linked. No new attempt starts
+while the real control is DISABLED.
+
+ADC and motor processing continue during grace; the existing projection,
+retreat, fault and sample-gap checks remain. If decoding completes while
+DISABLED, the producer quarantines the result and its success event. It
+releases them only after a REAL coherent PERMITTED observation of the same
+context. The source still performs its separate REAL publication recheck.
+The original read time is preserved: a completed record older than 50 ms is
+rejected, even if SEARCH itself was shorter than 200 ms. Failed control
+reads cannot refresh heartbeat or count as a permitted resume. A continuous
+grace timer cannot be extended by repeated DISABLED publications.
+
+Hard context changes, junctions, other routes and the 200 ms deadline are
+not eligible. The vehicle must revoke grace for these causes; the producer
+must not ignore revisions to recover a decode. This is separate from V3's
+policy for an already-offered pending command.
