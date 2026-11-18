@@ -100,6 +100,7 @@ not current acceptance reports. Local course originals are not public records.
 - [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
   Contains: source attribution, pure detector contract, finite/age guards, trigger-count semantics, applied-request acknowledgement and integration steps; E: UP resource table per build profile (demo, capture, bench), ARM stack frames, spare Pico W BENCH1 (absent IMU), kernel services checked vs d3890d0, old-kernel numbers marked not valid; device acceptance not claimed.
 - [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — synthetic IMU safety bench runbook (TEST runner and ROBOT synthetic profiles), BENCH2 record and BENCH3 procedure.
+- [IMU_SAFETY_CAPTURE.md](s4-imu/IMU_SAFETY_CAPTURE.md) — opt-in ROBOT IMU safety latch capture (`IMU_SAFETY_CAPTURE=1`): build, RAM, USB line format and the lift/overturn operator procedure.
   Contains: make guards and build lines, replay seams, 40 s phase table (OVERTURN, LIFT), spare Pico W procedure, USB lines to watch, pass conditions, limits (wall time, no I2C cost).
 
 ## S5 — Obstacle

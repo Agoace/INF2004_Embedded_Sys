@@ -113,6 +113,15 @@ scan geometry, configuration-token reader or live snapshot contract changes.
   Test `test_vehicle_network_imurecover` was red first. The IMU stack
   stays 2048 B: the first real-IMU robot run must show `imu_task` free
   ≥ 256 B; add 512 B if it fails or if the margin is below 384 B.
+- H: one kind 3 ESTOP event per IMU stop. The stop edge reset the kind 3
+  dedupe (left from the kind 3 IMU word), so the end-of-attempt motion
+  fault report sent word 4 again 3 ms later (K10_1 school run, `dd26a38`).
+  The reset is removed; the host motion stub now keeps ESTOP latched, and
+  the IMU network cases count one word 4 (red first).
+- I: opt-in ROBOT latch capture `IMU_SAFETY_CAPTURE=1`
+  ([IMU_SAFETY_CAPTURE.md](IMU_SAFETY_CAPTURE.md)) to find which rule
+  fires for a push-over (K10_1 reported LIFT), and a GP21 ESTOP capture
+  for a gentle lift that does not latch. Detector unchanged.
 
 ## UP resources (E)
 

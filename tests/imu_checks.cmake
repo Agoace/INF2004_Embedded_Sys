@@ -35,6 +35,11 @@ target_compile_options(test_imu_replay_service_robot PRIVATE
 target_link_libraries(test_imu_replay_service_robot PRIVATE m)
 add_test(NAME test_imu_safety_bench_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_imu_safety_bench_make.py")
+add_test(NAME test_imu_safety_capture_make COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_imu_safety_capture_make.py")
+host_test(test_imu_safety_capture tests/test_imu_safety_capture.c
+    app_program/imu_safety_capture/capture.c)
+target_link_libraries(test_imu_safety_capture PRIVATE m)
 host_test(test_imu_safety tests/test_imu_safety.c
     app_program/subsystem4/imu_safety.c)
 target_link_libraries(test_imu_safety PRIVATE m)

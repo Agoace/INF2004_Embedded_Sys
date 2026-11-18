@@ -16,6 +16,9 @@ TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/bench.c,$(TEMP_SRCS))
 else
 TEMP_SRCS := $(filter-out ../app_program/imu_safety_bench/%.c,$(TEMP_SRCS))
 endif
+ifneq ($(IMU_SAFETY_CAPTURE),1)
+TEMP_SRCS := $(filter-out ../app_program/imu_safety_capture/%.c,$(TEMP_SRCS))
+endif
 # Empty bench objects can still change veneer ordering and ordinary ELF bytes.
 ifneq ($(BENCH_KERNEL),1)
 TEMP_SRCS := $(filter-out ../app_program/bench_kernel/%.c,$(TEMP_SRCS))
