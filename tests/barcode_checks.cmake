@@ -339,7 +339,7 @@ endforeach()
 add_test(NAME test_barcode_live_feed_live_recheck_fail
     COMMAND test_barcode_live_feed_live recheck_fail)
 
-foreach(case IN ITEMS search30 search199 search200 search_context search_hard
+foreach(case IN ITEMS search10 search30 search199 search200 search_context search_hard
         search_end30 search_endlate search_end50 search_end51 search_unbound
         search_motorfault search_loss)
     add_test(NAME test_barcode_producer_grace_${case}

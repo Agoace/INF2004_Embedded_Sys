@@ -77,7 +77,8 @@ int main(int argc, char **argv)
         terminal_search ? 2450u : 1200u;
     const unsigned int search_duration = (strstr(kind, "199") || strstr(kind, "unbound")) ? 199u :
         strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u :
-        strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u : 30u;
+        strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u :
+        strcmp(kind, "search10") == 0 ? 10u : 30u;
     const bool search_positive = search && !strstr(kind, "200") &&
         !strstr(kind, "context") && !strstr(kind, "late") &&
         !strstr(kind, "end51") && !strstr(kind, "hard") &&
