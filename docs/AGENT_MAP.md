@@ -309,7 +309,7 @@ vehicle task described below.
   tolerate bounded control-board collisions. The shared source publication
   recheck remains uncached. Tests:
   [`test_barcode_control_cache.c`](../tests/test_barcode_control_cache.c). These expire a
-  pending live command at 400 mm from decode and cancel it after 200 ms of SEARCH;
+  pending live command at 1000 mm from decode and cancel it after 200 ms of SEARCH;
   default builds omit this folder. Tests:
   [`test_blv_policy.c`](../tests/test_blv_policy.c) and
   [`test_barcode_live_vehicle_make.py`](../tests/test_barcode_live_vehicle_make.py).

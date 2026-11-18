@@ -93,7 +93,7 @@ producer, jlive and ja code:
 
 | Item | Need |
 | --- | --- |
-| V1 expiry | Implemented: 400 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. Dashboard labels are a separate follow-up. |
+| V1 expiry | Implemented: 1000 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. Dashboard labels are a separate follow-up. |
 | V2 window | Optional: consume only when the junction edge is within [D_min, D_max] of the frame end. |
 | V3 SEARCH | Implemented: 200 ms continuous SEARCH before consumption cancels the live command, UNUSED reason 14 SEARCH. SCAN/DETOUR keep CANCELLED. No heading-change rule. |
 | V4 turn | Check that the LEFT spin finds the correct branch at this crossing (about 90 degrees, OPERATOR). |
@@ -106,9 +106,9 @@ Approved by Main on 2026-11-18. This policy applies only to source 2 live
 commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
 
 - **V1:** expire when the mean signed wheel travel from
-  `command.read_counts` reaches `BLV_PENDING_MAX_MM = 400` mm. This is a
+  `command.read_counts` reaches `BLV_PENDING_MAX_MM = 1000` mm. This is a
   design value, not a measured distance. The decode follows the frame end,
-  so this is not a strict 400 mm bound from `frame_end`. The origin does
+  so this is not a strict 1000 mm bound from `frame_end`. The origin does
   not restart at arming or during a reverse. Reverse net travel does not
   reach the positive bound. Count differences use wrap-safe subtraction
   and 64-bit addition. No time limit is added.
@@ -117,8 +117,10 @@ commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
   assertion requires it to exceed `BARCODE_MEASURED_CLEAR_MM + 160`.
   The nominal recommendation is about 200 mm physical placement (at least
   160 mm). After the 49 mm line-pair lead and 6 mm confirmation, normal
-  consumption is about 117–157 mm from the frame end. The 400 mm design
+  consumption is about 117–157 mm from the frame end. The 1000 mm design
   limit leaves margin without retaining a command for a full loop.
+  Operator approved the change from 400 to 1000 mm after LIVE4 reported
+  three EXPIRED results. It is not a measured placement or timing bound.
 - **V3:** cancel after 200 ms of continuous SEARCH, not on entry.
   `BLV_SEARCH_CANCEL_MS` is 200. Main approved this after LIVE1. A brief
   SEARCH returns to LINE without dropping the command. The timer starts
@@ -204,6 +206,15 @@ turn, stale/sonar/reverse/stall/distance/time failure and wrapper ownership.
 Live example-secret profile above: text 452684 B, BSS 218980 B, free 30340 B;
 RAM_PROOF 77/77, 19852 B. Main must observe a real branch turn before
 acceptance; no autonomous full-course run is approved by host tests.
+
+### LIVE4 software turn results
+
+On staging `3a6973e`, MQTT reports four LEFT DONE results with accepted
+angles 9259, 9322, 9288 and 9501 centidegrees (92.6/93.2/92.9/95.0 degrees).
+Source: `mtk3-core-review/build/school_stg_3a6973e/mqtt_LIVE4.csv`.
+Operator confirmed all four were real LEFT turns. This is scoped LIVE4
+acceptance, not a general fake-command or UTURN acceptance. The 1000 mm update has red/green 999/1000 mm
+boundary tests and preserves the 200 ms SEARCH policy.
 
 ## Clearance measurement (next robot session)
 
