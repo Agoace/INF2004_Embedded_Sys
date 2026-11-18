@@ -394,7 +394,8 @@ function renderPanel(panel) {
   // Keep all original facts in HEALTH, with short readouts on the driving cards.
   const labels = {line:["Line valid", "Line board"], wheels:["PWM duty left / right"],
     summary:["Run ID", "Duration", "Distance (path length)", "Detours started / done / succeeded",
-             "Line losses", "Stop reason"]};
+             "Line losses", "Stop reason", "IMU fault at run end", "Boot / session",
+             "Summary received age"]};
   if (labels[panel.id]) {
     renderPanel({...panel, id:panel.id + "-details", title:panel.title + " · details", chart:null});
     panel = {...panel, rows:panel.rows.filter(row => labels[panel.id].includes(row.label))};

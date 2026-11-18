@@ -380,6 +380,46 @@ A new active run does not turn the previous completed summary into current
 run totals. Hump events reset at an observed run start or new boot. A
 retained hump event is not assigned to the current run.
 
+##### IMU safety display
+
+The IMU card and compact LAST RUN show `IMU fault at run end`. For summary
+v3 shell fault 6, detail 1 means overturn, 2 means lift and 3 means
+unavailable. The value says `latched: <trigger>` **at run end**, not now.
+The IMU card also shows the last run's stop reason. Run/session, receipt
+age and retained/previous-run notes identify this history. A new run,
+recovery or boot does not turn an old summary into a current latch report.
+
+The IMU card states `Current IMU safety: not reported`. Generic Vehicle
+FAULT, motor ESTOP bits, hump warnings and wheel odometry cannot identify
+the current IMU latch. Summary v1/v2 keep shell fault 6 as `unknown (6)`
+and show the typed IMU result as not reported by that firmware version.
+Unknown v3 trigger/detail values keep numeric fallback labels. The shared
+decoder remains strict: out-of-range stop reasons are rejected, not guessed.
+
+##### Proposed live IMU safety report — not implemented
+
+Existing MQTT topics cannot supply a complete current safety state.
+`robot/imu` has reserved legacy formats, but no current safety publisher.
+`robot/state` has no IMU trigger or shell-fault detail. Summary reports are
+run-end history. Event kind 3 is not an unambiguous substitute: IMU trigger
+words 1 and 2 overlap motor fault bits, and recovery events alone do not
+provide a fresh snapshot after reconnect or a lost message.
+
+A future report needs:
+
+- Separate current detector condition and latched stop trigger, including
+  lift, overturn, unavailable and no reported trigger.
+- Validity, an unavailable cause and sensor-observation age. MQTT receipt
+  time alone is not the sample's age.
+- Boot ID, report sequence and observation uptime, so the receiver can
+  identify old sessions and old samples.
+- Recovery/clear status and an explicit successful-clear acknowledgement.
+  Do not infer a clear from IDLE, a missing event or an old summary.
+
+This is a proposal for the IMU owner, not an approved wire layout or
+publication policy. No decoder, firmware or remote-clear command change
+is part of this dashboard update.
+
 Report age means laptop time since receipt, not a 16-bit sensor-board age.
 It continues past 65535 ms. Completed scan/detour badges show elapsed time
 `since report`, including when the robot is stopped or offline. The detour

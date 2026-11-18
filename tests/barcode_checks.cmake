@@ -1,4 +1,5 @@
 add_test(NAME test_barcode_fail_analyze COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_analyze.py")
+add_test(NAME test_barcode_session_report COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_session_report.py")
 add_test(NAME test_barcode_fail_make COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_make.py")
 host_test(test_barcode_fail_capture tests/test_barcode_fail_capture.c)
 target_include_directories(test_barcode_fail_capture BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
