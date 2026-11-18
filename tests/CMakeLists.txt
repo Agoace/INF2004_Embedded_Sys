@@ -47,6 +47,8 @@ function(host_test name test_file)
 endfunction()
 
 host_test(test_fault_mask tests/test_fault_mask.c)
+host_test(test_telemetry_pack tests/test_telemetry_pack.c)
+host_test(test_telemetry_optional_pack tests/test_telemetry_optional_pack.c)
 
 function(robot_source old new output)
     if(EXISTS "${REPO}/${new}")
