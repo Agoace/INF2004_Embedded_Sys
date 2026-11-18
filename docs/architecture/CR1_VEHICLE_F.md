@@ -127,3 +127,63 @@ or stack acceptance.
 Local integration logs have the `merged-` prefix under
 `build/wip/f-takeover/`. The merged public-example UF2 SHA-256 is
 `d7f9c9dcab5735817dff21f1ed9e29b4126eaac6605ec43357285dcf15ba9a19`.
+
+## STOP capture integration
+
+Health API change `402e8fa` is merged with `--no-ff` as `ef87362`.
+Vehicle call commit `45ed77c` adds one call to
+`robot_health_faults_stop(epoch)` at the start of `hump_finish`, after an
+explicit owner-word publication. Both the Vehicle and timing epochs are
+still odd. All completed runs use this one exit. TEST/BENCH do not run
+it; non-MQTT builds omit the Health call.
+
+The later `vsm_stop` remains in its original place after the stop events
+and summary. Moving it would change their shell-state field. A normal
+RUNNING-to-IDLE transition changes neither owner fault bit. Shell faults
+and IMU latches already have their final values at capture. No wire,
+actuator, clear or latch rule changes.
+
+Vehicle copies current owner values through the Health API. It does not
+combine them. Health remains the only combined-mask writer; its separate
+F2a tests check the real capture board and frozen run history. See
+[the telemetry record](CR1_TELEMETRY_A.md).
+
+Caller integration evidence:
+
+- Before the call exists, five real Vehicle task cases fail: remote
+  ESTOP, GP21 operator stop, shell fault, IMU lift, and the real 90 s
+  time limit. Each has a missing STOP capture (ctest exit 8).
+- The Health API test double reads the real Vehicle owner board. It
+  requires bit 6 for shell FAILED and bit 4 for IMU lift/stale stops.
+  Recovery can later clear the current word, not the recorded copy.
+- The same double requires equal odd Vehicle/timing epochs at capture,
+  rejects a duplicate epoch, and records exactly one capture per run.
+  All real task cases, including two-run barcode cases, check the final
+  capture count against the number of completed runs. No-start cases
+  require zero captures.
+- Strict GCC and Clang ASan/UBSan suites each pass **697/697**, with
+  **0 build warnings**. Leak checks and halt-on-UB remain enabled.
+- Documentation, eight-template-deviation and diff checks pass. The ARM
+  message manifest is unchanged across the call commit.
+
+The clean-archive comparison below isolates the Vehicle call from F2a's
+own storage/packing changes. Both images use public example secrets and
+the demo command above. Do not compare these totals directly with the
+older integration table as a Vehicle packing saving.
+
+| Quantity | API merged `ef87362` | Call added `45ed77c` | Change |
+| --- | ---: | ---: | ---: |
+| Static RAM, map parser | 239280 B | 239280 B | 0 |
+| Vehicle linked inputs | 2512 B | 2512 B | 0 |
+| Telemetry linked inputs | 78862 B | 78862 B | 0 |
+| ELF text, `size` | 467500 B | 467628 B | +128 B |
+| ELF bss, `size` | 216888 B | 216888 B | 0 |
+| RAM functions | 79 / 21212 B | 79 / 21212 B | 0 |
+| Warnings, case-insensitive scan | 0 | 0 | 0 |
+
+Both images pass RAM_PROOF 79/79. Local logs are in ignored
+`build/wip/f-stop/`: `red-test.log`, `green-test.log`, `clang-test.log`,
+`before-build.log`, `after-build.log`, `before-ram.txt` and `after-ram.txt`.
+The call-enabled public-example UF2 SHA-256 is
+`31a36ddbb9ca4962f811db0c89a336c3aff8c9463b5d5a8b16fb0e7f6adfae89`.
+No push, flash or robot timing/stack acceptance is claimed.

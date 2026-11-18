@@ -44,7 +44,7 @@ not current acceptance reports. Local course originals are not public records.
   Contains: single sonar-task writer, ECHO-only update from the existing fault streak, NO_RETURN not a fault, last value kept while stopped, tests, +8 B static RAM.
 - [CR1_VEHICLE_A1.md](architecture/CR1_VEHICLE_A1.md) — approved Vehicle observation storage only.
   Contains: field ranges, single-writer board (44 to 40 B), baseline `7350da0`, static RAM 241228 to 241224 B, unchanged API/messages/wire, 680 host tests, compiler-local frames and hardware limits; private controller packing remains deferred.
-- [CR1_VEHICLE_F.md](architecture/CR1_VEHICLE_F.md) — Vehicle owner fault word: IMU latch and other shell fault, single writer, red proof, tests and 8 B board cost.
+- [CR1_VEHICLE_F.md](architecture/CR1_VEHICLE_F.md) — Vehicle owner fault word: IMU latch and other shell fault, single writer, red proof, tests, 8 B board cost and one STOP capture per run.
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
   Contains: scope and approval (2026-11-10, closed at `50426ae`), command table NONE/A–D, ownership and entry points, fixed consumer value, junction detection, phases and bounds, reports and failures (event 7).
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter, SHADOW only.
