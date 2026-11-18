@@ -7,6 +7,18 @@
 #include "../app_program/app.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/platform/run_timing.h"
+#include "../app_program/platform/fault_mask.h"
+uint32_t rt_epoch(void) { return 0u; }
+static int fake_fault_result=E_TMOUT;
+static unsigned int fault_pending_lines,fault_value_lines;
+int robot_health_faults_try_read(fault_mask_snapshot_t *,uint32_t *) __attribute__((weak));
+int robot_health_faults_try_read(fault_mask_snapshot_t *out,uint32_t *at)
+{
+    if (fake_fault_result!=E_OK) return fake_fault_result;
+    *out=(fault_mask_snapshot_t){.now=FAULT_WIFI_LINK_DOWN,
+        .run=FAULT_IMU_SAFETY,.valid=FAULT_MASK_ALL,.epoch=1u};
+    *at=1234000u;return E_OK;
+}
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
@@ -59,6 +71,15 @@ int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
 }
 int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] pending",20u)) ++fault_pending_lines;
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] now",16u)) {
+        assert(va_arg(a,unsigned long)==FAULT_WIFI_LINK_DOWN);
+        assert(va_arg(a,unsigned long)==FAULT_IMU_SAFETY);
+        assert(va_arg(a,unsigned long)==FAULT_MASK_ALL);
+        assert(va_arg(a,unsigned long)==1u);
+        assert(va_arg(a,unsigned long)==1234000u);
+        ++fault_value_lines;
+    }
     if (!strncmp((const char *)fmt,"[JUNCTION]",10u)) {
         assert(!strcmp(va_arg(a,const char *),"FAKE"));
         assert(!strcmp(va_arg(a,const char *),"B"));++junction_lines;
@@ -125,11 +146,14 @@ int main(void) {
     assert(telemetry_send(&m)==E_OK);telemetry_stats(&s);assert(s.busy);
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
     assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
+    assert(fault_pending_lines==1u && fault_value_lines==0u);
+    fake_fault_result=E_OK; /* Later GP20 dump: Health has sampled STOP. */
     assert(timelines==1u);
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(hump_none==1u && hump_lines==1u && diag_lines==1u && kr==4u && ve==2u);
+    assert(fault_pending_lines==1u && fault_value_lines==1u);
     assert(junction_lines==0u);
     m.kind=TELEMETRY_JUNCTION;
     m.data.junction=(ja_result_t){.command=JA_RIGHT,.phase=JA_DONE,.source=1u};

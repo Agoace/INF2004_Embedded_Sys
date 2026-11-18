@@ -94,7 +94,12 @@ void wifi_stack_health_check(uint32_t expected_free)
         memset(owner_values,0,sizeof(owner_values));
         owner_values[n]=stop_causes[n];
         robot_health_faults_stop(epoch);
+        robot_health_faults_stop(epoch+1u); /* Invalid even request cannot erase capture. */
         rt_begin(epoch+1u);
+        fault_mask_snapshot_t unchanged=faults;
+        const uint32_t unchanged_at=at;
+        assert(robot_health_faults_try_read(&faults,&at)==E_TMOUT);
+        assert(memcmp(&faults,&unchanged,sizeof(faults))==0 && at==unchanged_at);
         memset(owner_values,0,sizeof(owner_values)); /* cleared before Health runs */
         if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
         assert(robot_health_faults_try_read(&faults,&at)==E_OK);
@@ -106,6 +111,7 @@ void wifi_stack_health_check(uint32_t expected_free)
         assert(faults.run==stop_causes[n] && faults.now==FAULT_WIFI_LINK_DOWN);
     }
     rt_begin(9u); /* new START drops frozen old-run bits */
+    assert(robot_health_faults_try_read(&faults,&at)==E_TMOUT);
     memset(owner_values,0,sizeof(owner_values));
     if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
     assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.run==0u && faults.epoch==9u);

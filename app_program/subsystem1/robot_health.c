@@ -48,10 +48,11 @@ typedef struct {
     network_health_packed_t value;
     uint32_t us;
     fault_mask_snapshot_t faults;
+    uint32_t fault_epoch; /* Raw START/STOP phase; not just normalized identity. */
 } health_snapshot_t;
 
 static APP_BOARD(health_snapshot_t) board;
-_Static_assert(sizeof(board) == 128u, "Packed Health plus fault board allocation");
+_Static_assert(sizeof(board) == 132u, "Packed Health plus fault/phase board allocation");
 
 /* Vehicle writes this STOP capture; Health only reads. No masks are ORed
  * here: preserve each owner's value and read quality for the sole combiner. */
@@ -171,6 +172,7 @@ static void refresh(void)
     robot_network_metrics(&v.value);
     health_snapshot_t packed;
     packed.us = v.us;
+    packed.fault_epoch = rt_epoch();
     collect_fault_views();
     packed.faults = fault_views;
     if (network_health_pack(&packed.value, &v.value)) {
@@ -253,6 +255,7 @@ int robot_health_faults_try_read(fault_mask_snapshot_t *out, uint32_t *timestamp
     if (!out || !timestamp_us) return E_PAR;
     health_snapshot_t v;
     if (!app_board_try_read(&board.sequence,board.words,&v,sizeof(v))) return E_TMOUT;
+    if (v.fault_epoch!=rt_epoch()) return E_TMOUT;
     *out=v.faults;
     *timestamp_us=v.us;
     return E_OK;

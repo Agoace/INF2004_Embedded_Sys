@@ -45,6 +45,13 @@
 #define TOPIC_SUMMARY     "robot/summary"
 #define QOS_AT_LEAST_ONCE 1u
 #define RETAIN_ON         1u
+static fault_mask_board_t network_fault_board; /* Wi-Fi sole writer. */
+
+bool robot_network_fault_mask_try_read(uint32_t *out)
+{
+    return fault_mask_try_read(&network_fault_board,FAULT_OWNER_NETWORK,out);
+}
+
 static mqtt_client_t *client;
 static ip_addr_t broker;
 static bool configured;
@@ -861,6 +868,11 @@ void cyw43_utk_app_poll(void)
             }
         }
     }
+    T_CYW43_UTK_STATUS fault_status;
+    cyw43_utk_get_status(&fault_status);
+    uint32_t faults=fault_status.link_status==3?0u:FAULT_WIFI_LINK_DOWN;
+    if (client==0 || !mqtt_client_is_connected(client)) faults|=FAULT_MQTT_DISCONNECTED;
+    (void)fault_mask_publish(&network_fault_board,FAULT_OWNER_NETWORK,faults);
     const uint32_t elapsed = drv_time_us() - started;
     metrics_hook_max_update(elapsed);
 }

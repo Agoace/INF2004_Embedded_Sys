@@ -10,6 +10,9 @@
 #include "telemetry.h"
 #include "../platform/fault_mask.h" /* Also prove kernel-safe inclusion here. */
 #include "telemetry_pack.h"
+/* Health is absent in some isolated TEST/BENCH images. Unknown is pending. */
+extern int robot_health_faults_try_read(fault_mask_snapshot_t *, uint32_t *)
+    __attribute__((weak));
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
@@ -21,6 +24,12 @@
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
+static fault_mask_board_t log_fault_board; /* Telemetry sole writer. */
+
+bool telemetry_fault_mask_try_read(uint32_t *out)
+{
+    return fault_mask_try_read(&log_fault_board, FAULT_OWNER_TELEMETRY, out);
+}
 
 /*
  * RT-0071/F1: the CONTROL fields - DUMP reservation, storage full, loss count -
@@ -48,6 +57,9 @@ static void publish_stats(void)
 {
     __atomic_store_n(&stats_pub.rows, stats.rows, __ATOMIC_SEQ_CST);
     __atomic_store_n(&stats_pub.events, stats.events, __ATOMIC_SEQ_CST);
+    const uint32_t faults=__atomic_load_n(&admit_full,__ATOMIC_SEQ_CST)!=0u?
+        FAULT_LOG_FULL:0u;
+    (void)fault_mask_publish(&log_fault_board,FAULT_OWNER_TELEMETRY,faults);
 }
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
 static telemetry_event_packed_t events[TELEMETRY_EVENTS];
@@ -327,6 +339,19 @@ static void dump(void)
     telemetry_stats(&st);
     telemetry_info_t info;
     (void)telemetry_info_unpack(&info, &stored_info);
+    fault_mask_snapshot_t faults;
+    uint32_t sampled_us;
+    int (*const health_reader)(fault_mask_snapshot_t *,uint32_t *)=
+        robot_health_faults_try_read;
+    if (health_reader!=0 && health_reader(&faults,&sampled_us)==E_OK) {
+        tm_printf((UB *)"[FAULT_MASK] now %08lx run %08lx valid %08lx epoch %lu sample_us %lu\n",
+                  (unsigned long)faults.now,(unsigned long)faults.run,
+                  (unsigned long)faults.valid,(unsigned long)faults.epoch,
+                  (unsigned long)sampled_us);
+    } else {
+        tm_printf((UB *)"[FAULT_MASK] pending Health sample for phase_epoch %lu\n",
+                  (unsigned long)rt_epoch());
+    }
     tm_printf((UB *)"[robot] KR1 reset %s; %s rows %lu events %lu "
                     "lost_telemetry %lu lost_wakes %lu overruns %lu "
                     "response_max_us %lu faults %u gap %lu..%lu us\n",
