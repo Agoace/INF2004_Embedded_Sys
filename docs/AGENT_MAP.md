@@ -297,6 +297,9 @@ vehicle task described below.
   [`policy.h`](../app_program/barcode_live_vehicle/policy.h) and
   [`policy.c`](../app_program/barcode_live_vehicle/policy.c),
   [`hook.c`](../app_program/barcode_live_vehicle/hook.c) owns the timer,
+  [`action.c`](../app_program/barcode_live_vehicle/action.c) is the live-only
+  centred-turn action copy, and
+  [`line.c`](../app_program/barcode_live_vehicle/line.c) owns centre advance,
   [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
   [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
   [`make seams`](../build_make/barcode_live_vehicle.mk). These expire a

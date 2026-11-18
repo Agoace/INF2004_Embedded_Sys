@@ -253,6 +253,10 @@ endforeach()
 # a synthetic 1 mm clear bound; they are not firmware builds.
 foreach(variant IN ITEMS default custom builtin expire search)
     set(target test_barcode_live_e2e_${variant})
+    set(action app_program/barcode_live_vehicle/action.c)
+    if(variant STREQUAL "default")
+        set(action app_program/vehicle/junction_action.c)
+    endif()
     host_test(${target} tests/test_barcode_live_e2e.c
         app_program/barcode_live_vehicle/policy.c
         app_program/barcode_live_vehicle/hook.c
@@ -261,7 +265,7 @@ foreach(variant IN ITEMS default custom builtin expire search)
         app_program/subsystem3/barcode_live_producer.c
         app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c
         app_program/vehicle/junction_source.c app_program/vehicle/junction_live.c
-        app_program/vehicle/junction_action.c
+        ${action}
         ${line_search_source} ${obstacle_source})
     target_include_directories(${target} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_link_libraries(${target} PRIVATE m)
@@ -294,3 +298,9 @@ add_test(NAME test_barcode_live_vehicle_make
     COMMAND ${Python3_EXECUTABLE} ${REPO}/tests/test_barcode_live_vehicle_make.py)
 target_compile_definitions(test_barcode_live_e2e_builtin PRIVATE
     BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_LETTER='A')
+
+host_test(test_blv_turn tests/test_blv_turn.c
+    app_program/barcode_live_vehicle/action.c
+    app_program/barcode_live_vehicle/line.c
+    ${line_search_source} ${obstacle_source})
+target_link_libraries(test_blv_turn PRIVATE m)

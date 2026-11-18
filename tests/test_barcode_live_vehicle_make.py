@@ -21,6 +21,8 @@ def make(*extra):
 for extra in (LIVE, LIVE + ("BARCODE_FAIL_CAPTURE=1",)):
     result = make(*extra)
     assert result.returncode == 0, result.stderr[-500:]
+    assert "barcode_live_vehicle/action.c" in result.stdout
+    assert "vehicle/junction_action.c" not in result.stdout
     for seam in SEAMS:
         assert seam in result.stdout, (extra, seam)
 for extra in ((), ("BARCODE_FAIL_CAPTURE=1",),

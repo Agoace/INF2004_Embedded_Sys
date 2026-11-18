@@ -157,6 +157,54 @@ The build has no IMU capture. RAM_PROOF: 77/77 listed functions in RAM,
 These are build results, not measured run-time stack margins.
 The 200 ms update adds 16 B of state, with text 451952 B and free 30340 B.
 
+## Live LEFT/RIGHT turn correction
+
+LIVE1 and LIVE2 did not turn, despite DONE. Operator observation: a twitch
+then straight travel. Recorded first/accepted angles were 1.58, 39.04 and
+2.45 degrees. DONE is not physical branch acceptance. Sources:
+`school_stg_60e1af7/robot_LIVE1.final.log` and
+`school_stg_6c40c33/robot_LIVE2.log` under `mtk3-core-review/build/`.
+
+The old spin began about 35 mm from the edge. The axle was still about
+96 mm before the arm centre (122 mm sensor lead + half an assumed 18 mm
+stroke - 35). A sensor orbit of radius 122 meets that arm around 38 degrees,
+not 90. The 73 mm GP28 offset is for the barcode, not the line pair.
+`new_line` also allowed straight-line recontact after 20 ms with both
+sensors below 30%, followed by either at least 50%. A gap/noise can give
+that at 1–3 degrees. Neither mechanism proves a turn.
+
+Approved live-only correction:
+
+- LEFT/RIGHT own straight advance at 120 mm/s. Target 131 mm from saved
+  edge (122 mm ruler lead + 9 mm half stroke), max 170 mm, timeout 2 s.
+  Require two fresh nonjunction/not-both-black samples at the target.
+  These are design values, not a measured crossing centre.
+- During advance, stale/invalid data, sonar stop/fault, any backward wheel
+  step, 500 ms without progress on either wheel, distance/time limits or
+  total 6 s limit stop the action. Brief optical loss does not cancel it.
+  The live LINE wrapper bypasses `lt_step` during this owned advance.
+- LEFT/RIGHT accept only signed turn progress at least 60 degrees.
+  Earlier contacts stay diagnostic, never DONE; another fresh 20 ms white
+  departure is required after an ignored contact. Keep the first contact,
+  and report the accepted contact separately. Existing 150 degree/4 s
+  spin, reverse, stall and translation limits remain.
+- STRAIGHT and UTURN retain their previous logic. This does not establish
+  UTURN acceptance or fix the fake build.
+
+Implementation: [`action.c`](../../app_program/barcode_live_vehicle/action.c)
+is a copy of `vehicle/junction_action.c` at `43e1963`, linked instead of the
+original only for LIVE=1. [`line.c`](../../app_program/barcode_live_vehicle/line.c)
+provides the advance wrapper. Duplication is intentional to preserve all
+default ELF/UF2 bytes. **Follow-up: merge into general ja fix.** The defect
+also affects fake commands; reopen physical B2a turn acceptance.
+
+Tests are synthetic, not physical acceptance: red first; both compilers.
+They check centre travel, false contacts, 60-degree gate, departure, right
+turn, stale/sonar/reverse/stall/distance/time failure and wrapper ownership.
+Live example-secret profile above: text 452684 B, BSS 218980 B, free 30340 B;
+RAM_PROOF 77/77, 19852 B. Main must observe a real branch turn before
+acceptance; no autonomous full-course run is approved by host tests.
+
 ## Clearance measurement (next robot session)
 
 ### Operator decision (2026-11-18)
