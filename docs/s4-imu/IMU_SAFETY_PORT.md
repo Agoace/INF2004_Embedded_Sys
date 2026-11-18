@@ -100,7 +100,12 @@ scan geometry, configuration-token reader or live snapshot contract changes.
   per-section timers. Starts trigger alternating OVERTURN and LIFT, so the
   real Vehicle gate, ESTOP, FAULT and events run. GCC 645/645 and Clang
   ASan/UBSan 645/645 pass. The 76 default files stay byte-identical to
-  `91f9b48`. The BENCH3 run is pending.
+  `91f9b48`.
+- BENCH3 (ROBOT synthetic image of `3809dec`) ran on the spare Pico W.
+  The gate latched OVERTURN and LIFT with the Vehicle idle and each GP21
+  recovery cleared it. IMU overruns and lost wakes were 0. Results,
+  limits and open findings are in
+  [IMU_SAFETY_BENCH.md](IMU_SAFETY_BENCH.md#bench3-record-robot-synthetic-image-3809dec--home-secrets).
 
 ## UP resources (E)
 

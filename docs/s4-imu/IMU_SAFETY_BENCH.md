@@ -125,9 +125,11 @@ detector and the real service source.
 3. Do not press until `[IMU_BENCH_HINT] ... PRESS_GP21_ONCE_TO_START`.
    This is at uptime 70 s. Before that, the hint is
    `IDLE_WINDOW_DO_NOT_PRESS` (idle load window, Vehicle idle).
-4. Press GP21 once (start 1). The Vehicle starts calibration. At about
-   +2.3 s, OVERTURN latches. Expect the ESTOP, FAULT 6, event kind 3
-   word 1, then `[IMU_SAFETY] stop 1 cause N` when the Vehicle is idle.
+4. Press GP21 once (start 1). The Vehicle starts calibration. On the
+   spare Pico W, the motion stall check stops the calibration after
+   about 0.1–0.3 s (no encoders). At about +2.3 s, OVERTURN latches with
+   the Vehicle idle. Expect the ESTOP, FAULT, event kind 3 word 1, then
+   `[IMU_SAFETY] stop 1 cause N`.
 5. Wait for `PRESS_GP21_ONCE_TO_RECOVER` (about +6.4 s after press 1:
    tilt ends at +5.3 s, then a 1 s clear window). Press GP21 once
    (recover). This press only clears. It does not start.
@@ -145,14 +147,18 @@ is correct behaviour, but it is not the planned sequence.
 
 ### What MQTT shows
 
-- `state`: Vehicle state FAULT with fault 6 after each stop. Back to idle
-  after each recovery.
-- `event`: kind 3, word = trigger (1 OVERTURN, 2 LIFT), detail = cause.
-  Recovery and refusal events are kind 3 with word bit 15 set.
+- `state`: Vehicle state 2 (FAULT) after each stop. Back to 0 after each
+  recovery. The IDLE cadence sends `state` once per second, so the FAULT
+  state arrives up to 1 s after the stop.
+- `event`, for each start, in this order: kind 3 word 3 (motion stall
+  faults, left and right), kind 5 (run end), then at the stop kind 3
+  word 4 (`MC_FAULT_ESTOP`) and kind 3 word 1 or 2 (IMU trigger), detail
+  = cause. Recovery and refusal events are kind 3 with word bit 15 set:
+  `0x8000 | latched << 8 | gate reason`.
 - `summary`: **not published on the spare Pico W.** The summary exists
   only for a run that passed calibration. With no line sensors and no
-  encoders, calibration cannot complete, so the stop is always in
-  calibration. The stop reason text is in the USB INFO and DUMP lines.
+  encoders, calibration cannot complete. The stop reason text is in the
+  USB INFO and DUMP lines.
 
 ## BENCH3 USB lines
 
@@ -170,6 +176,80 @@ is correct behaviour, but it is not the planned sequence.
 Pass for BENCH3: overruns 0, lost wakes 0, one stop per start with the
 expected trigger, each recovery press clears, and no task stack below
 the 256 B low-stack margin in the dump.
+
+## BENCH3 record (ROBOT synthetic image, `3809dec` + home secrets)
+
+Image `3_IMU_SYNTH` (3dd1ff2f). Spare Pico W, no sensors or motors.
+Files: `build/home_imu_3809dec/robot_BENCH3.final.log` and
+`mqtt_BENCH3.csv` in the core-review worktree. All times are wall time.
+The stream is synthetic and has no I2C cost. Values are at uptime
+202805 ms unless stated.
+
+Operator sequence: start at 80.98 s, OVERTURN stop at 83.26 s; recover at
+110.56 s; start at 145.00 s, LIFT stop at 147.00 s; recover at 163.99 s;
+GP20 dump; `tm_usb_dropped 0`.
+
+| Value | Result |
+| --- | --- |
+| IMU overruns, missed wakes, lost wakes | 0, 0, 0 |
+| IMU gap_max_us | 17687 |
+| Vehicle response_max_us, overruns, lost wakes | 1299, 0, 0 |
+| MQTT | 1 connection; publish_ok 273, publish_failed 18 |
+| Aggregate CPU (permille) | MQTT heartbeats 326–370 (46); USB `[IMU_BENCH_CPU]` 339–348 (20); USB `[load]` 346 |
+| Stack free (B) | IMU 512 (high water 1536 of 2048), Vehicle 2464, telemetry 2992, Health 1272, idle_meter 520, motion 2576, line 1576, sonar 1720, cyw43 7008, reporter 896 of 2048 |
+
+Per phase, compute and work in µs (mean / max / min), and trigger bits:
+
+| Phase | Samples | Compute | Work (mean / max) | Trigger bits |
+| --- | --- | --- | --- | --- |
+| 0 upright idle | 8270 | 1180 / 1701 / 420 | 1510 / 2107 | 1 |
+| 1 tilt | 300 | 1353 / 1742 / 1162 | 1758 / 2125 | 3 |
+| 2 after tilt | 6101 | 1181 / 1694 / 888 | 1514 / 2088 | 3 |
+| 3 lift | 20 | 1299 / 1647 / 1152 | 1645 / 2045 | 5 |
+| 4 after lift | 5563 | 1180 / 1690 / 875 | 1512 / 2088 | 5 |
+
+Sections in µs (mean / max / min):
+
+| Phase | core | diag | safety | rest |
+| --- | --- | --- | --- | --- |
+| 0 | 930 / 1277 / 305 | 50 / 215 / 4 | 118 / 325 / 39 | 80 / 279 / 63 |
+| 1 | 1044 / 1203 / 911 | 55 / 206 / 43 | 165 / 348 / 112 | 87 / 256 / 69 |
+| 2 | 936 / 1260 / 495 | 51 / 212 / 40 | 113 / 327 / 81 | 80 / 288 / 66 |
+| 3 | 971 / 1248 / 865 | 55 / 75 / 46 | 185 / 355 / 133 | 86 / 121 / 71 |
+| 4 | 935 / 1199 / 501 | 50 / 206 / 39 | 113 / 323 / 76 | 80 / 278 / 67 |
+
+What BENCH3 proves:
+
+- With Vehicle, barcode, junction and Wi-Fi/MQTT running, the IMU task
+  keeps its 10 ms period: no overrun, no missed or lost wake.
+- `imu_core_step` is about 79% of the IMU compute time. The detector
+  (`imu_safety_step`) is 113–185 µs mean and at most 355 µs.
+- The Vehicle gate latches OVERTURN and LIFT, sends the ESTOP, enters
+  FAULT, publishes the events, and refuses starts until a GP21 recovery.
+  Each recovery press cleared the latch.
+
+What BENCH3 does not prove:
+
+- The stop of an active run. Both stops occurred with the Vehicle idle,
+  because the motion stall check ended each calibration in about
+  0.1–0.3 s. The active-run stop path has host tests only.
+- Any I2C time, real mounting or real motion.
+
+Open findings (no change made):
+
+- Each recovery press publishes two identical events (kind 3 word
+  `0x8108` or `0x8208`, PENDING, consecutive sequence numbers, same
+  uptime). The Vehicle calls `imu_recovery(IG_PENDING)` after
+  `ig_press`, then again in the start-refusal branch of the same press.
+  One producer, two calls. The successful clear has no event; only the
+  state change to 0 shows it.
+- Event kind 3 has three word meanings: motion fault bits (1, 2, 4),
+  IMU trigger (1, 2, 3) and IMU recovery (bit 15). Words 1, 2 and 3 are
+  ambiguous on the wire. The source branch has the same encoding.
+- The KR1 dump line `faults 7` is the latched motion fault bits:
+  `MC_FAULT_STALL_LEFT | MC_FAULT_STALL_RIGHT | MC_FAULT_ESTOP`. The
+  stall bits come from the calibration with no encoders, the ESTOP bit
+  from the IMU stop.
 
 ## BENCH2 record (TEST image, `f4ffd0e` + home secrets)
 
