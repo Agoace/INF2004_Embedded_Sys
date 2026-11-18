@@ -396,15 +396,48 @@ and show the typed IMU result as not reported by that firmware version.
 Unknown v3 trigger/detail values keep numeric fallback labels. The shared
 decoder remains strict: out-of-range stop reasons are rejected, not guessed.
 
-##### Proposed live IMU safety report — not implemented
+##### Dedicated IMU safety event (kind 10)
 
-Existing MQTT topics cannot supply a complete current safety state.
+The dashboard and shared decoder support SW9's frozen `8cd3036` event
+contract, documented in [MQTT_WIRE.md](MQTT_WIRE.md), section
+`Kind 10 IMU_SAFETY`. Integrate that firmware commit separately. Transport
+is the existing 20-byte `robot/event` v2 packet, QoS 0, not retained.
+
+The IMU card and Events show the latest STOP or RECOVERY report, trigger,
+cause and shell/module context. The IMU card includes its raw word/detail,
+boot/session, shared event sequence, robot uptime and unbounded laptop
+receipt age. Unknown enum values remain visible as `unknown (N)`; they are
+not discarded or guessed. A STOP trigger is a reported latch edge. PENDING
+is not a successful clear. Only RECOVERY CLEARED reports success; its
+trigger and cause describe the latch that was cleared, not a new trigger.
+
+Reports are history, **not a continuous current-state snapshot**. Lost
+QoS 0 reports or queue overflow can hide a stop or clear. The existing
+heartbeat `event_lost` count and shared event sequence gaps help identify
+loss, but cannot reconstruct the missing event. Within a boot, repeated
+or older kind 10 sequences do not create rows, replace the latest report
+or refresh its age. Sequence comparison supports 32-bit wrap. A new boot
+clears the latest report; an observed new run does not. An unexpected
+retained packet is labelled history and never proves current safety.
+
+Legacy kind 3 events keep their raw existing display, including ambiguous
+old IMU words and bit-15 recovery words. They do not become kind 10 or
+change its latest report. Embedded RAM-log kind 10 STOP records are also
+accepted through DUMP/refill. These v1, run-relative records have no cause
+byte: the decoded safety cause is unavailable, not NONE. CSV columns cover
+both live safety fields and their prefixed embedded-record fields.
+
+##### Proposed current IMU safety snapshot — not implemented
+
+Existing MQTT topics cannot supply a complete current safety snapshot.
 `robot/imu` has reserved legacy formats, but no current safety publisher.
-`robot/state` has no IMU trigger or shell-fault detail. Summary reports are
-run-end history. Event kind 10 IMU_SAFETY (see
+`robot/state` has no IMU trigger or shell-fault detail. Summaries are run-end
+history. Event kind 10 IMU_SAFETY (see
 [MQTT_WIRE.md](MQTT_WIRE.md#kind-10-imu_safety)) reports stops and
-recovery steps without ambiguity, but events alone do not provide a fresh
-snapshot after reconnect or a lost message.
+recovery steps without ambiguity, but it is a lossy event stream. Legacy
+kind 3 is not an unambiguous substitute: old IMU trigger words 1 and 2
+overlap motor fault bits. Events alone do not provide a fresh snapshot after
+reconnect or a lost message.
 
 A future report needs:
 
@@ -417,9 +450,9 @@ A future report needs:
 - Recovery/clear status and an explicit successful-clear acknowledgement.
   Do not infer a clear from IDLE, a missing event or an old summary.
 
-This is a proposal for the IMU owner, not an approved wire layout or
-publication policy. No decoder, firmware or remote-clear command change
-is part of this dashboard update.
+This snapshot is a proposal for the IMU owner, not an approved wire layout
+or publication policy. The implemented kind 10 event display above does
+not add a current-state snapshot, firmware change or remote-clear command.
 
 Report age means laptop time since receipt, not a 16-bit sensor-board age.
 It continues past 65535 ms. Completed scan/detour badges show elapsed time
