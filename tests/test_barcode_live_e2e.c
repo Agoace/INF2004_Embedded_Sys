@@ -146,8 +146,12 @@ int main(void)
     for (unsigned int ms = 0u; ms < 14000u; ++ms) {
         clock_us = 1000000u + ms * 1000u;
         const float mm = travel_mm(clock_us);
-        const bool decode_search = E2E_DECODE_DURATION != 0u &&
-            ms >= E2E_DECODE_START && ms < E2E_DECODE_START + E2E_DECODE_DURATION;
+#if E2E_DECODE_DURATION
+        const bool decode_search = ms >= E2E_DECODE_START &&
+            ms < E2E_DECODE_START + E2E_DECODE_DURATION;
+#else
+        const bool decode_search = false;
+#endif
         if (ms % 10u == 0u) {
             /* Vehicle tick (LINE module): ja first, then source/offer. */
             const bool black = junction_at(mm);
