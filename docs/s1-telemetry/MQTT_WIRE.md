@@ -214,7 +214,7 @@ can coalesce when the dedicated ESTOP queue is already full.
 For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
 (A/B/C/D); high byte is phase1..10. Detail is reason0..14. In an opt-in
 barcode live build, phase UNUSED (9) can carry reason 13 EXPIRED
-(pending command travelled at least 400 mm mean wheel travel from decode
+(pending command travelled at least 1000 mm mean wheel travel from decode
 `read_counts`) or 14 SEARCH (natural SEARCH lasted 200 ms). The
 command was never claimed and no turn was attempted. SCAN/DETOUR keep
 UNUSED/CANCELLED (1); fake commands and default builds are unchanged.

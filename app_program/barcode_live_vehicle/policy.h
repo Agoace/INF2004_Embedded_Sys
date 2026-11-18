@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include "../vehicle/junction_action.h"
 
-/* V1: wheel travel from the decode (read_counts) that ends a pending live
- * command. About 2x the ~200 mm recommended placement (rule >= 160 mm). */
-#define BLV_PENDING_MAX_MM 400u
+/* V1: wheel travel from decode (read_counts). Operator-approved 1000 mm
+ * bound; placement rule >=160 mm is unchanged. Not a frame_end bound. */
+#define BLV_PENDING_MAX_MM 1000u
 /* A short natural SEARCH can put the line between the sensors. */
 #define BLV_SEARCH_CANCEL_MS 200u
 /* New ja result reasons; phase stays JA_UNUSED (never acted). */

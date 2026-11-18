@@ -278,7 +278,7 @@ target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
     E2E_POLICY=3
     BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     BW_MAP_POLICY_ID=2u)
-# V1/V3 live policy: J1 beyond 400 mm from the decode, or SEARCH first.
+# V1/V3 live policy: J1 beyond 1000 mm from the decode, or SEARCH first.
 foreach(variant IN ITEMS expire search)
     target_compile_definitions(test_barcode_live_e2e_${variant} PRIVATE
         BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
@@ -286,7 +286,7 @@ foreach(variant IN ITEMS expire search)
         BW_MAP_POLICY_ID=2u)
 endforeach()
 target_compile_definitions(test_barcode_live_e2e_expire PRIVATE
-    J1_MM=850.0f E2E_POLICY=1)
+    J1_MM=1500.0f J2_MM=1800.0f E2E_POLICY=1)
 target_compile_definitions(test_barcode_live_e2e_search PRIVATE
     E2E_POLICY=2)
 host_test(test_blv_policy tests/test_blv_policy.c
@@ -359,3 +359,20 @@ target_compile_definitions(test_barcode_live_e2e_decode_timeout PRIVATE
     E2E_DECODE_START=1200u E2E_DECODE_DURATION=200u E2E_DECODE_RECORDS=0u)
 target_compile_definitions(test_barcode_live_e2e_decode_end PRIVATE
     E2E_DECODE_START=2450u E2E_DECODE_DURATION=30u)
+host_test(test_jlive_grace tests/test_jlive_grace.c
+    app_program/barcode_live_vehicle/live.c
+    app_program/barcode_live_vehicle/grace.c
+    app_program/vehicle/junction_action.c
+    ${line_search_source} ${obstacle_source})
+target_compile_definitions(test_jlive_grace PRIVATE BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100)
+target_link_libraries(test_jlive_grace PRIVATE m)
+
+# Shared e2e uses the same live-only jlive provider as the firmware.
+foreach(v IN ITEMS custom builtin expire search decode_grace decode_timeout decode_end)
+    set(t test_barcode_live_e2e_${v})
+    get_target_property(srcs ${t} SOURCES)
+    list(REMOVE_ITEM srcs "${REPO}/app_program/vehicle/junction_live.c")
+    set_property(TARGET ${t} PROPERTY SOURCES "${srcs}")
+    target_sources(${t} PRIVATE "${REPO}/app_program/barcode_live_vehicle/live.c"
+        "${REPO}/app_program/barcode_live_vehicle/grace.c")
+endforeach()

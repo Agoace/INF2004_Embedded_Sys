@@ -300,6 +300,11 @@ vehicle task described below.
   [`action.c`](../app_program/barcode_live_vehicle/action.c) is the live-only
   centred-turn action copy, and
   [`line.c`](../app_program/barcode_live_vehicle/line.c) owns centre advance,
+  [`live.c`](../app_program/barcode_live_vehicle/live.c) is the live adapter
+  copy with SEARCH-only decode grace, and
+  [`grace.h`](../app_program/barcode_live_vehicle/grace.h) /
+  [`grace.c`](../app_program/barcode_live_vehicle/grace.c) provide the
+  coherent Vehicle-to-LINE grace board,
   [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
   [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
   [`make seams`](../build_make/barcode_live_vehicle.mk).
@@ -309,7 +314,7 @@ vehicle task described below.
   tolerate bounded control-board collisions. The shared source publication
   recheck remains uncached. Tests:
   [`test_barcode_control_cache.c`](../tests/test_barcode_control_cache.c). These expire a
-  pending live command at 400 mm from decode and cancel it after 200 ms of SEARCH;
+  pending live command at 1000 mm from decode and cancel it after 200 ms of SEARCH;
   default builds omit this folder. Tests:
   [`test_blv_policy.c`](../tests/test_blv_policy.c) and
   [`test_barcode_live_vehicle_make.py`](../tests/test_barcode_live_vehicle_make.py).
