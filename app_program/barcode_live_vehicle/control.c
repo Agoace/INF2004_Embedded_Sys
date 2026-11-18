@@ -8,9 +8,6 @@ static uint32_t last_tag;
 static bool have_good;
 uint32_t blc_control_read_misses;
 
-#if defined(BLC_KERNEL_RAM) && BLC_KERNEL_RAM
-__attribute__((section(".data.ramfunc.barcode_live_producer_observe")))
-#endif
 void barcode_live_producer_observe(barcode_live_producer_t *p,
                                   const barcode_live_input_t *in)
 {
