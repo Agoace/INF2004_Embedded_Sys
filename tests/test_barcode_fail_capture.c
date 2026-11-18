@@ -21,6 +21,10 @@ int tm_printf(const UB *fmt, ...) {
 #pragma clang diagnostic pop
 #endif
 #include "../app_program/subsystem3/barcode_fail_capture.inc"
+_Static_assert(sizeof(bcfc_slots)==BCFC_SLOTS*5660u,
+               "CR1 packs evidence, not retained capacity");
+_Static_assert(BCFC_EDGES==64u && BCFC_ADC==512u && BCFC_PRE==64u,
+               "CR1 category B capacity change is not approved");
 static void attempt(uint32_t index, uint32_t reason, unsigned int samples) {
     barcode_window_t w={.phase=1u,.rise=320u,.fall=245u,.leading_mm=60.0f};
     barcode_window_motor_t motor={.us=10000u,.left=100u,.right=101u};
@@ -61,7 +65,7 @@ int main(void) {
     __atomic_store_n(&bcfc_reading,1u,__ATOMIC_SEQ_CST);
     bcfc_epoch(11u);
     assert(bcfc_work()!=NULL && bcfc_active!=0);
-    assert(bcfc_slots[0].frame.index==4u); /* Reader's payload untouched. */
+    assert(bcep_get(bcfc_slots[0].frame.words,BCEP_F_INDEX,32u)==4u); /* Reader's payload untouched. */
     __atomic_store_n(&bcfc_reading,0u,__ATOMIC_SEQ_CST);
     /* Successful candidates consume no retained failure slot. */
     bcfc_epoch(12u);bcfc_epoch(9u);
@@ -75,11 +79,13 @@ int main(void) {
     barcode_window_motor_t motor={.us=100u};
     bcfc_start(&w,(barcode_window_adc_t){w.start_us,600u,0u},0.0f,&motor);
     bcfc_bad_adc((barcode_window_adc_t){100u,0u,0u},2u);
+    bcfc_bad_adc((barcode_window_adc_t){101u,UINT16_MAX,UINT16_MAX},8u);
     bcfc_reject(&w,BW_LOSS);
     barcode_live_frame_t f={.record={.epoch=9u},.index=8u,.reason=BW_LOSS,
         .start_us=w.start_us,.terminal_us=101u};
     bcfc_terminal(&f);used=0u;text[0]='\0';bcfc_dump_begin();bcfc_dump_remaining();
     assert(strstr(text,"raw 0 flags 32770"));
+    assert(strstr(text,"raw 65535 flags 65535"));
     /* Context times: zero means unobserved, never a measured time 0. */
     assert(strstr(text,"[BC_FAIL_CONTEXT] epoch 9 index 8 enable_us 0 reset_us 0 reset_reason 0"));
     bcfc_epoch(14u);bcfc_epoch(9u);
