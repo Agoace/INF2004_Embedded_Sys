@@ -125,7 +125,8 @@ Measure D_cross with the current SHADOW image:
 `scripts/barcode_session_report.py` does this calculation. It also checks
 that no other dark pair occurs between the frame end and the edge
 ([BARCODE_SESSION_REPORT.md](BARCODE_SESSION_REPORT.md)). Existing logs give
-a DERIVED D_cross of 251–254 mm only.
+a DERIVED D_cross of 251–254 mm only. This is for barcode 2, measured to the
+next dark pair, which may not be the crossing.
 
 Set the clearance to D_min - 40 mm, and to no less than 10 mm. The 40 mm
 margin is ASSUMED: it covers the 6 mm arm distance, about 6 mm of read

@@ -88,7 +88,7 @@ not current acceptance reports. Local course originals are not public records.
 - [BARCODE_LIVE_COMMAND.md](s3-line-barcode/BARCODE_LIVE_COMMAND.md) — opt-in live command path from the barcode producer.
   Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, OPERATOR course answers, SW9 vehicle items V1–V6, clearance (D_cross) measurement procedure.
 - [BARCODE_SESSION_REPORT.md](s3-line-barcode/BARCODE_SESSION_REPORT.md) — GP20 log tool for per-attempt results and D_cross; dark-mark analysis.
-  Contains: tool usage and rules (one dump per run, MEASURED vs DERIVED D_cross), results on FX_1/FX2/B120 (barcode 2 D_cross DERIVED 251–254 mm), dark-mark position/width table and operator checks.
+  Contains: tool usage and rules (one dump per run, MEASURED vs DERIVED D_cross), results on FX_1/FX2/B120 (barcode 2 only, frame end to next dark pair, DERIVED 251–254 mm), dark-mark position/width table and operator checks.
 - [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
   Contains: status (merged `b405aef`; table A=LEFT, B=RIGHT, C=STRAIGHT, D=UTURN), results (system PASS, large A not decoded), findings, proposal on hold, evidence.
 

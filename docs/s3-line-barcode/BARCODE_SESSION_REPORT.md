@@ -63,8 +63,16 @@ The synthetic tests cover these cases:
 | FX2 (start 41669) | 7 of 7 (attempt 3 result `?`, FRAME line lost; MQTT says BP_DISABLED) | 1 at 50100, 2 at 80041 | 253, 254 mm | 1021.8 mm, NOT the next junction |
 | B120 (start 48929) | 8 of 8 | 1 at 25391, 2 at 61751 | 251, 254 mm | 2823.9 mm, NOT the next junction |
 
-D_cross from the barcode 2 frame end to the next dark pair is 251–254 mm. This
-was seen in four reads at 118–145 mm/s (DERIVED). The existing stop reports
+All four reads are **barcode 2**: the new barcode on the clean straight
+(OPERATOR). Barcode 1, the old barcode on the repaired line, never decoded
+(BP_DISABLED after line loss), so no D_cross exists for it.
+
+The DERIVED value is the distance from the barcode 2 frame end to the **next
+dark pair**: the first KR row where both line channels read dark. It is
+251–254 mm, from four reads at 118–145 mm/s. A dark pair is not always the
+crossing. It can also be a curve, tape or another mark that darkens both
+sensors. The OPERATOR places barcode 2 between two crossing passes, which
+makes the crossing likely, but no log proves it. The existing stop reports
 cannot give a MEASURED value, because each run continued past several more
 junctions. The [clearance procedure](BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session)
 still needs the robot stopped just after the first junction past barcode 2.
