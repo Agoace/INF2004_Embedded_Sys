@@ -376,6 +376,18 @@ ifneq ($(IMU_SAFETY_BENCH),0)
 include imu_safety_bench.mk
 endif
 
+# Opt-in ROBOT IMU safety latch capture. OFF adds no flag, object or name.
+IMU_SAFETY_CAPTURE ?= 0
+ifneq ($(words $(IMU_SAFETY_CAPTURE)),1)
+$(error IMU_SAFETY_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_SAFETY_CAPTURE),0 1),$(IMU_SAFETY_CAPTURE))
+$(error IMU_SAFETY_CAPTURE must be 0 or 1)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+include imu_safety_capture.mk
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -406,6 +418,9 @@ endif
 
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_imucap
 endif
 ifneq ($(LINE_P_NEAR),85)
 EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
@@ -597,6 +612,9 @@ PROFILE_ID := $(PROFILE_ID)-sametick0
 endif
 ifeq ($(BARCODE_FAIL_CAPTURE),1)
 PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifeq ($(IMU_SAFETY_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-imucap
 endif
 ifneq ($(LINE_P_NEAR),85)
 PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
