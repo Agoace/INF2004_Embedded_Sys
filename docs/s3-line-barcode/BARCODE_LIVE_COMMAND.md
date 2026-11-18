@@ -339,3 +339,37 @@ This proposal does not change any variable, error message or firmware.
   38 complete ELF files, including debug information), zero build warnings.
   No shared Vehicle/action C or header file changed.
 - The firmware matrix and RAM proof results are in the commit report.
+
+## Live control-board collision tolerance (2026-11-18)
+
+LIVE3 on 606ebbe reported BP_CONTROL with control age 11 ms, not >50 ms.
+LINE (priority 11) can preempt Vehicle (13) while Vehicle publishes control.
+The bounded coherent read then fails. Retrying in LINE cannot let the
+preempted writer finish. BP_CONTROL alone does not distinguish this case
+from a heartbeat timeout.
+
+The live-only producer seam caches the last genuinely coherent control and
+tag. On a failed read it increments `blc_control_read_misses` (RAM diagnostic)
+and uses that copy only if heartbeat qualification already exists and both
+the last successful observation age and conservative publication-progress
+age are <=50 ms. Cache use never refreshes either timestamp or the tag.
+A first failed read cannot qualify. An occupied slot never uses a cached ACK.
+The single LINE owner owns this cache; it is not a general multi-owner API.
+
+A successful DISABLED/context change is processed immediately. Cached
+PERMITTED can survive an unobserved disable for up to the heartbeat bound;
+this permits speculative decoding, not a command offer. The final source
+publication check MUST use a REAL fresh coherent read with matching epoch,
+revision and revision timestamp, and an enabled mode. It is unchanged.
+jlive also checks the current context/route/permission before offer.
+A disable/re-enable changes the context; the old decode must not publish.
+A collision at the final recheck fails closed (BP_CONTEXT), even if the cached
+copy was otherwise eligible. No threshold, retry loop or blocking is added.
+
+The forced include applies only to `barcode_live_producer.o` in live builds.
+The shared producer `.c`/`.h` and source `.c` are untouched, including line
+numbers. Default images retain the original failed-read cancellation.
+Tests cover poisoned failed-read contents, first read, 50/51 ms boundaries,
+no cached timestamp progress, context/disabled changes, ACK exclusion,
+observation pause, successful waveform decode across a miss, and a failed
+REAL final publication recheck.

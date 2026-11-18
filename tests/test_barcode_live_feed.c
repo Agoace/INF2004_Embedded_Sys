@@ -16,7 +16,7 @@
 #define FEED_MODE (BARCODE_LIVE_ENABLE ? BC_LIVE_PERMITTED : BC_LIVE_SHADOW_MODE)
 static uint32_t clock_us;
 static bool observing, race, raced, epoch_test, cancel_test, interrupt_counts;
-static bool start_test;
+static bool start_test, recheck_fail, interrupt_control;
 static char data_letter = 'A';
 static const barcode_cal_report_t cal = {.generation = 1u,
     .mode = BC_CAL_LEARNED, .white_samples = 1904u,
@@ -55,8 +55,12 @@ uint32_t drv_time_ms(void) { return clock_us / 1000u; }
 int motion_snapshot_try_read(motion_status_t *out, uint32_t *us)
 {
     if (race && !raced && clock_us >= 3470000u) {
-        ++control.eligibility_revision;
-        control.revision_ms = clock_us / 1000u;
+        if (recheck_fail) {
+            interrupt_control = true;
+        } else {
+            ++control.eligibility_revision;
+            control.revision_ms = clock_us / 1000u;
+        }
         assert(barcode_live_control_publish(&control) == E_OK);
         raced = true;
     }
@@ -69,6 +73,10 @@ int motion_snapshot_try_read(motion_status_t *out, uint32_t *us)
 void barcode_live_test_read_hook(const uint32_t *sequence, unsigned int index)
 {
     (void)sequence;
+    if (interrupt_control && index == 0u) {
+        interrupt_control = false;
+        assert(barcode_live_control_publish(&control) == E_OK);
+    }
     if (interrupt_counts && index == 0u) {
         interrupt_counts = false;
         ++control.epoch;
@@ -109,7 +117,8 @@ static uint16_t signal(unsigned int ms)
 int main(int argc, char **argv)
 {
     start_test = argc > 1 && strcmp(argv[1], "start_fail") == 0;
-    race = argc > 1 && strcmp(argv[1], "race") == 0;
+    recheck_fail = argc > 1 && strcmp(argv[1], "recheck_fail") == 0;
+    race = recheck_fail || (argc > 1 && strcmp(argv[1], "race") == 0);
     epoch_test = argc > 1 && strcmp(argv[1], "counts_epoch") == 0;
     cancel_test = argc > 1 && strcmp(argv[1], "counts_cancel") == 0;
     if (argc > 1 && strcmp(argv[1], "none") == 0) data_letter = 'F';
