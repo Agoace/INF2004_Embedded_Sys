@@ -109,15 +109,23 @@ A1/B1 hardware gate: **PASS 2026-11-10**, with the pre-existing idle-stack
 margin exception below. The later idle-stack increase is not yet retested
 on hardware. Main's review/merge and further CR1 work are still pending.
 
-## Vehicle observation round (2026-11-18)
+## Module round 2026-11-18
 
-[Vehicle A1](CR1_VEHICLE_A1.md) records the approved observation-only
-change against SW7's later `7350da0` baseline: Vehicle board 44 to 40 B,
-static RAM 241228 to 241224 B, with unchanged decoded API and messages.
-Category A saves 4 B; category B saves 0 B. Software checks pass;
-target timing and whole-stack acceptance remain pending. The older
-baseline and motion evidence below retain their original scope.
-Private Vehicle state and derived-copy removal are not approved.
+Baseline: `7350da0` (demo kernel `demo-kernel-v1` plus the detour
+lost-result fix), demo build line, public example settings. The operator
+approved category A for each module below. Category B is not approved.
+Integration branch: `mtk3-cr1`. Each module has its own record:
+
+| Module | Record | Category A | Static RAM (alone) |
+| --- | --- | --- | --- |
+| Sonar/obstacle | [CR1_SONAR_A.md](CR1_SONAR_A.md) | sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B | 241228 to 241148 B |
+| Vehicle | [CR1_VEHICLE_A1.md](CR1_VEHICLE_A1.md) | vehicle board 44 to 40 B | 241228 to 241224 B |
+
+Both merged (`ea5fae6`): static RAM 241228 to 241144 B, subsystem5 1013
+to 945 B, vehicle 2516 to 2504 B, 682 host tests, 0 warnings, RAM_PROOF
+79/79 (21004 B). Queue and MQTT sizes do not change. Target timing and
+whole-stack checks are not run. The older baseline and motion evidence
+below keep their original scope.
 
 ## Shared-access design rule
 
@@ -588,11 +596,11 @@ separately. A MQTT wire change requires a separate decision.
 | Module | RAM after | Message after | Software | Hardware/timing |
 | --- | --- | --- | --- | --- |
 | Motion A1 | 190664 B total | Board 64 B | Passed | PASS, idle note |
-| Sonar/obstacle | Pending | Pending | Not started | Not run |
+| Sonar/obstacle | 241148 B alone; boards 40/640/28 B | Unchanged | Passed | Not run |
 | IMU | Pending | Pending | Not started | Not run |
 | Telemetry/faults | Pending | Pending | Not started | Not run |
 | Line/barcode | Pending | Pending | Not started | Not run |
-| Vehicle | Pending | Pending | Not started | Not run |
+| Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | Not run |
 
 Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
 objects, discarded sections, zero-size sections, flash exclusion, padding

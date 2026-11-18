@@ -124,6 +124,11 @@ commit that changed this section (header comments and file lists).
   [`vehicle_pack.c`](../app_program/vehicle/vehicle_pack.c) define its nine-word
   payload; [`test_vehicle_pack.c`](../tests/test_vehicle_pack.c) checks
   ranges, invalid codes and interrupted publication. Vehicle is sole writer.
+- [Sonar/obstacle A](architecture/CR1_SONAR_A.md) records the sonar board,
+  history and obstacle board change. [`sonar_pack.h`](../app_program/subsystem5/sonar_pack.h)
+  and [`obstacle_pack.h`](../app_program/vehicle/obstacle_pack.h) define the
+  layouts; [`test_sonar_pack.c`](../tests/test_sonar_pack.c) and
+  [`test_obstacle_pack.c`](../tests/test_obstacle_pack.c) check them.
 - [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
   reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
