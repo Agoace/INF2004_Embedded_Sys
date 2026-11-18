@@ -95,7 +95,7 @@ producer, jlive and ja code:
 | --- | --- |
 | V1 expiry | Implemented: 400 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. Dashboard labels are a separate follow-up. |
 | V2 window | Optional: consume only when the junction edge is within [D_min, D_max] of the frame end. |
-| V3 SEARCH | Implemented: entering natural SEARCH before consumption cancels the live command, UNUSED reason 14 SEARCH. SCAN/DETOUR keep CANCELLED. No heading-change rule. |
+| V3 SEARCH | Implemented: 200 ms continuous SEARCH before consumption cancels the live command, UNUSED reason 14 SEARCH. SCAN/DETOUR keep CANCELLED. No heading-change rule. |
 | V4 turn | Check that the LEFT spin finds the correct branch at this crossing (about 90 degrees, OPERATOR). |
 | V5 detector | Confirm that this crossing gives a confirmed junction. The detector needs both channels >= 700 permille and the junction flag. |
 | V6 first run | Slow speed, kill switch ready, `BARCODE_MAP="F=LEFT"` only. |
@@ -119,8 +119,11 @@ commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
   160 mm). After the 49 mm line-pair lead and 6 mm confirmation, normal
   consumption is about 117–157 mm from the frame end. The 400 mm design
   limit leaves margin without retaining a command for a full loop.
-- **V3:** cancel on the first natural SEARCH module step, before any
-  junction consumption. SCAN/DETOUR keep their existing cancellation.
+- **V3:** cancel after 200 ms of continuous SEARCH, not on entry.
+  `BLV_SEARCH_CANCEL_MS` is 200. Main approved this after LIVE1. A brief
+  SEARCH returns to LINE without dropping the command. The timer starts
+  on the first SEARCH tick and resets on return to LINE; it uses wrap-safe
+  elapsed time. V1 expiry still wins during SEARCH. A new run resets it. SCAN/DETOUR keep their existing cancellation.
   No heading-change rule is added: the approved approach must be straight;
   wheel-difference heading during line corrections is not a reliable
   extra course-location check.
@@ -152,6 +155,7 @@ The build has no IMU capture. RAM_PROOF: 77/77 listed functions in RAM,
 19852 B. ELF text 451744 B, BSS 218964 B; link-time free RAM 30356 B
 (including static stacks), from ELF RAM section addresses and 270336 B.
 These are build results, not measured run-time stack margins.
+The 200 ms update adds 16 B of state, with text 451952 B and free 30340 B.
 
 ## Clearance measurement (next robot session)
 
@@ -280,6 +284,8 @@ This proposal does not change any variable, error message or firmware.
   count wrap, reverse, fake/idle passthrough, SEARCH, SCAN/DETOUR, duplicate
   retirement, and end-to-end expiry/SEARCH with no later junction claim.
   Normal live consumption remains covered through the policy wrapper.
+- The 200 ms update: red first; tests cover 199/200 ms, resetting the
+  timer, clock wrap and expiry during SEARCH. No wire change.
   The make test checks that live-only sources and seams are absent by default.
 - Default-build proof against staging `a93b1de`: HASH76 MATCH (38 UF2 and
   38 complete ELF files, including debug information), zero build warnings.

@@ -9,12 +9,26 @@
 /* V1: wheel travel from the decode (read_counts) that ends a pending live
  * command. About 2x the ~200 mm recommended placement (rule >= 160 mm). */
 #define BLV_PENDING_MAX_MM 400u
+/* A short natural SEARCH can put the line between the sensors. */
+#define BLV_SEARCH_CANCEL_MS 200u
 /* New ja result reasons; phase stays JA_UNUSED (never acted). */
 #define BLV_REASON_EXPIRED 13u
 #define BLV_REASON_SEARCH 14u
 
-/* Same contract as ja_pending_route. A live (source 2) pending command is
- * dropped on SEARCH entry or after BLV_PENDING_MAX_MM of forward travel. */
+/* Pure policy state; one Vehicle owner, no cross-task access. */
+typedef struct {
+    uint32_t sequence;
+    uint32_t epoch;
+    uint32_t search_ms;
+    bool searching;
+} blv_t;
+
+void blv_policy_route(blv_t *policy, ja_t *state, uint8_t module,
+                       const int32_t counts[2], uint32_t now_ms);
+
+/* Vehicle-owner wrappers. blv_init also resets the SEARCH timer. A live
+ * pending command expires by distance or after 200 ms continuous SEARCH. */
+void blv_init(ja_t *state, int16_t search_speed_mm_s, uint32_t epoch);
 void blv_pending_route(ja_t *state, uint8_t module,
                        const int32_t counts[2], uint32_t now_ms);
 const char *blv_reason_name(uint8_t reason);

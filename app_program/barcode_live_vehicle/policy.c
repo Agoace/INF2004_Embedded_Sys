@@ -24,21 +24,40 @@ static bool expired(const ja_t *s, const int32_t counts[2])
     return mean >= limit;
 }
 
-void blv_pending_route(ja_t *s, uint8_t module, const int32_t counts[2],
-                       uint32_t now)
+void blv_policy_route(blv_t *p, ja_t *s, uint8_t module,
+                       const int32_t counts[2], uint32_t now)
 {
     if (s->phase == JA_PENDING && s->command.source == BC_LIVE_SOURCE) {
+        if (p->sequence != s->command.sequence ||
+            p->epoch != s->command.epoch) {
+            *p = (blv_t){.sequence = s->command.sequence,
+                          .epoch = s->command.epoch};
+        }
         uint8_t reason = JA_OK;
         if (module == VSM_MOD_SEARCH) {
-            reason = BLV_REASON_SEARCH;
-        } else if (module == VSM_MOD_LINE && expired(s, counts)) {
+            if (!p->searching) {
+                p->search_ms = now;
+                p->searching = true;
+            }
+            if (now - p->search_ms >= BLV_SEARCH_CANCEL_MS) {
+                reason = BLV_REASON_SEARCH;
+            }
+        } else {
+            p->searching = false;
+        }
+        /* Distance expiry wins, including during a short SEARCH. */
+        if ((module == VSM_MOD_LINE || module == VSM_MOD_SEARCH) &&
+            expired(s, counts)) {
             reason = BLV_REASON_EXPIRED;
         }
         if (reason != JA_OK) {
             ja_finish(s, counts, now); /* PENDING -> UNUSED, consumed. */
             s->result.reason = reason;
+            p->searching = false;
             return;
         }
+    } else {
+        *p = (blv_t){0};
     }
     ja_pending_route(s, module, counts, now);
 }

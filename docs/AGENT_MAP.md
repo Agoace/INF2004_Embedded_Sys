@@ -296,10 +296,11 @@ vehicle task described below.
   Live-only vehicle V1/V3 policy:
   [`policy.h`](../app_program/barcode_live_vehicle/policy.h) and
   [`policy.c`](../app_program/barcode_live_vehicle/policy.c),
+  [`hook.c`](../app_program/barcode_live_vehicle/hook.c) owns the timer,
   [`vehicle_impl.h`](../app_program/barcode_live_vehicle/vehicle_impl.h),
   [`print_impl.h`](../app_program/barcode_live_vehicle/print_impl.h), and
   [`make seams`](../build_make/barcode_live_vehicle.mk). These expire a
-  pending live command at 400 mm from decode and cancel it on SEARCH;
+  pending live command at 400 mm from decode and cancel it after 200 ms of SEARCH;
   default builds omit this folder. Tests:
   [`test_blv_policy.c`](../tests/test_blv_policy.c) and
   [`test_barcode_live_vehicle_make.py`](../tests/test_barcode_live_vehicle_make.py).

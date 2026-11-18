@@ -11,7 +11,7 @@
 static ja_t pending(uint8_t source, int32_t base)
 {
     ja_t s;
-    ja_init(&s, 131, 1u);
+    blv_init(&s, 131, 1u);
     const ja_command_t c = {.epoch = 1u, .sequence = 5u,
         .read_counts = {base, base}, .command = JA_LEFT, .valid = 1u,
         .source = source};
@@ -50,13 +50,51 @@ int main(void)
     route(&s, VSM_MOD_LINE, -3 * LIMIT_COUNTS, -3 * LIMIT_COUNTS);
     assert(s.phase == JA_PENDING);
 
-    /* V3: SEARCH entry drops a live pending command (reason SEARCH). */
+    /* V3: only a continuous SEARCH of at least 200 ms cancels. */
     s = pending(BC_LIVE_SOURCE, 0);
-    route(&s, VSM_MOD_SEARCH, 10, 10);
+    const int32_t short_counts[2] = {10, 10};
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 100u);
+    assert(s.phase == JA_PENDING);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 299u);
+    assert(s.phase == JA_PENDING); /* 199 ms. */
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 300u);
     assert(s.phase == JA_UNUSED && s.result.reason == BLV_REASON_SEARCH);
     assert(s.command.valid == 0u && s.consumed == 5u);
     assert(!ja_offer(&s, &(ja_command_t){.epoch = 1u, .sequence = 5u,
         .command = JA_LEFT, .valid = 1u, .source = BC_LIVE_SOURCE}));
+
+    /* Return to LINE keeps pending and resets the continuous timer. */
+    s = pending(BC_LIVE_SOURCE, 0);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 100u);
+    blv_pending_route(&s, VSM_MOD_LINE, short_counts, 299u);
+    assert(s.phase == JA_PENDING && s.command.valid == 1u);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 1000u);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 1199u);
+    assert(s.phase == JA_PENDING);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 1200u);
+    assert(s.phase == JA_UNUSED && s.result.reason == BLV_REASON_SEARCH);
+
+    /* Expiry still applies during and after a brief SEARCH. */
+    for (unsigned int after = 0u; after < 2u; ++after) {
+        s = pending(BC_LIVE_SOURCE, 0);
+        blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 100u);
+        const int32_t far_counts[2] = {LIMIT_COUNTS, LIMIT_COUNTS};
+        blv_pending_route(&s, after ? VSM_MOD_LINE : VSM_MOD_SEARCH,
+                          far_counts, 150u);
+        assert(s.phase == JA_UNUSED &&
+               s.result.reason == BLV_REASON_EXPIRED);
+    }
+
+    /* Clock wrap and a new run reset the timer. */
+    s = pending(BC_LIVE_SOURCE, 0);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, UINT32_MAX - 99u);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 99u);
+    assert(s.phase == JA_PENDING);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 100u);
+    assert(s.phase == JA_UNUSED && s.result.reason == BLV_REASON_SEARCH);
+    s = pending(BC_LIVE_SOURCE, 0);
+    blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 500u);
+    assert(s.phase == JA_PENDING);
 
     /* SCAN/DETOUR keep the old CANCELLED. LINE short of the bound: no-op. */
     for (uint8_t m = VSM_MOD_SCAN; m <= VSM_MOD_DETOUR; ++m) {
@@ -85,7 +123,7 @@ int main(void)
     assert(s.result.claimed == 1u);
 
     /* Only PENDING is touched: idle state stays idle. */
-    ja_init(&s, 131, 1u);
+    blv_init(&s, 131, 1u);
     route(&s, VSM_MOD_SEARCH, 10 * LIMIT_COUNTS, 10 * LIMIT_COUNTS);
     assert(s.phase == JA_IDLE && s.result.reason == JA_OK);
 
