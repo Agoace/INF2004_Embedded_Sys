@@ -520,6 +520,9 @@ ifeq ($(IMU_SAFETY_BENCH),1)
 # The exclusive TEST runner has no ROBOT barcode/Vehicle command callers.
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/imu_safety_bench.list
 endif
+ifeq ($(BARCODE_LIVE_ENABLE),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/barcode_live_control.list
+endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
 KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
