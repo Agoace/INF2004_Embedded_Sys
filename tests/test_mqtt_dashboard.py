@@ -1426,6 +1426,84 @@ class ImuSafetyTests(ModelCase):
         self.assertIn('retained copy', self.panel('imu')['note'])
 
 
+def imu_safety_event(word=2, cause=0, sequence=10, uptime=1000, boot=100,
+                     source=2, module=1):
+    return struct.pack('<BBBBIIHBBI', 2, 10, source, module, sequence, uptime,
+                       word, cause, 0, boot)
+
+
+class ImuSafetyEventTests(ModelCase):
+    def test_stop_pending_and_explicit_clear_are_reports_not_a_current_snapshot(self):
+        for sequence, word, text in ((10, 2, 'STOP: lift'),
+                                     (11, 0x8208, 'RECOVERY: PENDING'),
+                                     (12, 0x8200, 'RECOVERY: CLEARED')):
+            self.model.ingest('robot/event', imu_safety_event(word, sequence=sequence))
+            rows = self.rows('imu')
+            self.assertEqual(rows['Latest IMU safety event'], text)
+            self.assertEqual(rows['IMU trigger in event'], 'lift')
+            self.assertEqual(rows['Current IMU safety'], 'not reported')
+            self.assertIn(text, self.panel('events')['items'][0]['text'])
+            self.assertIn('not a current-state snapshot', self.panel('imu')['note'])
+        self.assertEqual(self.model.event_gaps, 0)
+
+    def test_duplicates_and_older_reports_do_not_refresh_or_roll_back_latest(self):
+        frame = imu_safety_event()
+        self.model.ingest('robot/event', frame)
+        self.clock.advance(2500)
+        self.model.ingest('robot/event', frame)
+        self.model.ingest('robot/event', imu_safety_event(0x8208, sequence=9))
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'STOP: lift')
+        self.assertEqual(self.rows('imu')['IMU safety event received age'], '2500 ms')
+        self.assertEqual(len(self.model.events), 1)
+        self.model.ingest('robot/event', imu_safety_event(0x8200, sequence=12))
+        self.assertEqual(self.model.event_gaps, 1)
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'RECOVERY: CLEARED')
+
+    def test_shared_sequence_gap_across_wrap_with_estop_then_safety_stop(self):
+        self.model.ingest('robot/event', imu_safety_event(sequence=0xfffffffd))
+        estop = bytearray(imu_safety_event(4, sequence=0xfffffffe))
+        estop[1] = 3
+        self.model.ingest('robot/event', estop)
+        self.model.ingest('robot/event', imu_safety_event(sequence=1))
+        self.assertEqual(self.model.event_gaps, 2)  # Missing ffffffff and zero.
+        self.assertEqual(len(self.model.events), 3)
+        self.assertIn('ESTOP or fault', self.model.events[1]['text'])
+
+    def test_wrap_new_boot_and_retained_history_keep_event_identity(self):
+        self.model.ingest('robot/event', imu_safety_event(sequence=0xffffffff))
+        self.model.ingest('robot/event', imu_safety_event(0x8200, sequence=0))
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'RECOVERY: CLEARED')
+        self.model.ingest('robot/event', imu_safety_event(sequence=0, boot=200))
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'STOP: lift')
+        self.assertEqual(self.rows('imu')['IMU safety event boot / session'],
+                         self.model.log.sessions.current)
+        self.model.ingest('robot/state', reboot_state(300))
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'not received')
+        self.model.ingest('robot/event', imu_safety_event(boot=100), retained=True)
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'not received')
+
+    def test_unknown_enums_and_retained_packet_are_history_not_a_clear(self):
+        self.model.ingest('robot/event', imu_safety_event(
+            0xffff, 255, source=255, module=254, boot=0), retained=True)
+        rows = self.rows('imu')
+        self.assertEqual(rows['Latest IMU safety event'], 'RECOVERY: unknown (255)')
+        self.assertEqual(rows['IMU trigger in event'], 'unknown (127)')
+        self.assertEqual(rows['IMU safety event cause'], 'unknown (255)')
+        self.assertIn('unknown (255)', rows['IMU event shell / module'])
+        self.assertIn('unknown (254)', rows['IMU event shell / module'])
+        self.assertIn('retained history', self.panel('imu')['note'])
+        self.assertEqual(rows['Current IMU safety'], 'not reported')
+        self.assertEqual(self.model.discarded, 0)
+
+    def test_legacy_kind_three_does_not_become_an_imu_report(self):
+        for sequence, word in enumerate((1, 2, 3, 0x8108), 1):
+            frame = bytearray(imu_safety_event(word, sequence=sequence))
+            frame[1] = 3
+            self.model.ingest('robot/event', frame)
+        self.assertEqual(self.rows('imu')['Latest IMU safety event'], 'not received')
+        self.assertTrue(all('ESTOP or fault' in e['text'] for e in self.model.events))
+
+
 class HumpTests(ModelCase):
     def test_before_any_run(self):
         panel = self.panel("hump")
@@ -2694,6 +2772,19 @@ class RedesignPageTests(AppCase):
             self.assertEqual(imu['Current IMU safety'], 'not reported')
             self.assertIn('65.5 s since report', trace['views'][0]['text'])
             self.assertIn('retained copy', trace['views'][1]['text'])
+
+    def test_kind10_imu_reports_render_as_events_with_uncapped_receipt_age(self):
+        self.model.ingest('robot/event', imu_safety_event(0x8200, sequence=12))
+        self.clock.advance(90000)
+        expression = """document.getElementById('panel-imu').querySelector(
+          'table.facts').children.map(row => row.children.map(cell => cell.textContent))"""
+        trace = self.trace(expressions=[expression,
+            "document.getElementById('panel-events').querySelector('.items').children.map(n => n.textContent)"])
+        rows = dict(trace['values'][0])
+        self.assertEqual(rows['Latest IMU safety event'], 'RECOVERY: CLEARED')
+        self.assertEqual(rows['IMU safety event received age'], '90000 ms')
+        self.assertEqual(rows['Current IMU safety'], 'not reported')
+        self.assertIn('IMU SAFETY RECOVERY: CLEARED', ' '.join(trace['values'][1]))
 
     def test_unknown_contract_versions_render_not_crash_or_replace_valid_geometry(self):
         ApprovedContractPanelTests.geometry(self)

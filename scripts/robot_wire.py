@@ -47,6 +47,7 @@ JUNCTION_PHASES = {1: "pending", 2: "bar clear", 3: "legacy settle", 4: "search"
 JUNCTION_ANGLE_TAGS = {0x80: "first", 0x40: "accepted"}
 EVENT_SCAN_RETRY = 8
 EVENT_HUMP = 9  # word: peak 0.1 mm; detail bits 0..6 number, bit 7 LEFT
+EVENT_IMU_SAFETY = 10  # dedicated STOP/recovery report; never reinterpret kind 3
 SCAN_RETRY_PHASES = {1: "reverse_begin", 2: "reverse_end", 3: "rescan_begin"}
 OBSTACLE_DECISIONS = ("none", "right", "left")
 OBSTACLE_FLAGS = ("closest_valid", "too_near", "left_blocked", "right_blocked")
@@ -169,7 +170,7 @@ def decode(topic, data):
         result.update(echo_status=(result["echo"] >> 9) & 3,
                       echo_mm=(result["echo"] & 511) if ((result["echo"] >> 9) & 3) == 0 else "")
     elif name == "event":
-        _require(1 <= data[1] <= EVENT_HUMP and (data[15] & 0xFE) == 0,
+        _require(1 <= data[1] <= EVENT_IMU_SAFETY and (data[15] & 0xFE) == 0,
                  "event kind or reserved flags")
         if data[1] == EVENT_JUNCTION and data[0] >= 2:
             _require(data[2] == data[3] == 1, "junction modules")
@@ -192,6 +193,16 @@ def decode(topic, data):
             _require(data[0] >= 2 and data[2] == data[3] == 0 and
                      _u16(data, 12) != HUMP_PEAK_NONE and data[14] & 0x7F != 0,
                      "hump event")
+        if data[1] == EVENT_IMU_SAFETY:
+            # Live reports are v2; v1 is the run-relative embedded RAM record.
+            word = _u16(data, 12)
+            _require(data[0] >= 2 or (data[15] == 1 and not word & 0x8000),
+                     'IMU safety event version')
+            recovery = bool(word & 0x8000)
+            result.update(imu_safety_phase='recovery' if recovery else 'stop',
+                          imu_safety_trigger=(word >> 8) & 0x7f if recovery else word,
+                          imu_safety_recovery=word & 0xff if recovery else None,
+                          imu_safety_cause=data[14] if data[0] >= 2 else None)
         result.update(kind=data[1], **{"from": data[2], "to": data[3]},
                       sequence=_u32(data, 4), uptime_ms=_u32(data, 8), word=_u16(data, 12),
                       detail=data[14], run_relative=data[15] & 1)
@@ -787,6 +798,12 @@ def csv_fields():
     sample[0:4] = bytes((2, EVENT_JUNCTION, 1, 1))
     sample[14] = 0x81
     fields.update(decode("robot/event", sample))
+    # Include dedicated safety fields in both live and embedded-log CSV rows.
+    sample = bytearray(20)
+    sample[0], sample[1], sample[12] = 2, EVENT_IMU_SAFETY, 2
+    safety_fields = decode('robot/event', sample)
+    fields.update(safety_fields)
+    fields.update('event_' + key for key in safety_fields if key.startswith('imu_safety_'))
     # IMU motion events have different fields from snapshots.
     sample = bytearray(12)
     sample[0], sample[1], sample[2] = 1, 2, 1
