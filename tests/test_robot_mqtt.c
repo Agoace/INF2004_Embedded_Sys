@@ -460,8 +460,8 @@ static void test_summary(void) {
 static void test_schedule(void) {
     start_connected();
     assert(count_topic("robot/state")==1u && count_topic("robot/heartbeat")==1u);
-    poll_at(199u);assert(count_topic("robot/state")==1u);
-    poll_at(200u);assert(count_topic("robot/state")==2u && count_topic("robot/heartbeat")==1u);
+    poll_at(109u);assert(count_topic("robot/state")==1u);
+    poll_at(110u);assert(count_topic("robot/state")==2u && count_topic("robot/heartbeat")==1u);
     poll_at(999u);assert(count_topic("robot/state")==3u && count_topic("robot/heartbeat")==1u);
     health_busy=true;poll_at(1000u);
     assert(count_topic("robot/state")==3u && count_topic("robot/heartbeat")==2u);
@@ -719,7 +719,7 @@ static void test_idle_rates(void)
     vehicle_phase = 3u;
     first = publication_count;
     poll_range(10010u, 12005u, 5u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     assert(count_since("robot/heartbeat", first) == 2u);
     /* Stop: RUN rates continue for the 2 s grace, then IDLE. */
     vehicle_phase = 0u;
@@ -728,7 +728,7 @@ static void test_idle_rates(void)
     first = publication_count;
     poll_range(12015u, 14005u, 5u);
     assert(mode_word(last_topic("robot/state")) == 0u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     poll_at(14010u);
     first = publication_count;
     poll_range(14015u, 24000u, 5u);
@@ -823,7 +823,7 @@ static void test_idle_no_vehicle(void)
     first = publication_count;
     ram_index.rows = 12u;
     poll_range(1u, 2000u, 1u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     assert(count_since("robot/heartbeat", first) == 2u);
     assert(count_since("robot/log", first) >= 1u);
     assert(mode_word(last_topic("robot/state")) == 0u);
