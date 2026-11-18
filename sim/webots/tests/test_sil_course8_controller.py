@@ -93,7 +93,7 @@ class Course8ControllerTests(unittest.TestCase):
         (ROOT / 'build/webots').mkdir(parents=True, exist_ok=True)
         tmp = Path(tempfile.mkdtemp(dir=ROOT / 'build/webots', prefix='c8-host-test-'))
         try:
-            project, _, course = runner.prepare(tmp / 'p', 'default', SPIN)
+            project, _, course = runner.prepare(tmp / 'p', 'demo', SPIN)
             config = json.loads((project / 'sil-manifest.json').read_text())
             config['duration_ms'] = 3000
             (project / 'sil-manifest.json').write_text(json.dumps(config))
@@ -133,7 +133,7 @@ class Course8ControllerTests(unittest.TestCase):
         (ROOT / 'build/webots').mkdir(parents=True, exist_ok=True)
         tmp = Path(tempfile.mkdtemp(dir=ROOT / 'build/webots', prefix='c8-host-test-'))
         try:
-            project, _, course = runner.prepare(tmp / 'p', 'default', SPIN)
+            project, _, course = runner.prepare(tmp / 'p', 'demo', SPIN)
             config = json.loads((project / 'sil-manifest.json').read_text())
             config['duration_ms'] = 600
             (project / 'sil-manifest.json').write_text(json.dumps(config))
@@ -171,7 +171,7 @@ class Course8ControllerTests(unittest.TestCase):
         return runner, project, module, names, rows
 
     def test_adc_delay_20_feeds_old_optics_and_replays(self):
-        runner, project, module, names, rows = self._run('default', 1500, adc_delay_ms=20)
+        runner, project, module, names, rows = self._run('demo', 1500, adc_delay_ms=20)
         config = json.loads((project / 'sil-manifest.json').read_text())
         self.assertEqual(config['adc_delay_ms'], 20)
         self.assertEqual(config['adc_transport_label'], runner.DELAY_LABEL)
@@ -190,15 +190,30 @@ class Course8ControllerTests(unittest.TestCase):
         self.assertNotEqual([r[1:3] for r in rows], [o[1:] for o in optical])
         self.assertTrue(module.replay(project, rows))
 
+    def test_runner_cases_and_manifest(self):
+        sys.path.insert(0, str(ROOT / 'sim/webots/tools'))
+        import sil_course8_run as runner
+        import pil.sil_course8 as s8
+        self.assertIs(runner.CASES, s8.CASES)
+        self.assertEqual(runner.DEFAULT_CASE, 'demo')
+        for case in ('demo', 'p7'):
+            _, project, *_ = self._run(case, 300)
+            config = json.loads((project / 'sil-manifest.json').read_text())
+            base, kd, same = s8.CASES[case]
+            self.assertEqual((config['case'], config['base'], config['kd'],
+                              config['same_tick_apply']), (case, base, kd, same))
+        with self.assertRaises(KeyError):
+            runner.prepare(project.parent / 'q', 'default', SPIN)
+
     def test_adc_delay_0_identical_to_no_option(self):
-        a = self._run('default', 800)
-        b = self._run('default', 800, adc_delay_ms=0)
+        a = self._run('demo', 800)
+        b = self._run('demo', 800, adc_delay_ms=0)
         self.assertEqual(a[4], b[4])
         self.assertEqual((a[1] / 'sil-manifest.json').read_bytes(),
                          (b[1] / 'sil-manifest.json').read_bytes())
         self.assertFalse((b[1] / 'sil-result/optical_adc.csv').exists())
         with self.assertRaises(ValueError):
-            a[0].prepare(a[1].parent / 'q', 'default', SPIN, adc_delay_ms=10)
+            a[0].prepare(a[1].parent / 'q', 'demo', SPIN, adc_delay_ms=10)
 
 
 if __name__ == '__main__':
