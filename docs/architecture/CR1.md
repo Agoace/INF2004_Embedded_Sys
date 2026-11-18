@@ -109,6 +109,16 @@ A1/B1 hardware gate: **PASS 2026-11-10**, with the pre-existing idle-stack
 margin exception below. The later idle-stack increase is not yet retested
 on hardware. Main's review/merge and further CR1 work are still pending.
 
+## Vehicle observation round (2026-11-18)
+
+[Vehicle A1](CR1_VEHICLE_A1.md) records the approved observation-only
+change against SW7's later `7350da0` baseline: Vehicle board 44 to 40 B,
+static RAM 241228 to 241224 B, with unchanged decoded API and messages.
+Category A saves 4 B; category B saves 0 B. Software checks pass;
+target timing and whole-stack acceptance remain pending. The older
+baseline and motion evidence below retain their original scope.
+Private Vehicle state and derived-copy removal are not approved.
+
 ## Shared-access design rule
 
 Dual-core operation is not planned now. A later move, first possibly IMU

@@ -40,6 +40,7 @@ ENTRIES = [
      ["TELEMETRY_BYTES"]),
     ("subsystem1/robot_network.h", ["robot_command_t"], []),
     ("vehicle/vehicle_board.h", ["vehicle_snapshot_t"], []),
+    ("vehicle/vehicle_pack.h", ["vehicle_packed_t"], []),
     ("vehicle/imu_gate.h", ["ig_t", "ig_action_t"], []),
     ("vehicle/junction_live.h", ["jlive_t", "jlive_report_t", "jlive_counts_t"], []),
     ("subsystem1/mqtt_wire.h",
@@ -71,7 +72,7 @@ def measure(cc, nm):
                    "barcode_cal_report_t", "barcode_live_record_t",
                    "barcode_live_control_t",
                    "imu_hump_report_t", "imu_hump_diag_report_t",
-                   "imu_hump_summary_t", "vehicle_snapshot_t",
+                   "imu_hump_summary_t", "vehicle_packed_t",
                    "rm_obstacle_t", "rm_detour_t", "rm_summary_t",
                    "telemetry_log_index_t"]
     for name in board_types:

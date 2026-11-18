@@ -38,6 +38,7 @@
 #include "junction_source.h"
 #include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
+#include "vehicle_pack.h"
 #include "obstacle_report.h"
 #include "obstacle_pack.h"
 #include "run_stats.h"
@@ -118,7 +119,7 @@ static uint8_t stop_code;
 #define set_reason(code, text) (reason = (text))
 #endif
 #if TM_MQTT
-static APP_BOARD(vehicle_snapshot_t) vehicle_board;
+static APP_BOARD(vehicle_packed_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
 /* CR1 A: 6-word packed layout, see obstacle_pack.h. */
 static obstacle_board_t obstacle_board;
@@ -184,8 +185,11 @@ static void publish_vehicle(void)
     vehicle.wake_lost = wake_lost;
     vehicle.overruns = overruns;
     vehicle.response_max_us = response_max_us;
-    app_board_publish(&vehicle_board.sequence, vehicle_board.words, &vehicle,
-                      sizeof(vehicle));
+    vehicle_packed_t packed;
+    if (vehicle_pack(&packed, &vehicle)) {
+        app_board_publish(&vehicle_board.sequence, vehicle_board.words, &packed,
+                          sizeof(packed));
+    }
 }
 
 /*
@@ -196,12 +200,11 @@ int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
     if (!out) {
         return E_PAR;
     }
-    vehicle_snapshot_t v;
-    if (!app_board_try_read(&vehicle_board.sequence, vehicle_board.words, &v,
-                            sizeof(v))) {
+    vehicle_packed_t packed;
+    if (!app_board_try_read(&vehicle_board.sequence, vehicle_board.words, &packed,
+                            sizeof(packed)) || !vehicle_unpack(out, &packed)) {
         return E_TMOUT;
     }
-    *out = v;
     return E_OK;
 }
 

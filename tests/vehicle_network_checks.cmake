@@ -4,10 +4,20 @@ if(TARGET test_vehicle_mqtt)
     target_include_directories(test_vehicle_mqtt BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_vehicle_mqtt PRIVATE TM_MQTT=1)
 endif()
+host_test(test_vehicle_pack tests/test_vehicle_pack.c
+    app_program/vehicle/vehicle_pack.c)
+if(TARGET test_vehicle_pack)
+    target_include_directories(test_vehicle_pack BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    foreach(pack_case invalid boards)
+        add_test(NAME test_vehicle_pack_${pack_case}
+            COMMAND test_vehicle_pack ${pack_case})
+    endforeach()
+endif()
 host_test(test_vehicle_network_policy tests/test_vehicle_network_policy.c
     app_program/vehicle/vehicle_network_policy.c)
 host_test(test_vehicle_network_task tests/test_vehicle_network_task.c
     app_program/vehicle/vehicle_task.c app_program/vehicle/vehicle_log.c
+    app_program/vehicle/vehicle_pack.c
     app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/vehicle_network_policy.c app_program/vehicle/obstacle_report.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c
