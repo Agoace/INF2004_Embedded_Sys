@@ -1,6 +1,9 @@
 /*
  * sonar_service.c - application telemetry and service interface.
  */
+/* fault_mask.h includes <stddef.h>; the kernel headers define size_t. */
+#define PROHIBIT_DEF_SIZE_T
+#include <stddef.h>
 #include "subsystem5.h"
 
 /* Task timing and resource limits. */
@@ -17,6 +20,7 @@
 #include "../platform/drv_time.h"
 #include "../platform/run_timing.h"
 #include "sonar_pack.h"
+#include "../platform/fault_mask.h"
 /* Only aligned 32-bit atomic loads/stores: Cortex-M0+ needs no libatomic
  * read-modify-write helper. A reader never waits for the lower-priority writer.
  * All shared words are atomic, including the payload (no C data races).
@@ -92,6 +96,11 @@ static void board_publish(const sonar_snapshot_t *value, bool append)
     }
 }
 
+/* CR1 F owner word: FAULT_SONAR_SENSOR mirrors the fault streak of the last
+ * ECHO result. Single writer: the sonar task (publish()). It keeps its last
+ * value while the sonar is stopped. Zero-initialized = not yet published. */
+static fault_mask_board_t fault_board;
+
 static ID mutex;
 static ID requests;
 static ID results;
@@ -142,6 +151,13 @@ static void publish(uint8_t status, ultrasonic_result_t echo, uint32_t now)
         once_reserved = false;
     }
     (void)tk_unl_mtx(mutex);
+    if (status == SONAR_ECHO) {
+        /* Existing condition only: NO_RETURN is not a fault; no new latch. */
+        (void)fault_mask_publish(&fault_board, FAULT_OWNER_SONAR,
+                                 ultrasonic_result_fault(echo)
+                                     ? FAULT_SONAR_SENSOR
+                                     : 0u);
+    }
     (void)tk_set_flg(results, 1u);
 }
 
@@ -482,4 +498,13 @@ int sonar_result_read(sonar_snapshot_t *out, bool *is_new)
     *is_new =
         tk_wai_flg(results, 1u, TWF_ORW | TWF_BITCLR, &bits, TMO_POL) >= E_OK;
     return (int)tk_unl_mtx(mutex);
+}
+
+/*
+ * Copy the sonar owner fault word (CR1 F). False, with out unchanged, before
+ * the first ECHO result or when a write is in progress.
+ */
+bool sonar_fault_mask_try_read(uint32_t *out)
+{
+    return fault_mask_try_read(&fault_board, FAULT_OWNER_SONAR, out);
 }

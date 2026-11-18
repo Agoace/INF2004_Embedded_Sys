@@ -40,6 +40,8 @@ not current acceptance reports. Local course originals are not public records.
   Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
 - [CR1_SONAR_A.md](architecture/CR1_SONAR_A.md) — approved sonar and obstacle board storage only.
   Contains: field ranges, sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B, baseline `7350da0`, static RAM 241228 to 241148 B, unchanged API/messages/wire, 679 host tests, torn-read tests, DERIVED(emulator) pack time, compiler-local frames; category B and private scan/detour packing remain deferred.
+- [CR1_SONAR_F.md](architecture/CR1_SONAR_F.md) — sonar owner fault word (bit 5) for the F fault mask.
+  Contains: single sonar-task writer, ECHO-only update from the existing fault streak, NO_RETURN not a fault, last value kept while stopped, tests, +8 B static RAM.
 - [CR1_VEHICLE_A1.md](architecture/CR1_VEHICLE_A1.md) — approved Vehicle observation storage only.
   Contains: field ranges, single-writer board (44 to 40 B), baseline `7350da0`, static RAM 241228 to 241224 B, unchanged API/messages/wire, 680 host tests, compiler-local frames and hardware limits; private controller packing remains deferred.
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
