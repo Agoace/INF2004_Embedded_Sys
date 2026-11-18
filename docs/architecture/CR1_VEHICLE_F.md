@@ -99,3 +99,31 @@ make -C build_make --output-sync=target -j12 \
 not separate costs. Other linked RAM groups and alignment are unchanged.
 Messages, MQTT bytes, stack allocations and task periods do not change.
 Unreserved link-time RAM is not measured runtime free RAM.
+
+## Integration check
+
+Merge `73fadc7` brings `mtk3-cr1` at `66810d1` into this branch with
+`--no-ff`. The sonar owner board is now also present. Keep this comparison
+separate from the isolated Vehicle cost above. Both comparison images
+again use clean archives, public example secrets and the same demo line.
+
+| Quantity | CR1 `66810d1` | Merged `73fadc7` | Vehicle change |
+| --- | ---: | ---: | ---: |
+| Static RAM, map parser | 240816 B | 240824 B | +8 B |
+| Vehicle linked inputs | 2504 B | 2512 B | +8 B |
+| Sonar linked inputs | 953 B | 953 B | 0 |
+| ELF text, `size` | 458364 B | 458524 B | +160 B |
+| ELF bss, `size` | 218424 B | 218432 B | +8 B |
+| RAM functions | 79 / 21212 B | 79 / 21212 B | 0 |
+| Warnings, case-insensitive scan | 0 | 0 | 0 |
+
+Both images pass RAM_PROOF 79/79. The merged strict GCC and Clang
+ASan/UBSan suites each pass **693/693**, with 0 build warnings. Leak
+checks and halt-on-UB are enabled for the sanitizer run. Documentation,
+template (eight deviations) and diff checks pass. The ARM message size
+manifest remains unchanged. These checks do not establish robot timing
+or stack acceptance.
+
+Local integration logs have the `merged-` prefix under
+`build/wip/f-takeover/`. The merged public-example UF2 SHA-256 is
+`d7f9c9dcab5735817dff21f1ed9e29b4126eaac6605ec43357285dcf15ba9a19`.
