@@ -129,6 +129,10 @@ commit that changed this section (header comments and file lists).
   and [`obstacle_pack.h`](../app_program/vehicle/obstacle_pack.h) define the
   layouts; [`test_sonar_pack.c`](../tests/test_sonar_pack.c) and
   [`test_obstacle_pack.c`](../tests/test_obstacle_pack.c) check them.
+- [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
+  evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
+  defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)
+  checks them.
 - [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
   reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;

@@ -120,11 +120,13 @@ Integration branch: `mtk3-cr1`. Each module has its own record:
 | --- | --- | --- | --- |
 | Sonar/obstacle | [CR1_SONAR_A.md](CR1_SONAR_A.md) | sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B | 241228 to 241148 B |
 | Vehicle | [CR1_VEHICLE_A1.md](CR1_VEHICLE_A1.md) | vehicle board 44 to 40 B | 241228 to 241224 B |
+| Barcode (private evidence) | [CR1_BARCODE_A.md](CR1_BARCODE_A.md) | fail-capture edges 1536 to 1392 B per slot, barcode frame 104 to 92 B; capacity and precision unchanged | 241228 to 240892 B |
 
-Both merged (`ea5fae6`): static RAM 241228 to 241144 B, subsystem5 1013
-to 945 B, vehicle 2516 to 2504 B, 682 host tests, 0 warnings, RAM_PROOF
-79/79 (21004 B). Queue and MQTT sizes do not change. Target timing and
-whole-stack checks are not run. The older baseline and motion evidence
+All three merged (`db13b39`): static RAM 241228 to 240808 B (-420 B),
+subsystem3 36501 to 36145 B, subsystem5 1013 to 945 B, vehicle 2516 to
+2504 B. RAM code 21004 to 21212 B (+208 B, barcode pack code in the LINE
+task). 684 host tests, 0 warnings, RAM_PROOF 79/79. Queue and MQTT sizes
+do not change. Target timing and whole-stack checks are not run. The older baseline and motion evidence
 below keep their original scope.
 
 ## Shared-access design rule
@@ -599,7 +601,7 @@ separately. A MQTT wire change requires a separate decision.
 | Sonar/obstacle | 241148 B alone; boards 40/640/28 B | Unchanged | Passed | Not run |
 | IMU | Pending | Pending | Not started | Not run |
 | Telemetry/faults | Pending | Pending | Not started | Not run |
-| Line/barcode | Pending | Pending | Not started | Not run |
+| Line/barcode | Barcode evidence: 240892 B alone; line path not changed | Unchanged | Passed (barcode) | Not run |
 | Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | Not run |
 
 Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
