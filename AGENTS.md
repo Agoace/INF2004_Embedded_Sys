@@ -32,6 +32,7 @@ bash scripts/install-hooks.sh
 
 ## Conventions
 
+- Branches: merge each module branch into `mtk3-staging` (integration). Put kernel tests (simulation, bench) on `mtk3-testing`. `main` is the submission branch. The demo kernel is frozen at tag `demo-kernel-v1`; see [DEMO_FREEZE.md](docs/release/DEMO_FREEZE.md).
 - Keep coursework in clearly named task directories when coursework is added.
 - Keep standard repository entry points at the repository root.
 - Use ASD-STE100 Simplified Technical English for repository instructions.
