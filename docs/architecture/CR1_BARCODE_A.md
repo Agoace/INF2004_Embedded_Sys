@@ -125,7 +125,8 @@ wait in LINE or combine state and hazard flags into a shared read/modify/write.
 MEASURED, Arm GNU 14.3.Rel1, Cortex-M0+, public example secrets. The sole
 before baseline is SW7's `7350da0`, at
 `~/Projects/cr1-sw7-sonar/build/wip/cr1/BASELINE_7350da0.md`.
-No second firmware baseline was built. The after build uses the same profile:
+No second firmware baseline was built. The after image is from implementation
+commit `9575191`; red tests are `4fdc7d2`. The after build uses the same profile:
 
 ```sh
 make -C build_make --output-sync=target -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 BARCODE_FAIL_CAPTURE=1 BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100 BARCODE_MAP="F=LEFT" JUNCTION_TEST_CMD=NONE
@@ -147,7 +148,10 @@ The 564 B data saving is category A only: edge arrays save 432 B, the three
 capture frames save 36 B, and the eight frame boards save 96 B. Do not count
 the capture frames a second time. RAM code grew: `barcode_live_source_sample`
 changes from 2400 B to 2608 B. Other module totals are unchanged. Alignment
-and other output bytes grow by 20 B. Thus the **net static saving is 336 B**,
+and other output bytes grow by 20 B: a new 16 B RAM-to-flash call stub
+(`__bcep_frame_pack.part.0_veneer`) plus 4 B of padding. The listed RAM
+functions grow by 208 B; including that stub, executable RAM grows by 224 B.
+Thus the **net static saving is 336 B**,
 not 564 B. Existing capacity is not claimed as a saving.
 
 The after build has zero warnings, including assembler output, and
@@ -155,6 +159,11 @@ The after build has zero warnings, including assembler output, and
 `bcep_frame_pack.part.0`, is reported from the RAM source function; it is not
 claimed to be in RAM. Do not interpret 79/79 as a proof that every callee is
 in RAM or that the LINE deadline is met.
+
+| After image | SHA256 |
+| --- | --- |
+| ELF | `4cf85057c55bea263349fc3d615337d891642c6e89127b70bae28b08dbeea1ae` |
+| UF2 | `4b8416d007b4eb04cc6d8c6205ce0c90653fbd2002e2eca72f4015ae6bca7eea` |
 
 Generated logs, maps and replay CSVs stay under `build/wip/cr1/`, out of Git.
 Use `scripts/ram_report.py <map> --module subsystem3 --top 999` for the split.
@@ -192,3 +201,17 @@ arithmetic, allocation or wait in the codec. These operation counts are
 DERIVED, not a processor timing measurement. The existing source CPU counters
 include the changed work. Check LINE timing and stack on the post-merge LIVE
 robot run, including flash access and USB/DUMP activity.
+
+DERIVED from the linked ARM instruction sequences (saved registers included):
+
+| Function's own stack frame | Before B | After B |
+| --- | ---: | ---: |
+| `barcode_live_source_sample` | 96 | 184 |
+| New `bcep_frame_pack.part.0` child | absent | 160 |
+| `bcfc_print` (DUMP, not LINE) | 160 | 272 |
+| `barcode_live_source_dump` (DUMP) | 96 | 184 |
+
+The source-to-pack call path therefore uses 344 B before `memcpy` or other
+callees. This is not a complete task-stack bound or a measured watermark.
+The LINE stack remains 2048 B. No increase in stack allocation is claimed
+as a data saving; check its margin during the pending robot run.
