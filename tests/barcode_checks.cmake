@@ -251,9 +251,10 @@ endforeach()
 
 # HOST ONLY end-to-end S3 producer -> vehicle jlive -> ja. Live variants use
 # a synthetic 1 mm clear bound; they are not firmware builds.
-foreach(variant IN ITEMS default custom builtin)
+foreach(variant IN ITEMS default custom builtin expire search)
     set(target test_barcode_live_e2e_${variant})
     host_test(${target} tests/test_barcode_live_e2e.c
+        app_program/barcode_live_vehicle/policy.c
         app_program/subsystem3/barcode_attempt.c
         app_program/subsystem3/barcode_live_source.c
         app_program/subsystem3/barcode_live_producer.c
@@ -268,7 +269,26 @@ foreach(variant IN ITEMS default custom builtin)
 endforeach()
 target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
     BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
+    E2E_POLICY=3
     BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     BW_MAP_POLICY_ID=2u)
+# V1/V3 live policy: J1 beyond 400 mm from the decode, or SEARCH first.
+foreach(variant IN ITEMS expire search)
+    target_compile_definitions(test_barcode_live_e2e_${variant} PRIVATE
+        BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
+        BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+        BW_MAP_POLICY_ID=2u)
+endforeach()
+target_compile_definitions(test_barcode_live_e2e_expire PRIVATE
+    J1_MM=850.0f E2E_POLICY=1)
+target_compile_definitions(test_barcode_live_e2e_search PRIVATE
+    E2E_POLICY=2)
+host_test(test_blv_policy tests/test_blv_policy.c
+    app_program/barcode_live_vehicle/policy.c
+    app_program/vehicle/junction_action.c
+    ${line_search_source} ${obstacle_source})
+target_link_libraries(test_blv_policy PRIVATE m)
+add_test(NAME test_barcode_live_vehicle_make
+    COMMAND ${Python3_EXECUTABLE} ${REPO}/tests/test_barcode_live_vehicle_make.py)
 target_compile_definitions(test_barcode_live_e2e_builtin PRIVATE
     BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_LETTER='A')

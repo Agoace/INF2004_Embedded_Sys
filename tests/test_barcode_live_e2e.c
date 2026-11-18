@@ -97,8 +97,18 @@ static uint16_t gp28(float mm)
 }
 
 /* Line pair: a centred line, with two 30 mm junctions (crossings). */
+#ifndef J1_MM
 #define J1_MM 600.0f
+#endif
 #define J2_MM 900.0f
+/* Live policy: 0 none, 1 EXPIRED, 2 SEARCH, 3 normal consumption. */
+#ifndef E2E_POLICY
+#define E2E_POLICY 0
+#endif
+#if E2E_POLICY
+#include "../app_program/barcode_live_vehicle/policy.h"
+#define E2E_SEARCH_MM 450.0f
+#endif
 static bool junction_at(float mm)
 {
     return (mm >= J1_MM && mm < J1_MM + 30.0f) ||
@@ -138,6 +148,13 @@ int main(void)
             vsm_inputs_t in = {.line = &lp, .counts = {c, c},
                                .ping_ms = &ping_ms};
             vsm_drive_t drive = {0};
+#if E2E_POLICY
+            /* watched_step order: route policy before the LINE step. */
+            const bool search = E2E_POLICY == 2 && mm >= E2E_SEARCH_MM &&
+                                mm < E2E_SEARCH_MM + 2.0f;
+            blv_pending_route(&action, search ? VSM_MOD_SEARCH :
+                              VSM_MOD_LINE, counts, drv_time_ms());
+#endif
             const uint32_t consumed_before = action.consumed;
             (void)ja_step(&action, &in, &sample, drv_time_ms(), &drive);
             if (action.consumed != consumed_before) {
@@ -181,6 +198,15 @@ int main(void)
            (unsigned int)action.phase);
     assert(records == 1u); /* One pass, one decode, one record. */
     assert(junction_source_acknowledged() == record_sequence);
+#if E2E_POLICY == 1 || E2E_POLICY == 2
+    /* Offered once, never consumed: no junction acts on a dropped command. */
+    assert(offers == 1u && accepted == 1u && claimed_ticks == 0u);
+    assert(action.phase == JA_UNUSED && !action.result.claimed);
+    assert(action.consumed == record_sequence);
+    assert(action.result.reason == (E2E_POLICY == 1 ? BLV_REASON_EXPIRED :
+                                    BLV_REASON_SEARCH));
+    return 0;
+#endif
     if (E2E_EXPECT_OFFER) {
         assert(offers == 1u && accepted == 1u);
         assert(offered_sequence == record_sequence);

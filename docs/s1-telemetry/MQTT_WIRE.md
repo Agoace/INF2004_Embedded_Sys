@@ -212,7 +212,13 @@ commands, and full command queues increment `command_lost` without a vehicle
 event. Valid ESTOP requests are accepted in every state; repeated requests
 can coalesce when the dedicated ESTOP queue is already full.
 For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
-(A/B/C/D); high byte is phase1..10. Detail is reason0..12. Two angle
+(A/B/C/D); high byte is phase1..10. Detail is reason0..14. In an opt-in
+barcode live build, phase UNUSED (9) can carry reason 13 EXPIRED
+(pending command travelled at least 400 mm mean wheel travel from decode
+`read_counts`) or 14 SEARCH (natural SEARCH before consumption). The
+command was never claimed and no turn was attempted. SCAN/DETOUR keep
+UNUSED/CANCELLED (1); fake commands and default builds are unchanged.
+Old captures keep their existing reason meanings. Two angle
 variants instead use detail=`0x80|command` (first line) or `0x40|command`
 (accepted line), with word signed16-bit centidegrees, LEFT positive.
 A/B emit both; D first is the skipped arm and accepted is the second;
