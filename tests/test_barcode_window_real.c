@@ -153,8 +153,9 @@ int main(void)
                 assert(state.result.reason == (fixture == 3u ? BW_WIDTH : BW_MOTION));
             }
             if (state.result.accepted) {
-                const float expected_n[] = {5.766f, 5.776f};
-                const float expected_w[] = {17.551f, 17.715f};
+                /* 73/73 mm GP28 geometry; 80/77 gave 5.766/5.776, 17.551/17.715. */
+                const float expected_n[] = {5.769f, 5.778f};
+                const float expected_w[] = {17.573f, 17.727f};
                 const uint32_t expected_us[] = {3686283u, 3526276u};
                 assert(state.result.narrow_mm > expected_n[fixture] - 0.02f &&
                        state.result.narrow_mm < expected_n[fixture] + 0.02f);

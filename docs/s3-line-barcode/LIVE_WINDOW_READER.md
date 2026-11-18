@@ -26,8 +26,8 @@ One task owns all reader calls. These methods are not a cross-task queue API:
 6. An accepted result remains immutable until explicit `rearm()` or `begin()`.
 
 Default source bounds: 12414 counts/m, 1500 us ADC gap for the 1 kHz feed,
-30000 us motor gap. GP28 is modelled at 80 mm forward and 77 mm left of the
-drive axle, with a 111 mm track. The axis uses the GP28 point's differential-
+30000 us motor gap. GP28 is modelled at 73 mm forward and 73 mm left of the
+drive axle (operator ruler, 2026-11-16; earlier 80/77 mm), with a 111 mm track. The axis uses the GP28 point's differential-
 drive position projected onto its direction at the first motor observation,
 instead of mean wheel travel. This compensates a forward zigzag when the
 barcode is perpendicular to that initial direction; it cannot infer an
@@ -40,7 +40,13 @@ timestamp checks are not a substitute for those counters.
 There are 64 ADC slots, eight motor points and 29 run widths. No full-pass
 sample capture, allocation or unbounded scan exists. Excess queue/history,
 invalid raw/flags, nonpositive ADC time, excessive gaps, reverse mean wheel
-progress or non-forward GP28-axis progress abandon the candidate. Exact repeated motor snapshots are
+progress, both wheels stationary, or a GP28-axis retreat of more than 2.5 mm
+below the furthest point abandon the candidate. A smaller cumulative retreat
+(a hard left steering correction) holds the stored position at the furthest
+point, and ADC rows in a held interval are skipped until progress resumes.
+The 2.5 mm bound is ASSUMED; see the
+[FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md#approved-changes-and-host-plan).
+Exact repeated motor snapshots are
 idempotent; changed counts at the same timestamp are not. Per-wheel modular
 counter differences handle wrap before the mean is calculated. Large counter
 jumps are rejected. Stationary samples cannot earn spatial white evidence.
@@ -67,9 +73,11 @@ through all 29 elements and short white confirmation. Mat black never sets
 the threshold scale. A short bounded transition from white to the first bar
 is allowed; it is not counted as credible leading white.
 
-Leading white must cover ten fitted narrow widths at the start star. The
-pre-search gate is only provisional; matching the first star cannot waive
-that final leading-white test. Mid-window adaptation is forbidden.
+Leading white must cover 40 mm both before admission and after fitting the
+start star. Any above-rise black that is not admitted clears the white
+qualification, even if the black run is short. Transition-band handling
+below rise stays bounded as before. Mid-window adaptation is forbidden.
+See the [FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md).
 
 ## The course window, not a trailing quiet-zone repair
 
@@ -99,7 +107,7 @@ scale; a second fixed absolute wide band does not constrain it:
 | Data/stop scale against start | Within 20% |
 | Corrected inter-character gaps | 0.65--1.5 start narrow |
 | Total corrected body extent | Within two narrows of `20n + 9w` |
-| Provisional leading white | 40 mm; final leading proof remains ten fitted narrows |
+| Leading white | 40 mm before and after fitting; unadmitted black clears qualification |
 | Pre-star white-to-ink transition allowance | 7 mm maximum candidate narrow (unchanged) |
 | Candidate time/body limits | 5 s / 360 mm (unchanged absolute watchdogs) |
 | Run limit before start-star fit | 35 mm absolute ceiling |

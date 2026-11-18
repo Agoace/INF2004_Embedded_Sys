@@ -1,15 +1,61 @@
+add_test(NAME test_barcode_fail_analyze COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_analyze.py")
+add_test(NAME test_barcode_fail_make COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_fail_make.py")
+host_test(test_barcode_fail_capture tests/test_barcode_fail_capture.c)
+target_include_directories(test_barcode_fail_capture BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_capture PRIVATE BARCODE_FAIL_CAPTURE=1)
+target_link_libraries(test_barcode_fail_capture PRIVATE m)
+host_test(test_barcode_fail_capture_one tests/test_barcode_fail_capture.c)
+target_include_directories(test_barcode_fail_capture_one BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_capture_one PRIVATE BARCODE_FAIL_CAPTURE=1 BCFC_FAILED_SLOTS=1)
+target_link_libraries(test_barcode_fail_capture_one PRIVATE m)
+host_test(test_barcode_fail_feed tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_attempt.c
+    app_program/subsystem3/barcode_live_source.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_include_directories(test_barcode_fail_feed BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_barcode_fail_feed PRIVATE
+    BC_LIVE_COUNTS_HOST_TEST=1 TM_MQTT=1 BARCODE_FAIL_CAPTURE=1)
+target_link_libraries(test_barcode_fail_feed PRIVATE m)
+foreach(scenario start_fail counts_cancel counts_epoch race)
+    add_test(NAME test_barcode_fail_feed_${scenario} COMMAND test_barcode_fail_feed ${scenario})
+endforeach()
+host_test(test_barcode_wire tests/test_barcode_wire.c app_program/subsystem1/mqtt_wire.c)
+host_test(test_barcode_attempt tests/test_barcode_attempt.c app_program/subsystem3/barcode_attempt.c)
+target_compile_definitions(test_barcode_attempt PRIVATE TM_MQTT=1)
+add_test(NAME test_barcode_v2_python COMMAND ${Python3_EXECUTABLE} "${REPO}/tests/test_barcode_v2.py")
+
 host_test(test_barcode_live_feed tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_attempt.c
     app_program/subsystem3/barcode_live_source.c
     app_program/subsystem3/barcode_live_producer.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_include_directories(test_barcode_live_feed BEFORE PRIVATE
     "${REPO}/tests/mtk_stubs")
 target_link_libraries(test_barcode_live_feed PRIVATE m)
-target_compile_definitions(test_barcode_live_feed PRIVATE BC_LIVE_COUNTS_HOST_TEST=1)
+target_compile_definitions(test_barcode_live_feed PRIVATE BC_LIVE_COUNTS_HOST_TEST=1 TM_MQTT=1)
 add_test(NAME test_barcode_live_feed_race COMMAND test_barcode_live_feed race)
 add_test(NAME test_barcode_live_feed_counts_epoch COMMAND test_barcode_live_feed counts_epoch)
 add_test(NAME test_barcode_live_feed_counts_cancel COMMAND test_barcode_live_feed counts_cancel)
 add_test(NAME test_barcode_live_feed_none COMMAND test_barcode_live_feed none)
+# HOST ONLY live feed: custom A=LEFT map id2, mode2, synthetic clear bound.
+host_test(test_barcode_live_feed_live tests/test_barcode_live_feed.c
+    app_program/subsystem3/barcode_attempt.c
+    app_program/subsystem3/barcode_live_source.c
+    app_program/subsystem3/barcode_live_producer.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_include_directories(test_barcode_live_feed_live BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_link_libraries(test_barcode_live_feed_live PRIVATE m)
+target_compile_definitions(test_barcode_live_feed_live PRIVATE
+    BC_LIVE_COUNTS_HOST_TEST=1 TM_MQTT=1 BARCODE_LIVE_ENABLE=1
+    BARCODE_MEASURED_CLEAR_MM=1
+    BW_MAP_VALUES=1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    BW_MAP_POLICY_ID=2u)
+foreach(case IN ITEMS normal race counts_epoch counts_cancel none)
+    add_test(NAME test_barcode_live_feed_live_${case}
+        COMMAND test_barcode_live_feed_live ${case})
+endforeach()
 
 host_test(test_barcode_live_producer tests/test_barcode_live_producer.c
     app_program/subsystem3/barcode_live_producer.c
@@ -19,9 +65,46 @@ foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
         revision cut_change cut_equal disabled loss missed generation
         motor_fault motor_old raw_clip clock read_fail ack no_ack busy_ack
         us_wrap ms_wrap count_wrap old_epoch_ack old_epoch_no_ack sequence_wrap
-        nonletter)
+        nonletter mode2_ack)
     add_test(NAME test_barcode_producer_${case}
         COMMAND test_barcode_live_producer ${case})
+endforeach()
+
+# HOST ONLY live-gate variants (synthetic clear bound; never a firmware build).
+# custom: A=LEFT,B=RIGHT id2 -> mode2 acts. builtin: id1 never acts.
+# none: A=NONE,B=RIGHT id2 -> unmapped A stays SHADOW, B acts.
+foreach(variant IN ITEMS custom builtin none)
+    set(target test_barcode_live_producer_live_${variant})
+    host_test(${target} tests/test_barcode_live_producer.c
+        app_program/subsystem3/barcode_live_producer.c
+        app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+    target_link_libraries(${target} PRIVATE m)
+    target_compile_definitions(${target} PRIVATE BARCODE_LIVE_ENABLE=1
+        BARCODE_MEASURED_CLEAR_MM=1)
+    foreach(case IN ITEMS normal mode2 mode2_ack ack revision cut_change epoch
+            disabled nonletter)
+        add_test(NAME test_barcode_producer_live_${variant}_${case}
+            COMMAND ${target} ${case})
+    endforeach()
+endforeach()
+target_compile_definitions(test_barcode_live_producer_live_custom PRIVATE
+    BW_MAP_VALUES=1,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    BW_MAP_POLICY_ID=2u)
+target_compile_definitions(test_barcode_live_producer_live_none PRIVATE
+    BW_MAP_VALUES=0,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    BW_MAP_POLICY_ID=2u)
+
+host_test(test_barcode_quiet_real tests/test_barcode_quiet_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_quiet_real PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_quiet_real PRIVATE m)
+
+host_test(test_barcode_motion_twitch tests/test_barcode_motion_twitch.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_motion_twitch PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_motion_twitch PRIVATE m)
+foreach(case IN ITEMS geometry straight twitch_star twitch_edge kr retreat reverse stall)
+    add_test(NAME test_barcode_motion_${case} COMMAND test_barcode_motion_twitch ${case})
 endforeach()
 
 host_test(test_barcode_window_real tests/test_barcode_window_real.c
@@ -118,6 +201,7 @@ host_test(test_barcode_peak tests/test_barcode_peak.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak PRIVATE m)
 host_test(test_barcode_peak_real tests/test_barcode_peak_real.c
+    app_program/subsystem3/barcode_window.c
     app_program/subsystem3/barcode.c app_program/subsystem3/barcode_peak.c)
 target_link_libraries(test_barcode_peak_real PRIVATE m)
 target_compile_definitions(test_barcode_peak_real PRIVATE
@@ -148,6 +232,7 @@ target_compile_definitions(test_barcode_line_copy PRIVATE
 if(TARGET test_line_service)
     target_sources(test_line_service PRIVATE
         "${REPO}/app_program/subsystem3/barcode_calibration.c"
+        "${REPO}/app_program/subsystem3/barcode_attempt.c"
         "${REPO}/app_program/subsystem3/barcode_live_source.c"
         "${REPO}/app_program/subsystem3/barcode_live_producer.c"
         "${REPO}/app_program/subsystem3/barcode_window.c"
@@ -162,3 +247,27 @@ foreach(case IN ITEMS white_only air dark spike white_short black_short bounds
     add_test(NAME test_barcode_calibration_${case}
         COMMAND test_barcode_calibration ${case})
 endforeach()
+
+# HOST ONLY end-to-end S3 producer -> vehicle jlive -> ja. Live variants use
+# a synthetic 1 mm clear bound; they are not firmware builds.
+foreach(variant IN ITEMS default custom builtin)
+    set(target test_barcode_live_e2e_${variant})
+    host_test(${target} tests/test_barcode_live_e2e.c
+        app_program/subsystem3/barcode_attempt.c
+        app_program/subsystem3/barcode_live_source.c
+        app_program/subsystem3/barcode_live_producer.c
+        app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c
+        app_program/vehicle/junction_source.c app_program/vehicle/junction_live.c
+        app_program/vehicle/junction_action.c
+        ${line_search_source} ${obstacle_source})
+    target_include_directories(${target} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_link_libraries(${target} PRIVATE m)
+    target_compile_definitions(${target} PRIVATE BC_LIVE_COUNTS_HOST_TEST=1
+        TM_MQTT=1)
+endforeach()
+target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
+    BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
+    BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    BW_MAP_POLICY_ID=2u)
+target_compile_definitions(test_barcode_live_e2e_builtin PRIVATE
+    BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_LETTER='A')

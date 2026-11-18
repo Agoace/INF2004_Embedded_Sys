@@ -1,6 +1,9 @@
 /* Course-only window policy; frozen TEST framing is deliberately unchanged. */
 #include "barcode_window.h"
 #include "barcode.h"
+#if BARCODE_FAIL_CAPTURE
+#include "barcode_fail_capture.h"
+#endif
 #include <math.h>
 #include <string.h>
 
@@ -14,6 +17,9 @@
 /* ASSUMED scope, not an optical resolution measurement. Fit the scale from
  * the start star; smaller print needs measured along-travel GP28 evidence. */
 #define N_MIN 4.0f
+#define QUIET_MIN_MM 40.0f
+/* ASSUMED bound: nominal L0/R292 for 30 ms retreats GP28 about 1.6..1.9 mm. */
+#define RETREAT_MAX_MM 2.5f
 #define N_MAX 7.0f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
@@ -31,8 +37,8 @@ const barcode_window_config_t barcode_window_default_config = {
     .sample_gap_us = 1500u,
     .motor_gap_us = 30000u,
     /* GP28: measured from the drive axle; verify on the robot. */
-    .sensor_forward_mm = 80,
-    .sensor_lateral_mm = 77,
+    .sensor_forward_mm = 73, /* MEASURED operator ruler 2026-11-16 */
+    .sensor_lateral_mm = 73,
     .track_mm = 111u,
 };
 _Static_assert(sizeof(barcode_window_t) <= 2048u, "Window RAM budget");
@@ -71,6 +77,9 @@ static uint32_t next_serial(barcode_window_t *state)
 /* Failure abandons the whole candidate. Never repair or slide its runs. */
 static void reject(barcode_window_t *state, barcode_window_reason_t reason)
 {
+#if BARCODE_FAIL_CAPTURE
+    bcfc_reject(state, (uint32_t)reason);
+#endif
     state->result = (barcode_window_result_t){
         .serial = next_serial(state), .reason = (uint32_t)reason};
     state->phase = SEEK;
@@ -164,10 +173,19 @@ void barcode_window_adc(barcode_window_t *state, uint32_t us, uint16_t raw,
     state->previous_adc_us = us;
     state->have_adc = true;
     if (bad_time || raw == 0u || raw >= 4095u || flags != 0u) {
+#if BARCODE_FAIL_CAPTURE
+        bcfc_bad_adc((barcode_window_adc_t){us, raw, flags},
+                     (uint16_t)((bad_time ? 1u : 0u) |
+                     ((raw == 0u || raw >= 4095u) ? 2u : 0u) |
+                     (flags != 0u ? 4u : 0u)));
+#endif
         loss(state, BW_LOSS);
         return;
     }
     if (state->queued == BW_ADC_CAPACITY) {
+#if BARCODE_FAIL_CAPTURE
+        bcfc_bad_adc((barcode_window_adc_t){us, raw, flags}, 8u);
+#endif
         loss(state, BW_LOSS);
         return;
     }
@@ -249,14 +267,19 @@ void barcode_window_motor(barcode_window_t *state, uint32_t us,
         const int32_t dr = count_delta(right, last->right);
         if (dt == 0u || dt > state->config.motor_gap_us ||
             dl < -1024 || dl > 1024 || dr < -1024 || dr > 1024 ||
-            dl + dr < 0) {
+            dl + dr < 0 || (dl == 0 && dr == 0)) {
             loss(state, BW_MOTION);
             state->motor_count = 0u;
         } else {
+            /* Stored positions never decrease: last->mm is the furthest
+             * point. A small cumulative retreat (steering twitch) holds the
+             * position; step() skips ADC rows until progress resumes. */
             mm = sensor_pose_step(state, dl, dr);
-            if (!isfinite(mm) || mm <= last->mm) {
+            if (!isfinite(mm) || mm < last->mm - RETREAT_MAX_MM) {
                 loss(state, BW_MOTION);
                 state->motor_count = 0u;
+            } else if (mm < last->mm) {
+                mm = last->mm;
             }
         }
     }
@@ -350,7 +373,7 @@ static bool start_star(barcode_window_t *state)
     for (unsigned int reverse = 0u; reverse < 2u; ++reverse) {
         if (model(state->runs, reverse != 0u, &first) &&
             first.symbol == '*') {
-            if (state->leading_mm < 10.0f * first.narrow) {
+            if (state->leading_mm < QUIET_MIN_MM) {
                 return false;
             }
             state->direction = (uint8_t)(reverse + 1u);
@@ -469,7 +492,7 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
         const float rise = fminf(state->white_mean + 150.0f, 350.0f);
         const float fall = fminf(state->white_mean + 75.0f, rise - 75.0f);
         if (state->white_started && state->white_count >= 16u &&
-            state->white_end - state->white_start >= 10.0f * N_MIN &&
+            state->white_end - state->white_start >= QUIET_MIN_MM &&
             (float)sample.raw >= rise) {
             state->leading_mm = state->white_end - state->white_start;
             state->rise = (uint16_t)lroundf(rise);
@@ -480,6 +503,14 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
             state->elements = 0u;
             state->black = true;
             state->phase = WINDOW;
+#if BARCODE_FAIL_CAPTURE
+            bcfc_start(state, sample, mm, upper);
+#endif
+        } else if ((float)sample.raw >= rise) {
+            /* Unadmitted ink ends white, even when its run is short. */
+            state->white_started = false;
+            state->white_count = 0u;
+            state->transitioning = false;
         } else if (state->white_started) {
             if (!state->transitioning) {
                 state->transition_start = mm;
@@ -566,6 +597,12 @@ unsigned int barcode_window_step(barcode_window_t *state, unsigned int budget)
         state->head = (uint8_t)((state->head + 1u) % BW_ADC_CAPACITY);
         --state->queued;
         ++processed;
+#if BARCODE_FAIL_CAPTURE
+        bcfc_observe(state, sample, mm, b);
+#endif
+        if (b->mm == a->mm) {
+            continue; /* Held retreat: this position was already read. */
+        }
         process(state, sample, mm, b);
     }
     return processed;

@@ -679,7 +679,7 @@ class NewTopicTests(unittest.TestCase):
 
     def test_reserved_topics_ignore_unknown_versions_and_kinds(self):
         for topic in ("robot/barcode", "robot/imu"):
-            for frame in (bytes([2, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
+            for frame in (bytes([3, 1, 5]), bytes([1, 9, 7, 7, 7]), bytes([0, 1])):
                 result = wire.decode(topic, frame)
                 self.assertEqual((result["known"], result["length"]), (0, len(frame)))
                 self.assertEqual((result["version"], result["kind"]), (frame[0], frame[1]))
@@ -1003,6 +1003,48 @@ def boot_batch(boot, generation=2, first=0, count=2, publish=1000, **kwargs):
     return b"\x02" + old[1:32] + struct.pack("<I", boot) + old[32:]
 
 
+class ObstacleV3Tests(unittest.TestCase):
+    def test_geometry_and_legacy(self):
+        old = with_boot(obstacle_frame(), 0x12345678, 2)
+        frame = bytes([3]) + old[1:] + struct.pack("<HHHBB", 70, 18, 19, 7, 0)
+        decoded = wire.decode("robot/obstacle", frame)
+        self.assertEqual(decoded["boot_id"], 0x12345678)
+        self.assertEqual((decoded["width_mm"], decoded["left_clear_mm"],
+                          decoded["right_clear_mm"]), (70, 18, 19))
+        self.assertTrue(decoded["width_valid"])
+        self.assertFalse(decoded["width_lower_bound"])
+        self.assertEqual(wire.decode("robot/obstacle", old)["version"], 2)
+        none = bytes([3]) + old[1:] + struct.pack("<HHHBB", 65535, 65535,
+                                                65535, 0, 0)
+        self.assertIsNone(wire.decode("robot/obstacle", none)["width_mm"])
+        clipped = bytes([3]) + old[1:] + struct.pack("<HHHBB", 100, 65535,
+                                                   65535, 0x19, 0)
+        self.assertTrue(wire.decode("robot/obstacle", clipped)["width_lower_bound"])
+        for offset, value in ((30, 0x80), (31, 1), (24, 255), (25, 255)):
+            bad = bytearray(frame)
+            bad[offset] = value
+            if offset == 24:
+                bad[25] = 255
+            if offset == 25:
+                bad[24] = 255
+            with self.assertRaises(ValueError):
+                wire.decode("robot/obstacle", bad)
+
+
+class ImuSafetyWireTests(unittest.TestCase):
+    def test_stop_reasons_are_versioned(self):
+        for version, size in ((1, 44), (2, 48), (3, 52)):
+            for reason in (14, 15, 16, 17):
+                frame = bytearray(size)
+                frame[0], frame[2], frame[3] = version, 3, reason
+                if version == 3 and reason <= 16:
+                    self.assertEqual(wire.decode("robot/summary", frame)
+                                     ["stop_reason"], reason)
+                else:
+                    with self.assertRaises(ValueError):
+                        wire.decode("robot/summary", frame)
+
+
 class RebootWireTests(unittest.TestCase):
     def test_all_extended_observation_layouts_and_legacy_versions(self):
         legacy = {"state": state_v3_frame(bytes(48)), "sonar": bytes([1]) + bytes(31),
@@ -1190,7 +1232,7 @@ class RebootLogTests(unittest.TestCase):
                               begin["rows_total"]), (boot, 7, 2, 1))
             expected = {"state": 76, "heartbeat": 108, "status": 6,
                         "status_offline": 6, "summary": 52, "detour": 36,
-                        "event": 20, "sonar": 36, "obstacle": 24}
+                        "event": 20, "sonar": 36, "obstacle": 32}
             for name, size in expected.items():
                 topic = "robot/status" if name.startswith("status") else "robot/" + name
                 frame = outputs[f"dash/{name}_boot_{suffix}"]

@@ -51,7 +51,7 @@ not current acceptance reports. Local course originals are not public records.
 - [TELEMETRY.md](s1-telemetry/TELEMETRY.md) — the Wi-Fi/MQTT owner and how to run the laptop side.
   Contains: execution and hook, boards and queues, events and commands, publication settings (RUN/IDLE), RAM log and DUMP refill, results and limits; operation: broker, private settings, recorder and page, data panels (fan, hump, run path), Tailscale remote view, troubleshooting, tests.
 - [MQTT_WIRE.md](s1-telemetry/MQTT_WIRE.md) — the binary wire contract, byte by byte.
-  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 24, detour 36, summary 52, status 6; reserved barcode 20, IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
+  Contains: topic sizes (state 76, sonar 36, event 20, heartbeat 108, log 36 + 16 × n, cmd 22, obstacle 32, detour 36, summary 52, status 6; barcode v2 28 (legacy v1 20), reserved IMU 12); boot identity and sessions; field offsets per topic; publication modes; last will; command token; RAM log; client and host checks.
 
 ## S2 — Motion
 
@@ -76,10 +76,17 @@ not current acceptance reports. Local course originals are not public records.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
 - [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
   Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
+- [SCHOOL_FAILED_START_ANALYSIS.md](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md) — FC1/FC2 capture integrity, quiet and motion diagnosis, source-timing limits, and approved changes.
+- [FAILED_ATTEMPT_CAPTURE.md](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) — opt-in ROBOT raw failure evidence.
+  Contains: first two failed attempts per run, real threshold-crossing edges and 4 ms ADC prefix, bounded storage/ownership, stopped dump tags, combined staging RAM/headroom and KD30/same-tick compatibility, default-off 76 UF2/ELF-load gate.
+- [BARCODE_ATTEMPT_TELEMETRY.md](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) — immutable terminal attempts and early diagnostics.
+  Contains: v2/kind1 28-byte MQTT contract, 8-slot FIFO/drop and QoS1 retry behavior, known/unknown widths, epoch reason histogram before KR, terminal timestamps, software gates and hardware limits.
 - [BARCODE_RUN_SUMMARY.md](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — barcode ok/failed in the MQTT run summary.
   Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
 - [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
   Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
+- [BARCODE_LIVE_COMMAND.md](s3-line-barcode/BARCODE_LIVE_COMMAND.md) — opt-in live command path from the barcode producer.
+  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, OPERATOR course answers, SW9 vehicle items V1–V6, clearance (D_cross) measurement procedure.
 - [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
   Contains: status (merged `b405aef`; table A=LEFT, B=RIGHT, C=STRAIGHT, D=UTURN), results (system PASS, large A not decoded), findings, proposal on hold, evidence.
 
@@ -88,15 +95,24 @@ not current acceptance reports. Local course originals are not public records.
 - [IMU.md](s4-imu/IMU.md) — the IMU hump detector (report only) and its full step history.
   Contains: step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
 
+- [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
+  Contains: source attribution, pure detector contract, finite/age guards, trigger-count semantics, applied-request acknowledgement and integration steps; E: UP resource table per build profile (demo, capture, bench), ARM stack frames, spare Pico W BENCH1 (absent IMU), kernel services checked vs d3890d0, old-kernel numbers marked not valid; device acceptance not claimed.
+- [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — TEST-only synthetic IMU safety bench runbook.
+  Contains: make guards and build lines, replay seams, 40 s phase table (OVERTURN, LIFT), spare Pico W procedure, USB lines to watch, pass conditions, limits (wall time, no I2C cost).
+
 ## S5 — Obstacle
 
 - [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — obstacle monitor, scan, avoidance and the ultrasonic service.
-  Contains: forward monitor thresholds; 13-point coarse scan (no fine scan); mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
+  Contains: forward monitor thresholds; coarse/fine scan with 13-bin decision completion, estimated width and observed edge-plane spans; mounted servo limits; profile and PROFILE event; avoidance with reverse and reattempt; line recovery; interface; results (R3/R4, M2 reattempt 5/5 free side at 329–435 mm); wide-cone limit; HC-SR04+ pins and timing (rise 2 ms, echo 3 ms, gap 60 ms), packed 16-bit result (60–511 mm), sonar results (front offset 57.9 mm, kernel S5-U01) and limits.
+
+- [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — scan software proof and scoped robot floor result.
+  Contains: 551 GCC and sanitizer checks, 2560 ms host timing vs2230 ms baseline, v3 geometry/legacy decoding, stopped USB scan evidence, +620 B static RAM, and d44bd25 floor result (2026-11-17): 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, task stack high water; separate stationary placements skipped.
 
 ## Simulation
 
 - [SIMULATION.md](simulation/SIMULATION.md) — the host simulator: what it models and what it proves.
   Contains: layers, interface and operation, model assumptions, echo-fit summary (narrow box 160 × 250 mm, beam 5°, incidence 16°), box-sweep results (back-off 25°, gaps 22/54/91/91 mm), limits (bare-metal v1.8 sources, not kernel timing or physical proof).
+- [COURSE_FIGURE8_20261117.md](simulation/COURSE_FIGURE8_20261117.md) — the final demo line track (figure-8) as a Webots course; tile map from photos, placement parameters for obstacle, ramp and barcode.
 
 ## Archive
 

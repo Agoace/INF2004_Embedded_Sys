@@ -16,8 +16,8 @@
 #define RM_STATE_V2_SIZE     60u
 #define RM_SONAR_SIZE        36u
 #define RM_SONAR_VERSION     2u
-#define RM_OBSTACLE_SIZE     24u
-#define RM_OBSTACLE_VERSION  2u
+#define RM_OBSTACLE_SIZE     32u
+#define RM_OBSTACLE_VERSION  3u
 #define RM_STATUS_SIZE       6u
 #define RM_STATUS_VERSION    2u
 #define RM_EVENT_SIZE        20u
@@ -34,6 +34,20 @@
 #define RM_SUMMARY_VERSION   3u
 /* Value of an unavailable 16-bit measurement in robot/summary. */
 #define RM_SUMMARY_NONE_U16 65535u
+#define RM_BARCODE_SIZE     28u
+#define RM_BARCODE_VERSION  2u
+#define RM_BARCODE_DECODED  1u
+#define RM_BARCODE_FAILED   2u
+#define RM_BARCODE_SHADOW   4u
+#define RM_BARCODE_WIDTHS   8u
+/* Values, not a packed wire struct. Widths are hundredths of a millimetre;
+ * 65535 means unavailable. No action/execution permission is represented. */
+typedef struct {
+    uint32_t sequence, epoch, start_ms, uptime_ms;
+    uint16_t reason, narrow_cmm, wide_cmm;
+    uint8_t flags, letter, direction, command;
+} rm_barcode_t;
+bool rm_pack_barcode(uint8_t out[RM_BARCODE_SIZE], const rm_barcode_t *value);
 #define RM_COMMAND_SIZE     22u
 #define RM_LOG_SIZE         36u
 #define RM_LOG_VERSION      2u
@@ -104,6 +118,15 @@ enum {
     RM_OBSTACLE_ATTEMPT_MAX = 2
 };
 
+enum {
+    RM_OBSTACLE_WIDTH_VALID = 0x01,
+    RM_OBSTACLE_LEFT_CLEAR_VALID = 0x02,
+    RM_OBSTACLE_RIGHT_CLEAR_VALID = 0x04,
+    RM_OBSTACLE_LEFT_CLIPPED = 0x08,
+    RM_OBSTACLE_RIGHT_CLIPPED = 0x10
+};
+#define RM_OBSTACLE_GEOMETRY_NONE UINT16_MAX
+
 /* One completed obstacle scan. Decision is obstacle_side_t: 0 none, 1 right,
  * 2 left. Angles: negative right, positive left. */
 typedef struct {
@@ -119,6 +142,10 @@ typedef struct {
     uint8_t right_clear_deg;
     uint8_t left_clear_deg;
     uint32_t boot_id;
+    uint16_t width_mm;
+    uint16_t left_clear_mm;
+    uint16_t right_clear_mm;
+    uint8_t geometry_flags;
 } rm_obstacle_t;
 
 /* robot/detour outcome (byte 1): the shell outcome numbers, plus ABORTED. */
@@ -174,7 +201,11 @@ enum {
     RM_STOP_SONAR = 10,
     RM_STOP_TELEMETRY = 11,
     RM_STOP_OTHER = 12,
-    RM_STOP_SCAN_REVERSE_TIMEOUT = 13
+    RM_STOP_SCAN_REVERSE_TIMEOUT = 13,
+    /* Port of smojjofy 8ac6e38/d1a036e; summary v3 only. */
+    RM_STOP_IMU_LIFT = 14,
+    RM_STOP_IMU_OVERTURN = 15,
+    RM_STOP_IMU_UNAVAILABLE = 16
 };
 
 /* robot/summary flags (byte 1). */

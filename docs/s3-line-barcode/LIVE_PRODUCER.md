@@ -13,8 +13,10 @@ USB/DUMP formatter. `line_service.c` copies the calibration report and missed/
 dropped counters under its existing mutex. ALL decoder, control/motor reads
 and diagnostic publication occur AFTER unlocking. No sample-path printing.
 
-Every record is SHADOW with valid=0, including mapped A--D and mode2 input.
-OFFSET_VERIFIED is never set. The 150 mm placeholder cannot enable an action.
+In default builds, every record is SHADOW with valid=0, including mapped A--D
+and mode2 input, and OFFSET_VERIFIED is never set. The 150 mm placeholder
+cannot enable an action. Only the live opt-in build can set valid=1; see
+[BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md) for its gates.
 The public ABI stays [40 B record / 20 B control](LIVE_SOURCE_CONTRACT.md).
 Sub_Worker5 owns the single stopped USB/DUMP hook next to `[JUNCTION]`, and
 vehicle admission, terminal ACKs and boot printing of the SAME mapping table.
@@ -97,12 +99,18 @@ is skipped, not printed as a valid copy. No DTR-retained TEST dump is changed.
 
 | Tag | Evidence |
 | --- | --- |
+| BC_REASON_COUNTS | Last nonzero run epoch, attempts/ok/failed, lifetime FIFO drops, BW0..10 and BP100..107 bins; first line before KR |
 | BC_LIVE | SHADOW, current epoch, sample count, total frame/attempt counts |
 | BC_CPU | Total source us / samples, max source slice, max eligible control age and source publication age |
 | BC_CPU_ELIGIBLE | Source us / samples and max while control mode1/2; STOP samples do not dilute this view |
 | BC_FRAME | Original epoch/serial/letter/command, reason, offered flag, control/publication ages, white means/difference, frozen thresholds |
-| BC_REF | Original first/final ADC edges, final-edge motor upper bracket, eligible ADC time, original read time/counts |
+| BC_REF | Original first/final ADC edges, final-edge motor upper bracket, eligible ADC time, original read time/counts; appended terminal_us after final source recheck |
 | BC_EDGES / BC_EDGE | Total/retained/lost raw GP28 edges AFTER window, ADC time, original upper motor time/counts, polarity/raw |
+
+The bounded barcode dump precedes the large KR dump. The current
+[terminal-attempt telemetry record](BARCODE_ATTEMPT_TELEMETRY.md) specifies
+v2 MQTT FIFO ownership, reason-count epoch retention, terminal time and new
+resource measurements. Older resource tables below remain historical evidence.
 
 Keep the latest8 frame/attempt rows and24 edge rows across runs, keyed by
 original epoch/serial. Counts are lifetime; age maxima reset at epoch change.
@@ -113,6 +121,11 @@ the next snapshot. Slice us is wall time, so preemption can only increase this
 cost estimate. Offered rows include pre-publication age; a final-rejected row
 retains its preparation-age evidence and offered0, not a claim of delivery. Existing LINE cpu_us remains its mutex path; add source
 cost, or use heartbeat cpu_load for the total. All CPU figures await hardware.
+
+For raw FAILED-attempt evidence, use the separate opt-in
+[ROBOT failed capture](FAILED_ATTEMPT_CAPTURE.md). It preserves the first two
+failures of the run and adds `BC_FAIL_*` rows after `BC_REF`; it does not
+reinterpret or replace the existing post-window `BC_EDGES` list.
 
 Post-window edge evidence is UNCLASSIFIED; later barcode ink is not a proven
 junction. ADC loss/clipping, unreadable control/motor or motor faults stop that

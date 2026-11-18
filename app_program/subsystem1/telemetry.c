@@ -62,6 +62,8 @@ static void dump_barcode_source(void)
 }
 
 static ja_result_t last_junction;
+static telemetry_scan_t scan_rows[TELEMETRY_SCAN_ROWS];
+static uint32_t scan_count, scan_omitted;
 static jlive_report_t last_source;
 static jlive_counts_t last_source_counts;
 static uint32_t loss_base;
@@ -343,6 +345,19 @@ static void dump(void)
     if (vehicle_hump_diag_try_read(&diag) == E_OK) {
         imu_hump_diag_print(&diag);
     }
+    for (uint32_t i = 0u; i < scan_count; ++i) {
+        const telemetry_scan_t *s = &scan_rows[i];
+        tm_printf((UB *)"[S5_SCAN] id %lu attempt %u coarse_hits %u "
+                        "fine_mask %04x duration_ms %lu\n",
+                  (unsigned long)s->scan_id, (unsigned int)s->attempt,
+                  (unsigned int)s->coarse_hits, (unsigned int)s->fine_mask,
+                  (unsigned long)s->duration_ms);
+        if ((i + 1u) % 8u == 0u) { dump_pause(); }
+    }
+    if (scan_omitted != 0u) {
+        tm_printf((UB *)"[S5_SCAN] omitted %lu\n",
+                  (unsigned long)scan_omitted);
+    }
     app_task_report();
     dump_pause(); /* let the report lines drain first */
     rt_timeline_report(dump_pause);
@@ -399,6 +414,7 @@ static void telemetry_task(INT code, void *ctx)
             last_source_counts = (jlive_counts_t){0};
             stats.rows = 0u;
             stats.events = 0u;
+            scan_count = scan_omitted = 0u;
             (void)atomic_xchg(&admit_full, 0u);
             loss_base = m.loss_base;
 #if TM_MQTT
@@ -473,6 +489,13 @@ static void telemetry_task(INT code, void *ctx)
             last_source_counts = m.data.junction_counts;
             jlive_print_counts(&last_source_counts);
             break;
+        case TELEMETRY_SCAN:
+            if (scan_count < TELEMETRY_SCAN_ROWS) {
+                scan_rows[scan_count++] = m.data.scan;
+            } else {
+                ++scan_omitted;
+            }
+            break;
         case TELEMETRY_BARCODE_DUMP:
             dump_barcode_source();
             break;
@@ -481,11 +504,13 @@ static void telemetry_task(INT code, void *ctx)
             info.reason[sizeof(info.reason) - 1u] = '\0';
             motion_diag_dump(1);
             motion_diag_print();
+            /* Bounded barcode diagnostics precede thousands of KR rows so
+             * a shortened USB capture still contains terminal outcomes. */
+            dump_barcode_source();
             dump();
             ja_print(&last_junction);
             jlive_print(&last_source);
             jlive_print_counts(&last_source_counts);
-            dump_barcode_source();
             motion_diag_dump(0);
             break;
         default:

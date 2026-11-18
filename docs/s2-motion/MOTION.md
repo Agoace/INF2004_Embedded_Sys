@@ -390,6 +390,61 @@ synchronization. SDK headers are `-isystem`; application strict warnings
 remain errors. Link-only proof and command:
 [BUILD.md](../kernel/BUILD.md#host-tests-and-link-proof).
 
+## Same-tick retarget (default on)
+
+Build switch `MOTION_SAME_TICK`, default 1 for robot images since
+2026-11-17 (demo default). `MOTION_SAME_TICK=0` gives the old timing;
+image suffix `_sametick0`, profile `-sametick0`. Before 2026-11-17 the
+default was 0 and 1 added `_sametick`.
+
+| Item | `MOTION_SAME_TICK=0` | Default (1) |
+| --- | --- | --- |
+| New target reaches the motor | next tick, about 8 ms after the vehicle step | in the same period, at `motion_set_speed()` |
+| Loop delay, line read to motor (10 ms period) | about 10 ms | about 2 ms |
+| Control steps per period | 1 | 1 (the retarget redoes the step, it does not add one) |
+
+How it works:
+
+1. The motion task saves the wheel state, then runs `mc_tick()`. If no
+   fault is latched and STALE is not set, the window opens.
+2. The vehicle task calls `motion_set_speed()`. Under `mtx_motion` it sets
+   the target, then `mc_retarget()` restores the saved state, keeps the
+   tick's measured speed and the new target, and runs the control step
+   again. The result is written to the motor at once.
+3. The result equals a tick run with the new target: one rise step and
+   one integral step per period. A second set in the same period redoes
+   the same step; it does not add a step.
+
+Safety and timing:
+
+- Stop, ESTOP, fault clear and init close the window before they act. They
+  use the same mutex as before, so the order against ESTOP does not change.
+  A latched fault also blocks the retarget. A stall found by the retarget
+  latches and gives duty 0.
+- Only a completed motion tick feeds the watchdog. The retarget never feeds.
+- The task schedule does not change; the wake, response and overrun
+  measurements keep their meaning. The vehicle step gets longer by the
+  retarget time (one control step under the mutex).
+- `KERNEL_RAM=1` adds [`same_tick.list`](../../tools/kernel_ram/same_tick.list)
+  (`motion_set_speed`, `mc_retarget`) only with this switch. The robot
+  demo build `KERNEL_RAM=1` gives `RAM_PROOF PASS listed 77`.
+- `BENCH_KERNEL=1` has no robot motion path: its default is 0, with no
+  suffix, and an explicit `MOTION_SAME_TICK=1` stops make. The sim,
+  Webots and CMake paths do not use the switch.
+
+Files: [`motor_ctl_same_tick.h`](../../app_program/subsystem2/motor_ctl_same_tick.h)
+(interface), [`motor_ctl_same_tick_impl.h`](../../app_program/subsystem2/motor_ctl_same_tick_impl.h)
+and [`motion_same_tick.h`](../../app_program/subsystem2/motion_same_tick.h).
+The make rules force-include (`-include`) the last two into `motor_ctl.o`
+and `motion.o`, so `motor_ctl.c` and `motion.c` do not change. Tests:
+[`test_motor_ctl_sametick.c`](../../tests/test_motor_ctl_sametick.c)
+(20000-step comparison against set-then-tick, rise, integral, ESTOP, stop,
+stale and stall cases) and `test_motion_task_sametick` (motor write in
+`motion_set_speed`, window closed by stop, clear and ESTOP).
+
+Status: built and host-tested. Not run on the robot. SIL reference (on
+`mtk3-hil`): with the same-tick model, 0..3 s wheel RMS 19.6 vs 30.1.
+
 ## Limits, tests and full evidence
 
 Wheel slip, tyre compression and startup kick affect speed/heading. No

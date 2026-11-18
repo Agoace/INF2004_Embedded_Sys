@@ -15,6 +15,9 @@ with tempfile.TemporaryDirectory(prefix="junction-make-", dir=ROOT / "build/wip"
             target = tree / name
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
+    tool = tree / "tools/barcode_map/barcode_map.py"
+    tool.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "tools/barcode_map/barcode_map.py", tool)
     build = tree / "build_make"
     (build / "probe.mk").write_text(
         'include pico_rp2040.mk\n.PHONY: clean\nclean:\n'
@@ -62,7 +65,11 @@ with tempfile.TemporaryDirectory(prefix="junction-make-", dir=ROOT / "build/wip"
     assert probe(BARCODE_LIVE_ENABLE=1).returncode != 0
     assert probe(BARCODE_LIVE_ENABLE=1, JUNCTION_SHADOW_CLEAR_MM=150).returncode != 0
     assert probe("A", BARCODE_LIVE_ENABLE=1, BARCODE_MEASURED_CLEAR_MM=1).returncode != 0
-    permitted = probe(BARCODE_LIVE_ENABLE=1, BARCODE_MEASURED_CLEAR_MM=1)
+    # Live actions also need a custom letter table (built-in A-D never acts).
+    no_map = probe(BARCODE_LIVE_ENABLE=1, BARCODE_MEASURED_CLEAR_MM=1)
+    assert no_map.returncode != 0 and "BARCODE_MAP" in no_map.stderr
+    permitted = probe(BARCODE_LIVE_ENABLE=1, BARCODE_MEASURED_CLEAR_MM=1,
+                      BARCODE_MAP="F=LEFT")
     assert permitted.returncode == 0, permitted.stderr
     assert "_bclive" in permitted.stdout and "-bclive1-bcclear1" in permitted.stdout
     dummy.write_bytes(b"permitted object")

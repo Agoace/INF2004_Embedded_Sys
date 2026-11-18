@@ -83,6 +83,29 @@ payload, otherwise LEFT). It turns 316 counts, then reverses through the
 start to 316 counts on the other side. FOUND returns to LINE; exhaustion
 fails the shell. SEARCH does not run its own forward obstacle watch.
 
+### D gain trial (`LINE_KD`, default 30 since 2026-11-17)
+
+School run 2026-11-17 (`LINE_GAP` + `MOTION_SAME_TICK`): on straights a
+2–3 mm drift flips the position 0 → 32 → 50 in 40 ms (t=20680→20720, yaw
+0 → 66 deg/s). The D term (kd 85, change clipped to 25) almost doubles
+the kick, and about 1 s of ±50 swings follow. Build switch
+`LINE_KD=<0..85>` (default 30 = config value, no suffix; other values
+add `_kdN`; was default 85 before 2026-11-17) replaces
+only `kd_pct` through the forced header
+[`line_kd.h`](../../app_program/vehicle/line_kd.h) in `vehicle_task.o`.
+The D change clip and all other LINE settings stay the same.
+
+| kd | Wheel difference after step 0 → 32 (host, DERIVED) |
+| --- | --- |
+| 85 (old default) | 82 mm/s at base 146; 56 at base 120 |
+| 30 (default) | 58 mm/s at base 146; 40 at base 120 |
+| 0 | 46 mm/s |
+
+Tests: [`test_line_kd.c`](../../tests/test_line_kd.c) for kd 85/60/30/0 and
+[`test_line_kd_make.py`](../../tests/test_line_kd_make.py) for make
+guards, suffix and build profile. Status: built and host-tested; robot
+trial pending.
+
 ## Interface
 
 | API/data | Contract |
@@ -105,8 +128,8 @@ Sources: [`line_position.h`](../../app_program/subsystem3/line_position.h),
 
 | Setting | Locked duty reference P4 | Current kernel/P7 |
 | --- | --- | --- |
-| Base / min / max | 25 / 12 / 50% | 146 / 62 / 378 mm/s |
-| Gain / D / far gain | 100 / 100 / 400 | 85 / 85 / 340 |
+| Base / min / max | 25 / 12 / 50% | 120 / 62 / 378 mm/s (P7: 146) |
+| Gain / D / far gain | 100 / 100 / 400 | 85 / 30 / 340 (P7: D 85) |
 | Far threshold | 50 | 50 |
 | Right trim | +1% | None; motion owns wheel matching |
 | Search and calibration | 20% | 131 mm/s |
@@ -115,10 +138,143 @@ Sources: [`line_position.h`](../../app_program/subsystem3/line_position.h),
 | Line width | 18 mm | Same course reference |
 
 The original duty-map port used 171/62/378 mm/s and 100/100/400, then P7
-matched measured P4 speed/turn response. Do not replace current 146 with
-171 by reading an older mapping table. The robot wheel loop has I enabled
+matched measured P4 speed/turn response. Do not replace the base with
+171 by reading an older mapping table.
+
+Demo default (operator decision, 2026-11-17): base 120, D 30 and
+same-tick retarget on. Run B120_1 (`LINE_BASE=120`, kd 30, same-tick):
+straight yaw deviation median / p99 5.7 / 60.2 deg/s against 9.3 / 77.2
+at base 146 (FX_1), 0 faults. See
+[MEASUREMENTS](../architecture/MEASUREMENTS.md#robot-runs-2026-11-17-school).
+`vehicle_robot_config.h` holds the values; the `LINE_KD`, `LINE_BASE` and
+`MOTION_SAME_TICK` switches only override them. The default image is the
+same code as the earlier `LINE_KD=30 LINE_BASE=120 MOTION_SAME_TICK=1`
+image (216 of 217 objects equal; `vehicle_task.o` differs only in
+instruction order and debug data; config bytes equal). CMake builds take
+base and D from the config but have no same-tick switch. The robot wheel loop has I enabled
 (`ki_q8` 128) and rise limit 8. Old GP20 D-step experiments belong to the
 bare-metal test target, not the current kernel operator interface.
+
+### Opt-in proportional-gain trial
+
+`LINE_P_NEAR` accepts a decimal integer from 0 to 85; unset and explicit
+85 retain the original build flags, profile and filename. Values below 85
+add `_pnearN` to the image name and select the vehicle-only
+`app_program/vehicle/line_p_near.h` configuration adapter. The original
+robot configuration and steering sources are unchanged. Changing the value
+invalidates prior objects; do not rename an old image to make a candidate.
+
+Despite its name, the switch changes base P at **all positions**, not only
+inside the centre band. The existing correction before wheel scaling is:
+
+```text
+turn = P * position + 85 * clipped_position_change
+     + sign(position) * 340 * max(abs(position) - 50, 0)
+```
+
+Thus the two slopes meet continuously at both -50 and +50; there is no
+switched-P jump. Extra far gain remains 340. Lower P also reduces total
+correction outside the centre band: curve acceptance is still required.
+D85, base/min/max speeds, detector, SEARCH, calibration, motor PI and rise
+limit remain unchanged. A candidate does not enable barcode LIVE.
+
+Candidates 60 and 40 are ASSUMED trial settings, reducing base P by about
+29 percent and 53 percent from 85. They bracket a moderate and larger
+reduction; neither is an accepted tune. The retained home analysis reports
+380 ms oscillation period, position amplitude 59 and wheel-derived yaw
+amplitude about 50 deg/s. It does not prove that P alone causes the swing.
+Analysis source: `mtk3-hil:docs/simulation/LINE_OSCILLATION_ANALYSIS_20261116.md`.
+
+Build the default and two candidates with identical options, for example:
+
+```sh
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_P_NEAR=60 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_P_NEAR=40 -j12
+```
+
+Operator test: same home straight and placement, one run per image, with
+unchanged paper, sensor height and start procedure. Retain the complete KR
+log and image identity. Compare the same RUNNING/LINE time window using raw
+C-L amplitude, position amplitude, requested wheel difference, wheel-derived
+yaw amplitude/period and line losses. Use the retained analysis method, not
+selected smooth sections. KR time is packed in 20 ms units; wheel-derived
+yaw is not independent body-heading evidence. One run cannot establish
+repeatability. Check curves, SEARCH reacquire, junction detection, DETOUR
+handoff and immediate stop before adopting a candidate on the course.
+
+Host checks compile the real configuration/steering at 85, 60 and 40,
+including both 50/51 boundaries and unchanged other settings. Make checks
+cover invalid values, suffixes, target-only flags and profile invalidation.
+GCC and Clang ASan/UBSan full suites pass. The default-image comparison
+against staging `1490768` is MATCH for all 76 ELF/UF2 files, including debug
+data. Explicit 85 also matches the unset demo image. Default/60/40 UP MQTT
+`KERNEL_RAM=1` images build without warnings and pass the RAM-placement
+proof. Evidence and the three trial UF2s are in
+`build/wip/line-p-near/` of the line worktree. Candidate hardware results
+are Not run for any further gain candidate. The approved first three
+physical trial runs are recorded below; family 1 is rejected.
+
+### Proportional-gain hardware outcome
+
+Operator-reported home straight, first 3 s, one run per image:
+
+| Base P | Wheel-derived yaw RMS deg/s | Yaw min/max deg/s | Barcode ok/failed | SEARCH |
+| --- | --- | --- | --- | --- |
+| 85 | 23.1 | -54 / +66 | 0 / 2 | No reported entry |
+| 60 | 21.4 | -66 / +62 | 0 / 1 | No reported entry |
+| 40 | 21.3 | -70 / +82 | 0 / 3 | Entered |
+
+Time with absolute position above 52 was 14–15 percent for all three;
+mean absolute wheel-speed difference was 124–152 mm/s. These measurements
+do not show an acceptable improvement. Family 1 is rejected; do not adopt
+a lower P. Keep its opt-in code for comparison only. The next speed trial
+uses P85, not a combination with a rejected P candidate.
+
+### Opt-in base-speed trial
+
+`LINE_BASE` changes only the vehicle LINE base speed, in mm/s. The default
+is 120 (was 146 before 2026-11-17). Both unset and explicit 120 preserve
+default flags/profile/image name. An integer greater than min+20 (82) and at most max (378) is required;
+therefore the accepted range is 83–378. The unchanged minimum is 62 mm/s.
+A nondefault value adds `_baseN`; changing it invalidates previous objects.
+The same vehicle-only config adapter is selected only for a nondefault
+speed or gain. The default configuration/steering source files are untouched.
+
+Candidates 120 and 100 mm/s are ASSUMED trial settings, not accepted speeds.
+Set only `LINE_BASE`; leave `LINE_P_NEAR` unset (P85). D85, extra far gain340,
+SEARCH131, min62, max378 and all motor settings remain unchanged. The native
+steering rule scales its correction by base-minus-min, so the speed change
+also reduces requested differential correction: this is not a constant-yaw
+speed test. At position53 on the first native update, requested left-minus-
+right is 92/64/42 mm/s for base146/120/100. That static check cannot predict
+time spent beyond absolute position52. A uniform position sweep is not a
+physical far-share measurement.
+
+```sh
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_BASE=120 -j12
+make -C build_make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 LINE_BASE=100 -j12
+```
+
+Operator plan: same straight, placement and start procedure; one run for
+each default/120/100 image. Use identical first-3-second KR windows and
+compare wheel-derived yaw RMS/extrema, wheel differential, far-share
+(absolute position above52), SEARCH/line losses and barcode ok/failed.
+Allow for different travel at lower speed. Check curves, SEARCH reacquire,
+junction detection, DETOUR handoff and stopping before course adoption.
+Keep barcode SHADOW. No worker flashes or runs hardware.
+
+Host checks cover actual native config and steering at146/120/100 and
+bounds83/378, invalid Make values, profile changes and combined-option
+suffix consistency. Combined tuning is not the approved hardware trial.
+GCC and Clang ASan/UBSan full suites pass. Default-image identity is MATCH
+for all76 ELF/UF2 hashes against `7810d07`, including debug data. Explicit
+base146/P85 also matches the unset demo ELF/UF2. Default/120/100 UP MQTT
+`KERNEL_RAM=1` builds have no warnings and pass the RAM-placement proof.
+Logs and public-example trial UF2s are under `build/wip/line-base/` in the
+line worktree; they are not operator-credentialed network images.
+Hardware base-speed outcomes are Not run.
 
 ## Results
 

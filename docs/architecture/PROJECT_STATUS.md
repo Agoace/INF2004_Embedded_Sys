@@ -4,7 +4,11 @@ One row per area, then the branch layout and merge rules. Read this page
 before you propose work. Update the row in
 the same commit as a change of state. Details stay in the linked records.
 
-State date: 2026-11-16. Staging tip at writing: `a0cd97b`.
+Baseline state date: 2026-11-16; staging tip at that writing: `a0cd97b`.
+2026-11-17: staging integrates barcode v2 (`ad22f8f`), coarse/fine scan
+with obstacle v3 (`7fe4054`) and the dashboard panels (`60b41f2`).
+The scan row records the scoped `d44bd25` school floor result from that date;
+it does not imply general geometry accuracy or acceptance of other changes.
 
 ## Demo image
 
@@ -19,16 +23,19 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 
 | Area | State | Evidence | Open |
 | --- | --- | --- | --- |
-| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. |
+| LINE (P7, two sensors) | Completes the course. Zigzags on straights: about +-40..54 deg/s, period about 0.4 s (2026-11-16). | [LINE.md](../s3-line-barcode/LINE.md) | Zigzag reduction (option C): real-log analysis first, then SIL, then tuning. LINE_P_NEAR (lower P) rejected; default P85 kept. LINE_BASE (83..378) override; base 120/100 were rejected on 2026-11-16 runs (D 85, no same-tick), but base 120 with kd 30 + same-tick is the demo default since 2026-11-17. |
+| Demo default LINE (base 120, kd 30, same-tick) | Default since 2026-11-17 (`mtk3-demo-default`). B120_1: straight deviation median / p99 5.7 / 60.2 deg/s vs 9.3 / 77.2 at base 146; 0 faults. Overrides: `LINE_BASE`, `LINE_KD`, `MOTION_SAME_TICK=0`. | [LINE.md (settings)](../s3-line-barcode/LINE.md#settings) | Full course check with the default image (curves, junctions, detour, barcode SHADOW). kd 0 not run. |
 | SEARCH / reacquire | Works on the course. SIL 6/6 reacquired. | [LINE.md](../s3-line-barcode/LINE.md) | None. |
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
-| Obstacle, scan, detour | Detours 2/2 in each of 6 course runs (2026-11-16). | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md) | DONE_NO_LINE and STALL_RIGHT cases. |
+| Same-tick retarget (`MOTION_SAME_TICK`) | Default on for robot images since 2026-11-17; `=0` gives the old timing. Loop delay about 10 -> 2 ms. Robot runs 2026-11-16/17: lifted-wheel ESTOP OK, 0 overruns/faults, smoother small corrections. | [MOTION.md (same tick)](../s2-motion/MOTION.md#same-tick-retarget-default-on) | None. |
+| Obstacle, scan, detour | Coarse/fine + v3 floor result on `d44bd25` (2026-11-17): same box met twice, 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, no overruns/lost wakes/faults; task stack high water recorded. Prior fixed-scan result: 2/2 in each of 6 runs. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Separate stationary A2/A3 placements skipped by operator; width accuracy/passability not established; DONE_NO_LINE and STALL_RIGHT remain open. |
 | Junction actions (B2a) | CLOSED. J1..J5 PASS on the floor with fake commands. | [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Pending command has no timeout. J2 new pending policy Not run. |
 | Barcode reader (B2b) | SHADOW only. Course 2026-11-16: 0 of 10 attempts decoded (robot zigzags). Straight TEST pass: large F decoded both ways. | [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md), [BARCODE.md](../s3-line-barcode/BARCODE.md) | Size-tolerant reader (n 4..7 mm) in staging: identical to the old reader on 5 real captures; not proven on the course. Reliable read needs less zigzag. |
+| Barcode failed-attempt evidence | Opt-in ROBOT software candidate, default OFF. Keeps first two failures of the run; edges and 4 ms ADC prefix dump after BC_REF. | [Failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) | Operator capture/image acceptance not run. Combined staging + KD30/same-tick RAM has30788 B link-time headroom including static stacks; no capacity fallback required. |
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
 | Barcode LIVE (steers) | Not enabled. Three gates: build flag with measured clearance, producer valid flag, table. | [JUNCTION_LIVE_ADAPTER.md](JUNCTION_LIVE_ADAPTER.md) | Blocked by reliable read. |
 | IMU humps | Report only. 2 humps per course run (2026-11-16). | [IMU.md](../s4-imu/IMU.md) | Extra IMU requirement: another team member works on staging. H3 Not run. `hump_imu_fault=1` once (2026-11-16 BASE run). |
-| Telemetry, MQTT, dashboard | Run-summary barcode ok/failed implemented; host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md) | Operator check of same-run barcode counts on the dashboard. |
+| Telemetry, MQTT, dashboard | Run-summary counts implemented. Barcode terminal v2 (FIFO/QoS1, early reason/frame dump) and the v2/v3 dashboard panels are in staging (2026-11-17); host checks pass. | [TELEMETRY.md](../s1-telemetry/TELEMETRY.md), [Barcode run summary](../s3-line-barcode/BARCODE_RUN_SUMMARY.md), [Terminal attempts](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) | Operator UI check pending: attempts, queue loss, same-run counts and the obstacle v3 panel on the robot. |
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. |
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
@@ -67,6 +74,8 @@ commit inside this repository before the parent updates its recorded revision.
 | `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface lineage |
 | `mtk3-line` | Line tracing and line search; the barcode reader is an optional extension of this module |
 | `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Pure navigation module lineage |
+| `mtk3-detour-sweep` | Helper from staging `024d01a`: the line counts in the DETOUR return turn from 20° (`line_turn_deg`, after the second STRAIGHT), after FC_2 and FX_1. Host tests pass; robot not run; Main merges into staging |
+| `mtk3-scan-int` | Approved helper for coarse/fine scan vehicle diagnostics, obstacle wire v3 and legacy-compatible decoder; Main merges into staging |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
 | `mtk3-imu` | S4 IMU module development |
 | `mtk3-cr1`, `mtk3-b2b` | Helper branches: CR1 data representation; B2b barcode-to-junction (S3 reader + vehicle adapter). Merged into staging; kept as records |

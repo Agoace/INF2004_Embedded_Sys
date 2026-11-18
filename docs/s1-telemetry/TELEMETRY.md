@@ -358,6 +358,75 @@ RUN/IDLE. Idle state arrives at 1 Hz, heartbeat every 5 s; sonar/live log pause.
 Their last data is labelled `idle (paused)`; the fan is held grey and its
 age continues to increase. Silent remains a3 s state gap in both modes.
 
+#### IMU and barcode reports
+
+HEALTH includes IMU and Barcode cards. Hump, summary and raw GP28 displays
+work with messages already transmitted by the existing firmware. New
+attempt and geometry rows need the corresponding producer formats.
+
+| Data | Source and display rule |
+| --- | --- |
+| Hump event run count, highest peak and side | `robot/event` kind 9; heights use 0.1 mm units on wire and mm on the page. The count is the reported run count, not the number of received messages. Duplicate delivery does not increase it. |
+| Completed hump result and warnings | `robot/summary` v3; includes count, peak, side, missing IMU data, open hump at stop, long-hump rejection and curve gating. |
+| Barcode ok / failed | `robot/summary`; zero is a reported count, not missing data. These are completed-run totals, not individual attempts. |
+| Raw GP28 | `robot/state`; its age includes the line-board age. The board-valid row is separate from the raw value. RUN and idle age limits apply. |
+| IMU attitude | Current state/status messages do not contain IMU attitude samples. State heading and turn rate are wheel odometry; do not use them as IMU values. Legacy `robot/imu` v1 raw fields still appear if received. |
+| Barcode attempt v2 | `robot/barcode` v2 shows decoded/failed, letter, reason, direction, mapped command, producer epoch/sequence, start/terminal uptime and available narrow/wide estimates in mm. Command values 0–4 display as NONE, LEFT, RIGHT, STRAIGHT and UTURN, separate from the decoded letter. These are not confidence votes or navigation acknowledgements. |
+| SHADOW / LIVE | The v2 attempt flag displays SHADOW when set and LIVE when clear. Without v2, SHADOW is deployment context only; summary counts and raw GP28 do not confirm it on wire. Neither LIVE nor a decoded letter proves that a command was issued or executed. |
+
+Each summary shows its run ID, boot/session, received age and retained-copy
+warning when applicable. An earlier boot's summary stays labelled as history.
+A new active run does not turn the previous completed summary into current
+run totals. Hump events reset at an observed run start or new boot. A
+retained hump event is not assigned to the current run.
+
+Report age means laptop time since receipt, not a 16-bit sensor-board age.
+It continues past 65535 ms. Completed scan/detour badges show elapsed time
+`since report`, including when the robot is stopped or offline. The detour
+table scrolls horizontally on narrow screens; its column headings can wrap.
+The page marks historical cards `since report`; it does not expire completed
+results as if they were samples. GP28, legacy barcode reports and legacy IMU
+snapshots keep their own source ages. A new summary or state frame cannot
+refresh an old IMU snapshot. Legacy IMU snapshot age is shown separately if
+a newer motion event arrives.
+
+The v2 attempt has no boot ID or run ID. Its displayed source session is
+inferred from other messages, not proved by the producer epoch. Do not join
+an attempt to a summary by matching epoch and run ID. Summary totals and
+attempt sequence remain separate; a difference does not establish lost
+reports. Stop-boundary inclusion follows the producer's rule, not a
+comparison inferred by the page. Legacy barcode v1
+keeps its raw fields and read-agreement rows. Unknown barcode versions show
+`unsupported version N`; their content is not interpreted.
+
+Obstacle v3 adds width and left/right observed clearance spans in mm.
+Invalid dimensions show `unavailable`, not zero. A clipped width is labelled
+`>= ... (lower bound)`. The closest range/angle gives an approximate sensor
+position: x is forward, y is left; it is not a world/map position. Clearance
+is an edge-plane span to an observed adjacent outward free ray, not
+guaranteed body clearance or passability. Existing clearance angles remain
+degrees. Older obstacle versions keep labelled unavailable geometry rows.
+An unknown obstacle version is rejected; a visible format notice does not
+replace the last valid scan.
+
+The dashboard uses the approved shared decoders, not its own packet parser:
+barcode v2 from `ad22f8f` and obstacle v3 from `3f569b2`. Main must integrate
+both decoder branches with this panel update. Binary integration tests run
+when those decoders are available; decoded-field fixtures also test the
+panels on the older baseline. Host validation of the combined decoders must
+run both binary tests, with no decoder-integration skips.
+
+The host tests use report fixtures reconstructed from decoded fields in
+`mqtt_B120_1.csv` (source SHA256
+`a2fc22e835c2b109c3cc0dfd73c55625fdb2b44083878ffc564bb425f4ede640`).
+This is not a raw-packet recording. The CSV has no retain flag; tests apply
+retained delivery to startup history explicitly. The fixtures check two
+hump reports, 11.7 and 12.3 mm, a current summary of 0 barcode successes and
+7 failures, and an earlier boot's separate 1-success/3-failure summary.
+These are telemetry reports, not a new physical height measurement or a
+hardware acceptance result. Host model/page tests do not change Gate1's
+INCOMPLETE status or the physical GP28 FAIL status.
+
 #### Ultrasonic fan
 
 Forward is up, LEFT positive angle, RIGHT negative. Rings show0..511 mm;

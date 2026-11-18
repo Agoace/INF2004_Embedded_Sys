@@ -76,6 +76,19 @@ static void setup(const vsm_route_t *routes, unsigned int n) {
 }
 
 int main(void) {
+    /* Port of 48b5f9b: an external IMU stop is a persistent FAULT. */
+    {
+        vsm_t stopped;
+        vsm_init(&stopped, VSM_DEFAULT_ROUTES, VSM_DEFAULT_ROUTE_COUNT);
+        vsm_set_fault(&stopped, VSM_FAULT_IMU, 2u);
+        vsm_stop(&stopped);
+        CHECK(stopped.state == VSM_FAULT && stopped.fault == VSM_FAULT_IMU &&
+              stopped.fault_detail == 2u, "IMU fault survives ordinary stop");
+        CHECK(vsm_step(&stopped, &IN, 0u, 0u).action == VSM_ACT_STOP,
+              "faulted shell remains stopped");
+        vsm_reset(&stopped);
+        CHECK(stopped.state == VSM_IDLE, "explicit reset releases fault");
+    }
     /* 1. Outcome word. */
     {
         const vsm_outcome_t o = vsm_outcome(VSM_OUT_OBSTACLE, 230u);

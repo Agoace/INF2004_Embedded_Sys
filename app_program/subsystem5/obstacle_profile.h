@@ -64,6 +64,12 @@ static inline unsigned int obstacle_profile_left(obstacle_profile_word_t w) {
     return (w & OBSTACLE_PROFILE_LEFT_MASK) >> OBSTACLE_PROFILE_LEFT_SHIFT;
 }
 
+/* Coarse points are indices 0,3,6,9,12. Return a clipped fine interval
+ * one coarse step outside the outermost VALID hit (nearest +150 mm).
+ * False: no VALID coarse hit; callers still fill legacy decision bins. */
+bool obstacle_fine_bounds(const obstacle_profile_t *profile,
+                           uint8_t *first, uint8_t *last);
+
 /* Build the PROFILE word from a finished scan. */
 obstacle_profile_word_t obstacle_profile_build(const obstacle_profile_t *profile);
 

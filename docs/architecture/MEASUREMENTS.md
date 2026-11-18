@@ -1,5 +1,30 @@
 # Measurements
 
+## Failed-attempt capture software budget
+
+| Quantity | Value | Date | Label | Source |
+| --- | --- | --- | --- | --- |
+| Capture retention and headroom floor |First2 failed attempts per run; optional1-slot fallback if combined link-time headroom is below8 KiB |2026-11-17 |ASSUMED |[Failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) |
+| Capture sample bounds |64 edges per buffer,512 ADC rows (64 pre-start +448 post-start),4000 us decimation; up to256 ms pre-start/about1.792 s post-start at continuous cadence |2026-11-17 |ASSUMED |[Capture bounds](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md#what-is-retained); not measured robot timing |
+| Capture ARM storage |5816 B per buffer (24 B edge,8 B ADC,184 B context incl. enable/reset times);17448 B for3 buffers;17485 B all capture data symbols (was 17432);18 KiB compile-time ceiling |2026-11-17 |MEASURED(build, `9ab99b2`) |[Capture bounds](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md#what-is-retained) |
+| Combined UP MQTT KRAM F=LEFT capture OFF/ON |Allocated vector+.data+.bss221348 ->239036 B (+17688); unallocated SRAM48988 ->31300 B, includes reserved static stacks; flash.text422224 ->425224 B |2026-11-17 |MEASURED(build) |[Combined RAM table](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md#software-gates-and-ram), baseline d44bd25; SRAM270336 B |
+| Above + KD30/same-tick1 |Allocated239548 B; unallocated30788 B including reserved stacks; .text425168, .data20776, .bss218580, vector192 B; RAM proof77/77 |2026-11-17 |MEASURED(build) |[Combined RAM table](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md#software-gates-and-ram); throwaway d06a787/c4e39f8 merge |
+| Capture individual compiler frames |window step128 ->144 B; print helper160 B, observer40 B, bad-ADC helper32 B; LINE96/source96/producer88/telemetry432/DUMP96/MQTT service312 unchanged |2026-11-17 |MEASURED(build) |[Combined RAM table](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md#software-gates-and-ram); not full call chains or device high-water |
+
+## Barcode terminal telemetry software budget
+
+These values are design bounds or compiler measurements, not robot timing.
+The matched build compares `a2a5f39` with the terminal-telemetry candidate,
+public example settings, UP MQTT, `KERNEL_RAM=1`, GCC14.3.1.
+
+| Quantity | Value | Date | Label | Source |
+| --- | --- | --- | --- | --- |
+| Attempt FIFO capacity and width unit |8 records, drop newest;0.01 mm width quantization, not physical accuracy |2026-11-17 |ASSUMED |[Terminal telemetry](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) |
+| Attempt FIFO ARM storage |236 B:8 padded28 B values +12 B counters;240 B compile-time ceiling |2026-11-17 |MEASURED(build) |[Terminal telemetry](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#bounded-fifo-and-delivery) |
+| UP MQTT RAM sections |vector+.data+.bss219432 ->220728 B (+1296); flash .text418320 ->419728 B (+1408) |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail) |
+| RAM-function placement |75/75 symbols;18424 ->19156 B;34 vs32 distinct flash callees |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail) |
+| Terminal telemetry individual stack frames |source88 ->96 B; producer72 ->88; cancel48 ->64; enqueue16; packer16; LINE task96, DUMP96, MQTT service312 unchanged |2026-11-17 |MEASURED(build) |[Matched resource table](../s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md#resource-comparison-detail); not full-call-chain or device high-water |
+
 One table of the measured or assumed physical and timing values in this project.
 Network values (addresses, secrets) are not included.
 
@@ -115,6 +140,13 @@ log each. Main_Worker's `feel.py` on the KR1 rows (20 ms):
 | GAP+ST | `5d063ac` + same-tick, `d9d228ac` | 5.6 / 32.4 / 70.7 | 12.0 | 36.7 (55) |
 | KD30+ST | trial `474cc70` kd 30, `c8729500` | 8.4 / 29.7 / 68.5 | 9.7 | 19.3 (29) |
 | KD30+GAP+ST | `474cc70` + `24e2051`, `642eff1c` | 6.3 / 31.8 / 73.4 | 10.3 | 35.3 (53) |
+| FX_1 base 146 (KD30+ST, detours) | staging `e6bf80b` | 9.3 / 32.8 / 77.2 | 9.1 | 54.7 (82) |
+| B120_1 base 120 (KD30+ST) | staging `1104752` `LINE_BASE=120`, `2f4b2ba1` | 5.7 / 23.1 / 60.2 | 8.6 | 20.0 (30) |
+
+B120_1 is the base for the demo default (base 120, kd 30, same-tick;
+2026-11-17). FX_1 also contains two detours; its SEARCH count is not a
+like-for-like comparison. B120_1: 0 faults, 0 overruns, response max
+1643 us.
 
 ## Operator estimates 2026-11-17 (ramp)
 
@@ -307,7 +339,17 @@ Reported through Main_Worker; estimates, not ruler values:
 | LINE_GAP + same-tick run (5d063ac): straights yaw deviation median / p90 / p99; flips; SEARCH | 5.6 / 32.4 / 70.7 deg/s; 12.0 /s; 36.7 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
 | LINE_KD 30 + LINE_GAP + same-tick run (474cc70 + 24e2051): straights yaw deviation median / p90 / p99; flips; SEARCH | 6.3 / 31.8 / 73.4 deg/s; 10.3 /s; 35.3 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
 | LINE_KD 30 + same-tick run (474cc70): straights yaw deviation median / p90 / p99; flips; SEARCH | 8.4 / 29.7 / 68.5 deg/s; 9.7 /s; 19.3 /min | 2026-11-17 | MEASURED(robot log,2026-11-17) | [MEASUREMENTS.md#robot-runs-2026-11-17-school](MEASUREMENTS.md#robot-runs-2026-11-17-school) |
+| LINE_BASE candidate speeds | 120 and 100 mm/s; P85, minimum62 and maximum378 unchanged | 2026-11-16 | ASSUMED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
+| LINE_BASE native position53 correction | requested left-minus-right92/64/42 mm/s at base146/120/100 on first update; not a time far-share prediction | 2026-11-16 | DERIVED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
+| Demo default LINE steering | base 120 mm/s, gain 85, D 30, far gain 340, min 62, max 378; same-tick on | 2026-11-17 | ASSUMED(operator decision,2026-11-17) | [LINE.md#settings](../s3-line-barcode/LINE.md#settings) |
+| LINE_BASE permitted range | integer83–378 mm/s; base must exceed minimum62+20 | 2026-11-16 | ASSUMED | [LINE.md#opt-in-base-speed-trial](../s3-line-barcode/LINE.md#opt-in-base-speed-trial) |
 | LINE_LOST delay / gap delay / junction hold | 50 ms / 300 ms / 300 ms | doc ≤ 2026-10-28 | ASSUMED | [LINE_POSITION.md#thresholds](../archive/s3-line-barcode/LINE_POSITION.md#thresholds) |
+| LINE_P_NEAR candidate gains | 60 and 40; base P at all positions, extra far gain 340 unchanged | 2026-11-16 | ASSUMED | [LINE.md#opt-in-proportional-gain-trial](../s3-line-barcode/LINE.md#opt-in-proportional-gain-trial) |
+| LINE_P_NEAR candidate reductions | about 29 % and 53 % below default P85; not accepted hardware settings | 2026-11-16 | ASSUMED | [LINE.md#opt-in-proportional-gain-trial](../s3-line-barcode/LINE.md#opt-in-proportional-gain-trial) |
+| LINE_P_NEAR hardware barcode ok/failed | P85/60/40:0/2,0/1,0/3; P40 entered SEARCH; family1 rejected | 2026-11-16 | MEASURED(operator,2026-11-16) | [LINE.md#proportional-gain-hardware-outcome](../s3-line-barcode/LINE.md#proportional-gain-hardware-outcome) |
+| LINE_P_NEAR hardware far-share | absolute position above52 for14–15 % of first3s; mean absolute wheel difference124–152 mm/s across P85/60/40 | 2026-11-16 | MEASURED(operator,2026-11-16) | [LINE.md#proportional-gain-hardware-outcome](../s3-line-barcode/LINE.md#proportional-gain-hardware-outcome) |
+| LINE_P_NEAR hardware yaw extrema | P85:-54/+66; P60:-66/+62; P40:-70/+82 deg/s, wheel-derived | 2026-11-16 | MEASURED(operator,2026-11-16) | [LINE.md#proportional-gain-hardware-outcome](../s3-line-barcode/LINE.md#proportional-gain-hardware-outcome) |
+| LINE_P_NEAR hardware yaw RMS | P85/60/40:23.1/21.4/21.3 deg/s, wheel-derived, first3s, one run each | 2026-11-16 | MEASURED(operator,2026-11-16) | [LINE.md#proportional-gain-hardware-outcome](../s3-line-barcode/LINE.md#proportional-gain-hardware-outcome) |
 | Lost / found / junction / centred / outer-seen thresholds | 30 % / 50 % / 50 % (L+C >= 125 % in pair mode) / 80 % / 5 % | doc ≤ 2026-10-28 | ASSUMED | [LINE_POSITION.md#thresholds](../archive/s3-line-barcode/LINE_POSITION.md#thresholds) |
 | M1 calibration ADC | L floor/line 178/3595; C 150/3577 | 2026-11-06 | MEASURED(operator,2026-11-06) | [KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06](../../testing/integration/KERNEL_ROBOT.md#basic-checks-on-two-tiles-2026-11-06) |
 | Midway reading, line between L and C | 38-40 % each; plain-line L+C max 102 % | 2026-11-03 | MEASURED(robot log,2026-11-03) | [LINE_POSITION.md#robot-check-spin-recording-2026-11-03-boot-5209](../archive/s3-line-barcode/LINE_POSITION.md#robot-check-spin-recording-2026-11-03-boot-5209) |
@@ -356,6 +398,12 @@ Reported through Main_Worker; estimates, not ruler values:
 | Capture RAM | ADC 6144 x 4 B (12.288 s at 2 ms); motion 512 x 12 B (10.24 s at 20 ms); static 158676 B | doc ≤ 2026-11-09 | DERIVED | [BARCODE.md#capture-ram-and-diagnostics](../s3-line-barcode/BARCODE.md#capture-ram-and-diagnostics) |
 | Course-size F sheet | about 141 mm; narrow 2.9 mm, wide 8.7 mm | doc ≤ 2026-11-09 | MEASURED(operator) | [BARCODE.md#decoder-rules-and-fixtures](../s3-line-barcode/BARCODE.md#decoder-rules-and-fixtures) |
 | Dark floor beyond barcode map | after about 450 mm | doc ≤ 2026-11-09 | MEASURED(operator) | [BARCODE.md#scope-and-evidence](../s3-line-barcode/BARCODE.md#scope-and-evidence) |
+| Live reader quiet-bin replay | 829 DISTANCE bins from four old fixtures, PEAK-centre 120 ms quiet crops; no candidate in either orientation | 2026-11-17 | DERIVED (host replay; synthetic increasing brackets) | [SCHOOL_FAILED_START_ANALYSIS.md#validation](../s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md#validation) |
+| FC1 / FC2 failure capture delivery | FC1 362/430 ADC, 20/20 edges; FC2 same-run repeat union 204/204 ADC, 10/10 edges, 154 agreeing overlaps | 2026-11-17 | DERIVED (strict stored-row audit) | [SCHOOL_FAILED_START_ANALYSIS.md#delivery-audit](../s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md#delivery-audit) |
+| FC1 / FC2 star fits | attempt 2 n/w/bias 5.895/17.607/3.372 mm; attempt 5 5.738/18.215/3.515 mm; both star 0x094, old leading gate fails | 2026-11-17 | DERIVED (rounded measured edges) | [SCHOOL_FAILED_START_ANALYSIS.md#width-diagnosis](../s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md#width-diagnosis) |
+| First-bar physical approach | only white paper then white mat, long relative to 40 mm; no measured length | 2026-11-17 | OPERATOR (no measured number) | [SCHOOL_FAILED_START_ANALYSIS.md#scope-and-evidence](../s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md#scope-and-evidence) |
+| Live reader GP28 offsets (config) | 73 mm forward / 73 mm left (was 80/77) | 2026-11-17 | MEASURED(operator,2026-11-16) value applied | [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) |
+| Barcode projection retreat allowance | 2.5 mm cumulative; nominal L0/R292 over 30 ms gives about 1.94 mm retreat at 80/77 geometry, 1.60 mm at 73/73 | 2026-11-17 | ASSUMED bound with DERIVED geometry margin | [SCHOOL_FAILED_START_ANALYSIS.md#approved-changes-and-host-plan](../s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md#approved-changes-and-host-plan) |
 | Encoder geometry (barcode) | 12414 counts/m | doc ≤ 2026-11-09 | DERIVED | [BARCODE.md#build-and-settings](../s3-line-barcode/BARCODE.md#build-and-settings) |
 | GP28 at L40/R217 mm/s | body-forward about 5.72 mm/s, lateral about 127.57 mm/s (mean 128.5) | doc ≤ 2026-11-13 | DERIVED | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#mount-and-motion-limits` |
 | GP28 clearance (operator) | approximately 5-6 mm; model stays 5.5 mm | 2026-11-15 | MEASURED(operator,2026-11-15) | `mtk3-hil:docs/simulation/S3_SENSOR_MODEL.md#status-and-limits` |
@@ -396,6 +444,10 @@ Reported through Main_Worker; estimates, not ruler values:
 | Shadow full circuit (b405aef) | 90 s, 9.9 m, 146 mm/s; 45 losses; 7 junctions; 3 attempts 0 frames | 2026-11-11 | MEASURED(operator,2026-11-11) | [SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md#full-circuit-shadow-image-b405aef-school-2026-11-11) |
 | SIL barcode along-sigma | 1 / 4 / 8 mm | 2026-11-16 | ASSUMED | `mtk3-hil:docs/simulation/SIL_JUNCTION_BARCODE_RESULTS_20261116.md#version-and-protocol` |
 | SIL barcode sheet | 400x50 mm paper, 40 mm bar height, 389.5 mm quiet length | doc ≤ 2026-11-13 | ASSUMED | `mtk3-hil:docs/simulation/WEBOTS_PIL.md#assumptions-to-replace-with-operator-inputs` |
+| Barcode 2 to 4-way crossing (D_cross) | unknown; long enough to straighten; up to one loop (course8 map L1 about 3.4 m, L2 about 5.2 m) | 2026-11-17 | OPERATOR (no measured number); loop lengths from map | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| Black between barcode 2 and next crossing | none (operator not fully sure) | 2026-11-17 | OPERATOR | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| 4-way crossing angle | about 90 deg (not fully sure) | 2026-11-17 | OPERATOR | [BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#course-information-operator-2026-11-17-not-measured) |
+| Live clearance margin below D_min | 40 mm (6 mm arm + about 6 mm read latency + ticks + slip) | 2026-11-17 | ASSUMED | [BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session) |
 
 ## Sonar, servo and obstacle
 
@@ -435,6 +487,14 @@ Reported through Main_Worker; estimates, not ruler values:
 | Reverse distance | 100 mm = 1241 counts at 12414 counts/m, -100 mm/s | doc ≤ 2026-11-08 | DERIVED | [OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt](../s5-obstacle/OBSTACLE.md#4--avoidance-decision-reverse-and-reattempt) |
 | Robot pose box | front 123, rear 67, half width 80 mm | doc ≤ 2026-11-06 | ASSUMED | `569672a:docs/archive/s5-obstacle/VC_DETOUR_RUN.md#run-r3-2026-11-05-boot-0491-run-1-straight-450-mm` |
 | S5-U01 wall (ruler) | 200 mm: medians 193/196 (188..204); 400 mm: 394/393 (390..407); about 60 mm: 19/20 not valid, 67 mm | 2026-11-06 | MEASURED(operator,2026-11-06) | [TEST_LOG.md#s5-u01-wall-check-2026-11-06](../../testing/subsystem5/TEST_LOG.md#s5-u01-wall-check-2026-11-06) |
+| Scan coarse/fine schedule | coarse −30/−15/0/+15/+30 deg; fine5 deg steps, nearestVALID+150 mm inclusive; compatibility fill13 unique angles/26 pings | 2026-11-17 | ASSUMED | [OBSTACLE.md#2--fine-scan-and-decision-bin-completion](../s5-obstacle/OBSTACLE.md#2--fine-scan-and-decision-bin-completion) |
+| Scan coarse/fine settle times | first/return150 ms; 5-deg move60 ms plus15 ms per additional5 deg, capped150 ms; initial stop300 ms | 2026-11-17 | ASSUMED | [OBSTACLE.md#1--coarse-scan](../s5-obstacle/OBSTACLE.md#1--coarse-scan) |
+| Scan coarse/fine simulated duration | worst2560 ms incl300 ms stop; 10 ms fake navigation/60 ms sonar spacing, contiguous hit regions and empty case; robot duration unmeasured | 2026-11-17 | DERIVED(host scheduler) | [OBSTACLE.md#2--fine-scan-and-decision-bin-completion](../s5-obstacle/OBSTACLE.md#2--fine-scan-and-decision-bin-completion) |
+| Scan host fixed-order comparison | 2230 ms incl300 ms stop, same10 ms fake scheduler as2560 ms candidate; no robot bound | 2026-11-17 | DERIVED(host scheduler) | [Scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md#host-evidence) |
+| Scan geometry assumptions | nearestVALID+150 mm inclusive hit region; law-of-cosines outermost chord; first outward free-ray edge-plane span; 1 mm rounding, clipped width lower-bound, unknown65535 | 2026-11-17 | ASSUMED | [Geometry estimates](../s5-obstacle/OBSTACLE.md#geometry-estimates) |
+| Scan integration RAM/text | static RAM219432→220052 B (+620); text437928→440424 B (+2496); UP MQTT KERNEL_RAM with F=LEFT vs b9a47b5 | 2026-11-17 | DERIVED(link map/GNU size) | [Firmware resources](../s5-obstacle/COARSE_FINE_VALIDATION.md#firmware-resources) |
+| Scan integration local stack frames | scan observer64→200 B, report40→64 B, telemetry task408→432 B; vehicle task1016 B unchanged, allocated vehicle/telemetry4096 B each; actual free stack unmeasured | 2026-11-17 | DERIVED(ARM GCC stack usage) | [Firmware resources](../s5-obstacle/COARSE_FINE_VALIDATION.md#firmware-resources) |
+| Scan dump storage | 48 rows of12 B +8 B counters=584 B; bounded nonblocking116 B queue value, print only at dump, excess explicit | 2026-11-17 | DERIVED(source and ARM sizeof) | [Stopped USB evidence](../s5-obstacle/COARSE_FINE_VALIDATION.md#stopped-usb-evidence) |
 | Scan gap rule | free if at least 150 mm farther than obstacle; corners were 20-35 mm farther | 2026-10-27 | ASSUMED | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#profile-analysis-and-the-profile-event` |
 | Scan run 1 flat-face visibility | -25..+20 deg; end readings up to 30 mm high vs ideal | 2026-10-27 | DERIVED | [SIM_ECHO_FIT.md#what-the-records-constrain](../archive/simulation/SIM_ECHO_FIT.md#what-the-records-constrain) |
 | Scan run 1 object face | about 165 mm from sensor (about 107 mm from front) | 2026-10-27 | MEASURED(operator,2026-10-27) | `569672a:docs/archive/s5-obstacle/OBSTACLE_SCAN.md#run-1-object-straight-ahead` |

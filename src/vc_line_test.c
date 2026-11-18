@@ -92,13 +92,15 @@
 /*
  * D test after P7 (docs/s3-line-barcode/LINE.md): GP20 picks the next D.
  * All other
- * settings stay. The first value is the P7 value. */
-static const uint8_t D_STEPS[] = {85u, 130u, 50u};
+ * settings stay. The first value is the default (D 30 since 2026-11-17;
+ * the P7 value was 85). */
+static const uint8_t D_STEPS[] = {30u, 85u, 130u, 50u};
 #define D_STEP_COUNT (sizeof D_STEPS / sizeof D_STEPS[0])
 static unsigned int d_step;
 
 static const lt_config_t LINE_CFG = {
-    .steer = {.base_mm_s = 146, .gain_pct = 85u, .kd_pct = 85u, .min_mm_s = 62,
+    /* Demo default 2026-11-17 (run B120_1): base 120, D 30 (was 146, 85). */
+    .steer = {.base_mm_s = 120, .gain_pct = 85u, .kd_pct = 30u, .min_mm_s = 62,
               .max_mm_s = 378, .far_from = 50u, .far_gain_pct = 340u},
     .straight_counts = 450,
     .hint_counts = 20,
@@ -145,7 +147,11 @@ static const dr_config_t DETOUR_CFG = {
            .first_max_mm = 700u,
            /* Trim the turn away: pass the corner by half the robot
             * width 80 (160 mm widest) + margin 30. */
-           .first_clear_mm = 110u},
+           .first_clear_mm = 110u,
+           /* Return turn: the line counts from 20 degrees toward it (FC_2
+            * 2026-11-17: the pivot crossed the line, ignored, then drove
+            * away; FX_1 detour 2: crossed at -25..-34, below 45). */
+           .line_turn_deg = 20u},
     .straight_mm_s = 131,
     .turn_mm_s = 131,
     .pause_ms = 250u,

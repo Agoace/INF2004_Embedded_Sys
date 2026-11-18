@@ -81,18 +81,26 @@ bool drv_motor_hw_button_down(unsigned int pin) {
             (now >= 6500u && now < 6550u) ||
             (now >= 12000u && now < 12050u));
     }
-    if (mode==1u) return false; /* No physical start in uncalibrated START case. */
-    if (mode==2u) return pin==21u && now>=20u && now<50u;
+    if (mode==1u || mode==5u) return false; /* No physical start in uncalibrated START case. */
+    if (mode>=2u) return pin==21u && now>=20u && now<50u;
     return base_vehicle_button(pin);
 }
 ER tk_slp_tsk(TMO timeout) {
     const ER result=base_vehicle_sleep(timeout);
     vehicle_snapshot_t value;assert(vehicle_snapshot_try_read(&value)==E_OK);
-    if (mode==1u) {
+    if (mode==5u) {
+        if (!injected && now>=20u) {
+            ordinary[command_head++%8u]=(robot_command_t){RM_CMD_DUMP,100u};
+            injected=true;
+        }
+        if (now>=100u) assert(dump_requests==1u && !value.active);
+    } else if (mode==1u) {
         if (!injected && now>=20u) { ordinary[command_head++%8u]=(robot_command_t){RM_CMD_START,1u};injected=true; }
         if (now>=40u) assert(!value.active && !value.calibrated && !calibrating && line_drives==0u);
     } else if (value.active && value.phase==3u && !injected) {
         injected=true;
+        if (mode==3u) { imu_lift_test=true; }
+        if (mode==4u) { imu_stale_test=true; }
         if (mode==2u) {
             /* START was queued first, but the dedicated ESTOP must win. */
             ordinary[command_head++%8u]=(robot_command_t){RM_CMD_START,200u};
@@ -126,9 +134,29 @@ int main(int argc,char **argv) {
     }
     if (argc>1 && !strcmp(argv[1],"uncalibrated")) mode=1u;
     else if (argc>1 && !strcmp(argv[1],"estop")) mode=2u;
+    else if (argc>1 && !strcmp(argv[1],"imulift")) mode=3u;
+    else if (argc>1 && !strcmp(argv[1],"imustale")) mode=4u;
+    else if (argc>1 && !strcmp(argv[1],"imuabsent")) {
+        mode=5u;imu_absent_test=true;
+    }
     lp_init(&line);lp_set_pair(&line,true,0);watchdog_ready=true;services_ready=true;
     assert(vehicle_task_start()==E_OK && starts==1u);
     if (setjmp(done)==0) ((void (*)(INT,void *))entry)(0,0);
+    if (mode==5u) {
+        assert(injected && dump_requests==1u && estops==0u && line_drives==0u);
+        return 0;
+    }
+    if (mode>=3u) {
+        vehicle_snapshot_t snapshot;
+        rm_summary_t summary;
+        assert(injected && estops==1u && asked[0]==0 && asked[1]==0);
+        assert(vehicle_snapshot_try_read(&snapshot)==E_OK);
+        assert(!snapshot.active && snapshot.state==VSM_FAULT);
+        assert(vehicle_summary_try_read(&summary)==E_OK);
+        assert(summary.stop_reason==(mode==3u ? 14u : 16u));
+        assert(summary.shell_fault==VSM_FAULT_IMU);
+        return 0;
+    }
     if (barcode_case != 0u) {
         rm_summary_t summary;
         assert(barcode_reads > 0u);

@@ -135,8 +135,74 @@ static void test_exhaustive_words(void)
     }
 }
 
+static void test_geometry(void)
+{
+    obstacle_profile_t profile;
+    rm_obstacle_t report;
+    open_profile(&profile);
+    for (unsigned int i = 4u; i <= 8u; ++i) {
+        profile.point[i] = valid_point(200u);
+    }
+    obstacle_profile_word_t word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, obstacle_profile_side(word, &profile),
+                         1u, 1000u, &report);
+    assert((report.geometry_flags & RM_OBSTACLE_WIDTH_VALID) != 0u);
+    assert(report.width_mm >= 69u && report.width_mm <= 70u);
+    assert(report.left_clear_mm > 0u && report.right_clear_mm > 0u);
+    assert(report.left_clear_mm == report.right_clear_mm);
+    assert((report.geometry_flags & RM_OBSTACLE_LEFT_CLIPPED) == 0u);
+    open_profile(&profile);
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_LEFT, 2u, 2000u,
+                         &report);
+    assert(report.geometry_flags == 0u);
+    assert(report.width_mm == UINT16_MAX);
+    /* A single hit is not a zero-width obstacle. */
+    profile.point[6] = valid_point(200u);
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_LEFT, 3u, 3000u,
+                         &report);
+    assert((report.geometry_flags & RM_OBSTACLE_WIDTH_VALID) == 0u);
+    assert(report.width_mm == UINT16_MAX);
+    /* Asymmetric edge distances: law of cosines, not polar arc length. */
+    open_profile(&profile);
+    profile.point[4] = valid_point(200u);
+    profile.point[8] = valid_point(250u);
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_LEFT, 4u, 4000u,
+                         &report);
+    assert(report.width_mm == 92u);
+    /* Field-of-view edges are censored: width is only a lower bound. */
+    open_profile(&profile);
+    profile.point[0] = profile.point[12] = valid_point(200u);
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_NONE, 5u, 5000u,
+                         &report);
+    assert(report.width_mm == 200u);
+    assert(report.geometry_flags == (RM_OBSTACLE_WIDTH_VALID |
+        RM_OBSTACLE_LEFT_CLIPPED | RM_OBSTACLE_RIGHT_CLIPPED));
+    assert(report.left_clear_mm == UINT16_MAX &&
+           report.right_clear_mm == UINT16_MAX);
+    /* Unknown ray directly beyond an edge cannot establish free span. */
+    open_profile(&profile);
+    profile.point[5] = profile.point[7] = valid_point(200u);
+    profile.point[8] = OBSTACLE_SCAN_POINT_EMPTY;
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_NONE, 6u, 6000u,
+                         &report);
+    assert(report.left_clear_mm == UINT16_MAX);
+    assert((report.geometry_flags & RM_OBSTACLE_LEFT_CLEAR_VALID) == 0u);
+    profile.point[6] = 0u;
+    word = obstacle_profile_build(&profile);
+    obstacle_report_make(&profile, word, OBSTACLE_SIDE_NONE, 7u, 7000u,
+                         &report);
+    assert((report.flags & RM_OBSTACLE_TOO_NEAR) != 0u);
+    assert(report.geometry_flags == 0u && report.width_mm == UINT16_MAX);
+}
+
 int main(void)
 {
+    test_geometry();
     test_closest_index();
     test_make_left_detour();
     test_make_blocked();

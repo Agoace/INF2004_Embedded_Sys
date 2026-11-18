@@ -156,6 +156,10 @@ endif
 ifneq ($(JUNCTION_TEST_CMD),NONE)
 $(error Fake JUNCTION_TEST_CMD and live actions are mutually exclusive)
 endif
+# The built-in A-D table never acts; live needs an explicit course map.
+ifeq ($(strip $(BARCODE_MAP)),)
+$(error Live actions need an explicit BARCODE_MAP, e.g. BARCODE_MAP="F=LEFT")
+endif
 JUNCTION_SUFFIX := _bclive
 endif
 
@@ -192,6 +196,46 @@ $(error BARCODE_CAPTURE=1 requires TEST=1 BENCH=0 IMU_STREAM=0 \
 SMP=0 WIFI=none NET=none MQTT=0)
 endif
 BARCODE_CAPTURE_SUFFIX := _barcode_capture
+endif
+
+# LINE D gain override: LINE_KD=<0..85> replaces only kd_pct in
+# vehicle_task.o through a forced header (line_kd.h). The default 30 is the
+# vehicle_robot_config.h value (demo default 2026-11-17; was 85) and adds
+# nothing. See docs/s3-line-barcode/LINE.md.
+LINE_KD ?= 30
+LINE_KD_VALID := $(shell printf '%s\n' '$(LINE_KD)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_KD)' -le 85 && echo yes)
+ifneq ($(LINE_KD_VALID),yes)
+$(error LINE_KD must be one integer from 0 to 85)
+endif
+ifneq ($(LINE_KD),30)
+ifeq ($(BENCH_KERNEL),1)
+$(error LINE_KD is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_KD=$(LINE_KD) -include ../app_program/vehicle/line_kd.h
+endif
+# Same-tick motion: motion_set_speed() applies the new target in the
+# current 10 ms period (mc_retarget). Only motion.o and motor_ctl.o get a
+# forced header. Default 1 for robot images (demo default 2026-11-17);
+# MOTION_SAME_TICK=0 gives the old next-period timing (suffix _sametick0).
+# BENCH_KERNEL=1 has no motion task path for it: default 0, and 1 fails.
+# See docs/s2-motion/MOTION.md.
+ifeq ($(BENCH_KERNEL),1)
+MOTION_SAME_TICK ?= 0
+else
+MOTION_SAME_TICK ?= 1
+endif
+ifneq ($(words $(MOTION_SAME_TICK)),1)
+$(error MOTION_SAME_TICK must be one value: 0 or 1)
+endif
+ifneq ($(filter $(MOTION_SAME_TICK),0 1),$(MOTION_SAME_TICK))
+$(error Unknown MOTION_SAME_TICK '$(MOTION_SAME_TICK)'; use 0 or 1)
+endif
+ifeq ($(MOTION_SAME_TICK),1)
+ifeq ($(BENCH_KERNEL),1)
+$(error MOTION_SAME_TICK=1 is for the robot image, not BENCH_KERNEL=1)
+endif
+mtkernel_3/app_program/subsystem2/motion.o: CFLAGS += -include ../app_program/subsystem2/motion_same_tick.h
+mtkernel_3/app_program/subsystem2/motor_ctl.o: CFLAGS += -include ../app_program/subsystem2/motor_ctl_same_tick_impl.h
 endif
 
 # CRASH_REPORT=1 also copies every console line to UART0 on GP0 (TX) /
@@ -258,6 +302,42 @@ $(error KERNEL_RAM=1 is UP only: needs SMP=0)
 endif
 endif
 
+# Opt-in ROBOT failed-attempt diagnostics. OFF adds no compiler flag/object.
+BARCODE_FAIL_CAPTURE ?= 0
+BARCODE_FAIL_SLOTS ?= 2
+ifneq ($(words $(BARCODE_FAIL_CAPTURE)),1)
+$(error BARCODE_FAIL_CAPTURE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(BARCODE_FAIL_CAPTURE),0 1),$(BARCODE_FAIL_CAPTURE))
+$(error BARCODE_FAIL_CAPTURE must be 0 or 1)
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+ifneq ($(TEST)$(BENCH),00)
+$(error BARCODE_FAIL_CAPTURE=1 is ROBOT only; TEST=0 BENCH=0 required)
+endif
+ifneq ($(words $(BARCODE_FAIL_SLOTS)),1)
+$(error BARCODE_FAIL_SLOTS must be one value: 1 or 2)
+endif
+ifneq ($(filter $(BARCODE_FAIL_SLOTS),1 2),$(BARCODE_FAIL_SLOTS))
+$(error BARCODE_FAIL_SLOTS must be 1 or 2)
+endif
+endif
+# Vehicle-only LINE proportional gain and base speed. The defaults (85, 120)
+# are the vehicle_robot_config.h values and emit no extra flags or suffix.
+LINE_P_NEAR ?= 85
+LINE_P_NEAR_VALID := $(shell printf '%s\n' '$(LINE_P_NEAR)' | grep -Eq '^(0|[1-9][0-9]?)$$' && test '$(LINE_P_NEAR)' -le 85 && echo yes)
+ifneq ($(LINE_P_NEAR_VALID),yes)
+$(error LINE_P_NEAR must be one integer from 0 to 85)
+endif
+LINE_BASE ?= 120
+LINE_BASE_VALID := $(shell printf '%s\n' '$(LINE_BASE)' | grep -Eq '^[1-9][0-9]{1,2}$$' && test '$(LINE_BASE)' -gt 82 && test '$(LINE_BASE)' -le 378 && echo yes)
+ifneq ($(LINE_BASE_VALID),yes)
+$(error LINE_BASE must be one integer greater than 82 and at most 378)
+endif
+ifneq ($(LINE_P_NEAR):$(LINE_BASE),85:120)
+mtkernel_3/app_program/vehicle/vehicle_task.o: CFLAGS += -DLINE_P_NEAR=$(LINE_P_NEAR) -DLINE_BASE=$(LINE_BASE) -include ../app_program/vehicle/line_p_near.h
+endif
+
 # Opt-in barcode action map, e.g. BARCODE_MAP="F=LEFT,K=RIGHT" (unlisted
 # letters NONE). Only barcode_window.o gets the flags. Empty (default) adds
 # nothing, so ordinary images stay byte-identical. Policy id 1 is the
@@ -282,6 +362,18 @@ mtkernel_3/app_program/subsystem3/barcode_window.o: CFLAGS += $(BARCODE_MAP_CFLA
 $(info BARCODE_MAP: $(BARCODE_MAP) -> policy $(BARCODE_MAP_ID))
 endif
 
+# Replay is opt-in TEST-only. Normal profiles keep the same flags and link.
+IMU_SAFETY_BENCH ?= 0
+ifneq ($(words $(IMU_SAFETY_BENCH)),1)
+$(error IMU_SAFETY_BENCH must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_SAFETY_BENCH),0 1),$(IMU_SAFETY_BENCH))
+$(error IMU_SAFETY_BENCH must be 0 or 1)
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+include imu_safety_bench.mk
+endif
+
 #
 # Images are named after the profile they were built with.  Every image is
 # flashed by hand from a downloads folder, so identically-named artifacts are
@@ -293,6 +385,7 @@ EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(IMU_SAFETY_BENCH_SUFFIX)
 ifeq ($(BENCH_KERNEL),1)
 EXE_FILE := $(EXE_FILE)_bench_kernel_step0
 endif
@@ -301,6 +394,22 @@ EXE_FILE := $(EXE_FILE)_kernel_ram
 endif
 ifneq ($(strip $(BARCODE_MAP)),)
 EXE_FILE := $(EXE_FILE)_bmap$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),30)
+EXE_FILE := $(EXE_FILE)_kd$(LINE_KD)
+endif
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+EXE_FILE := $(EXE_FILE)_sametick0
+endif
+
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifneq ($(LINE_P_NEAR),85)
+EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),120)
+EXE_FILE := $(EXE_FILE)_base$(LINE_BASE)
 endif
 
 GCC := arm-none-eabi-gcc
@@ -383,6 +492,13 @@ KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/bench.list
 else
 KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/robot.list
 endif
+ifeq ($(MOTION_SAME_TICK),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/same_tick.list
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+# The exclusive TEST runner has no ROBOT barcode/Vehicle command callers.
+KERNEL_RAM_LISTS := $(KERNEL_RAM_DIR)/common.list $(KERNEL_RAM_DIR)/imu_safety_bench.list
+endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
 KERNEL_RAM_OBJS := $(sort $(addprefix mtkernel_3/,$(foreach r,$(KERNEL_RAM_ROWS),$(firstword $(subst :, ,$(r))))))
@@ -400,6 +516,10 @@ $(EXE_FILE).ramproof: $(EXE_FILE).elf $(KERNEL_RAM_DIR)/ram_proof.py
 all: $(EXE_FILE).ramproof
 endif
 # End of kernel hot path in RAM
+
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+CFLAGS += -DBARCODE_FAIL_CAPTURE=1 -DBCFC_FAILED_SLOTS=$(BARCODE_FAIL_SLOTS)
+endif
 
 # Applied here, after CFLAGS/ASFLAGS are assigned with ':=', which would
 # otherwise discard anything appended above.
@@ -466,6 +586,24 @@ endif
 ifneq ($(strip $(BARCODE_MAP)),)
 BARCODE_MAP_COMMA := ,
 PROFILE_ID := $(PROFILE_ID)-bmap$(subst $(BARCODE_MAP_COMMA),,$(BARCODE_MAP_VALUES))-id$(BARCODE_MAP_ID)
+endif
+ifneq ($(LINE_KD),30)
+PROFILE_ID := $(PROFILE_ID)-kd$(LINE_KD)
+endif
+ifeq ($(MOTION_SAME_TICK)$(BENCH_KERNEL),00)
+PROFILE_ID := $(PROFILE_ID)-sametick0
+endif
+ifeq ($(BARCODE_FAIL_CAPTURE),1)
+PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
+endif
+ifneq ($(LINE_P_NEAR),85)
+PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)
+endif
+ifneq ($(LINE_BASE),120)
+PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
+endif
+ifeq ($(IMU_SAFETY_BENCH),1)
+PROFILE_ID := $(PROFILE_ID)-imu_safety_bench
 endif
 PROFILE_FILE := .build_profile
 

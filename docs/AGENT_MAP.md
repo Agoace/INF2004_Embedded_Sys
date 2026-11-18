@@ -24,9 +24,9 @@ record once. Use these topic directories before choosing a source entry below:
 | [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
-| [s4-imu/](s4-imu/) | Observe-only robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history. |
-| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: obstacle pipeline and ultrasonic service; history in archive/s5-obstacle/HISTORY.md. |
-| [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results. |
+| [s4-imu/](s4-imu/) | Robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history; IMU_SAFETY_PORT.md tracks the manual UP safety port. |
+| [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: pipeline, coarse/fine geometry and sonar service; COARSE_FINE_VALIDATION.md: software proof, scoped robot floor result and remaining limits; history in archive/s5-obstacle/HISTORY.md. |
+| [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results; figure-8 demo course. |
 | [archive/](archive/) | `HISTORY.md` pointers per area (`git show 569672a:<path>`), records that code still cites, and line/barcode/sim originals. |
 
 The detailed entries below retain source and test navigation. Archive links do
@@ -52,8 +52,11 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | Archived UDP bench dashboard architecture | [telemetry history](archive/s1-telemetry/HISTORY.md#files) |
 | Live MQTT dashboard (laptop) | [docs/s1-telemetry/TELEMETRY.md](s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard) |
 | Week 8 Change Requirement 1 notes | [architecture history](archive/architecture/HISTORY.md#files); summary in [CR1.md](architecture/CR1.md#requirement) |
+| IMU safety manual port | [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — pure [`imu_safety.c`](../app_program/subsystem4/imu_safety.c), [`imu_safety.h`](../app_program/subsystem4/imu_safety.h), synthetic [`test_imu_safety.c`](../tests/test_imu_safety.c), pure Vehicle gate [`imu_gate.c`](../app_program/vehicle/imu_gate.c)/[`imu_gate.h`](../app_program/vehicle/imu_gate.h), receipt/recovery [`test_imu_gate.c`](../tests/test_imu_gate.c), and bounded service boards in [`imu_service.c`](../app_program/subsystem4/imu_service.c). |
+| IMU safety synthetic bench (TEST only) | [IMU_SAFETY_BENCH.md](s4-imu/IMU_SAFETY_BENCH.md) — opt-in `TEST=1 IMU_SAFETY_BENCH=1` UP profile: [`imu_safety_bench/`](../app_program/imu_safety_bench) (replay, per-phase stats, forced-include seams, reporter), [`imu_safety_bench.mk`](../build_make/imu_safety_bench.mk), [`imu_safety_bench.list`](../tools/kernel_ram/imu_safety_bench.list); tests [`test_imu_replay.c`](../tests/test_imu_replay.c), [`test_imu_replay_service.c`](../tests/test_imu_replay_service.c), [`test_imu_safety_bench_make.py`](../tests/test_imu_safety_bench_make.py). |
 | Current kernel ultrasonic driver/service | [OBSTACLE.md](s5-obstacle/OBSTACLE.md#ultrasonic-driver-and-service) — bounded request/echo contract, packed result and sensor limits. |
-| Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; current fixed 13-point scan, no fine pass, monitor/profile, reattempt and line recovery. |
+| Current obstacle pipeline | [OBSTACLE.md](s5-obstacle/OBSTACLE.md) — five brief stages; coarse/fine scan, 13-bin decision completion, estimated geometry, monitor/profile, reattempt and line recovery. |
+| Coarse/fine proof and scoped robot floor result | [COARSE_FINE_VALIDATION.md](s5-obstacle/COARSE_FINE_VALIDATION.md) — [`test_scan_stages.c`](../tests/test_scan_stages.c), [`obstacle_report.c`](../app_program/vehicle/obstacle_report.c), [`test_obstacle_report.c`](../tests/test_obstacle_report.c); stopped `[S5_SCAN]` lines in [`telemetry.c`](../app_program/subsystem1/telemetry.c), wire v3 and legacy decoder [`robot_wire.py`](../scripts/robot_wire.py). |
 | Obstacle bypass record | [docs/archive/OBSTACLE_BYPASS.md](archive/OBSTACLE_BYPASS.md) |
 | Host simulation, echo fit and box sweep | [SIMULATION.md](simulation/SIMULATION.md) — current model/interfaces; historical v1.5 evidence is not the checkout's v1.8 target. [sim/README.md](../sim/README.md) gives build/schema/trace commands. Full originals stay in archive/simulation/. |
 | Obstacle detour handoff | [docs/archive/OBSTACLE_DETOUR_HANDOFF.md](archive/OBSTACLE_DETOUR_HANDOFF.md) |
@@ -96,6 +99,7 @@ commit that changed this section (header comments and file lists).
 | [`scripts/`](../scripts) | Checks (`check-docs.py`, `check-template-changes.py`, `check-sdk-hw-link.py`), hook installer, RAM and message-size reports, MQTT recorder/dashboard (`mqtt_robot.py`, `mqtt_dashboard.py`, `robot_wire.py`, `dashboard_*`), KR1 log decoder, motor bench report, old UDP receivers and dashboard, port restriction. |
 | [`tools/`](../tools) | `barcode_map/` (letter map to `BW_MAP_VALUES`), `kernel_ram/` (RAM placement lists and `ram_proof.py`), `elf2uf2/`, `verify_phase11_usb.py`. |
 | [`sim/`](../sim) | Separate host simulator of bare-metal sources: core clock/world/scenario/runner, devices, target hooks, scenarios JSON, offline viewer and local editor, box sweep, tests. |
+| [`sim/webots/`](../sim/webots) | Figure-8 demo course: tile map, course JSON, map-to-JSON tool and its tests. The Webots generator itself is on `mtk3-hil` (SW8). |
 | [`testing/`](../testing) | Operator test logs per subsystem, integration (`KERNEL_ROBOT.md`) and system; `logs/` placeholders. |
 | [`design-review/`](../design-review) | Week 6 Mermaid sources and images: system statechart, task interaction. |
 | [`videos/`](../videos) | README for hardware test and demo videos. |
@@ -285,13 +289,40 @@ vehicle task described below.
   [SHADOW producer](s3-line-barcode/LIVE_PRODUCER.md),
   [`barcode_live_producer.h`](../app_program/subsystem3/barcode_live_producer.h)
   and [`barcode_live_producer.c`](../app_program/subsystem3/barcode_live_producer.c)
-  bind the LINE feed, context/ACK policy and stopped DUMP; no live actions.
+  bind the LINE feed, context/ACK policy and stopped DUMP; live actions only in
+  the opt-in build ([live command path](s3-line-barcode/BARCODE_LIVE_COMMAND.md),
+  e2e test [`test_barcode_live_e2e.c`](../tests/test_barcode_live_e2e.c)).
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
   record the first course run, GP28 geometry and open findings.
   [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) specifies
   `barcode_live_counts_try_read`, the read-only epoch terminal counts in
   `barcode_live_source.{h,c}`; absence, cancellation and coherent-read tests
   include [`test_barcode_live_counts_absent.c`](../tests/test_barcode_live_counts_absent.c).
+  [Terminal-attempt telemetry](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md)
+  links the LINE FIFO [`barcode_attempt.c`](../app_program/subsystem3/barcode_attempt.c)
+  and [`barcode_attempt.h`](../app_program/subsystem3/barcode_attempt.h),
+  Wi-Fi `robot/barcode` QoS1 service, v2 codec/CSV and early reason/frame dump.
+  FIFO tests: [`test_barcode_attempt.c`](../tests/test_barcode_attempt.c);
+  codec tests: [`test_barcode_wire.c`](../tests/test_barcode_wire.c) and
+  [`test_barcode_v2.py`](../tests/test_barcode_v2.py).
+  [School failed-start analysis](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md)
+  records FC1/FC2 evidence and timing limits. The host validator is
+  [`scripts/barcode_fail_analyze.py`](../scripts/barcode_fail_analyze.py), with
+  [`test_barcode_fail_analyze.py`](../tests/test_barcode_fail_analyze.py).
+  [`test_barcode_quiet_real.c`](../tests/test_barcode_quiet_real.c) checks the
+  three retained vectors and complete FC2 ADC trace. The older
+  [`test_barcode_peak_real.c`](../tests/test_barcode_peak_real.c) also feeds
+  its measured quiet distance bins through the live reader.
+  [`test_barcode_motion_twitch.c`](../tests/test_barcode_motion_twitch.c)
+  checks the 2.5 mm retreat hold, reverse, stall and FC1 KR twitch rows.
+  [Opt-in failed-attempt capture](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md)
+  uses [`barcode_fail_capture.h`](../app_program/subsystem3/barcode_fail_capture.h)
+  and [`barcode_fail_capture.inc`](../app_program/subsystem3/barcode_fail_capture.inc),
+  included only by the enabled source provider. Window/producer hooks record
+  real failed inputs without a default-build object. Tests:
+  [`test_barcode_fail_capture.c`](../tests/test_barcode_fail_capture.c),
+  [`test_barcode_fail_make.py`](../tests/test_barcode_fail_make.py) and the
+  capture-enabled [`feed fixture`](../tests/test_barcode_live_feed.c).
 
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
@@ -387,6 +418,13 @@ vehicle task described below.
 
 - [`app_program/vehicle/vehicle_task.c`](../app_program/vehicle/vehicle_task.c) — priority-13 core-0 navigation: snapshots, spin behaviour, modules, buttons, motion/service/telemetry messages; deadline counter, no sensor polling or dump loop.
 - [`app_program/vehicle/vehicle_robot_config.h`](../app_program/vehicle/vehicle_robot_config.h) — reference-extracted locked settings.
+- [`line_p_near.h`](../app_program/vehicle/line_p_near.h) — opt-in vehicle
+  P-gain/base-speed adapter; [base-speed trial](s3-line-barcode/LINE.md#opt-in-base-speed-trial),
+  [native base test](../tests/test_line_base.c) and
+  [base Make tests](../tests/test_line_base_make.py); [trial settings](s3-line-barcode/LINE.md#opt-in-proportional-gain-trial),
+  [configuration/steering test](../tests/test_line_p_near.c) and
+  [Make option test](../tests/test_line_p_near_make.py). Default sources and
+  flags are unchanged.
 - [`app_program/vehicle/vehicle_log.c`](../app_program/vehicle/vehicle_log.c) and [`vehicle_log.h`](../app_program/vehicle/vehicle_log.h) — pure fixed 16-byte KR1 packing.
 - [`scripts/robot_log_decode.py`](../scripts/robot_log_decode.py) — rows/events CSV decoder; KR1 module 5 means SCAN reverse in the GP20 log; `--hump` CSV from run-end, DUMP and `[S4_HUMP]` lines.
 - [`tests/test_vehicle_task.c`](../tests/test_vehicle_task.c), [`test_vehicle_log.c`](../tests/test_vehicle_log.c) and [`test_robot_contract.py`](../tests/test_robot_contract.py) — glue, packing/decoder and reference-settings checks.
