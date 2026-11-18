@@ -124,7 +124,8 @@ commit that changed this section (header comments and file lists).
   [`vehicle_pack.c`](../app_program/vehicle/vehicle_pack.c) define its nine-word
   payload; [`test_vehicle_pack.c`](../tests/test_vehicle_pack.c) checks
   ranges, invalid codes and interrupted publication. Vehicle is sole writer.
-- [`vehicle_fault.h`](../app_program/vehicle/vehicle_fault.h) maps the current
+- [Vehicle F](architecture/CR1_VEHICLE_F.md) records the diagnostic owner word.
+  [`vehicle_fault.h`](../app_program/vehicle/vehicle_fault.h) maps the current
   IMU gate latch and non-motion/non-IMU shell FAULT to bits 4 and 6.
   `vehicle_task.c` is the sole owner-board writer. The bounded reader is
   `vehicle_fault_mask_try_read` in `fault_mask.h`; it is unavailable in
