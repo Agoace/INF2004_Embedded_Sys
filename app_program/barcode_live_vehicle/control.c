@@ -101,6 +101,17 @@ void barcode_live_producer_observe(barcode_live_producer_t *p,
     }
 
     const bool hold = p->bound && p->window_live && grace && !timed_out;
+    /* Blip grace before the first bar: keep the SEEK white run, frozen.
+     * The window ignores samples; motion loss still rejects it. */
+    const bool seek_hold = !p->bound && p->window_live && grace &&
+        barcode_window_seeking(&p->window);
+    if (seek_hold) {
+        barcode_window_freeze(&p->window, in->adc_us);
+        effective.control.mode = BC_LIVE_PERMITTED;
+        effective.control.ack_sequence = 0u;
+    } else {
+        barcode_window_thaw(&p->window, in->adc_us);
+    }
     if (hold) {
         if (!suspended) disabled_since = in->now_ms;
         suspended = true;
