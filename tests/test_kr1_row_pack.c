@@ -181,7 +181,7 @@ static double ns_between(const struct timespec *a, const struct timespec *b)
 /* Host timing of one pack and one unpack (diagnostic, not a gate). */
 static void bench(void)
 {
-    enum { N = 20000000 };
+    const uint32_t N = 20000000u;
     uint8_t in[16], stored[15], out[16];
     memset(in, 0x5A, sizeof(in));
     in[0] = 0u; in[1] = 0u; in[13] &= (uint8_t)~0x18u; in[15] &= (uint8_t)~0xE0u;
@@ -194,7 +194,7 @@ static void bench(void)
         __asm__ volatile("" ::: "memory");
     }
     clock_gettime(CLOCK_MONOTONIC, &b);
-    const double pack_ns = ns_between(&a, &b) / N;
+    const double pack_ns = ns_between(&a, &b) / (double)N;
     clock_gettime(CLOCK_MONOTONIC, &a);
     for (uint32_t n = 0u; n < N; ++n) {
         stored[0] = (uint8_t)n;
@@ -203,7 +203,7 @@ static void bench(void)
         __asm__ volatile("" ::: "memory");
     }
     clock_gettime(CLOCK_MONOTONIC, &b);
-    const double unpack_ns = ns_between(&a, &b) / N;
+    const double unpack_ns = ns_between(&a, &b) / (double)N;
     printf("kr1_row host pack %.2f ns unpack %.2f ns (sink %u)\n", pack_ns, unpack_ns,
            (unsigned int)sink);
 }
