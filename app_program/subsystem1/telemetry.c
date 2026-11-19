@@ -22,6 +22,9 @@ extern uint32_t robot_health_faults_stop_refused(void) __attribute__((weak));
 #include "../subsystem2/motion_diag.h"
 #include "../vehicle/vehicle_task.h"
 #include "../subsystem4/imu_settings.h"
+#include "../subsystem4/imu_fifo_counts.h"
+/* S4 supplies it in images with the IMU service; absent images print none. */
+extern int imu_fifo_counts_read(imu_fifo_counts_t *out) __attribute__((weak));
 #include <tk/smp.h>   /* T_SPLOCK, SpinLock: multi-writer stats */
 static ID mbf_telemetry;
 static ID task;
@@ -391,6 +394,15 @@ static void dump(void)
     } else {
         tm_printf((UB *)"[robot] hump no finished run source %u %s\n",
                   (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
+    }
+    imu_fifo_counts_t fifo;
+    int (*const fifo_reader)(imu_fifo_counts_t *) = imu_fifo_counts_read;
+    if (fifo_reader != 0 && fifo_reader(&fifo) == E_OK) {
+        tm_printf((UB *)"[S4_FIFO] partial %lu depth_max %lu overrun %lu "
+                        "bad %lu reset %lu batches %lu\n",
+                  (unsigned long)fifo.partial, (unsigned long)fifo.depth_max,
+                  (unsigned long)fifo.overruns, (unsigned long)fifo.bad_status,
+                  (unsigned long)fifo.recoveries, (unsigned long)fifo.batches);
     }
     imu_hump_diag_board_t diag;
     if (vehicle_hump_diag_try_read(&diag) == E_OK) {

@@ -19,6 +19,10 @@ endif
 ifneq ($(IMU_SAFETY_CAPTURE),1)
 TEMP_SRCS := $(filter-out ../app_program/imu_safety_capture/%.c,$(TEMP_SRCS))
 endif
+# Option D bench delay: only in the IMU_GAP_TEST=1 TEST image.
+ifneq ($(IMU_GAP_TEST),1)
+TEMP_SRCS := $(filter-out ../app_program/imu_gap_test/%.c,$(TEMP_SRCS))
+endif
 ifneq ($(BARCODE_LIVE_ENABLE),1)
 TEMP_SRCS := $(filter-out ../app_program/barcode_live_vehicle/%.c,$(TEMP_SRCS))
 else

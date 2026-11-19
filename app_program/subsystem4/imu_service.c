@@ -5,6 +5,7 @@
 #include <string.h>
 #include "../app.h"
 #include "imu_service.h"
+#include "imu_fifo_counts.h"
 #include "../platform/app_board.h"
 #include "imu_safety_board.h"
 #include "../platform/drv_time.h"
@@ -396,6 +397,25 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     return E_OK;
 }
 
+int imu_fifo_counts_read(imu_fifo_counts_t *out)
+{
+    if (out == NULL) {
+        return E_PAR;
+    }
+    if (!running) {
+        return E_OBJ;
+    }
+    out->partial = __atomic_load_n(&probe.fifo_partial, __ATOMIC_RELAXED);
+    out->depth_max = __atomic_load_n(&probe.fifo_depth_max, __ATOMIC_RELAXED);
+    out->overruns = __atomic_load_n(&probe.fifo_overruns, __ATOMIC_RELAXED);
+    out->bad_status = __atomic_load_n(&probe.fifo_bad_status,
+                                      __ATOMIC_RELAXED);
+    out->recoveries = __atomic_load_n(&probe.fifo_recoveries,
+                                      __ATOMIC_RELAXED);
+    out->batches = __atomic_load_n(&probe.fifo_batches, __ATOMIC_RELAXED);
+    return E_OK;
+}
+
 int imu_hump_try_read(imu_hump_board_t *out)
 {
     imu_hump_board_t scratch;
@@ -502,6 +522,10 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     return out == NULL ? E_PAR : E_OBJ;
 }
 int imu_hump_try_read(imu_hump_board_t *out)
+{
+    return out == NULL ? E_PAR : E_OBJ;
+}
+int imu_fifo_counts_read(imu_fifo_counts_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
 }
