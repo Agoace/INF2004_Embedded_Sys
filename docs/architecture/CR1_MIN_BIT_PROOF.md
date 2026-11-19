@@ -90,12 +90,19 @@ Bytes in RAM, from the module records. Boards include their 4 B sequence.
 | Health payload | 120 | 112 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | S1 pending sonar copy | 40 | 32 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | KR1 RAM-log rows (4501) | 72016 | 72016 | not changed on staging |
+| F Health fault snapshot (board copy and working views) | 32 | 16 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage) |
+| F STOP capture board | 36 | 16 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage) |
 
 The F fault mask adds 104 B (four 8 B owner boards, the 36 B STOP
 capture, the 16 B working views and 20 B in the Health board). Static
 RAM of the demo image: 241228 B at `7350da0`, 239304 B at `b68ce6b`
 (−1924 B). The detail is in
 [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md).
+
+After the F pack (branch `mtk3-cr1-fpack`) the F cost is 72 B: the
+snapshot copies use 16 B, the STOP capture board 16 B and a new 4 B
+refused count. Static RAM is 239272 B (−32 B). See
+[F pack](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage).
 
 ## Proof tables
 
@@ -446,7 +453,7 @@ Source: `app_program/subsystem1/network_pack.h`. 1 element(s) of 104 B (832 bits
 | wifi_observed_priority | 0..32 | 33 | 6 | 6 |  |
 | board_unavailable_mask | 5 independent bits | 32 | 5 | 5 |  |
 
-Bits per element: used 809, minimum 809. Layout: separate allocations. Bytes: stored 104; least at used widths 104; least at minimum widths 104 (each element alone in whole words: 104). The Health board also holds a u32 time, the fault snapshot below and a u32 phase (132 B with its sequence).
+Bits per element: used 809, minimum 809. Layout: separate allocations. Bytes: stored 104; least at used widths 104; least at minimum widths 104 (each element alone in whole words: 104). The Health board also holds a u32 time, the fault snapshot below and a u32 phase (124 B with its sequence).
 
 ### S1 pending sonar copy
 
@@ -512,41 +519,39 @@ Bits per element: used 32, minimum 2. Layout: separate allocations. Bytes: store
 
 ### F Health fault snapshot
 
-Source: `app_program/platform/fault_mask.h`. 2 element(s) of 16 B (128 bits, 0 spare).
+Source: `app_program/platform/fault_pack.h`. 2 element(s) of 8 B (64 bits, 2 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| now | 10 fault bits | 1024 | 10 | 32 | GAP |
-| run | 10 fault bits | 1024 | 10 | 32 | GAP |
-| valid | 10 fault bits | 1024 | 10 | 32 | GAP |
+| now | 10 fault bits | 1024 | 10 | 10 |  |
+| run | 10 fault bits | 1024 | 10 | 10 |  |
+| valid | 10 fault bits | 1024 | 10 | 10 |  |
 | epoch | u32 run epoch | 4294967296 | 32 | 32 |  |
 
-Bits per element: used 128, minimum 62. Layout: separate allocations. Bytes: stored 32; least at used widths 32; least at minimum widths 16 (each element alone in whole words: 16). Two copies: in the Health board and in the Health working views. The producer limits the masks (fault_mask_combine); the store does not.
+Bits per element: used 62, minimum 62. Layout: separate allocations. Bytes: stored 16; least at used widths 16; least at minimum widths 16 (each element alone in whole words: 16). Two copies: in the Health board and in the Health working views. The API value stays fault_mask_snapshot_t (16 B).
 
 ### F STOP capture
 
-Source: `app_program/subsystem1/robot_health.c`. 1 element(s) of 32 B (256 bits, 0 spare).
+Source: `app_program/platform/fault_pack.h`. 1 element(s) of 12 B (96 bits, 12 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| owner Motion | bits 0..3 | 16 | 4 | 32 | GAP |
-| owner Vehicle | bits 4, 6 | 4 | 2 | 32 | GAP |
-| owner Sonar | bit 5 | 2 | 1 | 32 | GAP |
-| owner Telemetry | bit 7 | 2 | 1 | 32 | GAP |
-| owner Wi-Fi | bits 8, 9 | 4 | 2 | 32 | GAP |
-| valid | 10 fault bits | 1024 | 10 | 32 | GAP |
+| owner Motion | bits 0..3 | 16 | 4 | 4 |  |
+| owner Vehicle | bits 4, 6 | 4 | 2 | 2 |  |
+| owner Sonar | bit 5 | 2 | 1 | 1 |  |
+| owner Telemetry | bit 7 | 2 | 1 | 1 |  |
+| owner Wi-Fi | bits 8, 9 | 4 | 2 | 2 |  |
+| valid | 10 fault bits | 1024 | 10 | 10 |  |
 | epoch | u32 run epoch | 4294967296 | 32 | 32 |  |
 | us | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
 
-Bits per element: used 256, minimum 84. Layout: separate allocations. Bytes: stored 32; least at used widths 32; least at minimum widths 12 (each element alone in whole words: 12). Plain u32 words (36 B board with its sequence). The producer limits each owner word (capture_owner_values).
+Bits per element: used 84, minimum 84. Layout: separate allocations. Bytes: stored 12; least at used widths 12; least at minimum widths 12 (each element alone in whole words: 12). 16 B board with its sequence. A refused owner word is stored as unknown (valid clear) and counted (robot_health_faults_stop_refused).
 
 ### Report-only gaps
 
 | Record | Fields (GAP) | Stored B | Least B | Saving B |
 | --- | --- | ---: | ---: | ---: |
 | KR1 RAM-log row | echo, flags | 72016 | 69203 | 2813 |
-| F Health fault snapshot | now, run, valid | 32 | 16 | 16 |
-| F STOP capture | owner Motion, owner Vehicle, owner Sonar, owner Telemetry, owner Wi-Fi, valid | 32 | 12 | 20 |
 
 ### Accepted with a reason
 
@@ -565,7 +570,6 @@ The `GAP` rows above are a report only.
 | Record | Why the gap stays now |
 | --- | --- |
 | KR1 RAM-log row | Echo (2 bits) and flags (3 bits) are wider than needed. A whole row stays 16 B at 123 bits; only one bit stream saves 2813 B. 15 B rows need the time to drop 3 bits too, with an index-anchored decode. That change is on `mtk3-cr1-kr1row`. |
-| F Health fault snapshot, F STOP capture | The fault words are plain u32 words. Each holds at most 10 meaningful bits. The producers mask the values; the store does not check them. Packing saves 16 B and 20 B (36 B). A fix is on a separate branch. |
 
 Accepted by the operator, with the written reason:
 
