@@ -17,7 +17,7 @@
 /* ASSUMED scope, not an optical resolution measurement. Fit the scale from
  * the start star; smaller print needs measured along-travel GP28 evidence. */
 #define N_MIN 4.0f
-#define QUIET_MIN_MM 40.0f
+#define QUIET_MIN_MM 20.0f /* operator 2026-11-19: was 40 */
 /* ASSUMED bound: nominal L0/R292 for 30 ms retreats GP28 about 1.6..1.9 mm. */
 #define RETREAT_MAX_MM 2.5f
 #define N_MAX 7.0f
