@@ -65,8 +65,11 @@ int vehicle_hump_try_read(imu_hump_summary_t *out) {
     if (hump_result==E_OK) *out=(imu_hump_summary_t){.peak_01mm=108u,.count=2u,.flags=0x05u,.gated=3u};
     return hump_result;
 }
-int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
-    if (hump_result==E_OK) *out=(imu_hump_diag_report_t){.valid=true};
+int vehicle_hump_diag_try_read(imu_hump_diag_board_t *out) {
+    if (hump_result==E_OK) {
+        const imu_hump_diag_report_t r={.valid=true};
+        imu_hump_diag_pack(out,&r);
+    }
     return hump_result;
 }
 int tm_printf(const UB *fmt,...) {

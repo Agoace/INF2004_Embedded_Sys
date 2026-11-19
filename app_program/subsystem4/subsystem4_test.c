@@ -100,7 +100,7 @@ static void report(const imu_snapshot_t *snapshot)
 static uint32_t hump_epoch;
 static imu_hump_report_t hump_last;
 static bool have_hump_last;
-static imu_hump_diag_report_t diag_last;
+static imu_hump_diag_board_t diag_last;
 static bool have_diag_last;
 
 /* One run result line, taken like the robot summary from the last good
@@ -117,11 +117,11 @@ static void hump_report(void)
               (unsigned int)h.flags, (unsigned int)h.gated,
               (unsigned int)hump_last.hump.long_rejects,
               (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
-    imu_hump_diag_finish(&diag_last, hump_epoch, drv_time_ms(),
+    imu_hump_diag_board_finish(&diag_last, hump_epoch, drv_time_ms(),
         have_diag_last && have_hump_last &&
-        diag_last.timestamp_ms == hump_last.timestamp_ms &&
+        imu_hump_diag_board_time(&diag_last) == hump_last.timestamp_ms &&
         h.peak_01mm != IMU_HUMP_PEAK_NONE);
-    imu_hump_diag_print(&diag_last);
+    imu_hump_diag_board_print(&diag_last);
 }
 
 static imu_drive_stats_t vibration;

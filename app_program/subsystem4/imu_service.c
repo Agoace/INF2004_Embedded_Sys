@@ -2,9 +2,11 @@
  * Polling has its own cyclic; never replace motion's vehicle wake client. */
 #define PROHIBIT_DEF_SIZE_T
 #include <stddef.h>
+#include <string.h>
 #include "../app.h"
 #include "imu_service.h"
 #include "../platform/app_board.h"
+#include "imu_safety_board.h"
 #include "../platform/drv_time.h"
 #include "../subsystem2/motion.h"
 #include "../subsystem2/motor_ctl_robot.h"
@@ -22,15 +24,19 @@ static imu_core_t core;
 static imu_probe_t probe;
 static imu_snapshot_t value;
 static APP_BOARD(imu_snapshot_t) board;
-static imu_hump_report_t hump_value;
-static APP_BOARD(imu_hump_report_t) hump_board;
+static imu_hump_board_t hump_value;
+static APP_BOARD(imu_hump_board_t) hump_board;
 /* Keep diagnostic windows OUT of core's rollback copy and snapshot. */
 static imu_hump_diag_t hump_diag;
 static imu_hump_diag_report_t diag_value;
-static APP_BOARD(imu_hump_diag_report_t) diag_board;
+static APP_BOARD(imu_hump_diag_board_t) diag_board;
+/* CR1: the packed peak words change only when the peak changes. */
+static imu_hump_peak_diag_t diag_peak;
+static imu_hump_diag_board_t diag_packed;
+static bool diag_peak_ready;
 /* Port of smojjofy 8ac6e38..038ff23; UP placement seam is unchanged. */
 static imu_safety_t safety;
-static APP_BOARD(imu_safety_report_t) safety_board;
+static APP_BOARD(imu_safety_board_t) safety_board;
 static uint32_t safety_clear_requests, safety_requests_consumed;
 static uint32_t safety_applied_request;
 static uint32_t mark_requests;
@@ -181,8 +187,16 @@ static void diagnostic_tick(const imu_core_input_t *input)
     if (run_epoch() != input->run_epoch) {
         diag_value.valid = false;
     }
+    if (!diag_peak_ready ||
+        memcmp(&diag_peak, &diag_value.peak, sizeof(diag_peak)) != 0) {
+        diag_peak = diag_value.peak;
+        imu_hump_diag_pack_peak(&diag_packed, &diag_peak);
+        diag_peak_ready = true;
+    }
+    imu_hump_diag_board_t packed;
+    imu_hump_diag_pack_run(&packed, &diag_packed, &diag_value);
     app_board_publish(&diag_board.sequence, diag_board.words,
-                      &diag_value, sizeof(diag_value));
+                      &packed, sizeof(packed));
 }
 
 static void safety_tick(const imu_core_input_t *input, bool read_valid)
@@ -207,8 +221,10 @@ static void safety_tick(const imu_core_input_t *input, bool read_valid)
     }
     const imu_safety_report_t report = {
         .value = safety.output, .applied_request = safety_applied_request};
+    imu_safety_board_t packed;
+    imu_safety_board_pack(&packed, &report);
     app_board_publish(&safety_board.sequence, safety_board.words,
-                      &report, sizeof(report));
+                      &packed, sizeof(packed));
 }
 
 static void sample(void)
@@ -277,8 +293,7 @@ static void sample(void)
         value.timestamp_ms = input.now_ms;
         /* Only a real observation refreshes the hump board time, so a
          * stalled sensor makes the copy stale for every reader. */
-        hump_value.hump = core.output.hump;
-        hump_value.timestamp_ms = input.now_ms;
+        imu_hump_pack(&hump_value, &core.output.hump, input.now_ms);
         app_board_publish(&hump_board.sequence, hump_board.words,
                           &hump_value, sizeof(hump_value));
         safety_tick(&input, valid);
@@ -381,9 +396,9 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
     return E_OK;
 }
 
-int imu_hump_try_read(imu_hump_report_t *out)
+int imu_hump_try_read(imu_hump_board_t *out)
 {
-    imu_hump_report_t scratch;
+    imu_hump_board_t scratch;
 
     if (out == NULL) {
         return E_PAR;
@@ -399,9 +414,9 @@ int imu_hump_try_read(imu_hump_report_t *out)
     return E_OK;
 }
 
-int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
+int imu_hump_diag_try_read(imu_hump_diag_board_t *out)
 {
-    imu_hump_diag_report_t scratch;
+    imu_hump_diag_board_t scratch;
 
     if (out == NULL) {
         return E_PAR;
@@ -419,7 +434,7 @@ int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
 
 int imu_safety_try_read(imu_safety_report_t *out)
 {
-    imu_safety_report_t copy;
+    imu_safety_board_t copy;
     if (out == NULL) { return E_PAR; }
     if (!running) { return E_OBJ; }
     if (__atomic_load_n(&safety_board.sequence, __ATOMIC_SEQ_CST) == 0u) {
@@ -429,7 +444,7 @@ int imu_safety_try_read(imu_safety_report_t *out)
                             &copy, sizeof(copy))) {
         return E_TMOUT;
     }
-    *out = copy;
+    imu_safety_board_unpack(out, &copy);
     return E_OK;
 }
 
@@ -486,11 +501,11 @@ int imu_snapshot_try_read(imu_snapshot_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
 }
-int imu_hump_try_read(imu_hump_report_t *out)
+int imu_hump_try_read(imu_hump_board_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
 }
-int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
+int imu_hump_diag_try_read(imu_hump_diag_board_t *out)
 {
     return out == NULL ? E_PAR : E_OBJ;
 }

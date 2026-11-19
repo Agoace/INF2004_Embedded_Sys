@@ -86,6 +86,75 @@ typedef struct {
     uint8_t gated;        /* Saturates at IMU_HUMP_GATED_MAX. */
 } imu_hump_summary_t;
 
+/*
+ * CR1 shared hump board: 4 words (16 B), masks and shifts only. The IMU
+ * task keeps the float report; imu_hump_pack() runs the float decisions of
+ * imu_hump_summarize() once (open-event compare, 0.1 mm rounding), so a
+ * reader gets the same summary and live event values for every input.
+ *
+ *   W0 31..0  timestamp_ms (last real observation)
+ *   W1 31..0  run_epoch
+ *   W2 15..0  best peak, 0.1 mm   W2 31..16 last closed peak, 0.1 mm
+ *   W3 15..0  closed count        W3 23..16 gated starts, max 255
+ *   W3 28..24 flags 0x3E >> 1     W3 29 open   W3 30 valid   W3 31 last LEFT
+ *
+ * IMPLEMENTED is always set in a summary, so it is not stored.
+ */
+#define IMU_HUMP_BOARD_WORDS 4u
+typedef struct {
+    uint32_t word[IMU_HUMP_BOARD_WORDS];
+} imu_hump_board_t;
+
+#define IMU_HUMP_W2_BEST_SHIFT 0u
+#define IMU_HUMP_W2_LAST_SHIFT 16u
+#define IMU_HUMP_W3_COUNT_SHIFT 0u
+#define IMU_HUMP_W3_GATED_SHIFT 16u
+#define IMU_HUMP_W3_FLAGS_SHIFT 24u
+#define IMU_HUMP_W3_OPEN_SHIFT 29u
+#define IMU_HUMP_W3_VALID_SHIFT 30u
+#define IMU_HUMP_W3_LEFT_SHIFT 31u
+#define IMU_HUMP_U16_MASK 0xFFFFu
+#define IMU_HUMP_U8_MASK 0xFFu
+#define IMU_HUMP_W3_FLAGS_MASK 0x1Fu
+
+static inline uint32_t imu_hump_board_time(const imu_hump_board_t *b)
+{
+    return b->word[0];
+}
+
+static inline uint32_t imu_hump_board_epoch(const imu_hump_board_t *b)
+{
+    return b->word[1];
+}
+
+/* Closed events of the run, saturating; the live event counter. */
+static inline uint16_t imu_hump_board_count(const imu_hump_board_t *b)
+{
+    return (uint16_t)((b->word[3] >> IMU_HUMP_W3_COUNT_SHIFT) &
+                      IMU_HUMP_U16_MASK);
+}
+
+/* imu_hump_tenths(last_peak_mm). */
+static inline uint16_t imu_hump_board_last_01mm(const imu_hump_board_t *b)
+{
+    return (uint16_t)((b->word[2] >> IMU_HUMP_W2_LAST_SHIFT) &
+                      IMU_HUMP_U16_MASK);
+}
+
+static inline bool imu_hump_board_last_left(const imu_hump_board_t *b)
+{
+    return ((b->word[3] >> IMU_HUMP_W3_LEFT_SHIFT) & 1u) != 0u;
+}
+
+/* Pack the writer's float report. Never fails; out must not be NULL. */
+void imu_hump_pack(imu_hump_board_t *out, const imu_hump_output_t *hump,
+                   uint32_t timestamp_ms);
+/* imu_hump_summarize() for a board copy: same rules, same values. */
+imu_hump_summary_t imu_hump_board_summarize(const imu_hump_board_t *b,
+                                            bool have, uint32_t run_epoch,
+                                            uint32_t now_ms,
+                                            uint32_t max_age_ms);
+
 void imu_hump_init(imu_hump_t *s);
 /* An odd new run_epoch starts a run: totals clear, smoothing continues.
  * An even epoch ends it: a confirmed open event closes with FLAG_OPEN.
@@ -101,7 +170,8 @@ void imu_hump_step(imu_hump_t *s, const imu_hump_input_t *in);
 /* Report the run as if STOP happened now: a confirmed open event counts
  * with FLAG_OPEN. Peak IMU_HUMP_PEAK_NONE (flags IMPLEMENTED|FAULT, count
  * 0) if have is false, run_epoch is even or different, the copy is older
- * than max_age_ms, or the run had no valid sample. Never uses stale data. */
+ * than max_age_ms, or the run had no valid sample. Never uses stale data.
+ * Same as imu_hump_board_summarize() of imu_hump_pack(r). */
 imu_hump_summary_t imu_hump_summarize(const imu_hump_report_t *r, bool have,
                                       uint32_t run_epoch, uint32_t now_ms,
                                       uint32_t max_age_ms);
