@@ -80,6 +80,9 @@ static void reject(barcode_window_t *state, barcode_window_reason_t reason)
 #if BARCODE_FAIL_CAPTURE
     bcfc_reject(state, (uint32_t)reason);
 #endif
+    if (state->phase == SEEK && state->white_started) {
+        state->white_lost |= BW_WHITE_LOST_OTHER;
+    }
     state->result = (barcode_window_result_t){
         .serial = next_serial(state), .reason = (uint32_t)reason};
     state->phase = SEEK;
@@ -467,10 +470,52 @@ static void tail(barcode_window_t *state, barcode_window_adc_t sample,
     state->phase = COMPLETE;
 }
 
+void barcode_window_freeze(barcode_window_t *state, uint32_t us)
+{
+    if (!state->frozen) {
+        state->frozen = true;
+        state->thaw = false;
+        state->freeze_us = us;
+    }
+}
+
+void barcode_window_thaw(barcode_window_t *state, uint32_t us)
+{
+    if (state->frozen) {
+        state->frozen = false;
+        state->thaw = true;
+        state->thaw_us = us;
+    }
+}
+
 static void process(barcode_window_t *state, barcode_window_adc_t sample,
                     float mm, const barcode_window_motor_t *upper)
 {
     if (state->phase == SEEK) {
+        const bool after_freeze = (state->frozen || state->thaw) &&
+            (int32_t)(sample.us - state->freeze_us) >= 0;
+        if (after_freeze && (state->frozen ||
+                             (int32_t)(sample.us - state->thaw_us) < 0)) {
+            return; /* Blip grace: the white run, mean and count wait. */
+        }
+        if (after_freeze) {
+            state->thaw = false;
+            if (state->white_started &&
+                (sample.raw < WHITE_MIN || sample.raw > WHITE_MAX)) {
+                /* Not white after the blip: a bar may have started in the
+                 * frozen travel, so the run cannot bridge the blip. */
+                state->white_lost |= BW_WHITE_LOST_BLIP;
+                state->white_started = false;
+                state->white_count = 0u;
+                state->transitioning = false;
+                state->seek_mm = mm;
+                return;
+            }
+            /* Frozen travel is not white: move the run start forward by
+             * it. The mean and the count continue. */
+            state->white_start += mm - state->seek_mm;
+        }
+        state->seek_mm = mm;
         if (sample.raw >= WHITE_MIN && sample.raw <= WHITE_MAX) {
             if (!state->white_started) {
                 state->white_start = mm;
@@ -508,6 +553,9 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
 #endif
         } else if ((float)sample.raw >= rise) {
             /* Unadmitted ink ends white, even when its run is short. */
+            if (state->white_started) {
+                state->white_lost |= BW_WHITE_LOST_BLACK;
+            }
             state->white_started = false;
             state->white_count = 0u;
             state->transitioning = false;
@@ -517,6 +565,7 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
                 state->transitioning = true;
             }
             if (mm - state->transition_start > N_MAX) {
+                state->white_lost |= BW_WHITE_LOST_OTHER;
                 state->white_started = false;
             }
         }
