@@ -809,7 +809,7 @@ static const record_t health_record = {
     health_pack_w, health_unpack_w, health_fields,
     sizeof(health_fields) / sizeof(health_fields[0]), 23, 104, 104, 104,
     "The Health board also holds a u32 time, the fault snapshot below and a "
-    "u32 phase (132 B with its sequence).", 0};
+    "u32 phase (124 B with its sequence).", 0};
 
 static bool ssc_pack_w(uint8_t *out, const void *n)
 {
@@ -889,78 +889,88 @@ OWNER_RECORD(own_telemetry, "F owner word: Telemetry", FAULT_OWNER_TELEMETRY,
 OWNER_RECORD(own_network, "F owner word: Wi-Fi", FAULT_OWNER_NETWORK,
              "bits 8, 9")
 
-static bool copy16_pack(uint8_t *out, const void *n)
+static bool snapshot_pack_w(uint8_t *out, const void *n)
 {
-    memcpy(out, n, 16u);
+    fault_snapshot_packed_t p;
+    if (!fault_snapshot_pack(&p, n)) {
+        return false;
+    }
+    memcpy(out, &p, sizeof(p));
     return true;
 }
-static bool copy16_unpack(void *n, const uint8_t *in)
+static bool snapshot_unpack_w(void *n, const uint8_t *in)
 {
-    memcpy(n, in, 16u);
+    fault_snapshot_packed_t p;
+    memcpy(&p, in, sizeof(p));
+    fault_snapshot_unpack(n, &p);
     return true;
 }
 FIELD_IO(fault_mask_snapshot_t, fs_now, v->now)
 FIELD_IO(fault_mask_snapshot_t, fs_run, v->run)
 FIELD_IO(fault_mask_snapshot_t, fs_valid, v->valid)
 FIELD_IO(fault_mask_snapshot_t, fs_epoch, v->epoch)
+static const int64_t bad_fault10[] = {0x400};
 static const field_t fault_snapshot_fields[] = {
-    {"now", 0, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_now)},
-    {"run", 32, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_run)},
-    {"valid", 64, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_valid)},
-    {"epoch", 96, 32, 1, U32, .range = "u32 run epoch", .set = IO(fs_epoch)},
+    {"now", 0, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_now)},
+    {"run", 10, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_run)},
+    {"valid", 20, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_valid)},
+    {"epoch", 32, 32, 1, U32, .range = "u32 run epoch", .set = IO(fs_epoch)},
 };
 static const record_t fault_snapshot_record = {
-    "F Health fault snapshot", "app_program/platform/fault_mask.h",
-    sizeof(fault_mask_snapshot_t), 16, 128, 2, 32, L_SEPARATE,
-    copy16_pack, copy16_unpack, fault_snapshot_fields,
-    sizeof(fault_snapshot_fields) / sizeof(fault_snapshot_fields[0]), 0,
-    32, 32, 16,
-    "Two copies: in the Health board and in the Health working views. The "
-    "producer limits the masks (fault_mask_combine); the store does not.", 0};
+    "F Health fault snapshot", "app_program/platform/fault_pack.h",
+    sizeof(fault_mask_snapshot_t), 8, 64, 2, 32, L_SEPARATE,
+    snapshot_pack_w, snapshot_unpack_w, fault_snapshot_fields,
+    sizeof(fault_snapshot_fields) / sizeof(fault_snapshot_fields[0]), 2,
+    16, 16, 16,
+    "Two copies: in the Health board and in the Health working views. "
+    "The API value stays fault_mask_snapshot_t (16 B).", 0};
 
-/* Mirror of the private fault_stop_capture_t (robot_health.c). */
-typedef struct {
-    uint32_t owner[5];
-    uint32_t valid;
-    uint32_t epoch;
-    uint32_t us;
-} stop_capture_t;
-_Static_assert(sizeof(stop_capture_t) == 32u, "STOP capture payload");
-static bool copy32_pack(uint8_t *out, const void *n)
+static bool stop_pack_w(uint8_t *out, const void *n)
 {
-    memcpy(out, n, 32u);
+    fault_stop_packed_t p;
+    if (!fault_stop_pack(&p, n)) {
+        return false;
+    }
+    memcpy(out, &p, sizeof(p));
     return true;
 }
-static bool copy32_unpack(void *n, const uint8_t *in)
+static bool stop_unpack_w(void *n, const uint8_t *in)
 {
-    memcpy(n, in, 32u);
+    fault_stop_packed_t p;
+    memcpy(&p, in, sizeof(p));
+    fault_stop_unpack(n, &p);
     return true;
 }
-FIELD_IO(stop_capture_t, sc_motion, v->owner[0])
-FIELD_IO(stop_capture_t, sc_vehicle, v->owner[1])
-FIELD_IO(stop_capture_t, sc_sonar, v->owner[2])
-FIELD_IO(stop_capture_t, sc_telemetry, v->owner[3])
-FIELD_IO(stop_capture_t, sc_network, v->owner[4])
-FIELD_IO(stop_capture_t, sc_valid, v->valid)
-FIELD_IO(stop_capture_t, sc_epoch, v->epoch)
-FIELD_IO(stop_capture_t, sc_us, v->us)
+FIELD_IO(fault_stop_values_t, sc_motion, v->owner[0])
+FIELD_IO(fault_stop_values_t, sc_vehicle, v->owner[1])
+FIELD_IO(fault_stop_values_t, sc_sonar, v->owner[2])
+FIELD_IO(fault_stop_values_t, sc_telemetry, v->owner[3])
+FIELD_IO(fault_stop_values_t, sc_network, v->owner[4])
+FIELD_IO(fault_stop_values_t, sc_valid, v->valid)
+FIELD_IO(fault_stop_values_t, sc_epoch, v->epoch)
+FIELD_IO(fault_stop_values_t, sc_us, v->us)
+static const int64_t bad_sc_motion[] = {0x10};
+static const int64_t bad_sc_vehicle[] = {FAULT_SONAR_SENSOR};
+static const int64_t bad_sc_sonar[] = {FAULT_SHELL_OTHER};
+static const int64_t bad_sc_telemetry[] = {FAULT_WIFI_LINK_DOWN};
+static const int64_t bad_sc_network[] = {FAULT_LOG_FULL};
 static const field_t stop_fields[] = {
-    {"owner Motion", 0, 32, 1, .flags = FAULT_OWNER_MOTION, .reason = R_GAP, .range = "bits 0..3", .set = IO(sc_motion)},
-    {"owner Vehicle", 32, 32, 1, .flags = FAULT_OWNER_VEHICLE, .reason = R_GAP, .range = "bits 4, 6", .set = IO(sc_vehicle)},
-    {"owner Sonar", 64, 32, 1, .flags = FAULT_OWNER_SONAR, .reason = R_GAP, .range = "bit 5", .set = IO(sc_sonar)},
-    {"owner Telemetry", 96, 32, 1, .flags = FAULT_OWNER_TELEMETRY, .reason = R_GAP, .range = "bit 7", .set = IO(sc_telemetry)},
-    {"owner Wi-Fi", 128, 32, 1, .flags = FAULT_OWNER_NETWORK, .reason = R_GAP, .range = "bits 8, 9", .set = IO(sc_network)},
-    {"valid", 160, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(sc_valid)},
-    {"epoch", 192, 32, 1, U32, .range = "u32 run epoch", .set = IO(sc_epoch)},
-    {"us", 224, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(sc_us)},
+    {"owner Motion", 0, 4, 1, .flags = FAULT_OWNER_MOTION, BAD(bad_sc_motion), .range = "bits 0..3", .set = IO(sc_motion)},
+    {"owner Vehicle", 4, 2, 1, .flags = FAULT_OWNER_VEHICLE, BAD(bad_sc_vehicle), .range = "bits 4, 6", .set = IO(sc_vehicle)},
+    {"owner Sonar", 6, 1, 1, .flags = FAULT_OWNER_SONAR, BAD(bad_sc_sonar), .range = "bit 5", .set = IO(sc_sonar)},
+    {"owner Telemetry", 7, 1, 1, .flags = FAULT_OWNER_TELEMETRY, BAD(bad_sc_telemetry), .range = "bit 7", .set = IO(sc_telemetry)},
+    {"owner Wi-Fi", 8, 2, 1, .flags = FAULT_OWNER_NETWORK, BAD(bad_sc_network), .range = "bits 8, 9", .set = IO(sc_network)},
+    {"valid", 10, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(sc_valid)},
+    {"epoch", 32, 32, 1, U32, .range = "u32 run epoch", .set = IO(sc_epoch)},
+    {"us", 64, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(sc_us)},
 };
 static const record_t stop_record = {
-    "F STOP capture", "app_program/subsystem1/robot_health.c",
-    sizeof(stop_capture_t), 32, 256, 1, 32, L_SEPARATE,
-    copy32_pack, copy32_unpack, stop_fields,
-    sizeof(stop_fields) / sizeof(stop_fields[0]), 0, 32, 32, 12,
-    "Plain u32 words (36 B board with its sequence). The producer limits "
-    "each owner word (capture_owner_values).", 0};
+    "F STOP capture", "app_program/platform/fault_pack.h",
+    sizeof(fault_stop_values_t), 12, 96, 1, 32, L_SEPARATE,
+    stop_pack_w, stop_unpack_w, stop_fields,
+    sizeof(stop_fields) / sizeof(stop_fields[0]), 12, 12, 12, 12,
+    "16 B board with its sequence. A refused owner word is stored as "
+    "unknown (valid clear) and counted (robot_health_faults_stop_refused).", 0};
 
 /* ---- IMU A boards (subsystem4/imu_hump.h, imu_hump_diag.h,
  *      imu_safety_board.h) ---------------------------------------------- */

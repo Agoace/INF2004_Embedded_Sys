@@ -13,6 +13,7 @@
 /* Health is absent in some isolated TEST/BENCH images. Unknown is pending. */
 extern int robot_health_faults_try_read(fault_mask_snapshot_t *, uint32_t *)
     __attribute__((weak));
+extern uint32_t robot_health_faults_stop_refused(void) __attribute__((weak));
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
@@ -351,6 +352,14 @@ static void dump(void)
     } else {
         tm_printf((UB *)"[FAULT_MASK] pending Health sample for phase_epoch %lu\n",
                   (unsigned long)rt_epoch());
+    }
+    /* CR1 F pack: printed only when a STOP owner word was refused (stored as
+     * unknown). With a zero count the FAULT_MASK output does not change. */
+    uint32_t (*const refused_reader)(void)=robot_health_faults_stop_refused;
+    const uint32_t refused=refused_reader!=0?refused_reader():0u;
+    if (refused!=0u) {
+        tm_printf((UB *)"[FAULT_MASK] stop_refused %lu (owner stored as unknown)\n",
+                  (unsigned long)refused);
     }
     tm_printf((UB *)"[robot] KR1 reset %s; %s rows %lu events %lu "
                     "lost_telemetry %lu lost_wakes %lu overruns %lu "

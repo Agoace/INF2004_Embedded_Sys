@@ -20,6 +20,7 @@
 #include "../platform/idle_meter.h"
 #include "../platform/cpu_load.h"
 #include "../platform/run_timing.h"
+#include "../platform/fault_pack.h"
 #include "../subsystem2/motion.h"
 
 /* Optional in isolated TEST/BENCH images. Missing means unknown, not zero.
@@ -47,46 +48,53 @@ static ID health_cyclic;
 typedef struct {
     network_health_packed_t value;
     uint32_t us;
-    fault_mask_snapshot_t faults;
+    fault_snapshot_packed_t faults; /* CR1 F pack: 8 B, fault_pack.h */
     uint32_t fault_epoch; /* Raw START/STOP phase; not just normalized identity. */
 } health_snapshot_t;
 
 static APP_BOARD(health_snapshot_t) board;
-_Static_assert(sizeof(board) == 132u, "Packed Health plus fault/phase board allocation");
+_Static_assert(sizeof(board) == 124u, "Packed Health plus fault/phase board allocation");
 
 /* Vehicle writes this STOP capture; Health only reads. No masks are ORed
- * here: preserve each owner's value and read quality for the sole combiner. */
-typedef struct {
-    uint32_t owner[5];
-    uint32_t valid;
-    uint32_t epoch;
-    uint32_t us;
-} fault_stop_capture_t;
-static APP_BOARD(fault_stop_capture_t) stop_capture;
-_Static_assert(sizeof(stop_capture) == 36u, "STOP capture allocation");
-static fault_mask_snapshot_t fault_views; /* Health sole writer, 16 B. */
+ * across owners here: each owner keeps its own field and read quality for
+ * the sole combiner. CR1 F pack: 12 B payload (fault_pack.h). */
+static APP_BOARD(fault_stop_packed_t) stop_capture;
+_Static_assert(sizeof(stop_capture) == 16u, "STOP capture allocation");
+/* Owner words refused by the STOP capture. Writer: robot_health_faults_stop
+ * (Vehicle task only). */
+static uint32_t stop_refused;
+static fault_snapshot_packed_t fault_views; /* Health sole writer, 8 B. */
 
-static const uint32_t owner_masks[5] = {FAULT_OWNER_MOTION, FAULT_OWNER_VEHICLE,
-    FAULT_OWNER_SONAR, FAULT_OWNER_TELEMETRY, FAULT_OWNER_NETWORK};
+static const uint32_t *const owner_masks = fault_pack_owner_masks;
 
-static void capture_owner_values(fault_stop_capture_t *out)
+/* Copy each owner word. A word with a bit outside its owner mask is not
+ * stored: the owner stays unknown (valid clear, value 0) and *refused
+ * counts it. Unknown is never an implicit all-clear. */
+static void capture_owner_values(fault_stop_values_t *out, uint32_t *refused)
 {
-    *out=(fault_stop_capture_t){0};
+    *out=(fault_stop_values_t){0};
     out->us=drv_time_us();
     motion_status_t motion;uint32_t us;
     if (motion_snapshot_try_read != 0 && motion_snapshot_try_read(&motion,&us)==E_OK) {
-        out->owner[0]=(uint32_t)motion.faults & FAULT_OWNER_MOTION;
-        out->valid=FAULT_OWNER_MOTION;
+        if (((uint32_t)motion.faults & ~FAULT_OWNER_MOTION)==0u) {
+            out->owner[0]=(uint32_t)motion.faults;
+            out->valid=FAULT_OWNER_MOTION;
+        } else {
+            ++*refused;
+        }
     }
     bool (*const getters[4])(uint32_t *)={vehicle_fault_mask_try_read,
         sonar_fault_mask_try_read,telemetry_fault_mask_try_read,
         robot_network_fault_mask_try_read};
     for (unsigned int i=1u;i<5u;++i) {
         uint32_t word;
-        if (getters[i-1u]!=0 && getters[i-1u](&word) &&
-            (word & ~owner_masks[i])==0u) {
-            out->owner[i]=word;
-            out->valid|=owner_masks[i];
+        if (getters[i-1u]!=0 && getters[i-1u](&word)) {
+            if ((word & ~owner_masks[i])==0u) {
+                out->owner[i]=word;
+                out->valid|=owner_masks[i];
+            } else {
+                ++*refused;
+            }
         }
     }
 }
@@ -94,47 +102,68 @@ static void capture_owner_values(fault_stop_capture_t *out)
 void robot_health_faults_stop(uint32_t odd_epoch)
 {
     if ((odd_epoch & 1u)==0u) return;
-    fault_stop_capture_t values;
-    capture_owner_values(&values);
+    fault_stop_values_t values;
+    uint32_t refused=0u;
+    capture_owner_values(&values,&refused);
     values.epoch=odd_epoch;
-    app_board_publish(&stop_capture.sequence,stop_capture.words,&values,sizeof(values));
+    fault_stop_packed_t packed;
+    if (!fault_stop_pack(&packed,&values)) {
+        /* Not reachable: every owner is masked above. Store all unknown. */
+        packed=(fault_stop_packed_t){0u,odd_epoch,values.us};
+        ++refused;
+    }
+    if (refused!=0u) {
+        __atomic_store_n(&stop_refused,
+            __atomic_load_n(&stop_refused,__ATOMIC_RELAXED)+refused,__ATOMIC_SEQ_CST);
+    }
+    app_board_publish(&stop_capture.sequence,stop_capture.words,&packed,sizeof(packed));
 }
 
-static void collect_fault_views(void)
+uint32_t robot_health_faults_stop_refused(void)
 {
-    const fault_mask_snapshot_t before=fault_views;
+    return __atomic_load_n(&stop_refused,__ATOMIC_SEQ_CST);
+}
+
+static void collect_fault_views(fault_mask_snapshot_t *views)
+{
+    fault_snapshot_unpack(views,&fault_views);
+    const fault_mask_snapshot_t before=*views;
     const uint32_t epoch=rt_epoch();
     const bool active=(epoch & 1u)!=0u;
     /* STOP is odd+1, not a new run. At wrapped STOP0 keep the last identity. */
-    const uint32_t run_epoch=active?epoch:(epoch==0u?fault_views.epoch:epoch-1u);
-    fault_mask_collect_begin(&fault_views,run_epoch);
-    const uint32_t previous_run=fault_views.run;
-    fault_stop_capture_t current;
-    capture_owner_values(&current);
+    const uint32_t run_epoch=active?epoch:(epoch==0u?views->epoch:epoch-1u);
+    fault_mask_collect_begin(views,run_epoch);
+    const uint32_t previous_run=views->run;
+    fault_stop_values_t current;
+    uint32_t refused=0u; /* now view: shown as valid clear, not counted */
+    capture_owner_values(&current,&refused);
     for (unsigned int i=0u;i<5u;++i) {
         const uint32_t *word=(current.valid & owner_masks[i])==owner_masks[i]?
             &current.owner[i]:0;
-        (void)fault_mask_combine(&fault_views,owner_masks[i],word);
+        (void)fault_mask_combine(views,owner_masks[i],word);
     }
     if (!active) {
         /* Do not add post-STOP conditions to the frozen run. Merge only the
          * immutable capture made at STOP, even if an owner has since cleared. */
-        fault_views.run=previous_run;
-        fault_stop_capture_t final;
-        if (app_board_try_read(&stop_capture.sequence,stop_capture.words,&final,
-                               sizeof(final)) && final.epoch==run_epoch) {
+        views->run=previous_run;
+        fault_stop_packed_t packed;
+        if (app_board_try_read(&stop_capture.sequence,stop_capture.words,&packed,
+                               sizeof(packed)) && packed.epoch==run_epoch) {
+            fault_stop_values_t final;
+            fault_stop_unpack(&final,&packed);
             for (unsigned int i=0u;i<5u;++i) {
-                if ((final.valid & owner_masks[i])==owner_masks[i] &&
-                    (final.owner[i] & ~owner_masks[i])==0u) {
-                    fault_views.run|=final.owner[i];
+                if ((final.valid & owner_masks[i])==owner_masks[i]) {
+                    views->run|=final.owner[i];
                 }
             }
         }
     }
     if (rt_epoch()!=epoch) {
-        fault_views=before;
-        fault_views.valid=0u; /* Cross-epoch collection is not a current sample. */
+        *views=before;
+        views->valid=0u; /* Cross-epoch collection is not a current sample. */
     }
+    /* Masks come from fault_mask_combine, so they are within 10 bits. */
+    (void)fault_snapshot_pack(&fault_views,views);
 }
 /* P1: per-run peak load; Health is the only writer. */
 static cpu_peak_t run_peak;
@@ -173,7 +202,8 @@ static void refresh(void)
     health_snapshot_t packed;
     packed.us = v.us;
     packed.fault_epoch = rt_epoch();
-    collect_fault_views();
+    fault_mask_snapshot_t views;
+    collect_fault_views(&views);
     packed.faults = fault_views;
     if (network_health_pack(&packed.value, &v.value)) {
         app_board_publish(&board.sequence, board.words, &packed, sizeof(packed));
@@ -256,7 +286,7 @@ int robot_health_faults_try_read(fault_mask_snapshot_t *out, uint32_t *timestamp
     health_snapshot_t v;
     if (!app_board_try_read(&board.sequence,board.words,&v,sizeof(v))) return E_TMOUT;
     if (v.fault_epoch!=rt_epoch()) return E_TMOUT;
-    *out=v.faults;
+    fault_snapshot_unpack(out,&v.faults);
     *timestamp_us=v.us;
     return E_OK;
 }

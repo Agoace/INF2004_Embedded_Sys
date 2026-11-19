@@ -159,6 +159,9 @@ single-writer owner words; run freezes at STOP and resets at the next START.
 These are diagnostic observations, not a current safety guarantee or a new
 actuator input. Unknown source bits must not be read as an all-clear. Fault
 masks are in the Health snapshot and USB only; MQTT wire bytes do not change.
+If a STOP owner word has a bit outside its owner mask, Health stores that
+owner as unknown and counts it. The dump then adds
+`[FAULT_MASK] stop_refused N`; at count 0 the line is not printed.
 A reset destroys RAM data. KR1 remains 128 bits; there is no spare
 barcode byte. `KERNEL_ROBOT.md` in the [kernel history](../archive/kernel/HISTORY.md#files)
 keeps the exact local KR/VE text description; the binary topic layout is
