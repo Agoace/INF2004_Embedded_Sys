@@ -142,24 +142,58 @@ int main(void)
     assert(p.fifo_last_samples == 8u && p.mean_accel_mg[0] == 1003.5f);
     assert(p.fifo_min == 1u && p.fifo_max == 8u);
     assert(p.fifo_batches == 4u && p.fifo_samples == 17u);
-    /* Count 9: backlog. Reset FIFO, discard, invalidate, NOT a bus fault. */
+    assert(p.fifo_partial == 0u && p.fifo_depth_max == 8u);
+    /* Option D (operator option a). Count 9..31 without OVRN: read the
+     * OLDEST 6 (one 36-byte burst, IMU_FIFO_CATCHUP_BATCH), leave the rest
+     * queued, no FIFO reset, a VALID observation. 6, not 8: an 8-sample
+     * cycle is about 2 ms and timed out on bench B1. Count <= 8 is the
+     * unchanged path. Assumption (AN3308 9.2.3 for LIS3DH; not stated for
+     * LSM303DLHC; confirmed on the robot in bench B1): FSS is the unread
+     * count and each 6-byte burst step pops ONE sample, so FSS drops by the
+     * number read. This fake models that: status = queued - consumed. */
     feed(9u);
-    assert(!imu_probe_read(&p, 50u, &value));
-    assert(p.ready && p.fifo_backlogs == 1u && p.fifo_recoveries == 1u);
-    assert(!p.no_sample && p.fifo_last_samples == 0u && p.faults == 0u);
-    assert(registers[0][0x2e] == 0x80u && queued == 0u);
-    assert(p.fifo_batches == 4u && p.reads == 4u);
-    /* 32 unread (OVRN, FSS=31): overrun, reset and invalidate. */
+    assert(imu_probe_read(&p, 50u, &value));
+    assert(p.ready && p.fifo_backlogs == 0u && p.fifo_recoveries == 0u);
+    assert(p.fifo_partial == 1u && p.fifo_depth_max == 9u);
+    assert(p.fifo_last_samples == 6u && p.mean_accel_mg[0] == 1002.5f);
+    assert(p.fifo_raw[0][0] == 16000 && p.fifo_raw[5][0] == 16080);
+    assert(registers[0][0x2e] == 0x80u && queued - consumed == 3u);
+    assert(p.fifo_batches == 5u && p.reads == 5u && p.faults == 0u);
+    /* The remainder (3 <= 8) takes the unchanged path: no gap, no duplicate. */
+    assert(imu_probe_read(&p, 55u, &value));
+    assert(p.fifo_last_samples == 3u && p.fifo_raw[0][0] == 16096);
+    assert(p.mean_accel_mg[0] == 1007.0f && queued == consumed);
+    assert(p.fifo_partial == 1u && !p.fifo_catchup);
+    /* 31 queued (largest count without OVRN): 6, 6, 6, 6, 6, then 1. The
+     * cap stays while 7 or 8 remain (the tail of a catch-up), so no
+     * catch-up cycle reads 8. */
+    feed(31u);
+    const unsigned int expect[6] = {6u, 6u, 6u, 6u, 6u, 1u};
+    for (unsigned int i = 0u; i < 6u; ++i) {
+        assert(imu_probe_read(&p, 56u + i, &value));
+        assert(p.fifo_last_samples == expect[i]);
+        assert(p.fifo_raw[0][0] == (int16_t)(16000u + 16u * 6u * i));
+        assert(p.fifo_catchup == (i < 5u)); /* 31,25,19,13,7 queued */
+    }
+    assert(queued == consumed && p.fifo_partial == 5u && !p.fifo_catchup);
+    assert(p.fifo_depth_max == 31u && p.fifo_recoveries == 0u);
+    assert(p.fifo_batches == 12u && p.reads == 12u);
+    /* After the catch-up, 8 queued takes the unchanged path again: 8. */
+    feed(8u);
+    assert(imu_probe_read(&p, 62u, &value) && p.fifo_last_samples == 8u);
+    assert(p.fifo_partial == 5u);
+    /* 32 unread (OVRN, FSS=31): overrun, reset and invalidate, as before. */
     feed(4u);
     status_override = 0x5f;
     assert(!imu_probe_read(&p, 60u, &value));
-    assert(p.fifo_overruns == 1u && p.fifo_recoveries == 2u);
+    assert(p.fifo_overruns == 1u && p.fifo_recoveries == 1u);
+    assert(p.fifo_depth_max == 32u && p.fifo_partial == 5u);
     assert(status_override < 0 && p.faults == 0u);
     /* EMPTY with a nonzero count is contradictory: reset, not trusted. */
     feed(4u);
     status_override = 0x23;
     assert(!imu_probe_read(&p, 65u, &value));
-    assert(p.fifo_bad_status == 1u && p.fifo_recoveries == 3u);
+    assert(p.fifo_bad_status == 1u && p.fifo_recoveries == 2u);
     feed(4u);
     const imu_units_t before_failure = value;
 
