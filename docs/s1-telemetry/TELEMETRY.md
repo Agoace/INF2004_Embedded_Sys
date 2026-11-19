@@ -133,7 +133,10 @@ See [publication modes](MQTT_WIRE.md#publication-modes).
 
 ## RAM log ownership
 
-Telemetry30 alone owns 4501 ×16-byte KR1 rows (72016 bytes) and 512
+Telemetry30 alone owns 4501 KR1 rows. Each row is stored in 15 private
+bytes (67515 bytes) and read back as the unchanged 16-byte row; a row whose
+time is 8192 or more ticks after its index is refused and counted as lost.
+See [CR1 KR1 row](../architecture/CR1_KR1_ROW.md). It also owns 512
 ×9-byte private VE records (4608 bytes). Public event values remain 12 B;
 USB VE text and 16-byte MQTT log events are unchanged. Private INFO is
 104 B, 48 scan records use 528 B, and the committed log-index board is

@@ -89,7 +89,7 @@ Bytes in RAM, from the module records. Boards include their 4 B sequence.
 | Retained INFO | 108 | 104 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | Health payload | 120 | 112 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | S1 pending sonar copy | 40 | 32 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
-| KR1 RAM-log rows (4501) | 72016 | 72016 | not changed on staging |
+| KR1 RAM-log rows (4501) | 72016 | 67515 | [CR1_KR1_ROW.md](CR1_KR1_ROW.md) (branch `mtk3-cr1-kr1row`) |
 | IMU hump board | 52 | 20 | [CR1_IMU_A.md](CR1_IMU_A.md) |
 | IMU hump value and Vehicle copy (2) | 96 | 32 | [CR1_IMU_A.md](CR1_IMU_A.md) |
 | IMU diag board | 76 | 40 | [CR1_IMU_A.md](CR1_IMU_A.md) |
@@ -241,23 +241,23 @@ Bits per element: used 278, minimum 278. Layout: separate allocations. Bytes: st
 
 ### KR1 RAM-log row
 
-Source: `app_program/vehicle/vehicle_log.h`. 4501 element(s) of 16 B (128 bits, 0 spare).
+Source: `app_program/subsystem1/kr1_row_pack.h`. 4501 element(s) of 15 B (120 bits, 0 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| time (20 ms ticks) | 0..65535 (wraps; no run time limit in code) | 65536 | 16 | 16 |  |
+| time (20 ms ticks) | offset 0..8191 from the row index (index-anchored; 8192+ refused, counted lost) | 8192 | 13 | 13 |  |
 | state | 0..2 | 3 | 2 | 2 |  |
 | module | 0..5 (5 = scan reverse) | 6 | 3 | 3 |  |
 | raw L, C[2] | ADC 0..4095 | 4096 | 12 | 12 |  |
 | position | -100..100 | 201 | 8 | 8 |  |
 | asked L, R[2] | -512..511 (clamped) | 1024 | 10 | 10 |  |
 | measured L, R[2] | -512..511 (clamped) | 1024 | 10 | 10 |  |
-| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 16 | GAP |
+| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 14 |  |
 | servo | -36..36 | 73 | 7 | 7 |  |
 | events | 8 defined bits (lost, found, echo, ping, outcome 3, fault) | 256 | 8 | 8 |  |
-| flags | bit 0 only (speed clamp) | 2 | 1 | 4 | GAP |
+| flags | bit 0 only (speed clamp) | 2 | 1 | 1 |  |
 
-Bits per element: used 128, minimum 123. Layout: one array. Bytes: stored 72016; least at used widths 72016; least at minimum widths 69203 (each element alone in whole bytes: 72016). Slack: echo 2 bits and flags 3 bits. A row stays 16 B (123 bits) unless the time also drops 3 bits (120 bits), which needs a decode rule that the code does not have.
+Bits per element: used 120, minimum 120. Layout: one array. Bytes: stored 67515; least at used widths 67515; least at minimum widths 67515 (each element alone in whole bytes: 67515). Private RAM storage of the unchanged 16-byte row (vehicle_log.h). Readers unpack to 16 B; robot/log, live kr1 and USB text do not change. Echo bits 14..15 and flags bits 1..3 are always 0.
 
 ### Barcode frame boards
 
@@ -622,7 +622,6 @@ Bits per element: used 88, minimum 88. Layout: separate allocations. Bytes: stor
 
 | Record | Fields (GAP) | Stored B | Least B | Saving B |
 | --- | --- | ---: | ---: | ---: |
-| KR1 RAM-log row | echo, flags | 72016 | 69203 | 2813 |
 
 ### Accepted with a reason
 
@@ -635,11 +634,8 @@ Bits per element: used 88, minimum 88. Layout: separate allocations. Bytes: stor
 
 ## Gaps
 
-The `GAP` rows above are a report only.
-
-| Record | Why the gap stays now |
-| --- | --- |
-| KR1 RAM-log row | Echo (2 bits) and flags (3 bits) are wider than needed. A whole row stays 16 B at 123 bits; only one bit stream saves 2813 B. 15 B rows need the time to drop 3 bits too, with an index-anchored decode. That change is on `mtk3-cr1-kr1row`. |
+No `GAP` row remains. The F pack (`mtk3-cr1-fpack`) and the 15 B KR1 row
+(`mtk3-cr1-kr1row`) closed the last two gaps.
 
 Accepted by the operator, with the written reason:
 
