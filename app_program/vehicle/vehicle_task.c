@@ -84,12 +84,12 @@ static uint32_t calibration_epoch;
 /* Single writer; odd from run start until the hump values are taken. */
 static uint32_t run_epoch;
 static uint32_t line_run_epoch;
-static imu_hump_diag_report_t diag_copy;
+static imu_hump_diag_board_t diag_copy;
 static bool have_diag_copy;
-static imu_hump_diag_report_t run_diag;
-static APP_BOARD(imu_hump_diag_report_t) run_diag_board;
+static imu_hump_diag_board_t run_diag;
+static APP_BOARD(imu_hump_diag_board_t) run_diag_board;
 /* Newest IMU hump board copy and the result of the last finished run. */
-static imu_hump_report_t hump_copy;
+static imu_hump_board_t hump_copy;
 static bool have_hump_copy;
 static imu_hump_summary_t run_hump;
 static APP_BOARD(imu_hump_summary_t) run_hump_board;
@@ -563,7 +563,7 @@ static void event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word)
  */
 static void diagnostic_read(void)
 {
-    imu_hump_diag_report_t r;
+    imu_hump_diag_board_t r;
 
     if (imu_hump_diag_try_read(&r) == E_OK) {
         diag_copy = r;
@@ -574,7 +574,7 @@ static void diagnostic_read(void)
 static void hump_read(void)
 {
     diagnostic_read();
-    imu_hump_report_t r;
+    imu_hump_board_t r;
     if (imu_hump_try_read(&r) == E_OK) {
         hump_copy = r;
         have_hump_copy = true;
@@ -593,14 +593,16 @@ static void hump_poll(uint32_t epoch)
 {
     hump_read();
 #if TM_MQTT
-    const imu_hump_output_t *h = &hump_copy.hump;
-    if (!have_hump_copy || h->run_epoch != epoch || h->count == hump_emitted ||
-        drv_time_ms() - hump_copy.timestamp_ms > IMU_HUMP_MAX_AGE_MS) {
+    const imu_hump_board_t *h = &hump_copy;
+    const uint16_t count = imu_hump_board_count(h);
+    if (!have_hump_copy || imu_hump_board_epoch(h) != epoch ||
+        count == hump_emitted ||
+        drv_time_ms() - imu_hump_board_time(h) > IMU_HUMP_MAX_AGE_MS) {
         return;
     }
-    hump_emitted = h->count;
-    live_event(RM_EVENT_HUMP, 0u, 0u, imu_hump_tenths(h->last_peak_mm),
-               imu_hump_detail(h->count, h->last_left));
+    hump_emitted = count;
+    live_event(RM_EVENT_HUMP, 0u, 0u, imu_hump_board_last_01mm(h),
+               imu_hump_detail(count, imu_hump_board_last_left(h)));
 #else
     (void)epoch;
 #endif
@@ -619,12 +621,13 @@ static void hump_finish(uint32_t epoch)
     robot_health_faults_stop(epoch);
 #endif
     hump_read();
-    run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
-                                  drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
+    run_hump = imu_hump_board_summarize(&hump_copy, have_hump_copy, epoch,
+                                        drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
     run_diag = diag_copy;
-    imu_hump_diag_finish(&run_diag, epoch, drv_time_ms(),
+    imu_hump_diag_board_finish(&run_diag, epoch, drv_time_ms(),
         have_diag_copy && have_hump_copy &&
-        diag_copy.timestamp_ms == hump_copy.timestamp_ms &&
+        imu_hump_diag_board_time(&diag_copy) ==
+            imu_hump_board_time(&hump_copy) &&
         run_hump.peak_01mm != IMU_HUMP_PEAK_NONE);
     app_board_publish(&run_diag_board.sequence, run_diag_board.words,
                       &run_diag, sizeof(run_diag));
@@ -1537,7 +1540,7 @@ static void run_once(void)
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
     hump_print();
-    imu_hump_diag_print(&run_diag);
+    imu_hump_diag_board_print(&run_diag);
 }
 
 /*
@@ -1811,13 +1814,13 @@ uint32_t vehicle_line_run_epoch(void)
 #endif
 }
 
-int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out)
+int vehicle_hump_diag_try_read(imu_hump_diag_board_t *out)
 {
     if (out == NULL) {
         return E_PAR;
     }
 #if !APP_TEST && !APP_BENCH
-    imu_hump_diag_report_t value;
+    imu_hump_diag_board_t value;
     if (!app_board_try_read(&run_diag_board.sequence, run_diag_board.words,
                             &value, sizeof(value))) {
         const uint32_t sequence =

@@ -6,6 +6,7 @@ target_link_libraries(test_imu_replay PRIVATE m)
 host_test(test_imu_replay_service tests/test_imu_replay_service.c
     tests/imu_replay_service.c tests/smp_stubs/placement_double.c
     app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_safety_board.c
     app_program/imu_safety_bench/replay.c
     app_program/imu_safety_bench/stats.c app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
@@ -21,6 +22,7 @@ target_link_libraries(test_imu_replay_service PRIVATE m)
 host_test(test_imu_replay_service_robot tests/test_imu_replay_service.c
     tests/imu_replay_service.c tests/smp_stubs/placement_double.c
     app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_safety_board.c
     app_program/imu_safety_bench/replay.c
     app_program/imu_safety_bench/stats.c app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_core.c app_program/subsystem4/imu_support.c
@@ -82,7 +84,7 @@ endforeach()
 target_compile_definitions(test_imu_hump_core_filtered PRIVATE
     IMU_HUMP_SOURCE=IMU_HUMP_SOURCE_FILTERED)
 host_test(test_imu_service tests/test_imu_service.c
-    app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_safety.c app_program/subsystem4/imu_safety_board.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c)
@@ -93,7 +95,7 @@ target_compile_options(test_imu_service PRIVATE
     -include "${REPO}/tests/imu_service_hook.h")
 target_link_libraries(test_imu_service PRIVATE m)
 host_test(test_imu_capture_service tests/test_imu_service.c
-    app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_safety.c app_program/subsystem4/imu_safety_board.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c
@@ -156,3 +158,22 @@ target_compile_definitions(test_imu_stream_runner PRIVATE
     APP_TEST=1 APP_IMU_STREAM=1)
 add_test(NAME test_imu_stream_priority_failure
     COMMAND test_imu_stream_runner priority_failure)
+# CR1 IMU A: packed shared boards (hump 16 B, diag 36 B, safety 12 B).
+host_test(test_imu_hump_board tests/test_imu_hump_board.c
+    app_program/subsystem4/imu_hump.c)
+target_link_libraries(test_imu_hump_board PRIVATE m)
+host_test(test_imu_hump_diag_board tests/test_imu_hump_diag_board.c
+    app_program/subsystem4/imu_hump.c
+    app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_hump_diag_print.c)
+target_include_directories(test_imu_hump_diag_board BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_link_libraries(test_imu_hump_diag_board PRIVATE m)
+host_test(test_imu_safety_board tests/test_imu_safety_board.c
+    app_program/subsystem4/imu_safety_board.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_safety_board PRIVATE m)
+host_test(test_imu_gate_board tests/test_imu_gate_board.c
+    app_program/subsystem4/imu_safety_board.c
+    app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c)
+target_link_libraries(test_imu_gate_board PRIVATE m)

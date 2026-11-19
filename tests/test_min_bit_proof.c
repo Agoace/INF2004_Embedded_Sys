@@ -32,6 +32,9 @@
 #include "../app_program/subsystem1/telemetry_pack.h"
 #include "../app_program/subsystem1/network_pack.h"
 #include "../app_program/platform/fault_mask.h"
+#include "../app_program/subsystem4/imu_hump.h"
+#include "../app_program/subsystem4/imu_hump_diag.h"
+#include "../app_program/subsystem4/imu_safety_board.h"
 
 #define MAX_ELEM_BYTES 128u
 #define MAX_FIELDS 48u
@@ -498,6 +501,7 @@ int main(int argc, char **argv)
 {
     const bool md = argc > 1 && strcmp(argv[1], "--markdown") == 0;
     build_lists();
+    build_imu_lists();
     for (unsigned int i = 0u; i < sizeof(records) / sizeof(records[0]); ++i) {
         if (md) {
             markdown(records[i]);
