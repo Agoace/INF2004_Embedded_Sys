@@ -34,7 +34,17 @@ not current acceptance reports. Local course originals are not public records.
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
   Contains: one row per value (value, date, label, source line) in 9 areas: geometry, mass, motors and DM1, encoders, line/junction, GP28/barcode, sonar/servo/obstacle, IMU, timing/CPU/RAM/telemetry; values that do not agree, with resolved ones marked (for example counts 2540/2535, sonar offset 58/47 mm); the operator ruler session 2026-11-16 (length 180 mm, track 111-112 mm, wheel width 16 mm).
 - [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, evidence and motion plan.
+- [CR1_TELEMETRY_A.md](architecture/CR1_TELEMETRY_A.md) — approved telemetry storage packing, diagnostic fault masks and T110.
+  Contains: per-step RAM/build evidence, unchanged binary MQTT formats, 110 ms deadline and 120 ms poll model, existing FIX2/LAST references and pending 110 ms robot gate.
+- [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — Private barcode evidence packing: representation, exact bits, RAM split, replay tests and pending robot timing.
   Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
+- [CR1_SONAR_A.md](architecture/CR1_SONAR_A.md) — approved sonar and obstacle board storage only.
+  Contains: field ranges, sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B, baseline `7350da0`, static RAM 241228 to 241148 B, unchanged API/messages/wire, 679 host tests, torn-read tests, DERIVED(emulator) pack time, compiler-local frames; category B and private scan/detour packing remain deferred.
+- [CR1_SONAR_F.md](architecture/CR1_SONAR_F.md) — sonar owner fault word (bit 5) for the F fault mask.
+  Contains: single sonar-task writer, ECHO-only update from the existing fault streak, NO_RETURN not a fault, last value kept while stopped, tests, +8 B static RAM.
+- [CR1_VEHICLE_A1.md](architecture/CR1_VEHICLE_A1.md) — approved Vehicle observation storage only.
+  Contains: field ranges, single-writer board (44 to 40 B), baseline `7350da0`, static RAM 241228 to 241224 B, unchanged API/messages/wire, 680 host tests, compiler-local frames and hardware limits; private controller packing remains deferred.
+- [CR1_VEHICLE_F.md](architecture/CR1_VEHICLE_F.md) — Vehicle owner fault word: IMU latch and other shell fault, single writer, red proof, tests, 8 B board cost and one STOP capture per run.
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
   Contains: scope and approval (2026-11-10, closed at `50426ae`), command table NONE/A–D, ownership and entry points, fixed consumer value, junction detection, phases and bounds, reports and failures (event 7).
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter, SHADOW only.

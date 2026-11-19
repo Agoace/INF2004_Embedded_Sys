@@ -42,7 +42,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Kernel UP | Robot image. Overruns 0, lost wakes 0. | [KERNEL.md](../kernel/KERNEL.md) | F-NVIC and idle-stack fixes on HOLD. |
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
-| CR1 change requirement | Motion round done. | [CR1.md](CR1.md) | Week 13: 110 ms telemetry, before/after tables. Sonar round waits for operator. |
+| CR1 change requirement | Motion round done. Round 2026-11-18 on `mtk3-cr1`: sonar/obstacle A, vehicle A1 and barcode evidence A merged, static RAM 241228 to 240808 B, API/wire unchanged, software checks pass. All robot MQTT payloads are binary. | [CR1.md](CR1.md#module-round-2026-11-18) | Telemetry/faults and the 110 ms MQTT state deadline (operator requirement, option A) in progress. Locked line path not packed. Robot timing/stack run not done. IMU not started. |
 | SIL (Webots) | LINE, SEARCH, curves, barcode A and F observe-only on `mtk3-hil`. | [SIMULATION.md](../simulation/SIMULATION.md) | Does not reproduce the real zigzag. Records live on `mtk3-hil`. |
 
 ## Robot run logs

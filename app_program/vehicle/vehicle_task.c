@@ -38,12 +38,16 @@
 #include "junction_source.h"
 #include "../subsystem3/barcode_live_source.h"
 #include "vehicle_board.h"
+#include "vehicle_pack.h"
+#include "vehicle_fault.h"
 #include "obstacle_report.h"
+#include "obstacle_pack.h"
 #include "run_stats.h"
 #include "../platform/app_board.h"
 #include "../subsystem4/imu_service.h"
 #if TM_MQTT
 #include "../subsystem1/robot_network.h"
+#include "../subsystem1/robot_health.h"
 #include "../subsystem1/network_queue.h"
 #include "../subsystem2/motor_ctl_robot.h"
 #endif
@@ -65,6 +69,8 @@ static ls_t ls;
 static ss_t ss;
 static dr_t dr;
 static vsm_t vsm;
+static fault_mask_board_t vehicle_fault_board;
+static void publish_vehicle_faults(void);
 static uint16_t raw[3];
 static vc_event_t line_event;
 static bool active;
@@ -117,9 +123,10 @@ static uint8_t stop_code;
 #define set_reason(code, text) (reason = (text))
 #endif
 #if TM_MQTT
-static APP_BOARD(vehicle_snapshot_t) vehicle_board;
+static APP_BOARD(vehicle_packed_t) vehicle_board;
 static vehicle_snapshot_t vehicle;
-static APP_BOARD(rm_obstacle_t) obstacle_board;
+/* CR1 A: 6-word packed layout, see obstacle_pack.h. */
+static obstacle_board_t obstacle_board;
 static uint32_t obstacle_scans;
 static APP_BOARD(rm_detour_t) detour_board;
 static APP_BOARD(rm_summary_t) summary_board;
@@ -172,6 +179,7 @@ static void live_event(uint8_t kind, uint8_t from, uint8_t to, uint16_t word,
  */
 static void publish_vehicle(void)
 {
+    publish_vehicle_faults();
     vehicle.timestamp_us = drv_time_us();
     ++vehicle.sequence;
     vehicle.state = vsm.state;
@@ -182,8 +190,11 @@ static void publish_vehicle(void)
     vehicle.wake_lost = wake_lost;
     vehicle.overruns = overruns;
     vehicle.response_max_us = response_max_us;
-    app_board_publish(&vehicle_board.sequence, vehicle_board.words, &vehicle,
-                      sizeof(vehicle));
+    vehicle_packed_t packed;
+    if (vehicle_pack(&packed, &vehicle)) {
+        app_board_publish(&vehicle_board.sequence, vehicle_board.words, &packed,
+                          sizeof(packed));
+    }
 }
 
 /*
@@ -194,12 +205,11 @@ int vehicle_snapshot_try_read(vehicle_snapshot_t *out)
     if (!out) {
         return E_PAR;
     }
-    vehicle_snapshot_t v;
-    if (!app_board_try_read(&vehicle_board.sequence, vehicle_board.words, &v,
-                            sizeof(v))) {
+    vehicle_packed_t packed;
+    if (!app_board_try_read(&vehicle_board.sequence, vehicle_board.words, &packed,
+                            sizeof(packed)) || !vehicle_unpack(out, &packed)) {
         return E_TMOUT;
     }
-    *out = v;
     return E_OK;
 }
 
@@ -221,8 +231,8 @@ static void publish_obstacle(const ss_t *scan)
                              (scan->stage << RM_OBSTACLE_STAGE_SHIFT) |
                              ((uint8_t)scan->completed_attempt
                               << RM_OBSTACLE_ATTEMPT_SHIFT));
-    app_board_publish(&obstacle_board.sequence, obstacle_board.words, &report,
-                      sizeof(report));
+    /* The report comes from obstacle_report_make(); it always packs. */
+    (void)obstacle_board_publish(&obstacle_board, &report);
     telemetry_message_t message = {.kind = TELEMETRY_SCAN};
     message.data.scan = (telemetry_scan_t){
         .scan_id = obstacle_scans, .duration_ms = scan->duration_ms,
@@ -304,8 +314,7 @@ int vehicle_obstacle_try_read(rm_obstacle_t *out)
     if (!out) {
         return E_PAR;
     }
-    if (!app_board_try_read(&obstacle_board.sequence, obstacle_board.words,
-                            &report, sizeof(report))) {
+    if (!obstacle_board_try_read(&obstacle_board, &report)) {
         return (obstacle_board.sequence == 0u) ? E_NOEXS : E_TMOUT;
     }
     *out = report;
@@ -463,7 +472,7 @@ static void handle_command(void)
 #define vehicle_stop      motion_stop
 #define vehicle_estop     motion_estop
 #define vehicle_servo     motion_set_servo
-#define publish_vehicle() ((void)0)
+#define publish_vehicle() publish_vehicle_faults()
 #endif
 
 /*
@@ -603,6 +612,12 @@ static void hump_poll(uint32_t epoch)
  */
 static void hump_finish(uint32_t epoch)
 {
+    /* Capture final owner values before this common run exit goes even.
+     * Keep vsm_stop below the summary/events so their shell state is unchanged. */
+    publish_vehicle_faults();
+#if TM_MQTT
+    robot_health_faults_stop(epoch);
+#endif
     hump_read();
     run_hump = imu_hump_summarize(&hump_copy, have_hump_copy, epoch,
                                   drv_time_ms(), IMU_HUMP_MAX_AGE_MS);
@@ -730,6 +745,14 @@ static void read_line(void)
 
 /* Port of smojjofy 48b5f9b..038ff23: integer-only, bounded Vehicle glue. */
 static ig_t imu_gate;
+
+/* Vehicle task only: mirror existing state, never latch or clear a fault. */
+static void publish_vehicle_faults(void)
+{
+    const uint32_t value = vehicle_fault_value(imu_gate.latched, vsm.state,
+                                               vsm.fault);
+    (void)fault_mask_publish(&vehicle_fault_board, FAULT_OWNER_VEHICLE, value);
+}
 static bool imu_announced;
 
 static const char *imu_stop_text(uint8_t trigger)
@@ -791,6 +814,7 @@ static bool imu_check_tick(void)
         ig_queued(&imu_gate, imu_safety_clear_request(), now);
     }
     if (action.recovery != 0u) { imu_recovery(action.recovery); }
+    publish_vehicle_faults();
     if (ig_stop_required(&imu_gate)) {
         if (active) { cancelled = true; }
         return false;
@@ -1211,6 +1235,7 @@ static void run_once(void)
     if (!ig_stop_required(&imu_gate)) {
         (void)motion_clear_faults();
         vsm_reset(&vsm);
+        publish_vehicle_faults();
     }
     read_line();
     line_event = VC_EVENT_NONE;
@@ -1379,6 +1404,7 @@ static void run_once(void)
         line_event = VC_EVENT_NONE;
         const vsm_drive_t d =
             vsm_step(&vsm, &in, (uint8_t)(s.faults & MC_FAULT_LATCHED), now);
+        publish_vehicle_faults();
         if (vsm.state == VSM_RUNNING &&
             (vsm.running == VSM_MOD_LINE || vsm.running == VSM_MOD_SEARCH)) {
             ja_cross_progress(&junction_line.action, s.counts, now);
@@ -1507,6 +1533,7 @@ static void run_once(void)
     (void)vehicle_stop();
     (void)vehicle_servo(0, 0);
     vsm_stop(&vsm);
+    publish_vehicle_faults();
     motion_diag_phase(MOTION_DIAG_STOP);
     sonar_stop();
     hump_print();
@@ -1669,6 +1696,7 @@ static void vehicle_task(INT code, void *ctx)
         active = false;
         cancelled = false;
         if (!ig_stop_required(&imu_gate)) { vsm_reset(&vsm); }
+        publish_vehicle_faults();
 #if TM_MQTT
         vehicle.phase = 0u;
         publish_vehicle();
@@ -1735,6 +1763,17 @@ int vehicle_task_start(void)
     return E_OK;
 }
 #endif
+/* Read-only observer: no board exists in TEST/BENCH roles. */
+bool vehicle_fault_mask_try_read(uint32_t *out)
+{
+#if !APP_TEST && !APP_BENCH
+    return fault_mask_try_read(&vehicle_fault_board, FAULT_OWNER_VEHICLE, out);
+#else
+    (void)out;
+    return false;
+#endif
+}
+
 /* Available without MQTT. TEST/BENCH cannot run vehicle calibration. */
 uint32_t vehicle_calibration_epoch(void)
 {

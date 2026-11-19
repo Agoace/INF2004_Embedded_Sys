@@ -8,6 +8,11 @@
 
 #include <tk/syslib.h>
 #include "telemetry.h"
+#include "../platform/fault_mask.h" /* Also prove kernel-safe inclusion here. */
+#include "telemetry_pack.h"
+/* Health is absent in some isolated TEST/BENCH images. Unknown is pending. */
+extern int robot_health_faults_try_read(fault_mask_snapshot_t *, uint32_t *)
+    __attribute__((weak));
 #include "../platform/drv_watchdog.h"
 #include "../platform/app_task.h"
 #include "../platform/drv_time.h"
@@ -19,6 +24,12 @@
 static ID mbf_telemetry;
 static ID task;
 static telemetry_stats_t stats;
+static fault_mask_board_t log_fault_board; /* Telemetry sole writer. */
+
+bool telemetry_fault_mask_try_read(uint32_t *out)
+{
+    return fault_mask_try_read(&log_fault_board, FAULT_OWNER_TELEMETRY, out);
+}
 
 /*
  * RT-0071/F1: the CONTROL fields - DUMP reservation, storage full, loss count -
@@ -46,10 +57,15 @@ static void publish_stats(void)
 {
     __atomic_store_n(&stats_pub.rows, stats.rows, __ATOMIC_SEQ_CST);
     __atomic_store_n(&stats_pub.events, stats.events, __ATOMIC_SEQ_CST);
+    const uint32_t faults=__atomic_load_n(&admit_full,__ATOMIC_SEQ_CST)!=0u?
+        FAULT_LOG_FULL:0u;
+    (void)fault_mask_publish(&log_fault_board,FAULT_OWNER_TELEMETRY,faults);
 }
 static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
-static telemetry_event_t events[TELEMETRY_EVENTS];
-static telemetry_info_t info;
+static telemetry_event_packed_t events[TELEMETRY_EVENTS];
+_Static_assert(sizeof(events) == 4608u, "Packed RAM event allocation");
+static telemetry_info_packed_t stored_info;
+_Static_assert(sizeof(stored_info) == 104u, "Packed retained INFO size");
 /* S3 supplies the strong, bounded stopped dump in its producer commit. */
 void barcode_live_source_dump(void) __attribute__((weak));
 void barcode_live_source_dump(void)
@@ -62,7 +78,8 @@ static void dump_barcode_source(void)
 }
 
 static ja_result_t last_junction;
-static telemetry_scan_t scan_rows[TELEMETRY_SCAN_ROWS];
+static telemetry_scan_packed_t scan_rows[TELEMETRY_SCAN_ROWS];
+_Static_assert(sizeof(scan_rows) == 528u, "Packed scan allocation");
 static uint32_t scan_count, scan_omitted;
 static jlive_report_t last_source;
 static jlive_counts_t last_source_counts;
@@ -117,7 +134,8 @@ void telemetry_test_release_payload_lock(void)
 #include "../platform/app_board.h"
 static uint32_t log_generation;
 static uint32_t newest_row_ms;
-static APP_BOARD(telemetry_log_index_t) log_index;
+static APP_BOARD(telemetry_index_packed_t) log_index;
+_Static_assert(sizeof(log_index) == 20u, "Packed log-index board size");
 
 /*
  * Publish the current RAM-log extent to the bounded-reader board.
@@ -127,7 +145,11 @@ static void publish_index(void)
     const telemetry_log_index_t v = {log_generation, stats.rows, stats.events,
                                      __atomic_load_n(&admit_lost, __ATOMIC_SEQ_CST),
                                      newest_row_ms};
-    app_board_publish(&log_index.sequence, log_index.words, &v, sizeof(v));
+    telemetry_index_packed_t packed;
+    if (telemetry_index_pack(&packed, &v)) {
+        app_board_publish(&log_index.sequence, log_index.words, &packed,
+                           sizeof(packed));
+    }
 }
 
 /*
@@ -138,12 +160,14 @@ int telemetry_log_open(telemetry_log_index_t *out)
     if (!out) {
         return E_PAR;
     }
-    telemetry_log_index_t v;
-    if (!app_board_try_read(&log_index.sequence, log_index.words, &v,
-                            sizeof(v))) {
+    telemetry_index_packed_t packed;
+    if (!app_board_try_read(&log_index.sequence, log_index.words, &packed,
+                            sizeof(packed))) {
         return E_TMOUT;
     }
-    *out = v;
+    if (!telemetry_index_unpack(out, &packed)) {
+        return E_SYS;
+    }
     return E_OK;
 }
 
@@ -222,9 +246,9 @@ int telemetry_log_event(uint32_t generation, uint32_t index,
         (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
-    *out = events[index];
+    const bool decoded = telemetry_event_unpack(out, &events[index]);
     (void)ISpinUnlock(&stats_lock, intsts);
-    return E_OK;
+    return decoded ? E_OK : E_SYS;
 }
 #endif
 #if TM_CONSOLE_USB_CDC
@@ -313,6 +337,21 @@ static void dump(void)
     const UW before = dropped();
     telemetry_stats_t st;
     telemetry_stats(&st);
+    telemetry_info_t info;
+    (void)telemetry_info_unpack(&info, &stored_info);
+    fault_mask_snapshot_t faults;
+    uint32_t sampled_us;
+    int (*const health_reader)(fault_mask_snapshot_t *,uint32_t *)=
+        robot_health_faults_try_read;
+    if (health_reader!=0 && health_reader(&faults,&sampled_us)==E_OK) {
+        tm_printf((UB *)"[FAULT_MASK] now %08lx run %08lx valid %08lx epoch %lu sample_us %lu\n",
+                  (unsigned long)faults.now,(unsigned long)faults.run,
+                  (unsigned long)faults.valid,(unsigned long)faults.epoch,
+                  (unsigned long)sampled_us);
+    } else {
+        tm_printf((UB *)"[FAULT_MASK] pending Health sample for phase_epoch %lu\n",
+                  (unsigned long)rt_epoch());
+    }
     tm_printf((UB *)"[robot] KR1 reset %s; %s rows %lu events %lu "
                     "lost_telemetry %lu lost_wakes %lu overruns %lu "
                     "response_max_us %lu faults %u gap %lu..%lu us\n",
@@ -346,7 +385,9 @@ static void dump(void)
         imu_hump_diag_print(&diag);
     }
     for (uint32_t i = 0u; i < scan_count; ++i) {
-        const telemetry_scan_t *s = &scan_rows[i];
+        telemetry_scan_t value;
+        if (!telemetry_scan_unpack(&value, &scan_rows[i])) continue;
+        const telemetry_scan_t *s = &value;
         tm_printf((UB *)"[S5_SCAN] id %lu attempt %u coarse_hits %u "
                         "fine_mask %04x duration_ms %lu\n",
                   (unsigned long)s->scan_id, (unsigned int)s->attempt,
@@ -372,7 +413,11 @@ static void dump(void)
         }
     }
     for (uint32_t i = 0u; i < st.events; ++i) {
-        const telemetry_event_t *e = &events[i];
+        telemetry_event_t value;
+        if (!telemetry_event_unpack(&value, &events[i])) {
+            continue; /* Only a corrupt private record can fail here. */
+        }
+        const telemetry_event_t *e = &value;
         tm_printf((UB *)"VE %lu %u %u %u %u\n", (unsigned long)e->ms,
                   (unsigned int)e->kind, (unsigned int)e->from,
                   (unsigned int)e->to, (unsigned int)e->word);
@@ -465,7 +510,11 @@ static void telemetry_task(INT code, void *ctx)
                 (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
             } else {
-                events[stats.events++] = m.data.event;
+                if (telemetry_event_pack(&events[stats.events], &m.data.event)) {
+                    ++stats.events;
+                } else {
+                    lose_locked(); /* Invalid event: never store a truncated value. */
+                }
             }
 #if TM_MQTT
             publish_index();
@@ -474,8 +523,8 @@ static void telemetry_task(INT code, void *ctx)
             (void)ISpinUnlock(&stats_lock, intsts);
             break;
         case TELEMETRY_INFO:
-            info = m.data.info;
-            info.reason[sizeof(info.reason) - 1u] = '\0';
+            m.data.info.reason[sizeof(m.data.info.reason) - 1u] = '\0';
+            if (!telemetry_info_pack(&stored_info, &m.data.info)) lose_locked();
             break;
         case TELEMETRY_JUNCTION:
             last_junction = m.data.junction;
@@ -491,7 +540,11 @@ static void telemetry_task(INT code, void *ctx)
             break;
         case TELEMETRY_SCAN:
             if (scan_count < TELEMETRY_SCAN_ROWS) {
-                scan_rows[scan_count++] = m.data.scan;
+                if (telemetry_scan_pack(&scan_rows[scan_count], &m.data.scan)) {
+                    ++scan_count;
+                } else {
+                    ++scan_omitted;
+                }
             } else {
                 ++scan_omitted;
             }
@@ -500,8 +553,8 @@ static void telemetry_task(INT code, void *ctx)
             dump_barcode_source();
             break;
         case TELEMETRY_DUMP:
-            info = m.data.info;
-            info.reason[sizeof(info.reason) - 1u] = '\0';
+            m.data.info.reason[sizeof(m.data.info.reason) - 1u] = '\0';
+            if (!telemetry_info_pack(&stored_info, &m.data.info)) lose_locked();
             motion_diag_dump(1);
             motion_diag_print();
             /* Bounded barcode diagnostics precede thousands of KR rows so

@@ -118,6 +118,52 @@ commit that changed this section (header comments and file lists).
   [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
   60 B motion payload, published in a 64 B sequence/word board. Its sole
   writer is motion; decoded public APIs are unchanged.
+- [Vehicle A1](architecture/CR1_VEHICLE_A1.md) records the observation-only
+  board change (44 to 40 B), unchanged public API and wire, and software
+  evidence. [`vehicle_pack.h`](../app_program/vehicle/vehicle_pack.h) and
+  [`vehicle_pack.c`](../app_program/vehicle/vehicle_pack.c) define its nine-word
+  payload; [`test_vehicle_pack.c`](../tests/test_vehicle_pack.c) checks
+  ranges, invalid codes and interrupted publication. Vehicle is sole writer.
+- [Vehicle F](architecture/CR1_VEHICLE_F.md) records the diagnostic owner word.
+  [`vehicle_fault.h`](../app_program/vehicle/vehicle_fault.h) maps the current
+  IMU gate latch and non-motion/non-IMU shell FAULT to bits 4 and 6.
+  `vehicle_task.c` is the sole owner-board writer. The bounded reader is
+  `vehicle_fault_mask_try_read` in `fault_mask.h`; it is unavailable in
+  TEST/BENCH. [`test_vehicle_fault_value.c`](../tests/test_vehicle_fault_value.c),
+  [`test_vehicle_fault_owner.py`](../tests/test_vehicle_fault_owner.py) and
+  the real Vehicle network task tests check the mirror and ownership.
+  The common run exit in `hump_finish` publishes the final owner word and
+  calls `robot_health_faults_stop` before the run epochs become even.
+  Capture tests check one call per run and the shell/IMU stop bits.
+- [Sonar/obstacle A](architecture/CR1_SONAR_A.md) records the sonar board,
+  history and obstacle board change. [`sonar_pack.h`](../app_program/subsystem5/sonar_pack.h)
+  and [`obstacle_pack.h`](../app_program/vehicle/obstacle_pack.h) define the
+  layouts; [`test_sonar_pack.c`](../tests/test_sonar_pack.c) and
+  [`test_obstacle_pack.c`](../tests/test_obstacle_pack.c) check them.
+- [Telemetry A, faults and T110](architecture/CR1_TELEMETRY_A.md) records
+  the approved S1 storage work, diagnostic owner masks and 110 ms RUN state
+  deadline. [`test_telemetry_mode.c`](../tests/test_telemetry_mode.c) checks
+  eligibility, unchanged modes and the 20 ms polling model.
+  [`fault_mask.h`](../app_program/platform/fault_mask.h) defines the diagnostic
+  single-writer owner board and Health-only combiner interface;
+  [`test_fault_mask.c`](../tests/test_fault_mask.c) checks ownership, interrupted
+  reads, reserved bits and run-epoch resets. Publishers are separate changes.
+  [`telemetry_pack.h`](../app_program/subsystem1/telemetry_pack.h) defines
+  private retained RAM codecs, not MQTT formats;
+  [`test_telemetry_pack.c`](../tests/test_telemetry_pack.c) checks field ranges,
+  byte layouts, spare bits and unchanged outputs on invalid input.
+  [`network_pack.h`](../app_program/subsystem1/network_pack.h) defines private
+  Health and pending-sonar codecs; [`test_telemetry_optional_pack.c`](../tests/test_telemetry_optional_pack.c)
+  checks them and the INFO/scan codecs. [`value_bits.h`](../app_program/platform/value_bits.h)
+  provides local byte operations, not shared atomics.
+  [`robot_health.h`](../app_program/subsystem1/robot_health.h) exposes the
+  Vehicle-only STOP capture API and bounded fault snapshot reader. Health
+  alone combines owner words and freezes run history; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
+  tests the real Health path with fake owners and a fake STOP caller.
+- [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
+  evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
+  defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)
+  checks them.
 - [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
   reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;

@@ -376,3 +376,11 @@ foreach(v IN ITEMS custom builtin expire search decode_grace decode_timeout deco
     target_sources(${t} PRIVATE "${REPO}/app_program/barcode_live_vehicle/live.c"
         "${REPO}/app_program/barcode_live_vehicle/grace.c")
 endforeach()
+
+# CR1 private evidence representation (capacities unchanged).
+host_test(test_barcode_evidence_pack tests/test_barcode_evidence_pack.c)
+host_test(test_barcode_evidence_replay tests/test_barcode_window_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_evidence_replay PRIVATE
+    BCEP_VERIFY=1 BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_evidence_replay PRIVATE m)

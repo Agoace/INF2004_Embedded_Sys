@@ -3,6 +3,7 @@
 #include <stddef.h>
 #include "subsystem3.h"
 #include "barcode_live_source.h"
+#include "barcode_evidence_pack.h"
 #if BC_LIVE_SOURCE_HOST_TEST || BC_LIVE_COUNTS_HOST_TEST
 extern void barcode_live_test_read_hook(const uint32_t *sequence,
                                         unsigned int index);
@@ -126,7 +127,8 @@ typedef struct {
 static barcode_live_producer_t producer;
 static barcode_live_input_t input;
 static motion_status_t motor;
-static APP_BOARD(barcode_live_frame_t) frames[FRAME_ROWS];
+static APP_BOARD(bcep_frame_t) frames[FRAME_ROWS];
+_Static_assert(sizeof(frames)==736u, "CR1 eight 92 B frame boards");
 static APP_BOARD(edge_row_t) edges[EDGE_ROWS];
 static APP_BOARD(summary_t) summary_board;
 static summary_t summary;
@@ -377,8 +379,11 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         (void)barcode_attempt_enqueue(&attempt);
 #endif
         const unsigned int at = frame_count++ % FRAME_ROWS;
-        app_board_publish(&frames[at].sequence, frames[at].words,
-                          &producer.event, sizeof(producer.event));
+        bcep_frame_t packed_frame;
+        if (bcep_frame_pack(&packed_frame, &producer.event)) {
+            app_board_publish(&frames[at].sequence, frames[at].words,
+                              &packed_frame, sizeof(packed_frame));
+        }
         producer.event_pending = false;
     }
     if (counts_changed) {
@@ -465,8 +470,10 @@ void barcode_live_source_dump(void)
                           dump_summary.attempts - FRAME_ROWS : 0u;
     for (uint32_t i = first; i < dump_summary.attempts; ++i) {
         const unsigned int at = i % FRAME_ROWS;
+        bcep_frame_t packed_frame;
         if (!app_board_try_read(&frames[at].sequence, frames[at].words,
-                                &dump_frame, sizeof(dump_frame)) ||
+                                &packed_frame, sizeof(packed_frame)) ||
+            !bcep_frame_unpack(&dump_frame, &packed_frame) ||
             dump_frame.index != i + 1u) {
             continue;
         }

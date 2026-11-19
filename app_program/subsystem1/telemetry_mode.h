@@ -25,7 +25,7 @@
 #define PM_RUN_GRACE_MS      2000u
 
 /* Publication periods, milliseconds. */
-#define PM_RUN_STATE_MS      200u
+#define PM_RUN_STATE_MS      110u
 #define PM_RUN_HEARTBEAT_MS  1000u
 #define PM_IDLE_STATE_MS     1000u
 #define PM_IDLE_HEARTBEAT_MS 5000u
