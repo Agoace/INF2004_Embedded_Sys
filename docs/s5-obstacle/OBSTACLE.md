@@ -313,6 +313,26 @@ That trim interaction is not part of fix B and was not changed; it needs a
 robot run, or a decision about the trim (for example, no trim when the
 edge was seen below the minimum). Robot result: not run.
 
+Build evidence. Base `871c806`, fix `f48f856`; the firmware at the branch
+tip is the same (docs only after `f48f856`). Demo MQTT image (the CR1
+demo build line), Arm GCC, `scripts/ram_report.py`:
+
+| Item | `871c806` | `f48f856` | Change |
+| --- | ---: | ---: | ---: |
+| `.bss.dr` (`vehicle_task.o`) | 264 B | 272 B | +8 B (`away_min_deg` and `scan_word`) |
+| Vehicle module RAM | 2372 B | 2380 B | +8 B |
+| Subsystem 5 module RAM | 953 B | 953 B | 0 |
+| Linker alignment | 947 B | 947 B | 0 |
+| Static RAM | 234596 B | 234604 B | +8 B |
+| Flash text | 470092 B | 470300 B | +208 B |
+| RAM_PROOF | PASS 79/79, 21212 B | PASS 79/79, 21212 B | 0 |
+| Compiler warnings | 0 | 0 | 0 |
+| UF2 SHA-256 prefix | — | `39928b27caff3782` | — |
+| Host tests (GCC; Clang ASan + UBSan) | — | 706/706; 706/706 | — |
+
+Red first: `62d0cfe` failed 10 checks in `test_detour_sweep` and
+`test_obstacle_modules`. Ignored evidence: `build/wip/minturn/`.
+
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
 
