@@ -156,3 +156,23 @@ target_compile_definitions(test_imu_stream_runner PRIVATE
     APP_TEST=1 APP_IMU_STREAM=1)
 add_test(NAME test_imu_stream_priority_failure
     COMMAND test_imu_stream_runner priority_failure)
+# IMU INT1 watermark wake (IMU_INT1_WAKE=1): policy, host SIL, probe
+# registers and the service wake path. The =0 tests above stay unchanged.
+host_test(test_imu_wake tests/test_imu_wake.c)
+host_test(test_imu_probe_int1 tests/test_imu_probe.c
+    app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c
+    app_program/subsystem4/imu_fifo.c)
+target_compile_definitions(test_imu_probe_int1 PRIVATE IMU_INT1_WAKE=1)
+target_link_libraries(test_imu_probe_int1 PRIVATE m)
+host_test(test_imu_wake_service tests/test_imu_wake_service.c
+    app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
+    app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
+    app_program/subsystem4/imu_hump.c)
+target_include_directories(test_imu_wake_service BEFORE PRIVATE
+    "${REPO}/tests/mtk_stubs")
+target_compile_definitions(test_imu_wake_service PRIVATE
+    APP_TEST=1 APP_BENCH=0 IMU_INT1_WAKE=1)
+target_link_libraries(test_imu_wake_service PRIVATE m)
+add_test(NAME test_imu_wake_service_add_failure
+    COMMAND test_imu_wake_service add_failure)

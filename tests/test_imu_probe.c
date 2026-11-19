@@ -3,6 +3,14 @@
 #include "../app_program/subsystem4/imu_hw.h"
 #include <assert.h>
 #include <string.h>
+#if IMU_INT1_WAKE
+#include "../app_program/subsystem4/imu_wake.h"
+#define EXPECT_CTRL3 IMU_WAKE_CTRL3
+#define EXPECT_FIFO IMU_WAKE_FIFO_CTRL
+#else
+#define EXPECT_CTRL3 0x00u
+#define EXPECT_FIFO 0x80u
+#endif
 
 static uint8_t registers[2][256];
 static int16_t fifo[32][3];
@@ -112,8 +120,8 @@ int main(void)
     const unsigned int setup_calls = calls;
 
     assert(p.ready && !p.faults);
-    assert(p.ctrl1 == 0x77u && p.ctrl3 == 0u && p.ctrl4 == 0x88u);
-    assert(p.ctrl5 == 0x40u && p.fifo_ctrl == 0x80u);
+    assert(p.ctrl1 == 0x77u && p.ctrl3 == EXPECT_CTRL3 && p.ctrl4 == 0x88u);
+    assert(p.ctrl5 == 0x40u && p.fifo_ctrl == EXPECT_FIFO);
     assert(registers[1][0] == 0x18u && registers[1][1] == 0x20u);
     feed(4u);
     assert(imu_probe_read(&p, 20u, &value));
@@ -147,7 +155,7 @@ int main(void)
     assert(!imu_probe_read(&p, 50u, &value));
     assert(p.ready && p.fifo_backlogs == 1u && p.fifo_recoveries == 1u);
     assert(!p.no_sample && p.fifo_last_samples == 0u && p.faults == 0u);
-    assert(registers[0][0x2e] == 0x80u && queued == 0u);
+    assert(registers[0][0x2e] == EXPECT_FIFO && queued == 0u);
     assert(p.fifo_batches == 4u && p.reads == 4u);
     /* 32 unread (OVRN, FSS=31): overrun, reset and invalidate. */
     feed(4u);
