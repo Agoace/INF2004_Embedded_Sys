@@ -23,6 +23,12 @@ New acceptance: `test_imu_wake_acceptance` requires backlog == 0 in the dead-INT
 
 Fix options: F0 (done) default 0. F1 (proposed): the cyclic wakes the task if GP7 is HIGH, or if the last FIFO read is more than 8 ms old. F2 (drain backlogs) and F3 (gate tolerance) are not recommended.
 
+Follow-up decisions (2026-11-19):
+
+- F1 (the cyclic wakes the task if the last read is more than 8 ms old) is REJECTED. The cyclic acts only at 10 ms ticks, so a late read gives about a 20 ms gap and a backlog when INT1 is dead (6 of 30 model cases at the planned latency). Only a rule of about 3 ms passes, and then INT1 adds 40–80 % IMU work for no gain. Model: `build/wip/irq/f1/f1sim.c` (not committed).
+- Option D (read the oldest 8 when 9..31 are queued, reset only on OVRN) is APPROVED for the DEFAULT timer build on branch `mtk3-imu-fifo-d`. See `docs/s4-imu/IMU.md` "FIFO partial read (option D)" on that branch. In the 90-case model (`build/wip/irq/d/dsim.c`, which links the real `imu_safety.c` and `imu_gate.c`), D also removes every reset and gate latch for this INT1 design: 30/90 → 0/90 cases.
+- INT1 wake stays PARKED, even with D. It gives no CPU gain (same or more IMU work); the only gain is mean data age 3.4 ms instead of 5.0 ms.
+
 ## Summary
 
 | Item | Value |
