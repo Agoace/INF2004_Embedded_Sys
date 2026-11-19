@@ -380,9 +380,9 @@ static void dump(void)
         tm_printf((UB *)"[robot] hump no finished run source %u %s\n",
                   (unsigned int)IMU_HUMP_SOURCE, IMU_HUMP_SOURCE_NAME);
     }
-    imu_hump_diag_report_t diag;
+    imu_hump_diag_board_t diag;
     if (vehicle_hump_diag_try_read(&diag) == E_OK) {
-        imu_hump_diag_print(&diag);
+        imu_hump_diag_board_print(&diag);
     }
     for (uint32_t i = 0u; i < scan_count; ++i) {
         telemetry_scan_t value;

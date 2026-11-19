@@ -330,6 +330,10 @@ foreach(test IN ITEMS test_imu_stream test_vehicle_task
         test_vehicle_network_task test_telemetry test_telemetry_log)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
+    if(NOT "${test}" MATCHES "^test_(imu_stream|vehicle_task|vehicle_network_task)$")
+        target_sources(${test} PRIVATE
+            "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+    endif()
     target_link_libraries(${test} PRIVATE m)
 endforeach()
 

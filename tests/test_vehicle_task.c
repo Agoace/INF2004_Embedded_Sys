@@ -112,20 +112,21 @@ int imu_safety_try_read(imu_safety_report_t *out) {
     return E_OK;
 }
 uint32_t imu_safety_clear_request(void) { return ++imu_clear_token; }
-int imu_hump_try_read(imu_hump_report_t *r) {
+int imu_hump_try_read(imu_hump_board_t *r) {
     const uint32_t e=vehicle_run_epoch();
     ++hump_reads;if (e&1u) run_seen=e;
-    *r=(imu_hump_report_t){.timestamp_ms=stale ? 0u : now};
-    r->hump=(imu_hump_output_t){.run_epoch=e,.running=(e&1u)!=0u,.valid_samples=1u,
+    const imu_hump_output_t h=(imu_hump_output_t){.run_epoch=e,.running=(e&1u)!=0u,.valid_samples=1u,
         .count=1u,.max_peak_mm=10.8f,.last_peak_mm=10.8f,.flags=IMU_HUMP_FLAG_IMPLEMENTED};
+    imu_hump_pack(r,&h,stale ? 0u : now);
     return E_OK;
 }
 static unsigned int diag_lines;
-int imu_hump_diag_try_read(imu_hump_diag_report_t *r) {
-    *r=(imu_hump_diag_report_t){.run_epoch=vehicle_run_epoch(),
+int imu_hump_diag_try_read(imu_hump_diag_board_t *b) {
+    imu_hump_diag_report_t r=(imu_hump_diag_report_t){.run_epoch=vehicle_run_epoch(),
         .timestamp_ms=stale ? 0u : now,.valid=true};
-    r->peak=(imu_hump_peak_diag_t){.valid=true,.corrected_mm=10.8f,
+    r.peak=(imu_hump_peak_diag_t){.valid=true,.corrected_mm=10.8f,
         .filtered_mm=9.9f,.ms=100u};
+    imu_hump_diag_pack(b,&r);
     return E_OK;
 }
 int tm_printf(const UB *f,...) {
@@ -250,7 +251,7 @@ int main(int argc,char **argv) {
     assert(vehicle_calibration_epoch() == 0u && vehicle_run_epoch() == 0u);
     imu_hump_summary_t last;assert(vehicle_hump_try_read(&last)==E_NOEXS);
     assert(vehicle_hump_try_read(NULL)==E_PAR);
-    imu_hump_diag_report_t diag;
+    imu_hump_diag_board_t diag;
     assert(vehicle_hump_diag_try_read(NULL)==E_PAR);
     assert(vehicle_hump_diag_try_read(&diag)==E_NOEXS);
     assert(vehicle_run_start_ms()==0u && vehicle_line_run_epoch()==0u);
@@ -283,8 +284,10 @@ int main(int argc,char **argv) {
         assert(vehicle_hump_try_read(&last)==E_OK);
         assert(vehicle_hump_diag_try_read(&diag)==E_OK && diag_lines>=1u);
         assert(vehicle_line_run_epoch()==0u);
-        assert(diag.valid==!stale && diag.peak.valid==!stale);
-        if (!stale) assert(diag.peak.corrected_mm==10.8f && diag.peak.ms==100u);
+        imu_hump_diag_board_values_t dv;
+        imu_hump_diag_board_unpack(&dv,&diag);
+        assert(dv.valid==!stale && dv.peak_valid==!stale);
+        if (!stale) assert(dv.corrected_01mm==108 && dv.ms==100u);
         if (stale) assert(hump_none>=1u && last.peak_01mm==IMU_HUMP_PEAK_NONE);
         else assert(hump_lines==1u && hump_none==0u && last.peak_01mm==108u &&
                     last.count==1u && last.flags==IMU_HUMP_FLAG_IMPLEMENTED);

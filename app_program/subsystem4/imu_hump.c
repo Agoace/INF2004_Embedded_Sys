@@ -225,28 +225,27 @@ uint8_t imu_hump_detail(uint16_t number, bool left)
     return (uint8_t)(n | (left ? IMU_HUMP_DETAIL_LEFT : 0u));
 }
 
-imu_hump_summary_t imu_hump_summarize(const imu_hump_report_t *r, bool have,
-                                      uint32_t run_epoch, uint32_t now_ms,
-                                      uint32_t max_age_ms)
+static imu_hump_summary_t unavailable(void)
 {
-    imu_hump_summary_t out = {
+    return (imu_hump_summary_t){
         .peak_01mm = (uint16_t)IMU_HUMP_PEAK_NONE,
         .count = 0u,
         .flags = IMU_HUMP_FLAG_IMPLEMENTED | IMU_HUMP_FLAG_FAULT,
         .gated = 0u};
+}
 
-    if (r == NULL || !have || (run_epoch & 1u) == 0u ||
-        r->hump.run_epoch != run_epoch ||
-        (uint32_t)(now_ms - r->timestamp_ms) > max_age_ms) {
-        return out;
-    }
-    const imu_hump_output_t *o = &r->hump;
+void imu_hump_pack(imu_hump_board_t *out, const imu_hump_output_t *o,
+                   uint32_t timestamp_ms)
+{
+    /* The float decisions of the summary, made once with full precision. */
     float peak = o->max_peak_mm;
     bool left = o->max_left;
-    uint16_t count = o->count;
+    const uint16_t closed = o->count;
+    uint16_t count = closed;
     uint8_t flags = (uint8_t)(o->flags | IMU_HUMP_FLAG_IMPLEMENTED);
+    const bool open = o->running && o->state == (uint8_t)IMU_HUMP_ACTIVE;
 
-    if (o->running && o->state == (uint8_t)IMU_HUMP_ACTIVE) {
+    if (open) {
         if (count == 0u || o->event_peak_mm > peak) {
             peak = o->event_peak_mm;
             left = o->event_left;
@@ -258,15 +257,65 @@ imu_hump_summary_t imu_hump_summarize(const imu_hump_report_t *r, bool have,
     }
     flags = (uint8_t)((flags & (uint8_t)~IMU_HUMP_FLAG_LEFT) |
                       (count != 0u && left ? IMU_HUMP_FLAG_LEFT : 0u));
-    out.gated = o->gated_starts > IMU_HUMP_GATED_MAX
-                    ? (uint8_t)IMU_HUMP_GATED_MAX : (uint8_t)o->gated_starts;
-    if (o->valid_samples == 0u) {
+    const uint32_t best = count == 0u ? 0u : imu_hump_tenths(peak);
+    const uint32_t gated = o->gated_starts > IMU_HUMP_GATED_MAX
+                               ? IMU_HUMP_GATED_MAX : o->gated_starts;
+
+    out->word[0] = timestamp_ms;
+    out->word[1] = o->run_epoch;
+    out->word[2] = (best << IMU_HUMP_W2_BEST_SHIFT) |
+                   ((uint32_t)imu_hump_tenths(o->last_peak_mm)
+                    << IMU_HUMP_W2_LAST_SHIFT);
+    out->word[3] = ((uint32_t)closed << IMU_HUMP_W3_COUNT_SHIFT) |
+                   (gated << IMU_HUMP_W3_GATED_SHIFT) |
+                   ((uint32_t)((flags & IMU_HUMP_FLAGS_MASK) >> 1u)
+                    << IMU_HUMP_W3_FLAGS_SHIFT) |
+                   ((open ? 1u : 0u) << IMU_HUMP_W3_OPEN_SHIFT) |
+                   ((o->valid_samples != 0u ? 1u : 0u)
+                    << IMU_HUMP_W3_VALID_SHIFT) |
+                   ((o->last_left ? 1u : 0u) << IMU_HUMP_W3_LEFT_SHIFT);
+}
+
+imu_hump_summary_t imu_hump_board_summarize(const imu_hump_board_t *b,
+                                            bool have, uint32_t run_epoch,
+                                            uint32_t now_ms,
+                                            uint32_t max_age_ms)
+{
+    imu_hump_summary_t out = unavailable();
+
+    if (b == NULL || !have || (run_epoch & 1u) == 0u ||
+        imu_hump_board_epoch(b) != run_epoch ||
+        (uint32_t)(now_ms - imu_hump_board_time(b)) > max_age_ms) {
+        return out;
+    }
+    const uint32_t w3 = b->word[3];
+    const uint16_t closed = imu_hump_board_count(b);
+    const bool open = ((w3 >> IMU_HUMP_W3_OPEN_SHIFT) & 1u) != 0u;
+    const uint8_t flags = (uint8_t)(IMU_HUMP_FLAG_IMPLEMENTED |
+        (((w3 >> IMU_HUMP_W3_FLAGS_SHIFT) & IMU_HUMP_W3_FLAGS_MASK) << 1u));
+
+    out.gated = (uint8_t)((w3 >> IMU_HUMP_W3_GATED_SHIFT) & IMU_HUMP_U8_MASK);
+    if (((w3 >> IMU_HUMP_W3_VALID_SHIFT) & 1u) == 0u) {
         out.flags = (uint8_t)((flags | IMU_HUMP_FLAG_FAULT) &
                               IMU_HUMP_FLAGS_MASK);
         return out;
     }
-    out.count = count;
-    out.flags = (uint8_t)(flags & IMU_HUMP_FLAGS_MASK);
-    out.peak_01mm = count == 0u ? 0u : imu_hump_tenths(peak);
+    out.count = open && closed != UINT16_MAX ? (uint16_t)(closed + 1u)
+                                             : closed;
+    out.flags = flags;
+    out.peak_01mm = (uint16_t)((b->word[2] >> IMU_HUMP_W2_BEST_SHIFT) &
+                               IMU_HUMP_U16_MASK);
     return out;
+}
+
+imu_hump_summary_t imu_hump_summarize(const imu_hump_report_t *r, bool have,
+                                      uint32_t run_epoch, uint32_t now_ms,
+                                      uint32_t max_age_ms)
+{
+    if (r == NULL) {
+        return unavailable();
+    }
+    imu_hump_board_t b;
+    imu_hump_pack(&b, &r->hump, r->timestamp_ms);
+    return imu_hump_board_summarize(&b, have, run_epoch, now_ms, max_age_ms);
 }
