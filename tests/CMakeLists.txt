@@ -304,6 +304,7 @@ add_test(NAME test_startup_provider_failure
 add_test(NAME test_timing_window_threshold COMMAND test_timing_test_hooks bad_window)
 include("${CMAKE_CURRENT_SOURCE_DIR}/imu_checks.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/barcode_checks.cmake")
+include("${CMAKE_CURRENT_SOURCE_DIR}/imu_wake_checks.cmake")
 
 add_test(NAME test_imu_source_make COMMAND "${Python3_EXECUTABLE}"
     "${REPO}/tests/test_imu_source_make.py")
