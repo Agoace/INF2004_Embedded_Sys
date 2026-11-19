@@ -111,6 +111,7 @@ not current acceptance reports. Local course originals are not public records.
 ## S4 — IMU
 
 - [IMU.md](s4-imu/IMU.md) — the IMU hump detector (report only) and its full step history.
+- [IMU_IRQ.md](s4-imu/IMU_IRQ.md) — IMU INT1 watermark wake (`IMU_INT1_WAKE`): design, 10 ms fallback, FTH=3 default, host SIL and image-identity evidence, robot checks R1–R6.
   Contains: step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
 
 - [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
