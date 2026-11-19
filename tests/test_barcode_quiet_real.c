@@ -60,7 +60,7 @@ static void vectors(void)
             state.black = true;
             state.rise = (uint16_t)v[4];
             state.fall = (uint16_t)v[5];
-            state.leading_mm = mode == 1u ? 19.99f : mode == 2u ? 20.0f :
+            state.leading_mm = mode == 1u ? 29.99f : mode == 2u ? 30.0f :
                                (float)v[6] / 100.0f;
             state.start_us = mode == 3u ? UINT32_MAX - 5000u : v[2];
             float mm = 0.0f;

@@ -210,7 +210,7 @@ static void sizes(void)
     /* Scale extension must not waive framing, gaps, damage or quiet proof. */
     for (unsigned int test = 0u; test < 7u; ++test) {
         make("*F*", false, 210.0f / 273.5f);
-        lead = test == 0u ? 15.0f : 60.0f; /* test 0: below QUIET_MIN_MM */
+        lead = test == 0u ? 25.0f : 60.0f; /* test 0: below QUIET_MIN_MM */
         if (test == 1u) elements[9] *= 2.0f;
         if (test == 2u) for (unsigned int i = 10u; i < 19u; ++i)
             elements[i] *= 1.4f;
@@ -307,7 +307,7 @@ int main(int argc, char **argv)
         make(strcmp(kind, "multi") == 0 ? "*AB*" : "*F*", false,
              strcmp(kind, "small") == 0 ? 0.5f : 1.0f);
         if (strcmp(kind, "leading") == 0) {
-            lead = 20.0f; /* QUIET_MIN_MM boundary */
+            lead = 30.0f; /* QUIET_MIN_MM boundary */
         } else if (strcmp(kind, "short_tail") == 0) {
             tail_white = 3.0f;
         } else if (strcmp(kind, "short_quiet") == 0) {
