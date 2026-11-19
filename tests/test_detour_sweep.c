@@ -212,6 +212,7 @@ typedef struct {
     int line_steps;              /* updates with line_seen in TURN_TOWARD */
     int line_heading;            /* heading when ON_LINE began */
     int on_line_from;            /* step before ON_LINE */
+    uint8_t away_min;            /* dt_set_away_min(); 0: old rule */
 } scene_t;
 
 /* sin and cos of degrees, no libm: reduce, then a Taylor series. */
@@ -267,6 +268,7 @@ static dt_step_t scene_run(scene_t *s, const dt_config_t *cfg) {
     s->on_line_from = -1;
     dt_init(&dt, cfg, OBSTACLE_SIDE_LEFT, s->omm ? s->omm : 220u, 0, 0,
             s->t);
+    dt_set_away_min(&dt, s->away_min);
     while (dt_step(&dt) < DT_DONE && s->t < 60000u) {
         s->t += 10u;
         if (s->echo_due && (int32_t)(s->t - s->echo_at) >= 0) {
@@ -568,6 +570,224 @@ static void test_robot_value(void) {
     }
 }
 
+
+/* ---- Minimum turn before LOST (docs/s5-obstacle/OBSTACLE.md). ---- */
+
+/* One robot sweep, replayed: wheel counts (L, R) at run-relative times from
+ * robot/state, linearly interpolated, and the robot/sonar results (trigger
+ * time, packed result; the result comes at the trigger time). After the
+ * last sample the turn goes on at turn_rate counts per 10 ms (S frame),
+ * every further reading is far_echo, until coast_ms; then the counts stop. */
+typedef struct {
+    uint32_t t;
+    int32_t l, r;
+} count_sample_t;
+typedef struct {
+    uint32_t t;
+    ultrasonic_result_t echo;
+} ping_sample_t;
+typedef struct {
+    uint32_t hash;           /* FNV-1a of (step, word, heading, sweep end) */
+    int lost_trig_x100;      /* turn x100 of the trigger of the last reading before LOST */
+    int first_end_heading;   /* heading at the end of TURN_AWAY */
+    uint8_t first_end;       /* sweep_last_end at the end of TURN_AWAY */
+    uint8_t step_after;      /* step after TURN_AWAY */
+    bool trimming;           /* TURN_TOWARD after TURN_AWAY is the trim */
+    bool lost_at_start;      /* LOST accepted with the turn below 10 degrees */
+} replay_t;
+
+static int32_t lerp(int32_t a, int32_t b, uint32_t t, uint32_t t0, uint32_t t1) {
+    return a + (int32_t)((int64_t)(b - a) * (int64_t)(t - t0) / (int64_t)(t1 - t0));
+}
+
+static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
+                       const count_sample_t *cs, unsigned int nc,
+                       const ping_sample_t *ps, unsigned int np,
+                       int32_t turn_rate, ultrasonic_result_t far_echo,
+                       uint32_t end_ms) {
+    const dt_config_t *rc = &DETOUR_CFG.dt;
+    dt_t dt;
+    replay_t out = {2166136261u, 0, 0, 0u, 0u, false, false};
+    int32_t l = cs[0].l, r = cs[0].r;
+    dt_init(&dt, rc, side, mm, l, r, 0u);
+    dt_set_away_min(&dt, away_min);
+    unsigned int next = 0u;
+    int32_t extra = 0;
+    int last_trig = 0;
+    bool in_away = true;
+    for (uint32_t t = 10u; t <= end_ms && dt_step(&dt) < DT_DONE; t += 10u) {
+        if (t <= cs[nc - 1u].t) {
+            unsigned int i = 0u;
+            while (i + 1u < nc && cs[i + 1u].t < t) ++i;
+            if (i + 1u < nc) {
+                l = lerp(cs[i].l, cs[i + 1u].l, t, cs[i].t, cs[i + 1u].t);
+                r = lerp(cs[i].r, cs[i + 1u].r, t, cs[i].t, cs[i + 1u].t);
+            }
+        } else if (dt_step(&dt) == DT_TURN_AWAY && dt.sweep_end == DT_SWEEP_NONE) {
+            extra += turn_rate; /* S frame: + toward S */
+            l = cs[nc - 1u].l - dt.side * (extra - extra / 2);
+            r = cs[nc - 1u].r + dt.side * (extra / 2);
+        }
+        const dt_word_t w = dt_update(&dt, false, l, r, t);
+        if (dt_wants_reading(&dt, t)) {
+            const bool replayed = next < np && t >= ps[next].t;
+            const bool beyond = next >= np && t > cs[nc - 1u].t;
+            if (replayed || beyond) {
+                dt_triggered(&dt);
+                last_trig = dt.trig_turn_x100;
+                dt_reading(&dt, replayed ? ps[next].echo : far_echo, t);
+                if (replayed) ++next;
+            }
+        }
+        if (dt.sweep_end == DT_SWEEP_LOST && out.lost_trig_x100 == 0) {
+            out.lost_trig_x100 = last_trig;
+        }
+        if (in_away && dt_step(&dt) != DT_TURN_AWAY) {
+            in_away = false;
+            out.first_end_heading = dt.heading;
+            out.first_end = dt.sweep_last_end;
+            out.step_after = dt.step;
+            out.trimming = dt.trimming;
+            out.lost_at_start = dt.sweep_last_end == DT_SWEEP_LOST &&
+                                out.lost_trig_x100 < 10 * (int)rc->counts_per_deg_x100;
+        }
+        const uint32_t v[2] = {(uint32_t)dt.step | (uint32_t)w << 8 |
+                                   (uint32_t)(uint16_t)dt.heading << 24,
+                               dt.sweep_last_end};
+        for (unsigned int k = 0u; k < 2u; ++k)
+            for (int b = 0; b < 4; ++b) {
+                out.hash ^= (v[k] >> (8 * b)) & 0xFFu;
+                out.hash *= 16777619u;
+            }
+    }
+    return out;
+}
+
+#define ECHO(mm) ((ultrasonic_result_t)(mm))
+#define NO_RET ((ultrasonic_result_t)(ULTRASONIC_STATUS_NO_RETURN << ULTRASONIC_STATUS_SHIFT))
+
+/* Boot e7b34e07 (2026-11-19, image 15, FAILED TOO_NEAR): detour start at
+ * uptime 22180 ms; robot/state counts and robot/sonar results relative
+ * to it. Scan: closest 230, left free step 6 (30 deg), right blocked:
+ * side LEFT. Seen 278/278 before the wheels moved, 290 at about 1 deg,
+ * then NO_RETURN x2 at about 2-4 deg: today LOST, trim back to 0. */
+static const count_sample_t E7_COUNTS[] = {
+    {0u, 3267, 3358}, {26u, 3267, 3358}, {144u, 3267, 3358}, {265u, 3266, 3358},
+    {386u, 3233, 3400}, {505u, 3216, 3423},
+};
+static const ping_sample_t E7_PINGS[] = {
+    {161u, ECHO(278)}, {230u, ECHO(278)}, {301u, ECHO(290)}, {371u, NO_RET}, {441u, NO_RET},
+};
+/* Boot c2c31955 (same obstacle, DONE_LINE): start at uptime 16180 ms.
+ * Scan: closest 233, right free step 4 (20 deg), left blocked: side RIGHT.
+ * The obstacle is seen on every ping to about 45 degrees, then lost. */
+static const count_sample_t C2_COUNTS[] = {
+    {0u, 1410, 1218}, {6u, 1410, 1218}, {124u, 1410, 1218}, {245u, 1410, 1218},
+    {365u, 1439, 1186}, {486u, 1461, 1179}, {605u, 1485, 1179}, {725u, 1520, 1135},
+    {846u, 1577, 1074}, {965u, 1634, 1015}, {1325u, 1804, 825}, {1685u, 1976, 648},
+    {2046u, 1984, 631},
+};
+static const ping_sample_t C2_PINGS[] = {
+    {161u, ECHO(250)}, {230u, ECHO(263)}, {301u, ECHO(250)}, {371u, ECHO(250)},
+    {441u, ECHO(258)}, {511u, ECHO(254)}, {581u, ECHO(245)}, {651u, ECHO(240)},
+    {721u, ECHO(241)}, {791u, ECHO(237)}, {861u, ECHO(238)}, {931u, ECHO(239)},
+    {1001u, ECHO(236)}, {1071u, ECHO(242)}, {1141u, ECHO(243)}, {1211u, ECHO(242)},
+    {1281u, ECHO(248)}, {1351u, ECHO(250)}, {1421u, ECHO(249)}, {1491u, ECHO(259)},
+    {1561u, ECHO(262)}, {1631u, NO_RET}, {1701u, NO_RET},
+};
+#define N_OF(a) (sizeof(a) / sizeof((a)[0]))
+
+static void test_away_min(void) {
+    const int cpd = (int)DETOUR_CFG.dt.counts_per_deg_x100;
+    /* 40 deg/s: 0.4 deg per 10 ms = 9.6 counts (S frame). */
+    const int32_t rate = 10;
+    /* (1) Old rule (0): the replay gives the robot's result (fidelity). */
+    replay_t old = replay(OBSTACLE_SIDE_LEFT, 230u, 0u, E7_COUNTS, N_OF(E7_COUNTS),
+                          E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 1500u);
+    CHECK(old.first_end == DT_SWEEP_LOST && old.lost_at_start &&
+              old.first_end_heading >= 2 && old.first_end_heading <= 6 &&
+              old.step_after == DT_TURN_TOWARD && old.trimming,
+          "e7b34e07 old rule: LOST at about 5 deg, then the trim (robot result)");
+    /* (2) Minimum 30 (left free step 6 x 5): NO_RETURN x2 at 2-4 deg do not
+     * give LOST. The turn goes on; LOST is accepted only from 30 deg. */
+    replay_t fix = replay(OBSTACLE_SIDE_LEFT, 230u, 30u, E7_COUNTS, N_OF(E7_COUNTS),
+                          E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 6000u);
+    CHECK(!fix.lost_at_start && fix.lost_trig_x100 >= 30 * cpd,
+          "e7b34e07 min 30: no LOST below 30 deg");
+    CHECK(fix.first_end == DT_SWEEP_LOST && fix.first_end_heading >= 30 &&
+              fix.first_end_heading < (int)DETOUR_CFG.dt.away_max_deg,
+          "e7b34e07 min 30: LOST past 30 deg, not the turn limit");
+    /* (3) Boot c2c31955, minimum 20 (right free step 4 x 5): LOST at about
+     * 45 deg, past the minimum: the same steps as the old rule. */
+    replay_t c_old = replay(OBSTACLE_SIDE_RIGHT, 233u, 0u, C2_COUNTS, N_OF(C2_COUNTS),
+                            C2_PINGS, N_OF(C2_PINGS), 0, NO_RET, 2600u);
+    replay_t c_new = replay(OBSTACLE_SIDE_RIGHT, 233u, 20u, C2_COUNTS, N_OF(C2_COUNTS),
+                            C2_PINGS, N_OF(C2_PINGS), 0, NO_RET, 2600u);
+    CHECK(c_old.first_end == DT_SWEEP_LOST && c_old.first_end_heading >= 40 &&
+              c_old.first_end_heading <= 52,
+          "c2c31955 old rule: LOST at about 47 deg (robot result)");
+    CHECK(c_new.hash == c_old.hash && c_new.first_end_heading == c_old.first_end_heading &&
+              c_new.step_after == c_old.step_after,
+          "c2c31955 min 20: steps identical to the old rule");
+    /* (4) Seen only from the start pose (seen x2 at turn 0, then no echo):
+     * old rule LOST at the start; minimum 30: LOST at 30 deg, no TURN_LIMIT. */
+    static const ping_sample_t START_ONLY[] = {{161u, ECHO(250)}, {230u, ECHO(250)}};
+    static const count_sample_t STILL[] = {{0u, 0, 0}, {250u, 0, 0}};
+    replay_t so_old = replay(OBSTACLE_SIDE_LEFT, 230u, 0u, STILL, N_OF(STILL),
+                             START_ONLY, N_OF(START_ONLY), rate, NO_RET, 6000u);
+    replay_t so_new = replay(OBSTACLE_SIDE_LEFT, 230u, 30u, STILL, N_OF(STILL),
+                             START_ONLY, N_OF(START_ONLY), rate, NO_RET, 6000u);
+    CHECK(so_old.first_end == DT_SWEEP_LOST && so_old.lost_at_start,
+          "start pose only, old rule: LOST at the start");
+    CHECK(so_new.first_end == DT_SWEEP_LOST && so_new.lost_trig_x100 >= 30 * cpd &&
+              so_new.first_end_heading >= 30 && so_new.first_end_heading <= 36,
+          "start pose only, min 30: LOST at 30 deg, no TURN_LIMIT");
+    /* (5) Never seen: TURN_LIMIT at away_max_deg, with and without the minimum. */
+    replay_t ns_old = replay(OBSTACLE_SIDE_LEFT, 230u, 0u, STILL, N_OF(STILL),
+                             START_ONLY, 0u, rate, NO_RET, 12000u);
+    replay_t ns_new = replay(OBSTACLE_SIDE_LEFT, 230u, 30u, STILL, N_OF(STILL),
+                             START_ONLY, 0u, rate, NO_RET, 12000u);
+    CHECK(ns_old.first_end == DT_SWEEP_LIMIT && ns_new.hash == ns_old.hash,
+          "never seen: TURN_LIMIT as today, identical");
+    /* (6) Clamp and default. */
+    dt_t dt;
+    dt_init(&dt, &DETOUR_CFG.dt, OBSTACLE_SIDE_LEFT, 230u, 0, 0, 0u);
+    CHECK(dt.away_min_deg == 0u, "dt_init: minimum off");
+    dt_set_away_min(&dt, 30u);
+    CHECK(dt.away_min_deg == 30u, "set 30");
+    dt_set_away_min(&dt, 500u);
+    CHECK(dt.away_min_deg == DETOUR_CFG.dt.away_max_deg, "clamped to away_max_deg");
+    /* (7) Stepped looks (sweep_deg_s 0): an unseen look below the minimum
+     * after seen_once turns one more step; at the minimum it ends. */
+    dt_config_t stepped = CFG;
+    stepped.sweep_deg_s = 0u;
+    dt_init(&dt, &stepped, OBSTACLE_SIDE_LEFT, 250u, 0, 0, 0u);
+    dt_set_away_min(&dt, 10u);
+    (void)at(&dt, 0, 200u);
+    reading(&dt, 250u, 400u); /* seen at 0 */
+    CHECK(dt.seen_once && dt.target_deg == 5u, "stepped: seen at 0, look at 5");
+    (void)at(&dt, 5, 600u);
+    reading(&dt, NR, 800u);
+    CHECK(dt.step == DT_TURN_AWAY && dt.target_deg == 10u,
+          "stepped: unseen at 5 (below 10): one more step");
+    (void)at(&dt, 10, 1000u);
+    reading(&dt, NR, 1200u);
+    CHECK(dt.step != DT_TURN_AWAY && dt.heading == 10,
+          "stepped: unseen at 10: past the edge");
+    /* (8) Robot scenes with a small minimum (free step 1, 5 deg): the step
+     * traces are identical to the old rule. */
+    const uint32_t old_fc1 = 0x391dc490u;
+    scene_t s = fc1_like();
+    s.away_min = 5u;
+    CHECK(scene_run(&s, &ROBOT) == DT_DONE && s.hash == old_fc1,
+          "min 5: FC_1-like trace identical");
+    scene_t a = fc2_like(), b = fc2_like();
+    b.away_min = 5u;
+    (void)scene_run(&a, &DETOUR_CFG.dt);
+    (void)scene_run(&b, &DETOUR_CFG.dt);
+    CHECK(a.hash == b.hash, "min 5: FC_2-like robot trace identical");
+}
+
 int main(void) {
     test_controller();
     test_convergence();
@@ -578,6 +798,7 @@ int main(void) {
     test_lost_result();
     test_scenes();
     test_robot_value();
+    test_away_min();
     if (failures) return 1;
     puts("test_detour_sweep: all tests passed");
     return 0;

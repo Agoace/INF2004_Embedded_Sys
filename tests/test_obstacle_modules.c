@@ -673,6 +673,42 @@ static void test_shell(void) {
           "failed: state %u fault %u detail %u", vsm.state, vsm.fault, vsm.fault_detail);
 }
 
+
+/* Minimum turn before LOST: the TURN_AWAY minimum from the scan word. */
+static void test_away_min_payload(void) {
+    /* Boot e7b34e07: PROFILE 28390 = distance 230, right 7, left 6. */
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_LEFT, 230u), 28390u) == 30u,
+          "e7b34e07: left free step 6: %u", dr_away_min_deg(ss_payload(OBSTACLE_SIDE_LEFT, 230u), 28390u));
+    /* Boot c2c31955: PROFILE 30953 = distance 233, right 4, left 7. */
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_RIGHT, 233u), 30953u) == 20u,
+          "c2c31955: right free step 4: %u", dr_away_min_deg(ss_payload(OBSTACLE_SIDE_RIGHT, 233u), 30953u));
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_LEFT, 231u), 28390u) == 0u,
+          "word of another scan (distance differs): off");
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_NONE, 230u), 28390u) == 0u, "side NONE: off");
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_RIGHT, 230u), 28390u) == 0u,
+          "chosen side blocked (step 7): off");
+    CHECK(dr_away_min_deg(ss_payload(OBSTACLE_SIDE_LEFT, 300u),
+                          (obstacle_profile_word_t)(300u | 7u << 9)) == 0u,
+          "free step 0: minimum 0 (old rule)");
+
+    lp_t lp;
+    lp_init(&lp);
+    vsm_inputs_t in = {&lp, VC_EVENT_NONE, {5000, 7000}, false, 0u, &ping, false};
+    vsm_drive_t d;
+    dr_t dr;
+    obstacle_profile_word_t word = 28390u;
+    dr_init(&dr, &DR);
+    dr_set_scan_word(&dr, &word);
+    dr_start(&dr, ss_payload(OBSTACLE_SIDE_LEFT, 230u), 0u);
+    (void)step(&dr, dr_step, &in, 1000u, &d);
+    CHECK(dr.dt.away_min_deg == 30u && dt_step(&dr.dt) == DT_TURN_AWAY,
+          "dr_step: minimum from the scan word: %u", dr.dt.away_min_deg);
+    dr_init(&dr, &DR); /* no scan word: the old rule */
+    dr_start(&dr, ss_payload(OBSTACLE_SIDE_LEFT, 230u), 0u);
+    (void)step(&dr, dr_step, &in, 1000u, &d);
+    CHECK(dr.dt.away_min_deg == 0u, "dr_step without a scan word: off");
+}
+
 int main(void) {
     test_payload();
     test_scan();
@@ -681,6 +717,7 @@ int main(void) {
     test_reverse_safety();
     test_turn_speed();
     test_detour();
+    test_away_min_payload();
     test_back();
     test_shell();
     if (failures != 0) {

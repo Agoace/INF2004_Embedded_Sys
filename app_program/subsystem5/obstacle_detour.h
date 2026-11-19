@@ -238,6 +238,7 @@ typedef struct {
     int edge_deg;                /* S-frame heading at its trigger */
     bool trimming;               /* TURN_TOWARD: trim before the first STRAIGHT */
     int trim_deg;                /* trim angle, degrees */
+    uint8_t away_min_deg;        /* TURN_AWAY: no LOST below this turn; 0: off */
 } dt_t;
 
 /* Start a detour at the STOP point. side and obstacle_mm come from the
@@ -245,6 +246,14 @@ typedef struct {
  * are the wheel counts now. side NONE fails at once (DT_FAIL_NO_SIDE). */
 void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t obstacle_mm,
              int32_t left, int32_t right, uint32_t now_ms);
+
+/* Minimum turn before LOST. Call after dt_init(). TURN_AWAY does not
+ * accept the edge (sweep LOST, or a stepped unseen look after seen_once)
+ * for a reading triggered at a turn below deg degrees. Such an unseen
+ * reading does not count toward LOST; the turn goes on. seen_once and
+ * note_edge do not change. deg is clamped to away_max_deg; 0 (the dt_init
+ * value) is the old rule. */
+void dt_set_away_min(dt_t *dt, unsigned int deg);
 
 /* True when a reading is wanted now: in a STRAIGHT, or stopped for a look
  * in a turn, after the servo or the robot settled. */

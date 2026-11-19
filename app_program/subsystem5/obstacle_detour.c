@@ -272,6 +272,11 @@ static void away_done(dt_t *dt) {
     }
 }
 
+void dt_set_away_min(dt_t *dt, unsigned int deg) {
+    (void)dt;
+    (void)deg; /* RED: not implemented yet */
+}
+
 bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
     const bool step_wants = dt->step == DT_STRAIGHT || (is_turn(dt) && dt->looking) ||
                             sweeping(dt);

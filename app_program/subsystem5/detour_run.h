@@ -61,6 +61,7 @@ typedef struct {
     int8_t dir;         /* direction of the last motion */
     uint32_t pause_until_ms;
     uint16_t detours;   /* starts since dr_init() */
+    const obstacle_profile_word_t *scan_word; /* last SCAN PROFILE; NULL: none */
 } dr_t;
 
 /* Wheel speed for a turn on the spot at deg_s, mm/s, rounded. */
@@ -68,6 +69,16 @@ int16_t dr_turn_mm_s(const dt_config_t *dt, unsigned int deg_s);
 
 void dr_init(dr_t *dr, const dr_config_t *cfg);
 void dr_start(void *ctx, uint16_t payload, uint32_t now_ms);
+/* Minimum turn before LOST (docs/s5-obstacle/OBSTACLE.md). The detour
+ * reads the PROFILE word of the scan that started it from *word (the
+ * SCAN module's ss_t.word; same task). Call after dr_init(). With no
+ * word (NULL), the old rule. */
+void dr_set_scan_word(dr_t *dr, const obstacle_profile_word_t *word);
+/* TURN_AWAY minimum turn for a start payload and a PROFILE word:
+ * free step of the payload side x OBSTACLE_SCAN_STEP_DEG; 0 when the
+ * side is NONE or blocked, or the word distance is not the payload
+ * distance (not the scan of this detour). */
+unsigned int dr_away_min_deg(uint16_t payload, obstacle_profile_word_t word);
 vsm_outcome_t dr_step(void *ctx, const vsm_inputs_t *in, uint32_t now_ms, vsm_drive_t *drive);
 
 static inline vsm_module_t dr_module(dr_t *dr) {

@@ -16,6 +16,17 @@ void dr_init(dr_t *dr, const dr_config_t *cfg) {
     dr->sweep_mm_s = dr_turn_mm_s(&cfg->dt, cfg->dt.sweep_deg_s);
 }
 
+void dr_set_scan_word(dr_t *dr, const obstacle_profile_word_t *word) {
+    (void)dr;
+    (void)word; /* RED: not implemented yet */
+}
+
+unsigned int dr_away_min_deg(uint16_t payload, obstacle_profile_word_t word) {
+    (void)payload;
+    (void)word; /* RED: not implemented yet */
+    return 0u;
+}
+
 void dr_start(void *ctx, uint16_t payload, uint32_t now_ms) {
     (void)now_ms;
     dr_t *dr = ctx;
