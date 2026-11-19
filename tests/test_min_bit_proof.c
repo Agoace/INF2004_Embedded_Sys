@@ -35,6 +35,7 @@
 #include "../app_program/subsystem4/imu_hump.h"
 #include "../app_program/subsystem4/imu_hump_diag.h"
 #include "../app_program/subsystem4/imu_safety_board.h"
+#include "../app_program/platform/fault_pack.h"
 
 #define MAX_ELEM_BYTES 128u
 #define MAX_FIELDS 48u

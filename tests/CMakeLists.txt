@@ -47,6 +47,8 @@ function(host_test name test_file)
 endfunction()
 
 host_test(test_fault_mask tests/test_fault_mask.c)
+# CR1 F pack: snapshot 8 B and STOP capture 12 B round trips and refusals.
+host_test(test_fault_pack tests/test_fault_pack.c)
 host_test(test_telemetry_pack tests/test_telemetry_pack.c)
 host_test(test_telemetry_optional_pack tests/test_telemetry_optional_pack.c)
 

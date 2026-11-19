@@ -14,4 +14,8 @@ void robot_health_faults_stop(uint32_t odd_epoch);
  * E_TMOUT also means Health has not sampled the current START/STOP phase.
  * Failed reads leave both outputs unchanged; no wire change. */
 int robot_health_faults_try_read(fault_mask_snapshot_t *out, uint32_t *timestamp_us);
+/* CR1 F pack: STOP owner words refused by the packed capture (a bit outside
+ * the owner mask). Each one is stored as unknown, not as zero. Written only
+ * by robot_health_faults_stop (Vehicle); any task may read. */
+uint32_t robot_health_faults_stop_refused(void);
 #endif

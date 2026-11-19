@@ -119,5 +119,37 @@ void wifi_stack_health_check(uint32_t expected_free)
     if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
     assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.valid==0u);
     rt_begin(10u);
+    /* CR1 F pack: a STOP owner word with a bit outside its owner mask cannot
+     * be stored in the packed capture. It is not lost silently: the owner is
+     * stored as unknown (valid clear, not merged into run) and counted. The
+     * other owners stay exact. */
+    owners_readable=true;
+    assert(robot_health_faults_stop_refused()==0u);
+    rt_begin(11u);
+    memset(owner_values,0,sizeof(owner_values));
+    owner_values[0]=FAULT_MOTION_ESTOP;
+    owner_values[1]=FAULT_IMU_SAFETY|FAULT_SONAR_SENSOR; /* wrong-owner bit 5 */
+    owner_values[4]=FAULT_MQTT_DISCONNECTED;
+    robot_health_faults_stop(11u);
+    assert(robot_health_faults_stop_refused()==1u);
+    rt_begin(12u);
+    memset(owner_values,0,sizeof(owner_values));
+    if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+    assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.epoch==11u);
+    assert(faults.run==(FAULT_MOTION_ESTOP|FAULT_MQTT_DISCONNECTED));
+    assert(faults.now==0u && faults.valid==FAULT_MASK_ALL);
+    /* Motion bits above its 4-bit field are refused the same way. */
+    rt_begin(13u);
+    memset(owner_values,0,sizeof(owner_values));
+    owner_values[0]=0x10u|FAULT_MOTION_STALL_RIGHT;
+    owner_values[3]=FAULT_LOG_FULL;
+    robot_health_faults_stop(13u);
+    assert(robot_health_faults_stop_refused()==2u);
+    rt_begin(14u);
+    memset(owner_values,0,sizeof(owner_values));
+    if (setjmp(refreshed)==0) ((void (*)(INT,void *))health_entry)(0,NULL);
+    assert(robot_health_faults_try_read(&faults,&at)==E_OK && faults.epoch==13u);
+    assert(faults.run==FAULT_LOG_FULL);
+    rt_begin(15u);
 }
 #endif

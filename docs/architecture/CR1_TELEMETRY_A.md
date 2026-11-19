@@ -358,6 +358,77 @@ size. Sanitizer evidence: `final-clang-asan-build.log` and
 `final-clang-asan.log`; unavailable GCC runtime details are retained in
 `final-asan-build.log`.
 
+## F pack minimum-bit storage
+
+Operator approved. Branch `mtk3-cr1-fpack`, base staging `290439c`
+(after the minimum-bit proof merge). RAM only: the API value
+`fault_mask_snapshot_t`, the USB `[FAULT_MASK]` line and MQTT do not
+change. The codec is `app_program/platform/fault_pack.h` (masks and
+shifts, no C bit-fields).
+
+| Record | Before | After | Layout |
+| --- | ---: | ---: | --- |
+| Fault snapshot in the Health board | 16 B | 8 B | word0: now 0..9, run 10..19, valid 20..29; word1: epoch |
+| Health working views | 16 B | 8 B | Same as above |
+| STOP capture payload | 32 B | 12 B | word0: Motion 0..3, Vehicle 4..5 (fault bits 4, 6), Sonar 6 (bit 5), Telemetry 7, Wi-Fi 8..9, valid 10..19; word1: epoch; word2: us |
+| STOP refused count | none | 4 B | New u32 |
+
+The epoch, the raw phase epoch, the STOP time and the board sequence
+words stay exact u32 words. Health is still the only writer of the board
+and the working views. Vehicle (through `robot_health_faults_stop`) is
+still the only writer of the STOP capture and the refused count. Health
+unpacks the working views into a local `fault_mask_snapshot_t`, uses the
+unchanged `fault_mask_combine`, and packs the result.
+
+Pack refuses any bit outside its field and writes nothing. The STOP
+path never sends such a bit to the pack. An owner word with a bit
+outside its owner mask is stored as unknown: value 0, valid bits clear.
+Health then does not merge that owner into the run view, so the run view
+does not show it as a cleared fault. `robot_health_faults_stop_refused`
+counts each such owner. The GP20 dump prints
+`[FAULT_MASK] stop_refused N (owner stored as unknown)` only when N is
+not 0, so the normal output is byte-identical. The other owners stay
+exact.
+
+Behaviour change: before, a Motion fault byte with a bit above bit 3 was
+masked to bits 0..3 and kept as valid. Now the Motion owner is unknown
+for that sample, as for the other owners. Motion produces only bits
+0..3 (minimum-bit proof), so this does not occur in normal operation.
+
+Tests: `tests/test_fault_pack.c` checks all 1024 values of each snapshot
+mask and all 2^10 × 2^10 STOP owner/valid patterns, the slot of each
+owner bit, and refusal of every out-of-field bit with no write. The real
+Health test (`wifi_stack_health_checks.c`) checks the earlier STOP,
+lift and sonar cases, and two refused STOP captures: a wrong-owner
+Vehicle bit and a Motion bit above bit 3. The count goes up by one each
+time, and the run view keeps the exact other owners. `test_telemetry.c`
+checks that the stop_refused line is absent at count 0 and present when
+the count is not 0. The minimum-bit proof records now use the real pack
+functions; the two F gaps are closed.
+
+| Gate | Result |
+| --- | --- |
+| Red first | `f60fc02`: Health count link error, telemetry line, proof doc block (17 of 701 fail) |
+| Host GCC | 701/701 |
+| Clang ASan + UBSan | 701/701 |
+| Demo build | 0 warnings, RAM_PROOF 79/79, 21212 B |
+
+| RAM item | Before `290439c` | After | Change |
+| --- | ---: | ---: | ---: |
+| `.bss.board` (Health) | 132 | 124 | -8 |
+| `.bss.fault_views` | 16 | 8 | -8 |
+| `.bss.stop_capture` | 36 | 16 | -20 |
+| `.bss.stop_refused` | 0 | 4 | +4 |
+| S1 module RAM | 78882 | 78850 | -32 |
+| Linker alignment | 943 | 943 | 0 |
+| Static RAM | 239304 | 239272 | -32 |
+| Flash text | 468260 | 468716 | +456 |
+
+The packing saves 36 B; the refused count costs 4 B. The F cost from
+optional A is now 72 B, not 104 B. Evidence: `build/wip/fpack/`
+(`red-host.keep.log`, `green-host.log`, `asan.log`, `before/`, `after/`).
+No robot run.
+
 ## Binary MQTT audit
 
 | Topic | Version | Payload bytes |
@@ -393,6 +464,7 @@ This dormant demo is not an active robot MQTT publisher.
 | Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
 | F2a plus merged sonar owner | 239272 | +72 from optional A | Sonar +8, S1 +68, alignment -4 B |
 | Final F including Vehicle and local owners | 239304 | +104 total F cost from optional A | Final S1 78882 B, Health board 132 B |
+| F pack (`mtk3-cr1-fpack`) | 239272 | -32 from final F | F cost from optional A is now 72 B; Health board 124 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay
