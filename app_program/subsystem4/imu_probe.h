@@ -24,7 +24,7 @@ typedef struct {
     uint8_t fifo_ctrl;
     uint8_t fifo_status;      /* Last FIFO_SRC_REG_A value. */
     /* Ready read cycles; accepted batches/samples; min/max per accepted
-     * batch; EMPTY cycles; OVRN, count>8 and contradictory status cases;
+     * batch; EMPTY cycles; OVRN, (retired) count>8 and contradictory status cases;
      * successful bypass->stream resets. */
     uint32_t fifo_cycles;
     uint32_t fifo_batches;
@@ -36,6 +36,10 @@ typedef struct {
     uint32_t fifo_backlogs;
     uint32_t fifo_bad_status;
     uint32_t fifo_recoveries;
+    /* Option D: cycles with 9..31 queued that read the oldest 8 and left
+     * the rest; largest FIFO count seen (32 = OVRN). */
+    uint32_t fifo_partial;
+    uint32_t fifo_depth_max;
     unsigned int fifo_last_samples;
     bool no_sample;          /* EMPTY, not an invalid/duplicate observation. */
     float mean_accel_mg[3];  /* Mapped, fractional batch mean. */
