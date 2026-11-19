@@ -163,18 +163,25 @@ int main(void)
     assert(imu_probe_read(&p, 55u, &value));
     assert(p.fifo_last_samples == 3u && p.fifo_raw[0][0] == 16096);
     assert(p.mean_accel_mg[0] == 1007.0f && queued == consumed);
-    assert(p.fifo_partial == 1u);
-    /* 31 queued (largest count without OVRN): 6, 6, 6, 6, then 7 (<= 8). */
+    assert(p.fifo_partial == 1u && !p.fifo_catchup);
+    /* 31 queued (largest count without OVRN): 6, 6, 6, 6, 6, then 1. The
+     * cap stays while 7 or 8 remain (the tail of a catch-up), so no
+     * catch-up cycle reads 8. */
     feed(31u);
-    const unsigned int expect[5] = {6u, 6u, 6u, 6u, 7u};
-    for (unsigned int i = 0u; i < 5u; ++i) {
+    const unsigned int expect[6] = {6u, 6u, 6u, 6u, 6u, 1u};
+    for (unsigned int i = 0u; i < 6u; ++i) {
         assert(imu_probe_read(&p, 56u + i, &value));
         assert(p.fifo_last_samples == expect[i]);
         assert(p.fifo_raw[0][0] == (int16_t)(16000u + 16u * 6u * i));
+        assert(p.fifo_catchup == (i < 5u)); /* 31,25,19,13,7 queued */
     }
-    assert(queued == consumed && p.fifo_partial == 5u);
+    assert(queued == consumed && p.fifo_partial == 5u && !p.fifo_catchup);
     assert(p.fifo_depth_max == 31u && p.fifo_recoveries == 0u);
     assert(p.fifo_batches == 12u && p.reads == 12u);
+    /* After the catch-up, 8 queued takes the unchanged path again: 8. */
+    feed(8u);
+    assert(imu_probe_read(&p, 62u, &value) && p.fifo_last_samples == 8u);
+    assert(p.fifo_partial == 5u);
     /* 32 unread (OVRN, FSS=31): overrun, reset and invalidate, as before. */
     feed(4u);
     status_override = 0x5f;

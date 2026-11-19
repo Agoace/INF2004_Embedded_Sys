@@ -40,6 +40,14 @@ typedef struct {
      * the rest; largest FIFO count seen (32 = OVRN). */
     uint32_t fifo_partial;
     uint32_t fifo_depth_max;
+    bool fifo_catchup;       /* Option D: still draining after a 9..31. */
+#if APP_TEST
+    /* TEST only: largest read cycle wall time (us) with exactly 6 and 8
+     * samples read, against the 2 ms deadline. Includes preemption, like
+     * max_us, and failed (timed-out) cycles. */
+    uint32_t max_us_n6;
+    uint32_t max_us_n8;
+#endif
     unsigned int fifo_last_samples;
     bool no_sample;          /* EMPTY, not an invalid/duplicate observation. */
     float mean_accel_mg[3];  /* Mapped, fractional batch mean. */

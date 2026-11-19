@@ -100,6 +100,7 @@ static void fault(imu_probe_t *probe, int result, uint32_t now_ms)
     probe->identity_errors += (result == PROBE_ID_ERROR) ? 1u : 0u;
     probe->config_errors += (result == PROBE_CONFIG_ERROR) ? 1u : 0u;
     probe->ready = false;
+    probe->fifo_catchup = false;
     probe->retry_at = now_ms + 1000u;
 }
 
@@ -115,6 +116,7 @@ static int recover_fifo(imu_probe_t *probe)
     }
     probe->fifo_last_samples = 0u;
     probe->no_sample = false;
+    probe->fifo_catchup = false;
     return result;
 }
 
@@ -147,12 +149,20 @@ static int collect_fifo(imu_probe_t *probe, uint8_t last[6])
         return recover_fifo(probe);
     }
     /* Option D (docs/s4-imu/IMU.md): 9..31 queued after a late task. Read
-     * the OLDEST 8 in the same 48-byte burst and leave the rest for the
-     * next cycle; no reset, so no READ_FAILED. Only OVRN or a bad status
-     * resets. Count <= 8 takes the unchanged path. */
+     * the OLDEST 6 in one 36-byte burst and leave the rest for the next
+     * cycle; no reset, so no READ_FAILED. 6, not 8, keeps the cycle inside
+     * the 2 ms deadline. The cap stays until the queue is at most 6 again,
+     * so the tail of a catch-up (7 or 8 left) is not one long 8-sample
+     * cycle. Only OVRN or a bad status resets. Outside a catch-up, count
+     * <= 8 takes the unchanged path. */
     if (count > IMU_FIFO_MAX_BATCH) {
         ++probe->fifo_partial;
-        count = IMU_FIFO_MAX_BATCH;
+        probe->fifo_catchup = true;
+    } else if (count <= IMU_FIFO_CATCHUP_BATCH) {
+        probe->fifo_catchup = false;
+    }
+    if (probe->fifo_catchup) {
+        count = IMU_FIFO_CATCHUP_BATCH;
     }
     if (count == 0u) {
         probe->no_sample = true;
@@ -235,6 +245,18 @@ bool imu_probe_read(imu_probe_t *probe, uint32_t now_ms, imu_units_t *out)
         probe->max_us = probe->last_us;
     }
     probe->total_us += probe->last_us;
+#if APP_TEST
+    if (reading) {
+        const unsigned int read_n = probe->fifo_last_samples;
+        uint32_t *const at_n = read_n == IMU_FIFO_CATCHUP_BATCH ?
+            &probe->max_us_n6 : read_n == IMU_FIFO_MAX_BATCH ?
+            &probe->max_us_n8 : NULL;
+
+        if (at_n != NULL && probe->last_us > *at_n) {
+            *at_n = probe->last_us;
+        }
+    }
+#endif
     if (reading && probe->last_us >= 2000u && result == IMU_IO_OK) {
         result = IMU_IO_TIMEOUT;
     }

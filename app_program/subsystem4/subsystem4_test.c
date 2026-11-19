@@ -282,9 +282,12 @@ static void diagnostics(const imu_snapshot_t *s)
               (unsigned long)s->probe.fifo_backlogs,
               (unsigned long)s->probe.fifo_bad_status,
               (unsigned long)s->probe.fifo_recoveries);
-    tm_printf((UB *)" partial %lu depth_max %lu",
+    tm_printf((UB *)" partial %lu depth_max %lu read_max_us_n6 %lu "
+              "read_max_us_n8 %lu",
               (unsigned long)s->probe.fifo_partial,
-              (unsigned long)s->probe.fifo_depth_max);
+              (unsigned long)s->probe.fifo_depth_max,
+              (unsigned long)s->probe.max_us_n6,
+              (unsigned long)s->probe.max_us_n8);
     print_mm("mean_samples_per_poll", s->probe.fifo_cycles == 0u ? 0.0f :
              (float)s->probe.fifo_samples / (float)s->probe.fifo_cycles);
     tm_printf((UB *)"\n");

@@ -4,10 +4,10 @@
  * register; compute (mean + decode) costs 330 + 10*(n-4) us, charged before
  * the probe's 2 ms deadline check; the line task preempts once per 1 ms
  * boundary for 132 us (UP line sample max, MEASUREMENTS). Model: read time
- * = 25*(3+1) + 25*(3+6n) + 25*(3+6) + 270 + 15n + 132 per 1 ms boundary.
- * It is pessimistic: n=4 gives 1462 us (robot mean 1315-1346), n=8 gives
- * 2122-2254 us (robot B1 max 1996/2007). Requirement: 0 TIMEOUT in every
- * catch-up cycle.
+ * = 25*(3+1) + 25*(3+6n) + 25*(3+6) + 138 + 15n + 132 per 1 ms boundary.
+ * Calibrated to the robot: n=4 gives 1330 us (robot mean 1315-1346); n=8
+ * gives 1990-2122 us (robot B1 max 1996 and 2007). Requirement: 0 TIMEOUT
+ * in every catch-up cycle.
  * Base: REAL imu_probe + imu_safety + ig_step(active=true)
  * over a time-based accel FIFO fake (32 deep, OVRN at 32 unread). The IMU
  * task reads every 10 ms, then one forced gap of G ms, then 10 ms again.
@@ -29,6 +29,7 @@ static uint64_t now_us, cycle_start, sample_period_ns, produced, consumed;
 static uint64_t next_sample_ns, next_preempt;
 static bool ovrn;
 static unsigned int burst_n;
+static uint64_t phase_us; /* Line alarm phase offset, swept 0..950 us. */
 
 #define BYTE_US 25u
 #define PREEMPT_US 132u
@@ -62,7 +63,7 @@ int imu_hw_cycle_end(void)
 {
     /* Mean + decode ran before this call in imu_probe_read. */
     if (cycle_reading) {
-        advance(270u + 15u * burst_n);
+        advance(138u + 15u * burst_n);
     }
     cycle_reading = false;
     return now_us - cycle_start >= 2000u ? IMU_IO_TIMEOUT : IMU_IO_OK;
@@ -110,7 +111,7 @@ int imu_hw_write(uint8_t address, uint8_t reg, uint8_t value)
 typedef struct {
     unsigned int read_failed, latches, observations, partial;
     unsigned int resets, overruns, timeouts;
-    uint32_t read_max_us;
+    uint32_t read_max_us, n6_us, n8_us;
     uint8_t first_cause;
 } gap_result_t;
 
@@ -148,7 +149,7 @@ static gap_result_t run(unsigned int hz, unsigned int gap_ms)
                 continue;
             }
             now_us = next_read;
-            next_preempt = (now_us / 1000u + 1u) * 1000u; /* Line alarm phase. */
+            next_preempt = (now_us / 1000u + 1u) * 1000u - phase_us;
             imu_units_t out;
             const bool valid = imu_probe_read(&probe, (uint32_t)(now_us / 1000u), &out);
             const bool empty = !valid && probe.no_sample;
@@ -188,6 +189,8 @@ static gap_result_t run(unsigned int hz, unsigned int gap_ms)
     r.overruns = probe.fifo_overruns;
     r.timeouts = probe.timeouts;
     r.read_max_us = probe.max_us;
+    r.n6_us = probe.max_us_n6;
+    r.n8_us = probe.max_us_n8;
     printf("%u Hz gap %u ms: observations %u READ_FAILED %u latches %u "
            "cause %u partial %u resets %u overruns %u depth_max %lu "
            "timeouts %u read_max_us %lu\n",
@@ -201,19 +204,32 @@ static gap_result_t run(unsigned int hz, unsigned int gap_ms)
 int main(void)
 {
     const unsigned int rates[] = {391u, 400u, 409u};
-    for (unsigned int i = 0u; i < 3u; ++i) {
-        gap_result_t base = run(rates[i], 0u);
-        assert(base.timeouts == 0u && base.read_failed == 0u);
-        assert(base.latches == 0u && base.partial == 0u);
-        const unsigned int ok[] = {22u, 30u, 40u, 49u};
-        for (unsigned int g = 0u; g < 4u; ++g) {
-            gap_result_t r = run(rates[i], ok[g]);
-            fflush(stdout);
-            assert(r.timeouts == 0u && r.read_max_us < 2000u);
-            assert(r.read_failed == 0u && r.latches == 0u);
-            assert(r.resets == 0u && r.partial >= 1u);
+    const unsigned int ok[] = {22u, 30u, 40u, 49u};
+    unsigned int runs = 0u;
+    uint32_t worst = 0u;
+
+    /* Every line-alarm phase in 50 us steps: a catch-up read must never
+     * meet the 2 ms deadline, whatever the preemption timing. */
+    for (phase_us = 0u; phase_us < 1000u; phase_us += 50u) {
+        for (unsigned int i = 0u; i < 3u; ++i) {
+            gap_result_t base = run(rates[i], 0u);
+            assert(base.n6_us == 0u && base.n8_us == 0u); /* n is 3..5. */
+            assert(base.timeouts == 0u && base.read_failed == 0u);
+            assert(base.latches == 0u && base.partial == 0u);
+            for (unsigned int g = 0u; g < 4u; ++g) {
+                gap_result_t r = run(rates[i], ok[g]);
+                fflush(stdout);
+                assert(r.timeouts == 0u && r.read_max_us < 2000u);
+                assert(r.read_failed == 0u && r.latches == 0u);
+                assert(r.resets == 0u && r.partial >= 1u);
+                /* TEST counters: a catch-up read is a 6-sample read. */
+                assert(r.n6_us > 0u && r.n6_us == r.read_max_us);
+                worst = r.read_max_us > worst ? r.read_max_us : worst;
+                ++runs;
+            }
         }
     }
-    puts("imu FIFO option D timing fixtures PASS");
+    printf("imu FIFO option D timing fixtures PASS: %u gap runs, worst "
+           "catch-up read %lu us\n", runs, (unsigned long)worst);
     return 0;
 }
