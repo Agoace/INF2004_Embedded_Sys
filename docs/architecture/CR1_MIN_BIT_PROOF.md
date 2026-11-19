@@ -17,7 +17,9 @@ tables in this document are the test output.
 - The KR1 row is recorded as it is on staging (16 B). The approved 15 B
   row is on branch `mtk3-cr1-kr1row`. Its owner updates the KR1 table
   after this proof is merged.
-- The gaps below are a report only. No gap is approved for a change.
+- The `GAP` rows are a report only. The fault snapshot and STOP capture
+  gaps get a fix on a separate branch. The operator accepted three other
+  items with a written reason (`SMALL_GAIN`, `ELEMENT_ALIGNED`).
 
 The module records keep the design detail. This record does not repeat
 it: [CR1.md](CR1.md) (motion), [CR1_SONAR_A.md](CR1_SONAR_A.md),
@@ -34,13 +36,17 @@ and [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md).
 | Independent bits | k flags that can be set in any mix have n = 2^k, so k bits. |
 | Full-range field | A wrapping u32 counter or time, a random id, or an exact binary32 float has n = 2^32, so 32 bits is the minimum. |
 | Bits used | Width of the field slot in the stored element. |
-| Reason | Necessary when bits used > min bits. The list is closed: `WORD_SLACK` or `GAP`. |
+| Reason | Necessary when bits used > min bits. The list is closed: `WORD_SLACK`, `GAP` or `SMALL_GAIN`. A record can also state `ELEMENT_ALIGNED`. |
 | `WORD_SLACK` | Fewer bits save 0 B over the WHOLE record, all elements included. The test computes this; a field in an array cannot use it when the array total can become smaller. |
 | `GAP` | Fewer bits save bytes. Report only. The gap table gives the bytes. |
+| `SMALL_GAIN` | Fewer bits save a small number of bytes, and the operator accepted it. The row states the bytes; the test makes sure that the figure is the true saving. |
+| `ELEMENT_ALIGNED` | Record reason for an array. Every field is minimal, but each element starts on a whole byte or word, so that the code can get element i directly (O(1)) under the lock. The record states the bytes that one bit stream would save; the test makes sure that the figure is exact. |
 
 The test fails when a reason is missing, when a reason is on a field
-that has the minimum width, when `WORD_SLACK` hides a saving, and when
-`GAP` saves 0 B.
+that has the minimum width, when `WORD_SLACK` hides a saving, when
+`GAP` or `SMALL_GAIN` saves 0 B, when a `SMALL_GAIN` or
+`ELEMENT_ALIGNED` figure is not the computed bytes, and when an array
+has alignment bytes with no `ELEMENT_ALIGNED` figure.
 
 ## What the test does
 
@@ -159,14 +165,14 @@ Source: `app_program/subsystem5/sonar_pack.h`. 16 element(s) of 40 B (320 bits, 
 | deadline_ms | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
 | ping_generation | u32 (wrapping) | 4294967296 | 32 | 32 |  |
 | ping_id | u32 (wrapping) | 4294967296 | 32 | 32 |  |
-| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 16 | GAP |
+| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 16 | SMALL_GAIN (4 B) |
 | angle | -30..30 | 61 | 6 | 6 |  |
 | ping_angle | -30..30 | 61 | 6 | 6 |  |
 | status | 0..3 | 4 | 2 | 2 |  |
 | pending | bool | 2 | 1 | 1 |  |
 | valid | bool | 2 | 1 | 1 |  |
 
-Bits per element: used 320, minimum 318. Layout: one array. Bytes: stored 640; least at used widths 640; least at minimum widths 636 (each element alone in whole words: 640). Same layout as the board. Only a bit stream over all 16 entries can use the 2 echo bits (4 B).
+Bits per element: used 320, minimum 318. Layout: one array. Bytes: stored 640; least at used widths 640; least at minimum widths 636 (each element alone in whole words: 640). Same layout as the board. Only a bit stream over all 16 entries can use the 2 echo bits (4 B). Accepted by the operator: 4 B needs a new history layout.
 
 ### Obstacle board
 
@@ -345,7 +351,7 @@ Source: `app_program/subsystem1/telemetry_pack.h`. 512 element(s) of 9 B (72 bit
 | from | 0..5 | 6 | 3 | 3 |  |
 | to | 0..5 | 6 | 3 | 3 |  |
 
-Bits per element: used 66, minimum 66. Layout: one array. Bytes: stored 4608; least at used widths 4224; least at minimum widths 4224 (each element alone in whole bytes: 4608). Each event starts on a byte, so 6 zero bits per event.
+Bits per element: used 66, minimum 66. Layout: one array. Bytes: stored 4608; least at used widths 4224; least at minimum widths 4224 (each element alone in whole bytes: 4608). ELEMENT_ALIGNED: 384 B. Each event starts on a byte, so 6 zero bits per event. Accepted by the operator: whole events give O(1) indexed access under the lock.
 
 ### Telemetry log index
 
@@ -373,7 +379,7 @@ Source: `app_program/subsystem1/telemetry_pack.h`. 48 element(s) of 11 B (88 bit
 | coarse_hits | 0..5 | 6 | 3 | 3 |  |
 | attempt | 1..2 | 2 | 1 | 1 |  |
 
-Bits per element: used 81, minimum 81. Layout: one array. Bytes: stored 528; least at used widths 486; least at minimum widths 486 (each element alone in whole bytes: 528). Each row starts on a byte, so 7 zero bits per row.
+Bits per element: used 81, minimum 81. Layout: one array. Bytes: stored 528; least at used widths 486; least at minimum widths 486 (each element alone in whole bytes: 528). ELEMENT_ALIGNED: 42 B. Each row starts on a byte, so 7 zero bits per row. Accepted by the operator: whole rows give O(1) indexed access under the lock.
 
 ### Retained INFO
 
@@ -536,27 +542,38 @@ Bits per element: used 256, minimum 84. Layout: separate allocations. Bytes: sto
 
 ### Report-only gaps
 
-| Record | Fields wider than minimum | Stored B | Least B, whole elements | Least B, one bit stream |
+| Record | Fields (GAP) | Stored B | Least B | Saving B |
 | --- | --- | ---: | ---: | ---: |
-| Sonar history | echo | 640 | 640 | 636 |
-| KR1 RAM-log row | echo, flags | 72016 | 72016 | 69203 |
-| Telemetry events | none (alignment only) | 4608 | 4608 | 4224 |
-| Stopped scan rows | none (alignment only) | 528 | 528 | 486 |
+| KR1 RAM-log row | echo, flags | 72016 | 69203 | 2813 |
 | F Health fault snapshot | now, run, valid | 32 | 16 | 16 |
-| F STOP capture | owner Motion, owner Vehicle, owner Sonar, owner Telemetry, owner Wi-Fi, valid | 32 | 12 | 12 |
+| F STOP capture | owner Motion, owner Vehicle, owner Sonar, owner Telemetry, owner Wi-Fi, valid | 32 | 12 | 20 |
+
+### Accepted with a reason
+
+| Record | Reason | Fields | Bytes not saved |
+| --- | --- | --- | ---: |
+| Sonar history | SMALL_GAIN | echo | 4 |
+| Telemetry events | ELEMENT_ALIGNED | all (6 zero bits per element) | 384 |
+| Stopped scan rows | ELEMENT_ALIGNED | all (7 zero bits per element) | 42 |
 
 <!-- min-bit:end -->
 
 ## Gaps
 
-The gap table above is a report only. No change is approved.
+The `GAP` rows above are a report only.
 
-| Record | Why the gap stays |
+| Record | Why the gap stays now |
 | --- | --- |
-| Sonar history | Echo keeps the 16-bit native word. Only one bit stream over all 16 entries can save the 4 B. |
-| KR1 RAM-log row | Echo (2 bits) and flags (3 bits) are wider than needed. A whole row stays 16 B at 123 bits. 15 B rows need the time to drop 3 bits too, with an index-anchored decode. That change is on `mtk3-cr1-kr1row`. |
-| Telemetry events, stopped scan rows | Each element starts on a byte (6 and 7 zero bits). A bit stream over the array saves 384 B and 42 B, but the element code changes. |
-| F Health fault snapshot, F STOP capture | The fault words are plain u32 words. Each holds at most 10 meaningful bits. The producers mask the values; the store does not check them. Packing saves 16 B and 20 B. |
+| KR1 RAM-log row | Echo (2 bits) and flags (3 bits) are wider than needed. A whole row stays 16 B at 123 bits; only one bit stream saves 2813 B. 15 B rows need the time to drop 3 bits too, with an index-anchored decode. That change is on `mtk3-cr1-kr1row`. |
+| F Health fault snapshot, F STOP capture | The fault words are plain u32 words. Each holds at most 10 meaningful bits. The producers mask the values; the store does not check them. Packing saves 16 B and 20 B (36 B). A fix is on a separate branch. |
+
+Accepted by the operator, with the written reason:
+
+| Record | Reason | Bytes not saved | Why |
+| --- | --- | ---: | --- |
+| Sonar history | `SMALL_GAIN` | 4 | Echo keeps the 16-bit native word. Only one bit stream over all 16 entries can use the 2 free bits; that needs a new history layout for 4 B. |
+| Telemetry events | `ELEMENT_ALIGNED` | 384 | Every field is minimal. Each event starts on a byte (6 zero bits), so the code gets event i directly under the lock. |
+| Stopped scan rows | `ELEMENT_ALIGNED` | 42 | Every field is minimal. Each row starts on a byte (7 zero bits), so the code gets row i directly under the lock. |
 
 ## Not packed or out of scope
 
@@ -583,7 +600,7 @@ between the markers. `test_min_bit_doc` fails until the two agree.
 
 ## Evidence
 
-Date: 2026-11-19. Base `b68ce6b`; proof test commit `c9218ef`.
+Date: 2026-11-19. Base `b68ce6b`; proof commits `c9218ef`, `4551dc6` and the reason update after `4551dc6`.
 
 | Check | Result |
 | --- | --- |
@@ -604,6 +621,12 @@ change was then removed.
 | Sonar board echo `GAP` | GAP but 0 B can be saved |
 | Sonar history echo `WORD_SLACK` | WORD_SLACK but 4 B can be saved |
 | KR1 flags `WORD_SLACK` | WORD_SLACK but 2813 B can be saved |
+| Events `ELEMENT_ALIGNED` figure 384 → 383, or removed | element alignment 384 B, stated 383 B / 0 B |
+| Scan rows `ELEMENT_ALIGNED` removed | element alignment 42 B, stated 0 B |
+| Motion record states 4 B alignment | element alignment 0 B, stated 4 B |
+| Sonar history `SMALL_GAIN` figure 4 → 3 | SMALL_GAIN 3 B stated, 4 B saved |
+| Sonar board echo `SMALL_GAIN` | SMALL_GAIN 4 B stated, 0 B saved |
+| KR1 flags `SMALL_GAIN` beside echo `GAP` | SMALL_GAIN stated, 2813 B saved |
 | KR1 time range 0..8191 | width 16 min 13 reason 0 |
 | KR1 total +1 B | totals differ |
 | Barcode frame boards as one array | totals differ |

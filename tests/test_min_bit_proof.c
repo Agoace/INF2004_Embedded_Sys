@@ -46,7 +46,12 @@
 #define R_NONE 0
 #define R_WORD_SLACK 1 /* narrowing saves 0 B in the record total */
 #define R_GAP 2        /* report only: real saving, listed in the gap table */
-static const char *const reason_name[] = {"", "WORD_SLACK", "GAP"};
+#define R_SMALL_GAIN 3 /* accepted (operator): saving = .accepted bytes */
+static const char *const reason_name[] = {"", "WORD_SLACK", "GAP",
+                                          "SMALL_GAIN"};
+/* Record-level reason: ELEMENT_ALIGNED. An array keeps each element in
+ * whole bytes or words for O(1) indexed access; record_t.aligned_bytes
+ * states the bytes that one bit stream over the array would save. */
 
 typedef struct {
     const char *name;
@@ -60,6 +65,7 @@ typedef struct {
     const int64_t *bad;    /* values that the pack code must reject */
     unsigned int bad_n;
     int reason;
+    unsigned int accepted; /* R_SMALL_GAIN: stated saving in bytes */
     const char *range;     /* text for the "Valid range" column */
     void (*set)(void *native, unsigned int i, int64_t v);
     int64_t (*get)(const void *native, unsigned int i);
@@ -81,6 +87,7 @@ typedef struct {
     unsigned int spare;      /* expected zero bits in one element */
     unsigned int total, streamed, minimum; /* expected bytes (C, Ss, Sm) */
     const char *note;
+    unsigned int aligned_bytes; /* ELEMENT_ALIGNED: stated bytes, else 0 */
 } record_t;
 
 /* ---- helpers ------------------------------------------------------------ */
@@ -316,8 +323,38 @@ static void prove(const record_t *r)
                 r->minimum);
         assert(false);
     }
+    /* Element alignment: stored bytes above the least bytes at the used
+     * widths. Only an array can state it (ELEMENT_ALIGNED), with the
+     * exact figure. */
+    if (t.total - t.streamed != r->aligned_bytes ||
+        (r->aligned_bytes != 0u && r->layout != L_ARRAY)) {
+        fprintf(stderr, "%s: element alignment %u B, stated %u B\n",
+                r->name, t.total - t.streamed, r->aligned_bytes);
+        assert(false);
+    }
+    /* SMALL_GAIN: the stated bytes equal the record saving; not mixed
+     * with GAP, so each figure belongs to one decision. */
+    unsigned int small = 0u;
+    bool gap = false;
+    for (unsigned int i = 0u; i < r->nfields; ++i) {
+        small += r->fields[i].reason == R_SMALL_GAIN
+                     ? r->fields[i].accepted : 0u;
+        gap = gap || r->fields[i].reason == R_GAP;
+        if ((r->fields[i].reason == R_SMALL_GAIN) !=
+            (r->fields[i].accepted != 0u)) {
+            fprintf(stderr, "%s.%s: SMALL_GAIN needs a byte figure\n",
+                    r->name, r->fields[i].name);
+            assert(false);
+        }
+    }
+    if (small != 0u && (gap || small != t.streamed - t.smin)) {
+        fprintf(stderr, "%s: SMALL_GAIN %u B stated, %u B saved\n",
+                r->name, small, t.streamed - t.smin);
+        assert(false);
+    }
     /* WORD_SLACK holds only when the minimum widths save 0 B over the
-     * whole record (all elements as one bit stream). GAP needs a saving. */
+     * whole record (all elements as one bit stream). GAP and SMALL_GAIN
+     * need a saving. */
     for (unsigned int i = 0u; i < r->nfields; ++i) {
         if (r->fields[i].reason == R_WORD_SLACK && t.streamed != t.smin) {
             fprintf(stderr, "%s.%s: WORD_SLACK but %u B can be saved\n",
@@ -382,9 +419,12 @@ static void markdown(const record_t *r)
         }
         printf(" | ");
         print_range(f);
-        printf(" | %llu | %u | %u | %s |\n",
-               (unsigned long long)field_n(f), min_bits(f), f->width,
-               reason_name[f->reason]);
+        printf(" | %llu | %u | %u | %s", (unsigned long long)field_n(f),
+               min_bits(f), f->width, reason_name[f->reason]);
+        if (f->reason == R_SMALL_GAIN) {
+            printf(" (%u B)", f->accepted);
+        }
+        printf(" |\n");
     }
     static const char *const layout_name[] = {
         "separate allocations", "one array", "one bit stream"};
@@ -393,34 +433,63 @@ static void markdown(const record_t *r)
            "(each element alone in whole %ss: %u).",
            t.used, t.minimum, layout_name[r->layout], t.total, t.streamed,
            t.smin, r->unit == 8u ? "byte" : "word", t.aligned);
+    if (r->aligned_bytes != 0u) {
+        printf(" ELEMENT_ALIGNED: %u B.", r->aligned_bytes);
+    }
     if (r->note) {
         printf(" %s", r->note);
     }
     printf("\n\n");
 }
 
+static void field_list(const record_t *r, int reason)
+{
+    bool any = false;
+    for (unsigned int j = 0u; j < r->nfields; ++j) {
+        if (r->fields[j].reason == reason) {
+            printf("%s%s", any ? ", " : "", r->fields[j].name);
+            any = true;
+        }
+    }
+}
+
 static void gap_summary(void)
 {
+    const unsigned int n = sizeof(records) / sizeof(records[0]);
     printf("### Report-only gaps\n\n");
-    printf("| Record | Fields wider than minimum | Stored B | "
-           "Least B, whole elements | Least B, one bit stream |\n");
+    printf("| Record | Fields (GAP) | Stored B | Least B | Saving B |\n");
     printf("| --- | --- | ---: | ---: | ---: |\n");
-    for (unsigned int i = 0u; i < sizeof(records) / sizeof(records[0]); ++i) {
+    for (unsigned int i = 0u; i < n; ++i) {
         const record_t *r = records[i];
         const totals_t t = record_totals(r);
-        if (t.total == t.smin) {
+        bool gap = false;
+        for (unsigned int j = 0u; j < r->nfields; ++j) {
+            gap = gap || r->fields[j].reason == R_GAP;
+        }
+        if (!gap) {
             continue;
         }
         printf("| %s | ", r->name);
-        bool any = false;
+        field_list(r, R_GAP);
+        printf(" | %u | %u | %u |\n", t.streamed, t.smin,
+               t.streamed - t.smin);
+    }
+    printf("\n### Accepted with a reason\n\n");
+    printf("| Record | Reason | Fields | Bytes not saved |\n");
+    printf("| --- | --- | --- | ---: |\n");
+    for (unsigned int i = 0u; i < n; ++i) {
+        const record_t *r = records[i];
         for (unsigned int j = 0u; j < r->nfields; ++j) {
-            if (r->fields[j].reason == R_GAP) {
-                printf("%s%s", any ? ", " : "", r->fields[j].name);
-                any = true;
+            if (r->fields[j].reason == R_SMALL_GAIN) {
+                printf("| %s | SMALL_GAIN | %s | %u |\n", r->name,
+                       r->fields[j].name, r->fields[j].accepted);
             }
         }
-        printf("%s | %u | %u | %u |\n", any ? "" : "none (alignment only)",
-               t.total, t.aligned, t.smin);
+        if (r->aligned_bytes != 0u) {
+            printf("| %s | ELEMENT_ALIGNED | all (%u zero bits per "
+                   "element) | %u |\n", r->name, r->spare,
+                   r->aligned_bytes);
+        }
     }
     printf("\n");
 }

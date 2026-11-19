@@ -116,7 +116,7 @@ static const record_t motion_record = {
     motion_pack_w, motion_unpack_w, motion_fields,
     sizeof(motion_fields) / sizeof(motion_fields[0]), 22, 60, 60, 60,
     "The pulse code repeats the servo angle; removing it is category B5 "
-    "(not approved)."};
+    "(not approved).", 0};
 
 /* ---- sonar board and history (subsystem5/sonar_pack.h) ------------------- */
 
@@ -163,6 +163,7 @@ static const int64_t bad_status3[] = {4};
     {"ping_generation", 224, 32, 1, U32, .range = "u32 (wrapping)", .set = IO(s_ping_generation)}, \
     {"ping_id", 256, 32, 1, U32, .range = "u32 (wrapping)", .set = IO(s_ping_id)},     \
     {"echo", 288, 16, 1, RANGE(0, 0x3fff), .reason = (echo_reason),                   \
+     .accepted = (echo_reason) == R_SMALL_GAIN ? 4u : 0u,                             \
      .range = "ultrasonic word: distance 9, status 2, streak 3 bits", .set = IO(s_echo)}, \
     {"angle", 304, 6, 1, RANGE(-30, 30), BAD(bad_angle30), .range = "-30..30", .set = IO(s_angle)}, \
     {"ping_angle", 310, 6, 1, RANGE(-30, 30), BAD(bad_angle30), .range = "-30..30", .set = IO(s_ping_angle)}, \
@@ -170,21 +171,22 @@ static const int64_t bad_status3[] = {4};
     {"pending", 318, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(s_pending)},       \
     {"valid", 319, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(s_valid)}
 static const field_t sonar_board_fields[] = {SONAR_FIELDS(R_WORD_SLACK)};
-static const field_t sonar_history_fields[] = {SONAR_FIELDS(R_GAP)};
+static const field_t sonar_history_fields[] = {SONAR_FIELDS(R_SMALL_GAIN)};
 static const record_t sonar_board_record = {
     "Sonar board", "app_program/subsystem5/sonar_pack.h",
     sizeof(sonar_snapshot_t), 40, 320, 1, 32, L_SEPARATE,
     sonar_pack_w, sonar_unpack_w, sonar_board_fields,
     sizeof(sonar_board_fields) / sizeof(sonar_board_fields[0]), 0, 40, 40,
     40, "Echo keeps all 16 bits of the native word; the top 2 bits are always "
-    "zero. Word 9 stays one word, so 14 bits save 0 B."};
+    "zero. Word 9 stays one word, so 14 bits save 0 B.", 0};
 static const record_t sonar_history_record = {
     "Sonar history", "app_program/subsystem5/sonar_pack.h",
     sizeof(sonar_snapshot_t), 40, 320, SONAR_HISTORY_CAPACITY, 32, L_ARRAY,
     sonar_pack_w, sonar_unpack_w, sonar_history_fields,
     sizeof(sonar_history_fields) / sizeof(sonar_history_fields[0]), 0, 640,
     640, 636, "Same layout as the board. Only a bit stream over all 16 "
-    "entries can use the 2 echo bits (4 B)."};
+    "entries can use the 2 echo bits (4 B). Accepted by the operator: 4 B "
+    "needs a new history layout.", 0};
 
 /* ---- obstacle board (vehicle/obstacle_pack.h) ----------------------------- */
 
@@ -249,7 +251,7 @@ static const record_t obstacle_record = {
     "Obstacle board", "app_program/vehicle/obstacle_pack.h",
     sizeof(rm_obstacle_t), 24, 192, 1, 32, L_SEPARATE,
     obstacle_pack_w, obstacle_unpack_w, obstacle_fields,
-    sizeof(obstacle_fields) / sizeof(obstacle_fields[0]), 9, 24, 24, 24, 0};
+    sizeof(obstacle_fields) / sizeof(obstacle_fields[0]), 9, 24, 24, 24, 0, 0};
 
 /* ---- vehicle A1 (vehicle/vehicle_pack.h) ---------------------------------- */
 
@@ -311,7 +313,7 @@ static const record_t vehicle_record = {
     "Vehicle A1 snapshot", "app_program/vehicle/vehicle_pack.h",
     sizeof(vehicle_snapshot_t), 36, 288, 1, 32, L_SEPARATE,
     vehicle_pack_w, vehicle_unpack_w, vehicle_fields,
-    sizeof(vehicle_fields) / sizeof(vehicle_fields[0]), 10, 36, 36, 36, 0};
+    sizeof(vehicle_fields) / sizeof(vehicle_fields[0]), 10, 36, 36, 36, 0, 0};
 
 /* ---- KR1 RAM-log row (vehicle/vehicle_log.h) ------------------------------ */
 
@@ -410,7 +412,7 @@ static const record_t kr1_record = {
     sizeof(kr1_fields) / sizeof(kr1_fields[0]), 0, 72016, 72016, 69203,
     "Slack: echo 2 bits and flags 3 bits. A row stays 16 B (123 bits) "
     "unless the time also drops 3 bits (120 bits), which needs a decode rule "
-    "that the code does not have."};
+    "that the code does not have.", 0};
 
 /* ---- barcode frame and edge (subsystem3/barcode_evidence_pack.h) ---------- */
 
@@ -518,13 +520,13 @@ static const record_t frame_board_record = {
     sizeof(barcode_live_frame_t), 88, 704, 8, 32, L_SEPARATE,
     frame_pack_w, frame_unpack_w, frame_fields,
     sizeof(frame_fields) / sizeof(frame_fields[0]), 10, 704, 704, 704,
-    "Eight separate boards (barcode_live_source.c FRAME_ROWS)."};
+    "Eight separate boards (barcode_live_source.c FRAME_ROWS).", 0};
 static const record_t frame_slot_record = {
     "Barcode failed-capture frames", "app_program/subsystem3/barcode_evidence_pack.h",
     sizeof(barcode_live_frame_t), 88, 704, 3, 32, L_SEPARATE,
     frame_pack_w, frame_unpack_w, frame_fields,
     sizeof(frame_fields) / sizeof(frame_fields[0]), 10, 264, 264, 264,
-    "One frame in each of the three capture slots."};
+    "One frame in each of the three capture slots.", 0};
 
 static bool edge_pack_w(uint8_t *out, const void *n)
 {
@@ -567,7 +569,7 @@ static const record_t edge_record = {
     edge_pack_w, edge_unpack_w, edge_fields,
     sizeof(edge_fields) / sizeof(edge_fields[0]), 0, 1392, 1392, 1392,
     "Edges are packed back to back (174 bits each). There is one array in "
-    "each of the three capture slots."};
+    "each of the three capture slots.", 0};
 
 /* ---- telemetry events, scan rows, INFO, index (subsystem1/telemetry_pack.h) */
 
@@ -607,7 +609,9 @@ static const record_t event_record = {
     sizeof(telemetry_event_t), 9, 72, TELEMETRY_EVENTS, 8, L_ARRAY,
     event_pack_w, event_unpack_w, event_fields,
     sizeof(event_fields) / sizeof(event_fields[0]), 6, 4608, 4224, 4224,
-    "Each event starts on a byte, so 6 zero bits per event."};
+    "Each event starts on a byte, so 6 zero bits per event. Accepted by the "
+    "operator: whole events give O(1) indexed access under the lock.",
+    384};
 
 static bool scan_pack_w(uint8_t *out, const void *n)
 {
@@ -644,7 +648,9 @@ static const record_t scan_record = {
     sizeof(telemetry_scan_t), 11, 88, TELEMETRY_SCAN_ROWS, 8, L_ARRAY,
     scan_pack_w, scan_unpack_w, scan_fields,
     sizeof(scan_fields) / sizeof(scan_fields[0]), 7, 528, 486, 486,
-    "Each row starts on a byte, so 7 zero bits per row."};
+    "Each row starts on a byte, so 7 zero bits per row. Accepted by the "
+    "operator: whole rows give O(1) indexed access under the lock.",
+    42};
 
 static bool info_pack_w(uint8_t *out, const void *n)
 {
@@ -699,7 +705,7 @@ static const record_t info_record = {
     "Retained INFO", "app_program/subsystem1/telemetry_pack.h",
     sizeof(telemetry_info_t), 104, 832, 1, 8, L_SEPARATE,
     info_pack_w, info_unpack_w, info_fields,
-    sizeof(info_fields) / sizeof(info_fields[0]), 0, 104, 104, 104, 0};
+    sizeof(info_fields) / sizeof(info_fields[0]), 0, 104, 104, 104, 0, 0};
 
 static bool index_pack_w(uint8_t *out, const void *n)
 {
@@ -734,7 +740,7 @@ static const record_t index_record = {
     "Telemetry log index", "app_program/subsystem1/telemetry_pack.h",
     sizeof(telemetry_log_index_t), 16, 128, 1, 32, L_SEPARATE,
     index_pack_w, index_unpack_w, index_fields,
-    sizeof(index_fields) / sizeof(index_fields[0]), 9, 16, 16, 16, 0};
+    sizeof(index_fields) / sizeof(index_fields[0]), 9, 16, 16, 16, 0, 0};
 
 /* ---- Health payload and S1 sonar copy (subsystem1/network_pack.h) --------- */
 
@@ -803,7 +809,7 @@ static const record_t health_record = {
     health_pack_w, health_unpack_w, health_fields,
     sizeof(health_fields) / sizeof(health_fields[0]), 23, 104, 104, 104,
     "The Health board also holds a u32 time, the fault snapshot below and a "
-    "u32 phase (132 B with its sequence)."};
+    "u32 phase (132 B with its sequence).", 0};
 
 static bool ssc_pack_w(uint8_t *out, const void *n)
 {
@@ -846,7 +852,7 @@ static const record_t ssc_record = {
     "S1 pending sonar copy", "app_program/subsystem1/network_pack.h",
     sizeof(rm_sonar_t), 32, 256, 1, 32, L_SEPARATE,
     ssc_pack_w, ssc_unpack_w, ssc_fields,
-    sizeof(ssc_fields) / sizeof(ssc_fields[0]), 2, 32, 32, 32, 0};
+    sizeof(ssc_fields) / sizeof(ssc_fields[0]), 2, 32, 32, 32, 0, 0};
 
 /* ---- fault mask F (platform/fault_mask.h, subsystem1/robot_health.c) ------ */
 
@@ -874,7 +880,7 @@ static const record_t ssc_record = {
         title, "app_program/platform/fault_mask.h", 4, 4, 32, 1, 32,       \
         L_SEPARATE, id##_pack, id##_unpack, id##_fields, 1, 0, 4, 4, 4,          \
         "One writer stores the whole word atomically; owners cannot share " \
-        "a word without a shared read-modify-write."};
+        "a word without a shared read-modify-write.", 0};
 OWNER_RECORD(own_vehicle, "F owner word: Vehicle", FAULT_OWNER_VEHICLE,
              "bits 4, 6")
 OWNER_RECORD(own_sonar, "F owner word: Sonar", FAULT_OWNER_SONAR, "bit 5")
@@ -910,7 +916,7 @@ static const record_t fault_snapshot_record = {
     sizeof(fault_snapshot_fields) / sizeof(fault_snapshot_fields[0]), 0,
     32, 32, 16,
     "Two copies: in the Health board and in the Health working views. The "
-    "producer limits the masks (fault_mask_combine); the store does not."};
+    "producer limits the masks (fault_mask_combine); the store does not.", 0};
 
 /* Mirror of the private fault_stop_capture_t (robot_health.c). */
 typedef struct {
@@ -954,7 +960,7 @@ static const record_t stop_record = {
     copy32_pack, copy32_unpack, stop_fields,
     sizeof(stop_fields) / sizeof(stop_fields[0]), 0, 32, 32, 12,
     "Plain u32 words (36 B board with its sequence). The producer limits "
-    "each owner word (capture_owner_values)."};
+    "each owner word (capture_owner_values).", 0};
 
 /* ---- all records ---------------------------------------------------------- */
 
