@@ -135,7 +135,8 @@ static summary_t summary;
 static APP_BOARD(barcode_live_counts_t) counts_board;
 static barcode_live_counts_t run_counts;
 /* BW0..10 and BP100..107. LINE sole writer; DUMP is a bounded reader. */
-typedef struct { uint32_t epoch, reasons[19]; } reason_counts_t;
+/* seek: SEEK white restarts (report only): disabled, black, other. */
+typedef struct { uint32_t epoch, reasons[19], seek[3]; } reason_counts_t;
 static reason_counts_t reason_counts, dump_reasons;
 static APP_BOARD(reason_counts_t) reason_board;
 _Static_assert(sizeof(counts_board) == 20u, "Live counts board budget");
@@ -277,7 +278,19 @@ void barcode_live_source_sample(uint32_t us, uint16_t raw,
         bcfc_control(input.control.mode, input.now_us);
     }
 #endif
+    uint32_t seek_before[3];
+    memcpy(seek_before, producer.seek_restarts, sizeof(seek_before));
     barcode_live_producer_observe(&producer, &input);
+    if (input.control_ok && input.control.epoch != 0u &&
+        input.control.epoch == reason_counts.epoch) {
+        for (unsigned int i = 0u; i < 3u; ++i) {
+            const uint32_t d = producer.seek_restarts[i] - seek_before[i];
+            if (d != 0u) {
+                reason_counts.seek[i] += d;
+                counts_changed = true;
+            }
+        }
+    }
     if (producer.record_pending) {
         barcode_live_control_t current;
         const bool unchanged = barcode_live_control_try_read(&current, 0)
@@ -440,6 +453,11 @@ void barcode_live_source_dump(void)
             tm_printf((UB *)" %lu", (unsigned long)dump_reasons.reasons[i]);
         }
         tm_printf((UB *)"\n");
+        tm_printf((UB *)"[BC_SEEK_RESTARTS] epoch %lu disabled %lu black %lu "
+                  "other %lu\n", (unsigned long)dump_reasons.epoch,
+                  (unsigned long)dump_reasons.seek[0],
+                  (unsigned long)dump_reasons.seek[1],
+                  (unsigned long)dump_reasons.seek[2]);
     } else {
         tm_printf((UB *)"[BC_REASON_COUNTS] unavailable\n");
     }

@@ -93,6 +93,8 @@ not current acceptance reports. Local course originals are not public records.
   Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (narrow 4.0..7.0 mm fitted from the start star, wide by ratio 1.6..3.4, run ceiling min(35, 1.5w+|bias|) mm), historical evidence and limits.
 - [LIVE_COUNTS_SNAPSHOT.md](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — read-only per-run barcode reader totals.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
+- [BLIP_GRACE.md](s3-line-barcode/BLIP_GRACE.md) — live-only grace that keeps the SEEK white and a held LIVE record through a <200 ms SEARCH blip.
+  Contains: rule (F1 freeze/thaw, F2 hold/retire), `[BC_SEEK_RESTARTS]` report counter, blip fixtures, no-blip identity, RAM (+208 B), limits; robot test pending.
 - [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
   Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
 - [SCHOOL_FAILED_START_ANALYSIS.md](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md) — FC1/FC2 capture integrity, quiet and motion diagnosis, source-timing limits, and approved changes.
