@@ -8,6 +8,10 @@
 #define BW_ELEMENTS 29u
 #define BW_STEP_MAX 32u
 
+/* Leading white before the first bar. Operator 2026-11-19: 40 -> 30 mm.
+ * 30 mm accepts the known FC2 false start (see test_barcode_quiet_real). */
+#define QUIET_MIN_MM 30.0f
+
 typedef enum {
     BW_WAIT = 0, BW_OK, BW_CALIBRATION, BW_LOSS, BW_MOTION,
     BW_START, BW_WIDTH, BW_GAP, BW_EXTENT, BW_TAIL, BW_NOT_LETTER

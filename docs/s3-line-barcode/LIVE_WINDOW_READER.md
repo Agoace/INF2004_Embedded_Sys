@@ -73,7 +73,7 @@ through all 29 elements and short white confirmation. Mat black never sets
 the threshold scale. A short bounded transition from white to the first bar
 is allowed; it is not counted as credible leading white.
 
-Leading white must cover 40 mm both before admission and after fitting the
+Leading white must cover 30 mm (`QUIET_MIN_MM`; 40 mm before 2026-11-19) both before admission and after fitting the
 start star. Any above-rise black that is not admitted clears the white
 qualification, even if the black run is short. Transition-band handling
 below rise stays bounded as before. Mid-window adaptation is forbidden.
@@ -107,7 +107,7 @@ scale; a second fixed absolute wide band does not constrain it:
 | Data/stop scale against start | Within 20% |
 | Corrected inter-character gaps | 0.65--1.5 start narrow |
 | Total corrected body extent | Within two narrows of `20n + 9w` |
-| Leading white | 40 mm before and after fitting; unadmitted black clears qualification |
+| Leading white | 30 mm before and after fitting (operator 2026-11-19, was 40 mm); unadmitted black clears qualification |
 | Pre-star white-to-ink transition allowance | 7 mm maximum candidate narrow (unchanged) |
 | Candidate time/body limits | 5 s / 360 mm (unchanged absolute watchdogs) |
 | Run limit before start-star fit | 35 mm absolute ceiling |
@@ -252,3 +252,23 @@ are validation artifacts, not configured operator images. No push/flash was
 performed. Hardware live reading, same-stripe offset bound, measured stack/CPU
 and vehicle admission remain integration gates. Producer heartbeat/revision/
 slot policy is covered in the subsequent producer record.
+
+## Leading white 30 mm (operator decision 2026-11-19)
+
+The operator lowered `QUIET_MIN_MM` from 40 mm to 30 mm, after robot runs
+in which a barcode got no attempt because the leading white restarted.
+Image 18 and image 19 then decoded the barcode that image 16 missed.
+
+Host replay of the school capture FC2 (short marks before the barcode):
+
+| QUIET_MIN_MM | 100 mm/s | 146 mm/s | 220 mm/s |
+| --- | --- | --- | --- |
+| 40 mm | no candidate | no candidate | no candidate |
+| 30 mm | no candidate | no candidate | false candidate |
+| 32 mm | no candidate | no candidate | no candidate |
+
+The accepted risk is a false start above the demo LINE speed. 32 mm is the
+lowest value with no FC2 candidate at all three speeds.
+[`test_barcode_quiet_real.c`](../../tests/test_barcode_quiet_real.c)
+expects this result and changes back if the value is 32 mm or more.
+
