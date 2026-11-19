@@ -333,7 +333,7 @@ Demo image `1f46e88` (UF2 `4d3fe5a806fa4625`), GP20 dump and MQTT
 | --- | --- | ---: | --- | --- |
 | Small 141 mm (n 2.9 / w 8.7), 5.5 mm | Not read (B1c, 13 runs) | 6 of 15 | white 156 | fixture `barcode_430_small_fwd.csv` |
 | Small, 2.5 mm, run 1 | BW_WIDTH (reason 6), 8 elements | 5 of 15 | white 140 | boot `48e9db3c` |
-| Small, 2.5 mm, H3 | BW_WIDTH (reason 6), 4 elements | 3 of 15 | white 175; bar peaks 2797-3856 (H3 fixture rows); narrow gaps 1100-1400; wide gaps about 250 | boot `78a88a68` |
+| Small, 2.5 mm, H3 | BW_WIDTH (reason 6), 4 elements | 3 of 15 | white 175; bar peaks 2959-3856 (H3 fixture rows); narrow gaps 1100-1400; wide gaps about 250 | boot `78a88a68` |
 | Large 285 mm (n 5.8 / w 17.5), 2.5 mm | Decoded Q (BW_OK), widths valid | 15 of 15 | narrow 6.51 mm, wide 17.38 mm (MQTT) | boot `a42680ab` |
 
 At 2.5 mm the narrow gaps no longer return to white (1100-1400 counts),
