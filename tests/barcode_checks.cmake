@@ -345,6 +345,14 @@ foreach(case IN ITEMS search10 search30 search199 search200 search_context searc
     add_test(NAME test_barcode_producer_grace_${case}
         COMMAND test_barcode_live_producer_live_custom ${case})
 endforeach()
+# Blip grace before the first bar: kept below 200 ms, lost at 220 ms and on
+# a pivot that moves the sensor back. Shared producer: never kept.
+foreach(case IN ITEMS blip20 blip40 blip180 blip220 blip40pivot blip40grey blip40bar)
+    add_test(NAME test_barcode_producer_blip_${case}
+        COMMAND test_barcode_live_producer_live_custom ${case})
+    add_test(NAME test_barcode_producer_blip_shared_${case}
+        COMMAND test_barcode_live_producer ${case})
+endforeach()
 
 foreach(v IN ITEMS decode_grace decode_timeout decode_end)
     target_compile_definitions(test_barcode_live_e2e_${v} PRIVATE
