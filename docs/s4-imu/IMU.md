@@ -885,6 +885,20 @@ During catch-up the hump core receives reads that are close together in time but
 | `test_imu_probe` | 9 → oldest 8 read, 1 left, then 1; 31 → 8, 8, 8, 7; FSS drops by 8 each time; OVRN and bad status still reset |
 | `test_imu_fifo_gap` | Real probe + `imu_safety` + `ig_step(active=true)` on a 32-deep timed FIFO fake at 391/400/409 Hz. Gaps 22/30/40/49 ms: 0 READ_FAILED, 0 latch, 0 reset. Gap 60 ms: STALE latch. Gap 80 ms: OVRN, 1 reset, 1 READ_FAILED, latch. |
 
+### Build evidence
+
+Built from `git archive` with public example secrets and compared with staging `871c806`. Demo command (in `build_make/`): `make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 BARCODE_FAIL_CAPTURE=1 BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=100 BARCODE_MAP="F=LEFT" JUNCTION_TEST_CMD=NONE`.
+
+| Item | Staging `871c806` | Option D |
+| --- | --- | --- |
+| Demo warnings / RAM_PROOF | 0 / 79/79, 21212 B | 0 / 79/79, 21212 B |
+| Static RAM (`scripts/ram_report.py`) | 234596 B | 234620 B (+24: `.bss.probe` 156→164, `.bss.value` 504→512, `.bss.board` 508→516) |
+| Flash text / bss (`arm-none-eabi-size`) | 470092 / 212204 B | 470332 / 212228 B |
+| Demo UF2 sha256 | `0201de1e…` | `1b3f0cce…ebba390e` (changed by design: new probe and dump code) |
+| Bench image `_test_imugap` UF2 sha256 | n/a | `039f33cc…90c62957`; `imu_gap_test_sleep` only in this image |
+| Host GCC / Clang ASan+UBSan | n/a | 707/707 / 707/707 |
+| Template check / min-bit proof | 8 / pass | 8 / pass |
+
 ### Counters
 
 - TEST `[S4_FIFO]` line: adds `partial` and `depth_max`.
