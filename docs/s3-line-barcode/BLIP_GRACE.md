@@ -58,7 +58,7 @@ The two fixes use the existing grace without changes. The grace has the same beg
 
 | Test | Proves |
 | --- | --- |
-| `test_barcode_producer_blip_blip20/40/180` | A 20, 40 or 180 ms blip at 300 ms (before the bar at 548 ms) keeps the white: 1 record. `leading_mm` = 80 mm minus the frozen travel (±3 mm). |
+| `test_barcode_producer_blip_blip20/40/180` | A 20, 40 or 180 ms blip that ends at 500 ms keeps the white: 1 record. Only 7 mm of white follow the blip before the bar at 548 ms, so the read needs the kept run (valid for `QUIET_MIN_MM` 40 and 30). `leading_mm` = 80 mm minus the frozen travel (±3 mm). |
 | `test_barcode_producer_blip_blip220` | A 220 ms blip ends the grace: 0 records, 1 disabled restart. |
 | `test_barcode_producer_blip_blip40pivot` | A pivot that moves the sensor back gives BW_MOTION: 0 records. |
 | `test_barcode_producer_blip_blip40grey` | Non-white samples inside the blip do not enter the white: 1 record. |

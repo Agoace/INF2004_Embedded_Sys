@@ -73,10 +73,15 @@ int main(int argc, char **argv)
                     .mode = BC_LIVE_SHADOW_MODE},
         .control_ok = true, .motor_ok = true};
     /* Blip grace before the first bar (bar at 80 mm = 548 ms): a SEARCH
-     * blip at 300 ms of N ms; "pivot" turns left (axis retreat), "grey"
+     * blip of N ms that ends at 500 ms; "pivot" turns left (axis retreat), "grey"
      * puts non-white samples inside the blip. */
     const bool blip = strncmp(kind, "blip", 4u) == 0;
-    const unsigned int blip_begin = strstr(kind, "bar") ? 530u : 300u;
+    /* The blip ends at 500 ms: 7 mm of white remain before the bar at
+     * 80 mm (548 ms). That is below any admission minimum, so only a kept
+     * white run can read the bar. "bar": the bar starts in the blip. */
+    const unsigned int blip_duration_arg = blip ? (unsigned int)atoi(kind + 4) : 0u;
+    const unsigned int blip_begin = strstr(kind, "bar") ? 530u :
+        500u - blip_duration_arg;
     const unsigned int blip_duration = blip ? (unsigned int)atoi(kind + 4) : 0u;
     const bool blip_pivot = blip && strstr(kind, "pivot") != NULL;
     const bool blip_grey = blip && strstr(kind, "grey") != NULL;
