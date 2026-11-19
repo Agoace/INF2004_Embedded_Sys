@@ -438,6 +438,9 @@ host_test(test_min_bit_proof tests/test_min_bit_proof.c
 if(TARGET test_min_bit_proof)
     target_include_directories(test_min_bit_proof BEFORE PRIVATE
         "${REPO}/tests/mtk_stubs")
+    add_test(NAME test_min_bit_doc COMMAND python3
+        "${REPO}/tests/test_min_bit_doc.py" $<TARGET_FILE:test_min_bit_proof>
+        "${REPO}/docs/architecture/CR1_MIN_BIT_PROOF.md")
 endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/review_checks.cmake")
