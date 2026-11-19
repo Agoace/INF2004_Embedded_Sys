@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 #define IMU_FIFO_MAX_BATCH 8u
+/* Option D catch-up size for 9..31 queued: 6 samples (36 B). An 8-sample
+ * cycle is about 2.0 ms and timed out on bench B1 (2007 us > 2 ms). */
+#define IMU_FIFO_CATCHUP_BATCH 6u
 #define IMU_FIFO_ODR_HZ 400u
 #define IMU_FIFO_EMPTY 0x20u
 #define IMU_FIFO_OVERRUN 0x40u

@@ -16,6 +16,24 @@ void dr_init(dr_t *dr, const dr_config_t *cfg) {
     dr->sweep_mm_s = dr_turn_mm_s(&cfg->dt, cfg->dt.sweep_deg_s);
 }
 
+void dr_set_scan_word(dr_t *dr, const obstacle_profile_word_t *word) {
+    dr->scan_word = word;
+}
+
+unsigned int dr_away_min_deg(uint16_t payload, obstacle_profile_word_t word) {
+    const obstacle_side_t side = ss_payload_side(payload);
+    if ((side != OBSTACLE_SIDE_LEFT && side != OBSTACLE_SIDE_RIGHT) ||
+        obstacle_profile_distance(word) != ss_payload_distance(payload)) {
+        return 0u;
+    }
+    const unsigned int free_step = side == OBSTACLE_SIDE_LEFT ? obstacle_profile_left(word)
+                                                              : obstacle_profile_right(word);
+    if (free_step >= OBSTACLE_PROFILE_BLOCKED) {
+        return 0u;
+    }
+    return free_step * (unsigned int)OBSTACLE_SCAN_STEP_DEG;
+}
+
 void dr_start(void *ctx, uint16_t payload, uint32_t now_ms) {
     (void)now_ms;
     dr_t *dr = ctx;
@@ -37,6 +55,9 @@ vsm_outcome_t dr_step(void *ctx, const vsm_inputs_t *in, uint32_t now_ms, vsm_dr
     if (!dr->started) {
         dt_init(&dr->dt, &dr->cfg.dt, ss_payload_side(dr->payload), ss_payload_distance(dr->payload),
                 in->counts[0], in->counts[1], now_ms);
+        if (dr->scan_word != 0) {
+            dt_set_away_min(&dr->dt, dr_away_min_deg(dr->payload, *dr->scan_word));
+        }
         dr->started = true;
     }
     if (dr->done) {

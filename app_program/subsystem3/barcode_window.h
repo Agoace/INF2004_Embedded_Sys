@@ -8,6 +8,10 @@
 #define BW_ELEMENTS 29u
 #define BW_STEP_MAX 32u
 
+/* Leading white before the first bar. Operator 2026-11-19: 40 -> 30 mm.
+ * 30 mm accepts the known FC2 false start (see test_barcode_quiet_real). */
+#define QUIET_MIN_MM 30.0f
+
 typedef enum {
     BW_WAIT = 0, BW_OK, BW_CALIBRATION, BW_LOSS, BW_MOTION,
     BW_START, BW_WIDTH, BW_GAP, BW_EXTENT, BW_TAIL, BW_NOT_LETTER
@@ -105,7 +109,33 @@ typedef struct {
     bool white_started;
     bool transitioning;
     bool black;
+    /* Blip grace: SEEK ignores the samples from freeze_us (to thaw_us);
+     * the white run, mean and count wait. Frozen travel is not white. */
+    uint32_t freeze_us;
+    uint32_t thaw_us;
+    float seek_mm; /* Last SEEK sample position; frozen travel offset. */
+    bool frozen;   /* Open interval: no thaw yet. */
+    bool thaw;     /* Closed interval waiting for its first later sample. */
+    uint8_t white_lost; /* BW_WHITE_LOST_*; the owner reads and clears. */
 } barcode_window_t;
+
+#define BW_WHITE_LOST_BLACK 0x01u /* Unadmitted ink ended a white run. */
+#define BW_WHITE_LOST_OTHER 0x02u /* Loss, motion or grey ended it. */
+#define BW_WHITE_LOST_BLIP 0x04u  /* Not white just after a blip grace. */
+/* Blip grace owner calls. freeze: ADC samples at or after us wait.
+ * thaw: samples from us on count again. Only SEEK uses them. */
+void barcode_window_freeze(barcode_window_t *state, uint32_t us);
+void barcode_window_thaw(barcode_window_t *state, uint32_t us);
+/* True in SEEK (before the first bar; 1u is SEEK in the .c). */
+static inline bool barcode_window_seeking(const barcode_window_t *s)
+{
+    return s->phase == 1u;
+}
+/* True when a SEEK white run is in progress. */
+static inline bool barcode_window_white_run(const barcode_window_t *s)
+{
+    return barcode_window_seeking(s) && s->white_started;
+}
 
 /* Valid calibration/configuration is required. No old samples survive begin.
  * All methods must be called by ONE task or externally serialized owner.

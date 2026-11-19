@@ -4,10 +4,30 @@ if(TARGET test_vehicle_mqtt)
     target_include_directories(test_vehicle_mqtt BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_compile_definitions(test_vehicle_mqtt PRIVATE TM_MQTT=1)
 endif()
+foreach(fault_role TEST BENCH)
+    set(fault_test test_vehicle_fault_absent_${fault_role})
+    host_test(${fault_test} tests/test_vehicle_fault_absent.c
+        app_program/vehicle/vehicle_task.c)
+    target_include_directories(${fault_test} BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(${fault_test} PRIVATE APP_${fault_role}=1 TM_MQTT=1)
+endforeach()
+host_test(test_vehicle_fault_value tests/test_vehicle_fault_value.c)
+add_test(NAME test_vehicle_fault_owner COMMAND "${Python3_EXECUTABLE}"
+    "${REPO}/tests/test_vehicle_fault_owner.py")
+host_test(test_vehicle_pack tests/test_vehicle_pack.c
+    app_program/vehicle/vehicle_pack.c)
+if(TARGET test_vehicle_pack)
+    target_include_directories(test_vehicle_pack BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    foreach(pack_case invalid boards)
+        add_test(NAME test_vehicle_pack_${pack_case}
+            COMMAND test_vehicle_pack ${pack_case})
+    endforeach()
+endif()
 host_test(test_vehicle_network_policy tests/test_vehicle_network_policy.c
     app_program/vehicle/vehicle_network_policy.c)
 host_test(test_vehicle_network_task tests/test_vehicle_network_task.c
     app_program/vehicle/vehicle_task.c app_program/vehicle/vehicle_log.c
+    app_program/vehicle/vehicle_pack.c
     app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/vehicle_network_policy.c app_program/vehicle/obstacle_report.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c app_program/subsystem1/mqtt_wire.c
@@ -18,6 +38,15 @@ if(TARGET test_vehicle_network_task)
     target_include_directories(test_vehicle_network_task BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
     target_link_libraries(test_vehicle_network_task PRIVATE m)
     target_compile_definitions(test_vehicle_network_task PRIVATE TM_MQTT=1)
+    target_link_options(test_vehicle_network_task PRIVATE "-Wl,--wrap=vsm_step")
+    add_test(NAME test_vehicle_fault_capture_time
+        COMMAND test_vehicle_network_task capturetime)
+    add_test(NAME test_vehicle_fault_capture_operator
+        COMMAND test_vehicle_network_task)
+    foreach(shell_case shellother shellmotion shellimu)
+        add_test(NAME test_vehicle_fault_${shell_case}
+            COMMAND test_vehicle_network_task ${shell_case})
+    endforeach()
     foreach(imu_case imulift imustale imuabsent imurecover)
         add_test(NAME test_vehicle_network_${imu_case}
             COMMAND test_vehicle_network_task ${imu_case})
@@ -27,6 +56,8 @@ if(TARGET test_vehicle_network_task)
 endif()
 host_test(test_obstacle_report tests/test_obstacle_report.c app_program/vehicle/obstacle_report.c ${obstacle_profile_source})
 target_link_libraries(test_obstacle_report PRIVATE m)
+host_test(test_obstacle_pack tests/test_obstacle_pack.c app_program/vehicle/obstacle_report.c ${obstacle_profile_source})
+target_link_libraries(test_obstacle_pack PRIVATE m)
 host_test(test_odometry tests/test_odometry.c app_program/vehicle/odometry.c)
 host_test(test_run_stats tests/test_run_stats.c app_program/vehicle/run_stats.c
     app_program/vehicle/odometry.c)

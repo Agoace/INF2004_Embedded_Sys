@@ -1,12 +1,7 @@
-/* Reuse the established telemetry task doubles. Include the implementation
- * only to stop at private publication boundaries and inspect committed data. */
-#define main original_telemetry_test
-#define bytes telemetry_test_bytes
-#include "test_telemetry.c"
-#undef bytes
-#undef main
-static uint32_t fake_clock_ms;
-uint32_t drv_time_ms(void) { return fake_clock_ms; }
+/* Install the read hook before the doubles include fault_mask/app_board. */
+#include <stdbool.h>
+#include <stdint.h>
+#include "../app_program/subsystem1/kr1_row_pack.h"
 static bool change_log_guard;
 static void log_read_hook(const uint32_t *sequence,unsigned int index) {
     if (change_log_guard && index==0u) {
@@ -15,10 +10,20 @@ static void log_read_hook(const uint32_t *sequence,unsigned int index) {
     }
 }
 #define APP_BOARD_READ_HOOK(sequence,index) log_read_hook(sequence,index)
+/* Reuse the established doubles and inspect private committed boundaries. */
+#define main original_telemetry_test
+#define bytes telemetry_test_bytes
+#include "test_telemetry.c"
+#undef bytes
+#undef main
+static uint32_t fake_clock_ms;
+uint32_t drv_time_ms(void) { return fake_clock_ms; }
 #include "../app_program/subsystem1/telemetry.c"
 static void send_message(telemetry_message_t *message) { assert(telemetry_send(message)==E_OK);pump(); }
 int main(void) {
     telemetry_log_index_t opened={.generation=99u,.rows=88u,.events=77u,.lost=66u};
+    uint32_t fault_word=UINT32_MAX;
+    assert(!telemetry_fault_mask_try_read(&fault_word) && fault_word==UINT32_MAX);
     const telemetry_log_index_t untouched=opened;
     uint8_t row[TELEMETRY_BYTES];telemetry_event_t event;
     assert(telemetry_log_open(NULL)==E_PAR);
@@ -26,21 +31,29 @@ int main(void) {
     assert(telemetry_log_row(0u,0u,NULL)==E_PAR && telemetry_log_event(0u,0u,NULL)==E_PAR);
     assert(telemetry_log_row(0u,0u,row)==E_TMOUT && telemetry_log_event(0u,0u,&event)==E_TMOUT);
     assert(original_telemetry_test()==0);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==0u);
     assert(telemetry_log_open(&opened)==E_OK && opened.generation==2u && opened.rows==2u && opened.events==1u);
-    assert(telemetry_log_row(opened.generation,0u,row)==E_OK && row[0]==0x12u);
-    assert(telemetry_log_row(opened.generation,1u,row)==E_OK && row[0]==0x34u);
+    /* CR1 KR1 RAM row: 15-byte storage; reader returns the unchanged 16 bytes. */
+    assert(sizeof(rows)==TELEMETRY_ROWS*KR1_ROW_STORED_BYTES && sizeof(rows)==67515u);
+    assert(telemetry_log_row(opened.generation,0u,row)==E_OK && memcmp(row,kr_rich[0],sizeof(row))==0);
+    assert(telemetry_log_row(opened.generation,1u,row)==E_OK && memcmp(row,kr_rich[1],sizeof(row))==0);
     assert(telemetry_log_row(opened.generation,2u,row)==E_PAR);
     assert(telemetry_log_event(opened.generation,0u,&event)==E_OK && event.ms==10u && event.word==1u && event.kind==2u);
     assert(telemetry_log_event(opened.generation,1u,&event)==E_PAR);
     /* A partially copied next row, then the unadvertised count, remain hidden. */
-    rows[2][0]=0xabu;
+    uint8_t next_row[TELEMETRY_BYTES],next_stored[KR1_ROW_STORED_BYTES];
+    for (unsigned int i=0u;i<TELEMETRY_BYTES;++i) next_row[i]=(uint8_t)i;
+    next_row[0]=0xabu;next_row[1]=0u;next_row[13]=0x05u; /* time 0xab; bits 107..108 zero */
+    assert(kr1_row_pack(next_stored,next_row,2u));
+    rows[2][0]=next_stored[0];
     assert(telemetry_log_row(opened.generation,2u,row)==E_PAR);
-    for (unsigned int i=1u;i<TELEMETRY_BYTES;++i) rows[2][i]=(uint8_t)i;
+    for (unsigned int i=1u;i<KR1_ROW_STORED_BYTES;++i) rows[2][i]=next_stored[i];
     ++stats.rows;
     assert(telemetry_log_row(opened.generation,2u,row)==E_PAR);
     publish_index();
-    assert(telemetry_log_row(opened.generation,2u,row)==E_OK && row[0]==0xabu && row[15]==15u);
-    events[1]=(telemetry_event_t){.ms=50u,.kind=6u,.word=0x1234u,.detail=3u};
+    assert(telemetry_log_row(opened.generation,2u,row)==E_OK && memcmp(row,next_row,sizeof(row))==0);
+    const telemetry_event_t next_event={.ms=50u,.kind=6u,.word=0x1234u,.detail=3u};
+    assert(telemetry_event_pack(&events[1], &next_event));
     ++stats.events;
     assert(telemetry_log_event(opened.generation,1u,&event)==E_PAR);
     publish_index();
@@ -54,6 +67,30 @@ int main(void) {
     assert(telemetry_log_open(&current_index)==E_OK && current_index.rows==4u && highwater.rows==3u);
     assert(current_index.newest_ms==4321u && highwater.newest_ms!=4321u);
     assert(telemetry_log_row(highwater.generation,3u,row)==E_OK && row[0]==0xcdu);
+    /* Guard: a row 8192+ ticks after its index is refused and counted lost via
+     * the existing loss path. It is never stored with a wrong time and it does
+     * not mark the log full. Offset 8191 still stores exactly. */
+    {
+        const uint32_t lost_before=admit_lost;
+        telemetry_message_t late={.kind=TELEMETRY_ROW,.data.row={0x77u}};
+        late.data.row[0]=(uint8_t)(4u+8192u);late.data.row[1]=(uint8_t)((4u+8192u)>>8);
+        send_message(&late);
+        assert(stats.rows==4u && admit_lost==lost_before+1u && !admit_full);
+        assert(telemetry_log_row(highwater.generation,4u,row)==E_PAR);
+        late.data.row[13]=0x08u;late.data.row[0]=4u;late.data.row[1]=0u; /* echo bit 14 */
+        send_message(&late);
+        assert(stats.rows==4u && admit_lost==lost_before+2u && !admit_full);
+        late.data.row[13]=0u;late.data.row[15]=0x20u; /* flags bit 1 */
+        send_message(&late);
+        assert(stats.rows==4u && admit_lost==lost_before+3u && !admit_full);
+        late.data.row[15]=0x10u; /* flags bit 0 is kept */
+        late.data.row[0]=(uint8_t)(4u+8191u);late.data.row[1]=(uint8_t)((4u+8191u)>>8);
+        send_message(&late);
+        assert(stats.rows==5u && admit_lost==lost_before+3u && !admit_full);
+        assert(telemetry_log_row(highwater.generation,4u,row)==E_OK);
+        assert(memcmp(row,late.data.row,sizeof(row))==0);
+        stats.rows=4u;publish_index(); /* restore the fixture's row count */
+    }
     const uint32_t guard=log_index.sequence;
     log_index.sequence=guard+1u;
     assert(telemetry_log_open(&opened)==E_TMOUT);
@@ -67,9 +104,24 @@ int main(void) {
     assert(telemetry_log_open(&opened)==E_OK && opened.generation==highwater.generation+1u && opened.rows==0u && opened.events==0u);
     assert(telemetry_log_row(highwater.generation,0u,row)==E_OBJ);
     assert(telemetry_log_event(highwater.generation,0u,&event)==E_OBJ);
-    message.kind=TELEMETRY_ROW;message.data.row[0]=0xefu;send_message(&message);
+    message.kind=TELEMETRY_ROW;message.data.row[0]=0xefu;message.data.row[1]=0u;send_message(&message);
     assert(telemetry_log_row(opened.generation,0u,row)==E_OK && row[0]==0xefu);
     assert(telemetry_log_row(highwater.generation,0u,row)==E_OBJ);
     assert(!stats.busy); /* Log access does not claim the USB-dump exclusion. */
+    assert(sizeof(events) == 512u * 9u);
+    message.kind=TELEMETRY_EVENT;
+    message.data.event=(telemetry_event_t){.kind=10u,.from=2u,.to=5u,
+        .ms=UINT32_MAX,.word=UINT16_MAX,.detail=UINT8_MAX};
+    for (unsigned int n=0u;n<TELEMETRY_EVENTS;++n) send_message(&message);
+    assert(stats.events==512u && !admit_full);
+    assert(telemetry_log_event(opened.generation,511u,&event)==E_OK);
+    assert(event.ms==UINT32_MAX && event.word==UINT16_MAX && event.detail==UINT8_MAX);
+    assert(event.kind==10u && event.from==2u && event.to==5u);
+    const uint32_t loss_before=admit_lost;
+    send_message(&message);
+    assert(stats.events==512u && admit_full && admit_lost==loss_before+1u);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==FAULT_LOG_FULL);
+    message.kind=TELEMETRY_BEGIN;send_message(&message);
+    assert(telemetry_fault_mask_try_read(&fault_word) && fault_word==0u);
     return 0;
 }

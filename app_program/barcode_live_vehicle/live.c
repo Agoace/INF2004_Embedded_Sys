@@ -22,11 +22,17 @@ static int64_t distance(unsigned int mm)
     return ((int64_t)mm * JA_COUNTS_PER_M + 999) / 1000;
 }
 
+static void retire(jlive_t *s, uint8_t reason);
+
 static void cut(jlive_t *s, uint32_t when, bool bump)
 {
     if (grace) {
         grace = false;
         blg_publish(&s->control, grace_start, false);
+        if (s->waiting) {
+            /* A held record survives only a whole clean blip. */
+            retire(s, JLIVE_ROUTE);
+        }
     }
     if ((int32_t)(when - s->control.revision_ms) > 0) {
         s->control.revision_ms = when;
@@ -79,14 +85,15 @@ void jlive_route(jlive_t *s, uint8_t module, uint32_t now)
     }
     const bool begin = !grace && s->module == VSM_MOD_LINE &&
         module == VSM_MOD_SEARCH && s->permission &&
-        s->control.mode == BC_LIVE_PERMITTED && !s->candidate &&
-        !s->latched && !s->on_black && !s->waiting;
+        (s->control.mode == BC_LIVE_PERMITTED || s->waiting) &&
+        !s->candidate && !s->latched && !s->on_black;
     const bool resume = grace && s->module == VSM_MOD_SEARCH &&
         module == VSM_MOD_LINE && now - grace_start < BLG_SEARCH_MS;
     if (begin) {
         grace = true;
         grace_start = now;
-        blg_publish(&s->control, now, true);
+        /* A held record has no reader window to keep. */
+        blg_publish(&s->control, now, !s->waiting);
     } else if (!resume) {
         cut(s, now, true);
     }
@@ -98,7 +105,7 @@ void jlive_route(jlive_t *s, uint8_t module, uint32_t now)
     s->clear_started = false;
     s->candidate = false;
     s->latched = false;
-    if (s->waiting) {
+    if (s->waiting && !grace) {
         retire(s, JLIVE_ROUTE);
     }
     (void)barcode_live_control_publish(&s->control);
@@ -296,6 +303,9 @@ bool jlive_read(jlive_t *s, const barcode_live_record_t *record,
         }
     }
     const barcode_live_record_t *r = &s->report.frame;
+    if (s->waiting && grace && s->module == VSM_MOD_SEARCH) {
+        return false; /* Blip grace: hold; the guard runs again on LINE. */
+    }
     if (s->module != VSM_MOD_LINE) {
         retire(s, JLIVE_ROUTE);
         return false;

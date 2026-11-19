@@ -68,7 +68,8 @@ uint32_t boot_id_get(void) { ++boot_reads; return boot_identity; }
 uint32_t drv_time_ms(void) { return now_ms; }
 uint32_t drv_time_us(void) { return now_ms*1000u+clock_calls++; }
 ER tk_ref_tsk(ID id,T_RTSK *status) { assert(id==TSK_SELF && !irq_off);++priority_reads;status->tskpri=20;return E_OK; }
-void cyw43_utk_get_status(T_CYW43_UTK_STATUS *status) { *status=(T_CYW43_UTK_STATUS){.link_status=3}; }
+static int fake_link_status=3;
+void cyw43_utk_get_status(T_CYW43_UTK_STATUS *status) { *status=(T_CYW43_UTK_STATUS){.link_status=fake_link_status}; }
 int32_t cyw43_utk_timing_read(T_CYW43_TIMING *value) { *value=(T_CYW43_TIMING){.gap_max_us=12345u,.gaps=100u};return E_OK; }
 int32_t cyw43_utk_start_status(void) { return E_OK; }
 int ip4addr_aton(const char *text,ip_addr_t *address) {
@@ -457,11 +458,26 @@ static void test_summary(void) {
     connected(MQTT_CONNECT_ACCEPTED);poll_at(7300u);
     assert(count_topic("robot/summary")==6u && u32(last_topic("robot/summary")->data+4)==3u);
 }
+static void test_fault_owner(void)
+{
+    uint32_t word=UINT32_C(0xdeadbeef);
+    assert(!robot_network_fault_mask_try_read(&word) && word==UINT32_C(0xdeadbeef));
+    start_connected();
+    assert(robot_network_fault_mask_try_read(&word) && word==0u);
+    connected(MQTT_CONNECT_DISCONNECTED);
+    fake_link_status=0;poll_at(1u);
+    assert(robot_network_fault_mask_try_read(&word));
+    assert(word==(FAULT_WIFI_LINK_DOWN|FAULT_MQTT_DISCONNECTED));
+    fake_link_status=3;poll_at(2u);
+    assert(robot_network_fault_mask_try_read(&word) && word==FAULT_MQTT_DISCONNECTED);
+    connected(MQTT_CONNECT_ACCEPTED);poll_at(3u);
+    assert(robot_network_fault_mask_try_read(&word) && word==0u);
+}
 static void test_schedule(void) {
     start_connected();
     assert(count_topic("robot/state")==1u && count_topic("robot/heartbeat")==1u);
-    poll_at(199u);assert(count_topic("robot/state")==1u);
-    poll_at(200u);assert(count_topic("robot/state")==2u && count_topic("robot/heartbeat")==1u);
+    poll_at(109u);assert(count_topic("robot/state")==1u);
+    poll_at(110u);assert(count_topic("robot/state")==2u && count_topic("robot/heartbeat")==1u);
     poll_at(999u);assert(count_topic("robot/state")==3u && count_topic("robot/heartbeat")==1u);
     health_busy=true;poll_at(1000u);
     assert(count_topic("robot/state")==3u && count_topic("robot/heartbeat")==2u);
@@ -719,7 +735,7 @@ static void test_idle_rates(void)
     vehicle_phase = 3u;
     first = publication_count;
     poll_range(10010u, 12005u, 5u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     assert(count_since("robot/heartbeat", first) == 2u);
     /* Stop: RUN rates continue for the 2 s grace, then IDLE. */
     vehicle_phase = 0u;
@@ -728,7 +744,7 @@ static void test_idle_rates(void)
     first = publication_count;
     poll_range(12015u, 14005u, 5u);
     assert(mode_word(last_topic("robot/state")) == 0u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     poll_at(14010u);
     first = publication_count;
     poll_range(14015u, 24000u, 5u);
@@ -823,7 +839,7 @@ static void test_idle_no_vehicle(void)
     first = publication_count;
     ram_index.rows = 12u;
     poll_range(1u, 2000u, 1u);
-    assert(count_since("robot/state", first) == 10u);
+    assert(count_since("robot/state", first) == 18u);
     assert(count_since("robot/heartbeat", first) == 2u);
     assert(count_since("robot/log", first) >= 1u);
     assert(mode_word(last_topic("robot/state")) == 0u);
@@ -871,6 +887,7 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"connection")) test_connection();
     else if (!strcmp(argv[1],"commands")) test_commands();
     else if (!strcmp(argv[1],"schedule")) test_schedule();
+    else if (!strcmp(argv[1],"fault_owner")) test_fault_owner();
     else if (!strcmp(argv[1],"retained")) test_retained();
     else if (!strcmp(argv[1],"health_stalled")) test_health_stalled();
     else if (!strcmp(argv[1],"health_missing")) test_health_missing();

@@ -345,6 +345,14 @@ foreach(case IN ITEMS search10 search30 search199 search200 search_context searc
     add_test(NAME test_barcode_producer_grace_${case}
         COMMAND test_barcode_live_producer_live_custom ${case})
 endforeach()
+# Blip grace before the first bar: kept below 200 ms, lost at 220 ms and on
+# a pivot that moves the sensor back. Shared producer: never kept.
+foreach(case IN ITEMS blip20 blip40 blip180 blip220 blip40pivot blip40grey blip40bar)
+    add_test(NAME test_barcode_producer_blip_${case}
+        COMMAND test_barcode_live_producer_live_custom ${case})
+    add_test(NAME test_barcode_producer_blip_shared_${case}
+        COMMAND test_barcode_live_producer ${case})
+endforeach()
 
 foreach(v IN ITEMS decode_grace decode_timeout decode_end)
     target_compile_definitions(test_barcode_live_e2e_${v} PRIVATE
@@ -376,3 +384,11 @@ foreach(v IN ITEMS custom builtin expire search decode_grace decode_timeout deco
     target_sources(${t} PRIVATE "${REPO}/app_program/barcode_live_vehicle/live.c"
         "${REPO}/app_program/barcode_live_vehicle/grace.c")
 endforeach()
+
+# CR1 private evidence representation (capacities unchanged).
+host_test(test_barcode_evidence_pack tests/test_barcode_evidence_pack.c)
+host_test(test_barcode_evidence_replay tests/test_barcode_window_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_evidence_replay PRIVATE
+    BCEP_VERIFY=1 BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_evidence_replay PRIVATE m)

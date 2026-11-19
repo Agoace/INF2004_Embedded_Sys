@@ -35,10 +35,11 @@ static unsigned int hump_lines;
 static unsigned int hump_peak;
 static unsigned int diag_lines;
 
-int imu_hump_diag_try_read(imu_hump_diag_report_t *out)
+int imu_hump_diag_try_read(imu_hump_diag_board_t *out)
 {
-    *out = (imu_hump_diag_report_t){.run_epoch = test_epoch,
+    const imu_hump_diag_report_t r = {.run_epoch = test_epoch,
         .timestamp_ms = wakes * 20u, .valid = true};
+    imu_hump_diag_pack(out, &r);
     return E_OK;
 }
 
