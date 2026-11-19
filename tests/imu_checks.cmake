@@ -177,3 +177,10 @@ host_test(test_imu_gate_board tests/test_imu_gate_board.c
     app_program/subsystem4/imu_safety_board.c
     app_program/vehicle/imu_gate.c app_program/subsystem4/imu_safety.c)
 target_link_libraries(test_imu_gate_board PRIVATE m)
+# Option D (FIFO partial read): real probe + safety + gate over a timed FIFO
+# fake; forced IMU-task gaps of 22..80 ms (docs/s4-imu/IMU.md).
+host_test(test_imu_fifo_gap tests/test_imu_fifo_gap.c
+    app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c
+    app_program/subsystem4/imu_fifo.c app_program/subsystem4/imu_safety.c
+    app_program/vehicle/imu_gate.c)
+target_link_libraries(test_imu_fifo_gap PRIVATE m)
