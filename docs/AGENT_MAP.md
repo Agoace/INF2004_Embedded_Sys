@@ -413,6 +413,8 @@ vehicle task described below.
   [`test_barcode_fail_make.py`](../tests/test_barcode_fail_make.py) and the
   capture-enabled [`feed fixture`](../tests/test_barcode_live_feed.c).
 
+- [Blip grace](s3-line-barcode/BLIP_GRACE.md) keeps the leading white and a held
+  LIVE record through a SEARCH blip shorter than 200 ms.
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
   [`barcode_window.c`](../app_program/subsystem3/barcode_window.c) provide
