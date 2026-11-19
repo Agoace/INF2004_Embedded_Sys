@@ -11,6 +11,8 @@ The scan row records the scoped `d44bd25` school floor result from that date;
 it does not imply general geometry accuracy or acceptance of other changes.
 2026-11-18: code freeze. The demo kernel is tag `demo-kernel-v1` (`9f15213`);
 see [DEMO_FREEZE.md](../release/DEMO_FREEZE.md).
+2026-11-19: second submission, tag `submission-v2` (staging `1f46e88`); see
+[SUBMISSION_V2.md](../release/SUBMISSION_V2.md).
 
 ## Demo image
 
@@ -75,7 +77,7 @@ holds the kernel tests, and `main` is the submission branch.
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tag `submission-v1`. |
+| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`. |
 | `mtk3-staging` | Integration branch: merge all module branches here. Demo kernel tag `demo-kernel-v1`. |
 | `mtk3-testing` | Kernel test branch: SIL/HIL/PIL simulation (Webots, course8 SIL), bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
 | `mtk3` | Course-template/platform base |

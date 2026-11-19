@@ -18,7 +18,7 @@ record once. Use these topic directories before choosing a source entry below:
 
 | Directory | Scope |
 | --- | --- |
-| [release/](release/) | DEMO_FREEZE.md: frozen demo kernel (tag, build line, checks, robot evidence, known limits). |
+| [release/](release/) | DEMO_FREEZE.md: frozen demo kernel (tag, build line, checks, robot evidence, known limits). SUBMISSION_V2.md: second submission (tag, changes since v1, checks, limits). |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
 | [architecture/](architecture/) | PROJECT_STATUS (areas, branches: main, mtk3-staging, mtk3-testing), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
 | [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
@@ -39,6 +39,7 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
 | Demo freeze (2026-11-18) | [docs/release/DEMO_FREEZE.md](release/DEMO_FREEZE.md) — tag `demo-kernel-v1`, demo build line, checks and limits |
+| Submission v2 (2026-11-19) | [docs/release/SUBMISSION_V2.md](release/SUBMISSION_V2.md) — tag `submission-v2`, changes since `submission-v1`, checks and limits |
 | Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area; branch layout and merge rules |
 | Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
