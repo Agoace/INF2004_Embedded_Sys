@@ -243,6 +243,149 @@ stops waiting, clears the sweep counts and asks again. Host test:
 `test_lost_result` in `tests/test_detour_sweep.c` (fails without the fix
 with the LAST result). Robot result: not run.
 
+#### Minimum turn before LOST
+
+Operator approved (fix B, 2026-11-19), branch `mtk3-detour-minturn`.
+
+Problem (boot `e7b34e07`, image 15, FAILED `TOO_NEAR`). The obstacle had a
+wide flat face. The two sweep pings before the wheels moved saw that face
+(278 mm, 278 mm), so `seen_once` was set at turn 0. After about 3° the
+face sent the echo away from the sensor: two NO_RETURN readings. This gave
+sweep LOST at about 5°, the trim turned back to 0°, and the first STRAIGHT
+drove into the face. The scan had found free space on that side only at
+30°.
+
+Rule. At the first detour step, the DETOUR module computes:
+
+    away_min_deg = free_step(chosen side) x OBSTACLE_SCAN_STEP_DEG (5°)
+
+The free step comes from the PROFILE word of the scan that started the
+detour (0..6, so 0..30°). Then:
+
+| Case | Result |
+| --- | --- |
+| Free step 0..6 | Minimum 0..30° |
+| Side NONE, or the chosen side is blocked (step 7) | 0 (old rule) |
+| PROFILE distance is not the start payload distance (not the scan of this detour) | 0 (old rule) |
+| No scan word connected (`dr_set_scan_word` not called) | 0 (old rule) |
+| Above `away_max_deg` | Clamped to `away_max_deg` (90°) |
+
+In TURN_AWAY, an unseen reading whose trigger turn is below
+`away_min_deg` does not count toward sweep LOST. In stepped looks
+(`sweep_deg_s` 0) it does not end the turn; the next look comes after one
+more `turn_step_deg`. Seen readings, `seen_once`, `note_edge`, the seen
+streak reset, `away_max_deg`, `toward_max_deg`, TURN_LIMIT and TURN_TOWARD
+do not change. The minimum acts only on the decision to accept the edge.
+
+Interface. `dt_set_away_min()` (`obstacle_detour.c/.h`), `dr_set_scan_word()`
+and `dr_away_min_deg()` (`detour_run.c/.h`). `vehicle_task.c` connects the
+SCAN module's PROFILE word (`ss.word`, the same Vehicle task) to DETOUR with
+one call after `dr_init()`. The scan payload, the shell outcomes, the MQTT
+messages and the settings do not change.
+
+Host tests (`tests/test_detour_sweep.c` `test_away_min`,
+`tests/test_obstacle_modules.c` `test_away_min_payload`). The replays use
+the robot/state wheel counts and the robot/sonar results of each run:
+
+| Case | Old rule | Minimum |
+| --- | --- | --- |
+| `e7b34e07` (left free step 6: 30°) | LOST at 5°, trim to 0 (the robot result) | No LOST below 30°; LOST at 33°, trim to 0, then STRAIGHT |
+| `c2c31955` (right free step 4: 20°) | LOST at 48° | Same step trace (hash equal) |
+| Seen only from the start pose, minimum 30° | LOST at 4° | LOST at 34° (the first unseen readings past 30°); not TURN_LIMIT |
+| Never seen | TURN_LIMIT at 90° | Same trace |
+| FC_1-like and FC_2-like scenes, minimum 5° | — | Traces identical to the old rule |
+
+Not worse than today for the start-pose-only case. It now turns to the
+scan's free angle and then goes on as before. It does not reach TURN_LIMIT
+when the readings past the minimum are unseen. If the obstacle is still
+seen past the minimum, the sweep goes on until it is not seen (as today
+for an obstacle seen in the turn).
+
+Trim from the scan free-ray corner (S2, operator approved 2026-11-19).
+With fix B alone, the trim still used the last seen echo. In the
+`e7b34e07` replay that echo is the face at turn 1°, so after LOST at 33°
+the trim went back to 0°, the same path that hit the face. At 33° with
+no trim the body still meets the corner (5 to 31 mm overlap). Now, when
+TURN_AWAY ends and the last seen echo was triggered below `away_min_deg`,
+that echo is not used as the corner. The corner is put on the scan's free
+ray, in the axle frame at the detour start (a BACK included):
+
+    corner = (wall_mm, scan_mm x tan(away_min_deg))
+    wall_mm = sensor_ahead_mm (65) + scan closest distance (+ the BACK)
+
+The trim rule (`first_clear_mm` 110: half width 80 + margin 30) gives the
+smallest heading in 0..`away_max_deg` whose path passes that corner by
+110 mm. If that heading is above the turned heading, the robot turns on
+(toward the detour side) to it; if below, it trims down to it; if equal,
+STRAIGHT. With no solution below `away_max_deg`, the target is
+`away_max_deg` (90°): the turn-on stops there and STRAIGHT follows, with
+no TURN_LIMIT failure. Minimum 0, or the last seen echo at or past the
+minimum: the trim is unchanged.
+
+| Case (host) | Old rule | S2 |
+| --- | --- | --- |
+| `e7b34e07` replay (minimum 30°, corner (295, 133)) | LOST 33°, trim to 0° | LOST 33°, turn on to 45°, STRAIGHT 45° |
+| Centre-line clearance at 45°: free-ray corner / +25° hit / +20° hit | — | 114.7 / 142.4 / 150.8 mm (≥ 110) |
+| Body clearance (half width 80) to the free-ray corner | — | 34.7 mm (worst corner); 62 mm to the +25° hit |
+| Edge seen to 45° (past the minimum) | Today's trim (down) | Same: today's trim |
+| Seen only from the start pose, minimum 30° | LOST 4°, trim to 0° | Turn on to 45°, no TURN_LIMIT |
+| `away_max_deg` 40 (cap check) | — | Turn on stops at 40°, STRAIGHT 40° |
+| Minimum 10°, edge at 0°, LOST 40° | — | Trim down 10° to 30° |
+| `c2c31955` (edge at 43°, past the minimum 20°) | Trim | Step trace identical |
+| `e7b34e07`-like scene (box 150 mm deep, line along the approach; the face drops out after 3 pings) | FAILED TOO_NEAR | First STRAIGHT 45.2°, body clearance 35.6 mm; return turn to −89°, line found in the returning STRAIGHT, ALIGN, DONE |
+
+Return leg from about 45°. STRAIGHT 1 is 295 / cos 45 + 50 = 467 mm (at
+most 700 mm). Then the return turn: TURN_TOWARD to the obstacle, back-off
+25°, STRAIGHT 2, and the turn to `-return_heading_deg` (−90°). The line
+counts in the return turn from `line_turn_deg` 20° (after STRAIGHT 2) and
+in the returning STRAIGHT, which ends after `return_max_mm` 1000 mm. The
+worst return angle is −90° (`return_heading_deg`): the robot crosses the
+line square, which is the same return angle as the existing FC_1-like and
+FC_2-like scenes. In the 150 mm deep scene the line is found at −89°
+about 80 mm into the returning STRAIGHT, far inside 1000 mm. For a
+300 mm deep box, the scene ends NO_LINE with the old rule and with S2
+(three straights, no line in 1000 mm). This is the same scene limit as
+today, not an S2 effect.
+
+Limit. The free-ray corner is a bound from the scan (the first free ray
+at the free step), not a measured corner. A corner beyond that ray
+(a deeper box side) is not modelled. Robot result: not run.
+
+Build evidence (fix B). Base `871c806`, fix `f48f856`. Demo MQTT image
+(the CR1 demo build line), Arm GCC, `scripts/ram_report.py`:
+
+| Item | `871c806` | `f48f856` | Change |
+| --- | ---: | ---: | ---: |
+| `.bss.dr` (`vehicle_task.o`) | 264 B | 272 B | +8 B (`away_min_deg` and `scan_word`) |
+| Vehicle module RAM | 2372 B | 2380 B | +8 B |
+| Subsystem 5 module RAM | 953 B | 953 B | 0 |
+| Linker alignment | 947 B | 947 B | 0 |
+| Static RAM | 234596 B | 234604 B | +8 B |
+| Flash text | 470092 B | 470300 B | +208 B |
+| RAM_PROOF | PASS 79/79, 21212 B | PASS 79/79, 21212 B | 0 |
+| Compiler warnings | 0 | 0 | 0 |
+| UF2 SHA-256 prefix | — | `39928b27caff3782` | — |
+| Host tests (GCC; Clang ASan + UBSan) | — | 706/706; 706/706 | — |
+
+Red first: `62d0cfe` failed 10 checks in `test_detour_sweep` and
+`test_obstacle_modules`. Ignored evidence: `build/wip/minturn/`.
+
+Build evidence (S2). Fix `9d18d0b`, compared with `f48f856`:
+
+| Item | `f48f856` | S2 | Change |
+| --- | ---: | ---: | ---: |
+| `.bss.dr` (`vehicle_task.o`) | 272 B | 272 B | 0 (`turn_on` and `scan_mm` fit in `dt_t` padding) |
+| Static RAM | 234604 B | 234604 B | 0 |
+| Flash text | 470300 B | 470916 B | +616 B |
+| RAM_PROOF | PASS 79/79, 21212 B | PASS 79/79, 21212 B | 0 |
+| Compiler warnings | 0 | 0 | 0 |
+| UF2 SHA-256 prefix | `39928b27caff3782` | `cd20d0c169443d2c` | — |
+| Host tests (GCC; Clang ASan + UBSan) | 706/706; 706/706 | 706/706; 706/706 | — |
+
+Red first: `1271c7e` failed 7 checks in `test_detour_sweep`; the other
+detour tests passed unchanged (`test_obstacle_detour`,
+`test_obstacle_modules`).
+
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
 

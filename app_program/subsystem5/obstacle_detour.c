@@ -107,7 +107,7 @@ static int turn_dir(const dt_t *dt) {
         return +1;
     }
     if (dt->step == DT_TURN_TOWARD) {
-        return dt->backing ? +1 : -1;
+        return dt->backing || dt->turn_on ? +1 : -1;
     }
     return dt->heading < 0 ? +1 : -1; /* ALIGN: back to 0 */
 }
@@ -150,6 +150,7 @@ static void begin(dt_t *dt, dt_step_t step) {
     dt->target_deg = 0u; /* turns look first */
     dt->first_leg_mm = 0u;
     dt->trimming = false;
+    dt->turn_on = false;
     if (step == DT_STRAIGHT && dt->straights == 0u && dt->cfg.first_max_mm != 0u) {
         /* Wall triangle: hypotenuse to the wall line, then extra. */
         const int c = dt_cos1000(dt->heading);
@@ -193,6 +194,7 @@ void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t ob
     dt->l = dt->l0 = left;
     dt->r = dt->r0 = right;
     dt->start_ms = now_ms;
+    dt->scan_mm = obstacle_mm;
     if (side == OBSTACLE_SIDE_LEFT) {
         dt->side = +1;
     } else if (side == OBSTACLE_SIDE_RIGHT) {
@@ -259,9 +261,44 @@ static int trim_target(const dt_t *dt) {
     return -1;
 }
 
+/* Scan free-ray corner: smallest heading in 0..away_max_deg (S frame)
+ * whose path passes (wall_mm, scan_mm x tan(away_min_deg)) by
+ * first_clear_mm; away_max_deg when none. */
+static int scan_corner_heading(const dt_t *dt) {
+    const int c = dt_cos1000(dt->away_min_deg);
+    const int64_t ex = dt->wall_mm;
+    /* Rounded: the y of the free ray at the wall, mm. */
+    const int64_t ey = c > 0 ? ((int64_t)dt->scan_mm * dt_sin1000(dt->away_min_deg) + c / 2) / c
+                             : 0;
+    const int64_t need = -(int64_t)dt->cfg.first_clear_mm * 1000;
+    const int max = dt->cfg.away_max_deg;
+    for (int th = 0; th < max; ++th) {
+        if (-ex * dt_sin1000(th) + ey * dt_cos1000(th) <= need) {
+            return th;
+        }
+    }
+    return max;
+}
+
 /* TURN_AWAY passed the edge: trim toward the corner, or go straight. */
 static void away_done(dt_t *dt) {
     dt->heading = (int16_t)(dt->heading + turn_deg(dt));
+    if (dt->away_min_deg != 0u && dt->edge_valid && dt->cfg.first_clear_mm != 0u &&
+        dt->edge_deg < (int)dt->away_min_deg) {
+        /* The last seen echo is below the minimum: not the corner. */
+        const int th = scan_corner_heading(dt);
+        if (th == dt->heading) {
+            begin(dt, DT_STRAIGHT);
+        } else {
+            const bool on = th > dt->heading;
+            const int deg = on ? th - dt->heading : dt->heading - th;
+            begin(dt, DT_TURN_TOWARD);
+            dt->trimming = true;
+            dt->turn_on = on;
+            dt->trim_deg = deg;
+        }
+        return;
+    }
     const int th = trim_target(dt);
     if (th >= 0) {
         begin(dt, DT_TURN_TOWARD);
@@ -270,6 +307,18 @@ static void away_done(dt_t *dt) {
     } else {
         begin(dt, DT_STRAIGHT);
     }
+}
+
+void dt_set_away_min(dt_t *dt, unsigned int deg) {
+    const unsigned int max = dt->cfg.away_max_deg;
+    dt->away_min_deg = (uint8_t)(deg > max ? max : deg);
+}
+
+/* TURN_AWAY: the pending reading was triggered below the minimum turn. */
+static bool below_away_min(const dt_t *dt) {
+    return dt->step == DT_TURN_AWAY &&
+           (int64_t)dt->trig_turn_x100 <
+               (int64_t)dt->away_min_deg * dt->cfg.counts_per_deg_x100;
 }
 
 bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
@@ -355,7 +404,9 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
     if (sweep) {
         const uint8_t need = dt->cfg.sweep_seen_count ? dt->cfg.sweep_seen_count : 1u;
         uint8_t *count = seen ? &dt->sweep_seen : &dt->sweep_lost;
-        if (*count < need) {
+        /* Minimum turn before LOST: an unseen reading below it does not
+         * count toward LOST (the seen streak still restarts, as before). */
+        if (*count < need && (seen || !below_away_min(dt))) {
             ++*count;
         }
         if (seen) {
@@ -389,7 +440,7 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             dt->seen_once = true;
             note_edge(dt, mm);
             next_look(dt, dt->cfg.away_max_deg);
-        } else if (dt->seen_once) {
+        } else if (dt->seen_once && !below_away_min(dt)) {
             away_done(dt); /* past the edge */
         } else {
             next_look(dt, dt->cfg.away_max_deg);

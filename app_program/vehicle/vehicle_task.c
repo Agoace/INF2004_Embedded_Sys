@@ -1556,6 +1556,7 @@ static void vehicle_task(INT code, void *ctx)
     ls_init(&ls, &SEARCH_CFG);
     ss_init(&ss, &SCAN_CFG);
     dr_init(&dr, &DETOUR_CFG);
+    dr_set_scan_word(&dr, &ss.word); /* minimum turn before LOST */
 #if TM_MQTT
     {
         static const mc_config_t motion_config = MC_ROBOT_CONFIG;
