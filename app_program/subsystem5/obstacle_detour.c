@@ -273,8 +273,15 @@ static void away_done(dt_t *dt) {
 }
 
 void dt_set_away_min(dt_t *dt, unsigned int deg) {
-    (void)dt;
-    (void)deg; /* RED: not implemented yet */
+    const unsigned int max = dt->cfg.away_max_deg;
+    dt->away_min_deg = (uint8_t)(deg > max ? max : deg);
+}
+
+/* TURN_AWAY: the pending reading was triggered below the minimum turn. */
+static bool below_away_min(const dt_t *dt) {
+    return dt->step == DT_TURN_AWAY &&
+           (int64_t)dt->trig_turn_x100 <
+               (int64_t)dt->away_min_deg * dt->cfg.counts_per_deg_x100;
 }
 
 bool dt_wants_reading(const dt_t *dt, uint32_t now_ms) {
@@ -360,7 +367,9 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
     if (sweep) {
         const uint8_t need = dt->cfg.sweep_seen_count ? dt->cfg.sweep_seen_count : 1u;
         uint8_t *count = seen ? &dt->sweep_seen : &dt->sweep_lost;
-        if (*count < need) {
+        /* Minimum turn before LOST: an unseen reading below it does not
+         * count toward LOST (the seen streak still restarts, as before). */
+        if (*count < need && (seen || !below_away_min(dt))) {
             ++*count;
         }
         if (seen) {
@@ -394,7 +403,7 @@ void dt_reading(dt_t *dt, ultrasonic_result_t result, uint32_t now_ms) {
             dt->seen_once = true;
             note_edge(dt, mm);
             next_look(dt, dt->cfg.away_max_deg);
-        } else if (dt->seen_once) {
+        } else if (dt->seen_once && !below_away_min(dt)) {
             away_done(dt); /* past the edge */
         } else {
             next_look(dt, dt->cfg.away_max_deg);
