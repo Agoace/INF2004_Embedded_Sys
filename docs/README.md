@@ -36,6 +36,8 @@ not current acceptance reports. Local course originals are not public records.
 - [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, evidence and motion plan.
 - [CR1_TELEMETRY_A.md](architecture/CR1_TELEMETRY_A.md) — approved telemetry storage packing, diagnostic fault masks and T110.
   Contains: per-step RAM/build evidence, unchanged binary MQTT formats, 110 ms deadline and 120 ms poll model, existing FIX2/LAST references and pending 110 ms robot gate.
+- [CR1_KR1_ROW.md](architecture/CR1_KR1_ROW.md) — approved KR1 RAM row storage 16 → 15 B with time guard; wire and USB text unchanged.
+  Contains: field bit audit, 15-byte layout, index-anchored 13-bit time and guard, producer round-trip proof, APP_TEST row changes, RAM before/after, emulator lock-time cost.
 - [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — Private barcode evidence packing: representation, exact bits, RAM split, replay tests and pending robot timing.
   Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
 - [CR1_SONAR_A.md](architecture/CR1_SONAR_A.md) — approved sonar and obstacle board storage only.
