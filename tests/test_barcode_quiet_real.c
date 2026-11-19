@@ -131,7 +131,13 @@ static void pretrace(float speed)
             if (barcode_window_candidate(&state, NULL)) candidate = true;
         }
     }
-    assert(seeded && candidate == (QUIET_READER_OLD != 0));
+    /* Operator decision 2026-11-19: QUIET_MIN_MM 30 mm. Host replay of the
+     * school capture FC2 (short marks before the barcode): at 30 mm no false
+     * candidate at 100 and 146 mm/s, but a false candidate at 220 mm/s.
+     * 32 mm is the lowest value with no candidate at all three speeds. The
+     * accepted risk is only for speeds above the demo LINE speed. */
+    const bool fc2_risk_accepted = QUIET_MIN_MM < 32.0f && speed > 200.0f;
+    assert(seeded && candidate == (QUIET_READER_OLD != 0 || fc2_risk_accepted));
     printf("FC2 204 ADC/64 prefix, ASSUMED %.0f mm/s: candidate %u\n",
            (double)speed, (unsigned int)candidate);
 }
