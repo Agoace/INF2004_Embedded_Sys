@@ -315,7 +315,9 @@ static const record_t vehicle_record = {
     vehicle_pack_w, vehicle_unpack_w, vehicle_fields,
     sizeof(vehicle_fields) / sizeof(vehicle_fields[0]), 10, 36, 36, 36, 0, 0};
 
-/* ---- KR1 RAM-log row (vehicle/vehicle_log.h) ------------------------------ */
+/* ---- KR1 RAM-log row (subsystem1/kr1_row_pack.h) -------------------------- */
+/* The stored element is the private 15-byte row. The proof packs row 0:
+ * there the stored time offset equals the time (index-anchored decode). */
 
 typedef struct {
     vr_values_t v;
@@ -326,8 +328,7 @@ static bool kr1_pack_w(uint8_t *out, const void *n)
 {
     vr_row_t row;
     vr_pack(&row, &((const kr1_native_t *)n)->v);
-    memcpy(out, row.bytes, VR_BYTES);
-    return true;
+    return kr1_row_pack(out, row.bytes, 0u);
 }
 static uint32_t kr1_bits(const uint8_t *b, unsigned int off, unsigned int w)
 {
@@ -341,10 +342,13 @@ static int32_t kr1_signed(uint32_t v, unsigned int w)
 {
     return (v >> (w - 1u)) ? (int32_t)v - (int32_t)(1u << w) : (int32_t)v;
 }
-/* Independent decode from the VR_* offsets (as scripts/robot_log_decode.py). */
-static bool kr1_unpack_w(void *n, const uint8_t *in)
+/* Unpack to the unchanged 16-byte row, then an independent decode from the
+ * VR_* offsets (as scripts/robot_log_decode.py). */
+static bool kr1_unpack_w(void *n, const uint8_t *stored)
 {
     kr1_native_t *k = n;
+    uint8_t in[VR_BYTES];
+    kr1_row_unpack(in, stored, 0u);
     k->v.elapsed_ms = kr1_bits(in, VR_TIME, 16u) * 20u;
     k->v.state = (uint8_t)kr1_bits(in, VR_STATE, 2u);
     k->v.module = (uint8_t)kr1_bits(in, VR_MODULE, 3u);
@@ -392,27 +396,30 @@ FIELD_IO(kr1_native_t, k_measured, v->v.measured[i])
 FIELD_IO(kr1_native_t, k_echo, v->v.echo)
 FIELD_IO(kr1_native_t, k_servo, v->v.servo)
 FIELD_IO(kr1_native_t, k_events, v->v.events)
+static const int64_t bad_k_time[] = {8192};
+static const int64_t bad_k_echo[] = {0x4000};
+/* Stored bit = 16-byte row bit - 3 (bits 16..106) or - 5 (bits 109..124). */
 static const field_t kr1_fields[] = {
-    {"time (20 ms ticks)", VR_TIME, 16, 1, U16, .range = "0..65535 (wraps; no run time limit in code)", .set = IO(k_time)},
-    {"state", VR_STATE, 2, 1, RANGE(0, 2), .range = "0..2", .set = IO(k_state)},
-    {"module", VR_MODULE, 3, 1, RANGE(0, 5), .range = "0..5 (5 = scan reverse)", .set = IO(k_module)},
-    {"raw L, C", VR_L, 12, 2, RANGE(0, 4095), .range = "ADC 0..4095", .set = IO(k_raw)},
-    {"position", VR_POS, 8, 1, RANGE(-100, 100), .range = "-100..100", .set = IO(k_position)},
-    {"asked L, R", VR_ASK_L, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_asked)},
-    {"measured L, R", VR_MEAS_L, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_measured)},
-    {"echo", VR_ECHO, 16, 1, RANGE(0, 0x3fff), .reason = R_GAP, .range = "ultrasonic word: distance 9, status 2, streak 3 bits", .set = IO(k_echo)},
-    {"servo", VR_SERVO, 7, 1, RANGE(-36, 36), .range = "-36..36", .set = IO(k_servo)},
-    {"events", VR_EVENTS, 8, 1, .flags = 0xff, .range = "8 defined bits (lost, found, echo, ping, outcome 3, fault)", .set = IO(k_events)},
-    {"flags", VR_FLAGS, 4, 1, RANGE(0, 1), .reason = R_GAP, .range = "bit 0 only (speed clamp)", .set = IO(k_flags)},
+    {"time (20 ms ticks)", 0, 13, 1, RANGE(0, 8191), BAD(bad_k_time), .range = "offset 0..8191 from the row index (index-anchored; 8192+ refused, counted lost)", .set = IO(k_time)},
+    {"state", VR_STATE - 3, 2, 1, RANGE(0, 2), .range = "0..2", .set = IO(k_state)},
+    {"module", VR_MODULE - 3, 3, 1, RANGE(0, 5), .range = "0..5 (5 = scan reverse)", .set = IO(k_module)},
+    {"raw L, C", VR_L - 3, 12, 2, RANGE(0, 4095), .range = "ADC 0..4095", .set = IO(k_raw)},
+    {"position", VR_POS - 3, 8, 1, RANGE(-100, 100), .range = "-100..100", .set = IO(k_position)},
+    {"asked L, R", VR_ASK_L - 3, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_asked)},
+    {"measured L, R", VR_MEAS_L - 3, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_measured)},
+    {"echo", VR_ECHO - 3, 14, 1, RANGE(0, 0x3fff), BAD(bad_k_echo), .range = "ultrasonic word: distance 9, status 2, streak 3 bits", .set = IO(k_echo)},
+    {"servo", VR_SERVO - 5, 7, 1, RANGE(-36, 36), .range = "-36..36", .set = IO(k_servo)},
+    {"events", VR_EVENTS - 5, 8, 1, .flags = 0xff, .range = "8 defined bits (lost, found, echo, ping, outcome 3, fault)", .set = IO(k_events)},
+    {"flags", VR_FLAGS - 5, 1, 1, RANGE(0, 1), .range = "bit 0 only (speed clamp)", .set = IO(k_flags)},
 };
 static const record_t kr1_record = {
-    "KR1 RAM-log row", "app_program/vehicle/vehicle_log.h",
-    sizeof(kr1_native_t), VR_BYTES, 128, VR_ROWS, 8, L_ARRAY,
+    "KR1 RAM-log row", "app_program/subsystem1/kr1_row_pack.h",
+    sizeof(kr1_native_t), KR1_ROW_STORED_BYTES, 120, VR_ROWS, 8, L_ARRAY,
     kr1_pack_w, kr1_unpack_w, kr1_fields,
-    sizeof(kr1_fields) / sizeof(kr1_fields[0]), 0, 72016, 72016, 69203,
-    "Slack: echo 2 bits and flags 3 bits. A row stays 16 B (123 bits) "
-    "unless the time also drops 3 bits (120 bits), which needs a decode rule "
-    "that the code does not have.", 0};
+    sizeof(kr1_fields) / sizeof(kr1_fields[0]), 0, 67515, 67515, 67515,
+    "Private RAM storage of the unchanged 16-byte row (vehicle_log.h). "
+    "Readers unpack to 16 B; robot/log, live kr1 and USB text do not "
+    "change. Echo bits 14..15 and flags bits 1..3 are always 0.", 0};
 
 /* ---- barcode frame and edge (subsystem3/barcode_evidence_pack.h) ---------- */
 

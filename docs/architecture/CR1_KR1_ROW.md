@@ -6,7 +6,7 @@
 | --- | --- |
 | Approval | Operator approved option (a) with the time guard |
 | Branch | `mtk3-cr1-kr1row`, base `b68ce6b` (staging) |
-| Commits | `d30a73b` red tests and row codec; `2269320` storage change; this record |
+| Commits | `d30a73b` red tests and row codec; `2269320` storage change; `6b6408d` this record; then a `--no-ff` merge of staging `290439c` (minimum-bit proof) and the KR1 proof row update |
 | Scope | RAM storage only. One `--no-ff` merge into staging |
 | Revert | `git revert -m 1 <merge commit>` removes the full change |
 | Robot | Not flashed and not run. No hardware result is claimed |
@@ -185,14 +185,25 @@ The `telemetry_log_row` read under the lock is about 15 cycles (0.12 µs)
 longer. The emulated round trip gives the identical 16 bytes. Host
 timing (x86, diagnostic only): pack 17.9 ns, unpack 19.4 ns.
 
+## Minimum-bit proof row
+
+After the merge of staging `290439c`, the KR1 record in
+`tests/min_bit_records.inc` proves the 15-byte stored row with the real
+`vr_pack` and `kr1_row_pack`. The proof packs row 0, where the stored time
+offset equals the time. All 11 fields are at their minimum width: time
+13 bits (offset 0..8191 from the row index), echo 14 bits, flags 1 bit.
+Time 8192 and echo 0x4000 are refused. The record has 0 spare bits and
+4501 × 15 = 67515 B, so the earlier KR1 gap (echo and flags) is closed.
+The doc block in [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md) was
+regenerated with `test_min_bit_proof --markdown`. After the merge: host
+701/701, Clang ASan + UBSan 701/701, demo 0 warnings, RAM_PROOF 79/79,
+static RAM 234800 B, S1 74381 B (the same as `2269320`).
+
 ## Open items
 
 - Main owns these records; they need an update after the merge:
   `CR1.md` (the `rows` line says 72016) and `AGENT_MAP.md` (add
   `kr1_row_pack.h`).
-- SW7's minimum-bit proof (`tests/test_min_bit_proof.c`,
-  `CR1_MIN_BIT_PROOF.md`) gets the KR1 row update only after it is
-  merged, on Main's notice.
 - MEASUREMENTS rows go to SW7 as `#PENDING`.
 - Robot: rows lost through the guard are visible in the existing loss
   counts. No robot run has checked the lateness bound.
