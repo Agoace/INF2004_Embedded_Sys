@@ -144,7 +144,10 @@ subsystem1 80402 to 78882 B, subsystem3 36501 to 36145 B, subsystem5
 1013 to 953 B, vehicle 2516 to 2512 B. ELF text 468260 B. 698 host
 tests, Clang ASan/UBSan pass, 0 warnings, RAM_PROOF 79/79 (21212 B).
 MQTT message sizes do not change. Robot timing at 110 ms is not
-measured yet. The older baseline and motion evidence
+measured yet.
+
+Proof of minimum-bit representation, field by field, with accepted
+reasons and open gaps: [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md). The older baseline and motion evidence
 below keep their original scope.
 
 ## Shared-access design rule
