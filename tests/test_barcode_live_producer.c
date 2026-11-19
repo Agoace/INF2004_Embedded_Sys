@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "../app_program/subsystem3/barcode.h"
 #include "../app_program/subsystem3/barcode_live_producer.h"
@@ -71,7 +72,17 @@ int main(int argc, char **argv)
                     .revision_ms = (uint32_t)(origin / 1000u) - 1u,
                     .mode = BC_LIVE_SHADOW_MODE},
         .control_ok = true, .motor_ok = true};
-    const bool search = strncmp(kind, "search", 6u) == 0;
+    /* Blip grace before the first bar (bar at 80 mm = 548 ms): a SEARCH
+     * blip at 300 ms of N ms; "pivot" turns left (axis retreat), "grey"
+     * puts non-white samples inside the blip. */
+    const bool blip = strncmp(kind, "blip", 4u) == 0;
+    const unsigned int blip_begin = strstr(kind, "bar") ? 530u : 300u;
+    const unsigned int blip_duration = blip ? (unsigned int)atoi(kind + 4) : 0u;
+    const bool blip_pivot = blip && strstr(kind, "pivot") != NULL;
+    const bool blip_grey = blip && strstr(kind, "grey") != NULL;
+    /* "bar": the first bar starts inside the blip (blip at 530 ms). */
+    const bool blip_bar = blip && strstr(kind, "bar") != NULL;
+    const bool search = strncmp(kind, "search", 6u) == 0 || blip;
     const bool terminal_search = strncmp(kind, "search_end", 10u) == 0;
     const unsigned int search_begin = strstr(kind, "unbound") ? 500u :
         terminal_search ? 2450u : 1200u;
@@ -79,7 +90,7 @@ int main(int argc, char **argv)
         strstr(kind, "200") ? 200u : strstr(kind, "late") ? 100u :
         strstr(kind, "end50") ? 70u : strstr(kind, "end51") ? 71u :
         strcmp(kind, "search10") == 0 ? 10u : 30u;
-    const bool search_positive = search && !strstr(kind, "200") &&
+    const bool search_positive = !blip && search && !strstr(kind, "200") &&
         !strstr(kind, "context") && !strstr(kind, "late") &&
         !strstr(kind, "end51") && !strstr(kind, "hard") &&
         !strstr(kind, "unbound") && !strstr(kind, "motorfault") &&
@@ -122,6 +133,17 @@ int main(int argc, char **argv)
         const uint32_t counts = (uint32_t)lroundf(
             (float)(i - i % 10u) * 146.0f * 12.414f / 1000.0f);
         in.left = in.right = counts;
+        if (blip_pivot) {
+            /* Left pivot inside the blip: the sensor axis moves back. */
+            const unsigned int t10 = i - i % 10u;
+            if (t10 >= blip_begin) {
+                const unsigned int end = blip_begin + blip_duration;
+                const unsigned int k = ((t10 < end ? t10 : end) -
+                                        blip_begin) / 10u;
+                in.left -= 30u * k;
+                in.right += 30u * k;
+            }
+        }
         if (strcmp(kind, "count_wrap") == 0) {
             in.left += UINT32_MAX - 3000u;
             in.right = in.left;
@@ -136,6 +158,9 @@ int main(int argc, char **argv)
         const char letter = strcmp(kind, "nonletter") == 0 ? '3' : 'A';
         in.raw = mm < 500.0f ? waveform(mm, 80.0f, letter, reverse) :
                               waveform(mm, 500.0f, 'B', false);
+        if (blip_grey && i >= blip_begin && i < blip_begin + blip_duration) {
+            in.raw = 260u; /* Not white, below rise: pivot floor. */
+        }
         in.control_ok = !(strcmp(kind, "read_fail") == 0 && i == 1200u);
         in.motor_faults = 0u;
         if (i == 1200u) {
@@ -181,15 +206,21 @@ int main(int argc, char **argv)
         }
         if (search) {
 #ifdef TEST_CONTROL_CACHE
-            grace_start = (uint32_t)(origin / 1000u) + search_begin;
+            grace_start = (uint32_t)(origin / 1000u) +
+                (blip ? blip_begin : search_begin);
             grace_enabled = !strstr(kind, "hard");
 #endif
-            if (i >= search_begin && i < search_begin + search_duration) {
+            if (blip) {
+                in.control.mode = i >= blip_begin &&
+                    i < blip_begin + blip_duration ? BC_LIVE_DISABLED :
+                                                     BC_LIVE_PERMITTED;
+            } else if (i >= search_begin && i < search_begin + search_duration) {
                 in.control.mode = BC_LIVE_DISABLED;
             } else {
                 in.control.mode = BC_LIVE_PERMITTED;
             }
-            if (strstr(kind, "context") && i == search_begin + 10u)
+            if (blip) {
+            } else if (strstr(kind, "context") && i == search_begin + 10u)
                 ++in.control.eligibility_revision;
             if (strstr(kind, "motorfault") && i == search_begin + 5u)
                 in.motor_faults = 1u;
@@ -232,6 +263,11 @@ int main(int argc, char **argv)
             assert(p.slot.read_ms == barcode_live_ms_at(in.now_ms,
                 in.now_us, p.window.result.read_us));
             assert(p.event.leading_white == 160u && p.event.rise == 310u);
+            if (blip) {
+                /* White before the blip counts; frozen travel does not. */
+                const float frozen = (float)blip_duration * 0.146f;
+                assert(fabsf(p.event.leading_mm - (80.0f - frozen)) < 3.0f);
+            }
             assert(p.event.spin_white == cal.white_mean);
             assert(p.slot.read_counts[0] == p.slot.read_counts[1]);
             assert(p.event.record_age_ms <= (terminal_search ? 50u : 10u));
@@ -241,6 +277,30 @@ int main(int argc, char **argv)
         if (p.occupied && publications == 1u) {
             assert(memcmp(&p.slot, &original, sizeof(original)) == 0);
         }
+    }
+    if (blip) {
+        /* Only the live vehicle owner has the grace. */
+#ifdef TEST_CONTROL_CACHE
+        const bool kept = blip_duration < 200u && !blip_pivot && !blip_bar;
+#else
+        const bool kept = false;
+#endif
+        printf("%s pubs%u seek %lu/%lu/%lu\n", kind, publications,
+               (unsigned long)p.seek_restarts[0],
+               (unsigned long)p.seek_restarts[1],
+               (unsigned long)p.seek_restarts[2]);
+        assert(publications == (kept ? 1u : 0u));
+#ifdef TEST_CONTROL_CACHE
+        const bool held = true;
+#else
+        const bool held = false;
+#endif
+        /* Held: no route restart; a pivot ends the frozen run as motion. */
+        assert(p.seek_restarts[BP_SEEK_ROUTE] ==
+               (kept || (held && blip_pivot) ? 0u : 1u));
+        (void)blip_bar; /* bar: held, then ended as a blip restart. */
+        if (held && blip_pivot) assert(p.seek_restarts[BP_SEEK_OTHER] >= 1u);
+        return 0;
     }
     const bool cached_read_fail =
 #ifdef TEST_CONTROL_CACHE

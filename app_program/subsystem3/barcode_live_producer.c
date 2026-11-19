@@ -94,9 +94,25 @@ static void evidence(barcode_live_producer_t *p,
     p->event_pending = true;
 }
 
+/* Report only: why a SEEK white run restarted. No decision reads it. */
+static void seek_note(barcode_live_producer_t *p)
+{
+    const uint8_t lost = p->window.white_lost;
+    p->window.white_lost = 0u;
+    if (lost & BW_WHITE_LOST_BLACK) ++p->seek_restarts[BP_SEEK_BLACK];
+    if (lost & BW_WHITE_LOST_OTHER) ++p->seek_restarts[BP_SEEK_OTHER];
+    if (lost & BW_WHITE_LOST_BLIP) ++p->seek_restarts[BP_SEEK_ROUTE];
+}
+
 static void cancel(barcode_live_producer_t *p,
                    const barcode_live_input_t *in, uint32_t reason)
 {
+    seek_note(p);
+    if (p->window_live && !p->bound &&
+        barcode_window_white_run(&p->window)) {
+        ++p->seek_restarts[reason == BP_DISABLED ? BP_SEEK_ROUTE :
+                                                   BP_SEEK_OTHER];
+    }
     if (p->bound) {
         evidence(p, in, reason);
         ++p->failures;
@@ -174,6 +190,7 @@ void barcode_live_producer_observe(barcode_live_producer_t *p,
                                   const barcode_live_input_t *in)
 {
     ++p->samples;
+    seek_note(p);
     if (in->control_ok && in->control.epoch != p->run_epoch) {
         p->run_epoch = in->control.epoch;
         p->max_control_age_ms = 0u;

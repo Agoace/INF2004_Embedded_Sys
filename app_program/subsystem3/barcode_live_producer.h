@@ -35,9 +35,14 @@ typedef struct {
     uint32_t missed, dropped, run_epoch;
     uint32_t control_age_ms, max_control_age_ms, max_record_age_ms;
     uint32_t samples, publications, failures;
+    /* Boot-lifetime SEEK white restarts: route/disable, black, other. */
+    uint32_t seek_restarts[3];
     bool seen, qualified, window_live, bound, occupied;
     bool counters_seen, event_pending, record_pending;
 } barcode_live_producer_t;
+#define BP_SEEK_ROUTE 0u
+#define BP_SEEK_BLACK 1u
+#define BP_SEEK_OTHER 2u
 
 void barcode_live_producer_observe(barcode_live_producer_t *state,
                                   const barcode_live_input_t *input);
