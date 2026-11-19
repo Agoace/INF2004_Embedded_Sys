@@ -135,15 +135,24 @@ static int collect_fifo(imu_probe_t *probe, uint8_t last[6])
     }
     const bool status_ok = imu_fifo_count(probe->fifo_status, &count);
 
-    if (!status_ok || (count > IMU_FIFO_MAX_BATCH)) {
+    if (count > probe->fifo_depth_max) {
+        probe->fifo_depth_max = count;
+    }
+    if (!status_ok) {
         if ((probe->fifo_status & IMU_FIFO_OVERRUN) != 0u) {
             ++probe->fifo_overruns;
-        } else if (!status_ok) {
-            ++probe->fifo_bad_status;
         } else {
-            ++probe->fifo_backlogs;
+            ++probe->fifo_bad_status;
         }
         return recover_fifo(probe);
+    }
+    /* Option D (docs/s4-imu/IMU.md): 9..31 queued after a late task. Read
+     * the OLDEST 8 in the same 48-byte burst and leave the rest for the
+     * next cycle; no reset, so no READ_FAILED. Only OVRN or a bad status
+     * resets. Count <= 8 takes the unchanged path. */
+    if (count > IMU_FIFO_MAX_BATCH) {
+        ++probe->fifo_partial;
+        count = IMU_FIFO_MAX_BATCH;
     }
     if (count == 0u) {
         probe->no_sample = true;

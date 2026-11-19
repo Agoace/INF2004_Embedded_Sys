@@ -645,7 +645,7 @@ words, RX FIFO <=8 bytes) and drains RX while it queues a long burst.
 | --- | --- | --- |
 | n=0 with EMPTY | No observation: core not stepped, timestamp kept, MARK waits one tick | `empty` |
 | n=1..8 | Mean of n to core; `reads`, `batches`, `samples`, `min`/`max` | normal |
-| n>8 (backlog, e.g. a wake later than about 20 ms) | Bypass then stream reset; invalid observation | `backlog`, `reset` |
+| n=9..31 (late wake), no OVRN | Option D: mean of the OLDEST 8, the rest stays queued; valid observation, no reset (see [FIFO partial read (option D)](#fifo-partial-read-option-d)) | `partial`, `depth_max` |
 | OVRN (32 unread, data lost) | Same reset; invalid observation | `overrun`, `reset` |
 | EMPTY with n>0, or no EMPTY with n=0 | Same reset; invalid observation | `bad`, `reset` |
 | Bus fault or deadline | Counted fault; invalid; reconfigure after 1 s | `faults`, `timeout`/`nack` |
@@ -840,6 +840,71 @@ Follow-up: work_us is about 27 % of core 0 wall time, mostly busy-wait
 I2C at priority 14. Reduce it (for example an interrupt- or DMA-driven
 transfer, or fewer bytes per cycle) in a separately approved step. Stack
 high-water was not supplied.
+
+## FIFO partial read (option D)
+
+Status: software and host proof on branch `mtk3-imu-fifo-d`. Accepted by the operator and the safety owner 2026-11-19. Bench check open.
+
+### Why
+
+Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake later than about 20 ms) caused a bypass/stream reset and an invalid observation. The safety path publishes an invalid observation as READ_FAILED. While a run is active, the Vehicle gate (`vehicle/imu_gate.c` `ig_step`) latches that as an IMU_UNAVAILABLE STOP. This happened on robot image 13 with the parked INT1 wake (record `docs/s4-imu/IMU_IRQ.md` on branch `mtk3-imu-irq`). With option D, one late wake no longer stops a run.
+
+### Rule
+
+[imu_probe.c](../../app_program/subsystem4/imu_probe.c) `collect_fifo`:
+
+| FIFO_SRC | Action |
+| --- | --- |
+| n = 0..8 | Unchanged: read all n, mean of n |
+| n = 9..31, no OVRN | Read the OLDEST 8 in the same 48-byte burst. The other n − 8 stay in the sensor FIFO for the next cycle. Valid observation. No reset. `partial` + 1 |
+| OVRN (32 unread), or a contradictory status | Unchanged: FIFO reset, invalid observation (READ_FAILED) |
+
+`depth_max` records the largest count seen (32 = OVRN).
+
+Assumption (datasheet, not hardware-verified): FSS is the unread count, and each 6-byte step of the auto-incrementing burst (0x28..0x2D, then back to 0x28) removes ONE sample. Thus FSS drops by exactly 8 after a partial read. AN3308 (LIS3DH) states this; the LSM303DLHC datasheet does not. The test fakes model it, and the bench check below verifies it.
+
+### Data-age trade-off
+
+The observation is stamped with the READ time, not the sample time. After a task gap of G ms, the next reads publish samples up to about G − 10 ms old as fresh data. Each 10 ms read removes up to 8 samples and about 4 new ones arrive, so the queue drains by about 4 samples per read.
+
+| Gap G | Before option D | Option D |
+| --- | --- | --- |
+| ≤ about 20 ms (n ≤ 8) | No change | No change |
+| 22, 30, 40, 49 ms | One READ_FAILED, then a STOP in a run | 0 READ_FAILED, 0 STOP. Lift/overturn data is late by up to about G − 10 ms during catch-up. |
+| ≥ 60 ms | STOP | STOP, cause STALE (the 50 ms age rule; unchanged) |
+| 80 ms (OVRN) | STOP | FIFO reset, READ_FAILED, STOP (unchanged) |
+
+During catch-up the hump core receives reads that are close together in time but hold older data. Encoder and accel data are misaligned by up to the same delay (about 3 mm at 150 mm/s for a 20 ms delay). This applies only after a late wake. Step 2d had 0 backlogs in 45000 polls.
+
+### Proof (host)
+
+| Check | Result |
+| --- | --- |
+| n ≤ 8 path | The staging and option-D probes gave byte-identical output over a 200000-cycle random stream (0..8 per cycle, burst arrivals, empty cycles). Output: validity, n, mean, decoded value, every probe counter. Trace SHA-256 prefix `0037a9edb9f04b07`. |
+| Existing IMU tests | 75 of 79 IMU/safety/gate/vehicle tests print byte-identical output to staging `871c806`. The other 4: `test_imu_core_benchmark` (host `sizeof` probe 156→164 B, snapshot 504→512 B, plus timing), `test_imu_fifo_gap` (new), and two tests whose only difference is the ctest command path. |
+| `test_imu_probe` | 9 → oldest 8 read, 1 left, then 1; 31 → 8, 8, 8, 7; FSS drops by 8 each time; OVRN and bad status still reset |
+| `test_imu_fifo_gap` | Real probe + `imu_safety` + `ig_step(active=true)` on a 32-deep timed FIFO fake at 391/400/409 Hz. Gaps 22/30/40/49 ms: 0 READ_FAILED, 0 latch, 0 reset. Gap 60 ms: STALE latch. Gap 80 ms: OVRN, 1 reset, 1 READ_FAILED, latch. |
+
+### Counters
+
+- TEST `[S4_FIFO]` line: adds `partial` and `depth_max`.
+- ROBOT GP20 dump: one new line `[S4_FIFO] partial … depth_max … overrun … bad … reset … batches …`. A 6-word atomic reader (`imu_fifo_counts_read`) supplies it, so the dump does not copy the 512-byte snapshot.
+
+### Bench check (operator)
+
+Build in `build_make` (public example secrets):
+
+```sh
+make SMP=0 WIFI=none NET=none TEST=1 IMU_GAP_TEST=1 -j4 --output-sync=target
+```
+
+The image name ends in `_test_imugap`. `IMU_GAP_TEST=1` requires `TEST=1 BENCH=0 IMU_STREAM=0 SMP=0`; no other image contains the delay ([gap.c](../../app_program/imu_gap_test/gap.c)). About 10 s after boot, the IMU task sleeps once for 30 ms, which queues about 12–16 samples. Keep the robot still. Pass condition:
+
+1. The `[S4_FIFO]` lines after the delay show `partial` ≥ 1 and `depth_max` ≥ 12.
+2. `backlog` 0, `overrun` 0, `bad` 0, `reset` 0.
+3. `min`..`max` per batch stays ≤ 8, and `[S4_DIAG]` faults 0.
+
+This verifies the FSS-drops-by-8 assumption on hardware.
 
 ## Step 3 hump report
 
