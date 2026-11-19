@@ -376,6 +376,25 @@ ifneq ($(IMU_SAFETY_BENCH),0)
 include imu_safety_bench.mk
 endif
 
+# IMU INT1 watermark wake (docs/s4-imu/IMU_IRQ.md). Default 1 only where
+# the IMU task and the GPIO interrupt are both on core 0 (SMP=0) in the
+# real-IMU robot/TEST app; forced 0 elsewhere. 0 adds no flag, object, list
+# or name part, so IMU_INT1_WAKE=0 gives the image from before this option.
+IMU_INT1_ELIGIBLE := $(if $(filter 0:0:0:0,$(SMP):$(BENCH):$(BENCH_KERNEL):$(IMU_SAFETY_BENCH)),1,0)
+IMU_INT1_WAKE ?= $(IMU_INT1_ELIGIBLE)
+ifneq ($(words $(IMU_INT1_WAKE)),1)
+$(error IMU_INT1_WAKE must be one value: 0 or 1)
+endif
+ifneq ($(filter $(IMU_INT1_WAKE),0 1),$(IMU_INT1_WAKE))
+$(error IMU_INT1_WAKE must be 0 or 1)
+endif
+ifeq ($(IMU_INT1_WAKE)$(IMU_INT1_ELIGIBLE),10)
+$(error IMU_INT1_WAKE=1 requires SMP=0 BENCH=0 BENCH_KERNEL=0 IMU_SAFETY_BENCH=0)
+endif
+ifeq ($(IMU_INT1_WAKE)$(IMU_INT1_ELIGIBLE),01)
+IMU_INT1_SUFFIX := _noint1
+endif
+
 # Opt-in ROBOT IMU safety latch capture. OFF adds no flag, object or name.
 IMU_SAFETY_CAPTURE ?= 0
 ifneq ($(words $(IMU_SAFETY_CAPTURE)),1)
@@ -400,7 +419,7 @@ endif
 #
 EXE_FILE := mtk3pico_smp$(SMP)_$(CONSOLE)$(WIFI_SUFFIX)$(NET_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(MQTT_SUFFIX)$(CRASH_SUFFIX)$(BENCH_SUFFIX)
-EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)
+EXE_FILE := $(EXE_FILE)$(TEST_SUFFIX)$(DIAG_SUFFIX)$(IMU_STREAM_SUFFIX)$(IMU_INT1_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_HUMP_SOURCE_SUFFIX)$(JUNCTION_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(CORE_SUFFIX)$(BARCODE_CAPTURE_SUFFIX)
 EXE_FILE := $(EXE_FILE)$(IMU_SAFETY_BENCH_SUFFIX)
@@ -523,6 +542,9 @@ endif
 ifeq ($(BARCODE_LIVE_ENABLE),1)
 KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/barcode_live_control.list
 endif
+ifeq ($(IMU_INT1_WAKE),1)
+KERNEL_RAM_LISTS += $(KERNEL_RAM_DIR)/imu_int1.list
+endif
 KERNEL_RAM_ROWS := $(shell sed -e '/^\#/d' -e '/^[[:space:]]*$$/d' \
 	-e 's/^\([^ ]*\) \([^ ]*\).*/\1:\2/' $(KERNEL_RAM_LISTS))
 ifeq ($(BARCODE_LIVE_ENABLE),1)
@@ -560,6 +582,9 @@ FORCE_CORE0 ?= 0
 CFLAGS  += -DAPP_TEST=$(TEST) -DAPP_BENCH=$(BENCH) -DAPP_DIAG=$(DIAG)
 CFLAGS  += -DAPP_FORCE_CORE0=$(FORCE_CORE0)
 CFLAGS  += -DAPP_IMU_STREAM=$(IMU_STREAM)
+ifeq ($(IMU_INT1_WAKE),1)
+CFLAGS  += -DIMU_INT1_WAKE=1
+endif
 CFLAGS  += -DIMU_HUMP_SOURCE=$(IMU_HUMP_SOURCE)
 CFLAGS  += -DJUNCTION_TEST_CMD=$(JUNCTION_TEST_CMD_ID)
 CFLAGS  += -DAPP_BARCODE_CAPTURE=$(BARCODE_CAPTURE)
@@ -636,6 +661,9 @@ PROFILE_ID := $(PROFILE_ID)-base$(LINE_BASE)
 endif
 ifneq ($(IMU_SAFETY_BENCH),0)
 PROFILE_ID := $(PROFILE_ID)-imu_safety_bench_$(IMU_SAFETY_BENCH)
+endif
+ifeq ($(IMU_INT1_WAKE),1)
+PROFILE_ID := $(PROFILE_ID)-imuint1
 endif
 PROFILE_FILE := .build_profile
 

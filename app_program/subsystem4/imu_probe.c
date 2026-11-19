@@ -3,6 +3,15 @@
 #include "imu_probe.h"
 #include "imu_hw.h"
 #include <string.h>
+#if IMU_INT1_WAKE
+/* Watermark to INT1 (GP7); see imu_wake.h. Recovery restores the same FTH. */
+#include "imu_wake.h"
+#define PROBE_CTRL3 IMU_WAKE_CTRL3
+#define PROBE_FIFO_STREAM IMU_WAKE_FIFO_CTRL
+#else
+#define PROBE_CTRL3 0x00u
+#define PROBE_FIFO_STREAM 0x80u
+#endif
 
 #define PROBE_ID_ERROR -4
 #define PROBE_CONFIG_ERROR -5
@@ -17,14 +26,14 @@ static const reg_setting_t settings[] = {
     {IMU_ACCEL_ADDR, 0x20u, 0x00u}, /* power down during configuration */
     {IMU_ACCEL_ADDR, 0x2eu, 0x00u}, /* transient bypass clears FIFO */
     {IMU_ACCEL_ADDR, 0x21u, 0x00u},
-    {IMU_ACCEL_ADDR, 0x22u, 0x00u}, /* FIFO count replaces DRDY polling */
+    {IMU_ACCEL_ADDR, 0x22u, PROBE_CTRL3}, /* no DRDY; WTM only if INT1 wake */
     {IMU_ACCEL_ADDR, 0x23u, 0x88u}, /* BDU, HR, +/-2 g, little endian */
     {IMU_ACCEL_ADDR, 0x24u, 0x40u}, /* FIFO_EN */
     {IMU_ACCEL_ADDR, 0x25u, 0x00u}, /* high-active, default output mode */
     {IMU_MAG_ADDR, 0x00u, 0x18u},   /* 75 Hz */
     {IMU_MAG_ADDR, 0x01u, 0x20u},   /* +/-1.3 gauss */
     {IMU_MAG_ADDR, 0x02u, 0x00u},   /* continuous */
-    {IMU_ACCEL_ADDR, 0x2eu, 0x80u}, /* stream mode, no IRQ/watermark */
+    {IMU_ACCEL_ADDR, 0x2eu, PROBE_FIFO_STREAM}, /* stream mode (+FTH) */
     {IMU_ACCEL_ADDR, 0x20u, 0x77u} /* 400 Hz, XYZ on */
 };
 
@@ -108,7 +117,7 @@ static int recover_fifo(imu_probe_t *probe)
     int result = imu_hw_write(IMU_ACCEL_ADDR, 0x2eu, 0x00u);
 
     if (result == IMU_IO_OK) {
-        result = imu_hw_write(IMU_ACCEL_ADDR, 0x2eu, 0x80u);
+        result = imu_hw_write(IMU_ACCEL_ADDR, 0x2eu, PROBE_FIFO_STREAM);
     }
     if (result == IMU_IO_OK) {
         ++probe->fifo_recoveries;
