@@ -100,6 +100,15 @@ host_test(test_barcode_quiet_real tests/test_barcode_quiet_real.c
 target_compile_definitions(test_barcode_quiet_real PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
 target_link_libraries(test_barcode_quiet_real PRIVATE m)
 
+# GP28 at 2.5 mm: robot H3 small capture and synthetic small/large *F*.
+host_test(test_barcode_height_2p5 tests/test_barcode_height_2p5.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_height_2p5 PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_height_2p5 PRIVATE m)
+foreach(case IN ITEMS h3 img20 small small69 large large69 small_z large_z)
+    add_test(NAME test_barcode_height_2p5_${case} COMMAND test_barcode_height_2p5 ${case})
+endforeach()
+
 host_test(test_barcode_motion_twitch tests/test_barcode_motion_twitch.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_compile_definitions(test_barcode_motion_twitch PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")

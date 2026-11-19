@@ -41,6 +41,9 @@ app_program/subsystem3/barcode_window.o .text.barcode_window_adc
 app_program/subsystem3/barcode_window.o .text.barcode_window_step
 app_program/subsystem3/barcode_window.o .text.barcode_window_candidate
 app_program/subsystem3/barcode_window.o .text.tail.isra.0
+app_program/subsystem3/barcode_window.o .text.edge.isra.0
+app_program/subsystem3/barcode_window.o .text.record
+app_program/subsystem3/barcode_window.o .text.lookup
 app_program/subsystem3/barcode_peak.o .text.model
 app_program/subsystem3/barcode_window.o .text.model
 app_program/subsystem3/barcode.o .text.barcode_symbol

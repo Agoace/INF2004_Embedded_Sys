@@ -6,6 +6,8 @@
 #define BW_ADC_CAPACITY 64u
 #define BW_MOTOR_CAPACITY 8u
 #define BW_ELEMENTS 29u
+#define BW_LEVELS 17u /* 0..4096 counts in 256-count steps */
+#define BW_PEAKS 3u
 #define BW_STEP_MAX 32u
 
 /* Leading white before the first bar. Operator 2026-11-19: 40 -> 30 mm.
@@ -109,6 +111,24 @@ typedef struct {
     bool white_started;
     bool transitioning;
     bool black;
+    /* WINDOW local-midpoint edges (see barcode_window.c). */
+    bool started;        /* The first edge position is set. */
+    bool closing;        /* Last bar: wait for its falling midpoint. */
+    bool mode_set;       /* The first bar chose the edge mode. */
+    bool mid;            /* Local-midpoint edges (else fixed levels). */
+    uint8_t bars;        /* Bars detected in this window. */
+    uint8_t shifts;      /* Faint first marks dropped. */
+    uint16_t prev_raw;   /* Previous processed sample. */
+    uint16_t run_peak;   /* Highest raw in the current black run. */
+    uint16_t run_valley; /* Lowest raw in the current white run. */
+    uint16_t ref_peak;   /* Peak of the last black run. */
+    uint16_t ref_valley; /* Valley of the last white run (floor white). */
+    uint16_t bar_peak[BW_PEAKS];
+    float prev_mm;
+    float det_mm;        /* Position of the last detected edge. */
+    uint32_t fall_set, rise_set;
+    float fall_mm[BW_LEVELS]; /* First crossing of level b*256 counts. */
+    float rise_mm[BW_LEVELS];
     /* Blip grace: SEEK ignores the samples from freeze_us (to thaw_us);
      * the white run, mean and count wait. Frozen travel is not white. */
     uint32_t freeze_us;

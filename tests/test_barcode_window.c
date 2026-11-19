@@ -199,11 +199,11 @@ static void sizes(void)
                 make(text, reverse != 0u, scale);
                 lead = 10.0f * 5.8f * scale + 2.0f;
                 run("normal");
-                assert(state.result.accepted == (size < 2u));
-                if (size < 2u) {
-                    assert(state.result.letter == letters[ch]);
-                    assert(state.result.direction == reverse + 1u);
-                }
+                /* N_MIN 2.5 mm (2026-11-19): the 141 mm body (2.99 mm
+                 * narrow) is now read too. */
+                assert(state.result.accepted);
+                assert(state.result.letter == letters[ch]);
+                assert(state.result.direction == reverse + 1u);
             }
         }
     }
@@ -223,7 +223,7 @@ static void sizes(void)
         missing = merged = -1;
         tail_white = 20.0f;
     }
-    const float narrows[] = {3.9f, 4.05f, 6.95f, 7.1f};
+    const float narrows[] = {2.4f, 2.55f, 6.95f, 7.1f}; /* N_MIN 2.5, N_MAX 7 */
     for (unsigned int i = 0u; i < 4u; ++i) {
         make("*F*", false, narrows[i] / 5.8f);
         lead = 80.0f;
@@ -323,7 +323,8 @@ int main(int argc, char **argv)
             strcmp(kind, "two_ms") == 0 || strcmp(kind, "freeze") == 0 ||
             strcmp(kind, "tracking") == 0 ||
             strcmp(kind, "short_quiet") == 0 ||
-            strcmp(kind, "immutable") == 0;
+            strcmp(kind, "immutable") == 0 ||
+            strcmp(kind, "small") == 0; /* 2.9 mm narrow >= N_MIN 2.5 */
         if (state.result.accepted != positive) {
             printf("%s accepted %d reason %lu count %u lead %.3f\n", kind,
                    state.result.accepted, (unsigned long)state.result.reason,
