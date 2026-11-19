@@ -1,0 +1,4 @@
+# Added only for IMU_INT1_WAKE=1 (UP only). The INT1 GPIO dispatcher client
+# runs in the core-0 GPIO interrupt; gpio_dispatch and drv_time_us are in
+# common.list. The cyclic fallback check stays in flash, as before.
+app_program/subsystem4/imu_service.o .text.int1_irq

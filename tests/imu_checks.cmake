@@ -165,7 +165,7 @@ host_test(test_imu_probe_int1 tests/test_imu_probe.c
 target_compile_definitions(test_imu_probe_int1 PRIVATE IMU_INT1_WAKE=1)
 target_link_libraries(test_imu_probe_int1 PRIVATE m)
 host_test(test_imu_wake_service tests/test_imu_wake_service.c
-    app_program/subsystem4/imu_safety.c
+    app_program/subsystem4/imu_hump_diag.c app_program/subsystem4/imu_safety.c
     app_program/subsystem4/imu_service.c app_program/subsystem4/imu_core.c
     app_program/subsystem4/imu_support.c app_program/subsystem4/imu_roll.c
     app_program/subsystem4/imu_hump.c)

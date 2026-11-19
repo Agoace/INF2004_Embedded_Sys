@@ -43,6 +43,15 @@ bool imu_hw_drive_down(void)
     return !gpio_get(21u);
 }
 
+#if IMU_INT1_WAKE
+/* INT1 wake: the core-0 GPIO dispatcher owns the GP7 edge interrupt
+ * (imu_service.c). This reads the level only; the pull-down stays. */
+bool imu_hw_int1_high(void)
+{
+    return gpio_get(7u);
+}
+#endif
+
 static uint32_t started;
 static uint32_t spins;
 static uint32_t cycle_started;

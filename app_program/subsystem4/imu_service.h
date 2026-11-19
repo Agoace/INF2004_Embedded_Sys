@@ -60,5 +60,10 @@ bool imu_capture_frozen(uint32_t *samples, uint32_t *batches,
 bool imu_capture_batch_read(uint32_t index, imu_capture_batch_t *batch,
                              int16_t raw[IMU_FIFO_MAX_BATCH][3]);
 bool imu_capture_release(void);
+#if IMU_INT1_WAKE
+#include "imu_wake.h"
+/* INT1 wake counters (diagnostic, per-field). E_PAR for NULL. */
+int imu_int1_stats_read(imu_wake_t *out);
+#endif
 
 #endif

@@ -27,4 +27,8 @@ bool imu_hw_mark_down(void);
 /* IMU_STREAM-only GP21 bounded drive job; active low, no IRQ. */
 void imu_hw_drive_init(void);
 bool imu_hw_drive_down(void);
+#if IMU_INT1_WAKE
+/* GP7 (accel INT1) level; HIGH = FIFO at/above the watermark. */
+bool imu_hw_int1_high(void);
+#endif
 #endif

@@ -16,6 +16,7 @@ static drv_gpio_irq_fn int1_fn;
 static uint32_t int1_pins;
 static jmp_buf stop;
 static unsigned int sleeps, sleep_goal, reads, wakes, add_error, init_calls;
+static ER wup_result = E_OK;
 static uint32_t clock_us;
 static bool level_high, stuck, probe_ready = true, empty;
 
@@ -75,7 +76,7 @@ ER tk_slp_tsk(TMO timeout)
     return E_OK;
 }
 INT tk_can_wup(ID id) { assert(id == TSK_SELF); return 0; }
-ER tk_wup_tsk(ID id) { assert(id == 7); ++wakes; return E_OK; }
+ER tk_wup_tsk(ID id) { assert(id == 7); ++wakes; return wup_result; }
 
 /* Run the task until it sleeps once more; return the probe reads. */
 static unsigned int run_once(void)
@@ -148,6 +149,12 @@ int main(int argc, char **argv)
     assert(imu_int1_stats_read(&w) == E_OK);
     assert(w.batches[0] == 1u && w.batches[4] == 6u && w.extra == 1u);
     assert(w.rises == 3u && w.falls == 1u && w.fallbacks == 1u);
+    assert(w.isr_lost == 0u);
+    /* A refused wakeup from the ISR is counted, not retried. */
+    wup_result = E_OBJ;
+    int1_fn(IMU_INT1_PIN, DRV_GPIO_EDGE_RISE, NULL);
+    assert(imu_int1_stats_read(&w) == E_OK && w.isr_lost == 1u);
+    wup_result = E_OK;
     assert(imu_int1_stats_read(NULL) == E_PAR);
     return 0;
 }

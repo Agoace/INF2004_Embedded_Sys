@@ -285,6 +285,21 @@ static void diagnostics(const imu_snapshot_t *s)
     print_mm("mean_samples_per_poll", s->probe.fifo_cycles == 0u ? 0.0f :
              (float)s->probe.fifo_samples / (float)s->probe.fifo_cycles);
     tm_printf((UB *)"\n");
+#if IMU_INT1_WAKE
+    imu_wake_t w;
+    if (imu_int1_stats_read(&w) == E_OK) {
+        /* R1 bench readout: n histogram 0..8 decides FTH 3 versus 4. */
+        tm_printf((UB *)"[S4_INT1] rise %lu fall %lu ticks %lu fallback %lu "
+                  "extra %lu lost %lu n0..8",
+                  (unsigned long)w.rises, (unsigned long)w.falls,
+                  (unsigned long)w.ticks, (unsigned long)w.fallbacks,
+                  (unsigned long)w.extra, (unsigned long)w.isr_lost);
+        for (unsigned int i = 0u; i < IMU_WAKE_HISTOGRAM; ++i) {
+            tm_printf((UB *)" %lu", (unsigned long)w.batches[i]);
+        }
+        tm_printf((UB *)" fth %u\n", (unsigned int)IMU_WAKE_FTH);
+    }
+#endif
     tm_printf((UB *)"[S4_QUALITY] refresh_rejects %lu tilt_ddeg %ld "
               "peak_rejects %lu omega_mrad_s %ld alpha_mrad_s2 %ld\n",
               (unsigned long)v->refresh_rejects,

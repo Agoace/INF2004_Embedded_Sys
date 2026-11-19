@@ -9,6 +9,11 @@
 #include "../subsystem2/motion.h"
 #include "../subsystem2/motor_ctl_robot.h"
 #include "../vehicle/vehicle_task.h"
+#if IMU_INT1_WAKE
+#include "../platform/drv_gpio_irq.h"
+#include "imu_hw.h"
+#include "imu_wake.h"
+#endif
 
 #if !APP_BENCH
 #define IMU_PERIOD_MS 10u
@@ -303,12 +308,65 @@ static void sample(void)
     }
 }
 
+#if IMU_INT1_WAKE
+/* INT1 wake: see imu_wake.h. Writers are split by context (ISR, cyclic,
+ * task); the read/compute path in sample() is unchanged. */
+static imu_wake_t wake;
+
+static void int1_irq(unsigned int pin, uint32_t events, void *context)
+{
+    (void)pin;
+    (void)context;
+    /* Own lost counter: this ISR can preempt the cyclic's wake_lost. */
+    if (imu_wake_edge(&wake, events, drv_time_us()) && task > 0 &&
+        tk_wup_tsk(task) < E_OK) {
+        imu_wake_add(&wake.isr_lost);
+    }
+}
+
+/* After a sample: histogram, then ONE extra pass if INT1 is still HIGH
+ * (no new rising edge would come). Not while the probe is not ready. */
+static void wake_after(void)
+{
+    bool extra = false;
+
+    for (;;) {
+        const unsigned int n = probe.no_sample ? 0u :
+            probe.fifo_last_samples > 0u ? probe.fifo_last_samples :
+            IMU_WAKE_HISTOGRAM;
+
+        if (!imu_wake_after(&wake, n, probe.ready, imu_hw_int1_high(),
+                            extra)) {
+            return;
+        }
+        extra = true;
+        imu_wake_read(&wake, drv_time_us());
+        sample();
+    }
+}
+
+int imu_int1_stats_read(imu_wake_t *out)
+{
+    if (out == NULL) {
+        return E_PAR;
+    }
+    imu_wake_copy(out, &wake);
+    return E_OK;
+}
+#endif
+
 static void entry(INT code, void *context)
 {
     (void)code;
     (void)context;
     for (;;) {
+#if IMU_INT1_WAKE
+        imu_wake_read(&wake, drv_time_us());
+#endif
         sample();
+#if IMU_INT1_WAKE
+        wake_after();
+#endif
         (void)tk_slp_tsk(TMO_FEVR);
         const INT missed = tk_can_wup(TSK_SELF);
 
@@ -321,6 +379,12 @@ static void entry(INT code, void *context)
 static void release(void *context)
 {
     (void)context;
+#if IMU_INT1_WAKE
+    /* Fallback only: no rising edge for more than 12 ms. */
+    if (!imu_wake_tick(&wake, drv_time_us())) {
+        return;
+    }
+#endif
     if (task > 0 && tk_wup_tsk(task) < E_OK) {
         const uint32_t lost = __atomic_load_n(&wake_lost, __ATOMIC_SEQ_CST);
 
@@ -344,6 +408,14 @@ int imu_service_init(void)
     imu_core_init(&core);
     imu_probe_init(&probe);
     imu_safety_init(&safety);
+#if IMU_INT1_WAKE
+    imu_wake_init(&wake);
+    /* Core 0, before tasks start. A refused client is not fatal: the
+     * cyclic fallback then polls every 10 ms, as without INT1 wake. */
+    if (drv_gpio_irq_init() >= E_OK) {
+        (void)drv_gpio_irq_add(1u << IMU_INT1_PIN, int1_irq, NULL);
+    }
+#endif
     cyclic = tk_cre_cyc(&config);
     return cyclic < 0 ? (int)cyclic : E_OK;
 }
