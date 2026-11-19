@@ -843,7 +843,7 @@ high-water was not supplied.
 
 ## FIFO partial read (option D)
 
-Status: software and host proof on branch `mtk3-imu-fifo-d`. Accepted by the operator and the safety owner 2026-11-19. Bench check open.
+Status: software and host proof on branch `mtk3-imu-fifo-d`. Accepted by the operator and the safety owner 2026-11-19. Bench B1 (8-sample catch-up) confirmed the partial read on the robot but showed one TIMEOUT; the operator chose a 6-sample catch-up (option a). Bench B2 (6-sample catch-up) is open.
 
 ### Why
 
@@ -855,23 +855,35 @@ Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake late
 
 | FIFO_SRC | Action |
 | --- | --- |
-| n = 0..8 | Unchanged: read all n, mean of n |
-| n = 9..31, no OVRN | Read the OLDEST 8 in the same 48-byte burst. The other n − 8 stay in the sensor FIFO for the next cycle. Valid observation. No reset. `partial` + 1 |
+| n = 0..8, no catch-up | Unchanged: read all n, mean of n |
+| n = 9..31, no OVRN | Start a catch-up: read the OLDEST 6 (`IMU_FIFO_CATCHUP_BATCH`) in one 36-byte burst. The other n − 6 stay in the sensor FIFO for the next cycle. Valid observation. No reset. `partial` + 1 |
+| n = 7..8 during a catch-up | Read the oldest 6 (the catch-up continues). The catch-up ends when n ≤ 6. |
 | OVRN (32 unread), or a contradictory status | Unchanged: FIFO reset, invalid observation (READ_FAILED) |
 
-`depth_max` records the largest count seen (32 = OVRN).
+`depth_max` records the largest count seen (32 = OVRN). A FIFO reset or a bus fault ends a catch-up.
 
-Assumption (datasheet, not hardware-verified): FSS is the unread count, and each 6-byte step of the auto-incrementing burst (0x28..0x2D, then back to 0x28) removes ONE sample. Thus FSS drops by exactly 8 after a partial read. AN3308 (LIS3DH) states this; the LSM303DLHC datasheet does not. The test fakes model it, and the bench check below verifies it.
+Why 6 and not 8: one read cycle is about 1060 + 165 n µs of bus time and compute plus line-task preemption (about 132 µs per 1 ms). An 8-sample cycle is about 1990–2120 µs and crosses the 2 ms deadline (`imu_probe.c`, unchanged); bench B1 measured 2007 µs and one TIMEOUT. A 6-sample cycle is at most about 1790 µs. Outside a catch-up, n = 7..8 still reads all n, as before option D (step 2d maximum n was 6 in 45000 polls).
+
+FSS is the unread count, and each 6-byte step of the auto-incrementing burst (0x28..0x2D, then back to 0x28) removes ONE sample. Thus FSS drops by exactly the number read after a partial read. AN3308 (LIS3DH) states this; the LSM303DLHC datasheet does not. Bench B1 confirmed it on the robot for 8 samples (`partial` 2, `depth_max` 16, `backlog`/`overrun`/`bad`/`reset` 0, `max` 8).
 
 ### Data-age trade-off
 
-The observation is stamped with the READ time, not the sample time. After a task gap of G ms, the next reads publish samples up to about G − 10 ms old as fresh data. Each 10 ms read removes up to 8 samples and about 4 new ones arrive, so the queue drains by about 4 samples per read.
+The observation is stamped with the READ time, not the sample time. After a task gap of G ms, the next reads publish older samples as fresh data. Each 10 ms catch-up read removes 6 samples and about 4 new ones arrive, so the queue drains by only about 2 samples per read (8-sample catch-up: about 4). The catch-up is therefore longer and the data older than with an 8-sample catch-up. Model at 409 Hz (`build/wip/d/dsim6.c`, timer build, not committed):
+
+| Gap G | Newest averaged sample age, 6-sample catch-up (8-sample) | Time back to depth ≤ 6, 6-sample catch-up (8-sample) |
+| --- | --- | --- |
+| 22 ms | 16.5 ms (11.6) | 12 ms (4) |
+| 30 ms | 25.1 ms (20.2) | 34 ms (14) |
+| 40 ms | 35.1 ms (30.2) | 56 ms (25) |
+| 49 ms | 43.1 ms (38.2) | 76 ms (36) |
+
+The queue grows only if the average read interval is more than 6/ODR (about 15 ms at 409 Hz); a sustained failure like this reaches OVRN and then resets.
 
 | Gap G | Before option D | Option D |
 | --- | --- | --- |
 | ≤ about 20 ms (n ≤ 8) | No change | No change |
-| 22, 30, 40, 49 ms | One READ_FAILED, then a STOP in a run | 0 READ_FAILED, 0 STOP. Lift/overturn data is late by up to about G − 10 ms during catch-up. |
-| ≥ 60 ms | STOP | STOP, cause STALE (the 50 ms age rule; unchanged) |
+| 22, 30, 40, 49 ms | One READ_FAILED, then a STOP in a run | 0 READ_FAILED, 0 STOP, 0 TIMEOUT. Lift/overturn data is late by up to the age in the table above during catch-up. |
+| ≥ 60 ms | STOP | STOP, cause STALE (the 50 ms age rule; unchanged). The publish time is fresh, but the gap itself exceeds 50 ms. |
 | 80 ms (OVRN) | STOP | FIFO reset, READ_FAILED, STOP (unchanged) |
 
 During catch-up the hump core receives reads that are close together in time but hold older data. Encoder and accel data are misaligned by up to the same delay (about 3 mm at 150 mm/s for a 20 ms delay). This applies only after a late wake. Step 2d had 0 backlogs in 45000 polls.
@@ -881,9 +893,10 @@ During catch-up the hump core receives reads that are close together in time but
 | Check | Result |
 | --- | --- |
 | n ≤ 8 path | The staging and option-D probes gave byte-identical output over a 200000-cycle random stream (0..8 per cycle, burst arrivals, empty cycles). Output: validity, n, mean, decoded value, every probe counter. Trace SHA-256 prefix `0037a9edb9f04b07`. |
-| Existing IMU tests | 75 of 79 IMU/safety/gate/vehicle tests print byte-identical output to staging `871c806`. The other 4: `test_imu_core_benchmark` (host `sizeof` probe 156→164 B, snapshot 504→512 B, plus timing), `test_imu_fifo_gap` (new), and two tests whose only difference is the ctest command path. |
-| `test_imu_probe` | 9 → oldest 8 read, 1 left, then 1; 31 → 8, 8, 8, 7; FSS drops by 8 each time; OVRN and bad status still reset |
+| Existing IMU tests | 77 of 80 IMU/safety/gate/vehicle tests print byte-identical output to staging `871c806`. The other 3: `test_imu_core_benchmark` (host `sizeof` probe 156→164 B, snapshot 504→512 B, plus timing), and the new `test_imu_fifo_gap` and `test_imu_fifo_timing`. |
+| `test_imu_probe` | 9 → oldest 6, then 3; 31 → 6, 6, 6, 6, 6, then 1 (the catch-up continues at 7); then 8 outside a catch-up → 8; FSS drops by the number read; OVRN and bad status still reset |
 | `test_imu_fifo_gap` | Real probe + `imu_safety` + `ig_step(active=true)` on a 32-deep timed FIFO fake at 391/400/409 Hz. Gaps 22/30/40/49 ms: 0 READ_FAILED, 0 latch, 0 reset. Gap 60 ms: STALE latch. Gap 80 ms: OVRN, 1 reset, 1 READ_FAILED, latch. |
+| `test_imu_fifo_timing` | The same, with a timed I2C fake: 25 µs per bus byte, 3 bytes per transfer, compute 138 + 15 n µs, and a 132 µs line preemption per 1 ms boundary. All 20 line phases (0..950 µs) × 3 rates × 4 gaps = 240 runs: 0 TIMEOUT, 0 READ_FAILED, 0 latch; worst catch-up cycle 1792 µs (< 2000). Calibration: n = 4 gives 1330 µs (robot mean 1315–1346); n = 8 gives 1990–2122 µs (robot B1 1996, 2007). An 8-sample catch-up times out in 76 of the 240 runs. |
 
 ### Build evidence
 
@@ -893,15 +906,15 @@ Built from `git archive` with public example secrets and compared with staging `
 | --- | --- | --- |
 | Demo warnings / RAM_PROOF | 0 / 79/79, 21212 B | 0 / 79/79, 21212 B |
 | Static RAM (`scripts/ram_report.py`) | 234596 B | 234620 B (+24: `.bss.probe` 156→164, `.bss.value` 504→512, `.bss.board` 508→516) |
-| Flash text / bss (`arm-none-eabi-size`) | 470092 / 212204 B | 470332 / 212228 B |
-| Demo UF2 sha256 | `0201de1e…` | `1b3f0cce…ebba390e` (changed by design: new probe and dump code) |
-| Bench image `_test_imugap` UF2 sha256 | n/a | `039f33cc…90c62957`; `imu_gap_test_sleep` only in this image |
-| Host GCC / Clang ASan+UBSan | n/a | 707/707 / 707/707 |
+| Flash text / bss (`arm-none-eabi-size`) | 470092 / 212204 B | 470372 / 212228 B |
+| Demo UF2 sha256 | `0201de1e…` | `ddd2fd85…a6427b7c` (changed by design: new probe and dump code) |
+| Bench image `_test_imugap` UF2 sha256 | n/a | `bd1af500…a6b0038a` (B2); `imu_gap_test_sleep` only in this image. B1 image was `039f33cc…90c62957` (8-sample catch-up). |
+| Host GCC / Clang ASan+UBSan | n/a | 708/708 / 708/708 |
 | Template check / min-bit proof | 8 / pass | 8 / pass |
 
 ### Counters
 
-- TEST `[S4_FIFO]` line: adds `partial` and `depth_max`.
+- TEST `[S4_FIFO]` line: adds `partial`, `depth_max`, and the TEST-only `read_max_us_n6` and `read_max_us_n8` (largest read cycle with exactly 6 or 8 samples, including preemption and failed cycles; not in ROBOT images).
 - ROBOT GP20 dump: one new line `[S4_FIFO] partial … depth_max … overrun … bad … reset … batches …`. A 6-word atomic reader (`imu_fifo_counts_read`) supplies it, so the dump does not copy the 512-byte snapshot.
 
 ### Bench check (operator)
@@ -916,9 +929,10 @@ The image name ends in `_test_imugap`. `IMU_GAP_TEST=1` requires `TEST=1 BENCH=0
 
 1. The `[S4_FIFO]` lines after the delay show `partial` ≥ 1 and `depth_max` ≥ 12.
 2. `backlog` 0, `overrun` 0, `bad` 0, `reset` 0.
-3. `min`..`max` per batch stays ≤ 8, and `[S4_DIAG]` faults 0.
+3. `min`..`max` per batch stays ≤ 8, and `[S4_DIAG]` faults 0 and timeout 0.
+4. `read_max_us_n6` < 2000 (expect about 1600–1800).
 
-This verifies the FSS-drops-by-8 assumption on hardware.
+Boot the image at least 3 times (B1 showed the timeout on 1 of 2 boots).
 
 ## Step 3 hump report
 
