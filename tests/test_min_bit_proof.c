@@ -32,6 +32,7 @@
 #include "../app_program/subsystem1/telemetry_pack.h"
 #include "../app_program/subsystem1/network_pack.h"
 #include "../app_program/platform/fault_mask.h"
+#include "../app_program/platform/fault_pack.h"
 
 #define MAX_ELEM_BYTES 128u
 #define MAX_FIELDS 48u

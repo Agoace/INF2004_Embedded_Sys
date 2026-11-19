@@ -19,6 +19,10 @@ int robot_health_faults_try_read(fault_mask_snapshot_t *out,uint32_t *at)
         .run=FAULT_IMU_SAFETY,.valid=FAULT_MASK_ALL,.epoch=1u};
     *at=1234000u;return E_OK;
 }
+static uint32_t fake_stop_refused;
+static unsigned int stop_refused_lines;
+uint32_t robot_health_faults_stop_refused(void) __attribute__((weak));
+uint32_t robot_health_faults_stop_refused(void) { return fake_stop_refused; }
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
@@ -72,6 +76,10 @@ int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
 int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
     if (!strncmp((const char *)fmt,"[FAULT_MASK] pending",20u)) ++fault_pending_lines;
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] stop_refused",25u)) {
+        assert(va_arg(a,unsigned long)==fake_stop_refused && fake_stop_refused!=0u);
+        ++stop_refused_lines;
+    }
     if (!strncmp((const char *)fmt,"[FAULT_MASK] now",16u)) {
         assert(va_arg(a,unsigned long)==FAULT_WIFI_LINK_DOWN);
         assert(va_arg(a,unsigned long)==FAULT_IMU_SAFETY);
@@ -147,13 +155,16 @@ int main(void) {
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
     assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
     assert(fault_pending_lines==1u && fault_value_lines==0u);
+    assert(stop_refused_lines==0u); /* zero count: FAULT_MASK output unchanged */
     fake_fault_result=E_OK; /* Later GP20 dump: Health has sampled STOP. */
+    fake_stop_refused=3u;
     assert(timelines==1u);
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(hump_none==1u && hump_lines==1u && diag_lines==1u && kr==4u && ve==2u);
     assert(fault_pending_lines==1u && fault_value_lines==1u);
+    assert(stop_refused_lines==1u);fake_stop_refused=0u;
     assert(junction_lines==0u);
     m.kind=TELEMETRY_JUNCTION;
     m.data.junction=(ja_result_t){.command=JA_RIGHT,.phase=JA_DONE,.source=1u};
