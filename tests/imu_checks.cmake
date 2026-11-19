@@ -184,3 +184,9 @@ host_test(test_imu_fifo_gap tests/test_imu_fifo_gap.c
     app_program/subsystem4/imu_fifo.c app_program/subsystem4/imu_safety.c
     app_program/vehicle/imu_gate.c)
 target_link_libraries(test_imu_fifo_gap PRIVATE m)
+# Option D timing (bench B1 model): 25 us/byte, line preemption, 2 ms deadline.
+host_test(test_imu_fifo_timing tests/test_imu_fifo_timing.c
+    app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c
+    app_program/subsystem4/imu_fifo.c app_program/subsystem4/imu_safety.c
+    app_program/vehicle/imu_gate.c)
+target_link_libraries(test_imu_fifo_timing PRIVATE m)
