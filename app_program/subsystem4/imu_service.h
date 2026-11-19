@@ -32,12 +32,15 @@ int imu_service_start(void);
 /* One bounded board copy. E_PAR null, E_OBJ inactive, E_TMOUT busy/empty.
  * Failed reads leave the caller's output unchanged. */
 int imu_snapshot_try_read(imu_snapshot_t *out);
-/* Bounded copy of the newest hump board; same returns as the snapshot.
- * timestamp_ms is the last real IMU observation; check age before use. */
-int imu_hump_try_read(imu_hump_report_t *out);
-/* Diagnostic C observation board; same bounded-copy contract. */
-int imu_hump_diag_try_read(imu_hump_diag_report_t *out);
-/* Unchanged output on failure; only real observations refresh board time. */
+/* Bounded copy of the newest packed hump board (CR1, 16 B); same returns
+ * as the snapshot. imu_hump_board_time() is the last real IMU observation;
+ * check age before use. */
+int imu_hump_try_read(imu_hump_board_t *out);
+/* Packed diagnostic C observation board (CR1, 36 B); same contract. */
+int imu_hump_diag_try_read(imu_hump_diag_board_t *out);
+/* Unchanged output on failure; only real observations refresh board time.
+ * The board is packed (CR1, 12 B, imu_safety_board.h); the fields that it
+ * does not carry read 0. */
 int imu_safety_try_read(imu_safety_report_t *out);
 /* Vehicle is the sole requester. Nonzero token identifies this attempt;
  * zero means no running writer. Acceptance is not acknowledgement: wait for

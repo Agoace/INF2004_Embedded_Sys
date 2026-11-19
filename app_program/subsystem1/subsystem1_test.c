@@ -24,7 +24,11 @@ EXPORT void subsystem1_test(void) {
     (void)motion_timing_probe_capture(MOTION_PROBE_S1_BURST_BEGIN);
     (void)telemetry_send(&message);message.kind=TELEMETRY_ROW;
     unsigned int accepted=0u;
-    for (unsigned int i=0u;i<100u;++i) if (telemetry_send(&message)>=E_OK) ++accepted;
+    for (unsigned int i=0u;i<100u;++i) {
+        /* KR1 time = accepted count: within 8192 ticks of the stored index. */
+        message.data.row[0]=(uint8_t)accepted;message.data.row[1]=(uint8_t)(accepted>>8);
+        if (telemetry_send(&message)>=E_OK) ++accepted;
+    }
     (void)motion_timing_probe_capture(MOTION_PROBE_S1_BURST_END);
     (void)tk_dly_tsk(20u); /* Let the consumer run after the bounded saturation burst. */
     (void)motion_timing_probe_capture(MOTION_PROBE_AFTER_S1_YIELD);

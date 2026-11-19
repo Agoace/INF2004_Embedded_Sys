@@ -24,8 +24,8 @@ tables in this document are the test output.
 The module records keep the design detail. This record does not repeat
 it: [CR1.md](CR1.md) (motion), [CR1_SONAR_A.md](CR1_SONAR_A.md),
 [CR1_SONAR_F.md](CR1_SONAR_F.md), [CR1_VEHICLE_A1.md](CR1_VEHICLE_A1.md),
-[CR1_VEHICLE_F.md](CR1_VEHICLE_F.md), [CR1_BARCODE_A.md](CR1_BARCODE_A.md)
-and [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md).
+[CR1_VEHICLE_F.md](CR1_VEHICLE_F.md), [CR1_BARCODE_A.md](CR1_BARCODE_A.md),
+[CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) and [CR1_IMU_A.md](CR1_IMU_A.md).
 
 ## Rule
 
@@ -89,13 +89,27 @@ Bytes in RAM, from the module records. Boards include their 4 B sequence.
 | Retained INFO | 108 | 104 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | Health payload | 120 | 112 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | S1 pending sonar copy | 40 | 32 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
-| KR1 RAM-log rows (4501) | 72016 | 72016 | not changed on staging |
+| KR1 RAM-log rows (4501) | 72016 | 67515 | [CR1_KR1_ROW.md](CR1_KR1_ROW.md) (branch `mtk3-cr1-kr1row`) |
+| IMU hump board | 52 | 20 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| IMU hump value and Vehicle copy (2) | 96 | 32 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| IMU diag board | 76 | 40 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| IMU diag Vehicle copies (2) and run board | 220 | 112 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| IMU diag peak cache (new: float peak and packed words) | 0 | 84 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| IMU safety board | 40 | 16 | [CR1_IMU_A.md](CR1_IMU_A.md) |
+| F Health fault snapshot (board copy and working views) | 32 | 16 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage) |
+| F STOP capture board | 36 | 16 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage) |
 
 The F fault mask adds 104 B (four 8 B owner boards, the 36 B STOP
 capture, the 16 B working views and 20 B in the Health board). Static
 RAM of the demo image: 241228 B at `7350da0`, 239304 B at `b68ce6b`
 (−1924 B). The detail is in
-[CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md).
+[CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md). IMU A: 239304 B to 239124 B
+(−180 B, the IMU rows above), in [CR1_IMU_A.md](CR1_IMU_A.md).
+
+After the F pack (branch `mtk3-cr1-fpack`) the F cost is 72 B: the
+snapshot copies use 16 B, the STOP capture board 16 B and a new 4 B
+refused count. Static RAM is 239272 B (−32 B). See
+[F pack](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage).
 
 ## Proof tables
 
@@ -227,23 +241,23 @@ Bits per element: used 278, minimum 278. Layout: separate allocations. Bytes: st
 
 ### KR1 RAM-log row
 
-Source: `app_program/vehicle/vehicle_log.h`. 4501 element(s) of 16 B (128 bits, 0 spare).
+Source: `app_program/subsystem1/kr1_row_pack.h`. 4501 element(s) of 15 B (120 bits, 0 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| time (20 ms ticks) | 0..65535 (wraps; no run time limit in code) | 65536 | 16 | 16 |  |
+| time (20 ms ticks) | offset 0..8191 from the row index (index-anchored; 8192+ refused, counted lost) | 8192 | 13 | 13 |  |
 | state | 0..2 | 3 | 2 | 2 |  |
 | module | 0..5 (5 = scan reverse) | 6 | 3 | 3 |  |
 | raw L, C[2] | ADC 0..4095 | 4096 | 12 | 12 |  |
 | position | -100..100 | 201 | 8 | 8 |  |
 | asked L, R[2] | -512..511 (clamped) | 1024 | 10 | 10 |  |
 | measured L, R[2] | -512..511 (clamped) | 1024 | 10 | 10 |  |
-| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 16 | GAP |
+| echo | ultrasonic word: distance 9, status 2, streak 3 bits | 16384 | 14 | 14 |  |
 | servo | -36..36 | 73 | 7 | 7 |  |
 | events | 8 defined bits (lost, found, echo, ping, outcome 3, fault) | 256 | 8 | 8 |  |
-| flags | bit 0 only (speed clamp) | 2 | 1 | 4 | GAP |
+| flags | bit 0 only (speed clamp) | 2 | 1 | 1 |  |
 
-Bits per element: used 128, minimum 123. Layout: one array. Bytes: stored 72016; least at used widths 72016; least at minimum widths 69203 (each element alone in whole bytes: 72016). Slack: echo 2 bits and flags 3 bits. A row stays 16 B (123 bits) unless the time also drops 3 bits (120 bits), which needs a decode rule that the code does not have.
+Bits per element: used 120, minimum 120. Layout: one array. Bytes: stored 67515; least at used widths 67515; least at minimum widths 67515 (each element alone in whole bytes: 67515). Private RAM storage of the unchanged 16-byte row (vehicle_log.h). Readers unpack to 16 B; robot/log, live kr1 and USB text do not change. Echo bits 14..15 and flags bits 1..3 are always 0.
 
 ### Barcode frame boards
 
@@ -446,7 +460,7 @@ Source: `app_program/subsystem1/network_pack.h`. 1 element(s) of 104 B (832 bits
 | wifi_observed_priority | 0..32 | 33 | 6 | 6 |  |
 | board_unavailable_mask | 5 independent bits | 32 | 5 | 5 |  |
 
-Bits per element: used 809, minimum 809. Layout: separate allocations. Bytes: stored 104; least at used widths 104; least at minimum widths 104 (each element alone in whole words: 104). The Health board also holds a u32 time, the fault snapshot below and a u32 phase (132 B with its sequence).
+Bits per element: used 809, minimum 809. Layout: separate allocations. Bytes: stored 104; least at used widths 104; least at minimum widths 104 (each element alone in whole words: 104). The Health board also holds a u32 time, the fault snapshot below and a u32 phase (124 B with its sequence).
 
 ### S1 pending sonar copy
 
@@ -512,41 +526,102 @@ Bits per element: used 32, minimum 2. Layout: separate allocations. Bytes: store
 
 ### F Health fault snapshot
 
-Source: `app_program/platform/fault_mask.h`. 2 element(s) of 16 B (128 bits, 0 spare).
+Source: `app_program/platform/fault_pack.h`. 2 element(s) of 8 B (64 bits, 2 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| now | 10 fault bits | 1024 | 10 | 32 | GAP |
-| run | 10 fault bits | 1024 | 10 | 32 | GAP |
-| valid | 10 fault bits | 1024 | 10 | 32 | GAP |
+| now | 10 fault bits | 1024 | 10 | 10 |  |
+| run | 10 fault bits | 1024 | 10 | 10 |  |
+| valid | 10 fault bits | 1024 | 10 | 10 |  |
 | epoch | u32 run epoch | 4294967296 | 32 | 32 |  |
 
-Bits per element: used 128, minimum 62. Layout: separate allocations. Bytes: stored 32; least at used widths 32; least at minimum widths 16 (each element alone in whole words: 16). Two copies: in the Health board and in the Health working views. The producer limits the masks (fault_mask_combine); the store does not.
+Bits per element: used 62, minimum 62. Layout: separate allocations. Bytes: stored 16; least at used widths 16; least at minimum widths 16 (each element alone in whole words: 16). Two copies: in the Health board and in the Health working views. The API value stays fault_mask_snapshot_t (16 B).
 
 ### F STOP capture
 
-Source: `app_program/subsystem1/robot_health.c`. 1 element(s) of 32 B (256 bits, 0 spare).
+Source: `app_program/platform/fault_pack.h`. 1 element(s) of 12 B (96 bits, 12 spare).
 
 | Field | Valid range | n | Min bits | Bits used | Reason |
 | --- | --- | ---: | ---: | ---: | --- |
-| owner Motion | bits 0..3 | 16 | 4 | 32 | GAP |
-| owner Vehicle | bits 4, 6 | 4 | 2 | 32 | GAP |
-| owner Sonar | bit 5 | 2 | 1 | 32 | GAP |
-| owner Telemetry | bit 7 | 2 | 1 | 32 | GAP |
-| owner Wi-Fi | bits 8, 9 | 4 | 2 | 32 | GAP |
-| valid | 10 fault bits | 1024 | 10 | 32 | GAP |
+| owner Motion | bits 0..3 | 16 | 4 | 4 |  |
+| owner Vehicle | bits 4, 6 | 4 | 2 | 2 |  |
+| owner Sonar | bit 5 | 2 | 1 | 1 |  |
+| owner Telemetry | bit 7 | 2 | 1 | 1 |  |
+| owner Wi-Fi | bits 8, 9 | 4 | 2 | 2 |  |
+| valid | 10 fault bits | 1024 | 10 | 10 |  |
 | epoch | u32 run epoch | 4294967296 | 32 | 32 |  |
 | us | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
 
-Bits per element: used 256, minimum 84. Layout: separate allocations. Bytes: stored 32; least at used widths 32; least at minimum widths 12 (each element alone in whole words: 12). Plain u32 words (36 B board with its sequence). The producer limits each owner word (capture_owner_values).
+Bits per element: used 84, minimum 84. Layout: separate allocations. Bytes: stored 12; least at used widths 12; least at minimum widths 12 (each element alone in whole words: 12). 16 B board with its sequence. A refused owner word is stored as unknown (valid clear) and counted (robot_health_faults_stop_refused).
+
+### IMU hump board
+
+Source: `app_program/subsystem4/imu_hump.h`. 3 element(s) of 16 B (128 bits, 0 spare).
+
+| Field | Valid range | n | Min bits | Bits used | Reason |
+| --- | --- | ---: | ---: | ---: | --- |
+| timestamp_ms | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
+| run_epoch | u32 (wrapping) | 4294967296 | 32 | 32 |  |
+| best peak 0.1 mm | 0..1110 (producer: 111 mm x sine) | 1111 | 11 | 16 | WORD_SLACK |
+| last peak 0.1 mm | 0..1110 (producer: 111 mm x sine) | 1111 | 11 | 16 | WORD_SLACK |
+| closed count | u16 (saturating count) | 65536 | 16 | 16 |  |
+| gated starts | 0..255 (saturates) | 256 | 8 | 8 |  |
+| flags | 5 independent bits | 32 | 5 | 5 |  |
+| open | bool | 2 | 1 | 1 |  |
+| valid | bool | 2 | 1 | 1 |  |
+| last LEFT | bool | 2 | 1 | 1 |  |
+
+Bits per element: used 128, minimum 118. Layout: separate allocations. Bytes: stored 48; least at used widths 48; least at minimum widths 48 (each element alone in whole words: 48). Three copies: the IMU value and board, and the Vehicle copy. The peaks keep 16 bits: 11 bits (118 bits in all) still need 4 words. The height is 111 mm x sine (imu_core.c), so a peak is at most 1110.
+
+### IMU diagnostic board
+
+Source: `app_program/subsystem4/imu_hump_diag.h`. 5 element(s) of 36 B (288 bits, 0 spare).
+
+| Field | Valid range | n | Min bits | Bits used | Reason |
+| --- | --- | ---: | ---: | ---: | --- |
+| run_epoch | u32 (wrapping) | 4294967296 | 32 | 32 |  |
+| timestamp_ms | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
+| peak ms | 0..2^20-1 (saturates) | 1048576 | 20 | 20 |  |
+| corrected 0.1 mm | -1110..1110 (producer: 111 mm x sine) | 2221 | 12 | 12 |  |
+| travel mm | u16 (saturates) | 65536 | 16 | 16 |  |
+| yaw mrad/s | s15 (saturates) | 32768 | 15 | 15 |  |
+| valid | bool | 2 | 1 | 1 |  |
+| yaw accel mrad/s2 | s19 (saturates; approved +-230 rad/s2) | 524288 | 19 | 19 |  |
+| lateral mg | s13 (saturates; approved +-600 mg) | 8192 | 13 | 13 |  |
+| window yaw accel | u18 magnitude (saturates) | 262144 | 18 | 18 |  |
+| window yaw | u14 magnitude (saturates) | 16384 | 14 | 14 |  |
+| line yaw accel | u18 magnitude (saturates) | 262144 | 18 | 18 |  |
+| window lateral | u12 magnitude (saturates) | 4096 | 12 | 12 |  |
+| left | bool | 2 | 1 | 1 |  |
+| peak valid | bool | 2 | 1 | 1 |  |
+| line samples | 0..2^20-1 (saturates) | 1048576 | 20 | 20 |  |
+| line lateral | u12 magnitude (saturates) | 4096 | 12 | 12 |  |
+| filtered 0.1 mm | -1110..1110 (producer: 111 mm x sine) | 2221 | 12 | 12 |  |
+| speed mm/s | s12 (saturates) | 4096 | 12 | 12 |  |
+| gate | 4 independent bits | 16 | 4 | 4 |  |
+| window gate | 4 independent bits | 16 | 4 | 4 |  |
+
+Bits per element: used 288, minimum 288. Layout: separate allocations. Bytes: stored 180; least at used widths 180; least at minimum widths 180 (each element alone in whole words: 180). Five copies: the IMU board and peak cache, and three Vehicle copies. USB only. The pack does not refuse a value; it saturates each value to its slot (approved by the operator), so n is the slot range. The heights are 111 mm x sine (imu_core.c).
+
+### IMU safety board
+
+Source: `app_program/subsystem4/imu_safety_board.h`. 1 element(s) of 12 B (96 bits, 8 spare).
+
+| Field | Valid range | n | Min bits | Bits used | Reason |
+| --- | --- | ---: | ---: | ---: | --- |
+| observation_ms | u32 (wrapping time) | 4294967296 | 32 | 32 |  |
+| applied_request | u32 (wrapping token) | 4294967296 | 32 | 32 |  |
+| clear_ms | 0..1000 (IMU_SAFETY_CLEAR_MS) | 1001 | 10 | 10 |  |
+| latched_trigger | 0..3 | 4 | 2 | 2 |  |
+| flags | 8 independent bits | 256 | 8 | 8 |  |
+| clear_blockers | 4 independent bits | 16 | 4 | 4 |  |
+
+Bits per element: used 88, minimum 88. Layout: separate allocations. Bytes: stored 12; least at used widths 12; least at minimum widths 12 (each element alone in whole words: 12). Option S2: the 7 fields that no board reader uses are not stored (CR1_IMU_A.md).
 
 ### Report-only gaps
 
 | Record | Fields (GAP) | Stored B | Least B | Saving B |
 | --- | --- | ---: | ---: | ---: |
-| KR1 RAM-log row | echo, flags | 72016 | 69203 | 2813 |
-| F Health fault snapshot | now, run, valid | 32 | 16 | 16 |
-| F STOP capture | owner Motion, owner Vehicle, owner Sonar, owner Telemetry, owner Wi-Fi, valid | 32 | 12 | 20 |
 
 ### Accepted with a reason
 
@@ -555,17 +630,12 @@ Bits per element: used 256, minimum 84. Layout: separate allocations. Bytes: sto
 | Sonar history | SMALL_GAIN | echo | 4 |
 | Telemetry events | ELEMENT_ALIGNED | all (6 zero bits per element) | 384 |
 | Stopped scan rows | ELEMENT_ALIGNED | all (7 zero bits per element) | 42 |
-
 <!-- min-bit:end -->
 
 ## Gaps
 
-The `GAP` rows above are a report only.
-
-| Record | Why the gap stays now |
-| --- | --- |
-| KR1 RAM-log row | Echo (2 bits) and flags (3 bits) are wider than needed. A whole row stays 16 B at 123 bits; only one bit stream saves 2813 B. 15 B rows need the time to drop 3 bits too, with an index-anchored decode. That change is on `mtk3-cr1-kr1row`. |
-| F Health fault snapshot, F STOP capture | The fault words are plain u32 words. Each holds at most 10 meaningful bits. The producers mask the values; the store does not check them. Packing saves 16 B and 20 B (36 B). A fix is on a separate branch. |
+No `GAP` row remains. The F pack (`mtk3-cr1-fpack`) and the 15 B KR1 row
+(`mtk3-cr1-kr1row`) closed the last two gaps.
 
 Accepted by the operator, with the written reason:
 
@@ -580,7 +650,7 @@ Accepted by the operator, with the written reason:
 | Item | Reason |
 | --- | --- |
 | Line path record (`lp_t`), line board and line queue | Locked line path. CR1 does not change it. |
-| IMU records | Owned by the IMU worker. The IMU table is added here when the IMU packing is merged. |
+| IMU snapshot board (504 B) and the `imu_gate` report copy | Category B1 and B4. Not approved. |
 | Public native types, MQTT wire formats, queue messages | Category B is not approved. No wire change without an operator decision. |
 | `boot_id`, detour `duration_ms`, `dr`/`dt` configuration copies, `latest_debug` | Category B is not approved; kept as they are. |
 | Pulse code in the motion record | Copy of the servo angle (category B5, not approved). It is minimal for its own 73 values. |
@@ -590,7 +660,23 @@ Accepted by the operator, with the written reason:
 
 ## IMU
 
-Placeholder. The IMU table is added when the IMU packing is merged.
+The three IMU tables above come from the real IMU pack code. The IMU
+task keeps full `float` values; only the shared copies are packed. The
+design and the exact-output proofs are in [CR1_IMU_A.md](CR1_IMU_A.md).
+
+| Record | Note |
+| --- | --- |
+| IMU hump board | The two peaks use 16 bits, the minimum is 11. Reason `WORD_SLACK`: at 118 bits the board still needs 4 words. The producer bound is the height formula `IMU_TRACK_MM` × sine (`imu_core.c`), so a peak is at most 1110 (0.1 mm). |
+| IMU hump board | The pack also sets the OPEN flag when `open` is set; the pair has 48 states and uses 6 bits. The test base has OPEN set, so each slot is measured alone. Without it, the test fails (`open: bit 121 outside slot`). |
+| IMU hump board | The count list starts with 1, because the pack stores the best peak and LEFT only when there is an event. All 65536 values are in the list. |
+| IMU diagnostic board | USB only. The pack saturates each value to its slot (operator approval), so n is the slot range. The heights use the producer bound (±1110). |
+| IMU safety board | Option S2: only the 6 fields that a reader uses are stored. 8 spare bits; 88 bits still need 3 words. |
+
+The test adapters build the writer's input from the field values, then
+call `imu_hump_pack()`, `imu_hump_diag_pack()` and
+`imu_safety_board_pack()`. The hump reader has accessors for 5 fields;
+the adapter reads the other 5 with the header shifts and masks, the same
+ones that `imu_hump_board_summarize()` uses.
 
 ## How to update
 
@@ -601,6 +687,11 @@ between the markers. `test_min_bit_doc` fails until the two agree.
 ## Evidence
 
 Date: 2026-11-19. Base `b68ce6b`; proof commits `c9218ef`, `4551dc6` and the reason update after `4551dc6`.
+
+IMU tables: 2026-11-19, branch `mtk3-cr1-imu` after the merge of
+`mtk3-staging` `290439c`. Host tests 704/704 with GCC and with Clang
+ASan/UBSan, 0 warnings; the same `--markdown` output from both. The
+IMU red checks are the last rows of the table below.
 
 | Check | Result |
 | --- | --- |
@@ -635,3 +726,13 @@ change was then removed.
 | S1 sonar copy echo range to 0x7fff | width 14 min 15 |
 | Motion fault mask 0x7 | width 4 min 3 |
 | `vehicle_pack.c` state shift 7 → 8 (firmware, removed) | round trip 1 → 2 |
+| IMU best peak, no reason | width 16 min 11 reason 0 |
+| IMU best peak `GAP` | GAP but 0 B can be saved |
+| IMU last peak range to 65534 with `WORD_SLACK` | width 16 min 16 reason 1 |
+| IMU open offset −1 | overlaps |
+| IMU flags base without OPEN | open: bit 121 outside slot |
+| IMU diag speed range ±460 with `WORD_SLACK` | footprint 12 bits, minimum 10 |
+| IMU diag yaw accel range one below the slot | width 19 min 20 |
+| IMU safety clear_ms range to 1024 | width 10 min 11 |
+| IMU safety total +4 B | totals differ |
+| IMU safety flags 7 bits | width 8 min 7 |

@@ -47,6 +47,8 @@ function(host_test name test_file)
 endfunction()
 
 host_test(test_fault_mask tests/test_fault_mask.c)
+# CR1 F pack: snapshot 8 B and STOP capture 12 B round trips and refusals.
+host_test(test_fault_pack tests/test_fault_pack.c)
 host_test(test_telemetry_pack tests/test_telemetry_pack.c)
 host_test(test_telemetry_optional_pack tests/test_telemetry_optional_pack.c)
 
@@ -156,6 +158,8 @@ if(TARGET test_drv_ultrasonic)
 endif()
 
 host_test(test_vehicle_log tests/test_vehicle_log.c app_program/vehicle/vehicle_log.c)
+# CR1 KR1 RAM row: producer round trip, guard and wrap (15-byte storage).
+host_test(test_kr1_row_pack tests/test_kr1_row_pack.c app_program/vehicle/vehicle_log.c)
 if(TARGET test_vehicle_log)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME test_robot_contract COMMAND "${Python3_EXECUTABLE}"
@@ -331,6 +335,10 @@ foreach(test IN ITEMS test_imu_stream test_vehicle_task
         test_vehicle_network_task test_telemetry test_telemetry_log)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
+    if(NOT "${test}" MATCHES "^test_(imu_stream|vehicle_task|vehicle_network_task)$")
+        target_sources(${test} PRIVATE
+            "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+    endif()
     target_link_libraries(${test} PRIVATE m)
 endforeach()
 
@@ -435,8 +443,11 @@ set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
 # CR1 minimum-bit proof: every packed record, and its document tables.
 host_test(test_min_bit_proof tests/test_min_bit_proof.c
     app_program/subsystem2/motion_pack.c app_program/vehicle/vehicle_pack.c
-    app_program/vehicle/vehicle_log.c)
+    app_program/vehicle/vehicle_log.c
+    app_program/subsystem4/imu_hump.c app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_safety_board.c)
 if(TARGET test_min_bit_proof)
+    target_link_libraries(test_min_bit_proof PRIVATE m)
     target_include_directories(test_min_bit_proof BEFORE PRIVATE
         "${REPO}/tests/mtk_stubs")
     add_test(NAME test_min_bit_doc COMMAND python3

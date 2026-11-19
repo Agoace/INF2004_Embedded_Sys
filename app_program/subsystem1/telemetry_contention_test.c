@@ -163,6 +163,11 @@ static void test_storage_full(void)
         /* A few sends, then yield: without the yield the buffer fills and no row is
          * ever stored on a single core. */
         for (unsigned int i = 0u; i < 8u; ++i) {
+            /* KR1 time = accepted count. Rows are stored in FIFO order, so
+             * the stored index is never above it: the 15-byte row guard
+             * accepts every one of these rows. */
+            row.data.row[0] = (uint8_t)sent;
+            row.data.row[1] = (uint8_t)(sent >> 8u);
             if (0 == telemetry_send(&row)) {
                 ++sent;
             }

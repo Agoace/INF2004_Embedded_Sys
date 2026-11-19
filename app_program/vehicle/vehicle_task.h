@@ -16,5 +16,5 @@ uint32_t vehicle_line_run_epoch(void);
 /* Hump result of the last finished run (USB DUMP). E_OK copy, E_NOEXS no
  * run yet, E_TMOUT busy, E_PAR null. Never waits. */
 int vehicle_hump_try_read(imu_hump_summary_t *out);
-int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out);
+int vehicle_hump_diag_try_read(imu_hump_diag_board_t *out);
 #endif

@@ -160,6 +160,13 @@ commit that changed this section (header comments and file lists).
   Vehicle-only STOP capture API and bounded fault snapshot reader. Health
   alone combines owner words and freezes run history; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
   tests the real Health path with fake owners and a fake STOP caller.
+- [IMU A](architecture/CR1_IMU_A.md) records the packed IMU hump, diag and
+  safety boards; [`imu_safety_board.h`](../app_program/subsystem4/imu_safety_board.h)
+  defines the safety board layout.
+- [KR1 row](architecture/CR1_KR1_ROW.md) records the 15 B RAM-log row;
+  [`kr1_row_pack.h`](../app_program/subsystem1/kr1_row_pack.h) packs it.
+  [`fault_pack.h`](../app_program/platform/fault_pack.h) packs the fault
+  snapshot and the STOP capture.
 - [Minimum-bit proof](architecture/CR1_MIN_BIT_PROOF.md) proves each packed
   field width against its valid range. [`test_min_bit_proof.c`](../tests/test_min_bit_proof.c)
   probes the real pack code from [`min_bit_records.inc`](../tests/min_bit_records.inc);

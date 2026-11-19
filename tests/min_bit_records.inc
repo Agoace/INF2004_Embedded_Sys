@@ -315,7 +315,9 @@ static const record_t vehicle_record = {
     vehicle_pack_w, vehicle_unpack_w, vehicle_fields,
     sizeof(vehicle_fields) / sizeof(vehicle_fields[0]), 10, 36, 36, 36, 0, 0};
 
-/* ---- KR1 RAM-log row (vehicle/vehicle_log.h) ------------------------------ */
+/* ---- KR1 RAM-log row (subsystem1/kr1_row_pack.h) -------------------------- */
+/* The stored element is the private 15-byte row. The proof packs row 0:
+ * there the stored time offset equals the time (index-anchored decode). */
 
 typedef struct {
     vr_values_t v;
@@ -326,8 +328,7 @@ static bool kr1_pack_w(uint8_t *out, const void *n)
 {
     vr_row_t row;
     vr_pack(&row, &((const kr1_native_t *)n)->v);
-    memcpy(out, row.bytes, VR_BYTES);
-    return true;
+    return kr1_row_pack(out, row.bytes, 0u);
 }
 static uint32_t kr1_bits(const uint8_t *b, unsigned int off, unsigned int w)
 {
@@ -341,10 +342,13 @@ static int32_t kr1_signed(uint32_t v, unsigned int w)
 {
     return (v >> (w - 1u)) ? (int32_t)v - (int32_t)(1u << w) : (int32_t)v;
 }
-/* Independent decode from the VR_* offsets (as scripts/robot_log_decode.py). */
-static bool kr1_unpack_w(void *n, const uint8_t *in)
+/* Unpack to the unchanged 16-byte row, then an independent decode from the
+ * VR_* offsets (as scripts/robot_log_decode.py). */
+static bool kr1_unpack_w(void *n, const uint8_t *stored)
 {
     kr1_native_t *k = n;
+    uint8_t in[VR_BYTES];
+    kr1_row_unpack(in, stored, 0u);
     k->v.elapsed_ms = kr1_bits(in, VR_TIME, 16u) * 20u;
     k->v.state = (uint8_t)kr1_bits(in, VR_STATE, 2u);
     k->v.module = (uint8_t)kr1_bits(in, VR_MODULE, 3u);
@@ -392,27 +396,30 @@ FIELD_IO(kr1_native_t, k_measured, v->v.measured[i])
 FIELD_IO(kr1_native_t, k_echo, v->v.echo)
 FIELD_IO(kr1_native_t, k_servo, v->v.servo)
 FIELD_IO(kr1_native_t, k_events, v->v.events)
+static const int64_t bad_k_time[] = {8192};
+static const int64_t bad_k_echo[] = {0x4000};
+/* Stored bit = 16-byte row bit - 3 (bits 16..106) or - 5 (bits 109..124). */
 static const field_t kr1_fields[] = {
-    {"time (20 ms ticks)", VR_TIME, 16, 1, U16, .range = "0..65535 (wraps; no run time limit in code)", .set = IO(k_time)},
-    {"state", VR_STATE, 2, 1, RANGE(0, 2), .range = "0..2", .set = IO(k_state)},
-    {"module", VR_MODULE, 3, 1, RANGE(0, 5), .range = "0..5 (5 = scan reverse)", .set = IO(k_module)},
-    {"raw L, C", VR_L, 12, 2, RANGE(0, 4095), .range = "ADC 0..4095", .set = IO(k_raw)},
-    {"position", VR_POS, 8, 1, RANGE(-100, 100), .range = "-100..100", .set = IO(k_position)},
-    {"asked L, R", VR_ASK_L, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_asked)},
-    {"measured L, R", VR_MEAS_L, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_measured)},
-    {"echo", VR_ECHO, 16, 1, RANGE(0, 0x3fff), .reason = R_GAP, .range = "ultrasonic word: distance 9, status 2, streak 3 bits", .set = IO(k_echo)},
-    {"servo", VR_SERVO, 7, 1, RANGE(-36, 36), .range = "-36..36", .set = IO(k_servo)},
-    {"events", VR_EVENTS, 8, 1, .flags = 0xff, .range = "8 defined bits (lost, found, echo, ping, outcome 3, fault)", .set = IO(k_events)},
-    {"flags", VR_FLAGS, 4, 1, RANGE(0, 1), .reason = R_GAP, .range = "bit 0 only (speed clamp)", .set = IO(k_flags)},
+    {"time (20 ms ticks)", 0, 13, 1, RANGE(0, 8191), BAD(bad_k_time), .range = "offset 0..8191 from the row index (index-anchored; 8192+ refused, counted lost)", .set = IO(k_time)},
+    {"state", VR_STATE - 3, 2, 1, RANGE(0, 2), .range = "0..2", .set = IO(k_state)},
+    {"module", VR_MODULE - 3, 3, 1, RANGE(0, 5), .range = "0..5 (5 = scan reverse)", .set = IO(k_module)},
+    {"raw L, C", VR_L - 3, 12, 2, RANGE(0, 4095), .range = "ADC 0..4095", .set = IO(k_raw)},
+    {"position", VR_POS - 3, 8, 1, RANGE(-100, 100), .range = "-100..100", .set = IO(k_position)},
+    {"asked L, R", VR_ASK_L - 3, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_asked)},
+    {"measured L, R", VR_MEAS_L - 3, 10, 2, RANGE(-512, 511), .range = "-512..511 (clamped)", .set = IO(k_measured)},
+    {"echo", VR_ECHO - 3, 14, 1, RANGE(0, 0x3fff), BAD(bad_k_echo), .range = "ultrasonic word: distance 9, status 2, streak 3 bits", .set = IO(k_echo)},
+    {"servo", VR_SERVO - 5, 7, 1, RANGE(-36, 36), .range = "-36..36", .set = IO(k_servo)},
+    {"events", VR_EVENTS - 5, 8, 1, .flags = 0xff, .range = "8 defined bits (lost, found, echo, ping, outcome 3, fault)", .set = IO(k_events)},
+    {"flags", VR_FLAGS - 5, 1, 1, RANGE(0, 1), .range = "bit 0 only (speed clamp)", .set = IO(k_flags)},
 };
 static const record_t kr1_record = {
-    "KR1 RAM-log row", "app_program/vehicle/vehicle_log.h",
-    sizeof(kr1_native_t), VR_BYTES, 128, VR_ROWS, 8, L_ARRAY,
+    "KR1 RAM-log row", "app_program/subsystem1/kr1_row_pack.h",
+    sizeof(kr1_native_t), KR1_ROW_STORED_BYTES, 120, VR_ROWS, 8, L_ARRAY,
     kr1_pack_w, kr1_unpack_w, kr1_fields,
-    sizeof(kr1_fields) / sizeof(kr1_fields[0]), 0, 72016, 72016, 69203,
-    "Slack: echo 2 bits and flags 3 bits. A row stays 16 B (123 bits) "
-    "unless the time also drops 3 bits (120 bits), which needs a decode rule "
-    "that the code does not have.", 0};
+    sizeof(kr1_fields) / sizeof(kr1_fields[0]), 0, 67515, 67515, 67515,
+    "Private RAM storage of the unchanged 16-byte row (vehicle_log.h). "
+    "Readers unpack to 16 B; robot/log, live kr1 and USB text do not "
+    "change. Echo bits 14..15 and flags bits 1..3 are always 0.", 0};
 
 /* ---- barcode frame and edge (subsystem3/barcode_evidence_pack.h) ---------- */
 
@@ -809,7 +816,7 @@ static const record_t health_record = {
     health_pack_w, health_unpack_w, health_fields,
     sizeof(health_fields) / sizeof(health_fields[0]), 23, 104, 104, 104,
     "The Health board also holds a u32 time, the fault snapshot below and a "
-    "u32 phase (132 B with its sequence).", 0};
+    "u32 phase (124 B with its sequence).", 0};
 
 static bool ssc_pack_w(uint8_t *out, const void *n)
 {
@@ -889,78 +896,336 @@ OWNER_RECORD(own_telemetry, "F owner word: Telemetry", FAULT_OWNER_TELEMETRY,
 OWNER_RECORD(own_network, "F owner word: Wi-Fi", FAULT_OWNER_NETWORK,
              "bits 8, 9")
 
-static bool copy16_pack(uint8_t *out, const void *n)
+static bool snapshot_pack_w(uint8_t *out, const void *n)
 {
-    memcpy(out, n, 16u);
+    fault_snapshot_packed_t p;
+    if (!fault_snapshot_pack(&p, n)) {
+        return false;
+    }
+    memcpy(out, &p, sizeof(p));
     return true;
 }
-static bool copy16_unpack(void *n, const uint8_t *in)
+static bool snapshot_unpack_w(void *n, const uint8_t *in)
 {
-    memcpy(n, in, 16u);
+    fault_snapshot_packed_t p;
+    memcpy(&p, in, sizeof(p));
+    fault_snapshot_unpack(n, &p);
     return true;
 }
 FIELD_IO(fault_mask_snapshot_t, fs_now, v->now)
 FIELD_IO(fault_mask_snapshot_t, fs_run, v->run)
 FIELD_IO(fault_mask_snapshot_t, fs_valid, v->valid)
 FIELD_IO(fault_mask_snapshot_t, fs_epoch, v->epoch)
+static const int64_t bad_fault10[] = {0x400};
 static const field_t fault_snapshot_fields[] = {
-    {"now", 0, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_now)},
-    {"run", 32, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_run)},
-    {"valid", 64, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(fs_valid)},
-    {"epoch", 96, 32, 1, U32, .range = "u32 run epoch", .set = IO(fs_epoch)},
+    {"now", 0, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_now)},
+    {"run", 10, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_run)},
+    {"valid", 20, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(fs_valid)},
+    {"epoch", 32, 32, 1, U32, .range = "u32 run epoch", .set = IO(fs_epoch)},
 };
 static const record_t fault_snapshot_record = {
-    "F Health fault snapshot", "app_program/platform/fault_mask.h",
-    sizeof(fault_mask_snapshot_t), 16, 128, 2, 32, L_SEPARATE,
-    copy16_pack, copy16_unpack, fault_snapshot_fields,
-    sizeof(fault_snapshot_fields) / sizeof(fault_snapshot_fields[0]), 0,
-    32, 32, 16,
-    "Two copies: in the Health board and in the Health working views. The "
-    "producer limits the masks (fault_mask_combine); the store does not.", 0};
+    "F Health fault snapshot", "app_program/platform/fault_pack.h",
+    sizeof(fault_mask_snapshot_t), 8, 64, 2, 32, L_SEPARATE,
+    snapshot_pack_w, snapshot_unpack_w, fault_snapshot_fields,
+    sizeof(fault_snapshot_fields) / sizeof(fault_snapshot_fields[0]), 2,
+    16, 16, 16,
+    "Two copies: in the Health board and in the Health working views. "
+    "The API value stays fault_mask_snapshot_t (16 B).", 0};
 
-/* Mirror of the private fault_stop_capture_t (robot_health.c). */
-typedef struct {
-    uint32_t owner[5];
-    uint32_t valid;
-    uint32_t epoch;
-    uint32_t us;
-} stop_capture_t;
-_Static_assert(sizeof(stop_capture_t) == 32u, "STOP capture payload");
-static bool copy32_pack(uint8_t *out, const void *n)
+static bool stop_pack_w(uint8_t *out, const void *n)
 {
-    memcpy(out, n, 32u);
+    fault_stop_packed_t p;
+    if (!fault_stop_pack(&p, n)) {
+        return false;
+    }
+    memcpy(out, &p, sizeof(p));
     return true;
 }
-static bool copy32_unpack(void *n, const uint8_t *in)
+static bool stop_unpack_w(void *n, const uint8_t *in)
 {
-    memcpy(n, in, 32u);
+    fault_stop_packed_t p;
+    memcpy(&p, in, sizeof(p));
+    fault_stop_unpack(n, &p);
     return true;
 }
-FIELD_IO(stop_capture_t, sc_motion, v->owner[0])
-FIELD_IO(stop_capture_t, sc_vehicle, v->owner[1])
-FIELD_IO(stop_capture_t, sc_sonar, v->owner[2])
-FIELD_IO(stop_capture_t, sc_telemetry, v->owner[3])
-FIELD_IO(stop_capture_t, sc_network, v->owner[4])
-FIELD_IO(stop_capture_t, sc_valid, v->valid)
-FIELD_IO(stop_capture_t, sc_epoch, v->epoch)
-FIELD_IO(stop_capture_t, sc_us, v->us)
+FIELD_IO(fault_stop_values_t, sc_motion, v->owner[0])
+FIELD_IO(fault_stop_values_t, sc_vehicle, v->owner[1])
+FIELD_IO(fault_stop_values_t, sc_sonar, v->owner[2])
+FIELD_IO(fault_stop_values_t, sc_telemetry, v->owner[3])
+FIELD_IO(fault_stop_values_t, sc_network, v->owner[4])
+FIELD_IO(fault_stop_values_t, sc_valid, v->valid)
+FIELD_IO(fault_stop_values_t, sc_epoch, v->epoch)
+FIELD_IO(fault_stop_values_t, sc_us, v->us)
+static const int64_t bad_sc_motion[] = {0x10};
+static const int64_t bad_sc_vehicle[] = {FAULT_SONAR_SENSOR};
+static const int64_t bad_sc_sonar[] = {FAULT_SHELL_OTHER};
+static const int64_t bad_sc_telemetry[] = {FAULT_WIFI_LINK_DOWN};
+static const int64_t bad_sc_network[] = {FAULT_LOG_FULL};
 static const field_t stop_fields[] = {
-    {"owner Motion", 0, 32, 1, .flags = FAULT_OWNER_MOTION, .reason = R_GAP, .range = "bits 0..3", .set = IO(sc_motion)},
-    {"owner Vehicle", 32, 32, 1, .flags = FAULT_OWNER_VEHICLE, .reason = R_GAP, .range = "bits 4, 6", .set = IO(sc_vehicle)},
-    {"owner Sonar", 64, 32, 1, .flags = FAULT_OWNER_SONAR, .reason = R_GAP, .range = "bit 5", .set = IO(sc_sonar)},
-    {"owner Telemetry", 96, 32, 1, .flags = FAULT_OWNER_TELEMETRY, .reason = R_GAP, .range = "bit 7", .set = IO(sc_telemetry)},
-    {"owner Wi-Fi", 128, 32, 1, .flags = FAULT_OWNER_NETWORK, .reason = R_GAP, .range = "bits 8, 9", .set = IO(sc_network)},
-    {"valid", 160, 32, 1, .flags = FAULT_MASK_ALL, .reason = R_GAP, .range = "10 fault bits", .set = IO(sc_valid)},
-    {"epoch", 192, 32, 1, U32, .range = "u32 run epoch", .set = IO(sc_epoch)},
-    {"us", 224, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(sc_us)},
+    {"owner Motion", 0, 4, 1, .flags = FAULT_OWNER_MOTION, BAD(bad_sc_motion), .range = "bits 0..3", .set = IO(sc_motion)},
+    {"owner Vehicle", 4, 2, 1, .flags = FAULT_OWNER_VEHICLE, BAD(bad_sc_vehicle), .range = "bits 4, 6", .set = IO(sc_vehicle)},
+    {"owner Sonar", 6, 1, 1, .flags = FAULT_OWNER_SONAR, BAD(bad_sc_sonar), .range = "bit 5", .set = IO(sc_sonar)},
+    {"owner Telemetry", 7, 1, 1, .flags = FAULT_OWNER_TELEMETRY, BAD(bad_sc_telemetry), .range = "bit 7", .set = IO(sc_telemetry)},
+    {"owner Wi-Fi", 8, 2, 1, .flags = FAULT_OWNER_NETWORK, BAD(bad_sc_network), .range = "bits 8, 9", .set = IO(sc_network)},
+    {"valid", 10, 10, 1, .flags = FAULT_MASK_ALL, BAD(bad_fault10), .range = "10 fault bits", .set = IO(sc_valid)},
+    {"epoch", 32, 32, 1, U32, .range = "u32 run epoch", .set = IO(sc_epoch)},
+    {"us", 64, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(sc_us)},
 };
 static const record_t stop_record = {
-    "F STOP capture", "app_program/subsystem1/robot_health.c",
-    sizeof(stop_capture_t), 32, 256, 1, 32, L_SEPARATE,
-    copy32_pack, copy32_unpack, stop_fields,
-    sizeof(stop_fields) / sizeof(stop_fields[0]), 0, 32, 32, 12,
-    "Plain u32 words (36 B board with its sequence). The producer limits "
-    "each owner word (capture_owner_values).", 0};
+    "F STOP capture", "app_program/platform/fault_pack.h",
+    sizeof(fault_stop_values_t), 12, 96, 1, 32, L_SEPARATE,
+    stop_pack_w, stop_unpack_w, stop_fields,
+    sizeof(stop_fields) / sizeof(stop_fields[0]), 12, 12, 12, 12,
+    "16 B board with its sequence. A refused owner word is stored as "
+    "unknown (valid clear) and counted (robot_health_faults_stop_refused).", 0};
+
+/* ---- IMU A boards (subsystem4/imu_hump.h, imu_hump_diag.h,
+ *      imu_safety_board.h) ---------------------------------------------- */
+
+/* Hump board values as a reader decodes them. The adapter builds the
+ * writer's float report, and the real imu_hump_pack() packs it. */
+typedef struct {
+    uint32_t time, epoch, best, last, count, gated, flags;
+    bool open, valid, left;
+} hump_native_t;
+
+/* count: all u16 values; 1 first, so that the base has one event and the
+ * best peak and LEFT are stored (the pack writes 0 for both with no event).
+ * flags: all 32 stored values (W3 28..24 = flags >> 1); OPEN first, so
+ * that the open bit alone is measured (open also sets OPEN). */
+static int64_t hump_count_list[65536];
+static int64_t hump_flag_list[32];
+
+static void build_imu_lists(void)
+{
+    hump_count_list[0] = 1;
+    hump_count_list[1] = 0;
+    for (unsigned int i = 2u; i < 65536u; ++i) {
+        hump_count_list[i] = i;
+    }
+    const int64_t open = IMU_HUMP_FLAG_OPEN >> 1;
+    hump_flag_list[0] = open;
+    for (unsigned int i = 0u, j = 1u; i < 32u; ++i) {
+        if (i != (unsigned int)open) {
+            hump_flag_list[j++] = i;
+        }
+    }
+}
+
+static bool hump_pack_w(uint8_t *out, const void *n)
+{
+    const hump_native_t *h = n;
+    const bool left = ((h->flags << 1) & IMU_HUMP_FLAG_LEFT) != 0u;
+    const imu_hump_output_t o = {
+        .run_epoch = h->epoch,
+        .valid_samples = h->valid ? 1u : 0u,
+        .max_peak_mm = (float)h->best / 10.0f,
+        .last_peak_mm = (float)h->last / 10.0f,
+        .event_peak_mm = (float)h->best / 10.0f,
+        .count = (uint16_t)h->count,
+        .gated_starts = (uint16_t)h->gated,
+        .flags = (uint8_t)((h->flags << 1) & (IMU_HUMP_FLAG_FAULT |
+                 IMU_HUMP_FLAG_OPEN | IMU_HUMP_FLAG_CURVE |
+                 IMU_HUMP_FLAG_LONG)),
+        .state = (uint8_t)(h->open ? IMU_HUMP_ACTIVE : IMU_HUMP_IDLE),
+        .running = h->open,
+        .event_left = left,
+        .max_left = left,
+        .last_left = h->left};
+    imu_hump_board_t b;
+    imu_hump_pack(&b, &o, h->time);
+    memcpy(out, &b, sizeof(b));
+    return true;
+}
+/* The reader accessors, and the header shifts and masks that
+ * imu_hump_board_summarize() uses. */
+static bool hump_unpack_w(void *n, const uint8_t *in)
+{
+    hump_native_t *h = n;
+    imu_hump_board_t b;
+    memcpy(&b, in, sizeof(b));
+    h->time = imu_hump_board_time(&b);
+    h->epoch = imu_hump_board_epoch(&b);
+    h->count = imu_hump_board_count(&b);
+    h->last = imu_hump_board_last_01mm(&b);
+    h->left = imu_hump_board_last_left(&b);
+    h->best = (b.word[2] >> IMU_HUMP_W2_BEST_SHIFT) & IMU_HUMP_U16_MASK;
+    h->gated = (b.word[3] >> IMU_HUMP_W3_GATED_SHIFT) & IMU_HUMP_U8_MASK;
+    h->flags = (b.word[3] >> IMU_HUMP_W3_FLAGS_SHIFT) &
+               IMU_HUMP_W3_FLAGS_MASK;
+    h->open = ((b.word[3] >> IMU_HUMP_W3_OPEN_SHIFT) & 1u) != 0u;
+    h->valid = ((b.word[3] >> IMU_HUMP_W3_VALID_SHIFT) & 1u) != 0u;
+    return true;
+}
+FIELD_IO(hump_native_t, ih_time, v->time)
+FIELD_IO(hump_native_t, ih_epoch, v->epoch)
+FIELD_IO(hump_native_t, ih_best, v->best)
+FIELD_IO(hump_native_t, ih_last, v->last)
+FIELD_IO(hump_native_t, ih_count, v->count)
+FIELD_IO(hump_native_t, ih_gated, v->gated)
+FIELD_IO(hump_native_t, ih_flags, v->flags)
+FIELD_IO(hump_native_t, ih_open, v->open)
+FIELD_IO(hump_native_t, ih_valid, v->valid)
+FIELD_IO(hump_native_t, ih_left, v->left)
+static const field_t hump_fields[] = {
+    {"timestamp_ms", 0, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(ih_time)},
+    {"run_epoch", 32, 32, 1, U32, .range = "u32 (wrapping)", .set = IO(ih_epoch)},
+    {"best peak 0.1 mm", 64, 16, 1, RANGE(0, 1110), .reason = R_WORD_SLACK, .range = "0..1110 (producer: 111 mm x sine)", .set = IO(ih_best)},
+    {"last peak 0.1 mm", 80, 16, 1, RANGE(0, 1110), .reason = R_WORD_SLACK, .range = "0..1110 (producer: 111 mm x sine)", .set = IO(ih_last)},
+    {"closed count", 96, 16, 1, LIST(hump_count_list), .range = "u16 (saturating count)", .set = IO(ih_count)},
+    {"gated starts", 112, 8, 1, RANGE(0, 255), .range = "0..255 (saturates)", .set = IO(ih_gated)},
+    {"flags", 120, 5, 1, LIST(hump_flag_list), .range = "5 independent bits", .set = IO(ih_flags)},
+    {"open", 125, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(ih_open)},
+    {"valid", 126, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(ih_valid)},
+    {"last LEFT", 127, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(ih_left)},
+};
+static const record_t hump_record = {
+    "IMU hump board", "app_program/subsystem4/imu_hump.h",
+    sizeof(hump_native_t), 16, 128, 3, 32, L_SEPARATE,
+    hump_pack_w, hump_unpack_w, hump_fields,
+    sizeof(hump_fields) / sizeof(hump_fields[0]), 0, 48, 48, 48,
+    "Three copies: the IMU value and board, and the Vehicle copy. The peaks "
+    "keep 16 bits: 11 bits (118 bits in all) still need 4 words. The "
+    "height is 111 mm x sine (imu_core.c), so a peak is at most 1110.", 0};
+
+/* Diagnostic board values in print units, and the board time. The adapter
+ * builds the float report (value / scale) and the real imu_hump_diag_pack()
+ * packs it; imu_hump_diag_board_unpack() and the time accessor read it. */
+typedef struct {
+    imu_hump_diag_board_values_t v;
+    uint32_t time;
+} diag_native_t;
+
+static bool diag_pack_w(uint8_t *out, const void *n)
+{
+    const imu_hump_diag_board_values_t *v = &((const diag_native_t *)n)->v;
+    const imu_hump_diag_report_t r = {
+        .peak = {.ms = v->ms,
+                 .travel_mm = (float)v->travel_mm,
+                 .corrected_mm = (float)v->corrected_01mm / 10.0f,
+                 .filtered_mm = (float)v->filtered_01mm / 10.0f,
+                 .speed_mm_s = (float)v->speed_mm_s,
+                 .yaw_rad_s = (float)v->yaw_mrad_s / 1000.0f,
+                 .yaw_accel_rad_s2 = (float)v->yaw_accel_mrad_s2 / 1000.0f,
+                 .lateral_mg = (float)v->lateral_mg,
+                 .window_yaw_rad_s = (float)v->win_yaw_mrad_s / 1000.0f,
+                 .window_yaw_accel_rad_s2 =
+                     (float)v->win_yaw_accel_mrad_s2 / 1000.0f,
+                 .window_lateral_mg = (float)v->win_lateral_mg,
+                 .gate = v->gate,
+                 .window_gate = v->win_gate,
+                 .left = v->left,
+                 .valid = v->peak_valid},
+        .run_epoch = v->run_epoch,
+        .timestamp_ms = ((const diag_native_t *)n)->time,
+        .line_samples = v->line_samples,
+        .line_lateral_mg = (float)v->line_lateral_mg,
+        .line_yaw_accel_rad_s2 = (float)v->line_yaw_accel_mrad_s2 / 1000.0f,
+        .valid = v->valid};
+    imu_hump_diag_board_t b;
+    imu_hump_diag_pack(&b, &r);
+    memcpy(out, &b, sizeof(b));
+    return true;
+}
+static bool diag_unpack_w(void *n, const uint8_t *in)
+{
+    diag_native_t *d = n;
+    imu_hump_diag_board_t b;
+    memcpy(&b, in, sizeof(b));
+    imu_hump_diag_board_unpack(&d->v, &b);
+    d->time = imu_hump_diag_board_time(&b);
+    return true;
+}
+FIELD_IO(diag_native_t, id_epoch, v->v.run_epoch)
+FIELD_IO(diag_native_t, id_time, v->time)
+FIELD_IO(diag_native_t, id_ms, v->v.ms)
+FIELD_IO(diag_native_t, id_corrected, v->v.corrected_01mm)
+FIELD_IO(diag_native_t, id_travel, v->v.travel_mm)
+FIELD_IO(diag_native_t, id_yaw, v->v.yaw_mrad_s)
+FIELD_IO(diag_native_t, id_valid, v->v.valid)
+FIELD_IO(diag_native_t, id_yaw_accel, v->v.yaw_accel_mrad_s2)
+FIELD_IO(diag_native_t, id_lateral, v->v.lateral_mg)
+FIELD_IO(diag_native_t, id_win_yaw_accel, v->v.win_yaw_accel_mrad_s2)
+FIELD_IO(diag_native_t, id_win_yaw, v->v.win_yaw_mrad_s)
+FIELD_IO(diag_native_t, id_line_yaw_accel, v->v.line_yaw_accel_mrad_s2)
+FIELD_IO(diag_native_t, id_win_lateral, v->v.win_lateral_mg)
+FIELD_IO(diag_native_t, id_left, v->v.left)
+FIELD_IO(diag_native_t, id_peak_valid, v->v.peak_valid)
+FIELD_IO(diag_native_t, id_line_samples, v->v.line_samples)
+FIELD_IO(diag_native_t, id_line_lateral, v->v.line_lateral_mg)
+FIELD_IO(diag_native_t, id_filtered, v->v.filtered_01mm)
+FIELD_IO(diag_native_t, id_speed, v->v.speed_mm_s)
+FIELD_IO(diag_native_t, id_gate, v->v.gate)
+FIELD_IO(diag_native_t, id_win_gate, v->v.win_gate)
+static const field_t diag_fields[] = {
+    {"run_epoch", 0, 32, 1, U32, .range = "u32 (wrapping)", .set = IO(id_epoch)},
+    {"timestamp_ms", 32, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(id_time)},
+    {"peak ms", 64, 20, 1, RANGE(0, 0xfffff), .range = "0..2^20-1 (saturates)", .set = IO(id_ms)},
+    {"corrected 0.1 mm", 84, 12, 1, RANGE(-1110, 1110), .range = "-1110..1110 (producer: 111 mm x sine)", .set = IO(id_corrected)},
+    {"travel mm", 96, 16, 1, U16, .range = "u16 (saturates)", .set = IO(id_travel)},
+    {"yaw mrad/s", 112, 15, 1, RANGE(-16384, 16383), .range = "s15 (saturates)", .set = IO(id_yaw)},
+    {"valid", 127, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(id_valid)},
+    {"yaw accel mrad/s2", 128, 19, 1, RANGE(-262144, 262143), .range = "s19 (saturates; approved +-230 rad/s2)", .set = IO(id_yaw_accel)},
+    {"lateral mg", 147, 13, 1, RANGE(-4096, 4095), .range = "s13 (saturates; approved +-600 mg)", .set = IO(id_lateral)},
+    {"window yaw accel", 160, 18, 1, RANGE(0, 0x3ffff), .range = "u18 magnitude (saturates)", .set = IO(id_win_yaw_accel)},
+    {"window yaw", 178, 14, 1, RANGE(0, 0x3fff), .range = "u14 magnitude (saturates)", .set = IO(id_win_yaw)},
+    {"line yaw accel", 192, 18, 1, RANGE(0, 0x3ffff), .range = "u18 magnitude (saturates)", .set = IO(id_line_yaw_accel)},
+    {"window lateral", 210, 12, 1, RANGE(0, 0xfff), .range = "u12 magnitude (saturates)", .set = IO(id_win_lateral)},
+    {"left", 222, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(id_left)},
+    {"peak valid", 223, 1, 1, RANGE(0, 1), .range = "bool", .set = IO(id_peak_valid)},
+    {"line samples", 224, 20, 1, RANGE(0, 0xfffff), .range = "0..2^20-1 (saturates)", .set = IO(id_line_samples)},
+    {"line lateral", 244, 12, 1, RANGE(0, 0xfff), .range = "u12 magnitude (saturates)", .set = IO(id_line_lateral)},
+    {"filtered 0.1 mm", 256, 12, 1, RANGE(-1110, 1110), .range = "-1110..1110 (producer: 111 mm x sine)", .set = IO(id_filtered)},
+    {"speed mm/s", 268, 12, 1, RANGE(-2048, 2047), .range = "s12 (saturates)", .set = IO(id_speed)},
+    {"gate", 280, 4, 1, .flags = 0xf, .range = "4 independent bits", .set = IO(id_gate)},
+    {"window gate", 284, 4, 1, .flags = 0xf, .range = "4 independent bits", .set = IO(id_win_gate)},
+};
+static const record_t diag_record = {
+    "IMU diagnostic board", "app_program/subsystem4/imu_hump_diag.h",
+    sizeof(diag_native_t), 36, 288, 5, 32, L_SEPARATE,
+    diag_pack_w, diag_unpack_w, diag_fields,
+    sizeof(diag_fields) / sizeof(diag_fields[0]), 0, 180, 180, 180,
+    "Five copies: the IMU board and peak cache, and three Vehicle copies. "
+    "USB only. The pack does not refuse a value; it saturates each value "
+    "to its slot (approved by the operator), so n is the slot range. The "
+    "heights are 111 mm x sine (imu_core.c).", 0};
+
+/* Safety board: the real imu_safety_board_pack/unpack on the report. */
+static bool safety_pack_w(uint8_t *out, const void *n)
+{
+    imu_safety_board_t b;
+    imu_safety_board_pack(&b, n);
+    memcpy(out, &b, sizeof(b));
+    return true;
+}
+static bool safety_unpack_w(void *n, const uint8_t *in)
+{
+    imu_safety_board_t b;
+    memcpy(&b, in, sizeof(b));
+    imu_safety_board_unpack(n, &b);
+    return true;
+}
+FIELD_IO(imu_safety_report_t, is_obs, v->value.observation_ms)
+FIELD_IO(imu_safety_report_t, is_request, v->applied_request)
+FIELD_IO(imu_safety_report_t, is_clear, v->value.clear_ms)
+FIELD_IO(imu_safety_report_t, is_latched, v->value.latched_trigger)
+FIELD_IO(imu_safety_report_t, is_flags, v->value.flags)
+FIELD_IO(imu_safety_report_t, is_block, v->value.clear_blockers)
+static const field_t safety_fields[] = {
+    {"observation_ms", 0, 32, 1, U32, .range = "u32 (wrapping time)", .set = IO(is_obs)},
+    {"applied_request", 32, 32, 1, U32, .range = "u32 (wrapping token)", .set = IO(is_request)},
+    {"clear_ms", 64, 10, 1, RANGE(0, IMU_SAFETY_CLEAR_MS), .range = "0..1000 (IMU_SAFETY_CLEAR_MS)", .set = IO(is_clear)},
+    {"latched_trigger", 74, 2, 1, RANGE(0, IMU_SAFETY_IMU_UNAVAILABLE), .range = "0..3", .set = IO(is_latched)},
+    {"flags", 76, 8, 1, .flags = 0xff, .range = "8 independent bits", .set = IO(is_flags)},
+    {"clear_blockers", 84, 4, 1, .flags = 0xf, .range = "4 independent bits", .set = IO(is_block)},
+};
+static const record_t safety_record = {
+    "IMU safety board", "app_program/subsystem4/imu_safety_board.h",
+    sizeof(imu_safety_report_t), 12, 96, 1, 32, L_SEPARATE,
+    safety_pack_w, safety_unpack_w, safety_fields,
+    sizeof(safety_fields) / sizeof(safety_fields[0]), 8, 12, 12, 12,
+    "Option S2: the 7 fields that no board reader uses are not stored "
+    "(CR1_IMU_A.md).", 0};
 
 /* ---- all records ---------------------------------------------------------- */
 
@@ -971,4 +1236,5 @@ static const record_t *const records[] = {
     &scan_record, &info_record, &health_record, &ssc_record,
     &own_vehicle_record, &own_sonar_record, &own_telemetry_record,
     &own_network_record, &fault_snapshot_record, &stop_record,
+    &hump_record, &diag_record, &safety_record,
 };
