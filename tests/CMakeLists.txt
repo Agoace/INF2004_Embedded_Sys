@@ -156,6 +156,8 @@ if(TARGET test_drv_ultrasonic)
 endif()
 
 host_test(test_vehicle_log tests/test_vehicle_log.c app_program/vehicle/vehicle_log.c)
+# CR1 KR1 RAM row: producer round trip, guard and wrap (15-byte storage).
+host_test(test_kr1_row_pack tests/test_kr1_row_pack.c app_program/vehicle/vehicle_log.c)
 if(TARGET test_vehicle_log)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME test_robot_contract COMMAND "${Python3_EXECUTABLE}"
