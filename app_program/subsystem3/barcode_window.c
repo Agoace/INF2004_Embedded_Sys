@@ -496,7 +496,16 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
             (int32_t)(sample.us - state->freeze_us) >= 0;
         if (after_freeze && (state->frozen ||
                              (int32_t)(sample.us - state->thaw_us) < 0)) {
-            return; /* Blip grace: the white run, mean and count wait. */
+            /* Blip grace: the white run, mean and count wait. Ink seen in
+             * the frozen travel still ends the run: no bar is bridged. */
+            if (state->white_started && (float)sample.raw >=
+                fminf(state->white_mean + 150.0f, 350.0f)) {
+                state->white_lost |= BW_WHITE_LOST_BLIP;
+                state->white_started = false;
+                state->white_count = 0u;
+                state->transitioning = false;
+            }
+            return;
         }
         if (after_freeze) {
             state->thaw = false;
