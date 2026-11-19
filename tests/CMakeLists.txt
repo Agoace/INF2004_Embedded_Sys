@@ -431,6 +431,15 @@ host_test(test_app_startup tests/test_app_startup.c
 target_link_libraries(test_app_startup PRIVATE Threads::Threads)
 set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
 
+# CR1 minimum-bit proof: every packed record, and its document tables.
+host_test(test_min_bit_proof tests/test_min_bit_proof.c
+    app_program/subsystem2/motion_pack.c app_program/vehicle/vehicle_pack.c
+    app_program/vehicle/vehicle_log.c)
+if(TARGET test_min_bit_proof)
+    target_include_directories(test_min_bit_proof BEFORE PRIVATE
+        "${REPO}/tests/mtk_stubs")
+endif()
+
 include("${CMAKE_CURRENT_SOURCE_DIR}/review_checks.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/shim_checks.cmake")
 
