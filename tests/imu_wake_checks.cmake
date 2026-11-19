@@ -1,6 +1,10 @@
 # IMU INT1 watermark wake (IMU_INT1_WAKE=1): policy, host SIL, probe
 # registers and the service wake path. The =0 tests above stay unchanged.
 host_test(test_imu_wake tests/test_imu_wake.c)
+# Red safety acceptance (backlog == 0 in dead and missed-edge INT1 cases).
+# Expected FAIL until fix F1; remove WILL_FAIL in the F1 change.
+add_test(NAME test_imu_wake_acceptance COMMAND test_imu_wake acceptance)
+set_tests_properties(test_imu_wake_acceptance PROPERTIES WILL_FAIL TRUE)
 host_test(test_imu_probe_int1 tests/test_imu_probe.c
     app_program/subsystem4/imu_probe.c app_program/subsystem4/imu_decode.c
     app_program/subsystem4/imu_fifo.c)

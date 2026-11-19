@@ -54,6 +54,7 @@ static void test_policy(void)
 typedef struct {
     unsigned int period_us, fth, max_latency_us, kill_at_ms, end_ms;
     bool at_least; /* WTM when count >= FTH (else count > FTH). */
+    unsigned int drop_edge; /* 0 = none; else drop only this rising edge. */
 } sil_t;
 typedef struct {
     unsigned int max_n, backlogs, empties, fallbacks, batches, extra;
@@ -78,6 +79,7 @@ static sil_result_t simulate(const sil_t *s)
     imu_wake_init(&w);
     unsigned int count = 0u;
     bool level = false, pending = false, busy = false, killed = false;
+    unsigned int edges_seen = 0u;
     uint64_t next_sample = 1000u, next_tick = 10000u, start_at = 0u;
     uint64_t last_obs = 0u, last_any = 0u, last_edge = 0u, oldest_unread = 0u;
     const uint64_t end = (uint64_t)s->end_ms * 1000u;
@@ -94,7 +96,10 @@ static sil_result_t simulate(const sil_t *s)
         if (!killed && s->kill_at_ms != 0u && t >= (uint64_t)s->kill_at_ms * 1000u) {
             killed = true;
         }
-        if (high && !level && !killed) {
+        if (high && !level && !killed &&
+            ++edges_seen == s->drop_edge) {
+            /* Image 13 failure mode: ONE rising edge does not reach the ISR. */
+        } else if (high && !level && !killed) {
             if (imu_wake_edge(&w, IMU_WAKE_EDGE_RISE, (uint32_t)t)) { pending = true; }
             last_edge = t;
         } else if (!high && level && !killed) {
@@ -197,14 +202,45 @@ static void report(const char *name, const sil_result_t *r)
     fflush(stdout);
 }
 
-int main(void)
+/* Safety acceptance after the image-13 robot FAIL: ANY backlog reset is a
+ * READ_FAILED observation, and one READ_FAILED latches an IMU_UNAVAILABLE
+ * STOP while a run is active (vehicle/imu_gate.c ig_step). So every INT1
+ * failure case must give backlog == 0. The parked design fails this; the
+ * test is registered WILL_FAIL until fix F1 (docs/s4-imu/IMU_IRQ.md). */
+static int acceptance(void)
 {
+    const unsigned int periods[] = {2557u, 2500u, 2445u};
+    unsigned int failures = 0u;
+
+    for (unsigned int p = 0u; p < 3u; ++p) {
+        for (unsigned int ge = 0u; ge < 2u; ++ge) {
+            sil_t dead = {periods[p], 3u, 6000u, 3000u, 6000u, ge != 0u, 0u};
+            sil_t miss = {periods[p], 3u, 6000u, 0u, 6000u, ge != 0u, 200u};
+            const sil_result_t d = simulate(&dead);
+            const sil_result_t m = simulate(&miss);
+
+            report(ge ? "accept_ge_dead" : "accept_gt_dead", &d);
+            report(ge ? "accept_ge_miss1" : "accept_gt_miss1", &m);
+            failures += d.backlogs != 0u ? 1u : 0u;
+            failures += m.backlogs != 0u ? 1u : 0u;
+        }
+    }
+    printf("imu INT1 safety acceptance: %u of 12 cases with a backlog\n",
+           failures);
+    return failures == 0u ? 0 : 1;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc > 1 && strcmp(argv[1], "acceptance") == 0) {
+        return acceptance();
+    }
     test_policy();
     const unsigned int periods[] = {2557u, 2500u, 2445u}; /* 391/400/409 Hz */
     for (unsigned int p = 0u; p < 3u; ++p) {
         for (unsigned int ge = 0u; ge < 2u; ++ge) {
             /* Normal INT1, FTH 3, both WTM semantics, 0..6 ms latency. */
-            sil_t s = {periods[p], 3u, 6000u, 0u, 6000u, ge != 0u};
+            sil_t s = {periods[p], 3u, 6000u, 0u, 6000u, ge != 0u, 0u};
             sil_result_t r = simulate(&s);
             report(ge ? "fth3_ge" : "fth3_gt", &r); fflush(stdout);
             assert(r.backlogs == 0u && r.fallbacks_before_kill <= 2u);
@@ -214,20 +250,20 @@ int main(void)
                 assert(r.histogram[n] == 0u); /* Never below the watermark. */
             }
             /* Short latency: almost every batch is the watermark count. */
-            sil_t q = {periods[p], 3u, 1000u, 0u, 6000u, ge != 0u};
+            sil_t q = {periods[p], 3u, 1000u, 0u, 6000u, ge != 0u, 0u};
             sil_result_t f = simulate(&q);
             report(ge ? "fth3_ge_fast" : "fth3_gt_fast", &f);
             assert(f.fallbacks == f.fallbacks_before_kill && f.fallbacks <= 2u);
             assert(f.histogram[ge ? 3u : 4u] * 10u >= f.batches * 9u);
-            /* INT1 dies at 3 s: today's polling continues, no freeze. */
-            sil_t k = {periods[p], 3u, 6000u, 3000u, 6000u, ge != 0u};
+            /* INT1 dies at 3 s: polling continues (mechanism; see acceptance). */
+            sil_t k = {periods[p], 3u, 6000u, 3000u, 6000u, ge != 0u, 0u};
             sil_result_t d = simulate(&k);
             report(ge ? "fth3_ge_dead" : "fth3_gt_dead", &d);
             assert(d.backlogs_before_kill == 0u);
             assert(d.first_fallback_after_kill_us > IMU_WAKE_FALLBACK_US &&
                    d.first_fallback_after_kill_us <= IMU_WAKE_FALLBACK_US + 10000u + k.max_latency_us);
-            /* Safety observations (valid or READ_FAILED) stay <= 30 ms
-             * apart; valid data stays below the 50 ms stale rule. */
+            /* Mechanism record only, NOT a safety pass: one backlog is one
+             * READ_FAILED, which latches a STOP in a run (see acceptance). */
             assert(d.backlogs <= 1u && d.max_any_gap_us <= 30000u);
             assert(d.max_gap_us < 50000u);
             assert(d.fallbacks >= 250u); /* ~3 s of 10 ms fallback polls. */
@@ -235,7 +271,7 @@ int main(void)
     }
     /* Why not FTH 4: with ">" it would give n=5 (~12.8 ms): false
      * fallbacks every few cycles. FTH 3 never reaches the 12 ms rule. */
-    sil_t bad = {2557u, 4u, 0u, 0u, 5000u, false};
+    sil_t bad = {2557u, 4u, 0u, 0u, 5000u, false, 0u};
     sil_result_t b = simulate(&bad);
     report("fth4_gt", &b);
     assert(b.fallbacks > 100u);

@@ -1,15 +1,36 @@
 # IMU INT1 watermark wake
 
-Status: host-verified on branch `mtk3-imu-irq`. Robot checks R1, R2, R4, R5 and R6 are open. R3 is host SIL only (operator decision).
+Status: **PARKED. Robot FAIL on image 13:** one missed edge → FIFO backlog → READ_FAILED → gate STOP. The build default is now `IMU_INT1_WAKE=0`. Fix F1 and the idle TEST-build bench check wait for the operator's decision.
+
+## Robot FAIL on image 13
+
+| Item | Value |
+|---|---|
+| Image | 13: staging + IMU A + F pack + KR1 row + this change, FTH=3, `IMU_INT1_WAKE=1` |
+| Boot | `c07b3039`; about 11 s after a flat boot, robot at start |
+| Event | robot/event kind 10 IMU safety STOP, trigger 3 = IMU_UNAVAILABLE, cause 5 = READ_FAILED; motion ESTOP latched |
+| Image 11 (no INT1) | No such stop |
+
+Mechanism (analysis; the hardware reason for the missed edge is not yet measured):
+
+1. After the first INT1 edge, the task waits for edges. If one rising edge does not come, the fallback waits 12 ms plus up to 10 ms to the next cyclic tick plus task latency.
+2. At about 400 Hz, this gives 9 or more samples, which is more than `IMU_FIFO_MAX_BATCH` 8. `collect_fifo` (`imu_probe.c`) resets the FIFO, and the read is not valid.
+3. `safety_tick` publishes `read_failed`. The gate (`vehicle/imu_gate.c` `ig_step`) latches IMU_UNAVAILABLE when `active` is true.
+
+The earlier claim "at most one READ_FAILED" was wrong as a safety claim: ONE READ_FAILED is a STOP in a run. The SIL below did not include the safety and gate code, and its INT1 model had no single missed edge and no stuck-HIGH level.
+
+New acceptance: `test_imu_wake_acceptance` requires backlog == 0 in the dead-INT1 and single-missed-edge cases (391/400/409 Hz, ">" and ">="). The parked design fails 6 of 12 cases. The test is registered `WILL_FAIL` until F1.
+
+Fix options: F0 (done) default 0. F1 (proposed): the cyclic wakes the task if GP7 is HIGH, or if the last FIFO read is more than 8 ms old. F2 (drain backlogs) and F3 (gate tolerance) are not recommended.
 
 ## Summary
 
 | Item | Value |
 |---|---|
 | Build switch | `IMU_INT1_WAKE` (0 or 1) in `build_make/pico_rp2040.mk` |
-| Default | 1 when `SMP=0 BENCH=0 BENCH_KERNEL=0 IMU_SAFETY_BENCH=0`; else 0 |
+| Default | 0 (parked). 1 is allowed only with `SMP=0 BENCH=0 BENCH_KERNEL=0 IMU_SAFETY_BENCH=0` |
 | Invalid request | `IMU_INT1_WAKE=1` with an ineligible profile stops the build |
-| Off image | `IMU_INT1_WAKE=0` adds `_noint1` to the name and no flag, object or list |
+| Off image | `IMU_INT1_WAKE=0` adds no flag, object, list or name part. `=1` adds `_int1` to the name. |
 | Pin | GP7 = LSM303 accel INT1 |
 | Registers | CTRL_REG3_A 0x22 = `0x04` (I1_WTM). FIFO_CTRL_REG_A 0x2E = `0x83` (stream, FTH=3). `recover_fifo` writes `0x83` again. |
 | Interrupt | Existing core-0 GPIO dispatcher (`app_program/platform/drv_gpio_irq.c`). No SDK callback. No template deviation (check stays at 8). |
@@ -47,7 +68,7 @@ FTH=3 is the default. The datasheet says the WTM flag is set when the FIFO conte
 
 FTH=3 stays below the 12 ms fallback limit in both cases. The R1 histogram (`[S4_INT1] ... n0..8`) shows which meaning the hardware uses. If n=4 is the mode, then "count > FTH" is true and FTH=3 stays. If n=3 is the mode, then FTH=4 is also safe; build with `IMU_WAKE_FTH=4` only after a change review.
 
-## Host evidence (SIL, no hardware)
+## Host evidence (SIL, no hardware; NOT a safety pass)
 
 Source: `tests/test_imu_wake.c`. The SIL models the FIFO, the INT1 level, the edge interrupt, the 10 ms cyclic handler, task latency of 0–6 ms, a 1.3 ms read, and the probe rules (read n≤8; n>8 = backlog reset). Each run is 6 s. The table shows the 391 Hz rows.
 
@@ -63,7 +84,7 @@ Source: `tests/test_imu_wake.c`. The SIL models the FIFO, the INT1 level, the ed
 The assertions pass at 391, 400 and 409 Hz:
 
 - With live INT1: no backlog, n≤8, valid gap ≤20 ms, data age <30 ms, ≤2 fallbacks per run.
-- With INT1 dead (R3): the first fallback comes 12–28 ms after the last edge. There is at most 1 backlog reset (1 READ_FAILED observation). The observation gap is ≤30 ms (the clear-gap rule) and the valid gap is <50 ms (the stale rule). After that, 10 ms polling continues.
+- With INT1 dead (R3): the first fallback comes 12–28 ms after the last edge. There is at most 1 backlog reset (1 READ_FAILED observation). The observation gap is ≤30 ms (the clear-gap rule) and the valid gap is <50 ms (the stale rule). After that, 10 ms polling continues. **This is NOT a safety pass:** the one READ_FAILED latches a STOP in a run (image 13).
 
 Other tests:
 
@@ -82,8 +103,8 @@ All builds use public example secrets.
 
 | Gate | Result |
 |---|---|
-| GCC host suite | 704/704 |
-| Clang ASan/UBSan host suite | 704/704 |
+| GCC host suite | 705/705 (includes `test_imu_wake_acceptance`, expected FAIL: 6 of 12 cases) |
+| Clang ASan/UBSan host suite | 705/705 |
 | Branch merged with SW11 `f47e3c0` (temporary worktree) | `git merge-tree` clean; 708/708; demo 0 warnings; RAM_PROOF 80/80 |
 | Demo, `IMU_INT1_WAKE=1` | 0 warnings; RAM_PROOF PASS 80/80, 21292 B (staging: 79/79, 21212 B) |
 | `IMU_STREAM=1` TEST build | 0 warnings; `int1_irq` linked |
@@ -95,11 +116,11 @@ Demo command (in `build_make/`): `make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_R
 
 | Image | Staging `290439c` UF2 | This branch UF2 |
 |---|---|---|
-| Demo, `IMU_INT1_WAKE=0` | `83f9192a…b348337e` | `83f9192a…b348337e` (identical) |
+| Demo, default (`IMU_INT1_WAKE=0`) | `83f9192a…b348337e` | `83f9192a…b348337e` (identical; same file name; RAM_PROOF 79/79, 21212 B) |
 | SMP=1 default (forced 0) | `398d88c5…2e0f6e38` | `398d88c5…2e0f6e38` (identical) |
 | BENCH=1 (forced 0) | `b7df88d3…e201d487` | `b7df88d3…e201d487` (identical) |
 
-For the demo `=0` build, all 225 objects are byte-identical to staging after `--strip-debug`. The ELF files differ only in debug line data.
+For the demo default build, all 225 objects are byte-identical to staging after `--strip-debug`. The ELF files differ only in debug line data.
 
 ### Size (demo, `IMU_INT1_WAKE=1` against staging)
 

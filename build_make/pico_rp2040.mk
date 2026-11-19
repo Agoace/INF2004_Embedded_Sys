@@ -376,12 +376,12 @@ ifneq ($(IMU_SAFETY_BENCH),0)
 include imu_safety_bench.mk
 endif
 
-# IMU INT1 watermark wake (docs/s4-imu/IMU_IRQ.md). Default 1 only where
-# the IMU task and the GPIO interrupt are both on core 0 (SMP=0) in the
-# real-IMU robot/TEST app; forced 0 elsewhere. 0 adds no flag, object, list
-# or name part, so IMU_INT1_WAKE=0 gives the image from before this option.
+# IMU INT1 watermark wake (docs/s4-imu/IMU_IRQ.md). PARKED after the robot
+# FAIL on image 13: default 0. 0 adds no flag, object, list or name part, so
+# the default image is the image from before this option. 1 is allowed only
+# where the IMU task and the GPIO interrupt are both on core 0.
 IMU_INT1_ELIGIBLE := $(if $(filter 0:0:0:0,$(SMP):$(BENCH):$(BENCH_KERNEL):$(IMU_SAFETY_BENCH)),1,0)
-IMU_INT1_WAKE ?= $(IMU_INT1_ELIGIBLE)
+IMU_INT1_WAKE ?= 0
 ifneq ($(words $(IMU_INT1_WAKE)),1)
 $(error IMU_INT1_WAKE must be one value: 0 or 1)
 endif
@@ -391,8 +391,8 @@ endif
 ifeq ($(IMU_INT1_WAKE)$(IMU_INT1_ELIGIBLE),10)
 $(error IMU_INT1_WAKE=1 requires SMP=0 BENCH=0 BENCH_KERNEL=0 IMU_SAFETY_BENCH=0)
 endif
-ifeq ($(IMU_INT1_WAKE)$(IMU_INT1_ELIGIBLE),01)
-IMU_INT1_SUFFIX := _noint1
+ifeq ($(IMU_INT1_WAKE),1)
+IMU_INT1_SUFFIX := _int1
 endif
 
 # Opt-in ROBOT IMU safety latch capture. OFF adds no flag, object or name.
