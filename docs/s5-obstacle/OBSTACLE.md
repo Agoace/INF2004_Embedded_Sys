@@ -243,6 +243,76 @@ stops waiting, clears the sweep counts and asks again. Host test:
 `test_lost_result` in `tests/test_detour_sweep.c` (fails without the fix
 with the LAST result). Robot result: not run.
 
+#### Minimum turn before LOST
+
+Operator approved (fix B, 2026-11-19), branch `mtk3-detour-minturn`.
+
+Problem (boot `e7b34e07`, image 15, FAILED `TOO_NEAR`). The obstacle had a
+wide flat face. The two sweep pings before the wheels moved saw that face
+(278 mm, 278 mm), so `seen_once` was set at turn 0. After about 3° the
+face sent the echo away from the sensor: two NO_RETURN readings. This gave
+sweep LOST at about 5°, the trim turned back to 0°, and the first STRAIGHT
+drove into the face. The scan had found free space on that side only at
+30°.
+
+Rule. At the first detour step, the DETOUR module computes:
+
+    away_min_deg = free_step(chosen side) x OBSTACLE_SCAN_STEP_DEG (5°)
+
+The free step comes from the PROFILE word of the scan that started the
+detour (0..6, so 0..30°). Then:
+
+| Case | Result |
+| --- | --- |
+| Free step 0..6 | Minimum 0..30° |
+| Side NONE, or the chosen side is blocked (step 7) | 0 (old rule) |
+| PROFILE distance is not the start payload distance (not the scan of this detour) | 0 (old rule) |
+| No scan word connected (`dr_set_scan_word` not called) | 0 (old rule) |
+| Above `away_max_deg` | Clamped to `away_max_deg` (90°) |
+
+In TURN_AWAY, an unseen reading whose trigger turn is below
+`away_min_deg` does not count toward sweep LOST. In stepped looks
+(`sweep_deg_s` 0) it does not end the turn; the next look comes after one
+more `turn_step_deg`. Seen readings, `seen_once`, `note_edge`, the seen
+streak reset, `away_max_deg`, `toward_max_deg`, TURN_LIMIT and TURN_TOWARD
+do not change. The minimum acts only on the decision to accept the edge.
+
+Interface. `dt_set_away_min()` (`obstacle_detour.c/.h`), `dr_set_scan_word()`
+and `dr_away_min_deg()` (`detour_run.c/.h`). `vehicle_task.c` connects the
+SCAN module's PROFILE word (`ss.word`, the same Vehicle task) to DETOUR with
+one call after `dr_init()`. The scan payload, the shell outcomes, the MQTT
+messages and the settings do not change.
+
+Host tests (`tests/test_detour_sweep.c` `test_away_min`,
+`tests/test_obstacle_modules.c` `test_away_min_payload`). The replays use
+the robot/state wheel counts and the robot/sonar results of each run:
+
+| Case | Old rule | Minimum |
+| --- | --- | --- |
+| `e7b34e07` (left free step 6: 30°) | LOST at 5°, trim to 0 (the robot result) | No LOST below 30°; LOST at 33°, trim to 0, then STRAIGHT |
+| `c2c31955` (right free step 4: 20°) | LOST at 48° | Same step trace (hash equal) |
+| Seen only from the start pose, minimum 30° | LOST at 4° | LOST at 34° (the first unseen readings past 30°); not TURN_LIMIT |
+| Never seen | TURN_LIMIT at 90° | Same trace |
+| FC_1-like and FC_2-like scenes, minimum 5° | — | Traces identical to the old rule |
+
+Not worse than today for the start-pose-only case. It now turns to the
+scan's free angle and then goes on as before. It does not reach TURN_LIMIT
+when the readings past the minimum are unseen. If the obstacle is still
+seen past the minimum, the sweep goes on until it is not seen (as today
+for an obstacle seen in the turn).
+
+Limits. The trim still uses the last seen echo. In the `e7b34e07` replay
+that echo is the face at turn 1°, so the trim target is again 0° after a
+33° turn. A straight at 0° from the scan point is the same path that hit
+the face. The minimum alone does not prevent this when the trim goes to 0.
+A replay check (not a committed test) shows the trim depends on the
+last seen echo. When the face is still seen to 15°, 30° or 45° of turn,
+the trim ends at 10°, 25° or 40°. When nothing is seen past 1°, the trim
+ends at 0°.
+That trim interaction is not part of fix B and was not changed; it needs a
+robot run, or a decision about the trim (for example, no trim when the
+edge was seen below the minimum). Robot result: not run.
+
 [Robot configuration](../../app_program/vehicle/vehicle_robot_config.h) is
 the settings source. SCAN reattempt did not tune DETOUR or the profile rule.
 
