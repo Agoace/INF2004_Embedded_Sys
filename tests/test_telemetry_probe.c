@@ -44,6 +44,7 @@ int main(void)
     assert(telemetry_log_row(index.generation, 0u, row) == E_OK);
     assert(row[0] == 0x12u);
     for (unsigned int i = 2u; i <= TELEMETRY_ROWS; ++i) {
+        row_time(&message, i); /* valid KR1 time for row i */
         assert(telemetry_send(&message) == E_OK); pump();
     }
     /* Older queued excess rows cannot acknowledge an unprocessed probe. */
@@ -68,9 +69,20 @@ int main(void)
     assert(telemetry_test_probe_send(4u) == E_OK);
     pump();
     expect_result(4u, false); /* BEGIN/reset: do not claim a drop */
+    /* CR1 KR1 RAM row: a probe whose time is 8192+ ticks after its index is
+     * refused by the 15-byte guard. It reports discarded (not stored), and the
+     * log is not full. */
     telemetry_stats_t state;
     telemetry_stats(&state);
-    assert(state.rows == 1u && !state.storage_full);
+    const uint32_t lost_before = state.lost;
+    assert(telemetry_test_probe_send(0x9000u) == E_OK);
+    pump();
+    expect_result(0x9000u, true);
+    assert(telemetry_test_probe_send(5u) == E_OK);
+    pump();
+    expect_result(5u, false);
+    telemetry_stats(&state);
+    assert(state.rows == 2u && !state.storage_full && state.lost == lost_before + 1u);
     assert(sizeof(telemetry_message_t) == 116u);
     assert(sizeof(telemetry_info_t) == 108u);
     assert(!test_smp_irq_mask && test_smp_saves == test_smp_restores);

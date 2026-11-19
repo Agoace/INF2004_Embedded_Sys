@@ -26,6 +26,7 @@
 #include "../app_program/subsystem2/motion_pack.h"
 #include "../app_program/vehicle/vehicle_pack.h"
 #include "../app_program/vehicle/vehicle_log.h"
+#include "../app_program/subsystem1/kr1_row_pack.h"
 #include "../app_program/vehicle/obstacle_pack.h"
 #include "../app_program/subsystem5/sonar_pack.h"
 #include "../app_program/subsystem3/barcode_evidence_pack.h"

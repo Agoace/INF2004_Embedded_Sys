@@ -10,6 +10,7 @@
 #include "telemetry.h"
 #include "../platform/fault_mask.h" /* Also prove kernel-safe inclusion here. */
 #include "telemetry_pack.h"
+#include "kr1_row_pack.h"
 /* Health is absent in some isolated TEST/BENCH images. Unknown is pending. */
 extern int robot_health_faults_try_read(fault_mask_snapshot_t *, uint32_t *)
     __attribute__((weak));
@@ -62,7 +63,11 @@ static void publish_stats(void)
         FAULT_LOG_FULL:0u;
     (void)fault_mask_publish(&log_fault_board,FAULT_OWNER_TELEMETRY,faults);
 }
-static uint8_t rows[TELEMETRY_ROWS][TELEMETRY_BYTES];
+/* CR1 KR1 RAM row: 15-byte private storage (kr1_row_pack.h). Readers get
+ * the unchanged 16-byte row; robot/log, live kr1 and USB text do not change. */
+static uint8_t rows[TELEMETRY_ROWS][KR1_ROW_STORED_BYTES];
+_Static_assert(sizeof(rows) == 67515u, "KR1 15-byte row allocation");
+_Static_assert(KR1_ROW_BYTES == TELEMETRY_BYTES, "KR1 public row size");
 static telemetry_event_packed_t events[TELEMETRY_EVENTS];
 _Static_assert(sizeof(events) == 4608u, "Packed RAM event allocation");
 static telemetry_info_packed_t stored_info;
@@ -212,9 +217,7 @@ int telemetry_log_row(uint32_t generation, uint32_t index,
         (void)ISpinUnlock(&stats_lock, intsts);
         return E_PAR;
     }
-    for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
-        out[i] = rows[index][i];
-    }
+    kr1_row_unpack(out, rows[index], index);
     (void)ISpinUnlock(&stats_lock, intsts);
     return E_OK;
 }
@@ -412,9 +415,11 @@ static void dump(void)
     dump_pause(); /* let the report lines drain first */
     rt_timeline_report(dump_pause);
     for (uint32_t i = 0u; i < st.rows; ++i) {
+        uint8_t row[TELEMETRY_BYTES];
+        kr1_row_unpack(row, rows[i], i);
         tm_printf((UB *)"KR %lu ", (unsigned long)i);
         for (unsigned int b = 0u; b < TELEMETRY_BYTES; ++b) {
-            tm_printf((UB *)"%02x", (unsigned int)rows[i][b]);
+            tm_printf((UB *)"%02x", (unsigned int)row[b]);
         }
         tm_printf((UB *)"\n");
         if ((i + 1u) % 8u == 0u) {
@@ -486,13 +491,17 @@ static void telemetry_task(INT code, void *ctx)
         {
             (void)ISpinLock(&stats_lock, &intsts);
             const bool row_full = stats.rows == TELEMETRY_ROWS;
+            bool stored = false;
             if (row_full) {
                 (void)atomic_xchg(&admit_full, 1u);
                 lose_locked();
+            } else if (!kr1_row_pack(rows[stats.rows], m.data.row, stats.rows)) {
+                /* KR1 guard: time 8192+ ticks after the index, or a zero-only
+                 * bit set. Count a lost row; never store a wrong row. The log
+                 * is not full. */
+                lose_locked();
             } else {
-                for (unsigned int i = 0u; i < TELEMETRY_BYTES; ++i) {
-                    rows[stats.rows][i] = m.data.row[i];
-                }
+                stored = true;
                 ++stats.rows;
 #if TM_MQTT
                 newest_row_ms = drv_time_ms();
@@ -503,10 +512,12 @@ static void telemetry_task(INT code, void *ctx)
 #endif
             publish_stats();
             (void)ISpinUnlock(&stats_lock, intsts);
+            (void)stored; /* read only by the APP_TEST probe below */
 #if APP_TEST
             if (m.kind == TELEMETRY_TEST_ROW) {
+                /* Discarded means "not stored": full log or KR1 guard. */
                 __atomic_store_n(&probe_dropped,
-                    row_full ? m.data.event.ms : 0u, __ATOMIC_SEQ_CST);
+                    stored ? 0u : m.data.event.ms, __ATOMIC_SEQ_CST);
                 __atomic_store_n(&probe_done, m.data.event.ms,
                                  __ATOMIC_SEQ_CST);
             }
