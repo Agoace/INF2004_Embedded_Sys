@@ -239,6 +239,8 @@ typedef struct {
     bool trimming;               /* TURN_TOWARD: trim before the first STRAIGHT */
     int trim_deg;                /* trim angle, degrees */
     uint8_t away_min_deg;        /* TURN_AWAY: no LOST below this turn; 0: off */
+    bool turn_on;                /* trim turns away (toward S): scan free-ray corner */
+    uint16_t scan_mm;            /* dt_init obstacle_mm: scan closest distance */
 } dt_t;
 
 /* Start a detour at the STOP point. side and obstacle_mm come from the
@@ -247,6 +249,15 @@ typedef struct {
 void dt_init(dt_t *dt, const dt_config_t *cfg, obstacle_side_t side, uint16_t obstacle_mm,
              int32_t left, int32_t right, uint32_t now_ms);
 
+/* Scan free-ray corner (with a minimum turn): when TURN_AWAY ends and the
+ * last seen echo was triggered below away_min_deg, that echo is not the
+ * corner. The corner is put on the scan's free ray instead: axle frame at
+ * the detour start (BACK included), x = wall_mm, y = scan_mm x
+ * tan(away_min_deg). The trim rule (first_clear_mm) then gives the
+ * smallest heading in 0..away_max_deg that clears it (away_max_deg when
+ * none): turn on to it (turn_on, toward S) when it is above the heading,
+ * trim down when below. Without a minimum, or with the echo at or past
+ * it, the trim is unchanged. */
 /* Minimum turn before LOST. Call after dt_init(). TURN_AWAY does not
  * accept the edge (sweep LOST, or a stepped unseen look after seen_once)
  * for a reading triggered at a turn below deg degrees. Such an unseen

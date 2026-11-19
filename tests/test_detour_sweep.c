@@ -213,6 +213,14 @@ typedef struct {
     int line_heading;            /* heading when ON_LINE began */
     int on_line_from;            /* step before ON_LINE */
     uint8_t away_min;            /* dt_set_away_min(); 0: old rule */
+    uint8_t away_seen;           /* !0: TURN_AWAY sees only its first n pings
+                                  * (e7b34e07: the face drops out); 0: off */
+    uint8_t away_pings;          /* TURN_AWAY pings so far */
+    bool away_now;               /* the ping now is in TURN_AWAY */
+    uint8_t fail;                /* dt_fail at the end */
+    double first_heading;        /* robot heading at the first STRAIGHT */
+    double first_clear;          /* body (half width 80) to corner (bx0, by1) there */
+    bool first_seen;             /* first STRAIGHT reached */
 } scene_t;
 
 /* sin and cos of degrees, no libm: reduce, then a Taylor series. */
@@ -245,6 +253,9 @@ static uint16_t scene_echo(const scene_t *s, int servo_deg) {
     for (double r = 20.0; r < 1000.0; r += 2.0) {
         const double px = ox + r * cos_d(a), py = oy + r * sin_d(a);
         if (px >= s->bx0 && px <= s->bx1 && py >= s->by0 && py <= s->by1) {
+            if (s->away_seen != 0u && s->away_now && s->away_pings > s->away_seen) {
+                return 0xFFFFu;
+            }
             return (uint16_t)r;
         }
     }
@@ -292,8 +303,18 @@ static dt_step_t scene_run(scene_t *s, const dt_config_t *cfg) {
         hash_add(s, (uint32_t)dt.step | (uint32_t)w << 8 |
                         (uint32_t)(uint16_t)dt.heading << 24);
         hash_add(s, (uint32_t)dt.returning);
+        if (dt.step == DT_STRAIGHT && dt.straights == 0u && !s->first_seen) {
+            const double ex = s->bx0 - s->x, ey = s->by1 - s->y;
+            s->first_seen = true;
+            s->first_heading = s->th;
+            s->first_clear = ex * sin_d(s->th) - ey * cos_d(s->th) - 80.0;
+        }
         if (!s->echo_due && dt_wants_reading(&dt, s->t)) {
             dt_triggered(&dt);
+            s->away_now = dt.step == DT_TURN_AWAY;
+            if (s->away_now && s->away_pings < 255u) {
+                ++s->away_pings;
+            }
             s->echo = s->blind && dt.straights >= 1u
                           ? 0xFFFFu
                           : scene_echo(s, dt_servo_deg(w));
@@ -317,6 +338,7 @@ static dt_step_t scene_run(scene_t *s, const dt_config_t *cfg) {
         s->x += (dl + dr) / 2.0 / cpm * cos_d(s->th);
         s->y += (dl + dr) / 2.0 / cpm * sin_d(s->th);
     }
+    s->fail = dt.fail;
     return dt_step(&dt);
 }
 
@@ -594,27 +616,37 @@ typedef struct {
     uint8_t step_after;      /* step after TURN_AWAY */
     bool trimming;           /* TURN_TOWARD after TURN_AWAY is the trim */
     bool lost_at_start;      /* LOST accepted with the turn below 10 degrees */
+    bool turn_on;            /* the step after TURN_AWAY turns away (S2) */
+    int straight_heading;    /* heading of the first STRAIGHT; -999: none */
+    uint8_t fail;            /* dt_fail at the end */
 } replay_t;
 
 static int32_t lerp(int32_t a, int32_t b, uint32_t t, uint32_t t0, uint32_t t1) {
     return a + (int32_t)((int64_t)(b - a) * (int64_t)(t - t0) / (int64_t)(t1 - t0));
 }
 
-static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
-                       const count_sample_t *cs, unsigned int nc,
-                       const ping_sample_t *ps, unsigned int np,
-                       int32_t turn_rate, ultrasonic_result_t far_echo,
-                       uint32_t end_ms) {
-    const dt_config_t *rc = &DETOUR_CFG.dt;
+/* After the last count sample the counts follow the command word of the
+ * last update (robot frame): a turn (sweep, trim, turn-on) turns
+ * sweep_rate counts per 10 ms, a back-off 32 counts (131 mm/s), a straight
+ * 16 counts per wheel (131 mm/s). Readings after the log are seen (250 mm)
+ * while the TURN_AWAY trigger turn is below seen_to_deg, else far_echo. The
+ * replay stops 200 ms into the first STRAIGHT, or at end_ms. */
+static replay_t replay_to(obstacle_side_t side, uint16_t mm, unsigned int away_min,
+                          const dt_config_t *rc,
+                          const count_sample_t *cs, unsigned int nc,
+                          const ping_sample_t *ps, unsigned int np,
+                          int32_t sweep_rate, ultrasonic_result_t far_echo,
+                          int seen_to_deg, uint32_t end_ms) {
     dt_t dt;
-    replay_t out = {2166136261u, 0, 0, 0u, 0u, false, false};
+    replay_t out = {2166136261u, 0, 0, 0u, 0u, false, false, false, -999, 0u};
     int32_t l = cs[0].l, r = cs[0].r;
     dt_init(&dt, rc, side, mm, l, r, 0u);
     dt_set_away_min(&dt, away_min);
     unsigned int next = 0u;
-    int32_t extra = 0;
     int last_trig = 0;
     bool in_away = true;
+    dt_word_t w = 0u;
+    uint32_t straight_at = 0u;
     for (uint32_t t = 10u; t <= end_ms && dt_step(&dt) < DT_DONE; t += 10u) {
         if (t <= cs[nc - 1u].t) {
             unsigned int i = 0u;
@@ -623,19 +655,30 @@ static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
                 l = lerp(cs[i].l, cs[i + 1u].l, t, cs[i].t, cs[i + 1u].t);
                 r = lerp(cs[i].r, cs[i + 1u].r, t, cs[i].t, cs[i + 1u].t);
             }
-        } else if (dt_step(&dt) == DT_TURN_AWAY && dt.sweep_end == DT_SWEEP_NONE) {
-            extra += turn_rate; /* S frame: + toward S */
-            l = cs[nc - 1u].l - dt.side * (extra - extra / 2);
-            r = cs[nc - 1u].r + dt.side * (extra / 2);
+        } else if (dt_move(w) == DT_MOVE_TURN) {
+            /* As detour_run.c: every turn but a back-off is at sweep speed. */
+            const bool sweep = dt.step == DT_TURN_AWAY ||
+                               (dt.step == DT_TURN_TOWARD && !dt.backing);
+            const int32_t d = sweep ? sweep_rate : 32;
+            l -= dt_dir(w) * (d - d / 2);
+            r += dt_dir(w) * (d / 2);
+        } else if (dt_move(w) == DT_MOVE_STRAIGHT) {
+            l += dt_dir(w) * 16;
+            r += dt_dir(w) * 16;
         }
-        const dt_word_t w = dt_update(&dt, false, l, r, t);
+        w = dt_update(&dt, false, l, r, t);
         if (dt_wants_reading(&dt, t)) {
             const bool replayed = next < np && t >= ps[next].t;
             const bool beyond = next >= np && t > cs[nc - 1u].t;
             if (replayed || beyond) {
                 dt_triggered(&dt);
                 last_trig = dt.trig_turn_x100;
-                dt_reading(&dt, replayed ? ps[next].echo : far_echo, t);
+                ultrasonic_result_t e = far_echo;
+                if (!replayed && dt.step == DT_TURN_AWAY &&
+                    dt.trig_turn_x100 < seen_to_deg * (int)rc->counts_per_deg_x100) {
+                    e = (ultrasonic_result_t)250u;
+                }
+                dt_reading(&dt, replayed ? ps[next].echo : e, t);
                 if (replayed) ++next;
             }
         }
@@ -647,9 +690,14 @@ static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
             out.first_end_heading = dt.heading;
             out.first_end = dt.sweep_last_end;
             out.step_after = dt.step;
-            out.trimming = dt.trimming;
+            out.trimming = dt.trimming && !dt.turn_on;
+            out.turn_on = dt.trimming && dt.turn_on;
             out.lost_at_start = dt.sweep_last_end == DT_SWEEP_LOST &&
                                 out.lost_trig_x100 < 10 * (int)rc->counts_per_deg_x100;
+        }
+        if (dt_step(&dt) == DT_STRAIGHT && out.straight_heading == -999) {
+            out.straight_heading = dt.heading;
+            straight_at = t;
         }
         const uint32_t v[2] = {(uint32_t)dt.step | (uint32_t)w << 8 |
                                    (uint32_t)(uint16_t)dt.heading << 24,
@@ -659,8 +707,27 @@ static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
                 out.hash ^= (v[k] >> (8 * b)) & 0xFFu;
                 out.hash *= 16777619u;
             }
+        if (straight_at != 0u && t >= straight_at + 200u) {
+            break;
+        }
     }
+    out.fail = dt.fail;
     return out;
+}
+
+static replay_t replay(obstacle_side_t side, uint16_t mm, unsigned int away_min,
+                       const count_sample_t *cs, unsigned int nc,
+                       const ping_sample_t *ps, unsigned int np,
+                       int32_t turn_rate, ultrasonic_result_t far_echo,
+                       uint32_t end_ms) {
+    return replay_to(side, mm, away_min, &DETOUR_CFG.dt, cs, nc, ps, np, turn_rate,
+                     far_echo, 0, end_ms);
+}
+
+/* Centre-line distance (mm) of a corner at (x, y) mm from the axle at the
+ * detour start, to the path at heading deg: + on the obstacle side. */
+static double corner_clear(double x, double y, int deg) {
+    return x * sin_d(deg) - y * cos_d(deg);
 }
 
 #define ECHO(mm) ((ultrasonic_result_t)(mm))
@@ -788,6 +855,116 @@ static void test_away_min(void) {
     CHECK(a.hash == b.hash, "min 5: FC_2-like robot trace identical");
 }
 
+/* ---- S2: corner on the scan free ray when the edge is below the minimum. ---- */
+
+/* Smallest whole heading in 0..max (S frame) whose path passes (x, y) by
+ * clear mm (centre line); max when none. Same rule as trim_target, doubles. */
+static int clear_heading(double x, double y, double clear, int max) {
+    for (int th = 0; th <= max; ++th) {
+        if (-corner_clear(x, y, th) <= -clear) return th;
+    }
+    return max;
+}
+
+static void test_scan_corner(void) {
+    const dt_config_t *rc = &DETOUR_CFG.dt;
+    const int32_t rate = 10;
+    /* Scan free-ray corner of e7b34e07: axle (65 + 230, 230 tan 30). */
+    const double fx = 295.0, fy = 230.0 * sin_d(30) / cos_d(30);
+    const int c45 = clear_heading(fx, fy, rc->first_clear_mm, rc->away_max_deg);
+    CHECK(c45 == 45, "free-ray corner (295, 133): clear heading 45");
+    /* (1) e7b34e07, minimum 30: LOST at 33, edge at 1 (below 30): turn on
+     * to the clear heading, STRAIGHT at 45. */
+    replay_t e = replay_to(OBSTACLE_SIDE_LEFT, 230u, 30u, rc, E7_COUNTS, N_OF(E7_COUNTS),
+                           E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 0, 8000u);
+    CHECK(e.first_end == DT_SWEEP_LOST && e.first_end_heading >= 30 &&
+              e.first_end_heading <= 36 && e.turn_on && !e.trimming,
+          "e7b34e07 S2: LOST at about 33, then turn on (not the trim to 0)");
+    CHECK(e.straight_heading == c45, "e7b34e07 S2: first STRAIGHT at 45");
+    /* Centre-line clearance at 45 for the free-ray corner and the two scan
+     * corners (+25: 282 mm, +20: 248 mm along the beam from the sensor). */
+    const double m_free = corner_clear(fx, fy, e.straight_heading);
+    const double m_25 = corner_clear(65.0 + 282.0 * cos_d(25), 282.0 * sin_d(25), e.straight_heading);
+    const double m_20 = corner_clear(65.0 + 248.0 * cos_d(20), 248.0 * sin_d(20), e.straight_heading);
+    CHECK(m_free >= 110.0 && m_25 >= 110.0 && m_20 >= 110.0,
+          "e7b34e07 S2: every scan corner clears by >= 110 mm (centre line)");
+    printf("S2 e7b34e07: LOST heading %d, straight %d, clear free %.1f +25 %.1f +20 %.1f mm\n",
+           e.first_end_heading, e.straight_heading, m_free, m_25, m_20);
+    /* (2) Edge at/after the minimum (face seen to 45): today's trim from
+     * the last seen echo (250 mm at about 44, ray 14). */
+    replay_t at45 = replay_to(OBSTACLE_SIDE_LEFT, 230u, 30u, rc, E7_COUNTS, N_OF(E7_COUNTS),
+                              E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 45, 8000u);
+    CHECK(at45.first_end == DT_SWEEP_LOST && at45.trimming && !at45.turn_on &&
+              at45.straight_heading < at45.first_end_heading,
+          "edge past the minimum: today's trim (down)");
+    /* (3) Seen only from the start pose: no TURN_LIMIT, turn on to 45. */
+    static const ping_sample_t START_ONLY[] = {{161u, ECHO(250)}, {230u, ECHO(250)}};
+    static const count_sample_t STILL[] = {{0u, 0, 0}, {250u, 0, 0}};
+    replay_t so = replay_to(OBSTACLE_SIDE_LEFT, 230u, 30u, rc, STILL, N_OF(STILL),
+                            START_ONLY, N_OF(START_ONLY), rate, NO_RET, 0, 8000u);
+    CHECK(so.fail == DT_FAIL_NONE && so.turn_on && so.straight_heading == c45,
+          "start pose only: no TURN_LIMIT, turn on, STRAIGHT at 45");
+    /* (4) Cap: away_max_deg 40 limits the turn-on target to 40. */
+    dt_config_t capped = *rc;
+    capped.away_max_deg = 40u;
+    replay_t cap = replay_to(OBSTACLE_SIDE_LEFT, 230u, 30u, &capped, E7_COUNTS, N_OF(E7_COUNTS),
+                             E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 0, 8000u);
+    CHECK(cap.fail == DT_FAIL_NONE && cap.turn_on && cap.straight_heading == 40,
+          "cap: turn on stops at away_max_deg 40, then STRAIGHT");
+    /* (5) Old rule (minimum 0) and c2c31955 (edge at 43, past 20): identical. */
+    replay_t e0a = replay_to(OBSTACLE_SIDE_LEFT, 230u, 0u, rc, E7_COUNTS, N_OF(E7_COUNTS),
+                             E7_PINGS, N_OF(E7_PINGS), rate, NO_RET, 0, 8000u);
+    CHECK(e0a.trimming && !e0a.turn_on && e0a.straight_heading <= 1,
+          "minimum 0: today's trim to about 0 (the robot result)");
+    replay_t c0 = replay_to(OBSTACLE_SIDE_RIGHT, 233u, 0u, rc, C2_COUNTS, N_OF(C2_COUNTS),
+                            C2_PINGS, N_OF(C2_PINGS), 0, NO_RET, 0, 4000u);
+    replay_t c20 = replay_to(OBSTACLE_SIDE_RIGHT, 233u, 20u, rc, C2_COUNTS, N_OF(C2_COUNTS),
+                             C2_PINGS, N_OF(C2_PINGS), 0, NO_RET, 0, 4000u);
+    CHECK(c0.hash == c20.hash && c20.trimming && !c20.turn_on,
+          "c2c31955: trace identical, today's trim");
+    /* (5b) Return leg, e7b34e07-like scene: face 230 mm ahead of the
+     * sensor, left corner at (295, 133) (scan free at +30), 150 mm deep,
+     * line along x. TURN_AWAY sees its first 3 pings, then the face drops
+     * out. Old rule: trim to about 8, FAILED TOO_NEAR. S2: STRAIGHT at
+     * 45, body clears the corner, the return turn and the returning
+     * STRAIGHT (-90) find the line: DONE. */
+    {
+        scene_t a = {.lx = 119.0, .ly = 0.0, .la = 0.0, .omm = 230u, .away_seen = 3u,
+                     .bx0 = 295.0, .bx1 = 445.0, .by0 = -300.0, .by1 = 133.0};
+        scene_t b = a;
+        b.away_min = 30u;
+        CHECK(scene_run(&a, rc) == DT_FAILED && a.fail == DT_FAIL_TOO_NEAR,
+              "e7-like scene, old rule: FAILED TOO_NEAR (the robot result)");
+        CHECK(scene_run(&b, rc) == DT_DONE && b.on_line_from == DT_STRAIGHT &&
+                  b.first_heading > 44.0 && b.first_heading < 46.5 && b.first_clear >= 30.0 &&
+                  b.line_heading <= -85 && b.line_heading >= -95,
+              "e7-like scene, S2: STRAIGHT at 45, corner clear, line found at -90, DONE");
+        printf("S2 scene: first STRAIGHT %.1f deg, body clearance %.1f mm, line at %d deg\n",
+               b.first_heading, b.first_clear, b.line_heading);
+    }
+    /* (6) Trim down from the free-ray corner: minimum 10 (corner (295, 41),
+     * clear heading 30), edge at 0, LOST at 40: trim down 10. */
+    dt_config_t unit = *rc;
+    unit.counts_per_deg_x100 = 2000u;
+    dt_t dt;
+    dt_init(&dt, &unit, OBSTACLE_SIDE_LEFT, 230u, 0, 0, 0u);
+    dt_set_away_min(&dt, 10u);
+    (void)at(&dt, 0, 200u);
+    reading(&dt, 250u, 200u);
+    reading(&dt, 250u, 260u);
+    CHECK(dt.seen_once && dt.edge_deg == 0, "trim down: edge at 0");
+    (void)at(&dt, 40, 400u);
+    reading(&dt, NR, 400u);
+    reading(&dt, NR, 460u);
+    (void)at(&dt, 40, 470u);
+    (void)at(&dt, 40, 500u);
+    const int c10 = clear_heading(295.0, 230.0 * sin_d(10) / cos_d(10), unit.first_clear_mm, 90);
+    CHECK(dt.step == DT_TURN_TOWARD && dt.trimming && !dt.backing && dt.heading == 40 &&
+              dt.trim_deg == 40 - c10,
+          "trim down: from 40 to the free-ray clear heading");
+    printf("S2 trim down: clear heading %d, trim %d\n", c10, dt.trim_deg);
+}
+
 int main(void) {
     test_controller();
     test_convergence();
@@ -799,6 +976,7 @@ int main(void) {
     test_scenes();
     test_robot_value();
     test_away_min();
+    test_scan_corner();
     if (failures) return 1;
     puts("test_detour_sweep: all tests passed");
     return 0;
