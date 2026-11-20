@@ -149,6 +149,13 @@ int main(int argc, char **argv)
                 in.right += 30u * k;
             }
         }
+        if (strcmp(kind, "held_retreat") == 0 && i >= 2060u) {
+            /* Inside the end star (letter done near 260 mm): the sensor
+             * axis moves back 8 mm -> window BW_MOTION; the held A must
+             * still be published (operator 2026-11-20). */
+            in.left -= 100u;
+            in.right -= 100u;
+        }
         if (strcmp(kind, "count_wrap") == 0) {
             in.left += UINT32_MAX - 3000u;
             in.right = in.left;
@@ -316,7 +323,8 @@ int main(int argc, char **argv)
     const bool positive = search_positive || cached_read_fail || strcmp(kind, "normal") == 0 || reverse || two ||
         strcmp(kind, "us_wrap") == 0 || strcmp(kind, "ms_wrap") == 0 ||
         strcmp(kind, "count_wrap") == 0 || strcmp(kind, "mode2") == 0 ||
-        strcmp(kind, "fallback") == 0 || strcmp(kind, "sequence_wrap") == 0;
+        strcmp(kind, "fallback") == 0 || strcmp(kind, "sequence_wrap") == 0 ||
+        strcmp(kind, "held_retreat") == 0;
     assert(publications == (ack_kind || old_ack ? 2u :
                             positive ? 1u : 0u));
     if (ack_kind || old_ack) {

@@ -66,7 +66,7 @@ foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
         revision cut_change cut_equal disabled loss missed generation
         motor_fault motor_old raw_clip clock read_fail ack no_ack busy_ack
         us_wrap ms_wrap count_wrap old_epoch_ack old_epoch_no_ack sequence_wrap
-        nonletter mode2_ack)
+        nonletter mode2_ack held_retreat)
     add_test(NAME test_barcode_producer_${case}
         COMMAND test_barcode_live_producer ${case})
 endforeach()
