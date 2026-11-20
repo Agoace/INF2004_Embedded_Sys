@@ -56,7 +56,7 @@
 #endif
 #if !APP_TEST && !APP_BENCH
 #define START_DELAY_MS 1000u
-#define RUN_LIMIT_MS   90000u
+#define RUN_LIMIT_MS   300000u /* operator 2026-11-20 (was 90 s) */
 static lp_t lp;
 static line_snapshot_t sensor;
 static lt_t lt;
@@ -881,10 +881,10 @@ static bool wait_tick(void)
 #endif
     telemetry_stats_t log;
     telemetry_stats(&log);
-    if (active && log.storage_full) {
-        cancelled = true;
-        set_reason(RM_STOP_TELEMETRY, "telemetry storage full");
-    }
+    /* Operator 2026-11-20: a full RAM log (4501 rows = 90 s) no longer
+     * stops the run. The log keeps the first 90 s; later rows are counted
+     * as discarded and the LOG_FULL fault bit shows it. */
+    (void)log;
     if (active && drv_time_ms() - run_button_ms >= BUTTON_INTERVAL_MS) {
         run_button_ms = drv_time_ms();
         if (pressed(RUN_BUTTON_PIN, &prev_run)) {
@@ -1511,7 +1511,7 @@ static void run_once(void)
             watch_deadline = now + (uint32_t)rate * 2u + SONAR_WATCH_SLACK_MS;
         }
         if (now - run_start >= RUN_LIMIT_MS) {
-            set_reason(RM_STOP_TIME_LIMIT, "90 s time limit");
+            set_reason(RM_STOP_TIME_LIMIT, "300 s time limit");
             break;
         }
         part_end(RT_STEP_LOG);

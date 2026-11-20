@@ -261,7 +261,7 @@ endforeach()
 # HOST ONLY end-to-end S3 producer -> vehicle jlive -> ja. Live variants use
 # a synthetic 1 mm clear bound; they are not firmware builds.
 foreach(variant IN ITEMS default custom builtin expire search
-        decode_grace decode_timeout decode_end)
+        decode_grace decode_timeout decode_end hold10m)
     set(target test_barcode_live_e2e_${variant})
     set(action app_program/barcode_live_vehicle/action.c)
     if(variant STREQUAL "default")
@@ -287,15 +287,18 @@ target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
     E2E_POLICY=3
     BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     BW_MAP_POLICY_ID=2u)
-# V1/V3 live policy: J1 beyond 1000 mm from the decode, or SEARCH first.
-foreach(variant IN ITEMS expire search)
+# V1/V3 live policy: J1 beyond 10000 mm from the decode, or SEARCH first.
+# hold10m: J1 about 9.5 m after the decode still consumes the command.
+foreach(variant IN ITEMS expire search hold10m)
     target_compile_definitions(test_barcode_live_e2e_${variant} PRIVATE
         BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
         BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         BW_MAP_POLICY_ID=2u)
 endforeach()
 target_compile_definitions(test_barcode_live_e2e_expire PRIVATE
-    J1_MM=1500.0f J2_MM=1800.0f E2E_POLICY=1)
+    J1_MM=10600.0f J2_MM=10900.0f E2E_POLICY=1 E2E_MS=80000u)
+target_compile_definitions(test_barcode_live_e2e_hold10m PRIVATE
+    J1_MM=9600.0f J2_MM=9900.0f E2E_POLICY=3 E2E_MS=80000u)
 target_compile_definitions(test_barcode_live_e2e_search PRIVATE
     E2E_POLICY=2)
 host_test(test_blv_policy tests/test_blv_policy.c
@@ -332,7 +335,7 @@ foreach(t IN ITEMS test_barcode_control_cache test_barcode_live_feed_live
         test_barcode_live_producer_live_none test_barcode_live_e2e_custom
         test_barcode_live_e2e_builtin test_barcode_live_e2e_expire test_barcode_live_e2e_search
         test_barcode_live_e2e_decode_grace test_barcode_live_e2e_decode_timeout
-        test_barcode_live_e2e_decode_end)
+        test_barcode_live_e2e_decode_end test_barcode_live_e2e_hold10m)
     get_target_property(srcs ${t} SOURCES)
     list(REMOVE_ITEM srcs "${REPO}/app_program/subsystem3/barcode_live_producer.c")
     set_property(TARGET ${t} PROPERTY SOURCES "${srcs}")

@@ -42,7 +42,7 @@ DETOUR_FAIL_TEXT = {0: "none", 1: "both sides blocked", 2: "turn limit reached",
                     6: "no line found"}
 STOP_SOURCES = {0: "none or unknown", 1: "GP21 button", 2: "MQTT ESTOP", 3: "fault",
                 4: "time limit"}
-STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "90 s limit",
+STOP_REASONS = {0: "unknown", 1: "GP21 button", 2: "MQTT ESTOP command", 3: "300 s limit",
                 4: "shell left RUNNING", 5: "vehicle deadline missed", 6: "motion wake lost",
                 7: "motion status failed", 8: "line snapshot stale", 9: "line samples lost",
                 10: "sonar failure", 11: "telemetry failure", 12: "other",

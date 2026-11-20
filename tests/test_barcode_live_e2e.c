@@ -118,6 +118,10 @@ static uint16_t gp28(float mm)
 #include "../app_program/barcode_live_vehicle/policy.h"
 #define E2E_SEARCH_MM 450.0f
 #endif
+/* Simulated time; the 10 m expiry cases need about 75 s at 146 mm/s. */
+#ifndef E2E_MS
+#define E2E_MS 14000u
+#endif
 static bool junction_at(float mm)
 {
     return (mm >= J1_MM && mm < J1_MM + 30.0f) ||
@@ -143,7 +147,7 @@ int main(void)
     uint32_t record_sequence = 0u, offered_sequence = 0u;
     float claim_mm = -1.0f;
     ja_command_t last = {0};
-    for (unsigned int ms = 0u; ms < 14000u; ++ms) {
+    for (unsigned int ms = 0u; ms < E2E_MS; ++ms) {
         clock_us = 1000000u + ms * 1000u;
         const float mm = travel_mm(clock_us);
 #if E2E_DECODE_DURATION

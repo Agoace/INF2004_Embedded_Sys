@@ -1304,7 +1304,7 @@ class SummaryTests(ModelCase):
 
     def test_stop_texts(self):
         cases = ((0, 0, "none or unknown", "unknown"), (2, 2, "MQTT ESTOP", "MQTT ESTOP command"),
-                 (3, 5, "fault", "vehicle deadline missed"), (4, 3, "time limit", "90 s limit"),
+                 (3, 5, "fault", "vehicle deadline missed"), (4, 3, "time limit", "300 s limit"),
                  (3, 12, "fault", "other"), (3, 4, "fault", "shell left RUNNING"))
         for run, (source, reason, source_text, reason_text) in enumerate(cases, start=1):
             self.model.ingest("robot/summary", summary(source=source, reason=reason, run=run))
@@ -1683,7 +1683,7 @@ class BatchTwoCFixtureTests(ModelCase):
         self.feed("summary_no_speed_error")
         rows = self.rows("summary")
         self.assertEqual((rows["Stop source"], rows["Stop reason"], rows["Max speed error"]),
-                         ("time limit", "90 s limit", "not measured"))
+                         ("time limit", "300 s limit", "not measured"))
 
     def test_c_junction_event(self):
         self.feed("event_junction")
