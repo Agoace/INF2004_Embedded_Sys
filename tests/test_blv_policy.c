@@ -5,8 +5,8 @@
 #include "../app_program/barcode_live_vehicle/policy.h"
 #include "../app_program/subsystem3/barcode_live_source.h"
 
-/* mm_counts(1000) = 12414; 999 mm rounds up to 12402 counts. */
-#define LIMIT_COUNTS 12414
+/* mm_counts(10000) = 124140; 9999 mm rounds up to 124128 counts. */
+#define LIMIT_COUNTS 124140
 
 static ja_t pending(uint8_t source, int32_t base)
 {
@@ -28,10 +28,10 @@ static void route(ja_t *s, uint8_t module, int32_t l, int32_t r)
 
 int main(void)
 {
-    /* Expiry at exactly 1000 mm mean forward travel, not one count before. */
+    /* Expiry at exactly 10000 mm mean forward travel, not one count before. */
     ja_t s = pending(BC_LIVE_SOURCE, 1000);
-    route(&s, VSM_MOD_LINE, 1000 + 12402, 1000 + 12402);
-    assert(s.phase == JA_PENDING); /* 999 mm. */
+    route(&s, VSM_MOD_LINE, 1000 + 124128, 1000 + 124128);
+    assert(s.phase == JA_PENDING); /* 9999 mm. */
     route(&s, VSM_MOD_LINE, 1000 + LIMIT_COUNTS - 1, 1000 + LIMIT_COUNTS - 1);
     assert(s.phase == JA_PENDING && s.command.valid == 1u);
     route(&s, VSM_MOD_LINE, 1000 + LIMIT_COUNTS, 1000 + LIMIT_COUNTS);
@@ -98,9 +98,24 @@ int main(void)
     blv_pending_route(&s, VSM_MOD_SEARCH, short_counts, 500u);
     assert(s.phase == JA_PENDING);
 
-    /* SCAN/DETOUR keep the old CANCELLED. LINE short of the bound: no-op. */
+    /* SCAN/DETOUR keep a live command (operator 2026-11-20); the detour
+     * travel counts, so LINE after it expires at the same bound. */
     for (uint8_t m = VSM_MOD_SCAN; m <= VSM_MOD_DETOUR; ++m) {
         s = pending(BC_LIVE_SOURCE, 0);
+        s.clear = true;
+        route(&s, m, 10, 10);
+        assert(s.phase == JA_PENDING && s.command.valid == 1u);
+        assert(s.result.reason == JA_OK && !s.clear);
+        route(&s, m, 2 * LIMIT_COUNTS, 2 * LIMIT_COUNTS);
+        assert(s.phase == JA_PENDING); /* no expiry inside the detour */
+        route(&s, VSM_MOD_LINE, LIMIT_COUNTS - 1, LIMIT_COUNTS - 1);
+        assert(s.phase == JA_PENDING);
+        route(&s, VSM_MOD_LINE, LIMIT_COUNTS, LIMIT_COUNTS);
+        assert(s.phase == JA_UNUSED && s.result.reason == BLV_REASON_EXPIRED);
+    }
+    /* Fake source 1 keeps the old CANCELLED in SCAN/DETOUR. */
+    for (uint8_t m = VSM_MOD_SCAN; m <= VSM_MOD_DETOUR; ++m) {
+        s = pending(1u, 0);
         route(&s, m, 10, 10);
         assert(s.phase == JA_UNUSED && s.result.reason == JA_CANCELLED);
     }

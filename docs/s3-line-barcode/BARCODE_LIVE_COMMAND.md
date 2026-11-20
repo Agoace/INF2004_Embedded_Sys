@@ -106,9 +106,10 @@ Approved by Main on 2026-11-18. This policy applies only to source 2 live
 commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
 
 - **V1:** expire when the mean signed wheel travel from
-  `command.read_counts` reaches `BLV_PENDING_MAX_MM = 1000` mm. This is a
-  design value, not a measured distance. The decode follows the frame end,
-  so this is not a strict 1000 mm bound from `frame_end`. The origin does
+  `command.read_counts` reaches `BLV_PENDING_MAX_MM = 10000` mm (operator
+  2026-11-20; was 1000 mm). This is a design value, not a measured
+  distance. The decode follows the frame end, so this is not a strict
+  bound from `frame_end`. The origin does
   not restart at arming or during a reverse. Reverse net travel does not
   reach the positive bound. Count differences use wrap-safe subtraction
   and 64-bit addition. No time limit is added.
@@ -435,3 +436,28 @@ Hard context changes, junctions, other routes and the 200 ms deadline are
 not eligible. The vehicle must revoke grace for these causes; the producer
 must not ignore revisions to recover a decode. This is separate from V3's
 policy for an already-offered pending command.
+
+## Demo limits (operator 2026-11-20)
+
+Branch `mtk3-demo-limits`. Three changes for the demo course:
+
+| Change | Before | Now | Where |
+| --- | --- | --- | --- |
+| Live command hold distance (`BLV_PENDING_MAX_MM`) | 1000 mm | 10000 mm | [`policy.h`](../../app_program/barcode_live_vehicle/policy.h) |
+| Live command in an obstacle SCAN or DETOUR | CANCELLED | Kept. The junction evidence restarts. The detour travel counts toward the 10 m. | [`policy.c`](../../app_program/barcode_live_vehicle/policy.c) |
+| Run time limit (`RUN_LIMIT_MS`) | 90 s | 300 s | [`vehicle_task.c`](../../app_program/vehicle/vehicle_task.c) |
+| Full RAM run log (4501 rows, 90 s) | Stopped the run (`telemetry storage full`) | The run continues. The GP20 dump keeps the first 90 s; the LOG_FULL fault bit is set. MQTT continues. | [`vehicle_task.c`](../../app_program/vehicle/vehicle_task.c) |
+
+Unchanged: a continuous line SEARCH of 200 ms or more cancels a live
+command. The fake command source (source 1) is still cancelled by SCAN and
+DETOUR.
+
+Risk: after a detour the robot can rejoin the line at an angle. A kept
+command can then act at a false junction. The detour ALIGN step turns the
+robot back to the line heading before LINE starts.
+
+Tests: `test_blv_policy` (10 m bound, SCAN/DETOUR keep), new
+`test_barcode_live_e2e_hold10m` (junction 9.6 m after the read consumes the
+command), `test_barcode_live_e2e_expire` (junction at 10.6 m: expired) and
+`test_vehicle_fault_capture_time` (300 s limit). `test_blv_policy`,
+`hold10m` and `fault_capture_time` fail on the old code.

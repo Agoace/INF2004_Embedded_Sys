@@ -6,10 +6,12 @@
 #include <stdint.h>
 #include "../vehicle/junction_action.h"
 
-/* V1: wheel travel from decode (read_counts). Operator-approved 1000 mm
- * bound; placement rule >=160 mm is unchanged. Not a frame_end bound. */
-#define BLV_PENDING_MAX_MM 1000u
-/* A short natural SEARCH can put the line between the sensors. */
+/* V1: wheel travel from decode (read_counts). Operator-approved bound,
+ * 10000 mm since 2026-11-20 (was 1000 mm); placement rule >=160 mm is
+ * unchanged. Not a frame_end bound. */
+#define BLV_PENDING_MAX_MM 10000u
+/* A short natural SEARCH can put the line between the sensors.
+ * SCAN and DETOUR keep a live command (operator 2026-11-20). */
 #define BLV_SEARCH_CANCEL_MS 200u
 /* New ja result reasons; phase stays JA_UNUSED (never acted). */
 #define BLV_REASON_EXPIRED 13u

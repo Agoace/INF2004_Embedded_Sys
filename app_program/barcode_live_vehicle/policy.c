@@ -56,6 +56,13 @@ void blv_policy_route(blv_t *p, ja_t *s, uint8_t module,
             p->searching = false;
             return;
         }
+        /* Operator 2026-11-20: a live command survives an obstacle SCAN
+         * and DETOUR (it was CANCELLED). Junction evidence restarts; the
+         * detour travel counts toward the distance bound. */
+        if (module == VSM_MOD_SCAN || module == VSM_MOD_DETOUR) {
+            ja_suspend(s);
+            return;
+        }
     } else {
         *p = (blv_t){0};
     }
