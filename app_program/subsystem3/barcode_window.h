@@ -65,6 +65,7 @@ typedef struct {
     uint8_t direction; /* 1 print order, 2 reverse print; motion is forward. */
     uint8_t mapped_action; /* Observation only: 0/1/2/3/4 = NONE/L/R/S/U. */
     bool accepted;
+    bool held; /* Accepted from the held letter; end star/tail not proven. */
 } barcode_window_result_t;
 
 typedef struct {
@@ -137,6 +138,15 @@ typedef struct {
     bool frozen;   /* Open interval: no thaw yet. */
     bool thaw;     /* Closed interval waiting for its first later sample. */
     uint8_t white_lost; /* BW_WHITE_LOST_*; the owner reads and clears. */
+    /* Held letter (operator 2026-11-20): parts 1..19 passed the letter
+     * checks; a later failure accepts this letter instead of rejecting. */
+    bool held;
+    bool held_tried; /* Midpoint mode: provisional part 19 was tested. */
+    char held_letter;
+    uint32_t held_edge_us;
+    uint32_t held_frame_us;
+    uint32_t held_frame_left;
+    uint32_t held_frame_right;
 } barcode_window_t;
 
 #define BW_WHITE_LOST_BLACK 0x01u /* Unadmitted ink ended a white run. */

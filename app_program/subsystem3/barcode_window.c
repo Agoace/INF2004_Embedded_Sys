@@ -90,9 +90,43 @@ static uint32_t next_serial(barcode_window_t *state)
     return state->serial;
 }
 
+/* Held-letter accept (operator 2026-11-20): once the start star, the first
+ * gap and the letter (parts 1..19) passed their checks, a later failure in
+ * the end star, gap 2, extent or tail keeps the letter. The edge and frame
+ * are those of the letter's last edge; read is the newest motor sample. */
+static void accept_held(barcode_window_t *state)
+{
+    const barcode_window_motor_t *read = state->motor_count > 0u ?
+        &state->motors[state->motor_count - 1u] : NULL;
+    const unsigned int index = (unsigned int)(state->held_letter - 'A');
+    state->result = (barcode_window_result_t){
+        .serial = next_serial(state), .reason = BW_OK,
+        .start_us = state->start_us, .edge_us = state->held_edge_us,
+        .frame_us = state->held_frame_us,
+        .frame_left = state->held_frame_left,
+        .frame_right = state->held_frame_right,
+        .eligible_us = state->previous_adc_us,
+        .read_us = read ? read->us : state->held_frame_us,
+        .read_left = read ? read->left : state->held_frame_left,
+        .read_right = read ? read->right : state->held_frame_right,
+        .narrow_mm = state->narrow, .wide_mm = state->wide,
+        .leading_mm = state->leading_mm,
+        .rise = state->rise, .fall = state->fall,
+        .letter = state->held_letter, .direction = state->direction,
+        .mapped_action = barcode_window_table_confirmed() ? actions[index] : 0u,
+        .accepted = true, .held = true};
+    state->held = false;
+    state->phase = COMPLETE;
+}
+
 /* Failure abandons the whole candidate. Never repair or slide its runs. */
 static void reject(barcode_window_t *state, barcode_window_reason_t reason)
 {
+    if (state->held && (state->phase == WINDOW || state->phase == TAIL)) {
+        accept_held(state);
+        return;
+    }
+    state->held = false;
 #if BARCODE_FAIL_CAPTURE
     bcfc_reject(state, (uint32_t)reason);
 #endif
@@ -510,6 +544,21 @@ static bool end_star_split(const barcode_window_t *state, bool reverse)
     return mask == 0x094u;
 }
 
+/* Letter checks on parts 10..18 against the start star: model, 20% scale
+ * and gap 1. Same rules as finish_window. */
+static bool letter_ok(const barcode_window_t *state, element_model_t *data)
+{
+    const bool reverse = state->direction == 2u;
+    if (!model(state->runs + 10, reverse, data) ||
+        data->symbol < 'A' || data->symbol > 'Z' ||
+        fabsf(data->narrow - state->narrow) > 0.2f * state->narrow ||
+        fabsf(data->wide - state->wide) > 0.2f * state->wide) {
+        return false;
+    }
+    const float gap1 = state->runs[9] - (state->bias + data->bias) * 0.5f;
+    return gap1 >= state->narrow * 0.65f && gap1 <= state->narrow * 1.5f;
+}
+
 static bool finish_window(barcode_window_t *state)
 {
     element_model_t data, last;
@@ -567,6 +616,9 @@ static bool rise_seen(barcode_window_t *state, uint16_t raw);
 static void note_bar(barcode_window_t *state);
 static void window_mid(barcode_window_t *state, barcode_window_adc_t sample,
                        float mm, const barcode_window_motor_t *upper);
+static void provisional_hold(barcode_window_t *state,
+                             barcode_window_adc_t sample, float mm,
+                             const barcode_window_motor_t *upper);
 
 static void tail(barcode_window_t *state, barcode_window_adc_t sample,
                  float mm, const barcode_window_motor_t *upper)
@@ -763,6 +815,8 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
             state->closing = false;
             state->bars = 0u;
             state->shifts = 0u;
+            state->held = false;
+            state->held_tried = false;
             state->phase = WINDOW;
 #if BARCODE_FAIL_CAPTURE
             bcfc_start(state, sample, mm, upper);
@@ -906,6 +960,9 @@ static void window_mid(barcode_window_t *state, barcode_window_adc_t sample,
         }
         return;
     }
+    if (state->elements == 18u) {
+        provisional_hold(state, sample, mm, upper);
+    }
     const float lift = (float)sample.raw - (float)state->run_valley;
     if (lift < EDGE_MIN_SWING || lift < EDGE_DETECT *
         ((float)state->ref_peak - (float)state->run_valley)) {
@@ -936,6 +993,40 @@ static bool faint_first(const barcode_window_t *state)
            0.5f * (weaker - state->white_mean);
 }
 
+/* Hold the letter when parts 1..19 pass the letter checks; the real part
+ * 19 replaces a provisional one. */
+static void hold_letter(barcode_window_t *state, barcode_window_adc_t sample,
+                        const barcode_window_motor_t *upper)
+{
+    element_model_t data;
+    state->held = letter_ok(state, &data);
+    if (state->held) {
+        state->held_letter = data.symbol;
+        state->held_edge_us = sample.us;
+        state->held_frame_us = upper->us;
+        state->held_frame_left = upper->left;
+        state->held_frame_right = upper->right;
+    }
+}
+
+/* Midpoint mode places a bar's falling edge only when the next bar rises.
+ * When the letter's last bar has fallen through the floor midpoint (the
+ * same rule as the closing bar), test a provisional part 19 so that the
+ * letter is held even if no further bar is seen. */
+static void provisional_hold(barcode_window_t *state,
+                             barcode_window_adc_t sample, float mm,
+                             const barcode_window_motor_t *upper)
+{
+    const float level = 0.5f * ((float)state->ref_peak + state->white_mean);
+    if (state->held_tried || (float)sample.raw > level) {
+        return;
+    }
+    state->held_tried = true;
+    state->runs[18] = lookup(state->fall_mm, state->fall_set, level, mm) -
+                      state->edge_mm;
+    hold_letter(state, sample, upper);
+}
+
 /* One edge at position t. The first edge only starts the window. False
  * when the window rejected or finished. */
 static bool edge(barcode_window_t *state, barcode_window_adc_t sample,
@@ -962,6 +1053,9 @@ static bool edge(barcode_window_t *state, barcode_window_adc_t sample,
     if (state->elements == 9u && !start_star(state) && !late_start(state)) {
         reject(state, BW_START);
         return false;
+    }
+    if (state->elements == 19u) {
+        hold_letter(state, sample, upper);
     }
     if (state->elements == BW_ELEMENTS) {
         state->edge_us = sample.us;
