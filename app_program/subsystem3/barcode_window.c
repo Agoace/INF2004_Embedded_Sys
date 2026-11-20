@@ -33,6 +33,9 @@
 #define STRONG_EXCESS 800.0f
 /* ASSUMED bound: nominal L0/R292 for 30 ms retreats GP28 about 1.6..1.9 mm. */
 #define RETREAT_MAX_MM 2.5f
+/* SEEK re-anchors the projection axis when the heading has turned more than
+ * this since the last anchor (bend exit, operator 2026-11-20). */
+#define AXIS_REBASE_RAD 0.0524f /* 3 degrees */
 #define N_MAX 7.0f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
@@ -257,7 +260,17 @@ static float sensor_pose_step(barcode_window_t *state, int32_t dl, int32_t dr)
     state->centre_x_mm += c * local_x - s * local_y;
     state->centre_y_mm += s * local_x + c * local_y;
     state->heading_rad += turn;
-    return sensor_axis_mm(state);
+    const float mm = sensor_axis_mm(state);
+    /* Before the first bar, keep the barcode axis near the current heading.
+     * Without this, a SEEK that starts inside a bend projects the barcode on
+     * the bend-entry heading: R7 (A after a bend) read 37.6 mm for 60.1 mm
+     * of wheel travel (cos 51 deg). Position stays continuous. */
+    if (state->phase == SEEK && fabsf(state->heading_rad) > AXIS_REBASE_RAD) {
+        state->centre_x_mm = mm - (float)state->config.sensor_forward_mm;
+        state->centre_y_mm = -(float)state->config.sensor_lateral_mm;
+        state->heading_rad = 0.0f;
+    }
+    return mm;
 }
 
 void barcode_window_motor(barcode_window_t *state, uint32_t us,
