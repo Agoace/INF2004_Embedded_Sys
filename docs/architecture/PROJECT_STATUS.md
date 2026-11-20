@@ -13,14 +13,17 @@ it does not imply general geometry accuracy or acceptance of other changes.
 see [DEMO_FREEZE.md](../release/DEMO_FREEZE.md).
 2026-11-19: second submission, tag `submission-v2` (staging `1f46e88`); see
 [SUBMISSION_V2.md](../release/SUBMISSION_V2.md).
+2026-11-20: third submission, tag `submission-v3` (barcode reader `083cde6`);
+see [SUBMISSION_V3.md](../release/SUBMISSION_V3.md). The demo letter map is
+set on the day with `BARCODE_MAP`.
 
 ## Demo image
 
 ```sh
-make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 [BARCODE_MAP="F=LEFT"]
+make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 [BARCODE_MAP="A=LEFT,F=UTURN"]
 ```
 
-The frozen live-barcode build line is in [DEMO_FREEZE.md](../release/DEMO_FREEZE.md#build).
+The current live-barcode build line is in [SUBMISSION_V3.md](../release/SUBMISSION_V3.md#demo-build-set-the-letter-map-on-the-day).
 Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 [BUILD.md](../kernel/BUILD.md) and [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram).
 
@@ -34,8 +37,8 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | Motion controller | Done. Cap 460 mm/s, rise limit 8. | [MOTION.md](../s2-motion/MOTION.md) | Flat-floor motor test only if the zigzag analysis points at the motor. |
 | Same-tick retarget (`MOTION_SAME_TICK`) | Default on for robot images since 2026-11-17; `=0` gives the old timing. Loop delay about 10 -> 2 ms. Robot runs 2026-11-16/17: lifted-wheel ESTOP OK, 0 overruns/faults, smoother small corrections. | [MOTION.md (same tick)](../s2-motion/MOTION.md#same-tick-retarget-default-on) | None. |
 | Obstacle, scan, detour | Coarse/fine + v3 floor result on `d44bd25` (2026-11-17): same box met twice, 2519/2509 ms scans, clipped/valid geometry, 2/2 detours, no overruns/lost wakes/faults; task stack high water recorded. Prior fixed-scan result: 2/2 in each of 6 runs. | [OBSTACLE.md](../s5-obstacle/OBSTACLE.md), [scan validation](../s5-obstacle/COARSE_FINE_VALIDATION.md) | Separate stationary A2/A3 placements skipped by operator; width accuracy/passability not established; DONE_NO_LINE and STALL_RIGHT remain open. Lost sonar result fix (run LAST 2026-11-18, TURN_LIMIT after a 178° turn with no pings): host test only, not run on the robot. Detour minimum turn before LOST + S2 free-ray clear heading (2026-11-19, [OBSTACLE.md](../s5-obstacle/OBSTACLE.md)): fixes a TOO_NEAR fail where TURN_AWAY ended at 5 deg on a flat face; host replay clears the corner by 35 mm at 45 deg; on the robot only the normal path was seen (2 DONE_LINE), the S2 path is host only. |
-| Junction actions (B2a) | Live images (2026-11-18): real LEFT turns at 92–95 deg (LIVE4, GRACE1), RIGHT seen by operator, U-turn accepted at 172.5 deg. LIVE1/LIVE2 DONE events went straight (old spin). Fake-command images still use the old spin. | [DEMO_FREEZE.md](../release/DEMO_FREEZE.md), [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Merge the live-only centre advance and 60 degree gate into the general junction action. U-turn: one pass only. |
-| Barcode reader (B2b) | SHADOW only. Course 2026-11-16: 0 of 10 attempts decoded (robot zigzags). Straight TEST pass: large F decoded both ways. | [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md), [BARCODE.md](../s3-line-barcode/BARCODE.md) | Size-tolerant reader (n 4..7 mm) in staging: identical to the old reader on 5 real captures; not proven on the course. Reliable read needs less zigzag. |
+| Junction actions (B2a) | Live images (2026-11-18): real LEFT turns at 92–95 deg (LIVE4, GRACE1), RIGHT seen by operator, U-turn accepted at 172.5 deg. 2026-11-20 image 29: LEFT after barcode A (93.7 deg) and U-turn after barcode F (177.5 deg). LIVE1/LIVE2 DONE events went straight (old spin). Fake-command images still use the old spin. | [DEMO_FREEZE.md](../release/DEMO_FREEZE.md), [JUNCTION_VALIDATION.md](../kernel/JUNCTION_VALIDATION.md) | Merge the live-only centre advance and 60 degree gate into the general junction action. U-turn: one pass only. |
+| Barcode reader (B2b) | LIVE in the demo build (2026-11-20, GP28 2.5 mm): image 29 read A, large F and Z 3/3 on a full lap; image 26 A 4/5 incl. bend exits. Local-midpoint mode reads the small sheet on calm straights. Held letter: the letter is kept once parts 1..19 pass. Older: course 2026-11-16 0 of 10 (zigzag). | [LIVE_WINDOW_READER.md (bend exit, held letter)](../s3-line-barcode/LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20), [SHADOW_HARDWARE_RESULTS.md](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) | GP28 can leave the bar ends on a bend exit or in a weave (not fixable in the reader). Small sheet fails on a hard zigzag. A held read has no end-star confirmation. |
 | Barcode failed-attempt evidence | Opt-in ROBOT software candidate, default OFF. Keeps first two failures of the run; edges and 4 ms ADC prefix dump after BC_REF. | [Failed capture](../s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) | Operator capture/image acceptance not run. Combined staging + KD30/same-tick RAM has30788 B link-time headroom including static stacks; no capacity fallback required. |
 | Barcode letter table | Done: `BARCODE_MAP` make switch, boot print. | [BUILD.md](../kernel/BUILD.md), [LIVE_WINDOW_READER.md](../s3-line-barcode/LIVE_WINDOW_READER.md) | None. |
 | Barcode LIVE (steers) | Opt-in, default OFF; the frozen demo build turns it on. Pending command expires at 1000 mm or after 200 ms continuous SEARCH (UNUSED 13/14). A decode continues through a natural SEARCH shorter than 200 ms. A failed control read uses the last good copy for up to 50 ms. GRACE1: 0 BP_DISABLED in 13 attempts. | [Live command path](../s3-line-barcode/BARCODE_LIVE_COMMAND.md), [DEMO_FREEZE.md](../release/DEMO_FREEZE.md) | A barcode entered at an angle (after a curve) often fails; place barcodes on straights. 2026-11-19: blip grace ([BLIP_GRACE.md](../s3-line-barcode/BLIP_GRACE.md)) keeps the leading white and a held LIVE record through a SEARCH shorter than 200 ms; leading white 30 mm (was 40, operator) decoded a barcode that 40 mm missed; accepted risk: FC2 false start above 200 mm/s ([30 mm record](../s3-line-barcode/LIVE_WINDOW_READER.md#leading-white-30-mm-operator-decision-2026-11-19)). |
@@ -77,7 +80,7 @@ holds the kernel tests, and `main` is the submission branch.
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`. |
+| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`, `submission-v3`. |
 | `mtk3-staging` | Integration branch: merge all module branches here. Demo kernel tag `demo-kernel-v1`. |
 | `mtk3-testing` | Kernel test branch: SIL/HIL/PIL simulation (Webots, course8 SIL), bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
 | `mtk3` | Course-template/platform base |

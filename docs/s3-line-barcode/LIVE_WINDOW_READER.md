@@ -340,3 +340,45 @@ At 2.5 mm the narrow gaps no longer return to white (1100-1400 counts),
 so the fixed rise/fall levels merge two bars into one: the reader sees
 3-5 bars and rejects with BW_WIDTH. The large sheet still decodes.
 Floor clearance at 2.5 mm over the 10 mm hump is not checked.
+
+## Bend exit and held letter (2026-11-20)
+
+Medium A sheet (narrow 4.2 mm, wide 13 mm), placed just after a bend.
+Image 21 read it 2/2 on a straight and 0/4 out of the bend. Five changes in
+[`barcode_window.c`](../../app_program/subsystem3/barcode_window.c) fix the
+reader-side causes. Each is one commit on `mtk3-bc-endstar`.
+
+| Change | Cause (robot dump) | Rule |
+| --- | --- | --- |
+| End-star split fallback (`end_star_split`) | R5: one end-star edge moved about 3 mm during a SEARCH pivot (yaw up to 20 deg/s; GP28 is 73 mm left of the axle). | If the end star fails the model or the 20% check, classify its 9 runs at (narrow + wide) / 2 after the start bias. The result must be `*`. The letter keeps the full model and the 20% check. |
+| Axis re-anchor in SEEK (`AXIS_REBASE_RAD`, 3 deg) | R7: the axis was fixed at the first motor sample of SEEK, inside the bend. Reader 37.6 mm against wheels 60.1 mm. | In SEEK only, when the heading is more than 3 deg from the axis, set a new axis. The position stays continuous. WINDOW and TAIL do not change. |
+| Wide/narrow limit 3.4 to 3.55 | R7 measured 3.45. | `test_barcode_window_sizes` still rejects 3.6. |
+| Late-start rescue (`late_start`) | Image 24: the first bar was faint (peak 319, rise 327). The read started at star element 2. | At 9 elements, when the start star fails: treat runs 0..6 as star elements 2..8, rebuild the 2 missed runs, and require `*` from the full model. Then continue with 11 elements. |
+| Held letter (`letter_ok`, `hold_letter`, `accept_held`), operator 2026-11-20 | Images 24 to 26: GP28 runs off the bar ends or moves back after the letter. | At part 19 (start star, gap, letter), run the letter checks: model, A to Z, 20% against the start star, gap 0.65..1.5 narrow. If they pass, hold the letter. A later reject in WINDOW or TAIL (end star, gap 2, extent, width, motion, loss, tail) accepts the held letter with `result.held = 1`. In midpoint mode a provisional part 19 is tested once when the last letter bar falls to the floor midpoint. |
+
+The producer publishes an accepted result also when a motor or ADC sample
+ends the window (`barcode_live_producer.c`). Image 27 lost one held read
+on this path. Test `held_retreat` is red without the fix.
+
+Accepted risks:
+
+- A held read has no end-star confirmation. Code 39 has no checksum, so a
+  wrong letter gives a wrong turn.
+- `*AB*` reads as A. The course uses one letter per sheet.
+- `test_barcode_window_missing` accepts a missing first bar (late start)
+  and any damage after part 19 (held).
+
+Robot results (hotspot, GP28 2.5 mm):
+
+| Image | Code | Result |
+| --- | --- | --- |
+| 21 | midpoint reader | A straight 2/2, A out of the bend 0/4 |
+| 24 | + split, axis, 3.55 | A out of the bend 2/4 at the correct size (n 3.95, w 13.36) |
+| 25 | + late start | A out of the bend 2/5, Z 2/2 |
+| 26 | `4e556c8` | A 4/5, LEFT after A 3/3, Z 1/1, small F 0/1 |
+| 29 | `2123e1f` + held fix, map `A=LEFT,F=UTURN` | A, large F, Z: 3/3 OK. LEFT 93.7 deg, U-turn 177.5 deg |
+
+Failures that the reader cannot fix: GP28 crosses the bar ends at an angle
+on a bend exit, or swings off the sheet in a weave. The small sheet fails
+on a hard zigzag (BW_WIDTH). The read must get past the letter for the held
+rule to help.
