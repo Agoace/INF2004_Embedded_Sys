@@ -403,19 +403,50 @@ static bool start_star(barcode_window_t *state)
     return false;
 }
 
+/* End-star fallback (operator 2026-11-20, option F): classify each of the
+ * nine end-star runs at the start star's split, (narrow + wide) / 2, after
+ * the start star's bar/space bias. The pattern must be exactly '*' (0x094).
+ * One edge moved by a SEARCH pivot keeps every run on its side of the split,
+ * so the end star still confirms the read. */
+static bool end_star_split(const barcode_window_t *state, bool reverse)
+{
+    const float split = 0.5f * (state->narrow + state->wide);
+    uint16_t mask = 0u;
+    for (unsigned int i = 0u; i < 9u; ++i) {
+        const float raw = state->runs[20u + (reverse ? 8u - i : i)];
+        const float value = raw + (i % 2u == 0u ? state->bias : -state->bias);
+        if (!isfinite(value) || value <= 0.0f) {
+            return false;
+        }
+        if (value > split) {
+            mask |= (uint16_t)(0x100u >> i);
+        }
+    }
+    return mask == 0x094u;
+}
+
 static bool finish_window(barcode_window_t *state)
 {
     element_model_t data, last;
     const bool reverse = state->direction == 2u;
-    if (!model(state->runs + 10, reverse, &data) ||
-        !model(state->runs + 20, reverse, &last) || last.symbol != '*') {
+    if (!model(state->runs + 10, reverse, &data)) {
         reject(state, BW_WIDTH);
         return false;
     }
+    const bool last_fit = model(state->runs + 20, reverse, &last) &&
+        last.symbol == '*' &&
+        fabsf(last.narrow - state->narrow) <= 0.2f * state->narrow &&
+        fabsf(last.wide - state->wide) <= 0.2f * state->wide;
+    if (!last_fit) {
+        if (!end_star_split(state, reverse)) {
+            reject(state, BW_WIDTH);
+            return false;
+        }
+        last = (element_model_t){state->narrow, state->wide, state->bias,
+                                 state->space, '*'};
+    }
     if (fabsf(data.narrow - state->narrow) > 0.2f * state->narrow ||
-        fabsf(last.narrow - state->narrow) > 0.2f * state->narrow ||
-        fabsf(data.wide - state->wide) > 0.2f * state->wide ||
-        fabsf(last.wide - state->wide) > 0.2f * state->wide) {
+        fabsf(data.wide - state->wide) > 0.2f * state->wide) {
         reject(state, BW_WIDTH);
         return false;
     }
