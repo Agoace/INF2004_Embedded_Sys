@@ -258,7 +258,13 @@ void barcode_live_producer_observe(barcode_live_producer_t *p,
                           in->motor_faults);
     barcode_window_adc(&p->window, in->adc_us, in->raw, 0u);
     if (p->bound && p->window.result.serial != serial) {
-        cancel(p, in, p->window.result.reason);
+        /* A motor/ADC loss can end the window with a held letter
+         * (accepted, operator 2026-11-20); publish it like a step result. */
+        if (p->window.result.accepted) {
+            publish(p, in);
+        } else {
+            cancel(p, in, p->window.result.reason);
+        }
         return;
     }
     for (unsigned int n = 0u; n < BW_STEP_MAX; ++n) {

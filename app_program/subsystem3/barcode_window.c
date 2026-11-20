@@ -16,9 +16,26 @@
 #define WHITE_MAX 220u
 /* ASSUMED scope, not an optical resolution measurement. Fit the scale from
  * the start star; smaller print needs measured along-travel GP28 evidence. */
-#define N_MIN 4.0f
+#define N_MIN 2.5f /* 2026-11-19: small sheet (2.9 mm narrow), GP28 2.5 mm. */
+/* Local-midpoint edges inside WINDOW (2026-11-19, GP28 2.5 mm): narrow
+ * small-sheet spaces stay far above the fixed fall level (H3 robot capture:
+ * 1100..1600 counts between 3800 bars). An edge is detected when the signal
+ * moves EDGE_DETECT of the local swing (and EDGE_MIN_SWING counts) away from
+ * the run extreme. Its position is then set at the crossing of the midpoint
+ * of the two extremes next to that edge (bar peak, space valley). */
+#define EDGE_DETECT 0.4f
+#define EDGE_MIN_SWING 300.0f /* H3 noise: white 25, bar 45 counts (1 sd) */
+#define LEVEL_STEP 256u
+/* First bar excess over floor white that selects the midpoint mode. Real
+ * captures: 5.5 mm narrow bars 450..570 counts over white (fixture
+ * barcode_large_f_forward.csv); 2.5 mm bars 2300..3700 (H3, image 20) and
+ * the image-20 faint mark 925 (dropped by faint_first). */
+#define STRONG_EXCESS 800.0f
 /* ASSUMED bound: nominal L0/R292 for 30 ms retreats GP28 about 1.6..1.9 mm. */
 #define RETREAT_MAX_MM 2.5f
+/* SEEK re-anchors the projection axis when the heading has turned more than
+ * this since the last anchor (bend exit, operator 2026-11-20). */
+#define AXIS_REBASE_RAD 0.0524f /* 3 degrees */
 #define N_MAX 7.0f
 #define MAX_WINDOW_US 5000000u
 #ifndef BW_MAP_VALUES
@@ -73,9 +90,43 @@ static uint32_t next_serial(barcode_window_t *state)
     return state->serial;
 }
 
+/* Held-letter accept (operator 2026-11-20): once the start star, the first
+ * gap and the letter (parts 1..19) passed their checks, a later failure in
+ * the end star, gap 2, extent or tail keeps the letter. The edge and frame
+ * are those of the letter's last edge; read is the newest motor sample. */
+static void accept_held(barcode_window_t *state)
+{
+    const barcode_window_motor_t *read = state->motor_count > 0u ?
+        &state->motors[state->motor_count - 1u] : NULL;
+    const unsigned int index = (unsigned int)(state->held_letter - 'A');
+    state->result = (barcode_window_result_t){
+        .serial = next_serial(state), .reason = BW_OK,
+        .start_us = state->start_us, .edge_us = state->held_edge_us,
+        .frame_us = state->held_frame_us,
+        .frame_left = state->held_frame_left,
+        .frame_right = state->held_frame_right,
+        .eligible_us = state->previous_adc_us,
+        .read_us = read ? read->us : state->held_frame_us,
+        .read_left = read ? read->left : state->held_frame_left,
+        .read_right = read ? read->right : state->held_frame_right,
+        .narrow_mm = state->narrow, .wide_mm = state->wide,
+        .leading_mm = state->leading_mm,
+        .rise = state->rise, .fall = state->fall,
+        .letter = state->held_letter, .direction = state->direction,
+        .mapped_action = barcode_window_table_confirmed() ? actions[index] : 0u,
+        .accepted = true, .held = true};
+    state->held = false;
+    state->phase = COMPLETE;
+}
+
 /* Failure abandons the whole candidate. Never repair or slide its runs. */
 static void reject(barcode_window_t *state, barcode_window_reason_t reason)
 {
+    if (state->held && (state->phase == WINDOW || state->phase == TAIL)) {
+        accept_held(state);
+        return;
+    }
+    state->held = false;
 #if BARCODE_FAIL_CAPTURE
     bcfc_reject(state, (uint32_t)reason);
 #endif
@@ -243,7 +294,17 @@ static float sensor_pose_step(barcode_window_t *state, int32_t dl, int32_t dr)
     state->centre_x_mm += c * local_x - s * local_y;
     state->centre_y_mm += s * local_x + c * local_y;
     state->heading_rad += turn;
-    return sensor_axis_mm(state);
+    const float mm = sensor_axis_mm(state);
+    /* Before the first bar, keep the barcode axis near the current heading.
+     * Without this, a SEEK that starts inside a bend projects the barcode on
+     * the bend-entry heading: R7 (A after a bend) read 37.6 mm for 60.1 mm
+     * of wheel travel (cos 51 deg). Position stays continuous. */
+    if (state->phase == SEEK && fabsf(state->heading_rad) > AXIS_REBASE_RAD) {
+        state->centre_x_mm = mm - (float)state->config.sensor_forward_mm;
+        state->centre_y_mm = -(float)state->config.sensor_lateral_mm;
+        state->heading_rad = 0.0f;
+    }
+    return mm;
 }
 
 void barcode_window_motor(barcode_window_t *state, uint32_t us,
@@ -359,7 +420,7 @@ static bool model(const float *runs, bool reverse, element_model_t *out)
     }
     const float n = sum[0] / 6.0f, w = sum[1] / 3.0f;
     if (n < N_MIN || n > N_MAX ||
-        w / n < 1.6f || w / n > 3.4f || low[1] / high[0] < 1.4f ||
+        w / n < 1.6f || w / n > 3.55f || low[1] / high[0] < 1.4f ||
         low[0] < n * 0.65f || high[0] > n * 1.5f ||
         low[1] < w * 0.65f || high[1] > w * 1.5f) {
         return false;
@@ -389,19 +450,137 @@ static bool start_star(barcode_window_t *state)
     return false;
 }
 
+/* Late-start rescue (operator 2026-11-20, option R). On a bend exit GP28 can
+ * slide onto the sheet across the bar ends: the first narrow bar of the
+ * start star stays below the rise threshold, so the window starts at star
+ * element 2 (image 24 capture: 2.2 6.4 11.6 5.9 12.0 5.6 2.6 | 6.0 | 11.5).
+ * When the normal start fails, treat runs 0..6 as star elements 2..8 in
+ * travel order, rebuild the two missed runs from their own narrow/wide
+ * estimates, and require the full nine-run model to give '*'. The letter,
+ * gaps, extent and end star are then checked as usual. */
+static bool late_start(barcode_window_t *state)
+{
+    for (unsigned int reverse = 0u; reverse < 2u; ++reverse) {
+        /* Star classes in travel order (1 = wide). */
+        bool wide[9];
+        for (unsigned int i = 0u; i < 9u; ++i) {
+            const unsigned int printed = reverse != 0u ? 8u - i : i;
+            wide[i] = (0x094u & (0x100u >> printed)) != 0u;
+        }
+        float bar = 0.0f, space = 0.0f, wide_sum = 0.0f;
+        unsigned int bars = 0u, spaces = 0u, wides = 0u;
+        for (unsigned int i = 0u; i < 7u; ++i) {
+            const unsigned int at = i + 2u;
+            if (wide[at]) {
+                continue;
+            }
+            if (at % 2u == 0u) {
+                bar += state->runs[i];
+                ++bars;
+            } else {
+                space += state->runs[i];
+                ++spaces;
+            }
+        }
+        if (bars == 0u || spaces == 0u) {
+            continue;
+        }
+        bar /= (float)bars;
+        space /= (float)spaces;
+        const float bias = (space - bar) * 0.5f;
+        for (unsigned int i = 0u; i < 7u; ++i) {
+            const unsigned int at = i + 2u;
+            if (wide[at]) {
+                wide_sum += state->runs[i] + (at % 2u == 0u ? bias : -bias);
+                ++wides;
+            }
+        }
+        if (wides == 0u) {
+            continue;
+        }
+        const float w = wide_sum / (float)wides;
+        float rebuilt[9];
+        rebuilt[0] = wide[0] ? w - bias : bar;
+        rebuilt[1] = wide[1] ? w + bias : space;
+        memcpy(rebuilt + 2, state->runs, 7u * sizeof(rebuilt[0]));
+        element_model_t first;
+        if (!model(rebuilt, reverse != 0u, &first) || first.symbol != '*' ||
+            state->leading_mm < QUIET_MIN_MM) {
+            continue;
+        }
+        memmove(state->runs + 2, state->runs, 9u * sizeof(state->runs[0]));
+        state->runs[0] = rebuilt[0];
+        state->runs[1] = rebuilt[1];
+        state->elements = 11u;
+        state->direction = (uint8_t)(reverse + 1u);
+        state->narrow = first.narrow;
+        state->wide = first.wide;
+        state->bias = first.bias;
+        state->space = first.space;
+        return true;
+    }
+    return false;
+}
+
+/* End-star fallback (operator 2026-11-20, option F): classify each of the
+ * nine end-star runs at the start star's split, (narrow + wide) / 2, after
+ * the start star's bar/space bias. The pattern must be exactly '*' (0x094).
+ * One edge moved by a SEARCH pivot keeps every run on its side of the split,
+ * so the end star still confirms the read. */
+static bool end_star_split(const barcode_window_t *state, bool reverse)
+{
+    const float split = 0.5f * (state->narrow + state->wide);
+    uint16_t mask = 0u;
+    for (unsigned int i = 0u; i < 9u; ++i) {
+        const float raw = state->runs[20u + (reverse ? 8u - i : i)];
+        const float value = raw + (i % 2u == 0u ? state->bias : -state->bias);
+        if (!isfinite(value) || value <= 0.0f) {
+            return false;
+        }
+        if (value > split) {
+            mask |= (uint16_t)(0x100u >> i);
+        }
+    }
+    return mask == 0x094u;
+}
+
+/* Letter checks on parts 10..18 against the start star: model, 20% scale
+ * and gap 1. Same rules as finish_window. */
+static bool letter_ok(const barcode_window_t *state, element_model_t *data)
+{
+    const bool reverse = state->direction == 2u;
+    if (!model(state->runs + 10, reverse, data) ||
+        data->symbol < 'A' || data->symbol > 'Z' ||
+        fabsf(data->narrow - state->narrow) > 0.2f * state->narrow ||
+        fabsf(data->wide - state->wide) > 0.2f * state->wide) {
+        return false;
+    }
+    const float gap1 = state->runs[9] - (state->bias + data->bias) * 0.5f;
+    return gap1 >= state->narrow * 0.65f && gap1 <= state->narrow * 1.5f;
+}
+
 static bool finish_window(barcode_window_t *state)
 {
     element_model_t data, last;
     const bool reverse = state->direction == 2u;
-    if (!model(state->runs + 10, reverse, &data) ||
-        !model(state->runs + 20, reverse, &last) || last.symbol != '*') {
+    if (!model(state->runs + 10, reverse, &data)) {
         reject(state, BW_WIDTH);
         return false;
     }
+    const bool last_fit = model(state->runs + 20, reverse, &last) &&
+        last.symbol == '*' &&
+        fabsf(last.narrow - state->narrow) <= 0.2f * state->narrow &&
+        fabsf(last.wide - state->wide) <= 0.2f * state->wide;
+    if (!last_fit) {
+        if (!end_star_split(state, reverse)) {
+            reject(state, BW_WIDTH);
+            return false;
+        }
+        last = (element_model_t){state->narrow, state->wide, state->bias,
+                                 state->space, '*'};
+    }
     if (fabsf(data.narrow - state->narrow) > 0.2f * state->narrow ||
-        fabsf(last.narrow - state->narrow) > 0.2f * state->narrow ||
-        fabsf(data.wide - state->wide) > 0.2f * state->wide ||
-        fabsf(last.wide - state->wide) > 0.2f * state->wide) {
+        fabsf(data.wide - state->wide) > 0.2f * state->wide) {
         reject(state, BW_WIDTH);
         return false;
     }
@@ -433,16 +612,26 @@ static bool finish_window(barcode_window_t *state)
     return true;
 }
 
+static bool rise_seen(barcode_window_t *state, uint16_t raw);
+static void note_bar(barcode_window_t *state);
+static void window_mid(barcode_window_t *state, barcode_window_adc_t sample,
+                       float mm, const barcode_window_motor_t *upper);
+static void provisional_hold(barcode_window_t *state,
+                             barcode_window_adc_t sample, float mm,
+                             const barcode_window_motor_t *upper);
+
 static void tail(barcode_window_t *state, barcode_window_adc_t sample,
                  float mm, const barcode_window_motor_t *upper)
 {
-    if (sample.raw >= state->rise ||
+    if ((state->mid ? rise_seen(state, sample.raw) : sample.raw >= state->rise) ||
         mm - state->edge_mm > 2.5f * state->tail_narrow) {
         reject(state, BW_TAIL);
         return;
     }
-    if (sample.raw < WHITE_MIN || sample.raw > WHITE_MAX ||
-        sample.raw > state->fall) {
+    /* Tail white. Midpoint mode: floor white up to the fixed fall level
+     * (white + 75); the 2.5 mm trailing white has 25-count noise. */
+    if (sample.raw < WHITE_MIN || sample.raw > state->fall ||
+        (!state->mid && sample.raw > WHITE_MAX)) {
         state->tail_start = -1.0f;
         return;
     }
@@ -487,9 +676,68 @@ void barcode_window_thaw(barcode_window_t *state, uint32_t us)
     }
 }
 
+static bool edge(barcode_window_t *state, barcode_window_adc_t sample,
+                 float t, const barcode_window_motor_t *upper);
+
+/* First crossing of each 256-count level since the last run extreme. */
+static void record(barcode_window_t *state, uint16_t raw, float mm,
+                   uint16_t prev_raw, float prev_mm)
+{
+    if (raw == prev_raw) {
+        return;
+    }
+    const bool falling = raw < prev_raw;
+    const unsigned int lo = falling ? raw : prev_raw;
+    const unsigned int hi = falling ? prev_raw : raw;
+    float *table = falling ? state->fall_mm : state->rise_mm;
+    uint32_t *set = falling ? &state->fall_set : &state->rise_set;
+    for (unsigned int b = lo / LEVEL_STEP + 1u;
+         b * LEVEL_STEP <= hi && b < BW_LEVELS; ++b) {
+        const uint32_t bit = UINT32_C(1) << b;
+        if ((*set & bit) == 0u) {
+            const float f = ((float)(b * LEVEL_STEP) - (float)prev_raw) /
+                            ((float)raw - (float)prev_raw);
+            table[b] = prev_mm + f * (mm - prev_mm);
+            *set |= bit;
+        }
+    }
+}
+
+/* Position where the edge crossed level; fallback when not recorded. */
+static float lookup(const float *table, uint32_t set, float level,
+                    float fallback)
+{
+    const unsigned int b = (unsigned int)(level / (float)LEVEL_STEP);
+    if (b + 1u >= BW_LEVELS) {
+        return fallback;
+    }
+    const bool a = (set & (UINT32_C(1) << b)) != 0u;
+    const bool c = (set & (UINT32_C(1) << (b + 1u))) != 0u;
+    if (a && c) {
+        const float f = (level - (float)(b * LEVEL_STEP)) / (float)LEVEL_STEP;
+        return table[b] + f * (table[b + 1u] - table[b]);
+    }
+    return a ? table[b] : c ? table[b + 1u] : fallback;
+}
+
+/* A new bar after a white run: the envelope detection rule. */
+static bool rise_seen(barcode_window_t *state, uint16_t raw)
+{
+    if (raw < state->run_valley) {
+        state->run_valley = raw;
+    }
+    const float lift = (float)raw - (float)state->run_valley;
+    return lift >= EDGE_MIN_SWING && lift >= EDGE_DETECT *
+        ((float)state->ref_peak - (float)state->run_valley);
+}
+
 static void process(barcode_window_t *state, barcode_window_adc_t sample,
                     float mm, const barcode_window_motor_t *upper)
 {
+    const uint16_t prev_raw = state->prev_raw;
+    const float prev_mm = state->prev_mm;
+    state->prev_raw = sample.raw;
+    state->prev_mm = mm;
     if (state->phase == SEEK) {
         const bool after_freeze = (state->frozen || state->thaw) &&
             (int32_t)(sample.us - state->freeze_us) >= 0;
@@ -555,6 +803,20 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
             state->start_us = sample.us;
             state->elements = 0u;
             state->black = true;
+            state->det_mm = mm;
+            state->run_peak = sample.raw;
+            state->ref_valley = (uint16_t)lroundf(state->white_mean);
+            state->fall_set = 0u;
+            state->rise_set = 0u;
+            record(state, sample.raw, mm, prev_raw, prev_mm);
+            state->started = false;
+            state->mode_set = false;
+            state->mid = false;
+            state->closing = false;
+            state->bars = 0u;
+            state->shifts = 0u;
+            state->held = false;
+            state->held_tried = false;
             state->phase = WINDOW;
 #if BARCODE_FAIL_CAPTURE
             bcfc_start(state, sample, mm, upper);
@@ -588,6 +850,31 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
         tail(state, sample, mm, upper);
         return;
     }
+    if (state->black && sample.raw > state->run_peak) {
+        state->run_peak = sample.raw;
+        state->fall_set = 0u;
+    }
+    if (!state->black && sample.raw < state->run_valley) {
+        state->run_valley = sample.raw;
+        state->rise_set = 0u;
+    }
+    record(state, sample.raw, mm, prev_raw, prev_mm);
+    if (!state->mode_set) {
+        /* Mode from the first bar: a strong bar (small spot) uses the local
+         * midpoint; a weak bar (5.5 mm mount) keeps the fixed levels. */
+        if ((float)state->run_peak - state->white_mean >= STRONG_EXCESS) {
+            state->mode_set = true;
+            state->mid = true;
+            state->started = false;
+        } else if (sample.raw <= state->fall) {
+            state->mode_set = true;
+            state->mid = false;
+        }
+    }
+    if (state->mid) {
+        window_mid(state, sample, mm, upper);
+        return;
+    }
     const bool black = state->black ? sample.raw > state->fall :
                                      sample.raw >= state->rise;
     /* Before the star, keep the absolute fail-closed ceiling. Afterwards a
@@ -602,20 +889,186 @@ static void process(barcode_window_t *state, barcode_window_adc_t sample,
     if (black == state->black) {
         return;
     }
-    state->runs[state->elements++] = mm - state->edge_mm;
-    state->edge_mm = mm;
+    if (black) {
+        state->run_peak = sample.raw;
+    } else {
+        note_bar(state);
+        state->run_valley = sample.raw;
+    }
     state->black = black;
-    if (state->elements == 9u && !start_star(state)) {
+    (void)edge(state, sample, mm, upper);
+}
+
+static void note_bar(barcode_window_t *state)
+{
+    if (state->bars < BW_PEAKS) {
+        state->bar_peak[state->bars] = state->run_peak;
+    }
+    if (state->bars < UINT8_MAX) {
+        ++state->bars;
+    }
+}
+
+/* Local-midpoint WINDOW step (strong first bar). */
+static void window_mid(barcode_window_t *state, barcode_window_adc_t sample,
+                       float mm, const barcode_window_motor_t *upper)
+{
+    if (state->closing) {
+        /* Last bar: its falling edge is the midpoint to floor white. */
+        if (rise_seen(state, sample.raw)) {
+            reject(state, BW_TAIL);
+            return;
+        }
+        const float level = 0.5f * ((float)state->ref_peak + state->white_mean);
+        if ((float)sample.raw <= level) {
+            state->closing = false;
+            (void)edge(state, sample, lookup(state->fall_mm, state->fall_set,
+                                             level, mm), upper);
+        } else if (mm - state->det_mm > 35.0f) {
+            reject(state, BW_WIDTH);
+        }
+        return;
+    }
+    const float run_limit = state->elements >= 9u ?
+        fminf(35.0f, 1.5f * state->wide + fabsf(state->bias)) : 35.0f;
+    if (mm - state->det_mm > run_limit) {
+        reject(state, BW_WIDTH);
+        return;
+    }
+    if (state->black) {
+        const float drop = (float)state->run_peak - (float)sample.raw;
+        if (drop < EDGE_MIN_SWING || drop < EDGE_DETECT *
+            ((float)state->run_peak - (float)state->ref_valley)) {
+            return;
+        }
+        /* Bar ended: place the rising edge before it at its midpoint. */
+        const float level = 0.5f * ((float)state->ref_valley +
+                                    (float)state->run_peak);
+        const float t = lookup(state->rise_mm, state->rise_set, level,
+                               state->det_mm);
+        note_bar(state);
+        state->ref_peak = state->run_peak;
+        state->run_valley = sample.raw;
+        state->rise_set = 0u;
+        state->black = false;
+        state->det_mm = mm;
+        if (!edge(state, sample, t, upper)) {
+            return;
+        }
+        if (state->elements == BW_ELEMENTS - 1u) {
+            state->closing = true;
+        }
+        return;
+    }
+    if (state->elements == 18u) {
+        provisional_hold(state, sample, mm, upper);
+    }
+    const float lift = (float)sample.raw - (float)state->run_valley;
+    if (lift < EDGE_MIN_SWING || lift < EDGE_DETECT *
+        ((float)state->ref_peak - (float)state->run_valley)) {
+        return;
+    }
+    /* Space ended: place the falling edge before it at its midpoint. */
+    const float level = 0.5f * ((float)state->ref_peak +
+                                (float)state->run_valley);
+    const float t = lookup(state->fall_mm, state->fall_set, level,
+                           state->det_mm);
+    state->ref_valley = state->run_valley;
+    state->run_peak = sample.raw;
+    state->fall_set = 0u;
+    state->black = true;
+    state->det_mm = mm;
+    (void)edge(state, sample, t, upper);
+}
+
+/* The first bar is faint when its contrast over floor white is below half
+ * of the weaker of the next two bars (image 20: a mark 1111 counts high,
+ * 5 mm before bars of 2800+). Narrow small-sheet bars blur to about 70% of
+ * the wide bars (synthetic 2769 against 3914), so 50% keeps them. */
+static bool faint_first(const barcode_window_t *state)
+{
+    const float weaker = fminf((float)state->bar_peak[1],
+                               (float)state->bar_peak[2]);
+    return (float)state->bar_peak[0] - state->white_mean <
+           0.5f * (weaker - state->white_mean);
+}
+
+/* Hold the letter when parts 1..19 pass the letter checks; the real part
+ * 19 replaces a provisional one. */
+static void hold_letter(barcode_window_t *state, barcode_window_adc_t sample,
+                        const barcode_window_motor_t *upper)
+{
+    element_model_t data;
+    state->held = letter_ok(state, &data);
+    if (state->held) {
+        state->held_letter = data.symbol;
+        state->held_edge_us = sample.us;
+        state->held_frame_us = upper->us;
+        state->held_frame_left = upper->left;
+        state->held_frame_right = upper->right;
+    }
+}
+
+/* Midpoint mode places a bar's falling edge only when the next bar rises.
+ * When the letter's last bar has fallen through the floor midpoint (the
+ * same rule as the closing bar), test a provisional part 19 so that the
+ * letter is held even if no further bar is seen. */
+static void provisional_hold(barcode_window_t *state,
+                             barcode_window_adc_t sample, float mm,
+                             const barcode_window_motor_t *upper)
+{
+    const float level = 0.5f * ((float)state->ref_peak + state->white_mean);
+    if (state->held_tried || (float)sample.raw > level) {
+        return;
+    }
+    state->held_tried = true;
+    state->runs[18] = lookup(state->fall_mm, state->fall_set, level, mm) -
+                      state->edge_mm;
+    hold_letter(state, sample, upper);
+}
+
+/* One edge at position t. The first edge only starts the window. False
+ * when the window rejected or finished. */
+static bool edge(barcode_window_t *state, barcode_window_adc_t sample,
+                 float t, const barcode_window_motor_t *upper)
+{
+    if (state->mid && !state->started) {
+        state->started = true;
+        state->edge_mm = t;
+        return true;
+    }
+    state->runs[state->elements++] = t - state->edge_mm;
+    state->edge_mm = t;
+    if (state->mid && state->elements == 5u && state->shifts < 2u &&
+        faint_first(state)) {
+        /* Three bars seen: drop the faint mark and its space. */
+        memmove(state->runs, state->runs + 2, 3u * sizeof(state->runs[0]));
+        memmove(state->bar_peak, state->bar_peak + 1,
+                2u * sizeof(state->bar_peak[0]));
+        state->elements = 3u;
+        state->bars = 2u;
+        ++state->shifts;
+        return true;
+    }
+    if (state->elements == 9u && !start_star(state) && !late_start(state)) {
         reject(state, BW_START);
-    } else if (state->elements == BW_ELEMENTS) {
+        return false;
+    }
+    if (state->elements == 19u) {
+        hold_letter(state, sample, upper);
+    }
+    if (state->elements == BW_ELEMENTS) {
         state->edge_us = sample.us;
         state->frame_us = upper->us;
         state->frame_left = upper->left;
         state->frame_right = upper->right;
         if (finish_window(state)) {
-            tail(state, sample, mm, upper);
+            state->tail_start = -1.0f;
+            tail(state, sample, t, upper);
         }
+        return false;
     }
+    return true;
 }
 
 unsigned int barcode_window_step(barcode_window_t *state, unsigned int budget)
