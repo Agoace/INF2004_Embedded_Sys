@@ -416,6 +416,78 @@ static bool start_star(barcode_window_t *state)
     return false;
 }
 
+/* Late-start rescue (operator 2026-11-20, option R). On a bend exit GP28 can
+ * slide onto the sheet across the bar ends: the first narrow bar of the
+ * start star stays below the rise threshold, so the window starts at star
+ * element 2 (image 24 capture: 2.2 6.4 11.6 5.9 12.0 5.6 2.6 | 6.0 | 11.5).
+ * When the normal start fails, treat runs 0..6 as star elements 2..8 in
+ * travel order, rebuild the two missed runs from their own narrow/wide
+ * estimates, and require the full nine-run model to give '*'. The letter,
+ * gaps, extent and end star are then checked as usual. */
+static bool late_start(barcode_window_t *state)
+{
+    for (unsigned int reverse = 0u; reverse < 2u; ++reverse) {
+        /* Star classes in travel order (1 = wide). */
+        bool wide[9];
+        for (unsigned int i = 0u; i < 9u; ++i) {
+            const unsigned int printed = reverse != 0u ? 8u - i : i;
+            wide[i] = (0x094u & (0x100u >> printed)) != 0u;
+        }
+        float bar = 0.0f, space = 0.0f, wide_sum = 0.0f;
+        unsigned int bars = 0u, spaces = 0u, wides = 0u;
+        for (unsigned int i = 0u; i < 7u; ++i) {
+            const unsigned int at = i + 2u;
+            if (wide[at]) {
+                continue;
+            }
+            if (at % 2u == 0u) {
+                bar += state->runs[i];
+                ++bars;
+            } else {
+                space += state->runs[i];
+                ++spaces;
+            }
+        }
+        if (bars == 0u || spaces == 0u) {
+            continue;
+        }
+        bar /= (float)bars;
+        space /= (float)spaces;
+        const float bias = (space - bar) * 0.5f;
+        for (unsigned int i = 0u; i < 7u; ++i) {
+            const unsigned int at = i + 2u;
+            if (wide[at]) {
+                wide_sum += state->runs[i] + (at % 2u == 0u ? bias : -bias);
+                ++wides;
+            }
+        }
+        if (wides == 0u) {
+            continue;
+        }
+        const float w = wide_sum / (float)wides;
+        float rebuilt[9];
+        rebuilt[0] = wide[0] ? w - bias : bar;
+        rebuilt[1] = wide[1] ? w + bias : space;
+        memcpy(rebuilt + 2, state->runs, 7u * sizeof(rebuilt[0]));
+        element_model_t first;
+        if (!model(rebuilt, reverse != 0u, &first) || first.symbol != '*' ||
+            state->leading_mm < QUIET_MIN_MM) {
+            continue;
+        }
+        memmove(state->runs + 2, state->runs, 9u * sizeof(state->runs[0]));
+        state->runs[0] = rebuilt[0];
+        state->runs[1] = rebuilt[1];
+        state->elements = 11u;
+        state->direction = (uint8_t)(reverse + 1u);
+        state->narrow = first.narrow;
+        state->wide = first.wide;
+        state->bias = first.bias;
+        state->space = first.space;
+        return true;
+    }
+    return false;
+}
+
 /* End-star fallback (operator 2026-11-20, option F): classify each of the
  * nine end-star runs at the start star's split, (narrow + wide) / 2, after
  * the start star's bar/space bias. The pattern must be exactly '*' (0x094).
@@ -887,7 +959,7 @@ static bool edge(barcode_window_t *state, barcode_window_adc_t sample,
         ++state->shifts;
         return true;
     }
-    if (state->elements == 9u && !start_star(state)) {
+    if (state->elements == 9u && !start_star(state) && !late_start(state)) {
         reject(state, BW_START);
         return false;
     }

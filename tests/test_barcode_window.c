@@ -262,8 +262,38 @@ int main(int argc, char **argv)
             merged = strcmp(kind, "merged") == 0 ? i : -1;
             make("*F*", false, 1.0f);
             run("normal");
-            assert(!state.result.accepted);
+            /* Option R: a missing first bar is a late start (bend exit);
+             * the letter and end star still decide. Any other missing or
+             * merged element still fails closed. */
+            assert(state.result.accepted == (missing == 0));
         }
+        missing = merged = -1;
+    } else if (strcmp(kind, "late_start") == 0) {
+        /* Image 24 bend capture: first narrow bar too faint to see. */
+        const char *letters[] = {"*A*", "*F*", "*Z*", "*Q*"};
+        for (unsigned int r = 0u; r < 2u; ++r) {
+            for (unsigned int k = 0u; k < 4u; ++k) {
+                make(letters[k], r != 0u, 0.72f);
+                missing = 0; /* first bar in travel order */
+                run("normal");
+                assert(state.result.accepted);
+                assert(state.result.letter == letters[k][1]);
+                assert(state.direction == r + 1u);
+            }
+        }
+        /* Two missed bars (first bar + next) are not rescued. */
+        make("*A*", false, 0.72f);
+        missing = 0;
+        merged = 1;
+        run("normal");
+        assert(!state.result.accepted);
+        /* A start that is not a star tail still fails as BW_START. */
+        make("AAA", false, 0.72f);
+        missing = 0;
+        merged = -1;
+        run("normal");
+        assert(!state.result.accepted);
+        missing = -1;
     } else if (strcmp(kind, "calibration") == 0) {
         barcode_cal_report_t bad = calibration;
         bad.mode = BC_CAL_INVALID;

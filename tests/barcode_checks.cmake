@@ -140,7 +140,7 @@ target_compile_definitions(test_barcode_window_unconfirmed PRIVATE
 foreach(case IN ITEMS sizes normal variable wrap two_ms freeze tracking short_quiet
         immutable missing merged calibration queue brackets leading short_tail
         gap extra multi small air reversal motor_fault motor_gap sample_gap
-        adc_fault paper flat_dark line_only alias one_missing)
+        adc_fault paper flat_dark line_only alias one_missing late_start)
     add_test(NAME test_barcode_window_${case}
         COMMAND test_barcode_window ${case})
 endforeach()
