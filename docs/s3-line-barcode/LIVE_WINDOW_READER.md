@@ -272,3 +272,113 @@ lowest value with no FC2 candidate at all three speeds.
 [`test_barcode_quiet_real.c`](../../tests/test_barcode_quiet_real.c)
 expects this result and changes back if the value is 32 mm or more.
 
+## Local-midpoint mode at GP28 2.5 mm
+
+At 2.5 mm the narrow spaces of the small sheet (2.9 mm) do not return to
+white. They stay at 1100..1600 counts between bars of 2500..3850. The fixed
+rise/fall levels then merge bars. The reader now has two edge modes. The
+first bar after admission selects the mode.
+
+| First bar over floor white | Mode | Edge rule |
+| --- | --- | --- |
+| Less than 800 counts (5.5 mm mount: 450..570) | Fixed | Unchanged: `rise`/`fall` levels, as before |
+| 800 counts or more (2.5 mm: 2300..3700) | Local midpoint | See below |
+
+Local-midpoint rule (`barcode_window.c`, `window_mid`):
+
+1. Detect: a run ends when the signal moves 40% of the local swing away
+   from the run extreme, and at least 300 counts. The swing is the run
+   extreme against the extreme of the run before it. Noise on H3 is
+   25 counts (white) and 45 counts (bar), 1 standard deviation.
+2. Place: the edge goes where the signal crossed the midpoint of the bar
+   peak and the space valley next to it. A crossing table (256-count
+   steps) holds the first crossing of each level since the run extreme.
+3. Last bar: its fall edge is the midpoint of the bar peak and floor white.
+   Trailing white is floor white up to `fall` (white + 75 counts).
+4. Faint first mark: when three bars are seen and the first bar is below
+   50% of the weaker of the next two (contrast over floor white), the reader
+   drops it and its space. At most two drops. Image 20 failed BW_START on
+   a mark of 1111 counts 5 mm before bars of 2800 or more.
+
+Admission does not change: `QUIET_MIN_MM` 30 and the fixed rise level.
+`N_MIN` is now 2.5 mm (was 4.0). `N_MAX` stays 7.0: the robot measured
+narrow 6.51 mm on the large sheet at 2.5 mm, and synthetic large gives
+5.83 mm. This is not a robot proof.
+
+Host evidence ([`test_barcode_height_2p5.c`](../../tests/test_barcode_height_2p5.c)):
+
+| Case | Source | Result |
+| --- | --- | --- |
+| H3 small, rows to 102 | Robot, odometer from `[BC_FAIL_EDGE]` | Midpoint mode; first runs 3.89, 2.92 mm (robot: merged); USB gap at row 103 ends the data |
+| Image 20 large, rows to 142 | Robot, odometer from `[BC_FAIL_EDGE]` | Mark dropped; runs 4.33, 7.08, 16.48 mm; USB gap at row 143 ends the data |
+| synth small `*F*` 115 and 69 mm/s | ASSUMED model (SW7) | F, n 3.45 / 3.44, w 7.78 / 7.76 |
+| synth large `*F*` 115 and 69 mm/s | ASSUMED model (SW7) | F, n 5.83 / 5.84, w 17.45 / 17.43 |
+| synth small and large `*Z*` | ASSUMED model (SW7) | Z, not F |
+
+All real 5.5 mm captures give the same letters and widths as before. These
+existing tests changed: `test_barcode_window` sizes (the 141 mm body is now
+read; `N_MIN` boundary 2.4/2.55 mm) and small (half size is now positive);
+`test_barcode_live_feed` start_fail uses bar level 700 (fixed mode), because
+1000 counts selects the midpoint mode. The robot run is pending.
+
+### GP28 height 2.5 mm results
+
+Source: SW7 draft `~/Projects/robot-logs/20261119_bcheight/HEIGHT_RESULTS_draft.md`.
+
+Demo image `1f46e88` (UF2 `4d3fe5a806fa4625`), GP20 dump and MQTT
+`robot/barcode`. Bars seen: dark runs with the current fixed levels
+(rise = white + 150, fall = white + 75); a `*F*` sheet has 15 bars.
+
+| Sheet, GP28 height | Result | Bars seen | Levels | Source |
+| --- | --- | ---: | --- | --- |
+| Small 141 mm (n 2.9 / w 8.7), 5.5 mm | Not read (B1c, 13 runs) | 6 of 15 | white 156 | fixture `barcode_430_small_fwd.csv` |
+| Small, 2.5 mm, run 1 | BW_WIDTH (reason 6), 8 elements | 5 of 15 | white 140 | boot `48e9db3c` |
+| Small, 2.5 mm, H3 | BW_WIDTH (reason 6), 4 elements | 3 of 15 | white 175; bar peaks 2959-3856 (H3 fixture rows); narrow gaps 1100-1400; wide gaps about 250 | boot `78a88a68` |
+| Large 285 mm (n 5.8 / w 17.5), 2.5 mm | Decoded Q (BW_OK), widths valid | 15 of 15 | narrow 6.51 mm, wide 17.38 mm (MQTT) | boot `a42680ab` |
+
+At 2.5 mm the narrow gaps no longer return to white (1100-1400 counts),
+so the fixed rise/fall levels merge two bars into one: the reader sees
+3-5 bars and rejects with BW_WIDTH. The large sheet still decodes.
+Floor clearance at 2.5 mm over the 10 mm hump is not checked.
+
+## Bend exit and held letter (2026-11-20)
+
+Medium A sheet (narrow 4.2 mm, wide 13 mm), placed just after a bend.
+Image 21 read it 2/2 on a straight and 0/4 out of the bend. Five changes in
+[`barcode_window.c`](../../app_program/subsystem3/barcode_window.c) fix the
+reader-side causes. Each is one commit on `mtk3-bc-endstar`.
+
+| Change | Cause (robot dump) | Rule |
+| --- | --- | --- |
+| End-star split fallback (`end_star_split`) | R5: one end-star edge moved about 3 mm during a SEARCH pivot (yaw up to 20 deg/s; GP28 is 73 mm left of the axle). | If the end star fails the model or the 20% check, classify its 9 runs at (narrow + wide) / 2 after the start bias. The result must be `*`. The letter keeps the full model and the 20% check. |
+| Axis re-anchor in SEEK (`AXIS_REBASE_RAD`, 3 deg) | R7: the axis was fixed at the first motor sample of SEEK, inside the bend. Reader 37.6 mm against wheels 60.1 mm. | In SEEK only, when the heading is more than 3 deg from the axis, set a new axis. The position stays continuous. WINDOW and TAIL do not change. |
+| Wide/narrow limit 3.4 to 3.55 | R7 measured 3.45. | `test_barcode_window_sizes` still rejects 3.6. |
+| Late-start rescue (`late_start`) | Image 24: the first bar was faint (peak 319, rise 327). The read started at star element 2. | At 9 elements, when the start star fails: treat runs 0..6 as star elements 2..8, rebuild the 2 missed runs, and require `*` from the full model. Then continue with 11 elements. |
+| Held letter (`letter_ok`, `hold_letter`, `accept_held`), operator 2026-11-20 | Images 24 to 26: GP28 runs off the bar ends or moves back after the letter. | At part 19 (start star, gap, letter), run the letter checks: model, A to Z, 20% against the start star, gap 0.65..1.5 narrow. If they pass, hold the letter. A later reject in WINDOW or TAIL (end star, gap 2, extent, width, motion, loss, tail) accepts the held letter with `result.held = 1`. In midpoint mode a provisional part 19 is tested once when the last letter bar falls to the floor midpoint. |
+
+The producer publishes an accepted result also when a motor or ADC sample
+ends the window (`barcode_live_producer.c`). Image 27 lost one held read
+on this path. Test `held_retreat` is red without the fix.
+
+Accepted risks:
+
+- A held read has no end-star confirmation. Code 39 has no checksum, so a
+  wrong letter gives a wrong turn.
+- `*AB*` reads as A. The course uses one letter per sheet.
+- `test_barcode_window_missing` accepts a missing first bar (late start)
+  and any damage after part 19 (held).
+
+Robot results (hotspot, GP28 2.5 mm):
+
+| Image | Code | Result |
+| --- | --- | --- |
+| 21 | midpoint reader | A straight 2/2, A out of the bend 0/4 |
+| 24 | + split, axis, 3.55 | A out of the bend 2/4 at the correct size (n 3.95, w 13.36) |
+| 25 | + late start | A out of the bend 2/5, Z 2/2 |
+| 26 | `4e556c8` | A 4/5, LEFT after A 3/3, Z 1/1, small F 0/1 |
+| 29 | `2123e1f` + held fix, map `A=LEFT,F=UTURN` | A, large F, Z: 3/3 OK. LEFT 93.7 deg, U-turn 177.5 deg |
+
+Failures that the reader cannot fix: GP28 crosses the bar ends at an angle
+on a bend exit, or swings off the sheet in a weave. The small sheet fails
+on a hard zigzag (BW_WIDTH). The read must get past the letter for the held
+rule to help.

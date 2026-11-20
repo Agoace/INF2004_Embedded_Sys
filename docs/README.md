@@ -18,6 +18,7 @@ not current acceptance reports. Local course originals are not public records.
 ## Release
 
 - [SUBMISSION_V2.md](release/SUBMISSION_V2.md) — the second submission of 2026-11-19.
+- [SUBMISSION_V3.md](release/SUBMISSION_V3.md) — the third submission of 2026-11-20; the demo letter map is set on the day.
   Contains: tag `submission-v2` on `main` = staging `1f46e88`; the staging merges since `submission-v1`; checks (host 722/722, RAM_PROOF 81/81, 0 warnings); robot evidence (images 12, 18, 19); known limits.
 - [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the frozen demo kernel of 2026-11-18.
   Contains: tag `demo-kernel-v1` (`9f15213`), submission branch `main` (`submission-v1`); live-barcode build line and fallback; checks (host 677/677, 76/76 MATCH, RAM_PROOF 79/79, 0 warnings); image SHA prefixes; robot runs LIVE1–4, UTURN1, RIGHT1, GRACE1 (LEFT turns 92–95 deg, U-turn 172.5 deg); known limits (straight barcode placement, 1000 mm expiry, U-turn one pass, no full-feature run on this image).
@@ -91,7 +92,7 @@ not current acceptance reports. Local course originals are not public records.
   Contains: status, unchanged spin controls, signal evidence and thresholds, report fields, SHADOW procedure, first home-mat result (`a883455`) and policy correction, software validation.
 - [LIVE_SOURCE_CONTRACT.md](s3-line-barcode/LIVE_SOURCE_CONTRACT.md) — the S3-to-vehicle barcode boards.
   Contains: ownership (S3 writes record, vehicle writes control), final sizes (40 B record, 20 B control), five-word control, coherent read APIs, validation scope.
-- [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode, size-tolerant.
+- [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode, size-tolerant; local-midpoint mode and GP28 2.5 mm height results.
   Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (narrow 4.0..7.0 mm fitted from the start star, wide by ratio 1.6..3.4, run ceiling min(35, 1.5w+|bias|) mm), historical evidence and limits.
 - [LIVE_COUNTS_SNAPSHOT.md](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — read-only per-run barcode reader totals.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
