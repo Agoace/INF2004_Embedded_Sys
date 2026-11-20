@@ -373,9 +373,9 @@ static bool model(const float *runs, bool reverse, element_model_t *out)
     }
     const float n = sum[0] / 6.0f, w = sum[1] / 3.0f;
     if (n < N_MIN || n > N_MAX ||
-        w / n < 1.6f || w / n > 3.4f || low[1] / high[0] < 1.4f ||
-        low[0] < n * 0.65f || high[0] > n * 1.5f ||
-        low[1] < w * 0.65f || high[1] > w * 1.5f) {
+        w / n < 1.6f || w / n > 3.4f || low[1] / high[0] < 1.3f ||
+        low[0] < n * 0.5f || high[0] > n * 1.8f ||
+        low[1] < w * 0.5f || high[1] > w * 1.8f) {
         return false;
     }
     *out = (element_model_t){physical, w, bias, space,
