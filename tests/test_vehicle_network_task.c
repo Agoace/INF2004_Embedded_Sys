@@ -232,7 +232,7 @@ int main(int argc,char **argv) {
     }
     if (argc > 1 && !strcmp(argv[1], "capturetime")) {
         capture_time_limit = true;
-        test_end_ms = 95000u;
+        test_end_ms = 305000u;
     }
     if (argc > 1 && !strcmp(argv[1], "shellother")) shell_fault_case = 1u;
     if (argc > 1 && !strcmp(argv[1], "shellmotion")) shell_fault_case = 2u;
@@ -248,7 +248,7 @@ int main(int argc,char **argv) {
     assert(stop_captures == vehicle_run_epoch() / 2u);
     if (capture_time_limit) {
         assert(stop_captures == 1u && captured_vehicle_faults == 0u);
-        assert(!strcmp(last_reason, "90 s time limit"));
+        assert(!strcmp(last_reason, "300 s time limit"));
         return 0;
     }
     if (mode != 1u && mode != 5u) {
