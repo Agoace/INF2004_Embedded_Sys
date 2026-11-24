@@ -1,5 +1,10 @@
 # Submission v3 2026-11-20
 
+Superseded by tag `submission-v4`; its firmware is the same as
+[demo-kernel-v2](DEMO_KERNEL_V2.md). The build, limits and results below
+apply to submission v3, not the current demo. The demo-day letter map is
+recorded in the current demo kernel record.
+
 This record identifies the third submission. `main` receives
 `mtk3-staging` with one `--no-ff` merge and gets the tag `submission-v3`.
 The earlier tags (`submission-v1`, `submission-v2`, `demo-kernel-v1`) stay
@@ -11,7 +16,7 @@ unchanged; see [SUBMISSION_V2.md](SUBMISSION_V2.md) and
 | Item | Value |
 | --- | --- |
 | Tag | `submission-v3` on `main` |
-| Code | `mtk3-bc-endstar` `2123e1f`, merged into staging as `083cde6` |
+| Code | `2123e1f` (tag `archive/mtk3-bc-endstar`), merged into staging as `083cde6` |
 | Previous submission | `submission-v2` (`e0eff53`) |
 | Date | 2026-11-20 |
 
@@ -20,11 +25,11 @@ unchanged; see [SUBMISSION_V2.md](SUBMISSION_V2.md) and
 One `--no-ff` merge (`083cde6`) brings both barcode branches. Use
 `git revert -m 1 083cde6` to remove them.
 
-| Change | Branch | Record |
+| Change | Archive tag (former branch) | Record |
 | --- | --- | --- |
-| Local-midpoint edges for the small sheet at GP28 2.5 mm, faint first mark drop, `N_MIN` 2.5 mm | `mtk3-bc-small` | [Local-midpoint mode](../s3-line-barcode/LIVE_WINDOW_READER.md#local-midpoint-mode-at-gp28-25-mm) |
-| End-star split fallback, axis re-anchor in SEEK, wide/narrow limit 3.55, late-start rescue | `mtk3-bc-endstar` | [Bend exit and held letter](../s3-line-barcode/LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20) |
-| Held letter: keep the letter once parts 1..19 pass (operator 2026-11-20), and publish it when a motor or ADC sample ends the window | `mtk3-bc-endstar` | [Bend exit and held letter](../s3-line-barcode/LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20) |
+| Local-midpoint edges for the small sheet at GP28 2.5 mm, faint first mark drop, `N_MIN` 2.5 mm | `archive/mtk3-bc-small` | [Local-midpoint mode](../s3-line-barcode/LIVE_WINDOW_READER.md#local-midpoint-mode-at-gp28-25-mm) |
+| End-star split fallback, axis re-anchor in SEEK, wide/narrow limit 3.55, late-start rescue | `archive/mtk3-bc-endstar` | [Bend exit and held letter](../s3-line-barcode/LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20) |
+| Held letter: keep the letter once parts 1..19 pass (operator 2026-11-20), and publish it when a motor or ADC sample ends the window | `archive/mtk3-bc-endstar` | [Bend exit and held letter](../s3-line-barcode/LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20) |
 
 ## Demo build: set the letter map on the day
 
