@@ -43,10 +43,11 @@ class MakeSelection(unittest.TestCase):
                   "$(wildcard ../app_program/*/*.c)\n",
             cwd=cls.cwd, capture_output=True, text=True, check=True)
         # Defaults remove these opt-in directories, order kept: BENCH_KERNEL,
-        # IMU_SAFETY_BENCH, IMU_SAFETY_CAPTURE and BARCODE_LIVE_ENABLE.
+        # IMU_SAFETY_BENCH, IMU_SAFETY_CAPTURE, IMU_GAP_TEST and
+        # BARCODE_LIVE_ENABLE.
         off = tuple("../app_program/" + d + "/" for d in (
             "bench_kernel", "imu_safety_bench", "imu_safety_capture",
-            "barcode_live_vehicle"))
+            "imu_gap_test", "barcode_live_vehicle"))
         cls.original_sources = [p for p in original.stdout.split()
             if not p.startswith(off)]
         for path in nested:
