@@ -2,16 +2,18 @@
 
 ## Status and scope
 
-B2b step 2 adds observation only. No live window reader, letter table,
-barcode command source or sensor-offset estimator is present yet.
-The operator reported the first home-mat spin results on `a883455` below.
-Live decoding and action acceptance are not claimed.
+Current (2026-11-24): the spin report feeds the integrated
+[LIVE window reader](LIVE_WINDOW_READER.md). The demo enables barcode
+commands for the next junction; see [live gates](BARCODE_LIVE_COMMAND.md)
+and [robot results](../release/DEMO_KERNEL_V2.md).
+This page retains the B2b step-2 observation-only history, including the
+first home-mat spin results on `a883455`.
 
-The approved course uses the large print and one uppercase letter.
-The later live reader will use a 29-element `*X*` window and approximately
-one narrow width of white after its last bar. This record does not change
-[TEST barcode](BARCODE.md) framing, USB wait or its quiet-zone checks.
-Small-print changes and the separate noise investigation remain deferred.
+The course uses one uppercase letter per sheet. The current reader supports
+small print through local-midpoint mode and can retain the letter after
+parts 1..19 pass, without a complete end star. See the reader record for
+those limits. The separate [TEST barcode](BARCODE.md) framing, USB wait
+and quiet-zone checks do not change.
 
 ## Existing spin, unchanged controls
 
@@ -110,6 +112,10 @@ FALLBACK, INVALID and ABORTED. Fault bits are:
 
 ## Shadow hardware procedure
 
+This is the observation-only procedure, not the LIVE demo procedure. Use
+`BARCODE_LIVE_ENABLE=0` explicitly. GP28 is now at 2.5 mm; the older
+mount restriction in this procedure predates the mechanical clearance fix.
+
 1. Use a ROBOT build with `JUNCTION_TEST_CMD=NONE`. A fake A/B/C/D build
    can still command an action: this step does not replace that source.
 2. Place the robot as for normal LINE calibration. Keep the full sweep on
@@ -131,11 +137,13 @@ FALLBACK, INVALID and ABORTED. Fault bits are:
    FALLBACK remains 320/240 and NO_WHITE must remain visible. Do not alter
    thresholds to obtain a preferred mode.
 
-No live turn is permitted before the later offset check. The approved
-method compares GP28 and line-pair encoder positions at the SAME transverse
+At step 2, no live turn was permitted before the offset check. The proposed
+method compared GP28 and line-pair encoder positions at the SAME transverse
 18 mm stripe/cross arm. Frame-end-to-junction travel alone mixes unknown
 course gap and sensor offset. The provisional 150 mm barcode-clear guard
-is unverified and shadow-only; this step does not implement it.
+is unverified and shadow-only; this step did not implement it. The demo now
+uses the operator-approved 100 mm design guard and placement rule in
+[BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md#placement-rule-operator-option-c-2026-11-18).
 
 ## First home-mat result and policy correction
 

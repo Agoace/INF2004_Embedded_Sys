@@ -2,7 +2,8 @@
 
 ## Meaning
 
-The vehicle task adds SHADOW reader counts to the existing MQTT run summary:
+The vehicle task adds barcode reader counts to the MQTT run summary in
+both fallback SHADOW builds and the LIVE demo build:
 
 | Field | Meaning |
 | --- | --- |

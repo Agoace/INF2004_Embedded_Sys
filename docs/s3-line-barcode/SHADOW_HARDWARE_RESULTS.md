@@ -6,7 +6,13 @@ This record gives the first hardware results for the B2b live barcode
 reader in SHADOW mode. In SHADOW mode, the robot reads GP28 and logs the
 decoded letter. It does not use the letter to turn.
 
-## Status
+Current (2026-11-24): this is the dated 2026-11-11 SHADOW record, not the
+current demo status. The demo is LIVE: mapped letters steer the next junction.
+Image 30 run 6 read 4/4 barcodes; demo day read M and turned LEFT. See
+[DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md). The dual-core migration
+is parked; it no longer freezes barcode work.
+
+## Historical status (2026-11-11)
 
 | Item | Status |
 | --- | --- |
@@ -80,7 +86,7 @@ the straight between the two loops, left of the line.
    differential-drive projection from these provisional offsets; it remains
    SHADOW-only until straight and zigzag hardware checks pass.
 
-## Proposal on hold (not approved)
+## Historical proposal on hold (2026-11-11)
 
 | ID | Change | RAM |
 | --- | --- | --- |
@@ -88,9 +94,10 @@ the straight between the two loops, left of the line.
 | B | Failed-frame record: gate, 29 widths, frozen thresholds, L/R counts at each edge | 0 (reuse diagnostic pools) |
 | C | Optional short raw GP28 snippet (about 0.5 s) | 0 (reuse diagnostic pools) |
 
-Test the large print on a straight line, once with low yaw and once with
-zigzag. Check that both decode with the GP28-point projection before any
-live-action approval.
+The straight/zigzag checks above were the gate at that date. Later work
+added [local-midpoint, axis re-anchor and held-letter rules](LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20).
+The current sensor offsets are 73 mm forward and 73 mm left, not the
+provisional 80/77 mm in this historical analysis.
 
 ## Evidence
 

@@ -5,13 +5,16 @@
 `barcode_window.{h,c}` is a pure, single-owner streaming reader. It does not
 read hardware, create tasks, publish commands or call vehicle actions.
 The ROBOT feed and slot/control policy are now connected by the
-[SHADOW producer](LIVE_PRODUCER.md). [The canonical boards](LIVE_SOURCE_CONTRACT.md)
+[producer](LIVE_PRODUCER.md). [The canonical boards](LIVE_SOURCE_CONTRACT.md)
 are initialized by S3 before tasks, with an invalid SHADOW record.
-Vehicle alone publishes control. No live action is enabled.
+Vehicle alone publishes control. The demo build enables LIVE barcode
+commands for the next junction (`BARCODE_LIVE_ENABLE=1`).
 
-This step supplies the reader and tests for later integration, not an on-robot
-live-read acceptance result. The current size extension covers a bounded
-4.0--7.0 mm fitted narrow, not arbitrary small print. Existing
+Current (2026-11-24): fitted narrow 2.5--7.0 mm, local-midpoint mode,
+SEEK axis re-anchor and held-letter acceptance are integrated. Image 30 run 6
+read A, large F, Z and small F (4/4). Demo day read M and turned LEFT;
+two BW_WIDTH failures also occurred. See [demo evidence](../release/DEMO_KERNEL_V2.md).
+This does not prove arbitrary small-print readability. Existing
 [TEST barcode](BARCODE.md) WIDTH/PEAK code and quiet rules are unchanged.
 
 ## Inputs and bounded work
@@ -31,10 +34,12 @@ drive axle (operator ruler, 2026-11-16; earlier 80/77 mm), with a 111 mm track. 
 drive position projected onto its direction at the first motor observation,
 instead of mean wheel travel. This compensates a forward zigzag when the
 barcode is perpendicular to that initial direction; it cannot infer an
-unknown print angle. The offsets are physical measurements to recheck on the
+unknown print angle. In SEEK, a heading change above 3 degrees re-anchors
+the axis while keeping position continuous. WINDOW/TAIL keep the axis fixed.
+The offsets are physical measurements to recheck on the
 robot. The first home calibration reported gaps near 1024 us.
 A missing 1 ms ADC sample is rejected even without an explicit loss flag.
-The future feeder must ALSO propagate acquisition missed/dropped counters;
+The feeder also propagates acquisition missed/dropped counters;
 timestamp checks are not a substitute for those counters.
 
 There are 64 ADC slots, eight motor points and 29 run widths. No full-pass
@@ -76,12 +81,13 @@ is allowed; it is not counted as credible leading white.
 Leading white must cover 30 mm (`QUIET_MIN_MM`; 40 mm before 2026-11-19) both before admission and after fitting the
 start star. Any above-rise black that is not admitted clears the white
 qualification, even if the black run is short. Transition-band handling
-below rise stays bounded as before. Mid-window adaptation is forbidden.
+below rise stays bounded as before. The fixed rise/fall values do not adapt;
+strong first bars select the local-midpoint edge rule described below.
 See the [FC1/FC2 analysis](SCHOOL_FAILED_START_ANALYSIS.md).
 
 ## The course window, not a trailing quiet-zone repair
 
-Accept exactly:
+The normal full-window path accepts:
 
 ```text
 start star (9) + narrow gap (1) + data (9) + narrow gap (1) + stop star (9)
@@ -94,14 +100,15 @@ bar/space edge bias without a requested letter, and uses the full ordinary
 Code 39 symbol table. Only a single uppercase A--Z is eligible for mapping.
 Digits/punctuation are recognized but rejected for course actuation.
 
-Current size gates, to verify in SHADOW hardware. The start star supplies the
-scale; a second fixed absolute wide band does not constrain it:
+Current normal-path gates follow. The start star supplies the scale; a
+second fixed absolute wide band does not constrain it. Held-letter and
+end-star fallback rules below can accept without a complete normal path.
 
 | Check | Bound |
 | --- | --- |
-| Corrected narrow | 4.0--7.0 mm (ASSUMED scope, not measured optical resolution) |
+| Corrected narrow | 2.5--7.0 mm (bounded scope, not arbitrary optical resolution) |
 | Corrected wide | Fitted from the three wide elements; ratio/consistency checks below |
-| Wide/narrow ratio | 1.6--3.4 |
+| Wide/narrow ratio | 1.6--3.55 |
 | Minimum class separation | 1.4 |
 | Each element against its class mean | 0.65--1.5 |
 | Data/stop scale against start | Within 20% |
@@ -116,25 +123,26 @@ scale; a second fixed absolute wide band does not constrain it:
 The body formula is about 273.5 mm at n=5.8 and w=17.5. It validates one
 candidate; it is NOT a 285 mm sensor blackout or a delay based on map geometry.
 With a wide/narrow ratio of three, approximate 274/210/141 mm bodies give
-n=5.83/4.47/3.00 mm. The first two are in scope; 141 mm remains out of scope.
+n=5.83/4.47/3.00 mm. All three are now in scope; the 141 mm sheet uses local-midpoint mode.
 The 210 mm home-sheet ruler measurement is approximate, not a measured fit.
 The cross-axis GP28 sigma estimate of about 2.15 mm cannot establish the
-along-travel optical resolution. The 4 mm floor is ASSUMED. Do not lower it
-without straight, full-rate GP28 and encoder captures.
+along-travel optical resolution. The old 4 mm floor was lowered to 2.5 mm
+after the height tests below.
 
 The start, data and stop fits retain the geometry and bar/space bias correction
 from `52244f2`. No sensor offsets, forward-axis projection, ADC hysteresis,
 source-gap checks, command mapping or one-narrow trailing proof change.
 
-After the fifteenth bar ends, require continuous credible white for one
+On the normal full-window path, after the fifteenth bar ends, require white for one
 narrow width (the larger fitted start/stop narrow). Ink before that proof
 rejects the window. White proof has a bounded 2.5n opportunity, not arbitrary
 look-ahead. Once accepted, later junction ink, ADC faults or motor reversals
 cannot change that result. No 58 mm trailing quiet is required here.
-Missing/merged/extra runs are never inserted, deleted or repaired. A failed
-candidate requires fresh leading white, not sliding resynchronization inside
-that damaged barcode. Without a checksum, damage that becomes another fully
-legal waveform cannot be distinguished from that legal letter.
+Exceptions: faint-first-mark removal, late-start rescue, end-star split and
+held-letter acceptance can bypass or reconstruct parts of this path. See
+[the current rules and risks](#bend-exit-and-held-letter-2026-11-20).
+Without a checksum, damage that becomes another legal letter cannot be
+distinguished from that letter.
 
 ## One mapping table
 
@@ -145,11 +153,12 @@ An invalid/unconfirmed table makes all action observations NONE. There is no
 special F path. Changing F to an action is a table edit, not decoder training.
 
 Helpers return table entries, confirmation and policy ID. Vehicle boot logging
-will print this same table once when integration lands; no second hardcoded
-copy is permitted. A mapped value remains data here, never an executed action.
+prints this same table; no second hardcoded copy is permitted. A mapped value remains data here, never an executed action.
 SHADOW and the unverified 150 mm guard cannot enable a real action.
 
 ## Size-extension acceptance gates
+
+Historical software gates with the old 4 mm floor, not the current limits.
 
 | Gate | Result and limit |
 | --- | --- |
@@ -214,7 +223,8 @@ These ten attempts constrain the context review, not a measured false-positive
 rate for the new policy. Do not interpolate 5 Hz ADC into an asserted full-rate
 regression. Wider size admission can admit more false starts; complete stars,
 class separation, gaps, scale agreement, single-letter framing, source health
-and fresh leading white remain mandatory. Keep SHADOW until hardware review.
+and fresh leading white were the gates at that revision. The SHADOW-only
+restriction is superseded by the LIVE demo and the held-letter rules below.
 Local source logs: `build/kram_robot_b0c3a9a/robot_{BASE,RAM}.final.log` and
 `mqtt_{BASE,RAM}.csv` in the review workspace. They are not public fixtures.
 
@@ -249,9 +259,10 @@ Local source logs: `build/kram_robot_b0c3a9a/robot_{BASE,RAM}.final.log` and
 Artifacts and link-only probes are under `build/b2b-validation/`.
 Never flash `step3-RETAINED-NOT-FOR-FLASH.elf`. Public-example Wi-Fi builds
 are validation artifacts, not configured operator images. No push/flash was
-performed. Hardware live reading, same-stripe offset bound, measured stack/CPU
-and vehicle admission remain integration gates. Producer heartbeat/revision/
-slot policy is covered in the subsequent producer record.
+performed in that software step. LIVE integration and robot runs followed;
+see the current status above. A new change still needs its own timing,
+stack and robot evidence. Producer heartbeat/revision/slot policy is in
+the producer record.
 
 ## Leading white 30 mm (operator decision 2026-11-19)
 
@@ -319,7 +330,9 @@ All real 5.5 mm captures give the same letters and widths as before. These
 existing tests changed: `test_barcode_window` sizes (the 141 mm body is now
 read; `N_MIN` boundary 2.4/2.55 mm) and small (half size is now positive);
 `test_barcode_live_feed` start_fail uses bar level 700 (fixed mode), because
-1000 counts selects the midpoint mode. The robot run is pending.
+1000 counts selects the midpoint mode. Image 21 later read small F on
+straights; image 30 run 6 read small F as part of the 4/4 course result.
+The implementation history is tag `archive/mtk3-bc-small`.
 
 ### GP28 height 2.5 mm results
 
@@ -339,14 +352,15 @@ Demo image `1f46e88` (UF2 `4d3fe5a806fa4625`), GP20 dump and MQTT
 At 2.5 mm the narrow gaps no longer return to white (1100-1400 counts),
 so the fixed rise/fall levels merge two bars into one: the reader sees
 3-5 bars and rejects with BW_WIDTH. The large sheet still decodes.
-Floor clearance at 2.5 mm over the 10 mm hump is not checked.
+This table predates the midpoint reader. The operator later fixed hump
+clearance mechanically; see [the mount update](BARCODE.md#scope-and-evidence).
 
 ## Bend exit and held letter (2026-11-20)
 
 Medium A sheet (narrow 4.2 mm, wide 13 mm), placed just after a bend.
 Image 21 read it 2/2 on a straight and 0/4 out of the bend. Five changes in
 [`barcode_window.c`](../../app_program/subsystem3/barcode_window.c) fix the
-reader-side causes. Each is one commit on `mtk3-bc-endstar`.
+reader-side causes. The implementation history is tag `archive/mtk3-bc-endstar`.
 
 | Change | Cause (robot dump) | Rule |
 | --- | --- | --- |
