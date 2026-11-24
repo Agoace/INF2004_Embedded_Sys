@@ -8,7 +8,7 @@ Later full-course evidence is in
 
 | ID | Check | Status |
 | --- | --- | --- |
-| R5 | [Kernel robot track check](KERNEL_ROBOT.md): line, two detours, SEARCH recovery, no contact/faults | Later course runs recorded, including image 30 run 6 (2026-11-20), 2/2 DONE_LINE. No separate complete R5 checklist pass claimed. |
+| R5 | [Kernel robot track check](KERNEL_ROBOT.md): line, two detours, SEARCH recovery, no contact/faults | Later course runs recorded, including image 30 run 6 (2026-11-20), 2/2 DONE_LINE. Open: complete R5 checklist. |
 | S7-U01 | [Task-split acceptance](KERNEL_ROBOT.md#step-7-task-split-image-new-acceptance): cold TEST, timing/cost/stacks, queue saturation, last watchdog reset | PASS 2026-11-06 with 3f889a1. [Results](KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | M1-S7 / M2-S7 | Repeat two-tile line and obstacle checks on the five-task robot | PASS (basic) 2026-11-06. [Results](KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
@@ -17,7 +17,7 @@ Later full-course evidence is in
 See [the hardware record](../../docs/archive/s1-telemetry/HISTORY.md#files) for exact
 measurements and limits. These results do not validate later boot/session,
 diagnostic or SCAN-retry changes. Later hardware evidence is recorded in
-the release record above, not as a repeat of every STEP 8 gate.
+the release record above. Open: remaining STEP 8 gates on the later images.
 
 | ID | Check | Result |
 | --- | --- | --- |

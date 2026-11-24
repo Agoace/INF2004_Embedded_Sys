@@ -121,7 +121,7 @@ M1/M2 repeats and CPU/ISR/stack measurements **passed on 2026-11-06** (see
 [step 7 results](testing/integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06)).
 Independent physical stop latency remains unmeasured. Later full-course
 runs are recorded in [the current release](docs/release/DEMO_KERNEL_V2.md);
-the early R5 procedure is not a claim of complete acceptance of every gate. See
+Open: complete coverage of the early R5 gates. See
 [task/object and plan-vs-port tables](docs/kernel/KERNEL.md).
 
 ## Hardware watchdog ownership
@@ -151,4 +151,4 @@ Read [watchdog procedure](docs/kernel/KERNEL.md).
   GP21 remains the real ESTOP in its normal/bench roles; lift wheels for TEST.
 - Earlier STEP 8 MQTT checks ran on 2026-11-07; coverage and limits are in
   [the S1 log](testing/subsystem1/TEST_LOG.md). M1/M2 remain independent of
-  MQTT acceptance. Later course runs do not prove all network-loss gates.
+  MQTT acceptance. Open: full network-loss gate coverage.

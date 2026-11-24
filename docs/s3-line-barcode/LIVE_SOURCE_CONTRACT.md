@@ -128,5 +128,4 @@ build; production exports no record setter.
 The full strict host suite passed262/262 at the ABI stage. Source lifecycle,
 freshness watchdog, revision admission and slot retirement are implemented
 and tested separately in the [producer](LIVE_PRODUCER.md), NOT by these
-mechanical getters. Those ABI checks are not robot acceptance; later LIVE
-robot results are in [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).
+mechanical getters. Later LIVE robot results are in [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).

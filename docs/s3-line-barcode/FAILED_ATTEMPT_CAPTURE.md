@@ -60,8 +60,8 @@ two failures. A NEW nonzero run epoch releases the old captures; STOP epoch0
 does not. Current code asserts 5660 B per slot (4096 ADC + 1392 edges + 172 metadata).
 The packed layout is documented in [CR1_BARCODE_A.md](../architecture/CR1_BARCODE_A.md).
 Before CR1 packing, each retained buffer had5816 B; the array was17448 B.
-The following byte totals are historical, not current image budgets. All capture
-data symbols together are17485 B (was17432 B before the context times,
+Before CR1, all capture data symbols together were 17485 B (17432 B
+before the context times,
 measured by symbol sizes at `9ab99b2`), including source/reader indices. A compile-time
 ceiling limits the module to18 KiB.
 

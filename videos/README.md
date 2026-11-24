@@ -34,9 +34,9 @@ put its link in the *Log / evidence* column of that test's row in
 
 ## Video index
 
-No video links are recorded here as of 2026-11-24. This empty index is not
-a claim that no robot tests ran; see [test records](../testing/README.md)
-and [demo evidence](../docs/release/DEMO_KERNEL_V2.md).
+No video links are recorded here as of 2026-11-24. Test evidence:
+[test records](../testing/README.md) and
+[demo evidence](../docs/release/DEMO_KERNEL_V2.md).
 Add real links only. Newest at the bottom. Never delete an evidence row.
 
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |

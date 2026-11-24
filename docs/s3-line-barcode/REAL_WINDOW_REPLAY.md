@@ -8,8 +8,8 @@ including rejection histories, observed processing times and fitted widths.
 This is a regression lock, so no new RED-first claim is made. No physical
 run, Webots run or new optical calibration was done for this comparison.
 Later reader changes and robot evidence are in
-[LIVE_WINDOW_READER.md](LIVE_WINDOW_READER.md); the 4 mm floor below is
-historical, not the current 2.5 mm limit.
+[LIVE_WINDOW_READER.md](LIVE_WINDOW_READER.md). The replay below used a
+4 mm floor; the reader now uses 2.5 mm.
 
 The first fixture is the public-safe extraction documented under
 [Supplied first floor 2x F capture](../../testing/subsystem3/TEST_LOG.md#supplied-first-floor-2x-f-capture-and-optical-correction).

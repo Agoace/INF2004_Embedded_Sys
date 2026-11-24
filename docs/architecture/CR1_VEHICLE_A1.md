@@ -12,7 +12,7 @@ Private `vsm_t`, `ja_result_t`, `ja_t` and `jlive_t` packing is not approved.
 This is the 2026-11-18 substep record. The 1000 mm expiry below is historical:
 current live commands last 10000 mm and survive SCAN/DETOUR. Combined CR1
 image 12 later checked timing and stacks; see [project status](PROJECT_STATUS.md#areas).
-Do not read the old build totals below as current demo totals.
+The build totals below were measured for this substep.
 
 This is a partial CR1 result, not completion of Week 8 sections 33–38.
 The historical 13-state set needs 4 bits. The current shell has three

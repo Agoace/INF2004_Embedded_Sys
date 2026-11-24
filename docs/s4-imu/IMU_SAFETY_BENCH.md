@@ -31,7 +31,7 @@ error. Both values require `SMP=0`, `WIFI=cyw43`, `NET=lwip`, `MQTT=1`,
 `BARCODE_FAIL_CAPTURE` and `BENCH_KERNEL`. Value `1` also requires
 `TEST=1 BENCH=0`. Value `robot_synthetic` requires `TEST=0 BENCH=0`.
 The default value is `0`. At the original bench integration, the 38 default
-profiles stayed byte-identical; that is not a comparison of today's firmware.
+profiles stayed byte-identical.
 
 ```sh
 # BENCH2: TEST runner
@@ -42,7 +42,7 @@ make -C build_make clean SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 IMU_SAFET
 make -C build_make --output-sync=target -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 IMU_SAFETY_BENCH=robot_synthetic
 ```
 
-Build evidence at the original bench integration (not current image totals):
+Build measurements at the original bench integration:
 
 | Image | Warnings | RAM_PROOF | KERNEL_RAM lists |
 | --- | --- | --- | --- |

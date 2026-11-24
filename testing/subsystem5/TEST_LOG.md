@@ -22,7 +22,8 @@ detours; demo-day image 31 ended detours DONE_NO_LINE then line search.
 The S2 early-edge path remains host-only evidence. See
 [OBSTACLE.md](../../docs/s5-obstacle/OBSTACLE.md) and
 [the demo record](../../docs/release/DEMO_KERNEL_V2.md). The wall tests below
-are dated sensor checks, not general clearance acceptance.
+record sensor measurements on their named revisions. Open: general
+clearance tests.
 
 ## Task-split image checks
 

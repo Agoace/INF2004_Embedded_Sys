@@ -222,5 +222,5 @@ used only for link validation and removed. No push/flash was performed.
 The step-4b SHADOW-only gate is superseded. The demo now uses GP28 at
 2.5 mm, LINE base 120 mm/s, and LIVE commands. Image 30 run 6 read 4/4
 barcodes; see [current demo evidence](../release/DEMO_KERNEL_V2.md).
-The historical 988 B context and resource tables above are not current
-image budgets. New changes still need timing, stack and robot checks.
+The 988 B context and resource tables above record step 4b.
+New changes require timing, stack and robot checks.

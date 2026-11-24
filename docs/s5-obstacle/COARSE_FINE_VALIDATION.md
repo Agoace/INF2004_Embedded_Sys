@@ -14,13 +14,13 @@ defines v3 and legacy decoding.
 
 Current (2026-11-24): coarse/fine scanning remains in the demo kernel.
 Later image 30 run 6 completed two detours; image 31 demo-day detours ended
-DONE_NO_LINE then line search. These runs do not turn the skipped A2/A3
-placements into passes or prove width accuracy. See
+DONE_NO_LINE then line search. Open: the skipped A2/A3 placement tests
+and width-accuracy measurements. See
 [the demo record](../release/DEMO_KERNEL_V2.md).
 
 ## Host evidence
 
-This evidence is for the scan-integration revision, not the current full suite.
+Host results below were recorded at the scan-integration revision.
 
 - A red schedule test failed when the old second point was index1 rather
   than coarse index3. Geometry tests initially failed because the old report
@@ -46,7 +46,7 @@ meet a nominal2.5 s target. Measure actual duration below.
 
 ## Firmware resources
 
-Historical scan-integration comparison, not the current demo RAM budget.
+Scan-integration RAM comparison:
 Same public-example build for baseline `b9a47b5` and candidate `3f569b2`:
 
 ```sh

@@ -6,14 +6,13 @@ Current (2026-11-24): the safety port is integrated in the demo robot image.
 Real-IMU push-over runs stopped the robot with LIFT and OVERTURN; see
 [capture results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
 The hump report is separate and does not command motion. The port and bench
-results below retain their tested revisions, not current build totals.
+results below record measurements on their named revisions.
 
 The original manual port used `mtk3-imu-int`, based on staging `d3890d0`. Do not merge or
 change the teammate branch. Source: smojjofy, `8ac6e38..038ff23` (initial
-implementation `8ac6e38` included). The source branch's run logs are not
-acceptance evidence for this UP integration. The original port checks below
-do not by themselves establish real-robot acceptance; later robot evidence
-is linked above.
+implementation `8ac6e38` included). The source branch's run logs record that
+branch's runs. UP robot results are linked above; the original port checks
+are listed below.
 
 ## Port steps
 

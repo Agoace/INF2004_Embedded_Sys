@@ -204,7 +204,7 @@ static RAM 234800 B, S1 74381 B (the same as `2269320`).
 This work is merged. The current stored row is 15 B; the public KR1 row is
 still 16 B. MEASUREMENTS is generated; send corrections to the ledger owner.
 Combined image 12 checked the rows on the robot. Row-guard loss remains
-visible in existing loss counts; that run is not a worst-case lateness proof.
+visible in existing loss counts. Open: worst-case lateness measurement.
 The demo now runs up to 300 s and retains only the first 90 s in RAM;
 a full log no longer stops driving or MQTT. See
 [demo-kernel-v2](../release/DEMO_KERNEL_V2.md).
