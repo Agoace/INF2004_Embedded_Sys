@@ -7,7 +7,7 @@ It replaces the blind bridge and axle-centred encoder turn in `eb18004`.
 B2a uses a fake START command, not a live barcode decoder. The fixed consumer
 is retained by the [B2b live adapter](JUNCTION_LIVE_ADAPTER.md). Default
 builds without live enable remain SHADOW; the demo enables live actions.
-B2a closure at `50426ae` is historical, not acceptance of the current live turn.
+B2a closed at `50426ae`. Current live-turn results are linked below.
 
 | Command | Action |
 | --- | --- |

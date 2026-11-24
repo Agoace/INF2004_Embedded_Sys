@@ -76,7 +76,8 @@ makes the crossing likely, but no log proves it. The existing stop reports
 cannot give a MEASURED value, because each run continued past several more
 junctions. The [clearance procedure](BARCODE_LIVE_COMMAND.md#clearance-measurement-next-robot-session)
 records the old measurement method. The operator later declined dedicated
-D_cross runs and approved option C placement; it is not a current test request.
+D_cross runs and approved option C placement. That decision closed the
+D_cross test request.
 
 Run start, end events and attempt times match the earlier manual analysis.
 

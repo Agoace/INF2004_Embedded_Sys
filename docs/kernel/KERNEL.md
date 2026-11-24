@@ -60,7 +60,7 @@ trial (100 mm/s,600 mm/10 s), with stop-pending retries. No IMU14 height or
 quality result chooses a drive command in that TEST trial. The robot
 Vehicle task separately applies the IMU lift/overturn stop gate. The older
 TEST drive procedure is [recorded here](../s4-imu/IMU.md#step-2d-current-procedure);
-its checks do not describe current whole-course acceptance.
+Open items for that TEST trial are recorded with the procedure.
 
 ### Interfaces and kernel objects
 
@@ -128,7 +128,7 @@ not add its normal 128-byte allowance.
 
 The A1/B1 hardware gate on 2026-11-10 measured idle-meter use 296/512 B,
 leaving only 216 B. The approved safety correction increases that reserve
-to 768 B. That result describes the older image, not the current margin.
+to 768 B. The 296/512 B reading is from that 2026-11-10 image.
 Image 12 later passed the combined CR1 timing/stack gate; see
 [current project status](../architecture/PROJECT_STATUS.md#areas).
 See [the gate record](../../testing/subsystem2/TEST_LOG.md).
@@ -150,7 +150,7 @@ module, queue saturation and dumps before accepting a stack budget.
 | Start | `app_task_start_config()` keeps entry, priority 20, `TA_RNG1`, name and core; duplicate start fails; failed delete quarantines the slot until reboot |
 | Report | `[stack] cyw43 core N size 8320 high_water U free F`; `free < 256` prints `LOW MARGIN`. Health includes it in `stack_min_free` |
 | RAM | Static +8336 B, pool request -8320 B. This is a move, **not** a saving: the kernel pool starts after BSS and shrinks by the same amount |
-| Hardware gate | Association, MQTT, DUMP and combined CR1 timing/stacks have later robot evidence; see [project status](../architecture/PROJECT_STATUS.md#areas). A separate reconnect stress gate is not established here. |
+| Hardware gate | Association, MQTT, DUMP and combined CR1 timing/stacks have later robot evidence; see [project status](../architecture/PROJECT_STATUS.md#areas). Open: separate reconnect stress test. |
 
 IMU stack readings (2048 B region, 256 B policy margin):
 
@@ -311,8 +311,8 @@ path in RAM with `KERNEL_RAM=1`. Cost at the P2 commit: `.data` +224 to
 The current `demo-kernel-v2` build uses `SMP=0`, MQTT and `KERNEL_RAM=1`.
 Use [BUILD.md](BUILD.md#build-profiles) for the full live-barcode command.
 RAM_PROOF is PASS 84/84 (23906 B) live, or 80/80 (23018 B) without live
-barcode. The dated v2 placement measurements below refer to `b0c3a9a`,
-not to the later release tag with a similar name.
+barcode. The v2 placement measurements below were taken at `b0c3a9a`;
+the later release tag is `demo-kernel-v2`.
 
 | Item | Record |
 | --- | --- |
@@ -499,7 +499,7 @@ images have none.
 
 ### If RAM becomes too small
 
-Historical planning list (2026-11-08), not current work instructions.
+RAM planning list from 2026-11-08.
 The robot no longer reserves `bench_stack`; CR1 stores each RAM row in
 15 B (67515 B total), and all CR1 minimum-bit GAPs are closed. These
 representation changes did not change MQTT row bytes. Further capacity

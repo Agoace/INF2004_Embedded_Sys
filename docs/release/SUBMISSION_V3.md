@@ -1,8 +1,8 @@
 # Submission v3 2026-11-20
 
-Superseded by tag `submission-v4`; its firmware is the same as
-[demo-kernel-v2](DEMO_KERNEL_V2.md). The build, limits and results below
-apply to submission v3, not the current demo. The demo-day letter map is
+Superseded by tag `submission-v4.1`. Tag `submission-v4` uses the same
+firmware as [demo-kernel-v2](DEMO_KERNEL_V2.md).
+Build, limits and results below: submission v3. The demo-day letter map is
 recorded in the current demo kernel record.
 
 This record identifies the third submission. `main` receives

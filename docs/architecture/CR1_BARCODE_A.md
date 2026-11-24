@@ -218,4 +218,4 @@ The source-to-pack call path therefore uses 344 B before `memcpy` or other
 callees. This is not a complete task-stack bound or a measured watermark.
 The LINE stack remains 2048 B. No increase in stack allocation is claimed
 as a data saving. The later combined image 12 checked stack margins;
-that does not turn compiler-local frames into whole-stack bounds.
+compiler-local frames list each function's own stack use.

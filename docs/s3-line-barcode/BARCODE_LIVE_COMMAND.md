@@ -5,8 +5,8 @@ a mapped letter commands the next junction. Fallback builds without that
 option remain SHADOW. Image 30 run 6 read 4/4 barcodes and performed LEFT
 and U-turn actions. Demo day read M and performed LEFT; two BW_WIDTH fails
 also occurred. See [demo evidence](../release/DEMO_KERNEL_V2.md).
-Main approved the V1/V3 policy on 2026-11-18. New changes still need robot
-checks; host tests and a successful build alone do not prove acceptance.
+Main approved the V1/V3 policy on 2026-11-18. New changes require robot
+checks.
 
 ## Scope
 

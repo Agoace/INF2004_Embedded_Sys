@@ -2,14 +2,14 @@
 
 | ID | Check | Pass condition | Status |
 | --- | --- | --- | --- |
-| R5 | Original 90 s track and box procedure as bare-metal R4, with the kernel robot image | Line followed; two detours end DONE_LINE or DONE_NO_LINE followed by successful SEARCH; no contact, no motor/sensor faults, no lost samples/wakes, no USB dump loss | Later full-course runs exist; see the current-state note below. No separate complete R5 checklist pass claimed. |
+| R5 | Original 90 s track and box procedure as bare-metal R4, with the kernel robot image | Line followed; two detours end DONE_LINE or DONE_NO_LINE followed by successful SEARCH; no contact, no motor/sensor faults, no lost samples/wakes, no USB dump loss | Later full-course runs exist; see the current-state note below. Open: complete R5 checklist. |
 
 Current (2026-11-24): image 30 run 6 (2026-11-20) ran 122 s / 11.5 m,
 read 4/4 barcodes, completed 2/2 detours DONE_LINE and reported a hump.
 Demo-day image 31 ran 119 s / 12.5 m, read M and turned LEFT; detours ended
 DONE_NO_LINE then line search. The operator reported "it works". See
 [the demo record](../../docs/release/DEMO_KERNEL_V2.md) for evidence and limits.
-These are not repeats of every R5/STEP 8 gate. The current demo limit is
+Open: remaining R5/STEP 8 gates. The current demo limit is
 300 s; GP20 stores only the first 90 s and full storage does not stop it.
 The procedure and early results below retain their original scope.
 
