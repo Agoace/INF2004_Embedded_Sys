@@ -12,16 +12,18 @@ not current acceptance reports. Local course originals are not public records.
   Contains: one entry per record; the two template-comment exceptions.
 - [AGENT_MAP.md](AGENT_MAP.md) — where to start in the source tree.
   Contains: map chain, doc directories, what each source group does, entry files per area, repository boundaries, template build layout, kernel platform/task notes.
-- [Repository README](../README.md) — public setup, current build and usage.
+- [Repository README](../README.md) — the robot front page: what it does, subsystems, layout, branches, demo build and flash, tests.
 - [Repository instructions](../AGENTS.md) — working rules and validation commands.
 
 ## Release
 
-- [SUBMISSION_V2.md](release/SUBMISSION_V2.md) — the second submission of 2026-11-19.
-- [SUBMISSION_V3.md](release/SUBMISSION_V3.md) — the third submission of 2026-11-20; the demo letter map is set on the day.
-- [DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — the demo-day kernel (code freeze 2 of 2026-11-20): 300 s limit, 10 m barcode hold, demo-day letter map steps.
+- [DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — CURRENT: the demo-day kernel (code freeze 2 of 2026-11-20) and the demo-day result.
+  Contains: tags `demo-kernel-v2` and `submission-v3.1` (`submission-v4` of 2026-11-24 has the same firmware); changes since v3 (300 s limit, full log keeps driving, 10 m barcode hold, command kept through SCAN/DETOUR); demo-day letter map steps; checks (host 735/735, RAM_PROOF 84/84, 0 warnings); robot evidence 2026-11-20 (image 30); demo day 2026-11-24 (image 31, M=LEFT,O=RIGHT,P=UTURN: M then LEFT 95.4..95.7 deg); known limits.
+- [SUBMISSION_V3.md](release/SUBMISSION_V3.md) — the third submission of 2026-11-20 (superseded by DEMO_KERNEL_V2.md).
+  Contains: tag `submission-v3`; barcode reader changes (bend exit, held letter); demo letter map build line; checks (host 734/734); robot evidence (images 26..29); known limits.
+- [SUBMISSION_V2.md](release/SUBMISSION_V2.md) — the second submission of 2026-11-19 (superseded).
   Contains: tag `submission-v2` on `main` = staging `1f46e88`; the staging merges since `submission-v1`; checks (host 722/722, RAM_PROOF 81/81, 0 warnings); robot evidence (images 12, 18, 19); known limits.
-- [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the frozen demo kernel of 2026-11-18.
+- [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the first demo kernel freeze of 2026-11-18 (superseded).
   Contains: tag `demo-kernel-v1` (`9f15213`), submission branch `main` (`submission-v1`); live-barcode build line and fallback; checks (host 677/677, 76/76 MATCH, RAM_PROOF 79/79, 0 warnings); image SHA prefixes; robot runs LIVE1–4, UTURN1, RIGHT1, GRACE1 (LEFT turns 92–95 deg, U-turn 172.5 deg); known limits (straight barcode placement, 1000 mm expiry, U-turn one pass, no full-feature run on this image).
 
 ## Project requirements
@@ -32,18 +34,19 @@ not current acceptance reports. Local course originals are not public records.
 ## Architecture
 
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — read first: the state of each area.
-  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch diagram and table (main = submission, mtk3-staging = integration, mtk3-testing = test environments and tools, one branch per module), merge rules (`--no-ff`, no rebase, one revertable merge per risky change, archive tag then delete), mtk3 source layout, commit checks, branch clean-ups 2026-11-18 and 2026-11-24, archive tags.
+  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode LIVE results 2026-11-20 and demo day, detours, IMU hump and safety stop, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..24; branch diagram and table (main = submission, mtk3-staging = integration, mtk3-testing = test environments and tools, one branch per module), merge rules (`--no-ff`, no rebase, one revertable merge per risky change, archive tag then delete), mtk3 source layout, commit checks, branch clean-ups 2026-11-18 and 2026-11-24, archive tags.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — the implemented robot system and its three decisions.
   Contains: subsystem ownership, tasks and cores, interrupt/polling rules, Vehicle Controller shell and route table, safety settings, results; ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal 1 ms time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
   Contains: one row per value (value, date, label, source line) in 9 areas: geometry, mass, motors and DM1, encoders, line/junction, GP28/barcode, sonar/servo/obstacle, IMU, timing/CPU/RAM/telemetry; values that do not agree, with resolved ones marked (for example counts 2540/2535, sonar offset 58/47 mm); the operator ruler session 2026-11-16 (length 180 mm, track 111-112 mm, wheel width 16 mm).
-- [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, evidence and motion plan.
+- [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, current state, module rounds, evidence and motion plan.
+  Contains: requirement and Week 8 §11/§33–38 details; current state (done; static RAM 241228 to 234596 B; robot image 12 PASS); module round 2026-11-18 table; baseline RAM, board/queue and MQTT sizes; B1 bench stack, B2 idle-stack margin, A1 motion board 72 to 64 B, A1/B1 hardware PASS 2026-11-10; after-and-acceptance table; M9 Wi-Fi stack accounting; motion module plan.
 - [CR1_TELEMETRY_A.md](architecture/CR1_TELEMETRY_A.md) — approved telemetry storage packing, diagnostic fault masks and T110.
   Contains: per-step RAM/build evidence, unchanged binary MQTT formats, 110 ms deadline and 120 ms poll model, existing FIX2/LAST references and pending 110 ms robot gate.
 - [CR1_KR1_ROW.md](architecture/CR1_KR1_ROW.md) — approved KR1 RAM row storage 16 → 15 B with time guard; wire and USB text unchanged.
   Contains: field bit audit, 15-byte layout, index-anchored 13-bit time and guard, producer round-trip proof, APP_TEST row changes, RAM before/after, emulator lock-time cost.
-- [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — Private barcode evidence packing: representation, exact bits, RAM split, replay tests and pending robot timing.
-  Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
+- [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — private barcode evidence packing (category A).
+  Contains: authority and scope; representation and ownership audit; exact stored frame layout (104 to 92 B) and edge layout (fail-capture edges 1536 to 1392 B per slot); RAM evidence (241228 to 240892 B alone); tests and timing limits.
 - [CR1_SONAR_A.md](architecture/CR1_SONAR_A.md) — approved sonar and obstacle board storage only.
   Contains: field ranges, sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B, baseline `7350da0`, static RAM 241228 to 241148 B, unchanged API/messages/wire, 679 host tests, torn-read tests, DERIVED(emulator) pack time, compiler-local frames; category B and private scan/detour packing remain deferred.
 - [CR1_SONAR_F.md](architecture/CR1_SONAR_F.md) — sonar owner fault word (bit 5) for the F fault mask.
@@ -52,11 +55,11 @@ not current acceptance reports. Local course originals are not public records.
   Contains: field ranges, single-writer board (44 to 40 B), baseline `7350da0`, static RAM 241228 to 241224 B, unchanged API/messages/wire, 680 host tests, compiler-local frames and hardware limits; private controller packing remains deferred.
 - [CR1_VEHICLE_F.md](architecture/CR1_VEHICLE_F.md) — Vehicle owner fault word: IMU latch and other shell fault, single writer, red proof, tests, 8 B board cost and one STOP capture per run.
 - [CR1_IMU_A.md](architecture/CR1_IMU_A.md) — approved IMU hump, diag and safety board packing (48/72/36 to 16/36/12 B), exact-output proofs, RAM and emulator timing.
-- [CR1_MIN_BIT_PROOF.md](architecture/CR1_MIN_BIT_PROOF.md) — CR1 minimum-bit proof: per-field tables (range, n, minimum bits, bits used, reason) generated by `test_min_bit_proof`, byte totals, report-only gaps and the out-of-scope list.
+- [CR1_MIN_BIT_PROOF.md](architecture/CR1_MIN_BIT_PROOF.md) — CR1 minimum-bit proof: per-field tables (range, n, minimum bits, bits used, reason) generated by `test_min_bit_proof`, byte totals, the GAP table (empty: no GAP left), items accepted with a reason, and the out-of-scope list.
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
   Contains: scope and approval (2026-11-10, closed at `50426ae`), command table NONE/A–D, ownership and entry points, fixed consumer value, junction detection, phases and bounds, reports and failures (event 7).
-- [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter, SHADOW only.
-  Contains: scope (SHADOW never offered to the consumer, valid 0), entry points, fixed boards and validation, encounter/route ordering, one slot and terminal ACK, build permission, diagnostics and remaining gates.
+- [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter (LIVE in the demo build; SHADOW without `BARCODE_LIVE_ENABLE=1`).
+  Contains: scope (live permission in the demo build; SHADOW fallback, valid 0), current hold/SEARCH/SCAN rules, entry points, fixed boards and validation, encounter/route ordering, one slot and terminal ACK, build permission, diagnostics and remaining gates.
 - [TEMPLATE_CHANGES.md](architecture/TEMPLATE_CHANGES.md) — the only list of allowed course-template changes; `check-template-changes.py` reads it.
   Contains: reference `c3b0954`; 8 deviations (`hw_setting.c`, `devinit.c`, `timer_tick.h`, `cyw43_utk_kernel.c`, `cyw43_utk.c/h`, `usb_console.c`, `mqtt_utk.c`); timing contract; cold-power guarantee; update and check procedure.
 
@@ -65,8 +68,9 @@ not current acceptance reports. Local course originals are not public records.
 - [KERNEL.md](kernel/KERNEL.md) — the μT-Kernel robot: tasks, timing, RAM and locks.
   Contains: task/priority table (motion 10, line 11, sonar 12, vehicle 13, IMU 14, Wi-Fi 20, USB 21, telemetry 30, Health 31, idle 32), kernel objects, settings; application stacks (Wi-Fi M9 8320 B, IMU high-water); watchdog and last reset reason; CPU load; P1 run timing and P2 overrun timeline; KERNEL_RAM placement (rule b, robot P1 pairs); F-NVIC (all external IRQs at 0); split parked 2026-11-15, placement and lock rules, M8 startup handoff; RAM budget by group and growth; USB priority; results and limits.
 - [BUILD.md](kernel/BUILD.md) — how to build, flash and read the firmware.
-- [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) — the course template setup guide (SDK, toolchain, template build options), moved from the root README on 2026-11-24.
   Contains: tools, Make profiles and options, demo line, private settings, BOOTSEL/picotool flash, USB output, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe (wiring, GDB on both cores), host tests and link proof.
+- [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) — the course template setup guide, moved from the root README on 2026-11-24.
+  Contains: SDK and Arm toolchain install, PATH settings, clone/build/flash of the template, template build options (`SMP`, `CONSOLE`, `WIFI`, `TEST`, `CRASH_REPORT`) and where they live in the makefile.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — junction hardware evidence and gates.
   Contains: B2a CLOSED (`50426ae`, 3/3 DONE); B2b STEP4a software candidate; operator evidence 2026-11-10; software evidence; RAM and stack; J0–J6 procedure (J3/J4 operator evidence on `7648081`, J6 open).
 
@@ -85,7 +89,7 @@ not current acceptance reports. Local course originals are not public records.
 ## S3 — Line and barcode
 
 - [LINE.md](s3-line-barcode/LINE.md) — the current two-sensor LINE and SEARCH.
-  Contains: acquisition and calibration spin, pair detection, interface, settings (P7: base 146, min 62, max 378 mm/s, gains 85/85/340; locked duty P4 reference), results (P4–P9, kernel S3-U01/U02 1009 samples, M1-S7), limits (straight-after-curve swing).
+  Contains: acquisition and calibration spin, pair detection, interface, settings (demo default base 120 mm/s, kd 30, same-tick; P7 history base 146, min 62, max 378 mm/s, gains 85/85/340; locked duty P4 reference), results (P4–P9, kernel S3-U01/U02 1009 samples, M1-S7), limits (straight-after-curve swing).
 - [BARCODE.md](s3-line-barcode/BARCODE.md) — TEST-only Code 39 reader (B1c WIDTH and PEAK).
   Contains: scope (one sheet, 430 mm pass at 100 mm/s, at most 450 mm), input and ownership, build and settings, driven procedure, snapshot health, capture/RAM, decoder rules and fixtures, PEAK contract. No routing.
 - [USB_CAPTURE_WAIT.md](s3-line-barcode/USB_CAPTURE_WAIT.md) — TEST-only USB report hold.
@@ -95,33 +99,33 @@ not current acceptance reports. Local course originals are not public records.
 - [LIVE_SOURCE_CONTRACT.md](s3-line-barcode/LIVE_SOURCE_CONTRACT.md) — the S3-to-vehicle barcode boards.
   Contains: ownership (S3 writes record, vehicle writes control), final sizes (40 B record, 20 B control), five-word control, coherent read APIs, validation scope.
 - [LIVE_WINDOW_READER.md](s3-line-barcode/LIVE_WINDOW_READER.md) — pure streaming reader for the course barcode, size-tolerant; local-midpoint mode and GP28 2.5 mm height results.
-  Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (narrow 4.0..7.0 mm fitted from the start star, wide by ratio 1.6..3.4, run ceiling min(35, 1.5w+|bias|) mm), historical evidence and limits.
+  Contains: inputs and bounded work, frozen thresholds and leading white, 29-element `*X*` window, one letter mapping table, size gates (current: narrow 2.5..7.0 mm fitted from the start star, wide by ratio 1.6..3.55; first version 4.0..7.0 and 3.4), local-midpoint mode, SEEK axis re-anchor (3 deg), held letter, late-start rescue, end-star split, robot evidence (image 30, demo day) and limits.
 - [LIVE_COUNTS_SNAPSHOT.md](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) — read-only per-run barcode reader totals.
   Contains: ownership, meaning of frames/attempts/failures, epoch boundary and late-cancellation rule, return values, firmware matrix (+240 B text, +40 B BSS on 24 reader profiles), regression evidence.
 - [BLIP_GRACE.md](s3-line-barcode/BLIP_GRACE.md) — live-only grace that keeps the SEEK white and a held LIVE record through a <200 ms SEARCH blip.
-  Contains: rule (F1 freeze/thaw, F2 hold/retire), `[BC_SEEK_RESTARTS]` report counter, blip fixtures, no-blip identity, RAM (+208 B), limits; robot test pending.
+  Contains: rule (F1 freeze/thaw, F2 hold/retire), `[BC_SEEK_RESTARTS]` report counter, blip fixtures, no-blip identity, RAM (+208 B), limits; robot evidence from the combined demo images (no isolated boundary test).
 - [REAL_WINDOW_REPLAY.md](s3-line-barcode/REAL_WINDOW_REPLAY.md) — old vs size-tolerant reader on the five real capture fixtures.
   Contains: result (identical on 15 rows; large F decoded, n/w 5.77/17.6 mm), reconstructed inputs and ASSUMED gap profile, native comparison table, regression lock.
 - [SCHOOL_FAILED_START_ANALYSIS.md](s3-line-barcode/SCHOOL_FAILED_START_ANALYSIS.md) — FC1/FC2 capture integrity, quiet and motion diagnosis, source-timing limits, and approved changes.
-- [FAILED_ATTEMPT_CAPTURE.md](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) — opt-in ROBOT raw failure evidence.
+- [FAILED_ATTEMPT_CAPTURE.md](s3-line-barcode/FAILED_ATTEMPT_CAPTURE.md) — opt-in ROBOT raw failure evidence (ON in the demo build).
   Contains: first two failed attempts per run, real threshold-crossing edges and 4 ms ADC prefix, bounded storage/ownership, stopped dump tags, combined staging RAM/headroom and KD30/same-tick compatibility, default-off 76 UF2/ELF-load gate.
 - [BARCODE_ATTEMPT_TELEMETRY.md](s3-line-barcode/BARCODE_ATTEMPT_TELEMETRY.md) — immutable terminal attempts and early diagnostics.
   Contains: v2/kind1 28-byte MQTT contract, 8-slot FIFO/drop and QoS1 retry behavior, known/unknown widths, epoch reason histogram before KR, terminal timestamps, software gates and hardware limits.
 - [BARCODE_RUN_SUMMARY.md](s3-line-barcode/BARCODE_RUN_SUMMARY.md) — barcode ok/failed in the MQTT run summary.
   Contains: meaning, ownership and run boundaries (epoch, busy final read keeps last same-run copy), validation, resource impact (+608 B text, +56 B BSS).
-- [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — SHADOW producer that feeds GP28 samples to the reader.
-  Contains: scope (one 988 B window context, no heap), threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
+- [LIVE_PRODUCER.md](s3-line-barcode/LIVE_PRODUCER.md) — the producer that feeds GP28 samples to the reader (LIVE in the demo build, SHADOW fallback).
+  Contains: scope (one window context, no heap; old resource tables are history), held letters, legacy `[BC_LIVE]`/`[BC_FRAME]` SHADOW dump labels, threshold evidence, control and time evidence, one slot and boot serial, USB/DUMP output, CR1 memory and stack, next gate.
 - [BARCODE_LIVE_COMMAND.md](s3-line-barcode/BARCODE_LIVE_COMMAND.md) — opt-in live command path from the barcode producer.
-  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, live-only centred LEFT/RIGHT correction (131 mm advance, 60 degree gate), reopened physical B2a acceptance, V1 expiry (1000 mm from decode) and V3 cancellation after 200 ms SEARCH (UNUSED reasons 13/14), build line and host tests, OPERATOR course answers, vehicle items V1–V6, OPERATOR decision against D_cross runs or school-track transfer, approved option C placement rule (100 mm design guard, >=160 mm physical gap, no extra 100 mm margin), proposed variable rename, geometry budget and failure limits; live-only bounded control-read cache, SEARCH-only decode eligibility grace, and uncached final publication check.
+  Contains: valid=1 gates (build, custom map, mode2, mapped command), MQTT SHADOW bit, one-decode-one-command chain, live-only centred LEFT/RIGHT correction (131 mm advance, 60 degree gate), reopened physical B2a acceptance, V1 expiry (10000 mm from decode since 2026-11-20, was 1000 mm), command kept through SCAN/DETOUR, V3 cancellation after 200 ms SEARCH (UNUSED reasons 13/14), demo limits and robot results, build line and host tests, OPERATOR course answers, vehicle items V1–V6, OPERATOR decision against D_cross runs or school-track transfer, approved option C placement rule (100 mm design guard, >=160 mm physical gap, no extra 100 mm margin), proposed variable rename, geometry budget and failure limits; live-only bounded control-read cache, SEARCH-only decode eligibility grace, and uncached final publication check.
 - [BARCODE_SESSION_REPORT.md](s3-line-barcode/BARCODE_SESSION_REPORT.md) — GP20 log tool for per-attempt results and D_cross; dark-mark analysis.
   Contains: tool usage and rules (one dump per run, MEASURED vs DERIVED D_cross), results on FX_1/FX2/B120 (barcode 2 only, frame end to next dark pair, DERIVED 251–254 mm), dark-mark position/width table and operator checks.
-- [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run.
+- [SHADOW_HARDWARE_RESULTS.md](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) — first full-circuit SHADOW run (2026-11-11, history; the demo build is LIVE).
   Contains: status (merged `b405aef`; table A=LEFT, B=RIGHT, C=STRAIGHT, D=UTURN), results (system PASS, large A not decoded), findings, proposal on hold, evidence.
 
 ## S4 — IMU
 
-- [IMU.md](s4-imu/IMU.md) — the IMU hump detector (report only) and its full step history.
-  Contains: step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
+- [IMU.md](s4-imu/IMU.md) — the IMU in the robot image: hump report (report only) and lift/overturn safety stop, with its full step history.
+  Contains: current scope (hump report, safety stop, FIFO option D with 6-sample catch-up, INT1 parked); step 3 report-only hump detector (summary v3, event kind 9, USB/DUMP lines, H1 STREAM PASS on `1480b37`, 9/9 humps and 0 false in 5 flat, IMU stack free 480 B, H3 Not run); step 2 data path, calibration, angle/height formulas; step 2b/2c (historical); step 2d 400 Hz FIFO batch mean, floor PASS for the 10 mm RIGHT-wheel hump only; datasheet/AN3308 audit; step 1 validation and raw-stream evidence.
 
 - [IMU_SAFETY_PORT.md](s4-imu/IMU_SAFETY_PORT.md) — manual safety port and UP validation record.
   Contains: source attribution, pure detector contract, finite/age guards, trigger-count semantics, applied-request acknowledgement and integration steps; E: UP resource table per build profile (demo, capture, bench), ARM stack frames, spare Pico W BENCH1 (absent IMU), kernel services checked vs d3890d0, old-kernel numbers marked not valid; device acceptance not claimed.
