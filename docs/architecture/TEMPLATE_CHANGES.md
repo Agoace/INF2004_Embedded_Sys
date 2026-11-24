@@ -72,7 +72,7 @@ order. `usermain` still calls the idempotent `drv_time_init`; motion retains
 the unchanged 2% TIMER-to-kernel check and motion-only watchdog feed policy.
 A correct tick is checked, not restarted. Cold-power hardware checks on the
 then-new robot, TEST, BENCH and MQTT images were **Not run** at this gate.
-Later robot runs do not prove cold-power timing for every profile. The
+Open: cold-power timing checks for each profile. The
 USB21 cold enumeration result is in [KERNEL.md](../kernel/KERNEL.md#results-and-limits).
 
 ## Update and check procedure

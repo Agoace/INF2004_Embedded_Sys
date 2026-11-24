@@ -1,8 +1,8 @@
 # Demo freeze 2026-11-18
 
-Superseded by [demo-kernel-v2](DEMO_KERNEL_V2.md). The current submission is
-tag `submission-v4` (same firmware). The build, limits and results below
-apply to the 2026-11-18 freeze, not the current demo.
+Superseded by [demo-kernel-v2](DEMO_KERNEL_V2.md). Tag `submission-v4`
+uses the same firmware. The current submission is tag `submission-v4.1`.
+Build, limits and results below: freeze of 2026-11-18.
 
 This record identifies the frozen demo kernel. Use it if a later change
 fails. Do not change code on the freeze tag. Put new work on a module

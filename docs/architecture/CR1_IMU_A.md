@@ -171,8 +171,8 @@ These are the original isolated-change gates. Current: the IMU is integrated
 in the robot, with hump reporting and lift/overturn safety. Combined CR1
 image 12 checked hump, lift stop, timing and stacks (2026-11-19); see
 [project status](PROJECT_STATUS.md#areas). Image 30 run 6 later reported a
-hump on a full course. These runs do not prove an isolated before/after
-compute cost or all overturn/recovery cases. INT1 wake is parked at tag
+hump on a full course. Open: isolated before/after compute cost and the
+remaining overturn/recovery cases. INT1 wake is parked at tag
 `archive/mtk3-imu-irq`; FIFO partial-read option D is integrated.
 
 - Robot: compute/work max of the IMU task before/after

@@ -14,7 +14,7 @@ Current (2026-11-24): fitted narrow 2.5--7.0 mm, local-midpoint mode,
 SEEK axis re-anchor and held-letter acceptance are integrated. Image 30 run 6
 read A, large F, Z and small F (4/4). Demo day read M and turned LEFT;
 two BW_WIDTH failures also occurred. See [demo evidence](../release/DEMO_KERNEL_V2.md).
-This does not prove arbitrary small-print readability. Existing
+Open: tests of other small-print barcodes. Existing
 [TEST barcode](BARCODE.md) WIDTH/PEAK code and quiet rules are unchanged.
 
 ## Inputs and bounded work
@@ -106,7 +106,7 @@ end-star fallback rules below can accept without a complete normal path.
 
 | Check | Bound |
 | --- | --- |
-| Corrected narrow | 2.5--7.0 mm (bounded scope, not arbitrary optical resolution) |
+| Corrected narrow | 2.5--7.0 mm fitted narrow width; other small-print barcodes remain open |
 | Corrected wide | Fitted from the three wide elements; ratio/consistency checks below |
 | Wide/narrow ratio | 1.6--3.55 |
 | Minimum class separation | 1.4 |
@@ -158,7 +158,7 @@ SHADOW and the unverified 150 mm guard cannot enable a real action.
 
 ## Size-extension acceptance gates
 
-Historical software gates with the old 4 mm floor, not the current limits.
+Software gate results below use the former 4 mm floor.
 
 | Gate | Result and limit |
 | --- | --- |

@@ -1,8 +1,8 @@
 # Submission v2 2026-11-19
 
-Superseded by tag `submission-v4`; its firmware is the same as
-[demo-kernel-v2](DEMO_KERNEL_V2.md). The build, limits and results below
-apply to submission v2, not the current demo.
+Superseded by tag `submission-v4.1`. Tag `submission-v4` uses the same
+firmware as [demo-kernel-v2](DEMO_KERNEL_V2.md).
+Build, limits and results below: submission v2.
 
 This record identifies the second submission. `main` receives
 `mtk3-staging` `1f46e88` with one `--no-ff` merge and gets the tag

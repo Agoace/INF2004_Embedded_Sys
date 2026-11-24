@@ -281,8 +281,8 @@ base146/P85 also matches the unset demo ELF/UF2. Default/120/100 UP MQTT
 `KERNEL_RAM=1` builds have no warnings and pass the RAM-placement proof.
 Logs and public-example trial UF2s are under `build/wip/line-base/` in the
 line worktree; they are not operator-credentialed network images.
-The 2026-11-16 base120/100 trials at D85 were rejected. This is not the
-later accepted base120 + D30 + same-tick demo configuration.
+The 2026-11-16 base120/100 trials at D85 were rejected. The later demo
+configuration uses accepted base120 + D30 + same-tick.
 
 ## Results
 

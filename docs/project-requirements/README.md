@@ -41,7 +41,7 @@ Use the original course material to resolve a requirement or marking detail.
 Use the [documentation index](../README.md) for the current subsystem records
 and the [agent map](../AGENT_MAP.md) for source locations. The
 [IMU record](../s4-imu/IMU.md#current-scope) describes the implemented calibration,
-hump report and safety stop. Its dated results state the height-accuracy
-limits; they do not establish acceptance across all course hump heights.
+hump report and safety stop. Its dated results record height accuracy.
+Open: tests across the full range of course hump heights.
 The current submission is tag `submission-v4`, with the same firmware as
 [demo-kernel-v2](../release/DEMO_KERNEL_V2.md).

@@ -3,8 +3,9 @@
 ## Status and scope
 
 Current (2026-11-24): terminal-attempt telemetry is integrated in the LIVE
-demo build. A mapped barcode can command the next junction; an MQTT event
-alone is not proof of execution. See [demo results](../release/DEMO_KERNEL_V2.md).
+demo build. A mapped barcode can command the next junction. The terminal
+MQTT event reports the attempt; kind 7 reports junction actions.
+See [demo results](../release/DEMO_KERNEL_V2.md).
 The original software implementation came from staging `b9a47b5` and the
 B2b helper `a2a5f39`. The software-only gates below describe that revision.
 
@@ -31,8 +32,8 @@ record sequence, which is zero on failures. A delayed old-context cancellation
 keeps the OLD epoch in its event; it cannot be charged to a new epoch.
 A failure's letter and mapped command are zero. A decoded F/NONE is still
 an OK observation. In the LIVE demo, a valid mapped BW_OK record clears
-SHADOW; failures and ineligible records keep it. The event does not prove
-that a junction command executed. See [the live gate](BARCODE_LIVE_COMMAND.md).
+SHADOW; failures and ineligible records keep it. Kind 7 reports junction
+actions. See [the live gate](BARCODE_LIVE_COMMAND.md).
 
 A fitted start star can exist on a later failure. Those widths are marked
 valid but are NOT accepted full-frame widths. When no valid start fit exists,

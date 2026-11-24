@@ -5,7 +5,7 @@ revision-scoped records also live in `docs/`; use
 [the documentation index](../docs/README.md) and
 [the current demo record](../docs/release/DEMO_KERNEL_V2.md).
 A test only counts as done with a written result and saved evidence.
-A later course run does not pass every gate in an earlier procedure.
+Open gates remain listed with each procedure and its tested revision.
 
 ```
 testing/

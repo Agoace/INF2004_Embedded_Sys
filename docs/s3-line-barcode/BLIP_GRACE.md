@@ -7,8 +7,8 @@
 - Code commits `d809e64` and `307a213`.
 - The change is live builds only (`BARCODE_LIVE_ENABLE=1`). The shared producer and the SHADOW builds do not change behaviour; they get only the report counter.
 - Robot: included in the later LIVE images. Image 30 run 6 read 4/4 barcodes;
-  see [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md). This is combined-image
-  evidence, not a separate on-robot F1/F2 isolation test.
+  see [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md). Open: separate
+  on-robot F1/F2 isolation test.
 
 A blip is a LINE → SEARCH → LINE change that is shorter than `BLG_SEARCH_MS` (200 ms). The image-12 log has 41 blips in the KR1 rows (20–100 ms, 20 ms rows) and 45 in the VE events (9–100 ms), in 3 boots. The 4 extra VE blips fall between two 20 ms rows.
 

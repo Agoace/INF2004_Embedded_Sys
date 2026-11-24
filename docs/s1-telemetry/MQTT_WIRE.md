@@ -525,7 +525,8 @@ their rates in both modes; only MQTT publication changes. The pure rule is
 
 Historical 200 ms state-period comparison, before T110. Current RUN uses
 `PM_RUN_STATE_MS=110` in `telemetry_mode.h`; IDLE remains 1000 ms.
-The table below is not a measured current RUN byte rate.
+The table below gives calculated byte rates for the 200 ms comparison.
+Open: measured RUN byte rate at 110 ms.
 
 Change Requirement 1 (minimum-bit data) cost, in bytes per second. "Payload"
 counts only message bytes. "With MQTT" adds the PUBLISH fixed header (2), the
@@ -602,10 +603,10 @@ frame. Known malformed v2 is rejected; unknown versions/kinds remain ignored.
 
 The producer sets SHADOW for observations not offered for action. It
 clears SHADOW for a decoded record offered through the permitted LIVE path
-(`BARCODE_LIVE_ENABLE=1` in the demo). The mapped command and a cleared
-SHADOW bit alone do not prove execution; kind 7 reports junction actions.
-v2 is not a reinterpretation of v1
-votes, action or executed-result fields. The Python decoder retains v1 and
+(`BARCODE_LIVE_ENABLE=1` in the demo). The mapped command and cleared
+SHADOW bit report an offer; kind 7 reports junction actions.
+The votes, action and executed-result fields belong to v1.
+The Python decoder retains v1 and
 adds `letter`, `reason`, `reason_name`, `epoch`, `start_ms`, `failed`, `shadow`,
 `widths_valid`, `narrow_mm` and `wide_mm` to decoded/CSV fields. All v2 width
 unavailability becomes `None` (blank CSV), not invented zero.

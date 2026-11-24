@@ -27,7 +27,7 @@ the Vehicle or MQTT. It is a ROBOT image with a real IMU.
 
 The profile is opt-in. Off (the default) adds no flag, object or name.
 At the original capture integration, the 76 default images were unchanged.
-This comparison does not describe later firmware changes. It combines with
+The capture profile combines with
 `BARCODE_FAIL_CAPTURE=1`.
 
 ```sh
