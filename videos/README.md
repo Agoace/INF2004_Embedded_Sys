@@ -34,10 +34,11 @@ put its link in the *Log / evidence* column of that test's row in
 
 ## Video index
 
-No video links are recorded here as of 2026-11-24. Test evidence:
-[test records](../testing/README.md) and
+Logs and results: [test records](../testing/README.md) and
 [demo evidence](../docs/release/DEMO_KERNEL_V2.md).
-Add real links only. Newest at the bottom. Never delete an evidence row.
+Newest at the bottom. Never delete an evidence row.
 
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |
 |---|---|---|---|---|---|---|
+| — | System | Full course run | — | — | <https://youtu.be/yyAoqicx5HM> | Full run: 2 barcode reads with LEFT and U-turn commands executed, obstacle bypass |
+| — | System | Robot test clips (about 14 videos) | — | — | [Google Drive folder](https://drive.google.com/drive/folders/17AkoLZjGzvb7GJ_nSWOSoktGJkr5Algo?usp=sharing) | Recording dates not known |
