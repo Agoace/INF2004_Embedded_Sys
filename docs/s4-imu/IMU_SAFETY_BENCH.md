@@ -2,6 +2,11 @@
 
 ## Purpose
 
+Current (2026-11-24): these are optional synthetic bench profiles, not the
+normal IMU input. The demo uses the physical IMU and the safety stop path.
+See [real-robot capture results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
+The BENCH2/BENCH3 results below remain evidence only for their named images.
+
 Two opt-in images measure the ported IMU safety path on the single-core
 (UP) kernel without a physical IMU. In both, a synthetic 100 Hz stream
 replaces only the physical probe read. The IMU core, the safety detector
@@ -25,7 +30,8 @@ error. Both values require `SMP=0`, `WIFI=cyw43`, `NET=lwip`, `MQTT=1`,
 `KERNEL_RAM=1`, and exclude `IMU_STREAM`, `BARCODE_CAPTURE`,
 `BARCODE_FAIL_CAPTURE` and `BENCH_KERNEL`. Value `1` also requires
 `TEST=1 BENCH=0`. Value `robot_synthetic` requires `TEST=0 BENCH=0`.
-The default value is `0`; the 38 default profiles stay byte-identical.
+The default value is `0`. At the original bench integration, the 38 default
+profiles stayed byte-identical; that is not a comparison of today's firmware.
 
 ```sh
 # BENCH2: TEST runner
@@ -36,15 +42,18 @@ make -C build_make clean SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 IMU_SAFET
 make -C build_make --output-sync=target -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 IMU_SAFETY_BENCH=robot_synthetic
 ```
 
+Build evidence at the original bench integration (not current image totals):
+
 | Image | Warnings | RAM_PROOF | KERNEL_RAM lists |
 | --- | --- | --- | --- |
 | TEST | 0 | 62/62, 8592 B | `common.list` + `imu_safety_bench.list` |
 | ROBOT synthetic | 0 | 77/77, 19544 B (same as demo) | `common.list` + `robot.list` (unchanged) |
 
-`imu_safety_bench.list` is `robot.list` without 13 barcode rows, and
-without the 2 `same_tick.list` rows. In the TEST image, those 15 functions
-have no callers, so the linker removes them. The ordinary lists do not
-change.
+[`imu_safety_bench.list`](../../tools/kernel_ram/imu_safety_bench.list) omits
+the barcode entries from [`robot.list`](../../tools/kernel_ram/robot.list) and
+the entries in [`same_tick.list`](../../tools/kernel_ram/same_tick.list).
+Those paths have no callers in the exclusive TEST image. These separate
+bench lists do not change ordinary robot RAM placement.
 
 ## Mechanism
 
@@ -235,7 +244,8 @@ What BENCH3 does not prove:
 
 - The stop of an active run. Both stops occurred with the Vehicle idle,
   because the motion stall check ended each calibration in about
-  0.1–0.3 s. The active-run stop path has host tests only.
+  0.1–0.3 s. At BENCH3, the active-run stop path had host tests only.
+  Later real-robot push-over stops are recorded in [capture results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
 - Any I2C time, real mounting or real motion.
 
 Findings in the BENCH3 image, and their status:
