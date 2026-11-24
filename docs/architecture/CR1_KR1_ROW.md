@@ -5,11 +5,11 @@
 | Item | Value |
 | --- | --- |
 | Approval | Operator approved option (a) with the time guard |
-| Branch | `mtk3-cr1-kr1row`, base `b68ce6b` (staging) |
+| Archive tag | `archive/mtk3-cr1-kr1row`, base `b68ce6b` (staging) |
 | Commits | `d30a73b` red tests and row codec; `2269320` storage change; `6b6408d` this record; then a `--no-ff` merge of staging `290439c` (minimum-bit proof) and the KR1 proof row update |
 | Scope | RAM storage only. One `--no-ff` merge into staging |
 | Revert | `git revert -m 1 <merge commit>` removes the full change |
-| Robot | Not flashed and not run. No hardware result is claimed |
+| Robot | Substep: not flashed. Later combined image 12 checked rows, timing and stacks (2026-11-19); see [project status](PROJECT_STATUS.md#areas) |
 
 Source of the field audit: SW7 report `/tmp/SW7_KR1_ROW_CHECK.md`
 (temporary, not committed). This record repeats the facts that the code
@@ -201,12 +201,13 @@ static RAM 234800 B, S1 74381 B (the same as `2269320`).
 
 ## Open items
 
-- Main owns these records; they need an update after the merge:
-  `CR1.md` (the `rows` line says 72016) and `AGENT_MAP.md` (add
-  `kr1_row_pack.h`).
-- MEASUREMENTS rows go to SW7 as `#PENDING`.
-- Robot: rows lost through the guard are visible in the existing loss
-  counts. No robot run has checked the lateness bound.
+This work is merged. The current stored row is 15 B; the public KR1 row is
+still 16 B. MEASUREMENTS is generated; send corrections to the ledger owner.
+Combined image 12 checked the rows on the robot. Row-guard loss remains
+visible in existing loss counts; that run is not a worst-case lateness proof.
+The demo now runs up to 300 s and retains only the first 90 s in RAM;
+a full log no longer stops driving or MQTT. See
+[demo-kernel-v2](../release/DEMO_KERNEL_V2.md).
 
 ## Evidence
 

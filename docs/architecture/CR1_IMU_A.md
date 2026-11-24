@@ -5,7 +5,7 @@ IMU boards. The IMU task keeps full `float` values. Only the shared copies
 are packed. The snapshot board (504 B) and items B1–B7 are not approved and
 do not change.
 
-Base: `mtk3-staging` at `b68ce6b`. Branch `mtk3-cr1-imu`. Code commit
+Base: `mtk3-staging` at `b68ce6b`. Work kept at tag `archive/mtk3-cr1-imu`. Code commit
 `f47e3c0`.
 
 ## Rules
@@ -78,7 +78,7 @@ outside its field saturates. This board is USB only.
 
 Peak bits and run bits never share a field. The writer keeps the packed peak
 bits and packs them again only when the peak changes
-([imu_service.c:190](../../app_program/subsystem4/imu_service.c#L190)).
+([imu_service.c:191](../../app_program/subsystem4/imu_service.c#L191)).
 
 ### Safety board (12 B), option S2
 
@@ -97,7 +97,7 @@ The board does not carry `tilt_ddeg`, `g_mg`, `vertical_mg`,
 reader uses them. They unpack as 0
 ([imu_safety_board.h:10](../../app_program/subsystem4/imu_safety_board.h#L10)).
 `imu_safety_try_read()` unpacks into the same `imu_safety_report_t`
-([imu_service.c:447](../../app_program/subsystem4/imu_service.c#L447)), so
+([imu_service.c:455](../../app_program/subsystem4/imu_service.c#L455)), so
 the gate and the bench code do not change.
 
 ## Week 8 §11 mapping
@@ -166,6 +166,14 @@ The peak changes only while a hump event rises. Compiler frames
 IMU stack high-water is 1520–1568 of 2048 B.
 
 ## Open gates
+
+These are the original isolated-change gates. Current: the IMU is integrated
+in the robot, with hump reporting and lift/overturn safety. Combined CR1
+image 12 checked hump, lift stop, timing and stacks (2026-11-19); see
+[project status](PROJECT_STATUS.md#areas). Image 30 run 6 later reported a
+hump on a full course. These runs do not prove an isolated before/after
+compute cost or all overturn/recovery cases. INT1 wake is parked at tag
+`archive/mtk3-imu-irq`; FIFO partial-read option D is integrated.
 
 - Robot: compute/work max of the IMU task before/after
   (`IMU_SAFETY_BENCH=robot_synthetic` images are built; Main flashes).

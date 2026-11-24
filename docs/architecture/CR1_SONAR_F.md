@@ -9,7 +9,7 @@ interface is [`fault_mask.h`](../../app_program/platform/fault_mask.h)
 the owner words. The word is a diagnostic mirror. It is not an actuator
 input and it adds no latch or clear rule.
 
-Commit: `4e953a6` on `mtk3-cr1-sonar` (parent `1809787`).
+Commit: `4e953a6`, kept at tag `archive/mtk3-cr1-sonar` (parent `1809787`).
 
 ## Rule
 
@@ -58,5 +58,6 @@ Demo line, public example secrets, Arm GNU 14.3.Rel1. Before is `1809787`.
 
 The 8 B board is new storage, a cost, not a packing saving. Of 225
 objects, only `sonar_service.o` differs. Messages and MQTT bytes do not
-change. The frame value is not a whole-stack measurement. Not run on the
-robot.
+change. The frame value is not a whole-stack measurement. This isolated
+substep had no robot run. Later combined CR1 image 12 checked fault-mask
+output, timing and stacks; see [project status](PROJECT_STATUS.md#areas).

@@ -31,8 +31,8 @@ read-only observation boards -> Wi-Fi task -> MQTT -> laptop dashboard
 | --- | --- | --- |
 | S1 telemetry | RAM log/dump, bounded network queues, MQTT codecs and health | No network call in a control task |
 | S2 motion | Speed loop, encoders, motor/servo PWM, stale-command stop | Sole actuator owner; sole watchdog feeder |
-| S3 line/barcode | ADC acquisition, pair-mode line learning and observations | Barcode is raw analog only; no robot barcode decoder |
-| S4 IMU | Robot/TEST observer: stationary bias, filtered/compensated pitch and relative height | No driving action, terrain events, MQTT/KR1 fields or physical step-2 acceptance |
+| S3 line/barcode | ADC acquisition, two-sensor line tracing and GP28 Code 39 reader | Demo build enables live commands for the next junction; GP28 can miss bar ends on bends |
+| S4 IMU | Stationary bias, pitch/height, hump report and lift/overturn safety | Humps are report-only; the safety gate can stop the robot |
 | S5 obstacle | Asynchronous echo service, monitor, scan and detour modules | Sensor service does not choose a route |
 | Vehicle | Calibration/run phases, buttons, module shell and routing | No ADC polling, echo wait, network call or dump loop |
 
@@ -40,8 +40,9 @@ read-only observation boards -> Wi-Fi task -> MQTT -> laptop dashboard
 
 Lower task priority numbers run first. Registered application tasks use
 `TP_PRC1`: processor 1 in kernel numbering, physical core 0. The robot
-profile uses `SMP=0`. A default SMP build does not move the robot or Wi-Fi
-tasks to core 1. The earlier proposed core split is not implemented.
+profile uses `SMP=0`. Split placement builds, but is parked: IMU, Wi-Fi,
+telemetry and the second idle meter use core 1 in an SMP build unless
+`FORCE_CORE0=1`. See [core placement](../kernel/KERNEL.md#core-placement-and-locks).
 
 | Task | Priority | Release / role |
 | --- | ---: | --- |
@@ -49,7 +50,7 @@ tasks to core 1. The earlier proposed core split is not implemented.
 | Line | 11 | Wake for queued 1 ms ADC samples |
 | Sonar | 12 | Requests, echo edges and 10 ms deadline checks |
 | Vehicle | 13 | Motion after-tick notification, 10 ms |
-| IMU, robot/TEST only | 14 | Own 10 ms cyclic, bounded sensor/count reads and observation board |
+| IMU, robot/TEST | 14 | Own 10 ms cyclic, FIFO/count reads, hump and safety boards |
 | Wi-Fi, when enabled | 20 | Sole CYW43/lwIP/MQTT owner; requested 2 ms sleep |
 | USB console | 21 | Interrupt wake or 10 ms fallback |
 | Telemetry | 30 | Nonblocking producer messages, RAM storage and dump |
@@ -70,7 +71,7 @@ kernel object sizes are in the [kernel record](../kernel/KERNEL.md).
 | Encoder and echo edges | Core-0 GPIO13 dispatcher, IRQ level 1 requested, 0 on hardware ([F-NVIC](../kernel/KERNEL.md#interrupt-priorities-f-nvic)) | Record counts/timestamps, set state and wake a task |
 | ADC sampling | TIMER alarm 0 / IRQ0, level 2 requested, 0 on hardware ([F-NVIC](../kernel/KERNEL.md#interrupt-priorities-f-nvic)); 1 ms absolute targets | Eight conversions per channel, timestamped 128-slot queue |
 | Motion scheduling | Kernel cyclic, 10 ms | Complete one tick; do not replay old releases |
-| IMU observation | Separate kernel cyclic, 10 ms, task14 | Bounded bus/count reads; no motion wake-client replacement or driving decision |
+| IMU observation | Separate kernel cyclic, 10 ms, task14 | Bounded bus/count reads; Vehicle applies the lift/overturn stop gate |
 | Missing echo / stalled wheel | Bounded deadline or progress check | A missing edge cannot generate its own interrupt |
 | GP21 operator button | Poll every 20 ms, then immediate motion ESTOP | Not a hardware ESTOP interrupt |
 
@@ -131,6 +132,8 @@ FOUND and FAILED. Other terminal outcomes have no route and fault.
 | Sensor requests | Sonar generation/ID/angle/deadline checked before use; one outstanding one-shot |
 | Data publication | Bounded value copies; no sensor event consumed by telemetry |
 | Commands | Latest-value motion request with timestamp expiry; no drive backlog |
+| Live barcode command | Hold for 10000 mm through SCAN/DETOUR; cancel after 200 ms continuous SEARCH |
+| Run and RAM log | Run limit 300 s; GP20 retains the first 90 s (4501 rows); a full log does not stop MQTT or driving |
 | Watchdog | 100 ms hardware timeout; fed only after completed motion ticks |
 | Network failure | Must not stop or delay driving; application command acceptance is separate from MQTT PUBACK |
 | ADC pins | C GP26, L GP27, barcode analog GP28; old digital GP7 unused |
@@ -152,8 +155,12 @@ physical measurements and model assumptions separate.
 
 ## Limits and records
 
-No gyro is present in the GY-511. IMU calibration/hump integration and the
-analog barcode decoder are not implemented. Physical stop latency and each
+No gyro is present in the GY-511. IMU hump reporting, lift/overturn safety
+and the GP28 decoder are integrated. The current demo kernel is
+`demo-kernel-v2`; submission-v4 changes documents only. Image 30 run 6 read
+A, large F, Z and small F (4/4), with two DONE_LINE detours and a hump.
+See [the release record](../release/DEMO_KERNEL_V2.md#robot-evidence-2026-11-20-image-30).
+Physical stop latency and each
 new image's cold-power and track checks need operator evidence. Do not
 carry a PASS from an earlier image to a new one.
 

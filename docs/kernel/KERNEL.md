@@ -21,17 +21,18 @@ multi-core proposal or acceptance of every possible load.
 echo interrupt -> sonar12 -------+-> vehicle13 -> motion commands
 10 ms cyclic -> motion10 -------+      |              |
                     | after-tick wake |              v
-                    +-----------------+          next motor tick
+                    +-----------------+          same-tick retarget
                                       |
                                       +-> RAM queue -> telemetry30
 10 ms IMU cyclic -> IMU14 -> read-only boards -> TEST20 USB observer
-                               hump board -> vehicle13 (run result)
+                      hump/safety boards -> vehicle13 (report/stop gate)
 read-only network boards -> Wi-Fi20 -> broker; health31 -> health board
 USB21 drains the console; idle_meter32 estimates unused core-0 time
 ```
 
-`TP_PRC1` means physical core 0. Application work stays there even in an
-SMP build (a build with both processor cores enabled). Interrupts release
+`TP_PRC1` means physical core 0. The demo uses UP (`SMP=0`); all its tasks
+stay there. An SMP build can use the parked split placement below unless
+`FORCE_CORE0=1`. Interrupts release
 work; they do not run navigation or format output. Only the initial startup
 task runs at priority 1. TEST lowers that task to 20 before tests.
 
@@ -43,21 +44,23 @@ task runs at priority 1. TEST lowers that task to 20 before tests.
 | line | 11 | Each 1 ms ADC acquisition; filter, learned line values and snapshot | 2048 |
 | sonar | 12 | Request/edge wake; 10 ms deadline cyclic; trigger and result service | 2048 |
 | vehicle | 13 | After each completed motion tick; buttons, calibration, modules and commands | 4096 |
-| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO batch/count reads, pure core, report-only hump detector, snapshot and hump boards | 2048 |
+| IMU, robot/TEST | 14 | Own 10 ms cyclic; bounded 400 Hz FIFO/count reads, hump report, snapshot and safety boards | 2048 |
 | Wi-Fi | 20 | Template poll loop; sole CYW43/lwIP/MQTT owner | 8320 with lwIP; 6272 radio-only, registered |
 | TEST runner | 20 | Initial task after startup; no normal vehicle/bench task | Initial task stack |
 | USB console | 21 | IRQ wake or 10 ms fallback; console drain | 2048 UP / 4096 SMP (template-owned) |
 | telemetry | 30 | Message arrival; RAM rows/events and paced USB dump | 4096 |
 | health, MQTT only | 31 | 1 s cyclic; counters and application-stack scan | 2048 |
-| idle meter, MQTT only | 32 | Always ready, preemptible; CPU estimate | 512 |
+| idle meter, MQTT only | 32 | Always ready, preemptible; CPU estimate | 768 |
 | motion bench, BENCH only | 11 | Motion after-tick wake; exclusive alternative to vehicle | 4096 |
 
 The motion notification slot has one consumer: vehicle or bench, never both.
 Task functions do not return. They loop or call `tk_ext_tsk()`.
 IMU_STREAM's TEST20 observer alone can request the operator GP21 drive
 trial (100 mm/s,600 mm/10 s), with stop-pending retries. No IMU14 height or
-quality result chooses a drive command. VIN/lifted-first hardware checks
-remain pending; see the [procedure](../s4-imu/IMU.md#step-2d-current-procedure).
+quality result chooses a drive command in that TEST trial. The robot
+Vehicle task separately applies the IMU lift/overturn stop gate. The older
+TEST drive procedure is [recorded here](../s4-imu/IMU.md#step-2d-current-procedure);
+its checks do not describe current whole-course acceptance.
 
 ### Interfaces and kernel objects
 
@@ -90,10 +93,11 @@ permits `tk_wup_tsk(explicit_id)` from the interrupt context.
 | Sonar ONCE | SCAN request deadline 100 ms; check generation, ID, angle and actual trigger identity |
 | Vehicle deadline | A new motion tick before completion or wake-to-finish >=10 ms counts an overrun and stops the active session |
 | Buttons | GP21 sampled every 20 ms; normal press calibrates then starts; press during calibration/run latches ESTOP. GP20 dumps saved RAM data while idle |
-| Driving limit | Normal start delay 1 s; navigation at most 90 s |
+| Driving limit | Normal start delay 1 s; navigation at most 300 s; a full 4501-row RAM log does not stop driving or MQTT |
 
 `response_max_us` is vehicle **wake-to-finish**, not cyclic-release-to-finish.
-Motion commands normally take effect on the following motor tick. The line
+Robot builds use same-tick retarget by default (`MOTION_SAME_TICK=1`);
+`=0` restores the following-tick behavior. The line
 10 ms age rule is not a sonar age rule. Rejected or full sonar requests stop
 the local session instead of making navigation wait. Old physical echoes
 cannot become a new generation's observations.
@@ -124,7 +128,9 @@ not add its normal 128-byte allowance.
 
 The A1/B1 hardware gate on 2026-11-10 measured idle-meter use 296/512 B,
 leaving only 216 B. The approved safety correction increases that reserve
-to 768 B. The enlarged stack's target high-water is not yet measured.
+to 768 B. That result describes the older image, not the current margin.
+Image 12 later passed the combined CR1 timing/stack gate; see
+[current project status](../architecture/PROJECT_STATUS.md#areas).
 See [the gate record](../../testing/subsystem2/TEST_LOG.md).
 
 `app_task_stacks()` scans the fill pattern from the low end and keeps the
@@ -144,7 +150,7 @@ module, queue saturation and dumps before accepting a stack budget.
 | Start | `app_task_start_config()` keeps entry, priority 20, `TA_RNG1`, name and core; duplicate start fails; failed delete quarantines the slot until reboot |
 | Report | `[stack] cyw43 core N size 8320 high_water U free F`; `free < 256` prints `LOW MARGIN`. Health includes it in `stack_min_free` |
 | RAM | Static +8336 B, pool request -8320 B. This is a move, **not** a saving: the kernel pool starts after BSS and shrinks by the same amount |
-| Hardware gate | Not run: association, reconnect, MQTT, DUMP, then `cyw43` free >= 256 B |
+| Hardware gate | Association, MQTT, DUMP and combined CR1 timing/stacks have later robot evidence; see [project status](../architecture/PROJECT_STATUS.md#areas). A separate reconnect stress gate is not established here. |
 
 IMU stack readings (2048 B region, 256 B policy margin):
 
@@ -295,14 +301,18 @@ section attribute on code there makes the assembler warn), and the template
 linker script copies `.data.*` to RAM; flash callers reach them through a 16 B long-branch
 veneer each. Their interrupt mask uses the inline `get_primask` and
 `set_primask`, because `DI` calls `disint()` in flash. The ISRs that call
-them still run from flash. Cost of the RAM placement: `.data` +224 to
+them ran from flash at that P2 commit. The demo now places the listed ISR
+path in RAM with `KERNEL_RAM=1`. Cost at the P2 commit: `.data` +224 to
 +232 B, `.text` -176 B. The RAM load segment is now RWX on purpose
 (`--no-warn-rwx-segments` in `build_make/app_sdk_hw.mk`).
 
 ## RAM placement (KERNEL_RAM)
 
-Demo image (operator decision): `make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1
-KERNEL_RAM=1`; `<image>.ramproof` must say `RAM_PROOF PASS listed 75 in_ram 75`.
+The current `demo-kernel-v2` build uses `SMP=0`, MQTT and `KERNEL_RAM=1`.
+Use [BUILD.md](BUILD.md#build-profiles) for the full live-barcode command.
+RAM_PROOF is PASS 84/84 (23906 B) live, or 80/80 (23018 B) without live
+barcode. The dated v2 placement measurements below refer to `b0c3a9a`,
+not to the later release tag with a similar name.
 
 | Item | Record |
 | --- | --- |
@@ -489,7 +499,11 @@ images have none.
 
 ### If RAM becomes too small
 
-Use the steps in this order; measure before and after each.
+Historical planning list (2026-11-08), not current work instructions.
+The robot no longer reserves `bench_stack`; CR1 stores each RAM row in
+15 B (67515 B total), and all CR1 minimum-bit GAPs are closed. These
+representation changes did not change MQTT row bytes. Further capacity
+or wire changes need separate operator approval.
 
 | Step | Change | Gain | Cost |
 | ---: | --- | ---: | --- |
@@ -548,8 +562,8 @@ CPU accuracy and complete all-load stack bounds are not established here.
   [app_task.c](../../app_program/platform/app_task.c),
   [motion.h](../../app_program/subsystem2/motion.h),
   [telemetry.h](../../app_program/subsystem1/telemetry.h).
-- [IMU observer](../s4-imu/IMU.md), [measured RAM delta](#static-ram-growth-mqtt-robot-same-public-example-settings)
-  and [pending S4 hardware](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
+- [IMU hump and safety service](../s4-imu/IMU.md), [measured RAM delta](#static-ram-growth-mqtt-robot-same-public-example-settings)
+  and [historical S4 observer gates](../../testing/subsystem4/TEST_LOG.md#observe-only-step-2-and-step-2b).
 - [S1 TEST_LOG](../../testing/subsystem1/TEST_LOG.md),
   [S2 TEST_LOG](../../testing/subsystem2/TEST_LOG.md),
   [integration TEST_LOG](../../testing/integration/TEST_LOG.md).
