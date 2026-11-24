@@ -426,9 +426,10 @@ vehicle task described below.
   tests in [`test_barcode_window_real.c`](../tests/test_barcode_window_real.c).
   [Real window replay](s3-line-barcode/REAL_WINDOW_REPLAY.md) compares old/new
   readers on all five retained ADC/motor fixtures.
-  SHADOW feed tests: [`test_barcode_live_feed.c`](../tests/test_barcode_live_feed.c)
+  Feed and producer tests: [`test_barcode_live_feed.c`](../tests/test_barcode_live_feed.c)
   and [`test_barcode_live_producer.c`](../tests/test_barcode_live_producer.c).
-  Vehicle merge, stack/CPU and offset hardware acceptance remain pending.
+  Vehicle integration is done; robot evidence is in
+  [DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md).
 
 ## TEST-only barcode B1c
 
@@ -469,10 +470,10 @@ vehicle task described below.
   passed; hand-push procedure failed. Lifted forward passed on 45040c7;
   0cd2c03 passed lifted/large F in both directions at 433 mm observed,
   but small F failed WIDTH. B1c PEAK has host evidence, not powered proof.
-  The mount cannot go below 5.5 mm; it touches a 10 mm hump.
-  Normal routing does not use the decoder.
+  These B1c results used the old 5.5 mm mount (2.5 mm since 2026-11-19).
+  B1c is TEST-only; the robot routes with the B2b live reader instead.
 
-## IMU task and hump report
+## IMU task, hump report and safety stop
 
 - [GY-511 IMU record](s4-imu/IMU.md) — step 3 report-only hump detector (thresholds, gates, outputs, synthetic fixtures, H1 STREAM hardware PASS on 1480b37; diagnostic C hardware on 29d57de, uncorrected LINE height accepted, corrected over-read under investigation (9/9 humps, 0 false in 5 flat); full-circuit no-false-hump H3 is priority and Not run; accuracy follow-up deferred); step 2d 400 Hz FIFO batch mean (cited datasheet/AN3308 facts, bus deadline, alias fixtures, retired INT1 check, TEST raw capture) feeding the step 2c roll-only RIGHT-wheel primary; legacy support diagnostics, bounded GP21 TEST drive; step 2c hardware NOT a height PASS; step 2d floor PASS for the 10 mm RIGHT-wheel hump only.
 - [`imu_core.c`](../app_program/subsystem4/imu_core.c), [`imu_core.h`](../app_program/subsystem4/imu_core.h) — pure guarded calibration, compensated pitch/roll, support-quality peaks and secondary slope integral; no driving decisions or packed fields.
@@ -504,7 +505,7 @@ vehicle task described below.
 
 ## Kernel robot integration
 
-- [Junction action design](architecture/JUNCTION_ACTION.md) — fixed B2a fake START consumer and LINE/SEARCH wrapper; B2a closed at50426ae. [Live adapter](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b STEP4a SHADOW admission and terminal ACK; no module number or summary change.
+- [Junction action design](architecture/JUNCTION_ACTION.md) — fixed B2a fake START consumer and LINE/SEARCH wrapper; B2a closed at50426ae. [Live adapter](architecture/JUNCTION_LIVE_ADAPTER.md) — B2b admission and terminal ACK (LIVE in the demo build, SHADOW without `BARCODE_LIVE_ENABLE=1`); no module number or summary change.
 - [`junction_action.c`](../app_program/vehicle/junction_action.c) and [`junction_action.h`](../app_program/vehicle/junction_action.h) — pure forced-corner job (A/B/D white-gated SEARCH; C160 mm marker; unconsumed pending survives normal SEARCH only); [`junction_line.c`](../app_program/vehicle/junction_line.c) and [`junction_line.h`](../app_program/vehicle/junction_line.h) delegate travel to locked LINE and wrap unchanged SEARCH for a forced corner.
 - [`junction_source.c`](../app_program/vehicle/junction_source.c) and [`junction_source.h`](../app_program/vehicle/junction_source.h) — exclusive fake source1 or live source2 backend. [`junction_live.c`](../app_program/vehicle/junction_live.c) and [`junction_live.h`](../app_program/vehicle/junction_live.h) own admission, independent encounter state, control and terminal ACK. [`junction_print.c`](../app_program/vehicle/junction_print.c) formats bounded USB evidence and counters in telemetry.
 - [`test_junction_live.c`](../tests/test_junction_live.c) checks SHADOW, host-only permission, age/cut/route guards, serial wrap and old-epoch slot races. [`test_barcode_dump_stub.c`](../tests/test_barcode_dump_stub.c) checks strong stopped-dump override with the telemetry fixture.
