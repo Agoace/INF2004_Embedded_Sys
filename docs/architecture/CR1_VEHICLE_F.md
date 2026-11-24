@@ -9,6 +9,12 @@ Health alone combines owner words. This word is not an actuator input.
 It adds no latch, clear rule, task, message or MQTT field. Category A and
 B storage savings are both zero: this change adds diagnostic storage.
 
+Current (2026-11-24): this change is merged. The comparisons and tests below
+are the 2026-11-18 substep evidence, including the then-current 90 s limit.
+The demo now permits 300 s. Combined CR1 image 12 checked lift stop,
+fault-mask output, timing and stacks; see [project status](PROJECT_STATUS.md#areas).
+This does not establish an isolated before/after timing comparison.
+
 ## Representation and ownership
 
 | Item | Rule |

@@ -15,7 +15,10 @@ fail-capture edge arrays and stored barcode frames. This is category A
 - Category B is NOT approved: no smaller capacities, fixed-point conversion,
   timestamp deltas or removal of duplicate data.
 - Do not push, flash or merge into another branch. Main owns integration.
-  The operator's LIVE robot run follows that merge; it is still pending.
+  At this substep the LIVE robot run was pending. Current: CR1 is merged;
+  image 12 checked barcode LIVE, timing and stacks on 2026-11-19. See
+  [project status](PROJECT_STATUS.md#areas) and [demo-kernel-v2](../release/DEMO_KERNEL_V2.md).
+  The tables below retain this substep's baseline and measurements.
 
 Implementation: [barcode_evidence_pack.h](../../app_program/subsystem3/barcode_evidence_pack.h),
 [barcode_live_source.c](../../app_program/subsystem3/barcode_live_source.c) and
@@ -214,4 +217,5 @@ DERIVED from the linked ARM instruction sequences (saved registers included):
 The source-to-pack call path therefore uses 344 B before `memcpy` or other
 callees. This is not a complete task-stack bound or a measured watermark.
 The LINE stack remains 2048 B. No increase in stack allocation is claimed
-as a data saving; check its margin during the pending robot run.
+as a data saving. The later combined image 12 checked stack margins;
+that does not turn compiler-local frames into whole-stack bounds.

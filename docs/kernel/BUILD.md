@@ -19,7 +19,7 @@ Only the operator authorizes a flash or powered motor test.
 | `paho-mqtt` 2.x (operator tools only) | Recorder/dashboard connection to an existing broker |
 
 Check `arm-none-eabi-gcc --version` and the SDK path before building. The
-[repository README](../../README.md) has installation steps. The exhaustive
+[template setup guide](TEMPLATE_SETUP.md) has installation steps. The exhaustive
 current SDK source/header list is in
 [app_sdk_hw.mk](../../build_make/app_sdk_hw.mk); do not add SDK startup,
 IRQ registration, time initialization or a second runtime. See
@@ -40,12 +40,17 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 DIAG=1 -j4 --output-sync=target
 make -j4 --output-sync=target  # default SMP=1, radio on, no lwIP/MQTT
 ```
 
-Demo image (operator, 2026-11-15): UP robot with the kernel hot path in RAM.
-Check that `<image>.ramproof` starts with `RAM_PROOF PASS listed 75 in_ram 75`.
-See [KERNEL_RAM](KERNEL.md#ram-placement-kernel_ram).
+Current demo kernel: `demo-kernel-v2`, UP robot with live barcode and the
+kernel hot path in RAM. Submission-v4 changes documents only. The live
+build has RAM_PROOF PASS 84/84, 23906 B; the fallback without live barcode
+has 80/80, 23018 B. See [KERNEL_RAM](KERNEL.md#ram-placement-kernel_ram) and
+[demo-day build steps](../release/DEMO_KERNEL_V2.md).
 
 ```sh
-make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
+make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1 \
+  BARCODE_FAIL_CAPTURE=1 BARCODE_LIVE_ENABLE=1 \
+  BARCODE_MEASURED_CLEAR_MM=100 BARCODE_MAP="M=LEFT,O=RIGHT,P=UTURN" \
+  JUNCTION_TEST_CMD=NONE
 ```
 
 | Option | Default / effect |
@@ -61,8 +66,8 @@ make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 KERNEL_RAM=1
 | `CRASH_REPORT` | 0; 1 mirrors console to UART0, occupying GP0/GP1 |
 | `IMU_STREAM` | 0; 1 requires TEST=1, not BENCH; S4 stream only, no other tests |
 | `BARCODE_CAPTURE` | 0; 1 selects B1b driven TEST capture; VIN required |
-| `JUNCTION_TEST_CMD` | NONE (default) selects source2 SHADOW; A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
-| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE, a non-empty `BARCODE_MAP` and a positive explicit measured bound; opt-in adds `_bclive`; no live-action image is authorized |
+| `JUNCTION_TEST_CMD` | NONE (default) selects source2 (SHADOW unless live enable1); A/B/C/D select exclusive fake START commands with `_jtestA`..`_jtestD` suffixes |
+| `BARCODE_LIVE_ENABLE` | 0 default; 1 requires NONE, a non-empty `BARCODE_MAP` and a positive explicit measured bound; opt-in adds `_bclive`; the demo uses 1 |
 | `BARCODE_MEASURED_CLEAR_MM` | 0 default; decimal integer0..65535 without leading zeros;150 mm SHADOW label is not a measured default |
 | `BARCODE_MAP` | Empty default = built-in table, image unchanged. `"F=LEFT,K=RIGHT"` sets the barcode_window action table (unlisted letters NONE; NONE/LEFT/RIGHT/STRAIGHT/UTURN) via [`barcode_map.py`](../../tools/barcode_map/barcode_map.py); bad letter, action or a repeat stops make. Adds `_bmap<id>`. Check the boot line `[BARCODE_TABLE] id <id> confirmed 1 A=.. Z=..` (0..4 = N/L/R/S/U). |
 | `BARCODE_MAP_ID` | 2 default, 2..255; only with `BARCODE_MAP`. Id 1 is the built-in table. |
@@ -106,8 +111,9 @@ Capture uses 6144 four-byte decimated records, about 12.3 s at default
 2 ms, plus 512 motion records. The TEST runner reports each frame and
 WIDTH and B1c PEAK on independent TIME/DISTANCE axes after freeze.
 All accepted payloads must agree; conflicts give AMBIGUOUS. B1c PEAK has
-host replay evidence, not powered acceptance. Its sensor remains at the
-5.5 mm mechanical minimum; it touches the floor on a 10 mm hump.
+host replay evidence, not powered acceptance. Those captures used the
+historical 5.5 mm mount. Since 2026-11-19 the operator
+uses 2.5 mm and has fixed hump clearance mechanically; see [BARCODE.md](../s3-line-barcode/BARCODE.md).
 Full dumps can take tens of seconds:
 wait for READY before GP21; presses during the dump are ignored with one
 notice. Partial-contrast optical rules and the approved real-capture host
@@ -182,7 +188,8 @@ done
 NONE retains the normal MQTT filename. The other images end in
 `_jtestA.uf2` through `_jtestD.uf2`. Fake boot prints its command and clearance;
 a kind7 phase event and telemetry-owned `[JUNCTION]` USB line report the job.
-NONE now prints BARCODE SHADOW and the official26-entry table once at boot.
+NONE without live enable prints BARCODE SHADOW and the 26-entry table at boot.
+The demo uses NONE with live enable1; it can offer mapped letters to Vehicle.
 No summary version is added. Use NONE for H3 IMU circuit
 comparisons. Read the [design](../architecture/JUNCTION_ACTION.md) and
 [validation/J0–J6 procedure](JUNCTION_VALIDATION.md) before an authorized test.
@@ -197,8 +204,10 @@ make SMP=0 WIFI=cyw43 NET=lwip MQTT=1 JUNCTION_TEST_CMD=NONE \
     BARCODE_LIVE_ENABLE=0 BARCODE_MEASURED_CLEAR_MM=0 -j4 --output-sync=target
 ```
 
-In default builds, the decoder and adapter report evidence only, and S3 forces
-valid0 even in mode2. A live opt-in build ([BARCODE_LIVE_COMMAND.md](../s3-line-barcode/BARCODE_LIVE_COMMAND.md))
+In default builds without live enable, the decoder and adapter report
+evidence only, and S3 forces valid0 even in mode2. The frozen demo enables
+live commands; the command above is a SHADOW diagnostic profile, not the demo.
+A live opt-in build ([BARCODE_LIVE_COMMAND.md](../s3-line-barcode/BARCODE_LIVE_COMMAND.md))
 can set valid1 only with mode2, a custom `BARCODE_MAP` and a mapped letter.
 The150 mm SHADOW label is unverified and cannot authorize actions. Enable,
 bound and source choice are object-profile keys. Invalid bounds, fake+live,

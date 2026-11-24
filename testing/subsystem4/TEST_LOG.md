@@ -1,5 +1,18 @@
 # Subsystem 4 test log
 
+## Current state (2026-11-24)
+
+The demo robot image includes the hump report and lift/overturn safety stop.
+See [IMU scope](../../docs/s4-imu/IMU.md#current-scope) and
+[real-robot safety results](../../docs/s4-imu/IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
+FIFO option D is integrated; [project status](../../docs/architecture/PROJECT_STATUS.md#areas)
+records bench B2 passing on all four boots. INT1 wake is parked at tag
+`archive/mtk3-imu-irq`. Later course/demo hump reports are in
+[the demo kernel record](../../docs/release/DEMO_KERNEL_V2.md).
+These do not establish the specific H3 two-source, no-hump comparison or
+H4–H9 acceptance. The revision-scoped results and pending tests below stay
+as recorded; the old observe-only procedures are not the current safety policy.
+
 ## GY-511 steps 0 and 1
 
 Use the [operator tilt procedure](../../docs/s4-imu/IMU.md#operator-tilt-check-not-run).

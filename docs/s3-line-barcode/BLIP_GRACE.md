@@ -3,10 +3,12 @@
 ## Status
 
 - Approved by the operator on 2026-11-19 (proposal `/tmp/SW11_BLIP_GRACE_PROPOSAL.md`).
-- Branch `mtk3-blip-grace`, base `mtk3-staging` `871c806`.
+- Integrated in the demo; development ref: tag `archive/mtk3-blip-grace`, base `871c806`.
 - Code commits `d809e64` and `307a213`.
 - The change is live builds only (`BARCODE_LIVE_ENABLE=1`). The shared producer and the SHADOW builds do not change behaviour; they get only the report counter.
-- Robot test: PENDING. Main builds and flashes the robot image.
+- Robot: included in the later LIVE images. Image 30 run 6 read 4/4 barcodes;
+  see [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md). This is combined-image
+  evidence, not a separate on-robot F1/F2 isolation test.
 
 A blip is a LINE → SEARCH → LINE change that is shorter than `BLG_SEARCH_MS` (200 ms). The image-12 log has 41 blips in the KR1 rows (20–100 ms, 20 ms rows) and 45 in the VE events (9–100 ms), in 3 boots. The 4 extra VE blips fall between two 20 ms rows.
 

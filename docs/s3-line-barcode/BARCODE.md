@@ -2,6 +2,11 @@
 
 ## Scope and evidence
 
+Current (2026-11-24): this page describes the separate B1c TEST profile,
+not the demo reader. The demo uses the [LIVE window reader](LIVE_WINDOW_READER.md)
+and [commands the next junction](BARCODE_LIVE_COMMAND.md). Its robot results
+are in [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).
+
 B1c keeps B1b WIDTH decoding and adds a separate post-stop PEAK path.
 It runs an operator-requested straight pass over **one barcode sheet**.
 GP21 starts 430 mm forward at 100 mm/s; after confirmed stop and a complete
@@ -12,8 +17,8 @@ The operator shortened the map: 430 mm leaves 20 mm margin for coast
 (about 3 mm observed at 100 mm/s). The old 600/620 settings are superseded.
 The first floor capture also reached unrelated dark floor after ~450 mm.
 
-This is not barcode-controlled navigation. A decoded command is data only;
-no barcode changes the Vehicle Controller route. Normal LINE behaviour is
+This TEST profile is not barcode-controlled navigation. Its decoded command
+is data only; it does not change the Vehicle Controller route. Normal LINE behaviour is
 unchanged. On `0cd2c03`, six lifted/large/small passes stopped at observed
 433 mm encoder travel, no loss/fault; UI notices worked, dump 31–33 s.
 Large F decoded with WIDTH both ways; backward crossed the USB cable and

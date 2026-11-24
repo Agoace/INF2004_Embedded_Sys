@@ -32,6 +32,12 @@ left. A hook records call completion, not a private assignment inside the
 caller. Hooked/unhooked comparisons cover native non-hook events. Do not
 infer success from text alone or use a decoder to control the robot.
 
+The Webots SIL/HIL/PIL environment is separate, on `mtk3-testing`.
+This staging checkout's `sim/` target does not run the demo kernel or its
+LIVE barcode/IMU safety integration. See
+[the figure-8 record](COURSE_FIGURE8_20261117.md) for course scope and the
+[demo record](../release/DEMO_KERNEL_V2.md) for current robot evidence.
+
 ## Interface and operation
 
 Use the standalone build and scenario runner from the repository root:
@@ -145,7 +151,7 @@ names, exact headings, console, hook times and viewer captures.
 | Hooked reference | Eight detour transitions match eight printed steps; hooked/unhooked non-hook events equal |
 | Contact-latch reference | Contact at 8.542512 s; real firmware later reports stall at 9.042200 s; not full contact dynamics |
 | Offline viewer reference | 4001 world samples, 7590 commands, 2718 detour observations; HTML 1868873 bytes; zero browser errors/network requests in recorded file-URL test |
-| Historical simulator checks | Six CTest groups passed in the echo-fit record; rerun against the checkout, and run optional browser checks separately |
+| Simulator checks | Six CTest groups passed at submission-v4 as well as in the historical echo-fit record; optional browser checks are separate |
 
 ## Limits and links
 

@@ -3,10 +3,11 @@
 ## Status and ownership
 
 The canonical header and boards were introduced in7177edd. The
-[SHADOW producer](LIVE_PRODUCER.md) now connects the existing LINE task to
-these boards. No new task is added. The initial record, and every produced
-record in default builds, have valid=0 and SHADOW set. Only a live opt-in
-build can produce valid=1 ([BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md)).
+[producer](LIVE_PRODUCER.md) connects the existing LINE task to these
+boards. No new task is added. The initial record is invalid and SHADOW.
+Fallback builds (`BARCODE_LIVE_ENABLE=0`) keep valid=0 and SHADOW set.
+The demo sets `BARCODE_LIVE_ENABLE=1` and can publish valid=1 commands
+([BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md)).
 
 - Header/source: `app_program/subsystem3/barcode_live_source.{h,c}`.
 - Record writer/reset owner: S3 producer only.
@@ -42,6 +43,9 @@ Record flags, in hexadecimal: 01 DISTANCE_FORWARD, 02 WINDOW29,
 04 LEADING_WHITE, 08 TAIL_ONE_N, 10 LOSS_FREE, 20 MAP_CONFIRMED,
 40 OFFSET_VERIFIED, 80 SHADOW. A live action needs low seven bits set,
 SHADOW clear, valid=1, supported metadata and nonzero mapped command.
+The flag names retain the original full-window contract. A held-letter
+acceptance can carry WINDOW29/TAIL_ONE_N without an end-star or tail proof;
+see [accepted reader risks](LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20).
 Shadow, unverified-offset and unmapped observations always have valid=0.
 OFFSET_VERIFIED is set only by a live opt-in build with a measured clearance.
 
@@ -79,7 +83,10 @@ new record. The source2-only first-credible-edge guard cancels a token not
 armed before that edge; an already-armed token remains assigned to that cross.
 First-edge encoder evidence stays in vehicle diagnostics for the later
 same-stripe offset check. Accepted pending may survive approved short SEARCH;
-partial barcode windows may not. No course-gap/pending-distance expiry exists.
+partial WINDOW reads do not. SEEK white and a waiting record have
+[200 ms blip grace](BLIP_GRACE.md). A pending LIVE command expires after
+10000 mm mean wheel travel; SCAN/DETOUR keep it and continuous SEARCH of
+200 ms cancels it. See [vehicle policy](BARCODE_LIVE_COMMAND.md#demo-limits-operator-2026-11-20).
 
 ACK is terminal slot retirement, not proof that a command executed.
 Serial NEVER resets on epoch/STOP/route/ACK/window changes. Vehicle rejects
@@ -121,4 +128,5 @@ build; production exports no record setter.
 The full strict host suite passed262/262 at the ABI stage. Source lifecycle,
 freshness watchdog, revision admission and slot retirement are implemented
 and tested separately in the [producer](LIVE_PRODUCER.md), NOT by these
-mechanical getters. No hardware or live-action acceptance is claimed.
+mechanical getters. Those ABI checks are not robot acceptance; later LIVE
+robot results are in [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).

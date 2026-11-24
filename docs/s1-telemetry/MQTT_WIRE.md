@@ -8,7 +8,7 @@ client is [mqtt_robot.py](../../scripts/mqtt_robot.py). No codec function uses
 kernel, radio, or TCP/IP headers. The sonar service has no MQTT dependency.
 
 Each message starts with its topic version: state `5`, heartbeat `4`, summary `3`, other
-implemented observations `2`, and commands `1`. Integers use little-endian byte order.
+implemented observations `2` except obstacle profiles `3`, and commands `1`. Integers use little-endian byte order.
 Signed fields use two's-complement representation. Offsets below are in bytes,
 from zero. Wire messages do not use C structure layout or C bit-fields.
 Send exactly the specified number of bytes. Reserved bits and bytes are zero.
@@ -27,7 +27,7 @@ bits. Each topic has its own layout; there is no common message-type byte.
 | `robot/detour` | 36 | Finished detour, QoS 0, not retained |
 | `robot/summary` | 52 | End-of-run totals (v3), QoS 1, retained |
 | `robot/status` | 6 | Online/offline and last will, QoS 1, retained |
-| `robot/barcode` | 28 | v2 terminal SHADOW attempt, QoS 1, not retained; legacy v1 20 B still decodes |
+| `robot/barcode` | 28 | v2 terminal LIVE/SHADOW attempt, QoS 1, not retained; legacy v1 20 B still decodes |
 | `robot/imu` | 12 | Reserved; 4-byte header plus 8-byte snapshot; not implemented |
 
 ## Boot identity and sessions
@@ -68,7 +68,8 @@ accepted, but their inferred sessions cannot reject all delayed old frames.
 ### Minimum-bit wire cost
 
 The only general addition is a 32-bit boot label per observation frame. RAM log
-records remain 16 bytes; one ID covers the entire batch. The heartbeat also
+records remain 16 bytes on wire (15 private bytes per stored KR1 row);
+one ID covers the entire batch. The heartbeat also
 adds a 32-bit unavailable counter and reuses its reserved byte for the mask.
 
 | Topic | Previous bytes/version | New bytes/version | Why identity is present |
@@ -214,10 +215,11 @@ can coalesce when the dedicated ESTOP queue is already full.
 For kind7 in event v2, from/to are LINE=1. Word low byte is command1..4
 (A/B/C/D); high byte is phase1..10. Detail is reason0..14. In an opt-in
 barcode live build, phase UNUSED (9) can carry reason 13 EXPIRED
-(pending command travelled at least 1000 mm mean wheel travel from decode
+(pending command travelled at least 10000 mm mean wheel travel from decode
 `read_counts`) or 14 SEARCH (natural SEARCH lasted 200 ms). The
-command was never claimed and no turn was attempted. SCAN/DETOUR keep
-UNUSED/CANCELLED (1); fake commands and default builds are unchanged.
+command was never claimed and no turn was attempted. Since 2026-11-20,
+SCAN/DETOUR keep the pending live command; older images cancelled it with
+UNUSED/CANCELLED (1). Fake commands and non-live builds are unchanged.
 Old captures keep their existing reason meanings. Two angle
 variants instead use detail=`0x80|command` (first line) or `0x40|command`
 (accepted line), with word signed16-bit centidegrees, LEFT positive.
@@ -229,7 +231,7 @@ Keep the tested revision: the forced-corner redesign reuses phase2/4/6/10
 with new meanings; old `eb18004` packets had blind-travel/encoder-turn phases. The [junction design](../architecture/JUNCTION_ACTION.md#reports-and-failures)
 lists phases and reasons. Event-v1 reserved kind7 stays readable as legacy
 input. No source identity is carried here: retain the boot/USB FAKE label.
-B2a changes no summary layout; later barcode integration owns summaryv4.
+B2a changes no summary layout; current barcode totals use summary v3.
 
 For kind 9, from and to are 0, the word is the peak of that hump in
 0.1 mm (never 65535), detail bits 0–6 are the hump number in this run
@@ -439,7 +441,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | Offset | Type | Field |
 | --- | --- | --- |
 | 0 | u8 | Version 3 |
-| 1 | u8 | Flags: barcode implemented bit 0 (zero; v1/v2 meant barcode or hump), speed error valid bit 1, detour aborted bit 2; v2+ bits 3–7 saturating SCAN reattempts 0–31 |
+| 1 | u8 | Flags: barcode implemented bit 0 (v1/v2 meant barcode or hump), speed error valid bit 1, detour aborted bit 2; v2+ bits 3–7 saturating SCAN reattempts 0–31 |
 | 2 | u8 | Stop source: unknown 0, GP21 1, MQTT 2, fault 3, limit 4 |
 | 3 | u8 | Stop reason, below |
 | 4 | u32 | Run ID since boot |
@@ -452,7 +454,7 @@ without network service can overwrite older summaries; run-ID gaps show this.
 | 34 | u16 | Maximum steady-command wheel speed error, mm/s; 65535 unavailable |
 | 36 | u8 | OR of motion fault bits seen |
 | 37, 38 | u8, u16 | Shell fault and detail, existing `vsm_fault_t` contract |
-| 40, 41 | u8 each | Reserved barcode success/failure counts (zero) |
+| 40, 41 | u8 each | Completed-run barcode frame/failure counts, each saturating at 255; meaningful when flag bit 0 is set |
 | 42 | u16 | Highest hump peak, 0.1 mm (v3); 0 no hump; 65535 unavailable. v1/v2: reserved 65535 |
 | 44 | u32 | Boot ID (summary v2+; v1 has 44 bytes) |
 | 48 | u16 | Hump count in this run (v3; v2 has 48 bytes) |
@@ -463,10 +465,11 @@ Hump fields (v3) come from the IMU hump detector at run end. Peak 65535
 means the IMU copy was missing, from another run, older than 50 ms, or had
 no valid sample; then the count is 0 and flags have bits 0 and 1 set. A
 missing value is never replaced by an old number. Flag bit 2 means a
-confirmed hump was still open at STOP and was counted. Barcode work takes
-the next summary version (v4); v3 keeps no reserved barcode bytes.
+confirmed hump was still open at STOP and was counted. Barcode totals use
+the existing v3 flag and count bytes; they are not command-execution counts.
+See [the barcode summary record](../s3-line-barcode/BARCODE_RUN_SUMMARY.md).
 
-Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; 90 s limit 3; shell left
+Stop reasons: unknown 0; GP21 1; MQTT ESTOP 2; run limit 3 (300 s now, 90 s in older images); shell left
 RUNNING 4; vehicle deadline 5; motion wake lost 6; motion status failure 7;
 line snapshot failure/stale 8; line samples lost 9; sonar failure 10;
 telemetry failure 11; other 12; SCAN reverse timeout 13; IMU lift 14;
@@ -489,7 +492,7 @@ their rates in both modes; only MQTT publication changes. The pure rule is
 
 | Mode | When | `robot/state` | `robot/heartbeat` | Live `robot/log` | `robot/sonar` |
 | --- | --- | --- | --- | --- | --- |
-| RUN | Vehicle calibrating, start delay, running or stopping, plus 2 s after it stops | 5 Hz | 1 Hz | Yes | Yes |
+| RUN | Vehicle calibrating, start delay, running or stopping, plus 2 s after it stops | 110 ms deadline; about 120 ms with a 20 ms poll | 1 Hz | Yes | Yes |
 | IDLE | Vehicle idle for 2 s or more | 1 Hz | Every 5 s | No | No |
 
 - The vehicle is busy when its phase is not 0 or its run flag is set. An
@@ -520,6 +523,10 @@ their rates in both modes; only MQTT publication changes. The pure rule is
 
 ### CR1 cost per mode
 
+Historical 200 ms state-period comparison, before T110. Current RUN uses
+`PM_RUN_STATE_MS=110` in `telemetry_mode.h`; IDLE remains 1000 ms.
+The table below is not a measured current RUN byte rate.
+
 Change Requirement 1 (minimum-bit data) cost, in bytes per second. "Payload"
 counts only message bytes. "With MQTT" adds the PUBLISH fixed header (2), the
 topic length (2) and the topic name (9 to 15 bytes) for each QoS 0 message. The
@@ -529,7 +536,7 @@ values do not include TCP/IP or Wi-Fi framing.
 | --- | --- | ---: | ---: |
 | RUN (before and after) | state 5 x 76 | 380 | 455 |
 | | heartbeat 1 x 108 | 108 | 127 |
-| | live log, 50 rows/s in 192-byte batches, plus events | about 980 | about 1050 |
+| | live log, 50 rows/s in 196-byte batches, plus events | about 980 | about 1050 |
 | | sonar about 10 x 36 | about 360 | about 510 |
 | | total | about 1828 | about 2142 |
 | IDLE before | state 5 x 76 + heartbeat 1 x 108 | 488 | 582 |
@@ -556,7 +563,7 @@ interval (about 7.5 seconds after the last control packet, plus broker timer
 and network delivery delay). This is not a guaranteed wall-clock deadline.
 The lwIP cyclic timer runs every 5 seconds; an idle connection sends at most
 one 2-byte MQTT PINGREQ per 5 seconds, plus a 2-byte PINGRESP and TCP/IP/link
-overhead. Telemetry at 5 Hz (RUN) or 1 Hz (IDLE) keeps the connection
+overhead. Routine state publication (110 ms RUN deadline or 1 Hz IDLE) keeps the connection
 active, so idle pings are normally unnecessary. Reconnect replaces retained OFFLINE with ONLINE.
 Retained ONLINE alone does not prove a current connection: require recent
 state messages too. Broker restart and stale retained data can mean unknown
@@ -593,9 +600,11 @@ both widths nonzero and below65535; no-valid-fit does not mean physical0 mm.
 Failures can carry the already-fitted start-star widths, NOT an accepted full
 frame. Known malformed v2 is rejected; unknown versions/kinds remain ignored.
 
-Current producer sets SHADOW, including valid0 decoded records. Issued and
-executed remain NO; the mapped command never grants action permission.
-No source/control/ACK behavior changes. v2 is not a reinterpretation of v1
+The producer sets SHADOW for observations not offered for action. It
+clears SHADOW for a decoded record offered through the permitted LIVE path
+(`BARCODE_LIVE_ENABLE=1` in the demo). The mapped command and a cleared
+SHADOW bit alone do not prove execution; kind 7 reports junction actions.
+v2 is not a reinterpretation of v1
 votes, action or executed-result fields. The Python decoder retains v1 and
 adds `letter`, `reason`, `reason_name`, `epoch`, `start_ms`, `failed`, `shadow`,
 `widths_valid`, `narrow_mm` and `wide_mm` to decoded/CSV fields. All v2 width
@@ -705,7 +714,9 @@ fault or stop. Boot does not wait for a radio, link, or broker.
 `robot/log` carries two things. The **live stream** (QoS 0) follows the newest
 KR1 rows for a dashboard. A **DUMP** (QoS 1) refills the whole run later.
 Both use the same batch frame. The live stream prefers fresh data over
-complete data. Completeness comes from DUMP, merged by index.
+complete data. DUMP refills the stored records, merged by index. Storage
+holds the first 4501 rows (about 90 s); later rows are discarded without
+stopping the current 300 s run. DUMP cannot recover those discarded rows.
 
 ### Batch frame (kinds ROWS 5 and EVENTS 6)
 
@@ -847,5 +858,5 @@ signed values, command policy, and invalid commands. It emits C-packed samples.
 [test_mqtt_robot.py](../../tests/test_mqtt_robot.py) decodes those samples in
 Python, checks all topics, rejects malformed packets, checks CSV fields,
 and checks private token files. No test uses a real credential or broker.
-The scan branch also tests odd and changed guards, overflow, sequence wrap,
+The sonar history tests also cover odd and changed guards, overflow, sequence wrap,
 and history independence from the result notification.

@@ -1,8 +1,18 @@
-# Junction validation — B2a closure and B2b SHADOW
+# Junction validation — historical B2a/B2b gates and current live evidence
 
 ## Status
 
-**B2a physical-turn acceptance REOPENED (2026-11-18).** LIVE1/LIVE2
+Current (2026-11-24): the demo uses live barcode commands, not SHADOW only.
+Image 30 run 6 read A, large F, Z and small F (4/4), turned LEFT at 93.5
+degrees and accepted a U-turn at 178.5 degrees. Demo day image 31 read M
+and turned LEFT at 95.4–95.7 degrees; the operator reported "it works".
+See [demo-kernel-v2](../release/DEMO_KERNEL_V2.md) for run scope and limits.
+The tables below retain the earlier image-specific gates. They do not mark
+the current demo as untested, or prove every J0–J6 case on the current image.
+Fake-command images still use the old turn; the live-only centre advance
+and 60-degree acceptance gate are in `app_program/barcode_live_vehicle/action.c`.
+
+Historical: **B2a physical-turn acceptance REOPENED (2026-11-18).** LIVE1/LIVE2
 reported DONE but went straight (operator). See the
 [live correction](../s3-line-barcode/BARCODE_LIVE_COMMAND.md#live-leftright-turn-correction).
 The earlier 40–45 degree contacts below did not establish final heading.
@@ -82,10 +92,13 @@ S3's planning targets remain about2% average and less than1 ms per source
 slice. Use `[BC_CPU]`, `[BC_CPU_ELIGIBLE]` and heartbeat CPU load; no source
 CPU percentage or deadline margin has yet been measured on this candidate.
 
-### First SHADOW hardware gate — Not run
+### First SHADOW hardware gate — historical plan
 
+This plan predates the later SHADOW and LIVE runs; see
+[SHADOW results](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) and the current
+release evidence above. No blanket PASS for the gates below is implied.
 Main builds the configured operator image. The worker does not flash or push.
-Use NONE/enable0/bound0. Confirm SHADOW boot and the official table, normal
+For a SHADOW-only diagnostic, use NONE/enable0/bound0. Confirm SHADOW boot and the official table, normal
 LINE/SEARCH, decoded source2 evidence and **no action offer/kind7 job**.
 After STOP, collect reason-keyed counts, maximum record/control ages, original
 frame-end/pair-edge evidence, S3 source CPU rows and all named stack margins.
@@ -306,6 +319,12 @@ after repeated/longest runs. Timing peaks, missed samples, radio loss and
 response latency still need new hardware evidence.
 
 ## J0–J6 hardware procedure
+
+Historical fake-command redesign matrix. The live build has a different
+approach and angle gate; the current evidence is at the top of this record.
+Keep each status below tied to its named revision. In particular, the
+expiry-free and SCAN/DETOUR cancellation rules below are not the demo live
+policy (10000 mm hold, 200 ms SEARCH limit, retention through SCAN/DETOUR).
 
 Only the operator authorizes flash/power. Main rebuilds configured images.
 Keep physical GP21 ESTOP ready. Lift wheels and check direction/stop before

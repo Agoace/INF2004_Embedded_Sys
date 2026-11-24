@@ -2,11 +2,18 @@
 
 ## Scope and provenance
 
-Manual port on `mtk3-imu-int`, based on staging `d3890d0`. Do not merge or
+Current (2026-11-24): the safety port is integrated in the demo robot image.
+Real-IMU push-over runs stopped the robot with LIFT and OVERTURN; see
+[capture results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
+The hump report is separate and does not command motion. The port and bench
+results below retain their tested revisions, not current build totals.
+
+The original manual port used `mtk3-imu-int`, based on staging `d3890d0`. Do not merge or
 change the teammate branch. Source: smojjofy, `8ac6e38..038ff23` (initial
 implementation `8ac6e38` included). The source branch's run logs are not
-acceptance evidence for this UP integration. No robot flash or acceptance
-is claimed here.
+acceptance evidence for this UP integration. The original port checks below
+do not by themselves establish real-robot acceptance; later robot evidence
+is linked above.
 
 ## Port steps
 
@@ -111,8 +118,9 @@ scan geometry, configuration-token reader or live snapshot contract changes.
   Kind 3 keeps motion fault bits only. One recovery event per press (the
   duplicate PENDING from the C glue is removed) and a new CLEARED event.
   Test `test_vehicle_network_imurecover` was red first. The IMU stack
-  stays 2048 B: the first real-IMU robot run must show `imu_task` free
-  ≥ 256 B; add 512 B if it fails or if the margin is below 384 B.
+  stays 2048 B. The first real-IMU gate required `imu_task` free
+  ≥ 256 B, with 512 B to be added below the 384 B margin. The later capture
+  runs showed 504–528 B free; see [results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
 - H: one kind 3 ESTOP event per IMU stop. The stop edge reset the kind 3
   dedupe (left from the kind 3 IMU word), so the end-of-attempt motion
   fault report sent word 4 again 3 ms later (K10_1 school run, `dd26a38`).

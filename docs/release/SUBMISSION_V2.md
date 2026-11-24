@@ -1,5 +1,9 @@
 # Submission v2 2026-11-19
 
+Superseded by tag `submission-v4`; its firmware is the same as
+[demo-kernel-v2](DEMO_KERNEL_V2.md). The build, limits and results below
+apply to submission v2, not the current demo.
+
 This record identifies the second submission. `main` receives
 `mtk3-staging` `1f46e88` with one `--no-ff` merge and gets the tag
 `submission-v2`. The first submission (`submission-v1`) and the frozen
@@ -60,7 +64,7 @@ changes in the table above. Image 12 (`73395bb`) contains the CR1 round.
 | --- | --- | --- |
 | CR1 round | 12 (`73395bb`) | KR1 rows decode, hump report, lift stop, fault run mask holds the IMU bit after an IMU stop, 0 overruns. |
 | Leading white 30 mm | 18, 19 | Decoded a barcode that the 40 mm image (16) missed. |
-| Detour minimum turn | `mtk3-detour-minturn` test image | Normal path seen on the robot (2 DONE_LINE). The S2 path is host only. |
+| Detour minimum turn | Test image from the work now at tag `archive/mtk3-detour-minturn` | Normal path seen on the robot (2 DONE_LINE). The S2 path is host only. |
 | GP28 at 2.5 mm, large sheet | `1f46e88` | Decoded Q; narrow 6.51 mm, wide 17.38 mm. |
 
 ## Known limits

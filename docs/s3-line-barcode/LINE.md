@@ -8,8 +8,9 @@ settings. The older duty design remains the locked physical reference
 not a new lock or proof that the kernel matches the duty run everywhere.
 
 The [architecture](../architecture/ARCHITECTURE.md) owns scheduling and
-routing. [Barcode](BARCODE.md) uses a separate analog channel; it does not
-supply line decisions or decoded robot commands.
+routing. [LIVE barcode](BARCODE_LIVE_COMMAND.md) uses the separate GP28
+channel and commands the next junction in the demo build. It does not feed
+the L/C line-position detector. [B1c](BARCODE.md) is the separate TEST path.
 
 ## How it works
 
@@ -39,7 +40,8 @@ GP21 for bounded driven passes; normal LINE and robot buttons are unchanged.
 The existing spin also collects [GP28 evidence](LIVE_CALIBRATION.md) on
 its separate report board. End/abort logs show GP28 min/max and learned or
 320/240 fallback thresholds. This observation does not change pair calibration,
-buttons or routing, and does not add a live barcode decoder.
+buttons or pair routing. The separate LIVE producer now uses that report
+and GP28 samples; see [the producer](LIVE_PRODUCER.md).
 
 ### Pair-mode position
 
@@ -103,8 +105,8 @@ The D change clip and all other LINE settings stay the same.
 
 Tests: [`test_line_kd.c`](../../tests/test_line_kd.c) for kd 85/60/30/0 and
 [`test_line_kd_make.py`](../../tests/test_line_kd_make.py) for make
-guards, suffix and build profile. Status: built and host-tested; robot
-trial pending.
+guards, suffix and build profile. D30 is the robot-tested demo default;
+see the B120_1 result under [Settings](#settings).
 
 ## Interface
 
@@ -176,14 +178,16 @@ Thus the two slopes meet continuously at both -50 and +50; there is no
 switched-P jump. Extra far gain remains 340. Lower P also reduces total
 correction outside the centre band: curve acceptance is still required.
 D85, base/min/max speeds, detector, SEARCH, calibration, motor PI and rise
-limit remain unchanged. A candidate does not enable barcode LIVE.
+limit remain unchanged in that historical D85 trial. The demo build enables
+barcode LIVE separately; a gain option does not select the barcode mode.
 
 Candidates 60 and 40 are ASSUMED trial settings, reducing base P by about
 29 percent and 53 percent from 85. They bracket a moderate and larger
 reduction; neither is an accepted tune. The retained home analysis reports
 380 ms oscillation period, position amplitude 59 and wheel-derived yaw
 amplitude about 50 deg/s. It does not prove that P alone causes the swing.
-Analysis source: `mtk3-hil:docs/simulation/LINE_OSCILLATION_ANALYSIS_20261116.md`.
+Analysis source: tag `archive/mtk3-hil`, file
+`docs/simulation/LINE_OSCILLATION_ANALYSIS_20261116.md`.
 
 Build the default and two candidates with identical options, for example:
 
@@ -233,6 +237,8 @@ uses P85, not a combination with a rejected P candidate.
 
 ### Opt-in base-speed trial
 
+Historical trial: D85, 2026-11-16. The current demo uses D30.
+
 `LINE_BASE` changes only the vehicle LINE base speed, in mm/s. The default
 is 120 (was 146 before 2026-11-17). Both unset and explicit 120 preserve
 default flags/profile/image name. An integer greater than min+20 (82) and at most max (378) is required;
@@ -263,7 +269,8 @@ compare wheel-derived yaw RMS/extrema, wheel differential, far-share
 (absolute position above52), SEARCH/line losses and barcode ok/failed.
 Allow for different travel at lower speed. Check curves, SEARCH reacquire,
 junction detection, DETOUR handoff and stopping before course adoption.
-Keep barcode SHADOW. No worker flashes or runs hardware.
+That trial kept barcode SHADOW. The current demo enables LIVE separately;
+only the operator flashes and runs hardware.
 
 Host checks cover actual native config and steering at146/120/100 and
 bounds83/378, invalid Make values, profile changes and combined-option
@@ -274,7 +281,8 @@ base146/P85 also matches the unset demo ELF/UF2. Default/120/100 UP MQTT
 `KERNEL_RAM=1` builds have no warnings and pass the RAM-placement proof.
 Logs and public-example trial UF2s are under `build/wip/line-base/` in the
 line worktree; they are not operator-credentialed network images.
-Hardware base-speed outcomes are Not run.
+The 2026-11-16 base120/100 trials at D85 were rejected. This is not the
+later accepted base120 + D30 + same-tick demo configuration.
 
 ## Results
 

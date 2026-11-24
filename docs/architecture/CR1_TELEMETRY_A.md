@@ -7,7 +7,15 @@ A-SONAR, A-INFO and diagnostic fault bits 0..9 on 2026-11-18. Category B
 and MQTT wire changes are not approved. Native public value types, units,
 identities, queue capacity and admission safety must stay unchanged.
 
-| Step | State |
+Current (2026-11-24): these steps are merged (work kept at tags
+`archive/mtk3-cr1-telemetry` and `archive/mtk3-cr1-fpack`). Image 12 checked
+rows, fault-mask output, timing and stacks on 2026-11-19; see
+[project status](PROJECT_STATUS.md#areas). A fair 110/200 ms network comparison,
+per-task CPU and live PBUF/heap headroom are still not established.
+The table and per-step gates below describe the original substeps, not the
+current integration state.
+
+| Step | State at the substep |
 | --- | --- |
 | T110 | Software checks pass; robot measurement pending |
 | F1 shared interface | Software checks pass; no publisher or storage is added by the interface |
@@ -208,7 +216,8 @@ to 239200 B (64 B): linker alignment adds 4 B, so do not claim a 68 B
 linked saving. Across A-EVENT, A-INDEX and these four records the retained
 data saving is 1608 B; linked static saving is also 1608 B in this layout.
 No category B or wire saving is included. Hardware codec CPU, task stack
-and control timing remain pending; local scratch is not a static saving.
+and control timing were pending at that substep; see the current status
+above. Local scratch is not a static saving.
 Evidence: `build/wip/cr1/optional-red.log`, `optional-host.log`,
 `optional-build.log`, `optional/ram_report.txt` and copied ELF/map/proof.
 
@@ -349,7 +358,9 @@ the merged Vehicle F2a result (239280 B, measured by SW11), this final
 commit adds 24 B: 20 B S1 data plus 4 B linker alignment. The existing
 before result is reused; it was not rebuilt. Final linked
 alignment is 943 B, equal to optional A. Category B and wire savings are
-zero. Hardware stack/CPU, PBUF/heap headroom and task timing remain pending.
+zero. At this substep hardware stack/CPU, PBUF/heap headroom and task timing
+were pending. Later image 12 checked combined timing/stacks, not live
+PBUF/heap headroom or per-task CPU.
 
 Evidence: `build/wip/cr1/final-red.log`, `final-host.log`, `final-build.log`,
 `final/ram_report.txt`, copied ELF/map/proof and `final/owner-symbols.txt`.
@@ -464,7 +475,7 @@ This dormant demo is not an active robot MQTT publisher.
 | Four optional A records | 239200 | -64 from A-INDEX | Data -68 B, linker alignment +4 B |
 | F2a plus merged sonar owner | 239272 | +72 from optional A | Sonar +8, S1 +68, alignment -4 B |
 | Final F including Vehicle and local owners | 239304 | +104 total F cost from optional A | Final S1 78882 B, Health board 132 B |
-| F pack (`mtk3-cr1-fpack`) | 239272 | -32 from final F | F cost from optional A is now 72 B; Health board 124 B |
+| F pack (tag `archive/mtk3-cr1-fpack`) | 239272 | -32 from final F | F cost from optional A is now 72 B; Health board 124 B |
 
 T110 leaves S1's module RAM at 80402 B. RAM-log rows stay 72016 B,
 events 6144 B and scan rows 576 B at this step. Queue allocations stay
@@ -491,6 +502,10 @@ copy each after ELF/map before another full host run. This is not a source
 or firmware change.
 
 ## Robot gate: 110 ms runs only
+
+Historical gate plan (2026-11-18). The combined robot check above supersedes
+"not run" claims for integration, timing and stacks, but not the controlled
+network comparison or unmeasured live heap/PBUF headroom.
 
 No new 200 ms robot run is permitted. Use existing files under
 `~/Projects/robot-logs/20261118_post_freeze/`.

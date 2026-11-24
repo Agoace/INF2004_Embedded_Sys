@@ -2,12 +2,18 @@
 
 ## Purpose
 
+Current (2026-11-24): this optional diagnostic profile ran on the robot;
+see [results](#results-staging-581ab85-image-3_imucap-37eba5a4). Both push-overs
+stopped the robot. The operator accepted either trigger label and cancelled
+the proposed settled-pose event. Gentle-lift trials remain untested.
+The normal demo image includes IMU safety without this capture profile.
+
 This profile records the IMU safety detector input and output at each
 observation around the first latch edge. Use it to find which rule fired
 for a stop and why. The K10_1 school run (`dd26a38`) stopped a sideways
 push-over as LIFT, not OVERTURN. The capture shows if the freefall rule or
 the vertical-change rule fired, and how long the fall, bounce and settle
-take. These values set X and T for the proposed settled-pose event. A
+take. These values were to set X and T for the now-cancelled settled-pose event. A
 gentle lift does not latch (K10_1 boot 347926102: no stop; a later, firmer
 lift latched). A GP21 stop captures it, to show how far below the
 vertical-change rule (500 mg, 3 samples) it stays, and if the raw Z trace
@@ -20,7 +26,8 @@ the Vehicle or MQTT. It is a ROBOT image with a real IMU.
 ## Build
 
 The profile is opt-in. Off (the default) adds no flag, object or name.
-The 76 default images are unchanged. It combines with
+At the original capture integration, the 76 default images were unchanged.
+This comparison does not describe later firmware changes. It combines with
 `BARCODE_FAIL_CAPTURE=1`.
 
 ```sh
@@ -134,7 +141,7 @@ For each run:
 
 | Run | Event | Expect |
 | --- | --- | --- |
-| P1–P3 | While driving LINE, push the robot over to its LEFT side | Today: LIFT. Capture shows which rule fired. |
+| P1–P3 | While driving LINE, push the robot over to its LEFT side | LIFT or OVERTURN; either label is accepted. Capture shows which rule fired. |
 | P4–P6 | While driving LINE, push the robot over to its RIGHT side | Same |
 | T1–T2 | Idle: tip the robot slowly by hand to its side (about 2–3 s to 90°), then leave it on its side | OVERTURN (tilt > 75° at near 1 g for 5 samples) |
 | T3 | Idle: tip slowly forward onto its nose, leave it | OVERTURN |
@@ -179,7 +186,8 @@ Findings:
 Before the demo, reseat the IMU connector, then power-cycle the robot.
 Capture 2 shows that a loose IMU cable gives IMU_UNAVAILABLE
 (READ_FAILED) and stops the run. The robot cannot start again until the
-IMU reads again.
+IMU reads again and the local GP21 recovery clears the safety latch. A later
+GP21 press starts a new run; see [recovery contract](IMU_SAFETY_PORT.md#integration-contracts).
 
 ## Limits
 

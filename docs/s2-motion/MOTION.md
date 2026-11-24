@@ -128,11 +128,11 @@ before a powered test. Historical calibration used Pico SDK2.3.0.
 
 | Function | Pico pin | Current connection / owner |
 | --- | --- | --- |
-| GY-511 SDA/SCL | GP0/GP1 | I2C0, robot/TEST IMU observer; USB console, crash mirror off |
+| GY-511 SDA/SCL | GP0/GP1 | I2C0, robot/TEST IMU service; USB console, crash mirror off |
 | Sonar echo/trigger | GP2/GP3 | HC-SR04+, sonar service |
 | Right/motor 2 encoder A/B | GP4/GP5 | Motion; forward raw count decreases, sign-1 |
 | GY-511 DRDY (magnetometer) | GP6 | Connected, unused; not the accelerometer data-ready signal |
-| GY-511 INT1 (accelerometer) | GP7 | CTRL_REG3 I1_DRDY1; polled before/after reads, input with weak pull-down; no IRQ |
+| GY-511 INT1 (accelerometer) | GP7 | Input with weak pull-down; current FIFO reader sets CTRL_REG3_A=0, no polling or IRQ |
 | Left/motor 1 driver | GP8/GP9 | Forward/reverse PWM |
 | Right/motor 2 driver | GP10/GP11 | Forward/reverse PWM |
 | Servo | GP15 | Motion owns PWM; positive angle turns left |
@@ -140,17 +140,18 @@ before a powered test. Historical calibration used Pico SDK2.3.0.
 | Dump / start-ESTOP buttons | GP20/GP21 | Active low with pull-ups; normal vehicle samples20 ms |
 | Centre line ADC | GP26/ADC0 | Current two-sensor line service |
 | Left line ADC | GP27/ADC1 | Current two-sensor line service |
-| Barcode raw ADC | GP28/ADC2 | Sample only; no barcode decoder; VBAT jumper open |
+| Barcode ADC | GP28/ADC2 | Code 39 reader; LIVE next-junction command in the demo; VBAT jumper open |
 
 Early three-sensor logs used different L/C/R labels. Do not copy those
 labels into the current two-sensor wiring. GP29/ADC3 is not selected.
 The GY-511 scan found accelerometer0x19 and magnetometer0x1E. Current
-accelerometer TEST bring-up and scale limits are in [IMU.md](../s4-imu/IMU.md);
+robot hump/safety integration, TEST bring-up and scale limits are in [IMU.md](../s4-imu/IMU.md);
 the raw magnitude is not calibrated gravity. No magnetometer navigation
 is implied. Grove 7 exposes GP7 and GP28: GP7 now carries accelerometer
 INT1 while GP28 remains the barcode analog input. Do not assign GP7 to
-barcode output or enable a GPIO IRQ. Step 2c checks INT1 HIGH before and
-LOW after the accel read; that transition is still a pending hardware gate.
+barcode output or enable a GPIO IRQ. The earlier step 2c INT1 checks are
+historical; the current reader uses FIFO counts. INT1 wake is parked at
+tag `archive/mtk3-imu-irq`.
 
 ### Geometry and distance settings
 
@@ -380,8 +381,8 @@ exhaustive include/source list, invoked by the
 Selected runtime-free GPIO/PWM/reset/ADC/tick/watchdog operations are allowed.
 ADC, ticks and watchdog source files are compiled; radio-off adds GPIO,
 radio builds reuse the template GPIO object. PWM/reset operations are inline.
-The robot/TEST IMU observer uses I2C0 registers and the I2C header path, not SDK I2C
-runtime; TEST links libm for tilt calculation.
+The robot/TEST IMU service uses I2C0 registers and the I2C header path, not SDK I2C
+runtime; the IMU filter/safety path uses libm.
 
 Do not add SDK crt0, stdlib/runtime initialization, IRQ registration, time,
 sync, multicore or clock runtime sources. Do not call SDK GPIO IRQ, timer
@@ -427,7 +428,8 @@ Safety and timing:
   retarget time (one control step under the mutex).
 - `KERNEL_RAM=1` adds [`same_tick.list`](../../tools/kernel_ram/same_tick.list)
   (`motion_set_speed`, `mc_retarget`) only with this switch. The robot
-  demo build `KERNEL_RAM=1` gives `RAM_PROOF PASS listed 77`.
+  demo build has `RAM_PROOF PASS 84/84` (live) or `80/80` (fallback) at
+  submission-v4; the earlier same-tick-only build listed 77.
 - `BENCH_KERNEL=1` has no robot motion path: its default is 0, with no
   suffix, and an explicit `MOTION_SAME_TICK=1` stops make. The sim,
   Webots and CMake paths do not use the switch.
@@ -442,8 +444,11 @@ and `motion.o`, so `motor_ctl.c` and `motion.c` do not change. Tests:
 stale and stall cases) and `test_motion_task_sametick` (motor write in
 `motion_set_speed`, window closed by stop, clear and ESTOP).
 
-Status: built and host-tested. Not run on the robot. SIL reference (on
-`mtk3-hil`): with the same-tick model, 0..3 s wheel RMS 19.6 vs 30.1.
+Status: default on since 2026-11-17; robot tests on 2026-11-16/17 found
+0 overruns/faults and smoother small corrections. Current course evidence
+is in [the demo record](../release/DEMO_KERNEL_V2.md). Historical SIL
+reference (tag `archive/mtk3-hil`): with the same-tick model, 0..3 s wheel
+RMS 19.6 vs 30.1.
 
 ## Limits, tests and full evidence
 

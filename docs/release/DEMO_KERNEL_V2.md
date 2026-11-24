@@ -77,6 +77,24 @@ was powered off before the GP20 dump).
 | Boots `a255e347`, `af9b19fa` | A then LEFT (93.8 deg). One BW_START: the first star bar was faint (peak 362, measured 1.3 mm); the other 8 star parts were correct. |
 | Boot `2f4eca77`, 4 runs | A out of the bend failed 4/4 (BW_WIDTH): GP28 crossed only the bar ends (3 bars, white, 2 bars; peaks 1300..1500). |
 
+## Demo day result 2026-11-24
+
+| Item | Value |
+| --- | --- |
+| Image | 31: `main` `d4b73c6` (`submission-v4`, firmware identical to `demo-kernel-v2`) with `BARCODE_MAP="M=LEFT,O=RIGHT,P=UTURN"`, hotspot settings, UF2 SHA-256 prefix `5dfd5611` |
+| Operator | The demo worked. |
+| Evidence | MQTT only (`robot-logs/20261124_demo/`, outside the repository). No GP20 dump. |
+
+| Boot | Result (MQTT) |
+| --- | --- |
+| `c0354cda` | 119 s, 12.5 m. Barcode M read twice (narrow 4.0..4.17 mm, wide 11.6..11.7 mm), then LEFT at the junction (95.4 deg). 4 humps. Detour ended DONE_NO_LINE, then line search. 2 BW_WIDTH failures. Stopped by the IMU safety stop when the robot was lifted. |
+| `e7e94ad5` | 39 s, 4.4 m. Barcode M (4.17 / 11.52 mm), then LEFT (95.7 deg). 2 humps. 1 BW_WIDTH failure. MQTT ESTOP. |
+| `f7345981` | 64 s, 5.1 m. Two barcode failures (BW_START, BW_WIDTH), 1 hump, two detours DONE_NO_LINE. Stop SHELL. |
+| `3c73aa5a`, `fe56de9c` | Short starts (under 3 s), stopped by the IMU safety stop (robot lifted). |
+
+O and P were not read in the MQTT data. No code change was made on the demo
+day; only the letter map changed.
+
 ## Known limits
 
 - All limits in [SUBMISSION_V3.md](SUBMISSION_V3.md#known-limits) stay.
