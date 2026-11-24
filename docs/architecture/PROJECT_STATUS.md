@@ -26,6 +26,8 @@ root README now describes the robot; the template setup guide moved to
 2026-11-24: demo day. Image 31 = `main` `d4b73c6` with
 `BARCODE_MAP="M=LEFT,O=RIGHT,P=UTURN"`. Operator: the demo worked. See
 [DEMO_KERNEL_V2.md (demo day)](../release/DEMO_KERNEL_V2.md#demo-day-result-2026-11-24).
+2026-11-24: documentation audit by four workers and Main, tag
+`submission-v4.1` (documents only; firmware byte-identical to `submission-v4`).
 
 ## Demo image
 
@@ -100,7 +102,7 @@ module branches                  v
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`, `submission-v3`, `submission-v3.1`, `demo-kernel-v2`, `submission-v4`. |
+| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`, `submission-v3`, `submission-v3.1`, `demo-kernel-v2`, `submission-v4`, `submission-v4.1`. |
 | `mtk3-staging` | Integration branch: merge all module branches here. It also holds the host tests (`tests/`, `host-tests/`), the detour simulator (`sim/`) and the default-off bench switches (`BENCH_KERNEL`, `IMU_SAFETY_BENCH`). |
 | `mtk3-testing` | Test environments and tools: Webots SIL/HIL/PIL simulation (`sim/webots/`, `app_program/sim/`, PIL stubs and fixtures), simulation records (`docs/simulation/`) and bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
 | `mtk3-telemetry`, `mtk3-dashboard` | S1: RAM log, MQTT, laptop dashboard |
