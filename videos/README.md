@@ -41,4 +41,5 @@ Newest at the bottom. Never delete an evidence row.
 | Date | Subsystem | Test ID / demo | Commit | Student ID | Link | Notes |
 |---|---|---|---|---|---|---|
 | 2026-11-20 | System | Full course run | — | — | <https://youtu.be/yyAoqicx5HM> | Full run: 2 barcode reads with LEFT and U-turn commands executed, obstacle bypass |
+| 2026-11-20 | System | YouTube Short | — | — | <https://www.youtube.com/shorts/Q09IG58HWGM> | |
 | — | System | Robot test clips (about 14 videos) | — | — | [Google Drive folder](https://drive.google.com/drive/folders/17AkoLZjGzvb7GJ_nSWOSoktGJkr5Algo?usp=sharing) | Recording dates not known |
