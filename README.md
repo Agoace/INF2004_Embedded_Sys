@@ -7,8 +7,8 @@ sends live data to a laptop dashboard over Wi-Fi (MQTT).
 
 | Item | Value |
 | --- | --- |
-| Submission | branch `main`, tag `submission-v3.1` |
-| Demo kernel | tag `demo-kernel-v2` ([record](docs/release/DEMO_KERNEL_V2.md)) |
+| Submission | branch `main`, tag `submission-v4` (2026-11-24; firmware identical to `submission-v3.1`) |
+| Demo kernel | tag `demo-kernel-v2` ([record and demo-day result](docs/release/DEMO_KERNEL_V2.md)) |
 | State per area | [PROJECT_STATUS.md](docs/architecture/PROJECT_STATUS.md) |
 | Course requirements (summary) | [project-requirements/README.md](docs/project-requirements/README.md) |
 | Change Requirement 1 (minimum-bit data) | [CR1.md](docs/architecture/CR1.md), [CR1_MIN_BIT_PROOF.md](docs/architecture/CR1_MIN_BIT_PROOF.md) |
@@ -105,7 +105,7 @@ Start a broker, then the recorder and the dashboard, and open
 
 ```sh
 cmake -S tests -B /tmp/host-tests && cmake --build /tmp/host-tests -j
-ctest --test-dir /tmp/host-tests          # host tests (735 on submission-v3.1)
+ctest --test-dir /tmp/host-tests          # host tests (735 on submission-v4)
 cmake -S sim -B /tmp/sim -DSIM_FIRMWARE=detour_test && cmake --build /tmp/sim
 ctest --test-dir /tmp/sim                 # detour simulator
 python3 scripts/check-docs.py             # links and anchors in all records

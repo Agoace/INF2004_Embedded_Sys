@@ -24,7 +24,7 @@ record once. Use these topic directories before choosing a source entry below:
 | [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md, TEMPLATE_SETUP.md (course template setup guide, moved from the root README). |
 | [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
-| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
+| [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b live reader (LIVE in the demo build; SHADOW in builds without `BARCODE_LIVE_ENABLE=1`), live command path and results; originals in archive/s3-line-barcode/. |
 | [s4-imu/](s4-imu/) | Robot/TEST IMU, calibration/filter/height formulas, software evidence and retained raw-stream history; IMU_SAFETY_PORT.md tracks the manual UP safety port. |
 | [s5-obstacle/](s5-obstacle/) | OBSTACLE.md: pipeline, coarse/fine geometry and sonar service; COARSE_FINE_VALIDATION.md: software proof, scoped robot floor result and remaining limits; history in archive/s5-obstacle/HISTORY.md. |
 | [simulation/](simulation/) | Current host simulator summary, explicit model assumptions and revision-scoped echo/sweep results; figure-8 demo course. |
@@ -38,10 +38,10 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | Content | Location |
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
-| Demo freeze (2026-11-18) | [docs/release/DEMO_FREEZE.md](release/DEMO_FREEZE.md) — tag `demo-kernel-v1`, demo build line, checks and limits |
+| Demo freeze (2026-11-18, superseded) | [docs/release/DEMO_FREEZE.md](release/DEMO_FREEZE.md) — tag `demo-kernel-v1`, demo build line, checks and limits |
 | Submission v2 (2026-11-19) | [docs/release/SUBMISSION_V2.md](release/SUBMISSION_V2.md) — tag `submission-v2`, changes since `submission-v1`, checks and limits |
 | Submission v3 (2026-11-20) | [docs/release/SUBMISSION_V3.md](release/SUBMISSION_V3.md) — tag `submission-v3`, barcode reader changes, demo letter map build line, checks and limits |
-| Demo kernel v2 (2026-11-20) | [docs/release/DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — tags `demo-kernel-v2`, `submission-v3.1`; demo-day letter map steps |
+| Demo kernel v2 (2026-11-20, CURRENT) | [docs/release/DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — tags `demo-kernel-v2`, `submission-v3.1` (same firmware in `submission-v4`); demo-day letter map steps and the 2026-11-24 demo-day result |
 | Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area; branch layout and merge rules |
 | Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
@@ -92,7 +92,7 @@ commit that changed this section (header comments and file lists).
 | [`app_program/platform/`](../app_program/platform) | Kernel-facing services: 1 µs time, GPIO IRQ dispatcher (core 0), watchdog, boards (bounded publication), task registry with static stacks, startup handoff, boot ID/entropy, CPU/idle meters, P1 run timing and lock stats, UP SMP shim. |
 | [`app_program/subsystem1/`](../app_program/subsystem1) | S1 telemetry: sole Wi-Fi/MQTT owner, binary wire codec (`mqtt_wire`), network queue, RUN/IDLE rates, RAM log stream and DUMP, Health task. |
 | [`app_program/subsystem2/`](../app_program/subsystem2) | S2 motion: motion task (only PWM writer), pure motor controller and robot settings, encoder/PWM hardware, packed 60 B status board, opt-in timing diagnostics, BENCH bench. |
-| [`app_program/subsystem3/`](../app_program/subsystem3) | S3 line and barcode: 1 ms ADC driver and line service, line position/steer/trace/search modules, TEST barcode (WIDTH, PEAK, capture, drive), B2b SHADOW live window reader, producer and source boards. |
+| [`app_program/subsystem3/`](../app_program/subsystem3) | S3 line and barcode: 1 ms ADC driver and line service, line position/steer/trace/search modules, TEST barcode (WIDTH, PEAK, capture, drive), B2b live window reader, producer and source boards (LIVE in the demo build). |
 | [`app_program/subsystem4/`](../app_program/subsystem4) | S4 IMU (GY-511 accelerometer, no gyro): I2C probe/decode, FIFO, roll and height core, report-only hump detector and diagnostics, IMU service task and TEST capture. |
 | [`app_program/subsystem5/`](../app_program/subsystem5) | S5 obstacle: ultrasonic driver and sonar request service, forward watch, servo scan, profile analysis, detour modules. |
 | [`app_program/vehicle/`](../app_program/vehicle) | Vehicle Controller: shell state machine, vehicle task, detector inputs, robot settings, junction action/live adapter/source, odometry, run/detour stats, obstacle report, vehicle log and MQTT glue. |
@@ -105,7 +105,7 @@ commit that changed this section (header comments and file lists).
 | [`scripts/`](../scripts) | Checks (`check-docs.py`, `check-template-changes.py`, `check-sdk-hw-link.py`), hook installer, RAM and message-size reports, MQTT recorder/dashboard (`mqtt_robot.py`, `mqtt_dashboard.py`, `robot_wire.py`, `dashboard_*`), KR1 log decoder, motor bench report, old UDP receivers and dashboard, port restriction. |
 | [`tools/`](../tools) | `barcode_map/` (letter map to `BW_MAP_VALUES`), `kernel_ram/` (RAM placement lists and `ram_proof.py`), `elf2uf2/`, `verify_phase11_usb.py`. |
 | [`sim/`](../sim) | Separate host simulator of bare-metal sources: core clock/world/scenario/runner, devices, target hooks, scenarios JSON, offline viewer and local editor, box sweep, tests. |
-| [`sim/webots/`](../sim/webots) | Figure-8 demo course: tile map, course JSON, map-to-JSON tool and its tests. The Webots generator itself is on `mtk3-hil` (SW8). |
+| [`sim/webots/`](../sim/webots) | Figure-8 demo course: tile map, course JSON, map-to-JSON tool and its tests. The Webots generator itself is on `mtk3-testing` (first on `mtk3-hil`, now tag `archive/mtk3-hil`). |
 | [`testing/`](../testing) | Operator test logs per subsystem, integration (`KERNEL_ROBOT.md`) and system; `logs/` placeholders. |
 | [`design-review/`](../design-review) | Week 6 Mermaid sources and images: system statechart, task interaction. |
 | [`videos/`](../videos) | README for hardware test and demo videos. |
@@ -349,7 +349,7 @@ vehicle task described below.
   [`barcode_live_source.h`](../app_program/subsystem3/barcode_live_source.h)
   and [`barcode_live_source.c`](../app_program/subsystem3/barcode_live_source.c)
   define the 40 B record and 20 B control, coherent getters and board ownership.
-  [SHADOW producer](s3-line-barcode/LIVE_PRODUCER.md),
+  [Live producer](s3-line-barcode/LIVE_PRODUCER.md),
   [`barcode_live_producer.h`](../app_program/subsystem3/barcode_live_producer.h)
   and [`barcode_live_producer.c`](../app_program/subsystem3/barcode_live_producer.c)
   bind the LINE feed, context/ACK policy and stopped DUMP; live actions only in
@@ -376,12 +376,12 @@ vehicle task described below.
   tolerate bounded control-board collisions. The shared source publication
   recheck remains uncached. Tests:
   [`test_barcode_control_cache.c`](../tests/test_barcode_control_cache.c). These expire a
-  pending live command at 1000 mm from decode and cancel it after 200 ms of SEARCH;
+  pending live command at 10000 mm from decode (1000 mm until 2026-11-20), keep it through SCAN/DETOUR, and cancel it after 200 ms of SEARCH;
   default builds omit this folder. Tests:
   [`test_blv_policy.c`](../tests/test_blv_policy.c) and
   [`test_barcode_live_vehicle_make.py`](../tests/test_barcode_live_vehicle_make.py).
   [SHADOW hardware results](s3-line-barcode/SHADOW_HARDWARE_RESULTS.md)
-  record the first course run, GP28 geometry and open findings.
+  record the first course run (2026-11-11, before LIVE), GP28 geometry and open findings.
   [Live counts snapshot](s3-line-barcode/LIVE_COUNTS_SNAPSHOT.md) specifies
   `barcode_live_counts_try_read`, the read-only epoch terminal counts in
   `barcode_live_source.{h,c}`; absence, cancellation and coherent-read tests

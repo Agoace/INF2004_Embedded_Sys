@@ -12,16 +12,18 @@ not current acceptance reports. Local course originals are not public records.
   Contains: one entry per record; the two template-comment exceptions.
 - [AGENT_MAP.md](AGENT_MAP.md) — where to start in the source tree.
   Contains: map chain, doc directories, what each source group does, entry files per area, repository boundaries, template build layout, kernel platform/task notes.
-- [Repository README](../README.md) — public setup, current build and usage.
+- [Repository README](../README.md) — the robot front page: what it does, subsystems, layout, branches, demo build and flash, tests.
 - [Repository instructions](../AGENTS.md) — working rules and validation commands.
 
 ## Release
 
-- [SUBMISSION_V2.md](release/SUBMISSION_V2.md) — the second submission of 2026-11-19.
-- [SUBMISSION_V3.md](release/SUBMISSION_V3.md) — the third submission of 2026-11-20; the demo letter map is set on the day.
-- [DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — the demo-day kernel (code freeze 2 of 2026-11-20): 300 s limit, 10 m barcode hold, demo-day letter map steps.
+- [DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — CURRENT: the demo-day kernel (code freeze 2 of 2026-11-20) and the demo-day result.
+  Contains: tags `demo-kernel-v2` and `submission-v3.1` (`submission-v4` of 2026-11-24 has the same firmware); changes since v3 (300 s limit, full log keeps driving, 10 m barcode hold, command kept through SCAN/DETOUR); demo-day letter map steps; checks (host 735/735, RAM_PROOF 84/84, 0 warnings); robot evidence 2026-11-20 (image 30); demo day 2026-11-24 (image 31, M=LEFT,O=RIGHT,P=UTURN: M then LEFT 95.4..95.7 deg); known limits.
+- [SUBMISSION_V3.md](release/SUBMISSION_V3.md) — the third submission of 2026-11-20 (superseded by DEMO_KERNEL_V2.md).
+  Contains: tag `submission-v3`; barcode reader changes (bend exit, held letter); demo letter map build line; checks (host 734/734); robot evidence (images 26..29); known limits.
+- [SUBMISSION_V2.md](release/SUBMISSION_V2.md) — the second submission of 2026-11-19 (superseded).
   Contains: tag `submission-v2` on `main` = staging `1f46e88`; the staging merges since `submission-v1`; checks (host 722/722, RAM_PROOF 81/81, 0 warnings); robot evidence (images 12, 18, 19); known limits.
-- [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the frozen demo kernel of 2026-11-18.
+- [DEMO_FREEZE.md](release/DEMO_FREEZE.md) — the first demo kernel freeze of 2026-11-18 (superseded).
   Contains: tag `demo-kernel-v1` (`9f15213`), submission branch `main` (`submission-v1`); live-barcode build line and fallback; checks (host 677/677, 76/76 MATCH, RAM_PROOF 79/79, 0 warnings); image SHA prefixes; robot runs LIVE1–4, UTURN1, RIGHT1, GRACE1 (LEFT turns 92–95 deg, U-turn 172.5 deg); known limits (straight barcode placement, 1000 mm expiry, U-turn one pass, no full-feature run on this image).
 
 ## Project requirements
@@ -32,18 +34,19 @@ not current acceptance reports. Local course originals are not public records.
 ## Architecture
 
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — read first: the state of each area.
-  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch diagram and table (main = submission, mtk3-staging = integration, mtk3-testing = test environments and tools, one branch per module), merge rules (`--no-ff`, no rebase, one revertable merge per risky change, archive tag then delete), mtk3 source layout, commit checks, branch clean-ups 2026-11-18 and 2026-11-24, archive tags.
+  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode LIVE results 2026-11-20 and demo day, detours, IMU hump and safety stop, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..24; branch diagram and table (main = submission, mtk3-staging = integration, mtk3-testing = test environments and tools, one branch per module), merge rules (`--no-ff`, no rebase, one revertable merge per risky change, archive tag then delete), mtk3 source layout, commit checks, branch clean-ups 2026-11-18 and 2026-11-24, archive tags.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — the implemented robot system and its three decisions.
   Contains: subsystem ownership, tasks and cores, interrupt/polling rules, Vehicle Controller shell and route table, safety settings, results; ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal 1 ms time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
   Contains: one row per value (value, date, label, source line) in 9 areas: geometry, mass, motors and DM1, encoders, line/junction, GP28/barcode, sonar/servo/obstacle, IMU, timing/CPU/RAM/telemetry; values that do not agree, with resolved ones marked (for example counts 2540/2535, sonar offset 58/47 mm); the operator ruler session 2026-11-16 (length 180 mm, track 111-112 mm, wheel width 16 mm).
-- [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, evidence and motion plan.
+- [CR1.md](architecture/CR1.md) — Change Requirement 1 (minimum-bit data): requirement, current state, module rounds, evidence and motion plan.
+  Contains: requirement and Week 8 §11/§33–38 details; current state (done; static RAM 241228 to 234596 B; robot image 12 PASS); module round 2026-11-18 table; baseline RAM, board/queue and MQTT sizes; B1 bench stack, B2 idle-stack margin, A1 motion board 72 to 64 B, A1/B1 hardware PASS 2026-11-10; after-and-acceptance table; M9 Wi-Fi stack accounting; motion module plan.
 - [CR1_TELEMETRY_A.md](architecture/CR1_TELEMETRY_A.md) — approved telemetry storage packing, diagnostic fault masks and T110.
   Contains: per-step RAM/build evidence, unchanged binary MQTT formats, 110 ms deadline and 120 ms poll model, existing FIX2/LAST references and pending 110 ms robot gate.
 - [CR1_KR1_ROW.md](architecture/CR1_KR1_ROW.md) — approved KR1 RAM row storage 16 → 15 B with time guard; wire and USB text unchanged.
   Contains: field bit audit, 15-byte layout, index-anchored 13-bit time and guard, producer round-trip proof, APP_TEST row changes, RAM before/after, emulator lock-time cost.
-- [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — Private barcode evidence packing: representation, exact bits, RAM split, replay tests and pending robot timing.
-  Contains: requirement and Week 13 deliverables; Week 8 §11 (8 B IMU snapshot, 1.40625° heading LSB) and §33–38 (13 states = 4 bits, mode/enum/fault bits, about 5-bit events, message rule); shared-access rule; baseline `168d705` RAM, board/queue and MQTT sizes; B1 (bench stack, 4112 B), B2 idle-stack margin, A1 board 72 → 64 B (static RAM 190672 → 190664 B), A1/B1 hardware PASS 2026-11-10, A2 16-bit counts plan, M9 accounting (+8336 B static); motion field table, controller/ISR inventory, tests.
+- [CR1_BARCODE_A.md](architecture/CR1_BARCODE_A.md) — private barcode evidence packing (category A).
+  Contains: authority and scope; representation and ownership audit; exact stored frame layout (104 to 92 B) and edge layout (fail-capture edges 1536 to 1392 B per slot); RAM evidence (241228 to 240892 B alone); tests and timing limits.
 - [CR1_SONAR_A.md](architecture/CR1_SONAR_A.md) — approved sonar and obstacle board storage only.
   Contains: field ranges, sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B, baseline `7350da0`, static RAM 241228 to 241148 B, unchanged API/messages/wire, 679 host tests, torn-read tests, DERIVED(emulator) pack time, compiler-local frames; category B and private scan/detour packing remain deferred.
 - [CR1_SONAR_F.md](architecture/CR1_SONAR_F.md) — sonar owner fault word (bit 5) for the F fault mask.
@@ -52,7 +55,7 @@ not current acceptance reports. Local course originals are not public records.
   Contains: field ranges, single-writer board (44 to 40 B), baseline `7350da0`, static RAM 241228 to 241224 B, unchanged API/messages/wire, 680 host tests, compiler-local frames and hardware limits; private controller packing remains deferred.
 - [CR1_VEHICLE_F.md](architecture/CR1_VEHICLE_F.md) — Vehicle owner fault word: IMU latch and other shell fault, single writer, red proof, tests, 8 B board cost and one STOP capture per run.
 - [CR1_IMU_A.md](architecture/CR1_IMU_A.md) — approved IMU hump, diag and safety board packing (48/72/36 to 16/36/12 B), exact-output proofs, RAM and emulator timing.
-- [CR1_MIN_BIT_PROOF.md](architecture/CR1_MIN_BIT_PROOF.md) — CR1 minimum-bit proof: per-field tables (range, n, minimum bits, bits used, reason) generated by `test_min_bit_proof`, byte totals, report-only gaps and the out-of-scope list.
+- [CR1_MIN_BIT_PROOF.md](architecture/CR1_MIN_BIT_PROOF.md) — CR1 minimum-bit proof: per-field tables (range, n, minimum bits, bits used, reason) generated by `test_min_bit_proof`, byte totals, the GAP table (empty: no GAP left), items accepted with a reason, and the out-of-scope list.
 - [JUNCTION_ACTION.md](architecture/JUNCTION_ACTION.md) — the B2a junction action consumer (fake commands).
   Contains: scope and approval (2026-11-10, closed at `50426ae`), command table NONE/A–D, ownership and entry points, fixed consumer value, junction detection, phases and bounds, reports and failures (event 7).
 - [JUNCTION_LIVE_ADAPTER.md](architecture/JUNCTION_LIVE_ADAPTER.md) — the B2b barcode-to-junction adapter, SHADOW only.
@@ -65,8 +68,9 @@ not current acceptance reports. Local course originals are not public records.
 - [KERNEL.md](kernel/KERNEL.md) — the μT-Kernel robot: tasks, timing, RAM and locks.
   Contains: task/priority table (motion 10, line 11, sonar 12, vehicle 13, IMU 14, Wi-Fi 20, USB 21, telemetry 30, Health 31, idle 32), kernel objects, settings; application stacks (Wi-Fi M9 8320 B, IMU high-water); watchdog and last reset reason; CPU load; P1 run timing and P2 overrun timeline; KERNEL_RAM placement (rule b, robot P1 pairs); F-NVIC (all external IRQs at 0); split parked 2026-11-15, placement and lock rules, M8 startup handoff; RAM budget by group and growth; USB priority; results and limits.
 - [BUILD.md](kernel/BUILD.md) — how to build, flash and read the firmware.
-- [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) — the course template setup guide (SDK, toolchain, template build options), moved from the root README on 2026-11-24.
   Contains: tools, Make profiles and options, demo line, private settings, BOOTSEL/picotool flash, USB output, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe (wiring, GDB on both cores), host tests and link proof.
+- [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) — the course template setup guide, moved from the root README on 2026-11-24.
+  Contains: SDK and Arm toolchain install, PATH settings, clone/build/flash of the template, template build options (`SMP`, `CONSOLE`, `WIFI`, `TEST`, `CRASH_REPORT`) and where they live in the makefile.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — junction hardware evidence and gates.
   Contains: B2a CLOSED (`50426ae`, 3/3 DONE); B2b STEP4a software candidate; operator evidence 2026-11-10; software evidence; RAM and stack; J0–J6 procedure (J3/J4 operator evidence on `7648081`, J6 open).
 
