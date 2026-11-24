@@ -4,6 +4,13 @@ The final demo line track, as a Webots course. Only the line track is
 fixed. Obstacle, ramp and barcode are free on the day, so they are
 parameters (default: none placed).
 
+Current (2026-11-24): this file retains the 2026-11-17 course design and
+original controller limits. Webots tools now live on `mtk3-testing`, not
+the deleted `mtk3-hil` branch (kept as tag `archive/mtk3-hil`). A separate
+course8 controller and the top-down generator fix are integrated there;
+see [the SIL integration record](https://github.com/Agoace/INF2004_Embedded_Sys/blob/mtk3-testing/docs/simulation/COURSE8_SIL_INTEGRATION_20261117.md).
+Those host checks are not physical GP28 acceptance or a Gate 1 pass.
+
 ## Source and labels
 
 | Item | Value | Label |
@@ -116,18 +123,20 @@ python3 -m unittest sim/webots/tests/test_course8_tilemap.py
 ```
 
 The tool writes schema-1 course JSON. The Webots world comes from the
-course generator on `mtk3-hil` (`sim/webots/pil/world.py`, owned by SW8),
-which is not on this branch: in a `mtk3-hil` checkout run
+course generator on `mtk3-testing` (`sim/webots/pil/world.py`),
+which is not on staging: in a `mtk3-testing` checkout run
 `cd sim/webots && python3 -m pil.world --course <json> --robot calibration/robot_assumed.json --output <that checkout>/build/<name>`.
 The generator reports 18 open ports: the free ends of the loose arcs
 (`allow_open_ports` is true for this reason).
 
-Known issues for SW8 (generator not changed here):
+Historical generator issues at `448fcef` (not current `mtk3-testing`):
 - `pil/world.py` writes `Viewpoint { ... orientation 0 0 1 0 }`: the camera looks horizontally and Webots shows a black screen.
 - A hump has material `MAT_WHITE`, so the ramp is invisible on the white tiles.
 
 [`course8_world_patch.py`](../../sim/webots/tools/course8_world_patch.py)
-fixes both in a generated `.wbt` only. Run it after `pil.world`:
+fixes both in an old generated `.wbt` only. Current `mtk3-testing` already
+emits the top-down view; generate a fresh project there. The old patch
+procedure below is for preview only:
 
 - View: top-down, north up (`orientation -0.57735 0.57735 0.57735
   2.0944`), centred on the tile grid of `../course.json`. Height: the
@@ -142,10 +151,13 @@ fixes both in a generated `.wbt` only. Run it after `pil.world`:
   failure it writes nothing and exits 1; else it writes through a
   temporary file and `os.replace`.
 
-## Robot drive in Webots: blocked
+## Robot drive in Webots: original controller limits
 
-The SIL controller on `mtk3-hil` 448fcef (`controllers/sil_line/sil_line.py`)
-cannot drive this course without SW8 changes:
+The SIL controller at `448fcef` (`controllers/sil_line/sil_line.py`)
+could not drive this course. The separate course8 controller on
+`mtk3-testing` addresses course reference, tilt and gain configuration;
+it still has no barcode offers or sonar. The table records the original
+controller, not the current course8 controller:
 
 | Need | Current SIL | Effect on the figure-8 |
 | --- | --- | --- |
@@ -156,6 +168,7 @@ cannot drive this course without SW8 changes:
 
 ## Status
 
-Built and host-checked: 14 unit checks; world generated on `mtk3-hil`
-448fcef. The top-down render was compared with IMG_1962. No Webots
-robot run (blocked, see above).
+At the 2026-11-17 course-design revision: 14 unit checks; world generated
+at `448fcef`. The top-down render was compared with IMG_1962. No Webots
+robot run was made for that result. Later host integration and its limits
+are linked in the current-state note above.

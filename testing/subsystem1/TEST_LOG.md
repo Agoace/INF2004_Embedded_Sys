@@ -1,7 +1,10 @@
 # Subsystem 1 and shared platform test log
 
-Subsystem 1 remains a stub. Its TEST hook runs the shared timer check in
-the initial task; it creates no new task.
+Subsystem 1 implements RAM telemetry, MQTT and health reporting. Its TEST
+hook runs the shared timer check in the initial task; the application also
+starts telemetry and, with MQTT, health/idle tasks. Later robot evidence is
+in [the demo record](../../docs/release/DEMO_KERNEL_V2.md); dated results
+below retain their tested revision and coverage.
 
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
@@ -43,7 +46,7 @@ the normal image after a cold VIN power-on.
 
 | ID | Procedure and acceptance | Status |
 | --- | --- | --- |
-| S1-U02 | TEST: bounded producer burst at priority 1 fills MBF; sends return without waiting, lost count increases; after allowing consumer to run, accepted rows are retained | PASS 2026-11-06 (445084c and 3f889a1): accepted 34, lost 66, no blocking. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
+| S1-U02 | TEST: bounded producer burst fills MBF (runner now priority 20; original image priority 1); sends return without waiting, lost count increases; after allowing consumer to run, accepted rows are retained | PASS 2026-11-06 (445084c and 3f889a1): accepted 34, lost 66, no blocking. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | S1-U03 | GP20 dump after a full robot session: valid KR1/VE CSV, telemetry loss 0, dump `tm_usb_dropped` delta 0, control deadlines remain within limits, per-task stack free margin >=256 bytes | PASS 2026-11-06 (M1-S7, M2-S7): telemetry loss 0, USB dump delta 0, overruns 0, stack free >= 1672 B. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
 ## STEP 8 MQTT image — operator results 2026-11-07

@@ -7,6 +7,12 @@ they do not validate a cold power-on. The fixed image passed
 [S0-U01](../subsystem1/TEST_LOG.md) after a cold power-on, and B4 ran
 from a cold VIN power-on.
 
+Current (2026-11-24): the robot uses same-tick retarget by default, with
+base line speed 120 mm/s, kd 30 and motion cap 460 mm/s. Full-course runs
+are recorded in [the demo record](../../docs/release/DEMO_KERNEL_V2.md).
+These later runs do not replace the independent timing/stop-distance gates
+below. Old task/stack results retain their tested revision.
+
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
 | S2-U01 | TEST priority-20 runner: begin/end a separate 5 s timing window; print buffered PROBE A and lifetime INFO afterwards | 500 ± 1 window ticks; maximum complete in-window task gap ≤ 11000 us; no discarded wakes in window; report window work maximum, gaps and late count; retain lifetime extrema/counters | PASS 2026-11-06 (3f889a1), both boots: window gap 9984..10016 and 9791..10210 us, late 0, missed 0. The earlier 445084c FAIL was a test artefact. [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
@@ -75,7 +81,8 @@ The 440 B stack value is a comparison, not a new size limit. A build/host
 PASS does not close this gate. Main reviews the logs, records measured
 values and merges the motion round before any sonar planning starts.
 Result: **PASS 2026-11-10**, operator supplied, with the idle-meter
-margin exception and approved correction below. Merge remains Main's task.
+margin exception and approved correction below. The CR1 changes are now
+integrated; history is kept at tag `archive/mtk3-cr1`.
 
 ### A1 + B1 result: 2026-11-10
 
@@ -115,8 +122,9 @@ Interrupt frames use the running task's stack; this lowest-priority task
 runs about 55 percent of the time. The operator approved a separate
 category-B safety correction: idle stack 512 -> 768 B (+256 B static RAM).
 At the observed 296 B use this would leave 472 B, not a new measurement.
-The enlarged stack has not yet been measured on hardware. No other stack
-is resized; no further CR1 work is authorized before Main's review/merge.
+At that gate the enlarged stack had not yet been measured on hardware.
+Current code allocates 768 B for `idle_meter` in `app_task.c`; the result
+above remains the original 512 B measurement. CR1 is now complete.
 
 Local evidence in Main's checkout (ignored; not committed):
 
@@ -384,7 +392,10 @@ The bench stops its RAM log at ESTOP, so the log has no rows after the
 stop. The duty 0 and "no later tick restores an old duty" result comes from
 the operator observation. Possible improvement: log about 1 s after ESTOP.
 
-## STEP 8 Wi-Fi20 coexistence — Not run
+## STEP 8 Wi-Fi20 coexistence — independent TEST window not recorded
+
+Later MQTT driving results exist in the integration/release records. They
+do not establish this separate five-second TEST-window result.
 
 Repeat S2-U01 on the new MQTT TEST image: 499–501 complete tick gaps over
 the independent five-second window, max <=11000 us and zero missed.

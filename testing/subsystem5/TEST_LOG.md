@@ -5,7 +5,8 @@
 | S5-U01 | TEST=1, wheels lifted; put a flat object 60..511 mm from the sensor and measure with a ruler. Capture 20 pings, median/min/max and unknown count. | Valid distances agree with manual distance within sensor tolerance; no sensor fault streak; explain any unknowns | PASS 2026-11-06 (3f889a1, USB power only, concrete wall, sensor straight on): 200 mm ruler → 20/20 valid, medians 193 and 196 mm (188..204); 400 mm → 20/20 valid, medians 394 and 393 mm (390..407). See the S5-U01 wall check below |
 
 GP3 sends a 10 us trigger. GP2 echo uses both edges on the shared core-0
-GPIO13 dispatcher, priority 1. No SDK IRQ handler is registered. TIMER
+GPIO13 dispatcher, priority 1 requested (0 observed on hardware; see
+[F-NVIC](../../docs/kernel/KERNEL.md#interrupt-priorities-f-nvic)). No SDK IRQ handler is registered. TIMER
 microseconds, the 2 ms rise timeout, 3 ms echo timeout, 60 ms minimum ping
 interval, packed result and unknown-on-no-echo rules match `src/ultrasonic.c`.
 Because task service is only every 10 ms, the GPIO callback also rejects
@@ -14,6 +15,14 @@ because task service has not run. Width/field limits remain in task context.
 Servo PWM remains owned by motion. Kernel tasks alone publish results;
 the GPIO callback only records edge times and phase. All APIs are core-0
 only, with DI/EI for shared phase snapshots.
+
+Current (2026-11-24): the robot uses coarse/fine SCAN and detour v1.8 with
+minimum turn and S2 clear heading. Image 30 run 6 completed 2/2 DONE_LINE
+detours; demo-day image 31 ended detours DONE_NO_LINE then line search.
+The S2 early-edge path remains host-only evidence. See
+[OBSTACLE.md](../../docs/s5-obstacle/OBSTACLE.md) and
+[the demo record](../../docs/release/DEMO_KERNEL_V2.md). The wall tests below
+are dated sensor checks, not general clearance acceptance.
 
 ## Task-split image checks
 
