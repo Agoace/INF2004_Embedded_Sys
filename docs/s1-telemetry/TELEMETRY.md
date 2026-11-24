@@ -119,7 +119,7 @@ replay protection. Token rules and units: [command spec](MQTT_WIRE.md#command).
 
 | Mode | Select when | State | Heartbeat | Live log / sonar |
 | --- | --- | --- | --- | --- |
-| RUN | Calibration, start delay, navigation, stop, plus 2 s grace | 200 ms | 1000 ms | Publish |
+| RUN | Calibration, start delay, navigation, stop, plus 2 s grace | 110 ms deadline; expected gap ~120 ms with 20 ms poll; robot measurement pending | 1000 ms | Publish |
 | IDLE | Idle beyond grace | 1000 ms | 5000 ms | Pause |
 
 Sensors and local logging do not slow down in IDLE. TEST/BENCH have no
@@ -133,8 +133,15 @@ See [publication modes](MQTT_WIRE.md#publication-modes).
 
 ## RAM log ownership
 
-Telemetry30 alone owns 4501 ×16-byte KR1 rows (72016 bytes) and 512
-×12-byte VE events (6144 bytes). BEGIN resets indices/generation, not
+Telemetry30 alone owns 4501 KR1 rows. Each row is stored in 15 private
+bytes (67515 bytes) and read back as the unchanged 16-byte row; a row whose
+time is 8192 or more ticks after its index is refused and counted as lost.
+See [CR1 KR1 row](../architecture/CR1_KR1_ROW.md). It also owns 512
+×9-byte private VE records (4608 bytes). Public event values remain 12 B;
+USB VE text and 16-byte MQTT log events are unchanged. Private INFO is
+104 B, 48 scan records use 528 B, and the committed log-index board is
+20 B. See [CR1 telemetry A](../architecture/CR1_TELEMETRY_A.md) for layouts
+and the separate diagnostic fault storage cost. BEGIN resets indices/generation, not
 lifetime losses. It captures the producer-loss baseline before delayed
 consumption. ROW/EVENT/INFO/DUMP messages copy values, never pointers.
 A full local queue/storage counts loss. The vehicle's existing policy stops
@@ -147,7 +154,18 @@ formats rows/events and yields 20 ms every eight records, then prints
 `tm_usb_dropped` total and dump delta. After the counts line it prints one
 `[robot] hump ...` line from the last finished run (12 B board copy, not a
 larger INFO message). No control task formats the saved
-arrays. A reset destroys RAM data. KR1 remains 128 bits; there is no spare
+arrays. The dump also prints `[FAULT_MASK]` with hexadecimal now/run masks,
+source-valid bits, run epoch and Health sample time. An immediate STOP dump
+can print `pending` until the 1 Hz Health sample processes the final STOP
+capture. A later GP20 dump prints the masks. Health alone combines the
+single-writer owner words; run freezes at STOP and resets at the next START.
+These are diagnostic observations, not a current safety guarantee or a new
+actuator input. Unknown source bits must not be read as an all-clear. Fault
+masks are in the Health snapshot and USB only; MQTT wire bytes do not change.
+If a STOP owner word has a bit outside its owner mask, Health stores that
+owner as unknown and counts it. The dump then adds
+`[FAULT_MASK] stop_refused N`; at count 0 the line is not printed.
+A reset destroys RAM data. KR1 remains 128 bits; there is no spare
 barcode byte. `KERNEL_ROBOT.md` in the [kernel history](../archive/kernel/HISTORY.md#files)
 keeps the exact local KR/VE text description; the binary topic layout is
 [RAM log](MQTT_WIRE.md#ram-log).

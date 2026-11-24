@@ -142,7 +142,11 @@ static void run(const char *kind)
             }
         }
         assert(barcode_window_step(&state, 1000u) <= BW_STEP_MAX);
-        if (state.result.accepted) {
+        if (state.result.accepted && state.result.held) {
+            /* Held letter: parts 1..19 were read; the end did not finish. */
+            assert(state.elements >= 18u); /* 18: provisional part 19 */
+            assert(state.result.letter >= 'A' && state.result.letter <= 'Z');
+        } else if (state.result.accepted) {
             float end = lead;
             for (unsigned int i = 0u; i < count; ++i) {
                 end += elements[i];
@@ -199,18 +203,18 @@ static void sizes(void)
                 make(text, reverse != 0u, scale);
                 lead = 10.0f * 5.8f * scale + 2.0f;
                 run("normal");
-                assert(state.result.accepted == (size < 2u));
-                if (size < 2u) {
-                    assert(state.result.letter == letters[ch]);
-                    assert(state.result.direction == reverse + 1u);
-                }
+                /* N_MIN 2.5 mm (2026-11-19): the 141 mm body (2.99 mm
+                 * narrow) is now read too. */
+                assert(state.result.accepted);
+                assert(state.result.letter == letters[ch]);
+                assert(state.result.direction == reverse + 1u);
             }
         }
     }
     /* Scale extension must not waive framing, gaps, damage or quiet proof. */
     for (unsigned int test = 0u; test < 7u; ++test) {
         make("*F*", false, 210.0f / 273.5f);
-        lead = test == 0u ? 35.0f : 60.0f;
+        lead = test == 0u ? 25.0f : 60.0f; /* test 0: below QUIET_MIN_MM */
         if (test == 1u) elements[9] *= 2.0f;
         if (test == 2u) for (unsigned int i = 10u; i < 19u; ++i)
             elements[i] *= 1.4f;
@@ -219,11 +223,14 @@ static void sizes(void)
         if (test == 5u) tail_white = 2.0f;
         if (test == 6u) elements[0] = 40.0f;
         run("normal");
-        assert(!state.result.accepted);
+        /* test 5: short tail after a good letter is a held accept. */
+        assert(state.result.accepted == (test == 5u));
+        assert(!state.result.accepted ||
+               (state.result.held && state.result.letter == 'F'));
         missing = merged = -1;
         tail_white = 20.0f;
     }
-    const float narrows[] = {3.9f, 4.05f, 6.95f, 7.1f};
+    const float narrows[] = {2.4f, 2.55f, 6.95f, 7.1f}; /* N_MIN 2.5, N_MAX 7 */
     for (unsigned int i = 0u; i < 4u; ++i) {
         make("*F*", false, narrows[i] / 5.8f);
         lead = 80.0f;
@@ -262,8 +269,65 @@ int main(int argc, char **argv)
             merged = strcmp(kind, "merged") == 0 ? i : -1;
             make("*F*", false, 1.0f);
             run("normal");
-            assert(!state.result.accepted);
+            /* Option R: a missing first bar is a late start (bend exit);
+             * the letter and end star still decide. Any other missing or
+             * merged element still fails closed. */
+            /* Held letter (operator 2026-11-20): damage after part 19 keeps
+             * the letter. */
+            const bool late = missing >= 20 || merged >= 20;
+            if (state.result.accepted != (missing == 0 || late)) fprintf(stderr, "missing %d merged %d accepted %d held %d reason %lu\n", missing, merged, state.result.accepted, state.result.held, (unsigned long)state.result.reason);
+            assert(state.result.accepted == (missing == 0 || late));
+            assert(!state.result.accepted || state.result.letter == 'F');
+            assert(state.result.held == late);
         }
+        missing = merged = -1;
+    } else if (strcmp(kind, "held") == 0) {
+        /* GP28 leaves the sheet: only the first parts are on paper. */
+        const unsigned int keep[] = {19u, 15u, 9u};
+        for (unsigned int r = 0u; r < 2u; ++r) {
+            for (unsigned int k = 0u; k < 3u; ++k) {
+                for (float scale = 0.5f; scale <= 1.01f; scale += 0.25f) {
+                    make("*A*", r != 0u, scale);
+                    count = keep[k];
+                    tail_white = 200.0f;
+                    run("normal");
+                    /* Letter complete (19 parts): A is kept. Less: reject. */
+                    assert(state.result.accepted == (k == 0u));
+                    if (k == 0u) {
+                        assert(state.result.held);
+                        assert(state.result.letter == 'A');
+                        assert(state.result.direction == r + 1u);
+                    }
+                }
+            }
+        }
+        tail_white = 20.0f;
+    } else if (strcmp(kind, "late_start") == 0) {
+        /* Image 24 bend capture: first narrow bar too faint to see. */
+        const char *letters[] = {"*A*", "*F*", "*Z*", "*Q*"};
+        for (unsigned int r = 0u; r < 2u; ++r) {
+            for (unsigned int k = 0u; k < 4u; ++k) {
+                make(letters[k], r != 0u, 0.72f);
+                missing = 0; /* first bar in travel order */
+                run("normal");
+                assert(state.result.accepted);
+                assert(state.result.letter == letters[k][1]);
+                assert(state.direction == r + 1u);
+            }
+        }
+        /* Two missed bars (first bar + next) are not rescued. */
+        make("*A*", false, 0.72f);
+        missing = 0;
+        merged = 1;
+        run("normal");
+        assert(!state.result.accepted);
+        /* A start that is not a star tail still fails as BW_START. */
+        make("AAA", false, 0.72f);
+        missing = 0;
+        merged = -1;
+        run("normal");
+        assert(!state.result.accepted);
+        missing = -1;
     } else if (strcmp(kind, "calibration") == 0) {
         barcode_cal_report_t bad = calibration;
         bad.mode = BC_CAL_INVALID;
@@ -307,7 +371,7 @@ int main(int argc, char **argv)
         make(strcmp(kind, "multi") == 0 ? "*AB*" : "*F*", false,
              strcmp(kind, "small") == 0 ? 0.5f : 1.0f);
         if (strcmp(kind, "leading") == 0) {
-            lead = 40.0f;
+            lead = 30.0f; /* QUIET_MIN_MM boundary */
         } else if (strcmp(kind, "short_tail") == 0) {
             tail_white = 3.0f;
         } else if (strcmp(kind, "short_quiet") == 0) {
@@ -318,12 +382,21 @@ int main(int argc, char **argv)
             extra = true;
         }
         run(kind);
+        /* Held letter (operator 2026-11-20): a short tail keeps F; *AB*
+         * keeps A (the end star position holds B). */
+        if (strcmp(kind, "short_tail") == 0 || strcmp(kind, "multi") == 0) {
+            assert(state.result.accepted && state.result.held);
+            assert(state.result.letter ==
+                   (strcmp(kind, "multi") == 0 ? 'A' : 'F'));
+            return 0;
+        }
         const bool positive = strcmp(kind, "normal") == 0 ||
             strcmp(kind, "variable") == 0 || strcmp(kind, "wrap") == 0 ||
             strcmp(kind, "two_ms") == 0 || strcmp(kind, "freeze") == 0 ||
             strcmp(kind, "tracking") == 0 ||
             strcmp(kind, "short_quiet") == 0 ||
-            strcmp(kind, "immutable") == 0;
+            strcmp(kind, "immutable") == 0 ||
+            strcmp(kind, "small") == 0; /* 2.9 mm narrow >= N_MIN 2.5 */
         if (state.result.accepted != positive) {
             printf("%s accepted %d reason %lu count %u lead %.3f\n", kind,
                    state.result.accepted, (unsigned long)state.result.reason,

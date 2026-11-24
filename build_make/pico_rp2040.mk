@@ -424,6 +424,14 @@ endif
 ifeq ($(IMU_SAFETY_CAPTURE),1)
 include imu_safety_capture.mk
 endif
+# Opt-in TEST bench check for IMU FIFO option D. OFF adds no flag or name.
+IMU_GAP_TEST ?= 0
+ifneq ($(filter $(IMU_GAP_TEST),0 1),$(IMU_GAP_TEST))
+$(error IMU_GAP_TEST must be 0 or 1)
+endif
+ifeq ($(IMU_GAP_TEST),1)
+include imu_gap_test.mk
+endif
 # V1/V3 live pending policy: live builds only (default objects unchanged).
 ifeq ($(BARCODE_LIVE_ENABLE),1)
 include barcode_live_vehicle.mk
@@ -466,6 +474,9 @@ EXE_FILE := $(EXE_FILE)_bcfail$(BARCODE_FAIL_SLOTS)
 endif
 ifeq ($(IMU_SAFETY_CAPTURE),1)
 EXE_FILE := $(EXE_FILE)_imucap
+endif
+ifeq ($(IMU_GAP_TEST),1)
+EXE_FILE := $(EXE_FILE)_imugap
 endif
 ifneq ($(LINE_P_NEAR),85)
 EXE_FILE := $(EXE_FILE)_pnear$(LINE_P_NEAR)
@@ -683,6 +694,9 @@ PROFILE_ID := $(PROFILE_ID)-bcfail$(BARCODE_FAIL_SLOTS)
 endif
 ifeq ($(IMU_SAFETY_CAPTURE),1)
 PROFILE_ID := $(PROFILE_ID)-imucap
+endif
+ifeq ($(IMU_GAP_TEST),1)
+PROFILE_ID := $(PROFILE_ID)-imugap
 endif
 ifneq ($(LINE_P_NEAR),85)
 PROFILE_ID := $(PROFILE_ID)-pnear$(LINE_P_NEAR)

@@ -66,7 +66,7 @@ foreach(case IN ITEMS reverse fallback mode2 no_progress stale pause epoch
         revision cut_change cut_equal disabled loss missed generation
         motor_fault motor_old raw_clip clock read_fail ack no_ack busy_ack
         us_wrap ms_wrap count_wrap old_epoch_ack old_epoch_no_ack sequence_wrap
-        nonletter mode2_ack)
+        nonletter mode2_ack held_retreat)
     add_test(NAME test_barcode_producer_${case}
         COMMAND test_barcode_live_producer ${case})
 endforeach()
@@ -100,6 +100,15 @@ host_test(test_barcode_quiet_real tests/test_barcode_quiet_real.c
 target_compile_definitions(test_barcode_quiet_real PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
 target_link_libraries(test_barcode_quiet_real PRIVATE m)
 
+# GP28 at 2.5 mm: robot H3 small capture and synthetic small/large *F*.
+host_test(test_barcode_height_2p5 tests/test_barcode_height_2p5.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_height_2p5 PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_height_2p5 PRIVATE m)
+foreach(case IN ITEMS h3 img20 small small69 large large69 small_z large_z)
+    add_test(NAME test_barcode_height_2p5_${case} COMMAND test_barcode_height_2p5 ${case})
+endforeach()
+
 host_test(test_barcode_motion_twitch tests/test_barcode_motion_twitch.c
     app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
 target_compile_definitions(test_barcode_motion_twitch PRIVATE BC_FIXTURES="${REPO}/tests/fixtures")
@@ -131,7 +140,7 @@ target_compile_definitions(test_barcode_window_unconfirmed PRIVATE
 foreach(case IN ITEMS sizes normal variable wrap two_ms freeze tracking short_quiet
         immutable missing merged calibration queue brackets leading short_tail
         gap extra multi small air reversal motor_fault motor_gap sample_gap
-        adc_fault paper flat_dark line_only alias one_missing)
+        adc_fault paper flat_dark line_only alias one_missing late_start held)
     add_test(NAME test_barcode_window_${case}
         COMMAND test_barcode_window ${case})
 endforeach()
@@ -252,7 +261,7 @@ endforeach()
 # HOST ONLY end-to-end S3 producer -> vehicle jlive -> ja. Live variants use
 # a synthetic 1 mm clear bound; they are not firmware builds.
 foreach(variant IN ITEMS default custom builtin expire search
-        decode_grace decode_timeout decode_end)
+        decode_grace decode_timeout decode_end hold10m)
     set(target test_barcode_live_e2e_${variant})
     set(action app_program/barcode_live_vehicle/action.c)
     if(variant STREQUAL "default")
@@ -278,15 +287,18 @@ target_compile_definitions(test_barcode_live_e2e_custom PRIVATE
     E2E_POLICY=3
     BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     BW_MAP_POLICY_ID=2u)
-# V1/V3 live policy: J1 beyond 1000 mm from the decode, or SEARCH first.
-foreach(variant IN ITEMS expire search)
+# V1/V3 live policy: J1 beyond 10000 mm from the decode, or SEARCH first.
+# hold10m: J1 about 9.5 m after the decode still consumes the command.
+foreach(variant IN ITEMS expire search hold10m)
     target_compile_definitions(test_barcode_live_e2e_${variant} PRIVATE
         BARCODE_LIVE_ENABLE=1 BARCODE_MEASURED_CLEAR_MM=1 E2E_EXPECT_OFFER=1
         BW_MAP_VALUES=0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
         BW_MAP_POLICY_ID=2u)
 endforeach()
 target_compile_definitions(test_barcode_live_e2e_expire PRIVATE
-    J1_MM=1500.0f J2_MM=1800.0f E2E_POLICY=1)
+    J1_MM=10600.0f J2_MM=10900.0f E2E_POLICY=1 E2E_MS=80000u)
+target_compile_definitions(test_barcode_live_e2e_hold10m PRIVATE
+    J1_MM=9600.0f J2_MM=9900.0f E2E_POLICY=3 E2E_MS=80000u)
 target_compile_definitions(test_barcode_live_e2e_search PRIVATE
     E2E_POLICY=2)
 host_test(test_blv_policy tests/test_blv_policy.c
@@ -323,7 +335,7 @@ foreach(t IN ITEMS test_barcode_control_cache test_barcode_live_feed_live
         test_barcode_live_producer_live_none test_barcode_live_e2e_custom
         test_barcode_live_e2e_builtin test_barcode_live_e2e_expire test_barcode_live_e2e_search
         test_barcode_live_e2e_decode_grace test_barcode_live_e2e_decode_timeout
-        test_barcode_live_e2e_decode_end)
+        test_barcode_live_e2e_decode_end test_barcode_live_e2e_hold10m)
     get_target_property(srcs ${t} SOURCES)
     list(REMOVE_ITEM srcs "${REPO}/app_program/subsystem3/barcode_live_producer.c")
     set_property(TARGET ${t} PROPERTY SOURCES "${srcs}")
@@ -344,6 +356,14 @@ foreach(case IN ITEMS search10 search30 search199 search200 search_context searc
         search_motorfault search_loss search_heartbeat)
     add_test(NAME test_barcode_producer_grace_${case}
         COMMAND test_barcode_live_producer_live_custom ${case})
+endforeach()
+# Blip grace before the first bar: kept below 200 ms, lost at 220 ms and on
+# a pivot that moves the sensor back. Shared producer: never kept.
+foreach(case IN ITEMS blip20 blip40 blip180 blip220 blip40pivot blip40grey blip40bar)
+    add_test(NAME test_barcode_producer_blip_${case}
+        COMMAND test_barcode_live_producer_live_custom ${case})
+    add_test(NAME test_barcode_producer_blip_shared_${case}
+        COMMAND test_barcode_live_producer ${case})
 endforeach()
 
 foreach(v IN ITEMS decode_grace decode_timeout decode_end)
@@ -376,3 +396,11 @@ foreach(v IN ITEMS custom builtin expire search decode_grace decode_timeout deco
     target_sources(${t} PRIVATE "${REPO}/app_program/barcode_live_vehicle/live.c"
         "${REPO}/app_program/barcode_live_vehicle/grace.c")
 endforeach()
+
+# CR1 private evidence representation (capacities unchanged).
+host_test(test_barcode_evidence_pack tests/test_barcode_evidence_pack.c)
+host_test(test_barcode_evidence_replay tests/test_barcode_window_real.c
+    app_program/subsystem3/barcode_window.c app_program/subsystem3/barcode.c)
+target_compile_definitions(test_barcode_evidence_replay PRIVATE
+    BCEP_VERIFY=1 BC_FIXTURES="${REPO}/tests/fixtures")
+target_link_libraries(test_barcode_evidence_replay PRIVATE m)

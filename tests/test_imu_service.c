@@ -177,9 +177,9 @@ void test_imu_board_hook(unsigned int index)
     }
 }
 
-static imu_hump_report_t read_hump(void)
+static imu_hump_board_t read_hump(void)
 {
-    imu_hump_report_t out;
+    imu_hump_board_t out;
 
     memset(&out, 0xa5, sizeof(out));
     assert(imu_hump_try_read(&out) == E_OK);
@@ -246,10 +246,10 @@ int main(int argc, char **argv)
 
     memset(&out, 0xa5, sizeof(out));
     saved = out;
-    imu_hump_report_t hump;
-    imu_hump_report_t hump_saved;
-    imu_hump_diag_report_t diag;
-    imu_hump_diag_report_t diag_saved;
+    imu_hump_board_t hump;
+    imu_hump_board_t hump_saved;
+    imu_hump_diag_board_t diag;
+    imu_hump_diag_board_t diag_saved;
 
     memset(&diag, 0xa5, sizeof(diag));
     diag_saved = diag;
@@ -300,17 +300,18 @@ int main(int argc, char **argv)
         run(103u);
         saved = read_snapshot();
         hump = read_hump();
-        assert(hump.timestamp_ms == saved.timestamp_ms);
+        assert(imu_hump_board_time(&hump) == saved.timestamp_ms);
         sensor_empty = true;
         const uint32_t mark = imu_request_mark();
 
         run(3u);
         out = read_snapshot();
         /* No new observation: the hump copy ages so readers reject it. */
-        assert(read_hump().timestamp_ms == hump.timestamp_ms);
+        const imu_hump_board_t again = read_hump();
+        assert(imu_hump_board_time(&again) == imu_hump_board_time(&hump));
         assert(imu_hump_diag_try_read(&diag) == E_OK);
-        assert(diag.timestamp_ms == hump.timestamp_ms);
-        assert(drv_time_ms() - hump.timestamp_ms > 20u);
+        assert(imu_hump_diag_board_time(&diag) == imu_hump_board_time(&hump));
+        assert(drv_time_ms() - imu_hump_board_time(&hump) > 20u);
         assert(out.timestamp_us == saved.timestamp_us);
         assert(out.value.samples == saved.value.samples);
         assert(out.marks != mark);
@@ -385,23 +386,35 @@ int main(int argc, char **argv)
     assert(out.value.samples > saved.value.samples);
     /* Hump board: same observation time; a torn copy is never a value. */
     hump = read_hump();
-    assert(hump.timestamp_ms == out.timestamp_ms);
-    assert(!hump.hump.running && hump.hump.run_epoch == 0u);
+    assert(imu_hump_board_time(&hump) == out.timestamp_ms);
+    assert(imu_hump_board_epoch(&hump) == 0u);
+    assert(imu_hump_board_summarize(&hump, true, 1u, out.timestamp_ms,
+                                    50u).peak_01mm == IMU_HUMP_PEAK_NONE);
     hump_saved = hump;
     corrupt_read = true;
     assert(imu_hump_try_read(&hump) == E_TMOUT);
     assert(memcmp(&hump, &hump_saved, sizeof(hump)) == 0);
-    assert(read_hump().timestamp_ms > hump_saved.timestamp_ms);
+    hump = read_hump();
+    assert(imu_hump_board_time(&hump) > imu_hump_board_time(&hump_saved));
     /* TEST run boundary: odd while driving, even after. */
     assert(imu_test_run(true) == 1u && imu_test_run(true) == 1u);
     run(2u);
     hump = read_hump();
-    assert(hump.hump.running && hump.hump.run_epoch == 1u);
-    assert(hump.hump.flags == IMU_HUMP_FLAG_IMPLEMENTED);
-    assert(hump.hump.valid_samples == 2u);
+    assert(imu_hump_board_epoch(&hump) == 1u);
+    {
+        /* Running, valid samples, no event: count 0, peak 0, flags IMPL. */
+        const imu_hump_summary_t s = imu_hump_board_summarize(&hump, true,
+            1u, imu_hump_board_time(&hump), 50u);
+        assert(s.flags == IMU_HUMP_FLAG_IMPLEMENTED && s.count == 0u &&
+               s.peak_01mm == 0u);
+    }
     assert(imu_hump_diag_try_read(&diag) == E_OK);
-    assert(diag.valid && diag.run_epoch == 1u && diag.line_samples == 0u);
-    assert(diag.timestamp_ms == hump.timestamp_ms);
+    {
+        imu_hump_diag_board_values_t v;
+        imu_hump_diag_board_unpack(&v, &diag);
+        assert(v.valid && v.run_epoch == 1u && v.line_samples == 0u);
+    }
+    assert(imu_hump_diag_board_time(&diag) == imu_hump_board_time(&hump));
     diag_saved = diag;
     corrupt_read = true;
     assert(imu_hump_diag_try_read(&diag) == E_TMOUT);
@@ -409,7 +422,7 @@ int main(int argc, char **argv)
     assert(imu_test_run(false) == 2u && imu_test_run(false) == 2u);
     run(1u);
     hump = read_hump();
-    assert(!hump.hump.running && hump.hump.run_epoch == 1u);
+    assert(imu_hump_board_epoch(&hump) == 1u);
     /* Opposite wheels with zero mean travel cannot refresh calibration. */
     count_step[0] = 3;
     count_step[1] = -3;
@@ -442,9 +455,21 @@ int main(int argc, char **argv)
     assert(!out.value.valid && out.probe.faults == 3u);
     /* A failing sensor still observes: the copy stays fresh with FAULT. */
     hump = read_hump();
-    assert(hump.timestamp_ms == out.timestamp_ms && hump.hump.run_epoch == 3u);
-    assert((hump.hump.flags & IMU_HUMP_FLAG_FAULT) != 0u);
-    assert(hump.hump.valid_samples == 0u);
+    {
+        /* CR1: the board is the pack of the same observation. */
+        imu_hump_board_t want;
+        imu_hump_pack(&want, &out.value.hump, out.timestamp_ms);
+        assert(memcmp(&want, &hump, sizeof(want)) == 0);
+    }
+    assert(imu_hump_board_time(&hump) == out.timestamp_ms &&
+           imu_hump_board_epoch(&hump) == 3u);
+    {
+        /* No valid sample: FAULT, no value. */
+        const imu_hump_summary_t s = imu_hump_board_summarize(&hump, true,
+            3u, out.timestamp_ms, 50u);
+        assert((s.flags & IMU_HUMP_FLAG_FAULT) != 0u);
+        assert(s.peak_01mm == IMU_HUMP_PEAK_NONE && s.count == 0u);
+    }
     assert(imu_test_run(false) == 4u);
     assert(out.value.calibrated); /* Fault is NOT a bias/height reset. */
     sensor_ok = true;

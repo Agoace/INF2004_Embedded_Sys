@@ -91,11 +91,40 @@ static void test_wrap(void)
 
 static void test_periods(void)
 {
-    assert(pm_state_period_ms(PM_MODE_RUN) == 200u);
+    assert(pm_state_period_ms(PM_MODE_RUN) == 110u);
     assert(pm_state_period_ms(PM_MODE_IDLE) == 1000u);
     assert(pm_heartbeat_period_ms(PM_MODE_RUN) == 1000u);
     assert(pm_heartbeat_period_ms(PM_MODE_IDLE) == 5000u);
     assert(pm_streams_live(PM_MODE_RUN) && !pm_streams_live(PM_MODE_IDLE));
+}
+
+/* Model the Wi-Fi owner's existing now+period deadline, not a fixed-rate
+ * scheduler. Poll granularity can delay an eligible publication. */
+static bool state_due(uint32_t now, uint32_t deadline)
+{
+    return (int32_t)(now - deadline) >= 0;
+}
+
+static void test_run_deadline(void)
+{
+    const uint32_t period = pm_state_period_ms(PM_MODE_RUN);
+    assert(!state_due(109u, period));
+    assert(state_due(110u, period));
+    assert(state_due(111u, period));
+    const uint32_t base = UINT32_MAX - 59u;
+    const uint32_t deadline = base + period;
+    assert(!state_due(base + 109u, deadline));
+    assert(state_due(base + 110u, deadline));
+    uint32_t next = 0u;
+    unsigned int sends = 0u;
+    for (uint32_t now = 0u; now <= 600u; now += 20u) {
+        if (state_due(now, next)) {
+            assert(now == (uint32_t)sends * 120u);
+            ++sends;
+            next = now + period;
+        }
+    }
+    assert(sends == 6u); /* 0,120,240,360,480,600; not a110-ms fixed rate. */
 }
 
 int main(void)
@@ -107,6 +136,7 @@ int main(void)
     test_board_results();
     test_wrap();
     test_periods();
+    test_run_deadline();
     printf("test_telemetry_mode: all checks passed\n");
     return 0;
 }

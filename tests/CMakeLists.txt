@@ -46,6 +46,12 @@ function(host_test name test_file)
     add_test(NAME ${name} COMMAND ${name})
 endfunction()
 
+host_test(test_fault_mask tests/test_fault_mask.c)
+# CR1 F pack: snapshot 8 B and STOP capture 12 B round trips and refusals.
+host_test(test_fault_pack tests/test_fault_pack.c)
+host_test(test_telemetry_pack tests/test_telemetry_pack.c)
+host_test(test_telemetry_optional_pack tests/test_telemetry_optional_pack.c)
+
 function(robot_source old new output)
     if(EXISTS "${REPO}/${new}")
         set(${output} "${new}" PARENT_SCOPE)
@@ -152,6 +158,8 @@ if(TARGET test_drv_ultrasonic)
 endif()
 
 host_test(test_vehicle_log tests/test_vehicle_log.c app_program/vehicle/vehicle_log.c)
+# CR1 KR1 RAM row: producer round trip, guard and wrap (15-byte storage).
+host_test(test_kr1_row_pack tests/test_kr1_row_pack.c app_program/vehicle/vehicle_log.c)
 if(TARGET test_vehicle_log)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME test_robot_contract COMMAND "${Python3_EXECUTABLE}"
@@ -235,9 +243,16 @@ if(TARGET test_line_service)
     target_include_directories(test_line_service BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
 endif()
 
+host_test(test_sonar_pack tests/test_sonar_pack.c)
 host_test(test_sonar_history tests/test_sonar_history.c)
 if(TARGET test_sonar_history)
     target_include_directories(test_sonar_history BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+endif()
+host_test(test_sonar_fault tests/test_sonar_fault.c)
+if(TARGET test_sonar_fault)
+    target_include_directories(test_sonar_fault BEFORE PRIVATE "${REPO}/tests/mtk_stubs")
+    target_compile_definitions(test_sonar_fault PRIVATE
+        SONAR_SERVICE_SOURCE="${REPO}/app_program/subsystem5/sonar_service.c")
 endif()
 host_test(test_sonar_service tests/test_sonar_service.c app_program/subsystem5/sonar_service.c)
 if(TARGET test_sonar_service)
@@ -319,6 +334,10 @@ foreach(test IN ITEMS test_imu_stream test_vehicle_task
         test_vehicle_network_task test_telemetry test_telemetry_log)
     target_sources(${test} PRIVATE
         "${REPO}/app_program/subsystem4/imu_hump_diag_print.c")
+    if(NOT "${test}" MATCHES "^test_(imu_stream|vehicle_task|vehicle_network_task)$")
+        target_sources(${test} PRIVATE
+            "${REPO}/app_program/subsystem4/imu_hump_diag.c")
+    endif()
     target_link_libraries(${test} PRIVATE m)
 endforeach()
 
@@ -419,6 +438,21 @@ host_test(test_app_startup tests/test_app_startup.c
     app_program/platform/app_startup.c)
 target_link_libraries(test_app_startup PRIVATE Threads::Threads)
 set_tests_properties(test_app_startup PROPERTIES TIMEOUT 10)
+
+# CR1 minimum-bit proof: every packed record, and its document tables.
+host_test(test_min_bit_proof tests/test_min_bit_proof.c
+    app_program/subsystem2/motion_pack.c app_program/vehicle/vehicle_pack.c
+    app_program/vehicle/vehicle_log.c
+    app_program/subsystem4/imu_hump.c app_program/subsystem4/imu_hump_diag.c
+    app_program/subsystem4/imu_safety_board.c)
+if(TARGET test_min_bit_proof)
+    target_link_libraries(test_min_bit_proof PRIVATE m)
+    target_include_directories(test_min_bit_proof BEFORE PRIVATE
+        "${REPO}/tests/mtk_stubs")
+    add_test(NAME test_min_bit_doc COMMAND python3
+        "${REPO}/tests/test_min_bit_doc.py" $<TARGET_FILE:test_min_bit_proof>
+        "${REPO}/docs/architecture/CR1_MIN_BIT_PROOF.md")
+endif()
 
 include("${CMAKE_CURRENT_SOURCE_DIR}/review_checks.cmake")
 include("${CMAKE_CURRENT_SOURCE_DIR}/shim_checks.cmake")

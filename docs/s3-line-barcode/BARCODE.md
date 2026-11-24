@@ -27,6 +27,9 @@ robot climbs a 10 mm hump. Do not lower it. The earlier proposed height
 comparison is ruled out; B1c must work at this mount. Floor contact and
 hump clearance remain mechanical risks, not decoder calibration steps.
 
+**2026-11-19:** GP28 moved to 2.5 mm; operator fixed the hump clearance
+mechanically. The 5.5 mm limit above is history.
+
 On B1 `70caef0`, the operator proved static contrast: white paper 151..170,
 floor 155..172, black bar 1334..1660. Black is HIGH; floor looks like white.
 The first contrast round was misplaced (the supposed white read about

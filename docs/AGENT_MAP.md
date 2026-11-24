@@ -18,7 +18,7 @@ record once. Use these topic directories before choosing a source entry below:
 
 | Directory | Scope |
 | --- | --- |
-| [release/](release/) | DEMO_FREEZE.md: frozen demo kernel (tag, build line, checks, robot evidence, known limits). |
+| [release/](release/) | DEMO_FREEZE.md: frozen demo kernel (tag, build line, checks, robot evidence, known limits). SUBMISSION_V2.md: second submission (tag, changes since v1, checks, limits). SUBMISSION_V3.md: third submission (barcode reader changes, demo letter map build line, checks, limits). DEMO_KERNEL_V2.md: demo-day kernel (freeze point, limits changes, letter map steps, robot evidence). |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
 | [architecture/](architecture/) | PROJECT_STATUS (areas, branches: main, mtk3-staging, mtk3-testing), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
 | [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
@@ -39,6 +39,9 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | --- | --- |
 | Documentation index | [docs/README.md](README.md) |
 | Demo freeze (2026-11-18) | [docs/release/DEMO_FREEZE.md](release/DEMO_FREEZE.md) — tag `demo-kernel-v1`, demo build line, checks and limits |
+| Submission v2 (2026-11-19) | [docs/release/SUBMISSION_V2.md](release/SUBMISSION_V2.md) — tag `submission-v2`, changes since `submission-v1`, checks and limits |
+| Submission v3 (2026-11-20) | [docs/release/SUBMISSION_V3.md](release/SUBMISSION_V3.md) — tag `submission-v3`, barcode reader changes, demo letter map build line, checks and limits |
+| Demo kernel v2 (2026-11-20) | [docs/release/DEMO_KERNEL_V2.md](release/DEMO_KERNEL_V2.md) — tags `demo-kernel-v2`, `submission-v3.1`; demo-day letter map steps |
 | Project status (read first) | [docs/architecture/PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — state, evidence and open items per area; branch layout and merge rules |
 | Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
@@ -118,6 +121,63 @@ commit that changed this section (header comments and file lists).
   [`motion_pack.c`](../app_program/subsystem2/motion_pack.c) define the
   60 B motion payload, published in a 64 B sequence/word board. Its sole
   writer is motion; decoded public APIs are unchanged.
+- [Vehicle A1](architecture/CR1_VEHICLE_A1.md) records the observation-only
+  board change (44 to 40 B), unchanged public API and wire, and software
+  evidence. [`vehicle_pack.h`](../app_program/vehicle/vehicle_pack.h) and
+  [`vehicle_pack.c`](../app_program/vehicle/vehicle_pack.c) define its nine-word
+  payload; [`test_vehicle_pack.c`](../tests/test_vehicle_pack.c) checks
+  ranges, invalid codes and interrupted publication. Vehicle is sole writer.
+- [Vehicle F](architecture/CR1_VEHICLE_F.md) records the diagnostic owner word.
+  [`vehicle_fault.h`](../app_program/vehicle/vehicle_fault.h) maps the current
+  IMU gate latch and non-motion/non-IMU shell FAULT to bits 4 and 6.
+  `vehicle_task.c` is the sole owner-board writer. The bounded reader is
+  `vehicle_fault_mask_try_read` in `fault_mask.h`; it is unavailable in
+  TEST/BENCH. [`test_vehicle_fault_value.c`](../tests/test_vehicle_fault_value.c),
+  [`test_vehicle_fault_owner.py`](../tests/test_vehicle_fault_owner.py) and
+  the real Vehicle network task tests check the mirror and ownership.
+  The common run exit in `hump_finish` publishes the final owner word and
+  calls `robot_health_faults_stop` before the run epochs become even.
+  Capture tests check one call per run and the shell/IMU stop bits.
+- [Sonar/obstacle A](architecture/CR1_SONAR_A.md) records the sonar board,
+  history and obstacle board change. [`sonar_pack.h`](../app_program/subsystem5/sonar_pack.h)
+  and [`obstacle_pack.h`](../app_program/vehicle/obstacle_pack.h) define the
+  layouts; [`test_sonar_pack.c`](../tests/test_sonar_pack.c) and
+  [`test_obstacle_pack.c`](../tests/test_obstacle_pack.c) check them.
+- [Telemetry A, faults and T110](architecture/CR1_TELEMETRY_A.md) records
+  the approved S1 storage work, diagnostic owner masks and 110 ms RUN state
+  deadline. [`test_telemetry_mode.c`](../tests/test_telemetry_mode.c) checks
+  eligibility, unchanged modes and the 20 ms polling model.
+  [`fault_mask.h`](../app_program/platform/fault_mask.h) defines the diagnostic
+  single-writer owner board and Health-only combiner interface;
+  [`test_fault_mask.c`](../tests/test_fault_mask.c) checks ownership, interrupted
+  reads, reserved bits and run-epoch resets. Publishers are separate changes.
+  [`telemetry_pack.h`](../app_program/subsystem1/telemetry_pack.h) defines
+  private retained RAM codecs, not MQTT formats;
+  [`test_telemetry_pack.c`](../tests/test_telemetry_pack.c) checks field ranges,
+  byte layouts, spare bits and unchanged outputs on invalid input.
+  [`network_pack.h`](../app_program/subsystem1/network_pack.h) defines private
+  Health and pending-sonar codecs; [`test_telemetry_optional_pack.c`](../tests/test_telemetry_optional_pack.c)
+  checks them and the INFO/scan codecs. [`value_bits.h`](../app_program/platform/value_bits.h)
+  provides local byte operations, not shared atomics.
+  [`robot_health.h`](../app_program/subsystem1/robot_health.h) exposes the
+  Vehicle-only STOP capture API and bounded fault snapshot reader. Health
+  alone combines owner words and freezes run history; [`wifi_stack_health_checks.c`](../tests/wifi_stack_health_checks.c)
+  tests the real Health path with fake owners and a fake STOP caller.
+- [IMU A](architecture/CR1_IMU_A.md) records the packed IMU hump, diag and
+  safety boards; [`imu_safety_board.h`](../app_program/subsystem4/imu_safety_board.h)
+  defines the safety board layout.
+- [KR1 row](architecture/CR1_KR1_ROW.md) records the 15 B RAM-log row;
+  [`kr1_row_pack.h`](../app_program/subsystem1/kr1_row_pack.h) packs it.
+  [`fault_pack.h`](../app_program/platform/fault_pack.h) packs the fault
+  snapshot and the STOP capture.
+- [Minimum-bit proof](architecture/CR1_MIN_BIT_PROOF.md) proves each packed
+  field width against its valid range. [`test_min_bit_proof.c`](../tests/test_min_bit_proof.c)
+  probes the real pack code from [`min_bit_records.inc`](../tests/min_bit_records.inc);
+  [`test_min_bit_doc.py`](../tests/test_min_bit_doc.py) keeps the doc tables equal to its output.
+- [Barcode A](architecture/CR1_BARCODE_A.md) records the private barcode
+  evidence change. [`barcode_evidence_pack.h`](../app_program/subsystem3/barcode_evidence_pack.h)
+  defines the layouts; [`test_barcode_evidence_pack.c`](../tests/test_barcode_evidence_pack.c)
+  checks them.
 - [`test_motion_pack.c`](../tests/test_motion_pack.c) checks ranges,
   reserved codes and interrupted compact-board reads.
 - [`ram_report.py`](../scripts/ram_report.py) reads linked RAM sections;
@@ -356,6 +416,8 @@ vehicle task described below.
   [`test_barcode_fail_make.py`](../tests/test_barcode_fail_make.py) and the
   capture-enabled [`feed fixture`](../tests/test_barcode_live_feed.c).
 
+- [Blip grace](s3-line-barcode/BLIP_GRACE.md) keeps the leading white and a held
+  LIVE record through a SEARCH blip shorter than 200 ms.
 - [Size-tolerant course window reader](s3-line-barcode/LIVE_WINDOW_READER.md):
   [`barcode_window.h`](../app_program/subsystem3/barcode_window.h) and
   [`barcode_window.c`](../app_program/subsystem3/barcode_window.c) provide

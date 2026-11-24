@@ -17,6 +17,7 @@
 #include "lwip/ip_addr.h"
 #include "robot_network.h"
 #include "network_queue.h"
+#include "network_pack.h"
 #include "../subsystem3/barcode_attempt.h"
 #include "robot_health.h"
 #include "telemetry.h"
@@ -44,6 +45,13 @@
 #define TOPIC_SUMMARY     "robot/summary"
 #define QOS_AT_LEAST_ONCE 1u
 #define RETAIN_ON         1u
+static fault_mask_board_t network_fault_board; /* Wi-Fi sole writer. */
+
+bool robot_network_fault_mask_try_read(uint32_t *out)
+{
+    return fault_mask_try_read(&network_fault_board,FAULT_OWNER_NETWORK,out);
+}
+
 static mqtt_client_t *client;
 static ip_addr_t broker;
 static bool configured;
@@ -74,7 +82,8 @@ static rm_heartbeat_t health_cache = {.stack_min_free = RM_NO_DATA_U16,
 static bool health_present;
 static rm_event_t pending_event;
 static bool have_event;
-static rm_sonar_t pending_sonar;
+static network_sonar_packed_t pending_sonar;
+_Static_assert(sizeof(pending_sonar) == 32u, "Packed pending sonar size");
 static bool have_sonar;
 static uint32_t obstacle_cursor;
 static rm_obstacle_t pending_obstacle;
@@ -769,25 +778,31 @@ static void service(uint32_t now)
          ++n) {
         if (!have_sonar) {
             uint32_t missed = 0u;
+            rm_sonar_t native;
             const int er =
-                robot_network_sonar(&sonar_cursor, &pending_sonar, &missed);
+                robot_network_sonar(&sonar_cursor, &native, &missed);
             metrics_sonar_missed_add(missed);
             if (er == E_TMOUT) {
                 robot_network_busy(ROBOT_BOARD_SONAR);
             }
-            have_sonar = er >= E_OK;
+            have_sonar = er >= E_OK && network_sonar_pack(&pending_sonar, &native);
         }
         if (!have_sonar) {
             break;
         }
+        rm_sonar_t native;
+        if (!network_sonar_unpack(&native, &pending_sonar)) {
+            have_sonar = false;
+            break;
+        }
         uint8_t bytes[RM_SONAR_SIZE];
-        pending_sonar.boot_id = boot_id_get();
-        rm_pack_sonar(bytes, &pending_sonar);
+        native.boot_id = boot_id_get();
+        rm_pack_sonar(bytes, &native);
         if (!publish("robot/sonar", bytes, sizeof(bytes))) {
             --budget;
             break;
         }
-        metrics_sonar_sequence_set(pending_sonar.history_sequence);
+        metrics_sonar_sequence_set(native.history_sequence);
         have_sonar = false;
         --budget;
     }
@@ -853,6 +868,11 @@ void cyw43_utk_app_poll(void)
             }
         }
     }
+    T_CYW43_UTK_STATUS fault_status;
+    cyw43_utk_get_status(&fault_status);
+    uint32_t faults=fault_status.link_status==3?0u:FAULT_WIFI_LINK_DOWN;
+    if (client==0 || !mqtt_client_is_connected(client)) faults|=FAULT_MQTT_DISCONNECTED;
+    (void)fault_mask_publish(&network_fault_board,FAULT_OWNER_NETWORK,faults);
     const uint32_t elapsed = drv_time_us() - started;
     metrics_hook_max_update(elapsed);
 }

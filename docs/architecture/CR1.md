@@ -109,6 +109,47 @@ A1/B1 hardware gate: **PASS 2026-11-10**, with the pre-existing idle-stack
 margin exception below. The later idle-stack increase is not yet retested
 on hardware. Main's review/merge and further CR1 work are still pending.
 
+## Module round 2026-11-18
+
+Baseline: `7350da0` (demo kernel `demo-kernel-v1` plus the detour
+lost-result fix), demo build line, public example settings. The operator
+approved category A for each module below. Category B is not approved.
+Integration branch: `mtk3-cr1`. Each module has its own record:
+
+| Module | Record | Category A | Static RAM (alone) |
+| --- | --- | --- | --- |
+| Sonar/obstacle | [CR1_SONAR_A.md](CR1_SONAR_A.md) | sonar board 44 to 40 B, history 704 to 640 B, obstacle board 36 to 28 B | 241228 to 241148 B |
+| Vehicle | [CR1_VEHICLE_A1.md](CR1_VEHICLE_A1.md) | vehicle board 44 to 40 B | 241228 to 241224 B |
+| Barcode (private evidence) | [CR1_BARCODE_A.md](CR1_BARCODE_A.md) | fail-capture edges 1536 to 1392 B per slot, barcode frame 104 to 92 B; capacity and precision unchanged | 241228 to 240892 B |
+| Telemetry T110 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md#t110) | MQTT `robot/state` RUN deadline 200 to 110 ms (operator requirement, option A; expected gap about 120 ms with the 20 ms Wi-Fi poll) | no change |
+| Fault mask F1 + sonar bit 5 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md), [CR1_SONAR_F.md](CR1_SONAR_F.md) | shared single-writer fault mask interface; sonar owner word (bit 5); a cost, not a saving | +8 B |
+| Telemetry A (events, index, scan, info, health, sonar copy) | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) | run events 512 x 12 to 9 B, log index 24 to 20 B, scan 576 to 528 B, info 108 to 104 B, health board 120 to 112 B, sonar copy 40 to 32 B | -1608 B |
+| Fault mask F (vehicle bits 4/6, STOP capture, combiner, USB output) | [CR1_VEHICLE_F.md](CR1_VEHICLE_F.md), [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) | one writer per owner word; Health is the only combiner; run mask freezes at STOP; USB dump shows now/run masks; no MQTT change; a cost | +104 B total |
+
+All three merged (`db13b39`): static RAM 241228 to 240808 B (-420 B),
+subsystem3 36501 to 36145 B, subsystem5 1013 to 945 B, vehicle 2516 to
+2504 B. RAM code 21004 to 21212 B (+208 B, barcode pack code in the LINE
+task). 684 host tests, 0 warnings, RAM_PROOF 79/79. Queue and MQTT sizes
+do not change. Target timing and whole-stack checks are not run.
+The first merge (`ea5fae6`, sonar/obstacle and vehicle only) gave 241144 B.
+
+After T110, F1/F1b and the sonar owner word (`a3a7578`): static RAM
+240816 B, subsystem5 953 B, 686 host tests, 0 warnings, RAM_PROOF 79/79
+(21212 B). All robot MQTT payloads are binary (audit in
+[CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md)).
+
+Final CR1 round (`mtk3-cr1` after merge of `bea07b5`): static RAM
+241228 to 239304 B (-1924 B net: -2028 B packing, +104 B fault mask).
+subsystem1 80402 to 78882 B, subsystem3 36501 to 36145 B, subsystem5
+1013 to 953 B, vehicle 2516 to 2512 B. ELF text 468260 B. 698 host
+tests, Clang ASan/UBSan pass, 0 warnings, RAM_PROOF 79/79 (21212 B).
+MQTT message sizes do not change. Robot timing at 110 ms is not
+measured yet.
+
+Proof of minimum-bit representation, field by field, with accepted
+reasons and open gaps: [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md). The older baseline and motion evidence
+below keep their original scope.
+
 ## Shared-access design rule
 
 Dual-core operation is not planned now. A later move, first possibly IMU
@@ -578,11 +619,11 @@ separately. A MQTT wire change requires a separate decision.
 | Module | RAM after | Message after | Software | Hardware/timing |
 | --- | --- | --- | --- | --- |
 | Motion A1 | 190664 B total | Board 64 B | Passed | PASS, idle note |
-| Sonar/obstacle | Pending | Pending | Not started | Not run |
+| Sonar/obstacle | 241148 B alone; boards 40/640/28 B | Unchanged | Passed | Not run |
 | IMU | Pending | Pending | Not started | Not run |
 | Telemetry/faults | Pending | Pending | Not started | Not run |
-| Line/barcode | Pending | Pending | Not started | Not run |
-| Vehicle | Pending | Pending | Not started | Not run |
+| Line/barcode | Barcode evidence: 240892 B alone; line path not changed | Unchanged | Passed (barcode) | Not run |
+| Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | Not run |
 
 Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
 objects, discarded sections, zero-size sections, flash exclusion, padding

@@ -5,6 +5,7 @@
  * either the reader sees ACTIVE and skips, or writer sees the hazard and
  * skips. Only aligned atomic loads/stores, no RP2040 libatomic/CAS. */
 #include <math.h>
+#include "barcode_evidence_pack.h"
 #ifndef BCFC_FAILED_SLOTS
 #define BCFC_FAILED_SLOTS 2u
 #endif
@@ -16,23 +17,18 @@ _Static_assert(BCFC_FAILED_SLOTS == 1u || BCFC_FAILED_SLOTS == 2u,
 #define BCFC_PRE 64u
 #define BCFC_DIV_US 4000u
 /* State: FREE0, ACTIVE1, FROZEN2. LINE is the only state writer. */
-typedef struct {
-    uint32_t us, motor_us, left, right;
-    float mm;
-    uint16_t raw;
-    uint8_t black, phase;
-} bcfc_edge_t;
+typedef bcep_edge_t bcfc_edge_t;
 typedef struct { uint32_t us; uint16_t raw, flags; } bcfc_adc_t;
 typedef struct {
     uint32_t state;
-    barcode_live_frame_t frame;
+    bcep_frame_t frame;
     uint32_t epoch, pre_head, pre_count, adc_count, edge_count;
     uint32_t adc_total, edge_total, last_adc_us, elements, window_reason;
     uint32_t enable_us, reset_us, reset_reason;
     float leading_mm, bias, space, first_mm, last_mm;
     uint16_t rise, fall;
     bool bound, closed, sampled;
-    bcfc_edge_t edges[BCFC_EDGES];
+    uint32_t edges[BCEP_EDGE_WORDS];
     bcfc_adc_t adc[BCFC_ADC];
 } bcfc_slot_t;
 static bcfc_slot_t bcfc_slots[BCFC_SLOTS];
@@ -47,6 +43,7 @@ static bool bcfc_enabled;
 static uint32_t bcfc_printed;
 _Static_assert(sizeof(bcfc_edge_t)==24u && sizeof(bcfc_adc_t)==8u,
                "Capture row ABI");
+_Static_assert(sizeof(bcfc_slot_t)==5660u, "CR1 capture slot; capacity unchanged");
 _Static_assert(sizeof(bcfc_slots) + 32u <= 18u*1024u,
                "Failed capture RAM ceiling");
 
@@ -63,7 +60,7 @@ static bcfc_slot_t *bcfc_work(void)
         }
         /* Reset metadata only; bounded records are never copied/cleared. */
         bcfc_slot_t *s=&bcfc_slots[i];
-        s->frame=(barcode_live_frame_t){0};s->epoch=bcfc_run;
+        s->frame=(bcep_frame_t){{0}};s->epoch=bcfc_run;
         s->pre_head=0u;s->pre_count=0u;s->adc_count=0u;s->edge_count=0u;
         s->adc_total=0u;s->edge_total=0u;s->elements=0u;s->window_reason=0u;
         s->bound=false;s->closed=false;s->sampled=false;
@@ -99,9 +96,10 @@ static void bcfc_edge(bcfc_slot_t *s, const barcode_window_t *w,
 {
     ++s->edge_total;
     if (s->edge_count==BCFC_EDGES) return;
-    s->edges[s->edge_count++]=(bcfc_edge_t){.us=a.us,.motor_us=upper->us,
+    const bcfc_edge_t edge={.us=a.us,.motor_us=upper->us,
         .left=upper->left,.right=upper->right,.mm=mm,.raw=a.raw,
         .black=black?1u:0u,.phase=w->phase};
+    if (bcep_edge_pack(s->edges,(unsigned int)s->edge_count,&edge)) ++s->edge_count;
 }
 
 void bcfc_observe(const barcode_window_t *w, barcode_window_adc_t a,
@@ -134,7 +132,7 @@ void bcfc_start(const barcode_window_t *w, barcode_window_adc_t a,
 {
     bcfc_slot_t *s=bcfc_work();
     if (!s || s->closed || s->bound) return;
-    s->bound=true;s->frame.start_us=w->start_us;
+    s->bound=true;bcep_put(s->frame.words,BCEP_F_START,32u,w->start_us);
     s->leading_mm=w->leading_mm;s->rise=w->rise;s->fall=w->fall;
     s->first_mm=mm;s->last_mm=mm;
     s->enable_us=bcfc_enable_us;s->reset_us=bcfc_reset_us;
@@ -179,7 +177,8 @@ void bcfc_terminal(const barcode_live_frame_t *frame)
 {
     if (frame->record.epoch!=bcfc_run || bcfc_saved>=BCFC_FAILED_SLOTS) return;
     bcfc_slot_t *s=bcfc_active>=0 ? &bcfc_slots[bcfc_active] : NULL;
-    if (!s || !s->bound || s->frame.start_us!=frame->start_us) {
+    if (!s || !s->bound ||
+        bcep_get(s->frame.words,BCEP_F_START,32u)!=frame->start_us) {
         if (frame->reason!=BW_OK)
             __atomic_store_n(&bcfc_missed,
                 __atomic_load_n(&bcfc_missed,__ATOMIC_SEQ_CST)+1u,__ATOMIC_SEQ_CST);
@@ -189,7 +188,12 @@ void bcfc_terminal(const barcode_live_frame_t *frame)
     if (frame->reason==BW_OK) {
         __atomic_store_n(&s->state,0u,__ATOMIC_RELEASE);return;
     }
-    s->frame=*frame;++bcfc_saved;
+    if (!bcep_frame_pack(&s->frame,frame)) {
+        __atomic_store_n(&bcfc_missed,
+            __atomic_load_n(&bcfc_missed,__ATOMIC_SEQ_CST)+1u,__ATOMIC_SEQ_CST);
+        __atomic_store_n(&s->state,0u,__ATOMIC_RELEASE);return;
+    }
+    ++bcfc_saved;
     __atomic_store_n(&s->state,2u,__ATOMIC_RELEASE);
 }
 
@@ -204,7 +208,9 @@ static void bcfc_print(unsigned int index, bool saved_ref)
 {
     if ((bcfc_printed & (1u<<index))!=0u) return;
     bcfc_slot_t *s=&bcfc_slots[index];
-    const barcode_live_frame_t *f=&s->frame;
+    barcode_live_frame_t decoded_frame;
+    if (!bcep_frame_unpack(&decoded_frame,&s->frame)) return;
+    const barcode_live_frame_t *f=&decoded_frame;
     if (saved_ref)
         tm_printf((UB *)"[BC_FAIL_REF] epoch %lu index %lu start_us %lu terminal_us %lu reason %lu\n",
             (unsigned long)f->record.epoch,(unsigned long)f->index,
@@ -233,7 +239,9 @@ static void bcfc_print(unsigned int index, bool saved_ref)
         (unsigned long)s->enable_us,(unsigned long)s->reset_us,
         (unsigned long)s->reset_reason);
     for (uint32_t i=0u;i<s->edge_count;++i) {
-        const bcfc_edge_t *e=&s->edges[i];
+        bcfc_edge_t decoded_edge;
+        if (!bcep_edge_unpack(&decoded_edge,s->edges,(unsigned int)i)) continue;
+        const bcfc_edge_t *e=&decoded_edge;
         tm_printf((UB *)"[BC_FAIL_EDGE] epoch %lu index %lu row %lu adc_us %lu "
             "raw %u black %u phase %u mm_cmm %ld bracket_us %lu counts %ld/%ld\n",
             (unsigned long)f->record.epoch,(unsigned long)f->index,(unsigned long)i,
@@ -258,7 +266,8 @@ void bcfc_dump(uint32_t epoch, uint32_t index)
     for (unsigned int i=0u;i<BCFC_SLOTS;++i) {
         __atomic_store_n(&bcfc_reading,i+1u,__ATOMIC_SEQ_CST);
         if (__atomic_load_n(&bcfc_slots[i].state,__ATOMIC_SEQ_CST)==2u &&
-            bcfc_slots[i].frame.record.epoch==epoch && bcfc_slots[i].frame.index==index)
+            bcep_get(bcfc_slots[i].frame.words,0u,32u)==epoch &&
+            bcep_get(bcfc_slots[i].frame.words,BCEP_F_INDEX,32u)==index)
             bcfc_print(i,false);
         __atomic_store_n(&bcfc_reading,0u,__ATOMIC_SEQ_CST);
     }

@@ -106,7 +106,9 @@ static uint16_t signal(unsigned int ms)
         for (unsigned int i = 0u; i < 9u; ++i) {
             const float width = (mask & (0x100u >> i)) ? 17.5f : 5.8f;
             if (mm < at + width) {
-                return (element & 1u) ? 160u : 1000u;
+                /* 700: 5.5 mm bar level (fixed-edge mode; 450..570 over
+                 * white measured). Bars >= white + 800 use midpoint edges. */
+                return (element & 1u) ? 160u : 700u;
             }
             at += width;
             ++element;

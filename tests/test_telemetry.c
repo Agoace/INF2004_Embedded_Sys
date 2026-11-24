@@ -7,12 +7,42 @@
 #include "../app_program/app.h"
 #include "../app_program/subsystem1/telemetry.h"
 #include "../app_program/platform/run_timing.h"
+#include "../app_program/platform/fault_mask.h"
+uint32_t rt_epoch(void) { return 0u; }
+static int fake_fault_result=E_TMOUT;
+static unsigned int fault_pending_lines,fault_value_lines;
+int robot_health_faults_try_read(fault_mask_snapshot_t *,uint32_t *) __attribute__((weak));
+int robot_health_faults_try_read(fault_mask_snapshot_t *out,uint32_t *at)
+{
+    if (fake_fault_result!=E_OK) return fake_fault_result;
+    *out=(fault_mask_snapshot_t){.now=FAULT_WIFI_LINK_DOWN,
+        .run=FAULT_IMU_SAFETY,.valid=FAULT_MASK_ALL,.epoch=1u};
+    *at=1234000u;return E_OK;
+}
+static uint32_t fake_stop_refused;
+static unsigned int stop_refused_lines;
+uint32_t robot_health_faults_stop_refused(void) __attribute__((weak));
+uint32_t robot_health_faults_stop_refused(void) { return fake_stop_refused; }
 #include "../app_program/vehicle/vehicle_task.h"
 #include "../app_program/subsystem4/imu_settings.h"
 static FP entry;static jmp_buf end;
 static telemetry_message_t queue[64];static unsigned int head,tail;
 #define irq_off test_smp_irq_mask
 static bool full;static unsigned int kr,ve,bytes,reports;
+/* KR hex bytes exactly as the USB dump prints them (ring of 64 rows). */
+static uint8_t dumped[64u*TELEMETRY_BYTES];
+/* Valid KR1 time field: rows are stored only within 8192 ticks of their index. */
+/* Two dense rows: every kept KR1 bit is 1 or patterned. Bits 107..108 (echo
+ * 14..15) and 125..127 (flags 1..3) are 0, as every producer makes them. */
+static const uint8_t kr_rich[2][TELEMETRY_BYTES]={
+    {0x12u,0x00u,0xffu,0xffu,0xffu,0xffu,0xffu,0xffu,
+     0xffu,0xffu,0xffu,0xffu,0xffu,0xe7u,0xffu,0x1fu},
+    {0x34u,0x00u,0x5au,0xa5u,0x3cu,0xc3u,0x96u,0x69u,
+     0x0fu,0xf0u,0x81u,0x7eu,0x24u,0x42u,0xdbu,0x0bu}};
+static void row_time(telemetry_message_t *m,uint32_t ticks)
+{
+    m->data.row[0]=(uint8_t)ticks;m->data.row[1]=(uint8_t)(ticks>>8);
+}
 unsigned int source_dumps;
 static unsigned int source_lines,source_count_lines,scan_lines,scan_omissions;
 static int hump_result=E_NOEXS;static unsigned int hump_lines,hump_none,diag_lines,junction_lines;
@@ -53,12 +83,28 @@ int vehicle_hump_try_read(imu_hump_summary_t *out) {
     if (hump_result==E_OK) *out=(imu_hump_summary_t){.peak_01mm=108u,.count=2u,.flags=0x05u,.gated=3u};
     return hump_result;
 }
-int vehicle_hump_diag_try_read(imu_hump_diag_report_t *out) {
-    if (hump_result==E_OK) *out=(imu_hump_diag_report_t){.valid=true};
+int vehicle_hump_diag_try_read(imu_hump_diag_board_t *out) {
+    if (hump_result==E_OK) {
+        const imu_hump_diag_report_t r={.valid=true};
+        imu_hump_diag_pack(out,&r);
+    }
     return hump_result;
 }
 int tm_printf(const UB *fmt,...) {
     va_list a;va_start(a,fmt);
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] pending",20u)) ++fault_pending_lines;
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] stop_refused",25u)) {
+        assert(va_arg(a,unsigned long)==fake_stop_refused && fake_stop_refused!=0u);
+        ++stop_refused_lines;
+    }
+    if (!strncmp((const char *)fmt,"[FAULT_MASK] now",16u)) {
+        assert(va_arg(a,unsigned long)==FAULT_WIFI_LINK_DOWN);
+        assert(va_arg(a,unsigned long)==FAULT_IMU_SAFETY);
+        assert(va_arg(a,unsigned long)==FAULT_MASK_ALL);
+        assert(va_arg(a,unsigned long)==1u);
+        assert(va_arg(a,unsigned long)==1234000u);
+        ++fault_value_lines;
+    }
     if (!strncmp((const char *)fmt,"[JUNCTION]",10u)) {
         assert(!strcmp(va_arg(a,const char *),"FAKE"));
         assert(!strcmp(va_arg(a,const char *),"B"));++junction_lines;
@@ -99,6 +145,7 @@ int tm_printf(const UB *fmt,...) {
     }
     if (!strcmp((const char *)fmt,"%02x")) {
         const unsigned int v=va_arg(a,unsigned int);
+        dumped[bytes%sizeof(dumped)]=(uint8_t)v;
         if (bytes==0u) assert(v==0x12u);
         if (bytes==16u) assert(v==0x34u);
         ++bytes;
@@ -112,12 +159,14 @@ int main(void) {
     assert(telemetry_init()==E_OK && telemetry_start()==E_OK && telemetry_start()==E_OBJ && telemetry_running());
     assert(telemetry_send(&m)==E_OK);pump();
     m.kind=TELEMETRY_ROW;full=true;assert(telemetry_send(&m)==E_TMOUT);full=false;
-    for (unsigned int i=0u;i<TELEMETRY_ROWS+1u;++i) { assert(telemetry_send(&m)==E_OK);pump(); }
+    for (unsigned int i=0u;i<TELEMETRY_ROWS+1u;++i) {
+        row_time(&m,i);assert(telemetry_send(&m)==E_OK);pump();
+    }
     telemetry_stats_t s;telemetry_stats(&s);
     assert(s.rows==TELEMETRY_ROWS && s.storage_full && s.lost==2u);
     m.kind=TELEMETRY_BEGIN;assert(telemetry_send(&m)==E_OK);pump();
-    m.kind=TELEMETRY_ROW;m.data.row[0]=0x12u;assert(telemetry_send(&m)==E_OK);
-    m.data.row[0]=0x34u;assert(telemetry_send(&m)==E_OK);
+    m.kind=TELEMETRY_ROW;memcpy(m.data.row,kr_rich[0],TELEMETRY_BYTES);assert(telemetry_send(&m)==E_OK);
+    memcpy(m.data.row,kr_rich[1],TELEMETRY_BYTES);assert(telemetry_send(&m)==E_OK);
     m.data.row[0]=0xffu; /* Value copy, not a retained producer pointer. */
     m.kind=TELEMETRY_EVENT;m.data.event=(telemetry_event_t){.ms=10u,.word=1u,.kind=2u};
     assert(telemetry_send(&m)==E_OK);pump();
@@ -125,11 +174,19 @@ int main(void) {
     assert(telemetry_send(&m)==E_OK);telemetry_stats(&s);assert(s.busy);
     assert(telemetry_send(&m)==E_OBJ);pump();telemetry_stats(&s);
     assert(!s.busy && s.rows==2u && s.events==1u && kr==2u && ve==1u && bytes==32u && reports==2u);
+    /* USB KR text is byte-identical to the admitted 16-byte rows. */
+    assert(memcmp(dumped,kr_rich,sizeof(kr_rich))==0);
+    assert(fault_pending_lines==1u && fault_value_lines==0u);
+    assert(stop_refused_lines==0u); /* zero count: FAULT_MASK output unchanged */
+    fake_fault_result=E_OK; /* Later GP20 dump: Health has sampled STOP. */
+    fake_stop_refused=3u;
     assert(timelines==1u);
     assert(hump_none==1u && hump_lines==0u);
     /* A finished run adds one hump line; KR1 rows and VE records unchanged. */
     hump_result=E_OK;m.kind=TELEMETRY_DUMP;assert(telemetry_send(&m)==E_OK);pump();
     assert(hump_none==1u && hump_lines==1u && diag_lines==1u && kr==4u && ve==2u);
+    assert(fault_pending_lines==1u && fault_value_lines==1u);
+    assert(stop_refused_lines==1u);fake_stop_refused=0u;
     assert(junction_lines==0u);
     m.kind=TELEMETRY_JUNCTION;
     m.data.junction=(ja_result_t){.command=JA_RIGHT,.phase=JA_DONE,.source=1u};

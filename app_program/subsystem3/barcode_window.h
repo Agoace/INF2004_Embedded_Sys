@@ -6,7 +6,13 @@
 #define BW_ADC_CAPACITY 64u
 #define BW_MOTOR_CAPACITY 8u
 #define BW_ELEMENTS 29u
+#define BW_LEVELS 17u /* 0..4096 counts in 256-count steps */
+#define BW_PEAKS 3u
 #define BW_STEP_MAX 32u
+
+/* Leading white before the first bar. Operator 2026-11-19: 40 -> 30 mm.
+ * 30 mm accepts the known FC2 false start (see test_barcode_quiet_real). */
+#define QUIET_MIN_MM 30.0f
 
 typedef enum {
     BW_WAIT = 0, BW_OK, BW_CALIBRATION, BW_LOSS, BW_MOTION,
@@ -59,6 +65,7 @@ typedef struct {
     uint8_t direction; /* 1 print order, 2 reverse print; motion is forward. */
     uint8_t mapped_action; /* Observation only: 0/1/2/3/4 = NONE/L/R/S/U. */
     bool accepted;
+    bool held; /* Accepted from the held letter; end star/tail not proven. */
 } barcode_window_result_t;
 
 typedef struct {
@@ -105,7 +112,60 @@ typedef struct {
     bool white_started;
     bool transitioning;
     bool black;
+    /* WINDOW local-midpoint edges (see barcode_window.c). */
+    bool started;        /* The first edge position is set. */
+    bool closing;        /* Last bar: wait for its falling midpoint. */
+    bool mode_set;       /* The first bar chose the edge mode. */
+    bool mid;            /* Local-midpoint edges (else fixed levels). */
+    uint8_t bars;        /* Bars detected in this window. */
+    uint8_t shifts;      /* Faint first marks dropped. */
+    uint16_t prev_raw;   /* Previous processed sample. */
+    uint16_t run_peak;   /* Highest raw in the current black run. */
+    uint16_t run_valley; /* Lowest raw in the current white run. */
+    uint16_t ref_peak;   /* Peak of the last black run. */
+    uint16_t ref_valley; /* Valley of the last white run (floor white). */
+    uint16_t bar_peak[BW_PEAKS];
+    float prev_mm;
+    float det_mm;        /* Position of the last detected edge. */
+    uint32_t fall_set, rise_set;
+    float fall_mm[BW_LEVELS]; /* First crossing of level b*256 counts. */
+    float rise_mm[BW_LEVELS];
+    /* Blip grace: SEEK ignores the samples from freeze_us (to thaw_us);
+     * the white run, mean and count wait. Frozen travel is not white. */
+    uint32_t freeze_us;
+    uint32_t thaw_us;
+    float seek_mm; /* Last SEEK sample position; frozen travel offset. */
+    bool frozen;   /* Open interval: no thaw yet. */
+    bool thaw;     /* Closed interval waiting for its first later sample. */
+    uint8_t white_lost; /* BW_WHITE_LOST_*; the owner reads and clears. */
+    /* Held letter (operator 2026-11-20): parts 1..19 passed the letter
+     * checks; a later failure accepts this letter instead of rejecting. */
+    bool held;
+    bool held_tried; /* Midpoint mode: provisional part 19 was tested. */
+    char held_letter;
+    uint32_t held_edge_us;
+    uint32_t held_frame_us;
+    uint32_t held_frame_left;
+    uint32_t held_frame_right;
 } barcode_window_t;
+
+#define BW_WHITE_LOST_BLACK 0x01u /* Unadmitted ink ended a white run. */
+#define BW_WHITE_LOST_OTHER 0x02u /* Loss, motion or grey ended it. */
+#define BW_WHITE_LOST_BLIP 0x04u  /* Not white just after a blip grace. */
+/* Blip grace owner calls. freeze: ADC samples at or after us wait.
+ * thaw: samples from us on count again. Only SEEK uses them. */
+void barcode_window_freeze(barcode_window_t *state, uint32_t us);
+void barcode_window_thaw(barcode_window_t *state, uint32_t us);
+/* True in SEEK (before the first bar; 1u is SEEK in the .c). */
+static inline bool barcode_window_seeking(const barcode_window_t *s)
+{
+    return s->phase == 1u;
+}
+/* True when a SEEK white run is in progress. */
+static inline bool barcode_window_white_run(const barcode_window_t *s)
+{
+    return barcode_window_seeking(s) && s->white_started;
+}
 
 /* Valid calibration/configuration is required. No old samples survive begin.
  * All methods must be called by ONE task or externally serialized owner.
