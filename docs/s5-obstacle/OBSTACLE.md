@@ -175,7 +175,7 @@ back-off, return toward the line, then alignment. Main settings are:
 | Back-off | Fixed 25° |
 | Straight-length setting / sweep distance | 350 (2026-11-13, with the trim; was 400) / 150 mm |
 | First straight | wall triangle: (sensor-ahead + obstacle + back) / cos(turn away) + 50 mm, at most 700 mm |
-| Turn-away trim | back to the smallest heading that passes the last seen corner by 110 mm (half width 80 + margin 30) |
+| Turn-away trim | smallest heading passing the corner by 110 mm (half width 80 + margin 30); S2 uses the scan free-ray corner for an edge seen below the minimum and can turn further away |
 | Margin / sensor-ahead / line-ahead | 30 / 65 / 123 mm |
 | Seen range / turn step | 400 mm / 5° |
 | Away / toward limits | 90 / 180° (toward ≥ away + return heading) |
@@ -245,7 +245,9 @@ with the LAST result). Robot result: not run.
 
 #### Minimum turn before LOST
 
-Operator approved (fix B, 2026-11-19), branch `mtk3-detour-minturn`.
+Operator approved (fix B, 2026-11-19), tag `archive/mtk3-detour-minturn`.
+Merged into staging and the current demo. The normal path has robot
+results; the S2 early-edge path remains host-tested only (see Results).
 
 Problem (boot `e7b34e07`, image 15, FAILED `TOO_NEAR`). The obstacle had a
 wide flat face. The two sweep pings before the wheels moved saw that face
@@ -349,7 +351,8 @@ today, not an S2 effect.
 
 Limit. The free-ray corner is a bound from the scan (the first free ray
 at the free step), not a measured corner. A corner beyond that ray
-(a deeper box side) is not modelled. Robot result: not run.
+(a deeper box side) is not modelled. The S2 early-edge path has not been
+observed on the robot; later normal-path detours do not validate it.
 
 Build evidence (fix B). Base `871c806`, fix `f48f856`. Demo MQTT image
 (the CR1 demo build line), Arm GCC, `scripts/ram_report.py`:
@@ -427,6 +430,8 @@ Sources: [`obstacle.c`](../../app_program/subsystem5/obstacle.c),
 | Reattempt outcome | Free side in 5/5 blocked runs at 329–435 mm; no contact; event/attempt/summary counts correct; no 3 s timeout observed |
 | DETOUR after reattempt | Four runs stalled or were operator-stopped after leaving the two-tile area; not a full detour PASS |
 | Host module mutation check | 45/45 caught; reverse timeout/stop/ESTOP and three-blocked-profile bounds covered by host tests |
+| Image 30 run 6, 2026-11-20 | Two detours, 2/2 DONE_LINE; normal path only, not robot acceptance of the S2 early-edge path |
+| Demo day image 31, 2026-11-24 | Detours ended DONE_NO_LINE then line search; operator reported "it works"; see [the demo record](../release/DEMO_KERNEL_V2.md) |
 
 ## Limits: the wide-cone finding
 
@@ -454,7 +459,7 @@ and simulation; do not link both driver owners into the robot.
 
 | Signal | Connection / owner |
 | --- | --- |
-| Echo | GP2, both edges on shared core-0 GPIO13 dispatcher, IRQ level 1 |
+| Echo | GP2, both edges on shared core-0 GPIO13 dispatcher; IRQ level 1 requested, 0 observed ([F-NVIC](../kernel/KERNEL.md#interrupt-priorities-f-nvic)) |
 | Trigger | GP3, 10 us HIGH pulse |
 | Supply | Recorded HC-SR04+ setup at 3.3 V; no divider in this setup |
 | Servo | Motion-owned PWM; sonar does not move it or add settle delays |

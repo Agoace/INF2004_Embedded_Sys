@@ -2,7 +2,16 @@
 
 | ID | Check | Pass condition | Status |
 | --- | --- | --- | --- |
-| R5 | Same 90 s track and box procedure as bare-metal R4, with the kernel robot image | Line followed; two detours end DONE_LINE or DONE_NO_LINE followed by successful SEARCH; no contact, no motor/sensor faults, no lost samples/wakes, no USB dump loss | Not run (no track access; see M1/M2 below) |
+| R5 | Original 90 s track and box procedure as bare-metal R4, with the kernel robot image | Line followed; two detours end DONE_LINE or DONE_NO_LINE followed by successful SEARCH; no contact, no motor/sensor faults, no lost samples/wakes, no USB dump loss | Later full-course runs exist; see the current-state note below. No separate complete R5 checklist pass claimed. |
+
+Current (2026-11-24): image 30 run 6 (2026-11-20) ran 122 s / 11.5 m,
+read 4/4 barcodes, completed 2/2 detours DONE_LINE and reported a hump.
+Demo-day image 31 ran 119 s / 12.5 m, read M and turned LEFT; detours ended
+DONE_NO_LINE then line search. The operator reported "it works". See
+[the demo record](../../docs/release/DEMO_KERNEL_V2.md) for evidence and limits.
+These are not repeats of every R5/STEP 8 gate. The current demo limit is
+300 s; GP20 stores only the first 90 s and full storage does not stop it.
+The procedure and early results below retain their original scope.
 
 ## Preconditions and procedure
 
@@ -30,9 +39,10 @@
 
 ## Results
 
-No R5 hardware run has been made; M1 and M2 below are basic checks on two tiles. Save the log and operator observations
-with the tested commit before changing this status. The kernel phase is
-not the bare-metal phase-9 schedule; evaluate stop distance and task/ADC
+At the 2026-11-06 bring-up, no R5 track run had been made; M1 and M2
+below were basic checks on two tiles. Later full-course runs are linked
+above. Keep the tested commit, log and operator observations with each result.
+The kernel phase is not the bare-metal phase-9 schedule; evaluate stop distance and task/ADC
 jitter on hardware, not from host test duration.
 
 ## Basic checks on two tiles: 2026-11-06
@@ -112,5 +122,6 @@ the TEST runner at priority 20 the delay is below 0.25 ms.
 Repeat cold-power S0-U01 on all four role families and S2-U01 with Wi-Fi20.
 M1/M2 remain independent local-drive criteria: loss of AP/broker must not
 stop or degrade driving. Network S1-U04/U05/U06 separately cover reconnect,
-rates/loss/decode and NORMAL-robot command policy. All are **Not run** on
-the STEP 8 image. Use [the runbook](../../docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard).
+rates/loss/decode and NORMAL-robot command policy. Earlier STEP 8 results
+ran on 2026-11-07; see [the S1 log](../subsystem1/TEST_LOG.md) for partial
+coverage and limits. Use [the runbook](../../docs/s1-telemetry/TELEMETRY.md#operation-broker-recorder-and-dashboard).

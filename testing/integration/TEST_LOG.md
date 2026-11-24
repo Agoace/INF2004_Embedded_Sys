@@ -1,13 +1,14 @@
 # Integration test log
 
-The template demo interfaces IF-01 through IF-05 are removed.
-Earlier M1/M2 and watchdog M1 passes are recorded in
-[KERNEL_ROBOT.md](KERNEL_ROBOT.md). New task-split checks remain Not run.
-Interfaces are recorded in TEAM.md.
+The old template demo interfaces are removed; current IF-01 through IF-05
+are defined in [TEAM.md](../../TEAM.md). Earlier M1/M2, watchdog and
+2026-11-06 task-split passes are recorded in [KERNEL_ROBOT.md](KERNEL_ROBOT.md).
+Later full-course evidence is in
+[the demo record](../../docs/release/DEMO_KERNEL_V2.md).
 
 | ID | Check | Status |
 | --- | --- | --- |
-| R5 | [Kernel robot track check](KERNEL_ROBOT.md): line, two detours, SEARCH recovery, no contact/faults | Not run |
+| R5 | [Kernel robot track check](KERNEL_ROBOT.md): line, two detours, SEARCH recovery, no contact/faults | Later course runs recorded, including image 30 run 6 (2026-11-20), 2/2 DONE_LINE. No separate complete R5 checklist pass claimed. |
 | S7-U01 | [Task-split acceptance](KERNEL_ROBOT.md#step-7-task-split-image-new-acceptance): cold TEST, timing/cost/stacks, queue saturation, last watchdog reset | PASS 2026-11-06 with 3f889a1. [Results](KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 | M1-S7 / M2-S7 | Repeat two-tile line and obstacle checks on the five-task robot | PASS (basic) 2026-11-06. [Results](KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
@@ -15,7 +16,8 @@ Interfaces are recorded in TEAM.md.
 
 See [the hardware record](../../docs/archive/s1-telemetry/HISTORY.md#files) for exact
 measurements and limits. These results do not validate later boot/session,
-diagnostic or SCAN-retry changes; new-image hardware remains Not run.
+diagnostic or SCAN-retry changes. Later hardware evidence is recorded in
+the release record above, not as a repeat of every STEP 8 gate.
 
 | ID | Check | Result |
 | --- | --- | --- |

@@ -1,7 +1,11 @@
 # Testing
 
-All test records for the project live in this folder. A test only counts as
-done when it is **written down here with its result and a saved log**.
+This folder holds test procedures and early hardware results. Later
+revision-scoped records also live in `docs/`; use
+[the documentation index](../docs/README.md) and
+[the current demo record](../docs/release/DEMO_KERNEL_V2.md).
+A test only counts as done with a written result and saved evidence.
+A later course run does not pass every gate in an earlier procedure.
 
 ```
 testing/
@@ -36,9 +40,9 @@ Test IDs never change and are never reused, even if a test is dropped.
 3. **Build the test image and flash it.**
    ```sh
    cd build_make
-   make TEST=1 -j8        # -> mtk3pico_smp1_usb_cdc_wifi_test.uf2
+   make SMP=0 WIFI=none TEST=1 -j8   # UP, radio-off TEST; output name follows profile
    ```
-   The test image runs every subsystem's tests at power-up and prints one
+   The UP TEST image runs the subsystem hooks at power-up and prints one
    `[TEST] <ID> PASS|FAIL` line per check. (A normal `make` leaves the tests out.)
 4. **Save the console output** to `logs/`, named `YYYY-MM-DD_<what>.txt`:
    ```sh
@@ -53,7 +57,8 @@ Test IDs never change and are never reused, even if a test is dropped.
    (keep each file under a few MB). Videos go in `videos/` instead (see below).
 5. **Record the result.** Add a row to the *Results* table: date, test ID,
    the commit you tested (`git rev-parse --short HEAD`), who ran it,
-   PASS/FAIL, and the log file. Commit the log and the table together.
+   PASS/FAIL, and the log file. Commit the result table; keep private robot
+   logs in ignored local storage and record their location.
 
 ## Videos of tests and demos
 

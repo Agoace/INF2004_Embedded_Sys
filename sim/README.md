@@ -3,6 +3,10 @@
 This host build reads the real `src/` files. It does not change or link to
 firmware CMake targets. See the [simulation record](../docs/simulation/SIMULATION.md)
 for the design, model equations, assumptions, and remaining work.
+This target uses the bare-metal detour entry point, not the UP demo kernel.
+The Webots SIL/HIL/PIL environment is on `mtk3-testing`; it is separate from
+this simulator. Current robot evidence is in
+[the demo record](../docs/release/DEMO_KERNEL_V2.md).
 
 ## Build and run
 
@@ -162,8 +166,10 @@ only, not a dependency of the editor or the simulator.
   fractional encoders, differential drive, the robot rectangle, tile lines,
   sensor overlap, conservative contact detection, and sector echo geometry.
 - [`scenarios/no_box_straight.json`](scenarios/no_box_straight.json) has 30
-  straight tiles and no box. Calibration succeeds; following ends at the
-  real 30 s run limit, with no searches in the reference run.
+  straight tiles and no box. The historical reference followed for 30 s
+  with no searches. Current `src/detour_test.c` has a 90 s firmware limit;
+  the scenario deadline can end a simulation earlier. The kernel robot
+  instead has a 300 s run limit.
 - [`scenarios/box_straight.json`](scenarios/box_straight.json) keeps the
   120 × 120 mm box on the line at x = 800 mm. Boxes now default to specular
   echoes (assumed 20° incidence cut, corner echo off). See the
