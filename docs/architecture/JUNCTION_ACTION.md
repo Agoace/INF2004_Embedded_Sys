@@ -5,9 +5,9 @@
 The operator approved this redesign on 2026-11-10 through Main_Worker.
 It replaces the blind bridge and axle-centred encoder turn in `eb18004`.
 B2a uses a fake START command, not a live barcode decoder. The fixed consumer
-is retained by the [B2b live adapter](JUNCTION_LIVE_ADAPTER.md). Its default
-SHADOW path does not offer decoded letters. B2a is closed at `50426ae`; live
-action permission and remaining physical gates are separate.
+is retained by the [B2b live adapter](JUNCTION_LIVE_ADAPTER.md). Default
+builds without live enable remain SHADOW; the demo enables live actions.
+B2a closure at `50426ae` is historical, not acceptance of the current live turn.
 
 | Command | Action |
 | --- | --- |
@@ -23,6 +23,15 @@ recovery preserves an unconsumed pending command. Reset its detector on
 SEARCH departure and LINE re-entry; never detect while SEARCH drives. SCAN,
 DETOUR, any other route, SEARCH failure/stop and STOP cancel pending. A/B/D
 private SEARCH stays inside the LINE wrapper; it does not cancel itself.
+
+Current (2026-11-24): the rules below describe the fake-command consumer in
+`vehicle/junction_action.c`. The live build selects
+`app_program/barcode_live_vehicle/action.c`: it adds a centred approach and
+at least 60 degrees before LEFT/RIGHT line acceptance. Live commands last
+10000 mm, survive SCAN/DETOUR and cancel after 200 ms continuous SEARCH.
+See [live command rules](../s3-line-barcode/BARCODE_LIVE_COMMAND.md) and
+[demo-kernel-v2 evidence](../release/DEMO_KERNEL_V2.md). Do not apply the
+fake-command route-cancellation and early-contact rules to that live path.
 
 ## Ownership and entry points
 
@@ -44,7 +53,8 @@ outcomes/failures remain authoritative. Claimed C's existing LINE obstacle/
 sonar fault handling is unchanged. Existing ESTOP and motion
 faults remain authoritative. The LINE-only IMU diagnostic epoch is excluded
 only during private SEARCH; normal LINE travel in C/bar clearance remains
-LINE. IMU still cannot command navigation or motors.
+LINE. Hump height does not choose a route; the integrated IMU safety gate
+can stop the robot on lift or overturn.
 
 ## Fixed consumer value
 
@@ -83,7 +93,8 @@ replacement, and not republish the same decoded barcode repeatedly. The final [B
 eligibility cuts and terminal slot retirement. Pending survives successful
 natural SEARCH only; other routes and run stop cancel it. Original sequence,
 read counts and time are not refreshed by recovery. There is no pending or
-course-gap expiry. Source2 additionally cancels an unarmed pending command
+course-gap expiry in this fake/legacy consumer. The live policy above has
+a 10000 mm limit and a SEARCH cancellation timer. Source2 additionally cancels an unarmed pending command
 at the first credible black edge; source1 behavior stays unchanged. Barcode
 summary integration remains separate.
 
