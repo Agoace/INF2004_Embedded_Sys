@@ -1,9 +1,12 @@
 # Barcode live command path (producer gate)
 
-Status: host-tested producer and V1/V3 vehicle policy, OFF by default.
-Main approved the V1/V3 policy on 2026-11-18. A live image still needs the
-approved placement checks on the actual demo course. Host tests and a
-successful firmware build do not prove robot acceptance.
+Current (2026-11-24): LIVE in the demo build (`BARCODE_LIVE_ENABLE=1`);
+a mapped letter commands the next junction. Fallback builds without that
+option remain SHADOW. Image 30 run 6 read 4/4 barcodes and performed LEFT
+and U-turn actions. Demo day read M and performed LEFT; two BW_WIDTH fails
+also occurred. See [demo evidence](../release/DEMO_KERNEL_V2.md).
+Main approved the V1/V3 policy on 2026-11-18. New changes still need robot
+checks; host tests and a successful build alone do not prove acceptance.
 
 ## Scope
 
@@ -91,9 +94,12 @@ producer, jlive and ja code:
 
 ## Vehicle work for SW9 (before any live image)
 
+Historical checklist. LIVE integration and robot runs are complete for the
+demo revision; current policy is below.
+
 | Item | Need |
 | --- | --- |
-| V1 expiry | Implemented: 1000 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. Dashboard labels are a separate follow-up. |
+| V1 expiry | Implemented: 10000 mm mean wheel travel from decode `read_counts`, live source only. UNUSED reason 13 EXPIRED; see the approved policy below. |
 | V2 window | Optional: consume only when the junction edge is within [D_min, D_max] of the frame end. |
 | V3 SEARCH | Implemented: 200 ms continuous SEARCH before consumption cancels the live command, UNUSED reason 14 SEARCH. SCAN/DETOUR keep CANCELLED. No heading-change rule. |
 | V4 turn | Check that the LEFT spin finds the correct branch at this crossing (about 90 degrees, OPERATOR). |
@@ -118,7 +124,7 @@ commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
   assertion requires it to exceed `BARCODE_MEASURED_CLEAR_MM + 160`.
   The nominal recommendation is about 200 mm physical placement (at least
   160 mm). After the 49 mm line-pair lead and 6 mm confirmation, normal
-  consumption is about 117–157 mm from the frame end. The 1000 mm design
+  consumption is about 117–157 mm from the frame end. The earlier 1000 mm design
   limit leaves margin without retaining a command for a full loop.
   Operator approved the change from 400 to 1000 mm after LIVE4 reported
   three EXPIRED results. It is not a measured placement or timing bound.
@@ -126,14 +132,16 @@ commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
   `BLV_SEARCH_CANCEL_MS` is 200. Main approved this after LIVE1. A brief
   SEARCH returns to LINE without dropping the command. The timer starts
   on the first SEARCH tick and resets on return to LINE; it uses wrap-safe
-  elapsed time. V1 expiry still wins during SEARCH. A new run resets it. SCAN/DETOUR keep their existing cancellation.
+  elapsed time. V1 expiry still wins during SEARCH. A new run resets it.
+  SCAN/DETOUR now keep the command and restart junction evidence.
   No heading-change rule is added: the approved approach must be straight;
   wheel-difference heading during line corrections is not a reliable
   extra course-location check.
 - A drop calls `ja_finish`: command invalid, sequence consumed (retired),
   final counts recorded, phase **UNUSED (9)**, claimed false. The new
   reasons are **13 EXPIRED** and **14 SEARCH**. UNUSED means no turn was
-  attempted; it is not FAILED. SCAN/DETOUR retain reason CANCELLED (1).
+  attempted; it is not FAILED. SCAN/DETOUR keep live source-2 commands;
+  fake source 1 still uses CANCELLED (1).
   These are command drops, not emergency stops. Ordinary navigation
   continues. Active/consumed actions and fake source 1 are unchanged.
 - The check runs before each normal module step. If a pending command
@@ -143,7 +151,8 @@ commands in `JA_PENDING`, with `BARCODE_LIVE_ENABLE=1`.
 Implementation: [`policy.c`](../../app_program/barcode_live_vehicle/policy.c)
 wraps `ja_pending_route` through live-only forced includes on
 `vehicle_task.o` and `junction_print.o`. The new folder is excluded from
-all default builds. Shared action/Vehicle headers and C files are unchanged.
+fallback builds (`BARCODE_LIVE_ENABLE=0`), not the LIVE demo. Shared
+action/Vehicle headers and C files are unchanged by this live-only adapter.
 Kind 7 keeps its layout; see [wire contract](../s1-telemetry/MQTT_WIRE.md).
 
 Live build (example secrets only for the recorded build):
@@ -296,7 +305,7 @@ Geometry and placement budget:
 | Junction confirmation | Both norms >= 700 permille, junction flag, then 6 mm confirmation. That confirmation is AFTER the leading edge; do not use it to reduce the pre-edge spacing. |
 | Post-junction bar clear | LEFT/RIGHT/UTURN use at least 33 mm from the junction edge, black exit and two fresh exit samples before SEARCH. Keep that exit area and the intended branch unobstructed. This is after consumption, not an extra pre-barcode guard. |
 
-The reader also needs its existing 40 mm leading quiet zone on the GP28
+The reader also needs its current 30 mm leading quiet zone on the GP28
 scan path. Do not cover or dim the tracking line with the barcode sheet.
 
 ### What the operator checks on the day
@@ -439,7 +448,7 @@ policy for an already-offered pending command.
 
 ## Demo limits (operator 2026-11-20)
 
-Branch `mtk3-demo-limits`. Three changes for the demo course:
+Tag `archive/mtk3-demo-limits`. Four changes, now in `demo-kernel-v2`:
 
 | Change | Before | Now | Where |
 | --- | --- | --- | --- |

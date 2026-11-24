@@ -1,8 +1,20 @@
-# GY-511 IMU: roll-only observer, step 3 hump report
+# GY-511 IMU: hump report and lift/overturn safety
 
 ## Current scope
 
-Step 3 adds a report-only hump detector on top of step 2d (`0207b54`).
+Current (2026-11-24): the IMU runs in the demo robot image, not only in TEST.
+The hump detector reports only; the separate safety detector can stop driving
+on lift, overturn or unavailable IMU input. See [safety port](IMU_SAFETY_PORT.md)
+and [real-robot capture results](IMU_SAFETY_CAPTURE.md#results-staging-581ab85-image-3_imucap-37eba5a4).
+FIFO option D is integrated. INT1 wake stays parked at tag `archive/mtk3-imu-irq`.
+CR1 hump, diagnostic and safety board packing is complete; see [CR1 IMU](../architecture/CR1_IMU_A.md).
+The current release is `submission-v4`; its firmware is the same as
+`demo-kernel-v2`. Later full-course runs include hump reports; see
+[demo kernel results](../release/DEMO_KERNEL_V2.md). These do not establish
+the two-source, no-hump H3 comparison or height accuracy on other objects.
+
+The dated step results below retain their tested revisions and limits.
+Step 3 added a report-only hump detector on top of step 2d (`0207b54`).
 It counts humps from the roll height during a run and reports the highest
 one: USB line at run end, GP20 DUMP line, live MQTT event kind 9 and
 summary v3. It never changes motor commands or navigation. See
@@ -21,10 +33,10 @@ Step 2d extends `8c5d679` (step 2c), which extends `75ff329` (step 2b),
 originally based on `b569adc`. Step 2d changes ONLY the accelerometer input:
 400 Hz FIFO samples are averaged into each 10 ms observation. See
 [step 2d FIFO input](#step-2d-fifo-input). Robot and
-TEST run an IMU observer; BENCH does not. The observer has no motor
-commands and no KR1 fields. It cannot change normal driving. The explicit exception is a
-separate operator-triggered GP21 straight-drive job in IMU_STREAM only;
-its stop policy is described below. CR1 packing is deferred.
+TEST run the IMU service; BENCH does not. The hump observer has no motor
+commands. The separate safety report feeds the Vehicle gate, which can stop
+normal driving. IMU_STREAM also has an operator-triggered GP21 straight-drive
+job; its stop policy is described below.
 
 Bias, pure-core separation, filtering and signed height-integration ideas
 are credited to Jaison, `origin/jaison-imu` `b2a6bb6`, especially
@@ -618,7 +630,9 @@ rows are RELATED-DEVICE facts. No PDF is committed.
 | I2C cost: about 29 clocks to start plus 9 per byte | AN3308 9.5 | Related device |
 | LIS3DH FIFO stores 10-bit samples | AN3308 9.1 | Related device; **hardware-confirmed on 0207b54**: every LSM303DLHC raw word is a multiple of 64 |
 
-Only the FIFO width is separately hardware-confirmed. The step 2d floor
+At the step 2d revision, only the FIFO width was separately hardware-confirmed.
+Later bench B1 also confirmed the partial-read count; see [option D](#fifo-partial-read-option-d).
+The step 2d floor
 run (readbacks 77/40/80, 3.913 samples per poll, zero resets, plausible
 captures) is consistent with the other rows but does not test each one.
 The 10-bit FIFO means one raw count is 4 mg; the batch mean of about 4
@@ -644,16 +658,17 @@ words, RX FIFO <=8 bytes) and drains RX while it queues a long burst.
 | Case | Action | Counter |
 | --- | --- | --- |
 | n=0 with EMPTY | No observation: core not stepped, timestamp kept, MARK waits one tick | `empty` |
-| n=1..8 | Mean of n to core; `reads`, `batches`, `samples`, `min`/`max` | normal |
-| n=9..31 (late wake), no OVRN | Option D: mean of the OLDEST 8, the rest stays queued; valid observation, no reset (see [FIFO partial read (option D)](#fifo-partial-read-option-d)) | `partial`, `depth_max` |
+| n=1..8, no catch-up | Mean of n to core; `reads`, `batches`, `samples`, `min`/`max` | normal |
+| n=9..31 (late wake), no OVRN | Option D: mean of the OLDEST 6; keep the cap while 7..8 remain in the same catch-up; valid observation, no reset (see [FIFO partial read (option D)](#fifo-partial-read-option-d)) | `partial`, `depth_max` |
 | OVRN (32 unread, data lost) | Same reset; invalid observation | `overrun`, `reset` |
 | EMPTY with n>0, or no EMPTY with n=0 | Same reset; invalid observation | `bad`, `reset` |
 | Bus fault or deadline | Counted fault; invalid; reconfigure after 1 s | `faults`, `timeout`/`nack` |
 
 An invalid observation breaks the angle/height windows like any other
 invalid sample; peaks are kept. During a GP21 drive, the observer stops
-the drive if it sees an invalid snapshot (existing rule). A partial or old
-mean never reaches the core: the mean is used only after the whole cycle,
+the drive if it sees an invalid snapshot (existing rule). An incomplete or failed
+read never reaches the core. Queued samples can be old during catch-up;
+the mean is used only after the whole cycle,
 including the magnetometer read and the deadline check, succeeded.
 
 Bus-time ESTIMATE (AN3308 9.5 clock counts at 400 kHz, plus about 57 us
@@ -843,11 +858,11 @@ high-water was not supplied.
 
 ## FIFO partial read (option D)
 
-Status: software and host proof on branch `mtk3-imu-fifo-d`. Accepted by the operator and the safety owner 2026-11-19. Bench B1 (8-sample catch-up) confirmed the partial read on the robot but showed one TIMEOUT; the operator chose a 6-sample catch-up (option a). Bench B2 (6-sample catch-up) is open.
+Status: merged into staging; history is tag `archive/mtk3-imu-fifo-d`. Accepted by the operator and the safety owner 2026-11-19. Bench B1 (8-sample catch-up) confirmed the partial read on the robot but showed one TIMEOUT; the operator chose a 6-sample catch-up (option a). Bench B2 passed on 4/4 boots; see [project status](../architecture/PROJECT_STATUS.md#areas). The per-boot detail is not in Git.
 
 ### Why
 
-Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake later than about 20 ms) caused a bypass/stream reset and an invalid observation. The safety path publishes an invalid observation as READ_FAILED. While a run is active, the Vehicle gate (`vehicle/imu_gate.c` `ig_step`) latches that as an IMU_UNAVAILABLE STOP. This happened on robot image 13 with the parked INT1 wake (record `docs/s4-imu/IMU_IRQ.md` on branch `mtk3-imu-irq`). With option D, one late wake no longer stops a run.
+Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake later than about 20 ms) caused a bypass/stream reset and an invalid observation. The safety path publishes an invalid observation as READ_FAILED. While a run is active, the Vehicle gate (`vehicle/imu_gate.c` `ig_step`) latches that as an IMU_UNAVAILABLE STOP. This happened on robot image 13 with the parked INT1 wake (record `docs/s4-imu/IMU_IRQ.md` at tag `archive/mtk3-imu-irq`; that file is not in this checkout). With option D, the tested 22–49 ms late wakes no longer give READ_FAILED or a STOP; longer gaps can still stop a run.
 
 ### Rule
 
@@ -862,7 +877,7 @@ Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake late
 
 `depth_max` records the largest count seen (32 = OVRN). A FIFO reset or a bus fault ends a catch-up.
 
-Why 6 and not 8: one read cycle is about 1060 + 165 n µs of bus time and compute plus line-task preemption (about 132 µs per 1 ms). An 8-sample cycle is about 1990–2120 µs and crosses the 2 ms deadline (`imu_probe.c`, unchanged); bench B1 measured 2007 µs and one TIMEOUT. A 6-sample cycle is at most about 1790 µs. Outside a catch-up, n = 7..8 still reads all n, as before option D (step 2d maximum n was 6 in 45000 polls).
+Why 6 and not 8: the [host timing model](../../tests/test_imu_fifo_timing.c) uses 538 + 165 n µs of bus time and compute plus line-task preemption (about 132 µs per 1 ms). This is 25 × (4 + 3 + 6 n + 9) bus µs plus 138 + 15 n compute µs, not a measured firmware bound. An 8-sample cycle is about 1990–2120 µs and crosses the 2 ms deadline (`imu_probe.c`, unchanged); bench B1 measured 2007 µs and one TIMEOUT. A 6-sample cycle is at most about 1790 µs. Outside a catch-up, n = 7..8 still reads all n, as before option D (step 2d maximum n was 6 in 45000 polls).
 
 FSS is the unread count, and each 6-byte step of the auto-incrementing burst (0x28..0x2D, then back to 0x28) removes ONE sample. Thus FSS drops by exactly the number read after a partial read. AN3308 (LIS3DH) states this; the LSM303DLHC datasheet does not. Bench B1 confirmed it on the robot for 8 samples (`partial` 2, `depth_max` 16, `backlog`/`overrun`/`bad`/`reset` 0, `max` 8).
 
@@ -954,7 +969,7 @@ All numbers in this section are synthetic fixtures or build results,
 ### Data path
 
 ```text
-IMU task14 (10 ms) --> imu_core --> imu_hump_step --> hump board (52 B)
+IMU task14 (10 ms) --> imu_core --> imu_hump_step --> hump board (packed by CR1)
      ^ run_epoch (atomic)                                    |
      |                                    vehicle task13 copy (no wait)
 vehicle run start: epoch odd             |-- live event kind 9 (MQTT)
@@ -1370,7 +1385,7 @@ run-end line, the summary and the `[S4_DIAG]` or health timing.
 The three source records below are retained in full. Their original revision
 scopes and historical Not-run statements remain attached to their evidence.
 Their TEST-only/no-calibration descriptions apply to those old revisions,
-not the current observe-only step 2 above.
+not the current robot IMU service and safety integration above.
 
 ## Source: IMU_BRINGUP.md
 

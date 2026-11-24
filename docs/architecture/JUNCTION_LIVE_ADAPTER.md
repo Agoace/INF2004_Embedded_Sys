@@ -2,14 +2,16 @@
 
 ## Scope
 
-The default NONE image reads S3 source2 in SHADOW. It never offers a SHADOW
-record to the action consumer. The integrated STEP 4b producer also forces
-all records to valid0, including when control mode2 is supplied.
-A decoded letter is therefore evidence, not a motor command.
+A default NONE image without live enable reads S3 source2 in SHADOW and
+never offers a SHADOW record to the action consumer. The demo build enables
+`BARCODE_LIVE_ENABLE=1`: permitted mapped letters can command the next
+junction. S3 sets valid1 only under the live producer checks, not in SHADOW.
 
 B2a fake A–D images remain exclusive source1 builds. The fixed24 B consumer,
 locked LINE/SEARCH, subsystem5, module numbers, summaryv3 and KR1 do not change.
-IMU remains report-only. B2a closure does not approve live barcode actions.
+IMU humps remain report-only; lift/overturn safety can stop the robot.
+B2a closure alone did not approve live actions. Later operator approval and
+robot results are in [the live command record](../s3-line-barcode/BARCODE_LIVE_COMMAND.md).
 
 ## Entry points and ownership
 
@@ -29,8 +31,10 @@ Use the canonical [source contract](../s3-line-barcode/LIVE_SOURCE_CONTRACT.md),
 
 ## Fixed boards and validation
 
-The canonical record is40 B; control is20 B. Their sequence/word boards use
-44+24=68 B. Control contains epoch, eligibility revision, revision time,
+The canonical decoded record is40 B; control is20 B. Their sequence/word
+boards still use 44+24=68 B (`barcode_live_source.c`). CR1 packed separate
+stored frame evidence, not these two boards. Control contains epoch,
+eligibility revision, revision time,
 terminal ACK sequence and mode. Vehicle is its sole writer.
 
 A live read copies the whole record once, then samples the receipt clock.
@@ -49,7 +53,7 @@ SHADOW, NONE, malformed, old-run and rejected observations never reach offer.
 | LINE observation age | At most10 ms at admission; otherwise terminal refusal. |
 | S3 control age | At most50 ms; S3 must first observe publication progress. |
 | Clear guard | Explicit measured bound for action permission; no assumed offset. |
-| Pending lifetime | No time/course-gap expiry. Routes and encounters invalidate it. |
+| Pending lifetime | Live: 10000 mm; 200 ms continuous SEARCH cancels it. SCAN/DETOUR keep it. Encounters and STOP invalidate it. |
 
 Every RUN tick publishes control, even when its words do not change. Mode0
 means disabled/non-LINE/BUSY; mode1 means SHADOW; mode2 means verified live
@@ -73,8 +77,10 @@ also blocks offers when no clear baseline is available.
 A source2 pending command not armed before that edge is cancelled. An armed
 command belongs to that encounter. Source1 behavior is unchanged. An already
 admitted pending command is not rechecked against the source revision:
-successful natural SEARCH retains it; failed SEARCH, SCAN, DETOUR and STOP
-cancel it through the B2a policy.
+the legacy B2a policy retains it through successful natural SEARCH and
+cancels it on failed SEARCH, SCAN, DETOUR or STOP. The demo live policy
+instead keeps it through SCAN/DETOUR and limits continuous SEARCH to 200 ms.
+See `app_program/barcode_live_vehicle/policy.c`.
 
 ## One slot, terminal ACK and serial lifetime
 
@@ -101,7 +107,9 @@ invalidate objects. Fake suffixes stay `_jtestA`–`_jtestD`; opt-in adds `_bcli
 
 The150 mm SHADOW label is unverified. It is not a measured default or action
 permission. Host-only permitted tests use a synthetic1 mm bound; they do not
-build or authorize live-action firmware. No live-action image was requested.
+authorize a robot image. The later demo build uses live enable1 and a
+100 mm explicit bound; its build and letter-map steps are in
+[DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).
 
 ## Diagnostics and remaining gates
 
@@ -121,9 +129,9 @@ after queued junction results and outside the LINE mutex. The empty weak
 fallback is overridden by S3's strong definition. It is not called at a
 mid-run DONE. Message116 B, INFO108 B and the4096 B buffer stay unchanged.
 
-See [validation](../kernel/JUNCTION_VALIDATION.md). Physical SHADOW flow,
-measured offset/clearance, named-task stack margins of at least256 B,
-CPU/timing, rejection cases and heading acceptance remain operator gates.
-No worker flash or push, private log inspection or live-action approval is
-implied by software tests. IMU H3 corrected/filtered circuit evidence remains
-separate and outstanding.
+See [validation](../kernel/JUNCTION_VALIDATION.md) for revision-scoped gates.
+Current evidence: image 30 run 6 read four barcodes, turned LEFT at 93.5
+degrees and accepted a U-turn at 178.5 degrees; see
+[demo-kernel-v2](../release/DEMO_KERNEL_V2.md). This is not an all-load stack
+or physical stop-latency proof. Software tests alone do not authorize a flash.
+IMU source comparisons remain separate from live-action acceptance.

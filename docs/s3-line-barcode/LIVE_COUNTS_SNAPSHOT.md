@@ -4,8 +4,8 @@
 
 Vehicle can read S3 terminal outcome counts without USB output, a LINE lock,
 a reset call or a wait. This is a read-only application API, not a new MQTT
-field or a change to either live record/control wire format. Vehicle owns
-any later summary integration.
+field or a change to either live record/control wire format. Vehicle now
+uses this API for [run-summary counts](BARCODE_RUN_SUMMARY.md).
 
 [`barcode_live_source.h`](../../app_program/subsystem3/barcode_live_source.h)
 defines:
@@ -33,8 +33,9 @@ GP20 lifetime counters are unchanged.
 An unfinished candidate is not yet an attempt in this snapshot. Merely
 seeing a dark edge without a bound candidate does not increment failures.
 A decoded record refused by the final source/control recheck increments
-failures, not frames. The existing SHADOW valid0 restriction does not turn
-a correctly published decoded record into a failure.
+failures, not frames. An ineligible SHADOW/valid0 result does not turn a
+correctly published decoded record into a failure. The same API serves the
+LIVE demo, where eligible mapped letters can command the next junction.
 
 These counters are totals for the named epoch, not lifetime totals from
 which Vehicle must subtract a baseline. Lifetime producer publications,
@@ -84,10 +85,11 @@ source storage; the existing4096-byte live-storage assertion includes them.
 This type/board accounting is not a runtime-stack claim. All24 matched
 reader-linked ARM profiles against `95c885d` measure +240 bytes text and
 +40 bytes BSS (the36 bytes plus linker alignment). The other14 profile sizes
-match. These source-only images do not yet call the getter from Vehicle;
-getter retention and the vehicle cache need a separate integration budget.
+match. Those historical source-only images did not call the getter from Vehicle;
+the later [summary integration](BARCODE_RUN_SUMMARY.md) added that call
+and its budget.
 
-## Source-only firmware matrix
+## Historical source-only firmware matrix
 
 The38-profile matrix completes without warnings. It uses the same export
 path for old/new DWARF. All24 reader-linked profiles (UP/split/control times
@@ -115,7 +117,7 @@ Local artifacts: `build/live-counts/` and `/tmp/sw10-counts-h76{,.base,.cand,.ba
 The representative disassembly proof is under `build/live-counts/compare/`.
 These are source-only checks, not permission to flash an operator image.
 
-## Regression evidence
+## Historical source-only regression evidence
 
 GCC and Clang ASan/UBSan each pass541/541 host tests. Documentation and the
 eight-template-deviation checks pass. No flash or hardware test was done.

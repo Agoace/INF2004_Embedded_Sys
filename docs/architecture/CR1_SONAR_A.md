@@ -142,7 +142,9 @@ measurements**.
 | Vehicle `scan_step_observed` | 200 B | 232 B |
 | `vehicle_obstacle_try_read` | 64 B | 112 B |
 
-Task stacks are not changed. A robot stack high-water check is still open.
+Task stacks did not change in this substep. The later combined CR1 image 12
+passed timing and stack checks (2026-11-19); see [project status](PROJECT_STATUS.md#areas).
+The emulator values above are still not robot measurements.
 
 ## Shared access and deferred work
 

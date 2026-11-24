@@ -14,12 +14,11 @@ tables in this document are the test output.
   (ctest `test_min_bit_doc`).
 - Base: `mtk3-staging` `b68ce6b`. The proof adds tests and documents only.
   The firmware is byte-identical.
-- The KR1 row is recorded as it is on staging (16 B). The approved 15 B
-  row is on branch `mtk3-cr1-kr1row`. Its owner updates the KR1 table
-  after this proof is merged.
-- The `GAP` rows are a report only. The fault snapshot and STOP capture
-  gaps get a fix on a separate branch. The operator accepted three other
-  items with a written reason (`SMALL_GAIN`, `ELEMENT_ALIGNED`).
+- Current: staging stores each KR1 row in 15 B. The merged work is kept
+  at tag `archive/mtk3-cr1-kr1row`; the KR1 table below includes it.
+- No `GAP` row remains. The F pack and KR1 row change closed the gaps.
+  The operator accepted three other items with a written reason
+  (`SMALL_GAIN`, `ELEMENT_ALIGNED`); see [Gaps](#gaps).
 
 The module records keep the design detail. This record does not repeat
 it: [CR1.md](CR1.md) (motion), [CR1_SONAR_A.md](CR1_SONAR_A.md),
@@ -89,7 +88,7 @@ Bytes in RAM, from the module records. Boards include their 4 B sequence.
 | Retained INFO | 108 | 104 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | Health payload | 120 | 112 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
 | S1 pending sonar copy | 40 | 32 | [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md) |
-| KR1 RAM-log rows (4501) | 72016 | 67515 | [CR1_KR1_ROW.md](CR1_KR1_ROW.md) (branch `mtk3-cr1-kr1row`) |
+| KR1 RAM-log rows (4501) | 72016 | 67515 | [CR1_KR1_ROW.md](CR1_KR1_ROW.md) (tag `archive/mtk3-cr1-kr1row`) |
 | IMU hump board | 52 | 20 | [CR1_IMU_A.md](CR1_IMU_A.md) |
 | IMU hump value and Vehicle copy (2) | 96 | 32 | [CR1_IMU_A.md](CR1_IMU_A.md) |
 | IMU diag board | 76 | 40 | [CR1_IMU_A.md](CR1_IMU_A.md) |
@@ -106,7 +105,7 @@ RAM of the demo image: 241228 B at `7350da0`, 239304 B at `b68ce6b`
 [CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md). IMU A: 239304 B to 239124 B
 (−180 B, the IMU rows above), in [CR1_IMU_A.md](CR1_IMU_A.md).
 
-After the F pack (branch `mtk3-cr1-fpack`) the F cost is 72 B: the
+After the F pack (tag `archive/mtk3-cr1-fpack`) the F cost is 72 B: the
 snapshot copies use 16 B, the STOP capture board 16 B and a new 4 B
 refused count. Static RAM is 239272 B (−32 B). See
 [F pack](CR1_TELEMETRY_A.md#f-pack-minimum-bit-storage).
@@ -634,8 +633,8 @@ Bits per element: used 88, minimum 88. Layout: separate allocations. Bytes: stor
 
 ## Gaps
 
-No `GAP` row remains. The F pack (`mtk3-cr1-fpack`) and the 15 B KR1 row
-(`mtk3-cr1-kr1row`) closed the last two gaps.
+No `GAP` row remains. The F pack (tag `archive/mtk3-cr1-fpack`) and the 15 B KR1 row
+(tag `archive/mtk3-cr1-kr1row`) closed the last two gaps.
 
 Accepted by the operator, with the written reason:
 
@@ -688,7 +687,7 @@ between the markers. `test_min_bit_doc` fails until the two agree.
 
 Date: 2026-11-19. Base `b68ce6b`; proof commits `c9218ef`, `4551dc6` and the reason update after `4551dc6`.
 
-IMU tables: 2026-11-19, branch `mtk3-cr1-imu` after the merge of
+IMU tables: 2026-11-19, work kept at tag `archive/mtk3-cr1-imu` after the merge of
 `mtk3-staging` `290439c`. Host tests 704/704 with GCC and with Clang
 ASan/UBSan, 0 warnings; the same `--markdown` output from both. The
 IMU red checks are the last rows of the table below.

@@ -3,9 +3,11 @@
 ## Scope and reference
 
 The operator permits small, justified template changes for STEP 8. Template
-source is no longer frozen. Commit shared changes on `mtk3`, one change per
-commit, and merge them into module and integration branches with `--no-ff`.
-Do not change the original `main` branch. The reference is the imported
+source is no longer frozen. The current template base is branch `mtk3` at
+`7fa70f5`; module changes enter `mtk3-staging` with `--no-ff`. `main` is now
+the submission branch, not an untouched template copy. Follow the
+[branch rules](PROJECT_STATUS.md#branch-layout-and-integration-rules).
+The comparison reference is the imported
 `template/main` revision `c3b0954`. The following table is the complete list (8 paths)
 of changed files under `kernel/`, `lib/`, `device/`, `include/`, `config/`
 and `etc/` against that reference. No SDK startup/runtime is added.
@@ -69,7 +71,9 @@ removes the former dependency on initial-task priority and application boot
 order. `usermain` still calls the idempotent `drv_time_init`; motion retains
 the unchanged 2% TIMER-to-kernel check and motion-only watchdog feed policy.
 A correct tick is checked, not restarted. Cold-power hardware checks on the
-new robot, TEST, BENCH and MQTT images remain **Not run**.
+then-new robot, TEST, BENCH and MQTT images were **Not run** at this gate.
+Later robot runs do not prove cold-power timing for every profile. The
+USB21 cold enumeration result is in [KERNEL.md](../kernel/KERNEL.md#results-and-limits).
 
 ## Update and check procedure
 

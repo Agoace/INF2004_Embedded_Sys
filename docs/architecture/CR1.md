@@ -107,14 +107,24 @@ The [motion module plan](#motion-module-plan) records the approved
 A1 substep. Controller packing and derived-copy removal are not approved.
 A1/B1 hardware gate: **PASS 2026-11-10**, with the pre-existing idle-stack
 margin exception below. The later idle-stack increase is not yet retested
-on hardware. Main's review/merge and further CR1 work are still pending.
+on hardware.
+
+Current state (2026-11-24): CR1 is done and merged into `mtk3-staging`,
+so it is in `main` (`submission-v2` and later). All module rounds below
+are merged. Static RAM of the demo image: 241228 B (`7350da0`) to 234596 B
+(-6632 B). The [minimum-bit proof](CR1_MIN_BIT_PROOF.md) has no `GAP`
+row. Robot image 12 (`73395bb`, 2026-11-19) passed: KR1 rows decode, hump
+report, lift stop, fault run mask, barcode LIVE, timing and stacks, 0
+overruns ([SUBMISSION_V2.md](../release/SUBMISSION_V2.md)). The work
+branches are now archive tags (`archive/mtk3-cr1`, `archive/mtk3-cr1-*`).
 
 ## Module round 2026-11-18
 
 Baseline: `7350da0` (demo kernel `demo-kernel-v1` plus the detour
 lost-result fix), demo build line, public example settings. The operator
 approved category A for each module below. Category B is not approved.
-Integration branch: `mtk3-cr1`. Each module has its own record:
+Integration branch: `mtk3-cr1` (now tag `archive/mtk3-cr1`, merged into
+staging). Each module has its own record:
 
 | Module | Record | Category A | Static RAM (alone) |
 | --- | --- | --- | --- |
@@ -147,7 +157,7 @@ MQTT message sizes do not change. Robot timing at 110 ms is not
 measured yet.
 
 Proof of minimum-bit representation, field by field, with accepted
-reasons and open gaps: [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md). The older baseline and motion evidence
+reasons (no `GAP` left): [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md). The older baseline and motion evidence
 below keep their original scope.
 
 ## Shared-access design rule
@@ -619,11 +629,15 @@ separately. A MQTT wire change requires a separate decision.
 | Module | RAM after | Message after | Software | Hardware/timing |
 | --- | --- | --- | --- | --- |
 | Motion A1 | 190664 B total | Board 64 B | Passed | PASS, idle note |
-| Sonar/obstacle | 241148 B alone; boards 40/640/28 B | Unchanged | Passed | Not run |
-| IMU | Pending | Pending | Not started | Not run |
-| Telemetry/faults | Pending | Pending | Not started | Not run |
-| Line/barcode | Barcode evidence: 240892 B alone; line path not changed | Unchanged | Passed (barcode) | Not run |
-| Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | Not run |
+| Sonar/obstacle | 241148 B alone; boards 40/640/28 B | Unchanged | Passed | PASS (image 12) |
+| IMU | hump/diag/safety boards 48/72/36 to 16/36/12 B ([CR1_IMU_A.md](CR1_IMU_A.md)) | Unchanged | Passed | PASS (image 12: hump report, lift stop) |
+| Telemetry/faults | events, index, scan, info, health, F pack ([CR1_TELEMETRY_A.md](CR1_TELEMETRY_A.md)); KR1 rows 16 to 15 B ([CR1_KR1_ROW.md](CR1_KR1_ROW.md)) | MQTT sizes unchanged | Passed | PASS (image 12: KR1 rows, fault run mask) |
+| Line/barcode | Barcode evidence: 240892 B alone; line path not changed | Unchanged | Passed (barcode) | PASS (image 12: barcode LIVE) |
+| Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | PASS (image 12) |
+
+Table updated 2026-11-24. Image 12 is `73395bb` (2026-11-19); total static
+RAM 241228 to 234596 B. A fair 110 ms vs 200 ms MQTT comparison was not
+done.
 
 Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
 objects, discarded sections, zero-size sections, flash exclusion, padding

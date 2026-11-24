@@ -2,8 +2,10 @@
 
 ## Scope and evidence
 
-The image was staging `024d01a`. No powered result for the changes in this
-record is claimed. Main owns integration and the operator owns flashing.
+The initial image was staging `024d01a`. Later powered results on
+`e6bf80b` and `1104752` are recorded below. This is revision-scoped history;
+current LIVE reader rules and demo results are in
+[LIVE_WINDOW_READER.md](LIVE_WINDOW_READER.md). The operator owns flashing.
 
 - FC1: `robot_FC_1.final.log`, epoch 1, attempts 1 and 2. One lossy dump.
 - FC2: `robot_FC_1d2.final.log`, epoch 3, attempt 5. Two dumps of this

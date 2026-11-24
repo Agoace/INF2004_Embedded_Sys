@@ -1,10 +1,19 @@
 # Subsystem 3 kernel line acquisition
 
+Current (2026-11-24): this log retains the dated acquisition and B1c TEST
+results. The demo uses the separate LIVE barcode reader; mapped letters
+command the next junction. Image 30 run 6 read 4/4 (A, large F, Z, small F).
+Demo day read M and turned LEFT; two BW_WIDTH fails occurred. See
+[DEMO_KERNEL_V2.md](../../docs/release/DEMO_KERNEL_V2.md) for current evidence.
+B1c-specific Not-run items below do not describe the LIVE demo.
+
 | ID | Procedure | Pass condition | Status |
 | --- | --- | --- | --- |
 | S3-U01 | TEST=1, wheels lifted. Move a black/white card under GP27 L and GP26 C during the 1 s window. | Actual TIMER window count within 1%; both raw means 0..4095 and nonzero spread; no missed conversions/alarms | PASS 2026-11-06: 1009 samples in 1 s, 0 missed (no card moved; spread from the floor only). [Results](../integration/KERNEL_ROBOT.md#step-7-hardware-results-2026-11-06) |
 
-Alarm 0 / TIMER IRQ0 runs on core 0 at priority 2, below GPIO IRQ13 at 1.
+Alarm 0 / TIMER IRQ0 requests priority 2 on core 0; GPIO IRQ13 requests 1.
+On the robot, all external IRQ priorities read as 0; see
+[F-NVIC](../../docs/kernel/KERNEL.md#interrupt-priorities-f-nvic).
 Each 1 ms sample is the integer mean of eight ADC conversions per channel,
 L then C; right is zero, matching the bare-metal two-sensor path. A 128-slot
 queue transfers timestamped samples to task context. TEST deliberately
@@ -24,8 +33,8 @@ configuration or kernel source is changed. GP29/ADC3 is never selected.
 | S3-U03 | Bench only, do not drive: GP28 analog barcode input, VBAT jumper open; show bars at intended height and record raw range, narrow-bar visibility and ISR cost | Not run |
 
 S3 now averages eight ADC conversions on each of L/ADC1, C/ADC0 and
-barcode/ADC2 every 1 ms (24 total). In the normal robot, barcode remains
-raw observation only. The exclusive B1 profile below adds TEST decoding;
+barcode/ADC2 every 1 ms (24 total). In the demo robot, GP28 feeds the LIVE
+window reader. The exclusive B1 profile below adds separate TEST decoding;
 no Ziven reference source is changed. Pure line logic receives L/C/zero,
 never ADC2. See the [control architecture](../../docs/archive/architecture/HISTORY.md#files)
 for the GP28 wiring and bar timing constraints. ISR timing excludes wrapper
@@ -447,6 +456,9 @@ WIDTH threshold alone does not solve its bar-width distortion.
 5.5 mm height and already touches the floor on the 10 mm hump. The proposed
 lower-height test is ruled out. B1c must use this height; no mount, GPIO,
 subsystem 4, line steering or vehicle-routing change is included.
+Current mount update (2026-11-19): GP28 moved to 2.5 mm and the operator
+fixed hump clearance mechanically. The 5.5 mm limit above is historical;
+see [the height results](../../docs/s3-line-barcode/LIVE_WINDOW_READER.md#gp28-height-25-mm-results).
 
 ### Approved real fixtures and analysis
 
@@ -518,7 +530,7 @@ Compiler frames are not runtime stack/IRQ proof. A noinline PEAK driver
 keeps new locals out of the WIDTH call chain on the 1 KiB TEST task. Primary
 storage has an assert <=40000 bytes; small owner/capture counters are extra.
 No kernel stack or template setting was changed. Normal images exclude
-all barcode workspace symbols. Full raw dump and its pacing remain intact.
+the B1c TEST workspace; the LIVE demo has its own streaming reader state. Full raw dump and its pacing remain intact.
 
 Retest using the exact B1c image: verify B1c WIDTH+PEAK startup, perform GP20
 ranges, then lifted forward/backward. Clear the USB cable before floor

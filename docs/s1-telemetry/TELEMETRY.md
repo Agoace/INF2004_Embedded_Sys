@@ -78,7 +78,8 @@ preemptible copies to avoid false unsigned ages.
 Health uses producer uptime milliseconds, so a stopped producer cannot look
 young after the 71-minute microsecond wrap. Its counters can lag a failed
 source read. Stack minimum covers registered application regions only,
-not USB/radio/interrupt stacks.
+including the registered Wi-Fi stack, but not the template USB stack.
+Interrupt frames use the interrupted task's stack.
 
 ### Events and commands
 
@@ -144,9 +145,11 @@ USB VE text and 16-byte MQTT log events are unchanged. Private INFO is
 and the separate diagnostic fault storage cost. BEGIN resets indices/generation, not
 lifetime losses. It captures the producer-loss baseline before delayed
 consumption. ROW/EVENT/INFO/DUMP messages copy values, never pointers.
-A full local queue/storage counts loss. The vehicle's existing policy stops
-an active session on a producer failure or storage-full report. This is a
-**local logger failure**, not a network failure.
+A full local queue/storage counts loss. A producer-send failure still stops
+an active session. Since 2026-11-20, full storage alone does not stop the
+run: GP20 keeps the first 4501 rows (about 90 s), later rows are discarded,
+and MQTT state publication continues up to the 300 s run limit. LOG_FULL
+remains a diagnostic fault bit. This is local storage, not a network failure.
 
 GP20 requests a local USB dump with copied diagnostics. Busy is reserved
 before enqueue; no new session starts while queued/active. The logger
@@ -176,7 +179,7 @@ keeps the exact local KR/VE text description; the binary topic layout is
 | --- | --- |
 | Live, QoS0 | Freshness first; send ten waiting rows or a partial batch after 100 ms; one batch per poll |
 | Live lag/reconnect | More than 100 rows behind, or reconnect: jump to newest ten and report skipped rows |
-| Current production | One local row every 20 ms, at most about 50 rows/s; older 100-row/s examples are synthetic stream loads |
+| Current production | One local row every 20 ms, at most about 50 rows/s until storage fills; older 100-row/s examples are synthetic stream loads |
 | DUMP, QoS1 | Freeze generation and committed row/event totals; BEGIN, batches of up to twelve, END |
 | DUMP progress | Up to three batches in flight; advance only in acknowledged order; reconnect rewinds to acknowledged cursor |
 | New generation | Abort the old DUMP instead of mixing runs |
@@ -416,7 +419,9 @@ only with UNUSED. Ordinary phase reasons above 14 remain rejected; existing
 tagged line-angle messages remain a separate, unchanged format. Reasons
 0–12 retain their existing raw numeric display, and legacy v1 event fields
 remain unchanged. The matching firmware and MQTT wire record are integrated
-separately; this update changes no firmware or command admission.
+in the current demo. Pending live commands now last 10000 mm and survive
+SCAN/DETOUR; 200 ms continuous SEARCH still cancels them. See
+[the release record](../release/DEMO_KERNEL_V2.md).
 
 ##### IMU safety display
 
@@ -438,8 +443,8 @@ decoder remains strict: out-of-range stop reasons are rejected, not guessed.
 
 The dashboard and shared decoder support SW9's frozen `8cd3036` event
 contract, documented in [MQTT_WIRE.md](MQTT_WIRE.md), section
-`Kind 10 IMU_SAFETY`. Integrate that firmware commit separately. Transport
-is the existing 20-byte `robot/event` v2 packet, QoS 0, not retained.
+`Kind 10 IMU_SAFETY`. This contract is integrated in the current demo.
+Transport is the existing 20-byte `robot/event` v2 packet, QoS 0, not retained.
 
 The IMU card and Events show the latest STOP or RECOVERY report, trigger,
 cause and shell/module context. The IMU card includes its raw word/detail,
@@ -609,8 +614,8 @@ python3 scripts/mqtt_dashboard.py --host <BROKER_IP> \
 Open that exact FQDN (full hostname). A short hostname is a different Host
 and is refused with403. HTTP shows “Not secure” in the browser, although
 Tailscale carries transport over WireGuard. For HTTPS, use
-`tailscale serve --bg --https=8443 http://127.0.0.1: 8765` and allow the exact
-`https://...: 8443` origin instead. Stop it with
+`tailscale serve --bg --https=8443 http://127.0.0.1:8765` and allow the exact
+`https://<laptop>.<tailnet>.ts.net:8443` origin instead. Stop it with
 `tailscale serve --https=8443 off`. Do not reset unrelated Serve entries.
 Tailnet devices that can reach the page can use **all** buttons; restrict
 access with Tailscale rules when required.

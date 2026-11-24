@@ -2,10 +2,11 @@
 
 ## Scope
 
-Software candidate from `mtk3-b2b` `ad22f8f`, with staging `d44bd25` merged
-before implementation. Staging includes barcode v2, scan integration
-`7fe4054` and the matching dashboard. No robot flash or hardware run for
-this capture change. The operator must approve the image before use.
+Current (2026-11-24): integrated ROBOT diagnostic, enabled by
+`BARCODE_FAIL_CAPTURE=1` in the LIVE demo build. Robot captures H3 and
+image 20 are recorded in [LIVE_WINDOW_READER.md](LIVE_WINDOW_READER.md).
+The original implementation used helper revision `ad22f8f`, with staging
+`d44bd25` merged first. The resource gates below describe that revision.
 
 The old `BC_EDGES` list starts only after a successful record publication.
 It is post-window evidence, not a record of failed start-star edges. Thus
@@ -36,13 +37,10 @@ make -C build_make -j12 SMP=0 WIFI=cyw43 NET=lwip MQTT=1 \
   `_bcfail1`. It is not required by the measured headroom below. A future
   combined image must be checked again; capacity is not selected at runtime.
 
-For the proposed operator combination, also integrate `d06a787` and
-`c4e39f8`, then add `LINE_KD=30 MOTION_SAME_TICK=1`. Those switches are NOT
-merged into this helper branch. A throwaway combination builds successfully.
-There is no firmware-C conflict. There are mechanical conflicts in the Make
-option, image-suffix and profile-ID insertion points, and documentation rows:
-keep all three independent conditions, including each closing `endif`.
-Do not choose one side and lose another switch or stale-object guard.
+The earlier proposed combination (`d06a787`, `c4e39f8`, KD30 and same-tick)
+is integrated. KD30 and same-tick are now demo defaults. The example above
+shows capture in the fallback SHADOW build. For LIVE demo flags, use
+[DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md#demo-day-letter-map-to-be-announced).
 
 ## What is retained
 
@@ -50,16 +48,19 @@ Each of three fixed RAM buffers can hold:
 
 | Data | Capacity | Meaning |
 | --- | ---: | --- |
-| Threshold-crossing rows |64 x24 B | ADC time/raw/polarity, decoder phase, interpolated GP28-axis distance, original upper motor bracket time and L/R counts |
+| Threshold-crossing rows |64 records, 1392 B packed array | ADC time/raw/polarity, decoder phase, interpolated GP28-axis distance, original upper motor bracket time and L/R counts; public decoded row is 24 B |
 | ADC rows |512 x8 B |64 rolling pre-start points plus the FIRST448 post-start points, at least4000 us apart |
-| Context |184 B | Saved original frame/reference, source-enable and last unbound-reset times, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
+| Context and slot metadata |172 B | Packed frame/reference, source-enable and last unbound-reset times, thresholds, leading white distance, fitted model parameters, failure stage and bounded-array counters |
 
 The three buffers allow one active capture plus two retained failures. A
 terminal failure transfers buffer ownership; LINE does not copy or clear a
 whole buffer. A successful terminal attempt releases its working buffer and
 does not use a failure slot. Later attempts/laps cannot replace the first
 two failures. A NEW nonzero run epoch releases the old captures; STOP epoch0
-does not. Each retained buffer has5816 B; the array is17448 B. All capture
+does not. Current code asserts 5660 B per slot (4096 ADC + 1392 edges + 172 metadata).
+The packed layout is documented in [CR1_BARCODE_A.md](../architecture/CR1_BARCODE_A.md).
+Before CR1 packing, each retained buffer had5816 B; the array was17448 B.
+The following byte totals are historical, not current image budgets. All capture
 data symbols together are17485 B (was17432 B before the context times,
 measured by symbol sizes at `9ab99b2`), including source/reader indices. A compile-time
 ceiling limits the module to18 KiB.
@@ -145,6 +146,9 @@ that could not be paired to a working buffer; it does not count deliberate
 omission after the two-failure limit. No extra MQTT payload is added.
 
 ## Software gates and RAM
+
+Historical comparison before CR1 barcode evidence packing; current layouts
+are in [CR1_BARCODE_A.md](../architecture/CR1_BARCODE_A.md).
 
 All resource builds use public example settings, UP MQTT, KERNEL_RAM and
 `BARCODE_MAP=F=LEFT`. GCC14.3.1; matched base/candidate exports share a path.
