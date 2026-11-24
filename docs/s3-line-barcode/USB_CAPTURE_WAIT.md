@@ -5,7 +5,9 @@
 This change is based on `f3e7d45`, not a staging merge. It changes only the
 exclusive USB `TEST=1 BARCODE_CAPTURE=1` image. It does not change barcode
 thresholds, decoding, travel limits, robot behaviour or the console layer.
-B1c noise/motion/quiet-zone follow-up remains deferred.
+B1c noise/motion/quiet-zone follow-up remains deferred. This TEST wait is
+not the demo's GP20 report path. The demo uses the separate
+[LIVE reader and junction command path](BARCODE_LIVE_COMMAND.md).
 
 ## Operator procedure
 
@@ -60,7 +62,7 @@ Candidate checks on the `f3e7d45` base:
 | Firmware | PASS, warning-free radio-off robot and capture builds |
 | Capture SDK link proof | PASS; never-run proof image, not for flashing |
 | Strict ARM capture units | PASS, six; conversion/shadow/format checks |
-| Normal robot ELF | No barcode/workspace/wait symbols |
+| Normal robot ELF at this revision | No B1c barcode/workspace/wait symbols; the later LIVE reader is separate |
 | Capture text / data / BSS | 76576 / 152 / 158524 bytes |
 | Owner / wait / PEAK-driver compiler frames | 328 / 24 / 64 bytes |
 

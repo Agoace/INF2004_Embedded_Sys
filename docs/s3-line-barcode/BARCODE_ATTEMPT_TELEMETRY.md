@@ -2,10 +2,11 @@
 
 ## Status and scope
 
-Software implementation from staging `b9a47b5`, merged into the B2b helper
-at `a2a5f39`. No robot flash or hardware test. SHADOW only. Driving, source
-control, terminal ACK policy, symbol mapping and decode thresholds are
-unchanged. A published observation is not permission to steer.
+Current (2026-11-24): terminal-attempt telemetry is integrated in the LIVE
+demo build. A mapped barcode can command the next junction; an MQTT event
+alone is not proof of execution. See [demo results](../release/DEMO_KERNEL_V2.md).
+The original software implementation came from staging `b9a47b5` and the
+B2b helper `a2a5f39`. The software-only gates below describe that revision.
 
 The [wire contract](../s1-telemetry/MQTT_WIRE.md#barcode-v2) defines
 `robot/barcode` v2/kind1,28 bytes. It reports each terminal bound candidate,
@@ -29,8 +30,9 @@ including events dropped from the queue. It is separate from the decoder's
 record sequence, which is zero on failures. A delayed old-context cancellation
 keeps the OLD epoch in its event; it cannot be charged to a new epoch.
 A failure's letter and mapped command are zero. A decoded F/NONE is still
-an OK observation. All current messages have SHADOW set and represent
-issued=NO/executed=NO.
+an OK observation. In the LIVE demo, a valid mapped BW_OK record clears
+SHADOW; failures and ineligible records keep it. The event does not prove
+that a junction command executed. See [the live gate](BARCODE_LIVE_COMMAND.md).
 
 A fitted start star can exist on a later failure. Those widths are marked
 valid but are NOT accepted full-frame widths. When no valid start fit exists,
@@ -104,7 +106,7 @@ as an ADC bar edge. The reason histogram is complete for the retained named
 run, even if its8-row history has wrapped. The existing edge rows remain
 bounded. No full-rate ADC capture is added by this feature.
 
-## Tests and acceptance gates
+## Historical software tests and acceptance gates
 
 New C wire and Python v2 tests first failed on missing type/API and unknown
 version behavior, before implementation. Local RED logs are under
@@ -132,7 +134,7 @@ version behavior, before implementation. Local RED logs are under
 |Compiler stack frames | LINE task96 unchanged; source88 ->96; producer72 ->88; cancel48 ->64; DUMP96 unchanged; MQTT service312 unchanged; enqueue16 and packer16 B. Hardware high-water NOT RUN |
 |Documentation/template checks | Link/anchor check PASS;8 recorded template deviations unchanged |
 |Dashboard integration | SW8 owns the v2 panel; integrate it with this decoder |
-|Robot MQTT/early dump acceptance | NOT RUN; wait for review |
+|Robot MQTT/early dump acceptance | Not run at this software-only revision; later robot MQTT results are in [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md). |
 
 ### Resource comparison detail
 

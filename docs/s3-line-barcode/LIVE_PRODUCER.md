@@ -1,9 +1,9 @@
-# B2b SHADOW producer — step 4b
+# B2b barcode producer — LIVE and SHADOW
 
 ## Scope
 
 ROBOT LINE now feeds every acquired GP28 sample to ONE static
-`barcode_live_producer_t`, which contains one 988 B window context. No heap,
+`barcode_live_producer_t`, which contains one window context. No heap,
 second acquisition consumer, ISR work or vehicle/action call is added.
 TEST/capture and BENCH feed functions are no-ops; their framing is unchanged.
 
@@ -13,10 +13,11 @@ USB/DUMP formatter. `line_service.c` copies the calibration report and missed/
 dropped counters under its existing mutex. ALL decoder, control/motor reads
 and diagnostic publication occur AFTER unlocking. No sample-path printing.
 
-In default builds, every record is SHADOW with valid=0, including mapped A--D
-and mode2 input, and OFFSET_VERIFIED is never set. The 150 mm placeholder
-cannot enable an action. Only the live opt-in build can set valid=1; see
-[BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md) for its gates.
+The demo build sets `BARCODE_LIVE_ENABLE=1` and enables mapped commands
+for the next junction. The fallback build (`BARCODE_LIVE_ENABLE=0`) keeps
+records SHADOW/valid=0, including mapped A--D and mode2 input. The unverified
+150 mm placeholder cannot enable an action. See
+[BARCODE_LIVE_COMMAND.md](BARCODE_LIVE_COMMAND.md) for the gates.
 The public ABI stays [40 B record / 20 B control](LIVE_SOURCE_CONTRACT.md).
 Sub_Worker5 owns the single stopped USB/DUMP hook next to `[JUNCTION]`, and
 vehicle admission, terminal ACKs and boot printing of the SAME mapping table.
@@ -24,7 +25,7 @@ vehicle admission, terminal ACKs and boot printing of the SAME mapping table.
 ## Threshold evidence
 
 Keep the [step-3 leading-white policy](LIVE_WINDOW_READER.md): qualified paper
-white is 120--220, mandatory leading extent is ten fitted narrows, and its
+white is 120--220, mandatory leading extent is 30 mm, and its
 mean +150/+75 gives thresholds, with rise capped at350. Freeze at FIRST BAR;
 never adapt to mat black or later ink. The current-boot spin report is the
 reference, not a replacement paper-white scale. Learned or fallback report
@@ -43,8 +44,8 @@ reference evidence. The window needs its own absolute leading white proof.
 - After more than50 ms without a successful observation, establish a new
   baseline and require NEW progress. A scheduling pause cannot certify old
   control as fresh. Eligible control fails closed above50 ms.
-- Mode0 disables reading, even when it shares a terminal ACK. Modes1/2 can
-  collect SHADOW observations; neither enables a live record in this commit.
+- Mode0 disables reading, even when it shares a terminal ACK. Mode1 collects
+  SHADOW observations. Mode2 can enable a valid record in a LIVE build.
 - Bind epoch/revision/cut at FIRST BAR; first_ms must be strictly after cut.
   Changed epoch/revision/cut or calibration generation abandons the window.
   This also discards leading white retained across a missed SEARCH cycle.
@@ -73,7 +74,7 @@ cover nonzero phase at both wraps. No retry restamps read_ms or encoder pairs.
 A complete uppercase window publishes once. Its original packet is immutable
 until terminal ACK; ADC samples received while occupied are not queued for
 later replay. A matching fresh ACK retires it. Mode0 keeps reading disabled;
-only future eligible samples can build a NEW ten-narrow leading white proof.
+only future eligible samples can build a NEW 30 mm leading white proof.
 
 Serial advances for the entire BOOT, nonzero modulo32 bits, skipping zero.
 STOP, epoch/route change, ACK, calibration and window reset NEVER reset it.
@@ -83,8 +84,9 @@ Old-epoch occupied slots remain until a terminal ACK; vehicle rejects/ACKs
 such slots, never admits them. An old ACK X cannot retire the new slot X+1.
 
 Partial optical/context failures produce diagnostic rows only (offered0),
-not fake complete packets requiring ACK. Full geometry A--Z windows produce
-an offered1 packet, even if its mapping is NONE. Non-letter Code39 payloads
+not fake complete packets requiring ACK. Accepted A--Z results produce
+an offered1 packet, even if its mapping is NONE. An accepted held letter
+need not have a complete end star; see [reader limits](LIVE_WINDOW_READER.md#bend-exit-and-held-letter-2026-11-20). Non-letter Code39 payloads
 retain their symbol in rejection diagnostics but never become course tokens.
 Reason is keyed diagnostic evidence, not an extra field in the40 B ABI.
 Window reasons0--10 are WAIT, OK, CALIBRATION, LOSS, MOTION, START, WIDTH,
@@ -107,6 +109,9 @@ is skipped, not printed as a valid copy. No DTR-retained TEST dump is changed.
 | BC_REF | Original first/final ADC edges, final-edge motor upper bracket, eligible ADC time, original read time/counts; appended terminal_us after final source recheck |
 | BC_EDGES / BC_EDGE | Total/retained/lost raw GP28 edges AFTER window, ADC time, original upper motor time/counts, polarity/raw |
 
+The `SHADOW`/`valid0` text in `BC_LIVE` and `BC_FRAME` is a legacy print
+label, also emitted in LIVE builds. Use the MQTT v2 SHADOW flag and vehicle
+command evidence to determine eligibility and execution, not these labels.
 The bounded barcode dump precedes the large KR dump. The current
 [terminal-attempt telemetry record](BARCODE_ATTEMPT_TELEMETRY.md) specifies
 v2 MQTT FIFO ownership, reason-count epoch retention, terminal time and new
@@ -135,7 +140,7 @@ These rows are NOT an offset measurement or permission. Compare GP28 with
 the independent line-pair observation on the SAME transverse18 mm stripe;
 unknown barcode-to-cross spacing cannot establish the sensor offset.
 
-## CR1 memory and compiled stack
+## Historical memory and compiled stack (step 4b)
 
 Matched fake-A relink against `366ec9a`, same current objects/profile:
 
@@ -151,7 +156,7 @@ source-storage assertion is at most4096 B, a ceiling, NOT an allocation target.
 There is no full-pass capture or frozen TEST decoder workspace pulled in.
 TEST/capture and BENCH static sizes stay unchanged from366ec9a.
 
-### Required state versus removable evidence
+### Historical proposal: required state versus removable evidence
 
 CR1 follow-up: ONE future build switch, `BARCODE_LIVE_DIAGNOSTICS`, must
 select all evidence storage together. Default ON for SHADOW and offset work.
@@ -214,7 +219,8 @@ Artifacts: `build/b2b-validation/step4b-*`.
 Link-only DUMP-retention ELF is NOT FOR FLASH. Wi-Fi example settings were
 used only for link validation and removed. No push/flash was performed.
 
-After Sub_Worker5 merges: verify SHADOW hardware with the LARGE print at the
-fixed5.5 mm mount and normal146 mm/s LINE. Keep full source/vehicle logs,
-stack/CPU evidence and same-stripe offset observations. Live action remains
-blocked until geometry, mapping, temporal safety and integration are approved.
+The step-4b SHADOW-only gate is superseded. The demo now uses GP28 at
+2.5 mm, LINE base 120 mm/s, and LIVE commands. Image 30 run 6 read 4/4
+barcodes; see [current demo evidence](../release/DEMO_KERNEL_V2.md).
+The historical 988 B context and resource tables above are not current
+image budgets. New changes still need timing, stack and robot checks.
