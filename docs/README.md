@@ -32,7 +32,7 @@ not current acceptance reports. Local course originals are not public records.
 ## Architecture
 
 - [PROJECT_STATUS.md](architecture/PROJECT_STATUS.md) — read first: the state of each area.
-  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch table (main = submission, mtk3-staging = integration, mtk3-testing = kernel tests), merge rules (`--no-ff`, no rebase), mtk3 source layout, commit checks, branch clean-up 2026-11-18, archive tags.
+  Contains: demo build line (`KERNEL_RAM=1`, `BARCODE_MAP`); area table (state, evidence, open items: LINE zigzag about ±40..54 deg/s, barcode 0/10 on course, detours 2/2 in 6 runs, KERNEL_RAM 676 vs 931 permille); robot run-log locations 2026-11-10..16; branch diagram and table (main = submission, mtk3-staging = integration, mtk3-testing = test environments and tools, one branch per module), merge rules (`--no-ff`, no rebase, one revertable merge per risky change, archive tag then delete), mtk3 source layout, commit checks, branch clean-ups 2026-11-18 and 2026-11-24, archive tags.
 - [ARCHITECTURE.md](architecture/ARCHITECTURE.md) — the implemented robot system and its three decisions.
   Contains: subsystem ownership, tasks and cores, interrupt/polling rules, Vehicle Controller shell and route table, safety settings, results; ADRs in full: motor controller is the only actuator owner, one hardware heartbeat (bare-metal 1 ms time base), Vehicle Controller runs one module at a time (four layers, rules, outcome table).
 - [MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number, generated from the docs. Check it before asking the operator.
@@ -65,6 +65,7 @@ not current acceptance reports. Local course originals are not public records.
 - [KERNEL.md](kernel/KERNEL.md) — the μT-Kernel robot: tasks, timing, RAM and locks.
   Contains: task/priority table (motion 10, line 11, sonar 12, vehicle 13, IMU 14, Wi-Fi 20, USB 21, telemetry 30, Health 31, idle 32), kernel objects, settings; application stacks (Wi-Fi M9 8320 B, IMU high-water); watchdog and last reset reason; CPU load; P1 run timing and P2 overrun timeline; KERNEL_RAM placement (rule b, robot P1 pairs); F-NVIC (all external IRQs at 0); split parked 2026-11-15, placement and lock rules, M8 startup handoff; RAM budget by group and growth; USB priority; results and limits.
 - [BUILD.md](kernel/BUILD.md) — how to build, flash and read the firmware.
+- [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) — the course template setup guide (SDK, toolchain, template build options), moved from the root README on 2026-11-24.
   Contains: tools, Make profiles and options, demo line, private settings, BOOTSEL/picotool flash, USB output, BENCH_KERNEL spare-Pico bench (pass rule), SWD probe (wiring, GDB on both cores), host tests and link proof.
 - [JUNCTION_VALIDATION.md](kernel/JUNCTION_VALIDATION.md) — junction hardware evidence and gates.
   Contains: B2a CLOSED (`50426ae`, 3/3 DONE); B2b STEP4a software candidate; operator evidence 2026-11-10; software evidence; RAM and stack; J0–J6 procedure (J3/J4 operator evidence on `7648081`, J6 open).

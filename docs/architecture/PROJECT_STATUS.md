@@ -19,6 +19,10 @@ set on the day with `BARCODE_MAP`.
 2026-11-20 (later): code freeze 2, demo kernel tags `demo-kernel-v2` and
 `submission-v3.1` (staging `972f7cd`): run limit 300 s, live barcode command
 held 10 m and through SCAN/DETOUR; see [DEMO_KERNEL_V2.md](../release/DEMO_KERNEL_V2.md).
+2026-11-24: submission tidy-up, tag `submission-v4` (documentation and
+branches only; the demo firmware is byte-identical to `demo-kernel-v2`). The
+root README now describes the robot; the template setup guide moved to
+[TEMPLATE_SETUP.md](../kernel/TEMPLATE_SETUP.md).
 
 ## Demo image
 
@@ -51,7 +55,7 @@ Check `.ramproof` PASS and the boot line `[BARCODE_TABLE]`. See
 | KERNEL_RAM v2 | Robot PASS (rule b): peak load 676 vs 931 permille. | [KERNEL.md (KERNEL_RAM)](../kernel/KERNEL.md#ram-placement-kernel_ram) | Soft-float helpers stay in flash. |
 | Dual-core split | PARKED. Demo uses UP. | [KERNEL.md (split parked)](../kernel/KERNEL.md#split-placement-parked-2026-11-15) | None until resumed. |
 | CR1 change requirement | Done on staging. Packed: motion, sonar/obstacle, vehicle, barcode evidence, telemetry, fault mask F, IMU hump/diag/safety boards, KR1 rows 16 to 15 B. Static RAM 241228 to 234596 B (-6632). MQTT sizes unchanged. Minimum-bit proof: every field minimal or accepted with a stated reason, no GAP left. Robot image 12 (`73395bb`): rows, hump, lift stop, fault mask, barcode LIVE, timing and stacks pass. | [CR1.md](CR1.md#module-round-2026-11-18), [CR1_MIN_BIT_PROOF.md](CR1_MIN_BIT_PROOF.md) | After an MQTT ESTOP stop the run fault mask is 0. Fair 110 vs 200 ms MQTT comparison not done. IMU INT1 wake parked on `mtk3-imu-irq` (robot FAIL on image 13; fix F1 in progress). IMU snapshot board not packed (no demo reader). |
-| SIL (Webots) | LINE, SEARCH, curves, barcode A and F observe-only on `mtk3-hil`. | [SIMULATION.md](../simulation/SIMULATION.md) | Does not reproduce the real zigzag. Records live on `mtk3-hil`. |
+| SIL (Webots) | LINE, SEARCH, curves, barcode A and F observe-only (first on `mtk3-hil`, now on `mtk3-testing`). | [SIMULATION.md](../simulation/SIMULATION.md) | Does not reproduce the real zigzag. Records live on `mtk3-testing`. |
 
 ## Robot run logs
 
@@ -78,49 +82,54 @@ commit inside this repository before the parent updates its recorded revision.
 
 ### Branches
 
-Rule from 2026-11-18: `mtk3-staging` combines all modules, `mtk3-testing`
-holds the kernel tests, and `main` is the submission branch.
+Rule from 2026-11-18, made final for submission on 2026-11-24.
+
+```
+main            submission: tags submission-v*, demo-kernel-v*
+  ^ --no-ff at each freeze
+mtk3-staging    integration: every module branch merges here
+  ^ --no-ff                      | staging merges into testing
+module branches                  v
+                              mtk3-testing: test environments and tools
+```
 
 | Branch | Purpose |
 | --- | --- |
-| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`, `submission-v3`, `submission-v3.1`, `demo-kernel-v2`. |
-| `mtk3-staging` | Integration branch: merge all module branches here. Demo kernel tag `demo-kernel-v1`. |
-| `mtk3-testing` | Kernel test branch: SIL/HIL/PIL simulation (Webots, course8 SIL), bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
-| `mtk3` | Course-template/platform base |
-| `mtk3-motion`, `mtk3-vehicle` | Motion and shared vehicle interface |
-| `mtk3-line` | Line tracing, line search and the barcode reader |
-| `mtk3-search`, `mtk3-scan`, `mtk3-detour` | Navigation modules |
-| `mtk3-telemetry`, `mtk3-dashboard` | S1 transport, RAM log, boards, network and laptop dashboard |
-| `mtk3-imu` | S4 IMU module |
-| `ziven-barcode-algo`, `yanshan`, `jaison-imu`, `mtk3-imu-safety` | Team reference branches; port approved ideas, do not merge them |
+| `main` | Submission branch. Receives `mtk3-staging` at a freeze (`--no-ff`). Tags `submission-v1`, `submission-v2`, `submission-v3`, `submission-v3.1`, `demo-kernel-v2`, `submission-v4`. |
+| `mtk3-staging` | Integration branch: merge all module branches here. It also holds the host tests (`tests/`, `host-tests/`), the detour simulator (`sim/`) and the default-off bench switches (`BENCH_KERNEL`, `IMU_SAFETY_BENCH`). |
+| `mtk3-testing` | Test environments and tools: Webots SIL/HIL/PIL simulation (`sim/webots/`, `app_program/sim/`, PIL stubs and fixtures), simulation records (`docs/simulation/`) and bench kernel procedures. Merge staging into it before new test work. Do not merge it into staging without operator approval. |
+| `mtk3-telemetry`, `mtk3-dashboard` | S1: RAM log, MQTT, laptop dashboard |
+| `mtk3-motion` | S2: motion controller |
+| `mtk3-line` | S3: line tracing, line search and the barcode reader |
+| `mtk3-imu` | S4: IMU |
+| `mtk3-search`, `mtk3-scan`, `mtk3-detour` | S5 and navigation modules |
+| `mtk3-vehicle` | Vehicle shell and shared vehicle interface |
+| `mtk3` | Course template base with the shared template changes (`7fa70f5`). It is not moved with the module branches; see [TEMPLATE_CHANGES.md](TEMPLATE_CHANGES.md). |
+| `ziven-barcode-algo`, `yanshan`, `jaison-imu`, `mtk3-imu-safety` | Team reference branches. Port approved ideas; do not merge, commit on or delete them. |
 
-The bench kernel switches (`BENCH_KERNEL`, `IMU_SAFETY_BENCH`) stay in
-staging, default off, because the freeze keeps shared files unchanged.
-
-Each module has its own development branch. Do module work and module-level
-tests on that branch. Merge it into `mtk3-staging`, where the complete
-system is integrated and tested. Use a temporary helper branch only for
-work that changes many modules at once, for example a documentation
-rewrite. Temporary helper branches are not new integration branches.
-Create a fresh worktree from the assigned staging revision. Keep the main checkout and
-another worker's branch untouched. Main performs hardware runs and pushes
-unless it assigns those operations explicitly.
+On 2026-11-24 every module branch was moved (fast-forward) to the staging
+tip of the tidy-up, so each module branch shows the current module code.
 
 ### Merge rules
 
 1. Keep pure interfaces and logic independent of hardware and the kernel.
-2. Test a module in its own worktree. Commit there, not in another branch.
-3. Merge module/helper work into staging with `--no-ff`. Do not rebase.
-   Before new work on a module branch, merge the current staging tip into
-   that branch first (`--no-ff`, or a fast-forward when the branch has no
-   own commits). This keeps the documentation layout and shared code
-   current. On 2026-11-08 all module branches were fast-forwarded to the
-   documentation rewrite (`c2b2154`).
-4. If parallel changes must be combined, the assigned second merger merges
-   the other tip with `--no-ff`, then repairs links and runs checks again.
-5. Commit and push the child repository before updating its parent gitlink.
-   A local helper's no-push instruction still applies.
-6. Do not merge a reference branch. Keep author credit when porting ideas.
+2. Do module work and module tests on the module branch, in its own
+   worktree. Before new work, merge the current staging tip into the module
+   branch (`--no-ff`, or a fast-forward when it has no own commits).
+3. Put a risky change on its own short branch. It enters staging as ONE
+   `--no-ff` merge, so `git revert -m 1 <merge>` can remove it. Robot test
+   images that combine branches come from a throwaway `tmp-img*` branch.
+4. Merge into staging and main with `--no-ff`. Do not rebase, cherry-pick,
+   rewrite history or force-push. `git revert` is allowed.
+5. One committer per branch at a time.
+6. Before a push: fetch, check that the remote tip is an ancestor
+   (`git merge-base --is-ancestor`), grep the tree diff for private
+   settings, check for binary files, then push.
+7. When a short branch is finished, tag it `archive/<name>` and delete the
+   branch. A pushed tag cannot move without a force-push, so a new release
+   gets a new tag (for example `submission-v3.1`).
+8. Commit and push this repository before the parent updates its gitlink.
+9. Do not merge a reference branch. Keep author credit when porting ideas.
 
 ### MTK3 layout
 
@@ -155,6 +164,13 @@ Run `python3 scripts/check-docs.py`,
 committing. A source/layout change must update the agent map in the same
 commit. Keep private Wi-Fi/MQTT settings and generated output out of Git.
 
+### Branch clean-up 2026-11-24
+
+Before the final submission, 24 finished work branches were tagged
+`archive/<name>` (table below) and deleted, locally and on GitHub. Each tag
+points to the last commit of its branch. The 30 extra worktrees were
+removed; their local build evidence is kept outside Git.
+
 ### Branch clean-up 2026-11-18
 
 All helper branches were deleted after the freeze. Their commits are in
@@ -181,6 +197,13 @@ historical layout record retains the complete commands and module results.
 | `archive/mtk3-line-gap` | 24e2051 | `LINE_GAP=1` opt-in, rejected 2026-11-16 |
 | `archive/mtk3-kd-st-trial` | 474cc70 | Throwaway KD + same-tick trial |
 | `demo-kernel-v1` | 9f15213 | Frozen demo kernel 2026-11-18 |
+| `demo-kernel-v2` | ef5064a | Demo kernel 2026-11-20 (code freeze 2) |
+| `archive/mtk3-cr1`, `archive/mtk3-cr1-*` (fpack, imu, kr1row, line, proof, sonar, telemetry, vehicle) | b68ce6b and others | CR1 minimum-bit rounds, merged into staging |
+| `archive/mtk3-bc-small`, `archive/mtk3-bc-endstar`, `archive/mtk3-bc-quiet20`, `archive/mtk3-blip-grace` | 083c647, 2123e1f, 4c0a42d, 03fc44b | Barcode reader changes, merged into staging |
+| `archive/mtk3-detour-minturn`, `archive/mtk3-imu-fifo-d`, `archive/mtk3-demo-limits` | bd36e12, 1c579cd, 3f4706c | Detour, IMU FIFO and demo limits, merged into staging |
+| `archive/mtk3-imu-irq` | 5a87c72 | IMU INT1 wake, parked, not merged |
+| `archive/mtk3-bc-nmin25` | cf81f86 | Barcode minimum-count trial, not merged |
+| `archive/tmp-cr1-img2`, `archive/tmp-img15` .. `archive/tmp-img19` | f0522da and others | Throwaway robot test images 2026-11-19, not merged |
 
 ### Branch limits
 
