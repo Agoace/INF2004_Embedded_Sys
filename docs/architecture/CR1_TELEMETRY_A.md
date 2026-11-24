@@ -10,10 +10,9 @@ identities, queue capacity and admission safety must stay unchanged.
 Current (2026-11-24): these steps are merged (work kept at tags
 `archive/mtk3-cr1-telemetry` and `archive/mtk3-cr1-fpack`). Image 12 checked
 rows, fault-mask output, timing and stacks on 2026-11-19; see
-[project status](PROJECT_STATUS.md#areas). A fair 110/200 ms network comparison,
-per-task CPU and live PBUF/heap headroom are still not established.
-The table and per-step gates below describe the original substeps, not the
-current integration state.
+[project status](PROJECT_STATUS.md#areas). Open: a fair 110/200 ms network
+comparison, per-task CPU and live PBUF/heap headroom measurements.
+The table and per-step gates below record the original substeps.
 
 | Step | State at the substep |
 | --- | --- |
@@ -217,7 +216,7 @@ linked saving. Across A-EVENT, A-INDEX and these four records the retained
 data saving is 1608 B; linked static saving is also 1608 B in this layout.
 No category B or wire saving is included. Hardware codec CPU, task stack
 and control timing were pending at that substep; see the current status
-above. Local scratch is not a static saving.
+above. Local scratch uses stack storage.
 Evidence: `build/wip/cr1/optional-red.log`, `optional-host.log`,
 `optional-build.log`, `optional/ram_report.txt` and copied ELF/map/proof.
 
@@ -359,8 +358,8 @@ commit adds 24 B: 20 B S1 data plus 4 B linker alignment. The existing
 before result is reused; it was not rebuilt. Final linked
 alignment is 943 B, equal to optional A. Category B and wire savings are
 zero. At this substep hardware stack/CPU, PBUF/heap headroom and task timing
-were pending. Later image 12 checked combined timing/stacks, not live
-PBUF/heap headroom or per-task CPU.
+were pending. Later image 12 checked combined timing/stacks.
+Open: live PBUF/heap headroom and per-task CPU measurements.
 
 Evidence: `build/wip/cr1/final-red.log`, `final-host.log`, `final-build.log`,
 `final/ram_report.txt`, copied ELF/map/proof and `final/owner-symbols.txt`.
@@ -503,9 +502,9 @@ or firmware change.
 
 ## Robot gate: 110 ms runs only
 
-Historical gate plan (2026-11-18). The combined robot check above supersedes
-"not run" claims for integration, timing and stacks, but not the controlled
-network comparison or unmeasured live heap/PBUF headroom.
+Historical gate plan (2026-11-18). The combined robot check above completed
+the integration, timing and stack checks. Open: the controlled network
+comparison and live heap/PBUF headroom measurements.
 
 No new 200 ms robot run is permitted. Use existing files under
 `~/Projects/robot-logs/20261118_post_freeze/`.

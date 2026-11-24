@@ -5,8 +5,8 @@
 This change is based on `f3e7d45`, not a staging merge. It changes only the
 exclusive USB `TEST=1 BARCODE_CAPTURE=1` image. It does not change barcode
 thresholds, decoding, travel limits, robot behaviour or the console layer.
-B1c noise/motion/quiet-zone follow-up remains deferred. This TEST wait is
-not the demo's GP20 report path. The demo uses the separate
+B1c noise/motion/quiet-zone follow-up remains deferred. This wait belongs
+to the TEST capture report. The demo uses the separate
 [LIVE reader and junction command path](BARCODE_LIVE_COMMAND.md).
 
 ## Operator procedure

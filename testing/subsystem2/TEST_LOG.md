@@ -10,8 +10,8 @@ from a cold VIN power-on.
 Current (2026-11-24): the robot uses same-tick retarget by default, with
 base line speed 120 mm/s, kd 30 and motion cap 460 mm/s. Full-course runs
 are recorded in [the demo record](../../docs/release/DEMO_KERNEL_V2.md).
-These later runs do not replace the independent timing/stop-distance gates
-below. Old task/stack results retain their tested revision.
+Open: the remaining independent timing/stop-distance gates below.
+Task/stack results retain their tested revision.
 
 | ID | Check and procedure | Pass condition | Status |
 | --- | --- | --- | --- |
@@ -394,8 +394,8 @@ the operator observation. Possible improvement: log about 1 s after ESTOP.
 
 ## STEP 8 Wi-Fi20 coexistence — independent TEST window not recorded
 
-Later MQTT driving results exist in the integration/release records. They
-do not establish this separate five-second TEST-window result.
+Later MQTT driving results are in the integration/release records.
+Open: the separate five-second TEST-window measurement.
 
 Repeat S2-U01 on the new MQTT TEST image: 499–501 complete tick gaps over
 the independent five-second window, max <=11000 us and zero missed.

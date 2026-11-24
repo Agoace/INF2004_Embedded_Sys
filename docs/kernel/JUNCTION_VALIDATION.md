@@ -7,8 +7,8 @@ Image 30 run 6 read A, large F, Z and small F (4/4), turned LEFT at 93.5
 degrees and accepted a U-turn at 178.5 degrees. Demo day image 31 read M
 and turned LEFT at 95.4–95.7 degrees; the operator reported "it works".
 See [demo-kernel-v2](../release/DEMO_KERNEL_V2.md) for run scope and limits.
-The tables below retain the earlier image-specific gates. They do not mark
-the current demo as untested, or prove every J0–J6 case on the current image.
+The tables below record the earlier image-specific gates.
+Open: complete J0–J6 coverage on the current image.
 Fake-command images still use the old turn; the live-only centre advance
 and 60-degree acceptance gate are in `app_program/barcode_live_vehicle/action.c`.
 
@@ -96,7 +96,7 @@ CPU percentage or deadline margin has yet been measured on this candidate.
 
 This plan predates the later SHADOW and LIVE runs; see
 [SHADOW results](../s3-line-barcode/SHADOW_HARDWARE_RESULTS.md) and the current
-release evidence above. No blanket PASS for the gates below is implied.
+release evidence above. Open: the remaining gates listed below.
 Main builds the configured operator image. The worker does not flash or push.
 For a SHADOW-only diagnostic, use NONE/enable0/bound0. Confirm SHADOW boot and the official table, normal
 LINE/SEARCH, decoded source2 evidence and **no action offer/kind7 job**.
@@ -322,9 +322,9 @@ response latency still need new hardware evidence.
 
 Historical fake-command redesign matrix. The live build has a different
 approach and angle gate; the current evidence is at the top of this record.
-Keep each status below tied to its named revision. In particular, the
-expiry-free and SCAN/DETOUR cancellation rules below are not the demo live
-policy (10000 mm hold, 200 ms SEARCH limit, retention through SCAN/DETOUR).
+Keep each status below tied to its named revision. The demo live policy
+supersedes the expiry-free and SCAN/DETOUR cancellation rules below:
+10000 mm hold, 200 ms SEARCH limit, retention through SCAN/DETOUR.
 
 Only the operator authorizes flash/power. Main rebuilds configured images.
 Keep physical GP21 ESTOP ready. Lift wheels and check direction/stop before

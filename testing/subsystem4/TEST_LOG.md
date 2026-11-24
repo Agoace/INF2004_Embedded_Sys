@@ -9,9 +9,9 @@ FIFO option D is integrated; [project status](../../docs/architecture/PROJECT_ST
 records bench B2 passing on all four boots. INT1 wake is parked at tag
 `archive/mtk3-imu-irq`. Later course/demo hump reports are in
 [the demo kernel record](../../docs/release/DEMO_KERNEL_V2.md).
-These do not establish the specific H3 two-source, no-hump comparison or
-H4–H9 acceptance. The revision-scoped results and pending tests below stay
-as recorded; the old observe-only procedures are not the current safety policy.
+Open: the H3 two-source, no-hump comparison and H4–H9 checks. The results
+and pending tests below retain their named revisions. The old observe-only
+procedures preceded the current safety policy.
 
 ## GY-511 steps 0 and 1
 

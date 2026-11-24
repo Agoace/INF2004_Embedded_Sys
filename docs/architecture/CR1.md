@@ -636,8 +636,7 @@ separately. A MQTT wire change requires a separate decision.
 | Vehicle | 241224 B alone; board 40 B | Unchanged | Passed | PASS (image 12) |
 
 Table updated 2026-11-24. Image 12 is `73395bb` (2026-11-19); total static
-RAM 241228 to 234596 B. A fair 110 ms vs 200 ms MQTT comparison was not
-done.
+RAM 241228 to 234596 B. Open: fair 110 ms vs 200 ms MQTT comparison.
 
 Parser host checks cover wrapped sections, RAM vector, `.noinit`, archive
 objects, discarded sections, zero-size sections, flash exclusion, padding

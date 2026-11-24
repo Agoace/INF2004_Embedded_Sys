@@ -10,8 +10,8 @@ FIFO option D is integrated. INT1 wake stays parked at tag `archive/mtk3-imu-irq
 CR1 hump, diagnostic and safety board packing is complete; see [CR1 IMU](../architecture/CR1_IMU_A.md).
 The current release is `submission-v4`; its firmware is the same as
 `demo-kernel-v2`. Later full-course runs include hump reports; see
-[demo kernel results](../release/DEMO_KERNEL_V2.md). These do not establish
-the two-source, no-hump H3 comparison or height accuracy on other objects.
+[demo kernel results](../release/DEMO_KERNEL_V2.md). Open: the two-source,
+no-hump H3 comparison and height-accuracy tests on other objects.
 
 The dated step results below retain their tested revisions and limits.
 Step 3 added a report-only hump detector on top of step 2d (`0207b54`).
@@ -877,7 +877,7 @@ Before option D, a FIFO count of 9..31 (a late IMU task, for example a wake late
 
 `depth_max` records the largest count seen (32 = OVRN). A FIFO reset or a bus fault ends a catch-up.
 
-Why 6 and not 8: the [host timing model](../../tests/test_imu_fifo_timing.c) uses 538 + 165 n µs of bus time and compute plus line-task preemption (about 132 µs per 1 ms). This is 25 × (4 + 3 + 6 n + 9) bus µs plus 138 + 15 n compute µs, not a measured firmware bound. An 8-sample cycle is about 1990–2120 µs and crosses the 2 ms deadline (`imu_probe.c`, unchanged); bench B1 measured 2007 µs and one TIMEOUT. A 6-sample cycle is at most about 1790 µs. Outside a catch-up, n = 7..8 still reads all n, as before option D (step 2d maximum n was 6 in 45000 polls).
+Why 6 and not 8: the [host timing model](../../tests/test_imu_fifo_timing.c) uses 538 + 165 n µs of bus time and compute plus line-task preemption (about 132 µs per 1 ms). This is 25 × (4 + 3 + 6 n + 9) bus µs plus 138 + 15 n compute µs in the host model. Open: firmware worst-case cycle-time measurement. An 8-sample cycle is about 1990–2120 µs and crosses the 2 ms deadline (`imu_probe.c`, unchanged); bench B1 measured 2007 µs and one TIMEOUT. A 6-sample cycle is at most about 1790 µs. Outside a catch-up, n = 7..8 still reads all n, as before option D (step 2d maximum n was 6 in 45000 polls).
 
 FSS is the unread count, and each 6-byte step of the auto-incrementing burst (0x28..0x2D, then back to 0x28) removes ONE sample. Thus FSS drops by exactly the number read after a partial read. AN3308 (LIS3DH) states this; the LSM303DLHC datasheet does not. Bench B1 confirmed it on the robot for 8 samples (`partial` 2, `depth_max` 16, `backlog`/`overrun`/`bad`/`reset` 0, `max` 8).
 
@@ -1384,8 +1384,8 @@ run-end line, the summary and the `[S4_DIAG]` or health timing.
 
 The three source records below are retained in full. Their original revision
 scopes and historical Not-run statements remain attached to their evidence.
-Their TEST-only/no-calibration descriptions apply to those old revisions,
-not the current robot IMU service and safety integration above.
+Those revisions used TEST-only service without calibration. The current
+robot IMU service and safety integration are described above.
 
 ## Source: IMU_BRINGUP.md
 

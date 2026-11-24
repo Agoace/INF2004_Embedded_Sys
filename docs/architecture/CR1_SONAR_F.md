@@ -58,6 +58,7 @@ Demo line, public example secrets, Arm GNU 14.3.Rel1. Before is `1809787`.
 
 The 8 B board is new storage, a cost, not a packing saving. Of 225
 objects, only `sonar_service.o` differs. Messages and MQTT bytes do not
-change. The frame value is not a whole-stack measurement. This isolated
-substep had no robot run. Later combined CR1 image 12 checked fault-mask
+change. The frame value comes from the compiler's per-function stack report.
+Open: whole-stack measurement for the isolated substep; no robot run was
+made. Later combined CR1 image 12 checked fault-mask
 output, timing and stacks; see [project status](PROJECT_STATUS.md#areas).

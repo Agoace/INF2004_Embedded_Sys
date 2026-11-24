@@ -144,7 +144,7 @@ measurements**.
 
 Task stacks did not change in this substep. The later combined CR1 image 12
 passed timing and stack checks (2026-11-19); see [project status](PROJECT_STATUS.md#areas).
-The emulator values above are still not robot measurements.
+The values above are emulator results at 125 MHz with a warm flash cache.
 
 ## Shared access and deferred work
 

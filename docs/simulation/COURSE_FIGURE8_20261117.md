@@ -9,7 +9,7 @@ original controller limits. Webots tools now live on `mtk3-testing`, not
 the deleted `mtk3-hil` branch (kept as tag `archive/mtk3-hil`). A separate
 course8 controller and the top-down generator fix are integrated there;
 see [the SIL integration record](https://github.com/Agoace/INF2004_Embedded_Sys/blob/mtk3-testing/docs/simulation/COURSE8_SIL_INTEGRATION_20261117.md).
-Those host checks are not physical GP28 acceptance or a Gate 1 pass.
+Open: physical GP28 and Gate 1 checks.
 
 ## Source and labels
 
@@ -129,7 +129,7 @@ which is not on staging: in a `mtk3-testing` checkout run
 The generator reports 18 open ports: the free ends of the loose arcs
 (`allow_open_ports` is true for this reason).
 
-Historical generator issues at `448fcef` (not current `mtk3-testing`):
+Generator issues recorded at `448fcef`:
 - `pil/world.py` writes `Viewpoint { ... orientation 0 0 1 0 }`: the camera looks horizontally and Webots shows a black screen.
 - A hump has material `MAT_WHITE`, so the ramp is invisible on the white tiles.
 
@@ -156,8 +156,7 @@ procedure below is for preview only:
 The SIL controller at `448fcef` (`controllers/sil_line/sil_line.py`)
 could not drive this course. The separate course8 controller on
 `mtk3-testing` addresses course reference, tilt and gain configuration;
-it still has no barcode offers or sonar. The table records the original
-controller, not the current course8 controller:
+it still has no barcode offers or sonar. Original `448fcef` controller:
 
 | Need | Current SIL | Effect on the figure-8 |
 | --- | --- | --- |

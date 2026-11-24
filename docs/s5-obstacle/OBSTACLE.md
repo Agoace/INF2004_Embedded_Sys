@@ -351,8 +351,7 @@ today, not an S2 effect.
 
 Limit. The free-ray corner is a bound from the scan (the first free ray
 at the free step), not a measured corner. A corner beyond that ray
-(a deeper box side) is not modelled. The S2 early-edge path has not been
-observed on the robot; later normal-path detours do not validate it.
+(a deeper box side) is not modelled. Open: robot test of the S2 early-edge path.
 
 Build evidence (fix B). Base `871c806`, fix `f48f856`. Demo MQTT image
 (the CR1 demo build line), Arm GCC, `scripts/ram_report.py`:
@@ -430,7 +429,7 @@ Sources: [`obstacle.c`](../../app_program/subsystem5/obstacle.c),
 | Reattempt outcome | Free side in 5/5 blocked runs at 329–435 mm; no contact; event/attempt/summary counts correct; no 3 s timeout observed |
 | DETOUR after reattempt | Four runs stalled or were operator-stopped after leaving the two-tile area; not a full detour PASS |
 | Host module mutation check | 45/45 caught; reverse timeout/stop/ESTOP and three-blocked-profile bounds covered by host tests |
-| Image 30 run 6, 2026-11-20 | Two detours, 2/2 DONE_LINE; normal path only, not robot acceptance of the S2 early-edge path |
+| Image 30 run 6, 2026-11-20 | Two detours, 2/2 DONE_LINE on the normal path; S2 early-edge robot test remains open |
 | Demo day image 31, 2026-11-24 | Detours ended DONE_NO_LINE then line search; operator reported "it works"; see [the demo record](../release/DEMO_KERNEL_V2.md) |
 
 ## Limits: the wide-cone finding

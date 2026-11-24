@@ -10,8 +10,8 @@ junction. S3 sets valid1 only under the live producer checks, not in SHADOW.
 B2a fake A–D images remain exclusive source1 builds. The fixed24 B consumer,
 locked LINE/SEARCH, subsystem5, module numbers, summaryv3 and KR1 do not change.
 IMU humps remain report-only; lift/overturn safety can stop the robot.
-B2a closure alone did not approve live actions. Later operator approval and
-robot results are in [the live command record](../s3-line-barcode/BARCODE_LIVE_COMMAND.md).
+Later operator approval for live actions and robot results are in
+[the live command record](../s3-line-barcode/BARCODE_LIVE_COMMAND.md).
 
 ## Entry points and ownership
 
@@ -132,6 +132,6 @@ mid-run DONE. Message116 B, INFO108 B and the4096 B buffer stay unchanged.
 See [validation](../kernel/JUNCTION_VALIDATION.md) for revision-scoped gates.
 Current evidence: image 30 run 6 read four barcodes, turned LEFT at 93.5
 degrees and accepted a U-turn at 178.5 degrees; see
-[demo-kernel-v2](../release/DEMO_KERNEL_V2.md). This is not an all-load stack
-or physical stop-latency proof. Software tests alone do not authorize a flash.
+[demo-kernel-v2](../release/DEMO_KERNEL_V2.md). Open: all-load stack margins
+and physical stop-latency measurements.
 IMU source comparisons remain separate from live-action acceptance.

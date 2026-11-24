@@ -4,12 +4,12 @@ Tests of the complete product against its requirements, run on the final hardwar
 
 See [the testing guide](../README.md) for how to record results.
 
-Current (2026-11-24): the tables below are unfilled template examples, not
-completed system-test evidence. Actual full-course results are in
+Current (2026-11-24): the tables below contain unfilled template examples.
+Actual full-course results are in
 [the demo record](../../docs/release/DEMO_KERNEL_V2.md): image 30 run 6
 (2026-11-20) ran 122 s / 11.5 m, read 4/4 barcodes and completed 2/2
 DONE_LINE detours. Demo-day image 31 also ran; the operator reported
-"it works". These results do not assign a PASS to placeholder SYS-01/02.
+"it works". Open: define and run SYS-01/02.
 
 ## Test cases
 
