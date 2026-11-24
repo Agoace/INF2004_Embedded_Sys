@@ -20,8 +20,8 @@ record once. Use these topic directories before choosing a source entry below:
 | --- | --- |
 | [release/](release/) | DEMO_FREEZE.md: frozen demo kernel (tag, build line, checks, robot evidence, known limits). SUBMISSION_V2.md: second submission (tag, changes since v1, checks, limits). SUBMISSION_V3.md: third submission (barcode reader changes, demo letter map build line, checks, limits). DEMO_KERNEL_V2.md: demo-day kernel (freeze point, limits changes, letter map steps, robot evidence). |
 | [project-requirements/](project-requirements/) | Only our summary is tracked; course originals remain local. |
-| [architecture/](architecture/) | PROJECT_STATUS (areas, branches: main, mtk3-staging, mtk3-testing), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
-| [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md. |
+| [architecture/](architecture/) | PROJECT_STATUS (areas, branches: main, mtk3-staging, mtk3-testing, module branches, archive tags), ARCHITECTURE (system and three ADRs), MEASUREMENTS, CR1, junction action/adapter, template ledger. |
+| [kernel/](kernel/) | KERNEL.md (tasks, timing, RAM, locks), BUILD.md (build, flash, bench, SWD), JUNCTION_VALIDATION.md, TEMPLATE_SETUP.md (course template setup guide, moved from the root README). |
 | [s1-telemetry/](s1-telemetry/) | TELEMETRY.md (design and operation: broker, recorder, dashboard) and MQTT_WIRE.md (bytes). |
 | [s2-motion/](s2-motion/) | MOTION.md (controller, pins, calibration, duty map, results). |
 | [s3-line-barcode/](s3-line-barcode/) | LINE/SEARCH, TEST barcode B1c, B2b SHADOW live reader and results, and analog barcode ideas; originals in archive/s3-line-barcode/. |
@@ -46,8 +46,8 @@ The [kernel history](archive/kernel/HISTORY.md#files) keeps the older CMake benc
 | Measured and assumed values | [docs/architecture/MEASUREMENTS.md](architecture/MEASUREMENTS.md) — every physical/timing number with date, label and source; check before asking the operator |
 | Course requirements | [Our summary](project-requirements/README.md); original PDFs/Word files are local-only and ignored. |
 | Repository instructions | [AGENTS.md](../AGENTS.md) |
-| Public orientation and setup | [README.md](../README.md) |
-| Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md) |
+| Public orientation | [README.md](../README.md) — robot overview, subsystems, layout, branches, demo build, tests |
+| Development setup | [docs/kernel/BUILD.md](kernel/BUILD.md); first-time SDK/toolchain setup in [TEMPLATE_SETUP.md](kernel/TEMPLATE_SETUP.md) |
 | SWD debug probe | [docs/kernel/BUILD.md](kernel/BUILD.md#swd-debug-probe) — wiring, safety, memory reads, GDB on both cores |
 | Interrupt priorities | [docs/kernel/KERNEL.md](kernel/KERNEL.md#interrupt-priorities-f-nvic) — F-NVIC: measured IPR, all external IRQs at 0 |
 | Calibration record | [docs/s2-motion/MOTION.md](s2-motion/MOTION.md#hardware-wiring-and-calibration) |
