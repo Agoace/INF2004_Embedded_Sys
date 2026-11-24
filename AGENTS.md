@@ -36,6 +36,7 @@ bash scripts/install-hooks.sh
 - Keep coursework in clearly named task directories when coursework is added.
 - Keep standard repository entry points at the repository root.
 - Use ASD-STE100 Simplified Technical English for repository instructions.
+- In documents, write only facts: what is true, when and on which revision it was measured, and what is open. Do not write disclaimers about what a document, test or run does not claim, prove or establish. Write each open item as an open item (for example "Open: H3, not run"), not as a denial.
 - Store each durable record—such as an architecture note, plan, runbook, status record, release note, or ADR—in its own aptly named file under `docs/`, and list it in `docs/README.md`.
 - Check [MEASUREMENTS.md](docs/architecture/MEASUREMENTS.md) before you ask the operator for a number. When you record a new measured or assumed value, add a row there in the same commit.
 - Use `git commit --no-verify` only as an intentional escape hatch from the repository-owned pre-commit hook.
